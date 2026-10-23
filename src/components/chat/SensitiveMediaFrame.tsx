@@ -56,7 +56,7 @@ function SensitiveMediaFrameContent({
       </div>
       <div
         className={cn(
-          "absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/45 px-4 text-center backdrop-blur-[2px]",
+          "absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/45 px-4 text-center",
           overlayClassName,
         )}
       >

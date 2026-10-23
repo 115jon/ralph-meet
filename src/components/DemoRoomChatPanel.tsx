@@ -154,7 +154,7 @@ export function DemoRoomChatPanel({
   return (
     <aside
       className={cn(
-        "flex min-h-0 flex-col border-t border-rm-border bg-rm-bg-surface/95 backdrop-blur md:w-[380px] md:border-l md:border-t-0",
+        "flex min-h-0 flex-col border-t border-rm-border bg-rm-bg-surface/95 md:w-[380px] md:border-l md:border-t-0",
         className,
       )}
     >
@@ -302,7 +302,7 @@ export function DemoUploadBlockerModal({
       <DialogPortal>
         <DialogSurface
           showCloseButton={false}
-          className="fixed inset-0 z-50 m-0 flex items-center justify-center border-0 bg-black/65 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 m-0 flex items-center justify-center border-0 bg-black/65 p-4"
           aria-labelledby="demo-upload-blocker-title"
         >
           <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">

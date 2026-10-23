@@ -45,7 +45,7 @@ const PROFILE_SURFACE_RATIO = 450 / 880;
 const MOBILE_MAX_SURFACE_HEIGHT = 600;
 const DESKTOP_MAX_SURFACE_HEIGHT = 620;
 const ACTION_CARD_CLASS =
-  "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
+  "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-lg";
 const ACTION_ROW_CLASS =
   "group/item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
 
@@ -286,7 +286,7 @@ export default function UserAccountPopover({
             <div className="relative z-20 px-4 pb-4">
               <div className="-mt-10 flex items-end gap-3">
                 <div className="relative shrink-0">
-                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
+                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
                     {user.avatar_url ? (
                       <AvatarImage
                         src={getAuthAssetUrl(user.avatar_url)}
@@ -308,7 +308,7 @@ export default function UserAccountPopover({
                 <div className="relative mb-6 min-w-0 flex-1 pb-1">
                   <button
                     type="button"
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none focus-visible:ring-2 focus-visible:ring-white/30"
                     aria-label="Edit custom status"
                     onClick={() => setIsEditingCustomStatus(true)}
                   >
@@ -323,7 +323,7 @@ export default function UserAccountPopover({
                   </button>
 
                   {isEditingCustomStatus ? (
-                    <div className="absolute -inset-x-2 -bottom-2 -top-2 z-50 flex items-center rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
+                    <div className="absolute -inset-x-2 -bottom-2 -top-2 z-50 flex items-center rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 animate-in fade-in zoom-in-95">
                       <input
                         type="text"
                         className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-ui-sm text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"

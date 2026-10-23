@@ -173,7 +173,7 @@ export function AvatarPickerModal({
         <div className="fixed inset-0 z-60 flex items-center justify-center overflow-y-auto p-4">
           <DialogSurface
             showCloseButton={false}
-            className="relative my-auto w-full max-w-[520px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary text-rm-text shadow-[0_28px_90px_rgba(0,0,0,0.55)] outline-none animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+            className="relative my-auto w-full max-w-[520px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary text-rm-text shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
           >
             <header className="flex items-start justify-between gap-4 border-b border-rm-border px-6 py-5">
               <div>

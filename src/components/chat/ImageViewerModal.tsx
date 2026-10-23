@@ -527,7 +527,7 @@ export const ImageViewerModal: React.FC = () => {
             if (menu.isOpen || confirmation) event.preventDefault();
           }}
           className={cn(
-            "fixed inset-0 z-50 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md duration-200",
+            "fixed inset-0 z-50 flex flex-col items-center justify-center bg-rm-bg-primary/95 duration-200",
             "animate-in fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
         >
@@ -550,7 +550,7 @@ export const ImageViewerModal: React.FC = () => {
 
           {/* Floating X button when clean mode active */}
           {hideUi && (
-            <div className="absolute top-4 right-4 z-60 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
+            <div className="absolute top-4 right-4 z-60 bg-rm-bg-elevated/80 border border-rm-border rounded-xl p-1 shadow-lg">
               <button
                 onClick={close}
                 className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"

@@ -241,7 +241,7 @@ export function UploadSoundModal({
         <DialogPortal>
           <div
             data-state={open ? "open" : "closed"}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
           >
             <DialogSurface
               showCloseButton={false}

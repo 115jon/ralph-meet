@@ -82,7 +82,7 @@ export default function InviteClient() {
       <div className="relative z-10 w-full max-w-[420px]">
         {/* Loading */}
         {status === "loading" && (
-          <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
+          <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06]">
             <Icon
               name="loader"
               size="2xl"
@@ -94,7 +94,7 @@ export default function InviteClient() {
 
         {/* Preview */}
         {status === "preview" && invite && (
-          <div className="flex flex-col items-center gap-6 rounded-2xl bg-rm-bg-secondary/80 p-8 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
+          <div className="flex flex-col items-center gap-6 rounded-2xl bg-rm-bg-secondary/80 p-8 shadow-2xl ring-1 ring-white/[0.06]">
             {/* Invite badge */}
             <div className="flex items-center gap-2 rounded-full bg-rm-accent-dim px-3 py-1 ring-1 ring-rm-accent/20">
               <Icon name="link" size="sm" className="text-rm-accent" />
@@ -166,7 +166,7 @@ export default function InviteClient() {
 
         {/* Joining */}
         {status === "joining" && (
-          <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
+          <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06]">
             <div className="relative">
               <Icon
                 name="loader"
@@ -183,7 +183,7 @@ export default function InviteClient() {
 
         {/* Success */}
         {status === "success" && (
-          <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
+          <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06]">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
               <Icon name="check" size="xl" className="text-emerald-400" />
             </div>
@@ -200,7 +200,7 @@ export default function InviteClient() {
 
         {/* Error */}
         {status === "error" && (
-          <div className="flex flex-col items-center gap-5 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
+          <div className="flex flex-col items-center gap-5 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06]">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/15 ring-1 ring-destructive/30">
               <Icon name="close" size="xl" className="text-destructive" />
             </div>

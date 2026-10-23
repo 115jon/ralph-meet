@@ -413,7 +413,7 @@ export function CollectiblePicker({
 
           {/* List */}
           <div className="min-h-0 overflow-y-auto overscroll-contain [grid-area:list] [touch-action:pan-y] [scroll-padding-top:7rem]">
-            <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-rm-border bg-rm-bg-primary/95 px-3 py-2.5 backdrop-blur-md md:px-5">
+            <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-rm-border bg-rm-bg-primary/95 px-3 py-2.5 md:px-5">
               <label htmlFor={searchId} className="sr-only">
                 Search {copy.many.toLowerCase()}
               </label>

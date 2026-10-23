@@ -188,7 +188,7 @@ export const PinModal: React.FC<PinModalProps> = ({
             {/* Backdrop */}
             <div
               className={cn(
-                "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200",
+                "absolute inset-0 bg-black/60 transition-opacity duration-200",
                 "opacity-100 data-[state=closed]:opacity-0",
               )}
               onClick={onClose}

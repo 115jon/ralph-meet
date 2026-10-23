@@ -203,7 +203,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
       <DialogPortal>
         <div
           className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center bg-black/62 p-4 backdrop-blur-sm animate-in fade-in duration-200",
+            "fixed inset-0 z-50 flex items-center justify-center bg-black/62 p-4 animate-in fade-in duration-200",
             "data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
           data-state={open ? "open" : "closed"}
@@ -217,7 +217,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative m-0 w-full overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-primary shadow-[0_36px_110px_rgba(0,0,0,0.52)] outline-none animate-in zoom-in-95 duration-200",
+              "relative m-0 w-full overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-primary shadow-2xl outline-none animate-in zoom-in-95 duration-200",
               "data-[state=closed]:animate-out data-[state=closed]:zoom-out-95",
             )}
             style={{
@@ -232,7 +232,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                   variant="ghost"
                   size="icon"
                   onClick={onClose}
-                  className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+                  className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                   aria-label="Close profile preview"
                 >
                   <Icon name="close" size="sm" />
@@ -300,7 +300,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                       <div className="relative z-20 px-6 pb-7">
                         <div className="-mt-9">
                           <div className="flex items-start justify-between gap-4">
-                            <div className="relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
+                            <div className="relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)]">
                               {resolvedUser.avatar_url ? (
                                 <AvatarImage
                                   src={getAuthAssetUrl(resolvedUser.avatar_url)}
@@ -325,7 +325,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
 
                             {customStatus ? (
                               <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
-                                <div className="inline-flex max-w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md">
+                                <div className="inline-flex max-w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left">
                                   <span className="truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
                                     {customStatus}
                                   </span>
@@ -365,7 +365,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                               <Button
                                 type="button"
                                 onClick={() => void handleMessage()}
-                                className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] pointer-fine:hover:opacity-95"
+                                className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] pointer-fine:hover:opacity-95"
                                 style={profileThemeStyle}
                               >
                                 <Icon name="chat" size="sm" />
@@ -375,7 +375,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 type="button"
                                 variant="secondary"
                                 onClick={() => void handleCopyUserId()}
-                                className="h-10 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-[color:var(--rm-profile-custom-text)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
+                                className="h-10 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                                 style={profileThemeStyle}
                               >
                                 <Icon name="copy" size="sm" />
@@ -479,7 +479,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                     onClick={() =>
                                       void handleRelationshipAction("accept")
                                     }
-                                    className="rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] pointer-fine:hover:brightness-105"
+                                    className="rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] pointer-fine:hover:brightness-105"
                                     style={profileThemeStyle}
                                   >
                                     {loading ? (
@@ -533,7 +533,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   onClick={() =>
                                     void handleRelationshipAction("add")
                                   }
-                                  className="w-full rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] pointer-fine:hover:brightness-105"
+                                  className="w-full rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] pointer-fine:hover:brightness-105"
                                   style={profileThemeStyle}
                                 >
                                   {loading ? (

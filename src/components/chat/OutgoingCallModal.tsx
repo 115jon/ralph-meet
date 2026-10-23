@@ -120,7 +120,7 @@ export function OutgoingCallModal() {
         <DialogPortal>
           <DialogSurface
             showCloseButton={false}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 outline-none backdrop-blur-md animate-in fade-in duration-200"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 outline-none animate-in fade-in duration-200"
           >
             <ResponsiveDialogTitle className="sr-only">
               Calling {activeCallee.displayName}

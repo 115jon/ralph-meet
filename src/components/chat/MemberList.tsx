@@ -1704,7 +1704,7 @@ function MediaGridImage({
             onError={() => setError(true)}
           />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-5">
-            <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10">
+            <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center shadow-lg border border-white/10">
               <PlayIcon className="w-5 h-5 text-white" />
             </div>
           </div>
@@ -1733,7 +1733,7 @@ function MediaGridImage({
         />
         {/* Play icon overlay */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-5">
-          <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10">
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center shadow-lg border border-white/10">
             <PlayIcon className="w-5 h-5 text-white" />
           </div>
         </div>

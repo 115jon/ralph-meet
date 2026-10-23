@@ -44,7 +44,7 @@ export function StreamWatcherList({
         "min-w-0",
         isInline
           ? "flex min-w-0 items-center gap-2"
-          : "flex max-w-full items-center gap-2 rounded-2xl border border-rm-border/80 bg-rm-bg-primary/72 px-2.5 py-1.5 shadow-xl backdrop-blur-md",
+          : "flex max-w-full items-center gap-2 rounded-2xl border border-rm-border/80 bg-rm-bg-primary/72 px-2.5 py-1.5 shadow-xl",
         className,
       )}
     >

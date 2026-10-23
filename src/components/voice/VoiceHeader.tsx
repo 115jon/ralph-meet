@@ -115,7 +115,7 @@ export function VoiceHeader({
             />
             <div
               className={cn(
-                "flex min-w-0 items-center gap-2 backdrop-blur-md px-3 py-1.5 rounded-full border",
+                "flex min-w-0 items-center gap-2 px-3 py-1.5 rounded-full border",
                 focusedItem
                   ? "bg-black/40 border-white/10"
                   : "bg-rm-bg-elevated/40 border-rm-border",
@@ -180,7 +180,7 @@ export function VoiceHeader({
         )}
       >
         {focusedItem && focusedItem?.isStreaming && (
-          <div className="flex items-center gap-1.5 bg-black/55 backdrop-blur-md px-2.5 py-1 rounded-md mr-2 group/hw">
+          <div className="flex items-center gap-1.5 bg-black/55 px-2.5 py-1 rounded-md mr-2 group/hw">
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white tabular-nums">
               <QualityMonitor
                 track={focusedItem.stream?.getVideoTracks()[0]}

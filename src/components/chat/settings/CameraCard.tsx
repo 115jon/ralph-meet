@@ -451,8 +451,7 @@ export default function CameraCard() {
               }}
               className={cn(
                 "absolute bottom-3 left-1/2 -translate-x-1/2",
-                previewOn &&
-                  "bg-black/60 text-white backdrop-blur-sm [--hover-o:0.16]",
+                previewOn && "bg-black/60 text-white [--hover-o:0.16]",
               )}
             >
               <Icon name={previewOn ? "cameraOff" : "camera"} size="sm" />

@@ -535,7 +535,7 @@ export const DesktopScreenPickerModal: React.FC<
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogPortal>
         <div
-          className="fixed inset-0 z-90 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
+          className="fixed inset-0 z-90 flex items-center justify-center bg-black/80 animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
           data-state={isOpen ? "open" : "closed"}
           onPointerDown={(event) => {
             if (event.target !== event.currentTarget) return;

@@ -99,7 +99,7 @@ export default function RoomPageClient() {
       <div className="flex h-full items-center justify-center bg-rm-bg-primary px-6">
         <div className="z-10 w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border">
               <Icon name="soundboard" size="2xl" className="text-rm-accent" />
             </div>
             <h1 className="text-ui-2xl font-semibold text-rm-text">
@@ -619,7 +619,7 @@ function RoomVoiceView({
       onDrop={handleDrop}
     >
       {isFileDragging && (
-        <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70">
           <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
             <p className="text-ui-sm font-semibold text-rm-text">
               Uploads unlock in the full app
@@ -680,7 +680,7 @@ function RoomVoiceView({
 
         <div className="shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
           {focusedId && showMembers && (
-            <div className="p-4 bg-rm-bg-primary/20 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
+            <div className="p-4 bg-rm-bg-primary/20 animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
               <div
                 className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}

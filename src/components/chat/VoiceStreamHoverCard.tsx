@@ -71,7 +71,7 @@ export function VoiceStreamHoverCard({
   return (
     <div
       className={cn(
-        "w-[292px] rounded-xl border border-rm-border bg-rm-bg-floating p-3 text-rm-text shadow-xl backdrop-blur-xl",
+        "w-[292px] rounded-xl border border-rm-border bg-rm-bg-floating p-3 text-rm-text shadow-xl",
         className,
       )}
       data-stream-hover-card="true"
@@ -124,7 +124,7 @@ export function VoiceStreamHoverCard({
         <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center justify-center">
           <div
             className={cn(
-              "rounded-full border border-rm-border bg-rm-bg-floating/90 px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text shadow-lg backdrop-blur-sm transition-ui",
+              "rounded-full border border-rm-border bg-rm-bg-floating/90 px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text shadow-lg transition-ui",
               hasWatchAction
                 ? "opacity-0stream-thumb:opacity-100"
                 : "opacity-100",

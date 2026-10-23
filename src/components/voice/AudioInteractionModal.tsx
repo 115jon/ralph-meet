@@ -23,7 +23,7 @@ export function AudioInteractionModal({
         >
           <div
             className={cn(
-              "absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300",
+              "absolute inset-0 bg-black/60 animate-in fade-in duration-300",
               "data-[state=closed]:animate-out data-[state=closed]:fade-out",
             )}
             onClick={onClose}

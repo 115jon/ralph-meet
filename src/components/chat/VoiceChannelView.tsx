@@ -590,7 +590,7 @@ export default function VoiceChannelView({
         <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
           {/* Members Tray */}
           {focusedId && showMembers && (
-            <div className="p-4 bg-rm-bg-primary/20 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
+            <div className="p-4 bg-rm-bg-primary/20 animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
               <div
                 className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}

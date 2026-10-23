@@ -41,7 +41,7 @@ export default function VoiceChannelStatusPreview({
           className={cn(
             "overflow-hidden border border-white/8 bg-black/20 shadow-sm",
             mediaOnly
-              ? "w-full rounded-xl shadow-[0_18px_36px_rgba(0,0,0,0.24)]"
+              ? "w-full rounded-xl"
               : compact
                 ? "h-11 w-11 shrink-0 rounded-xl"
                 : "h-16 w-16 shrink-0 rounded-xl",

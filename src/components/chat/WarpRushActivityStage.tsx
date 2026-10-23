@@ -1128,7 +1128,7 @@ export function WarpRushActivityStage({
       <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 sm:p-4 md:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="pointer-events-auto flex w-full max-w-[440px] flex-col gap-3">
-            <div className="rounded-3xl border border-cyan-300/15 bg-slate-950/48 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.42)] backdrop-blur-2xl sm:p-5">
+            <div className="rounded-3xl border border-cyan-300/15 bg-slate-950/48 p-4 sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.28em] text-cyan-200/74">
@@ -1204,13 +1204,13 @@ export function WarpRushActivityStage({
             </div>
 
             {failureReason && (
-              <div className="rounded-full border border-amber-300/28 bg-slate-950/72 px-4 py-2 text-ui-xs text-amber-50 backdrop-blur-xl">
+              <div className="rounded-full border border-amber-300/28 bg-slate-950/72 px-4 py-2 text-ui-xs text-amber-50">
                 {failureReason}
               </div>
             )}
           </div>
 
-          <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.4)] backdrop-blur-2xl sm:p-5">
+          <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-lg sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/80">
                 <Icon name="trophy" size="sm" />
@@ -1286,7 +1286,7 @@ export function WarpRushActivityStage({
         </div>
 
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 backdrop-blur-2xl sm:px-4">
+          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 sm:px-4">
             <div className="flex items-center gap-2 pr-1 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
               <Icon name="spatial" size="sm" />
               Controls
@@ -1305,7 +1305,7 @@ export function WarpRushActivityStage({
             </span>
           </div>
 
-          <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-[0_22px_90px_rgba(2,6,23,0.36)] backdrop-blur-2xl sm:p-4">
+          <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-lg sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
                 <Icon name="zap" size="sm" />
@@ -1384,8 +1384,8 @@ export function WarpRushActivityStage({
       </div>
 
       {status === "crashed" && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
-          <div className="max-w-md rounded-3xl border border-amber-300/30 bg-slate-950/86 p-6 text-center shadow-[0_24px_120px_rgba(2,6,23,0.8)]">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4">
+          <div className="max-w-md rounded-3xl border border-amber-300/30 bg-slate-950/86 p-6 text-center shadow-lg">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10 text-amber-200">
               <Icon name="warning" size="xl" />
             </div>

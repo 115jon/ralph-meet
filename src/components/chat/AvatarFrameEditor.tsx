@@ -305,7 +305,7 @@ export function AvatarFrameEditor({
 
   return createPortal(
     <div
-      className="pointer-events-auto fixed inset-0 z-70 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm md:p-6"
+      className="pointer-events-auto fixed inset-0 z-70 flex items-center justify-center overflow-y-auto bg-black/70 p-4 md:p-6"
       onClick={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}

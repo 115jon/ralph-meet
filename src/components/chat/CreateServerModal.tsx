@@ -286,7 +286,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
               type="button"
               data-base-modal-backdrop
               className={cn(
-                "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm pointer-events-auto",
+                "absolute inset-0 border-0 bg-black/60 p-0 pointer-events-auto",
                 !open && "pointer-events-none opacity-0",
               )}
               onClick={onClose}

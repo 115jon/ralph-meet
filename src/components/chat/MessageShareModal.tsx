@@ -84,7 +84,7 @@ export default function MessageShareModal({
         <div
           data-state={open ? "open" : "closed"}
           className={cn(
-            "fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm transition-opacity duration-200 md:items-center md:p-6",
+            "fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 transition-opacity duration-200 md:items-center md:p-6",
             "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
           onClick={(event) => {

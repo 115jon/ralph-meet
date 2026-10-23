@@ -199,7 +199,7 @@ export function VoiceAppsModal({
           <div
             data-state={isOpen ? "open" : "closed"}
             className={cn(
-              "fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm duration-200",
+              "fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 duration-200",
               "animate-in fade-in",
             )}
           >
@@ -211,7 +211,7 @@ export function VoiceAppsModal({
                 "animate-in zoom-in-95",
               )}
             >
-              <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-4 py-3 bg-rm-bg-surface/50 backdrop-blur-md">
+              <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-4 py-3 bg-rm-bg-surface/50">
                 <div className="flex items-center gap-2">
                   {backButton}
                   <h2

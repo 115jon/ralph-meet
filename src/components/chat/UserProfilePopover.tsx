@@ -56,7 +56,7 @@ interface Props {
 const MOBILE_MAX_SURFACE_HEIGHT = 680;
 const DESKTOP_MAX_SURFACE_HEIGHT = 640;
 const POPOVER_ACTION_BUTTON_CLASS =
-  "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]";
+  "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]";
 const SECTION_TITLE_CLASS =
   "text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-[color:var(--rm-profile-custom-muted)]";
 
@@ -170,8 +170,8 @@ function PopoverAvatar({
 }) {
   return (
     <div className="relative z-30 -mt-12 px-4">
-      <div className="relative inline-block rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.24)]">
-        <div className="relative flex h-[84px] w-[84px] items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_12px_30px_rgba(0,0,0,0.34)]">
+      <div className="relative inline-block rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1.5">
+        <div className="relative flex h-[84px] w-[84px] items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
           {avatarUrl ? (
             <AvatarImage
               src={getAuthAssetUrl(avatarUrl)}
@@ -875,7 +875,7 @@ function DesktopUserProfilePopover({
     <TooltipProvider delayDuration={0}>
       <div className="contents">
         <div
-          className="fixed inset-0 z-40 cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:pointer-events-none md:backdrop-blur-none animate-in fade-in duration-200"
+          className="fixed inset-0 z-40 cursor-default bg-black/50 md:bg-transparent md:pointer-events-none animate-in fade-in duration-200"
           onClick={onClose}
           onKeyDown={(event) => {
             if (
@@ -1001,7 +1001,7 @@ function DesktopUserProfilePopover({
                 </div>
 
                 {resolvedUser.bio?.trim() ? (
-                  <div className="mt-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 px-4 py-3 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)] shadow-[0_16px_32px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+                  <div className="mt-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 px-4 py-3 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)]">
                     {resolvedUser.bio.trim()}
                   </div>
                 ) : null}
@@ -1044,7 +1044,7 @@ function DesktopUserProfilePopover({
                   <button
                     type="button"
                     onClick={handleOpenProfileEditor}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition pointer-fine:hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-text)] transition pointer-fine:hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
                     <Icon name="edit" size="sm" />
                     Edit Profile

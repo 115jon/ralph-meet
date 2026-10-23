@@ -76,7 +76,7 @@ export default function AttachmentList({
                 <track kind="captions" />
               </video>
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
                   <svg
                     viewBox="0 0 24 24"
                     fill="white"
@@ -111,7 +111,7 @@ export default function AttachmentList({
             type="button"
             onClick={() => onToggleSensitive(att.id)}
             className={cn(
-              "absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-ui-2xs font-bold uppercase tracking-[0.14em] backdrop-blur-sm transition",
+              "absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-ui-2xs font-bold uppercase tracking-[0.14em] transition",
               att.is_nsfw
                 ? "bg-amber-500/85 text-black pointer-fine:hover:bg-amber-400"
                 : "bg-black/50 text-white/80 pointer-fine:hover:bg-black/65 pointer-fine:hover:text-white",
@@ -124,7 +124,7 @@ export default function AttachmentList({
             <button
               type="button"
               onClick={() => onRemove(att.id)}
-              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
+              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text rounded-lg transition-ui shadow-sm"
             >
               <Icon name="trash" size="sm" />
             </button>
@@ -159,7 +159,7 @@ export default function AttachmentList({
               })()}
             </div>
           )}
-          <div className="z-10 flex flex-col items-center p-3 w-full bg-rm-bg-floating/40 backdrop-blur-sm h-full justify-center">
+          <div className="z-10 flex flex-col items-center p-3 w-full bg-rm-bg-floating/40 h-full justify-center">
             <Icon
               name="loader"
               size="xl"
@@ -173,7 +173,7 @@ export default function AttachmentList({
             <button
               type="button"
               onClick={() => onCancel(p.tempId)}
-              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text/80 pointer-fine:hover:text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
+              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text/80 pointer-fine:hover:text-rm-text rounded-lg transition-ui shadow-sm"
             >
               <Icon name="close" size="sm" />
             </button>

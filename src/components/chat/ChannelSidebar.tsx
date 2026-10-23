@@ -260,7 +260,7 @@ function VoiceChannelMediaDisplay({
   readOnly?: boolean;
 }) {
   return (
-    <div className="group/media relative overflow-hidden rounded-xl border border-white/8 bg-black/30 shadow-[0_16px_34px_rgba(0,0,0,0.28)]">
+    <div className="group/media relative overflow-hidden rounded-xl border border-white/8 bg-black/30">
       <div
         className="w-full overflow-hidden bg-black/25"
         style={{
@@ -294,7 +294,7 @@ function VoiceChannelMediaDisplay({
               <button
                 type="button"
                 aria-label="Change media"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-white/30 pointer-fine:hover:bg-black/75 pointer-fine:hover:text-white md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg transition-ui pointer-fine:hover:border-white/30 pointer-fine:hover:bg-black/75 pointer-fine:hover:text-white md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onChange();
@@ -314,7 +314,7 @@ function VoiceChannelMediaDisplay({
                 type="button"
                 aria-label="Remove media"
                 disabled={isRemoving}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-destructive/50 pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg transition-ui pointer-fine:hover:border-destructive/50 pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove();
@@ -1737,7 +1737,7 @@ function VoiceChannelMemberRow({
           className={cn(
             "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-[0.96]",
             isSpeaking
-              ? "ring-[3px] ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10"
+              ? "ring-[3px] ring-primary ring-offset-2 ring-offset-rm-bg-secondary z-10"
               : "z-0",
           )}
         >

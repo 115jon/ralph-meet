@@ -69,7 +69,7 @@ const EMPTY_MUTUAL_SERVERS: MutualServerSummary = {
 };
 
 const BANNER_BUTTON = cn(
-  "inline-flex size-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm transition-colors duration-150 pointer-fine:hover:bg-black/50 disabled:opacity-60",
+  "inline-flex size-10 items-center justify-center rounded-full bg-black/35 text-white transition-colors duration-150 pointer-fine:hover:bg-black/50 disabled:opacity-60",
   PRESS,
 );
 

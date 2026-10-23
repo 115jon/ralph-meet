@@ -32,7 +32,7 @@ const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
             onDelete(id);
           }
         }}
-        className="p-1.5 bg-black/50 pointer-fine:hover:bg-rm-badge text-white/80 pointer-fine:hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
+        className="p-1.5 bg-black/50 pointer-fine:hover:bg-rm-badge text-white/80 pointer-fine:hover:text-white rounded-lg transition-[background-color,color] shadow-sm"
         aria-label="Delete image"
       >
         <Icon name="trash" size="sm" />
@@ -336,7 +336,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                   <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
                   {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
                   {isLastVisible && hasMore && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
                       <span className="text-ui-2xl font-semibold text-white">
                         +{count - 10}
                       </span>

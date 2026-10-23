@@ -1393,7 +1393,7 @@ export default function GifPickerModal({
               type="button"
               className={cn(
                 "absolute inset-0 z-0 border-0 p-0",
-                expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent",
+                expanded ? "bg-black/55" : "bg-transparent",
               )}
               aria-label="Close GIF picker"
             />
@@ -1401,7 +1401,7 @@ export default function GifPickerModal({
           </div>
         )}
         className={cn(
-          "picker-panel absolute z-10 flex min-h-0 flex-col overflow-hidden rounded-3xl border backdrop-blur-2xl shadow-2xl transition-ui ease-out",
+          "picker-panel absolute z-10 flex min-h-0 flex-col overflow-hidden rounded-3xl border shadow-2xl transition-ui ease-out",
           "animate-in fade-in zoom-in-95 opacity-100 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95 data-[state=closed]:opacity-0",
           panelLayout,
         )}
@@ -1607,7 +1607,7 @@ export default function GifPickerModal({
                 {suggestionsVisible && (
                   <div
                     id="gif-picker-search-suggestions"
-                    className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-floating shadow-2xl backdrop-blur-xl"
+                    className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-floating shadow-2xl"
                   >
                     {suggestions.map((suggestion, index) => (
                       <button
@@ -1778,7 +1778,7 @@ export default function GifPickerModal({
                   style={shortcutCardOverlayStyle}
                 />
                 <div
-                  className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
+                  className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white"
                   style={shortcutCardBadgeStyle}
                 >
                   <Icon name="star" size="md" />
@@ -1810,7 +1810,7 @@ export default function GifPickerModal({
                   style={shortcutCardOverlayStyle}
                 />
                 <div
-                  className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
+                  className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white"
                   style={shortcutCardBadgeStyle}
                 >
                   <Icon name="trendUp" size="md" />
@@ -2024,7 +2024,7 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         type="button"
         onClick={toggleMute}
         className={cn(
-          "absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-black/60 p-0 text-white transition-opacity duration-150 backdrop-blur-xs pointer-fine:hover:bg-black/80 active:scale-[0.96] cursor-pointer",
+          "absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-black/60 p-0 text-white transition-opacity duration-150 pointer-fine:hover:bg-black/80 active:scale-[0.96] cursor-pointer",
           hovered ? "opacity-100" : "opacity-0",
         )}
         aria-label={isMuted ? "Unmute clip preview" : "Mute clip preview"}
@@ -2090,7 +2090,7 @@ const GifTile = memo(function GifTile({
       </button>
 
       {duration !== undefined && (
-        <div className="pointer-events-none absolute bottom-2 right-2 z-10 rounded-md bg-black/60 px-1.5 py-0.5 text-ui-2xs font-bold text-white backdrop-blur-xs border border-white/5 select-none">
+        <div className="pointer-events-none absolute bottom-2 right-2 z-10 rounded-md bg-black/60 px-1.5 py-0.5 text-ui-2xs font-bold text-white border border-white/5 select-none">
           {formatDuration(duration)}
         </div>
       )}

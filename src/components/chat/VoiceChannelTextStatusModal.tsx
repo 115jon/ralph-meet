@@ -87,7 +87,7 @@ export default function VoiceChannelTextStatusModal({
           <div
             data-state={open ? "open" : "closed"}
             className={cn(
-              "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm duration-200",
+              "fixed inset-0 z-50 bg-black/50 duration-200",
               "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
             )}
             onClick={onClose}
@@ -100,7 +100,7 @@ export default function VoiceChannelTextStatusModal({
             <DialogSurface
               showCloseButton={false}
               className={cn(
-                "picker-panel relative m-0 w-full max-w-[540px] rounded-xl border p-0 shadow-[var(--rm-shadow-3)] outline-none backdrop-blur-2xl duration-200",
+                "picker-panel relative m-0 w-full max-w-[540px] rounded-xl border p-0 shadow-[var(--rm-shadow-3)] outline-none duration-200",
                 "animate-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
               )}
               aria-labelledby="voice-channel-text-status-title"
@@ -116,7 +116,7 @@ export default function VoiceChannelTextStatusModal({
                   aria-label="Close status editor"
                 />
 
-                <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-rm-border bg-rm-bg-surface shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+                <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-rm-border bg-rm-bg-surface">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-rm-bg-hover text-rm-accent-ink">
                     <Icon name="chat" size="2xl" />
                   </div>

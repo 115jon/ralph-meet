@@ -1019,7 +1019,7 @@ export function ListenTogetherPanel({
           ) : resolvedPreview ? (
             <div className="space-y-3">
               <div
-                className="flex cursor-pointer gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-3 shadow-[0_12px_30px_oklch(0_0_0_/_0.12)] transition-colors pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-primary/15"
+                className="flex cursor-pointer gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-3 transition-colors pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-primary/15"
                 title="Double-click to play now"
                 onDoubleClick={playResolvedPreview}
               >

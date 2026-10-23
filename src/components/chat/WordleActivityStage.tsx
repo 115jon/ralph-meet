@@ -105,8 +105,8 @@ const WORDLE_THEME = {
   icon: "text-rm-text-secondary",
   key: "bg-rm-bg-elevated text-rm-text",
   emptyTile: "border-rm-border",
-  modal: "bg-rm-bg-surface text-rm-text border-rm-border backdrop-blur-2xl",
-  overlay: "bg-black/50 backdrop-blur-sm",
+  modal: "bg-rm-bg-surface text-rm-text border-rm-border",
+  overlay: "bg-black/50",
   exampleTile: "border-rm-text-secondary/70",
   link: "text-rm-accent underline underline-offset-2",
 } as const;

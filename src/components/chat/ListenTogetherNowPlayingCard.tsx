@@ -301,7 +301,7 @@ export function ListenTogetherNowPlayingCard({
       <TooltipProvider delayDuration={100}>
         <div
           className={cn(
-            "rounded-2xl border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm max-md:rounded-xl max-md:bg-rm-bg-elevated max-md:px-2.5 max-md:py-2.5 max-md:shadow-[0_8px_20px_rgba(0,0,0,0.18)] max-md:backdrop-blur-none",
+            "rounded-2xl border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 max-md:rounded-xl max-md:bg-rm-bg-elevated max-md:px-2.5 max-md:py-2.5",
             className,
           )}
         >
@@ -449,7 +449,7 @@ export function ListenTogetherNowPlayingCard({
     <TooltipProvider delayDuration={100}>
       <div className={cn("space-y-4", className)}>
         <div className="flex gap-4 sm:gap-5">
-          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-rm-bg-elevated/60 shadow-[0_14px_32px_rgba(0,0,0,0.2)] ring-1 ring-white/10 sm:h-24 sm:w-24 sm:rounded-3xl">
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-rm-bg-elevated/60 ring-1 ring-white/10 sm:h-24 sm:w-24 sm:rounded-3xl">
             {artwork}
           </div>
           <div className="min-w-0 flex-1 py-0.5">
@@ -538,7 +538,7 @@ export function ListenTogetherNowPlayingCard({
             }}
             disabled={!canControl}
             className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_srgb,var(--primary)_25%,transparent)] transition-transform pointer-fine:hover:bg-primary/90 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground transition-transform pointer-fine:hover:bg-primary/90 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50",
             )}
             aria-label={
               isPaused ? "Resume shared playback" : "Pause shared playback"
@@ -613,7 +613,7 @@ export function ListenTogetherNowPlayingCard({
               <Icon name="privacy" size="sm" />
               <span className="sr-only">Audio options</span>
             </summary>
-            <div className="absolute bottom-12 right-0 z-20 w-56 rounded-2xl border border-rm-border bg-rm-bg-floating p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
+            <div className="absolute bottom-12 right-0 z-20 w-56 rounded-2xl border border-rm-border bg-rm-bg-floating p-3 shadow-lg">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-ui-xs font-semibold text-rm-text">

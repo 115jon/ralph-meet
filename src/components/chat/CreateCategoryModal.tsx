@@ -111,7 +111,7 @@ export default function CreateCategoryModal({
             <button
               type="button"
               data-base-modal-backdrop
-              className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-300"
+              className="absolute inset-0 border-0 bg-black/60 p-0 animate-in fade-in duration-300"
               onClick={onClose}
               aria-label="Close create category modal"
             />

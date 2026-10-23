@@ -637,7 +637,7 @@ const YouTubeEmbed = memo(
                   href={embed.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-10 h-10 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
+                  className="w-10 h-10 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors shadow-lg"
                   title="Open in YouTube"
                 >
                   <ExternalIcon />
@@ -1477,7 +1477,7 @@ const TikTokEmbed = memo(
 
           {hasRenderableMedia ? (
             <>
-              <div className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]">
+              <div className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95">
                 <div
                   ref={trackRef}
                   className="relative w-full overflow-hidden"
@@ -1609,7 +1609,7 @@ const TikTokEmbed = memo(
                           type="button"
                           onClick={handlePrevButtonClick}
                           onPointerDown={stopChromePointerPropagation}
-                          className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
+                          className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
                           aria-label="Previous media"
                         >
                           <InstagramChevronIcon direction="left" />
@@ -1620,7 +1620,7 @@ const TikTokEmbed = memo(
                           type="button"
                           onClick={handleNextButtonClick}
                           onPointerDown={stopChromePointerPropagation}
-                          className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
+                          className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
                           aria-label="Next media"
                         >
                           <InstagramChevronIcon direction="right" />
@@ -1709,7 +1709,7 @@ const TikTokEmbed = memo(
                             <InstagramMusicIcon />
                           </span>
                         )}
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/28 backdrop-blur-[1px]">
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/28">
                           {isAudioPlaying ? (
                             <PauseIcon className="h-4 w-4" />
                           ) : (
@@ -1797,7 +1797,7 @@ const TikTokEmbed = memo(
             </>
           ) : (
             <div
-              className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]"
+              className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95"
               style={{ aspectRatio: "9/16" }}
             >
               {(player.mode === "iframe" || player.mode === "ready") &&
@@ -2185,7 +2185,7 @@ const XExternalCardChip = memo(
 
     return (
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-start p-3">
-        <div className="max-w-[calc(100%-1.5rem)] rounded-md bg-black/82 px-2.5 py-1.5 text-ui-xs leading-snug text-white shadow-sm backdrop-blur-sm">
+        <div className="max-w-[calc(100%-1.5rem)] rounded-md bg-black/82 px-2.5 py-1.5 text-ui-xs leading-snug text-white shadow-sm">
           <span className="block max-w-full truncate">
             <EmbedInlineText
               text={label}
@@ -4579,7 +4579,7 @@ const InstagramEmbed = memo(
             </a>
           </header>
 
-          <div className="relative overflow-hidden rounded-[22px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.28)]">
+          <div className="relative overflow-hidden rounded-[22px] border border-rm-border/55 bg-black/95">
             <div
               ref={trackRef}
               className="relative w-full overflow-hidden"
@@ -4704,7 +4704,7 @@ const InstagramEmbed = memo(
                       type="button"
                       onClick={handlePrevButtonClick}
                       onPointerDown={stopChromePointerPropagation}
-                      className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
+                      className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
                       aria-label="Previous media"
                     >
                       <InstagramChevronIcon direction="left" />
@@ -4715,7 +4715,7 @@ const InstagramEmbed = memo(
                       type="button"
                       onClick={handleNextButtonClick}
                       onPointerDown={stopChromePointerPropagation}
-                      className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
+                      className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
                       aria-label="Next media"
                     >
                       <InstagramChevronIcon direction="right" />
@@ -4825,7 +4825,7 @@ const InstagramEmbed = memo(
                         <InstagramMusicIcon />
                       </span>
                     )}
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/28 backdrop-blur-[1px]">
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/28">
                       {isAudioPlaying ? (
                         <PauseIcon className="h-4 w-4" />
                       ) : (

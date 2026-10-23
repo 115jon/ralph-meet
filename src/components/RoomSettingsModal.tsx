@@ -404,7 +404,7 @@ export default function RoomSettingsModal({
       <DialogPortal>
         <DialogSurface
           showCloseButton={false}
-          className="fixed inset-0 z-50 m-0 flex min-h-0 h-full w-full items-center justify-center bg-black/60 p-4 backdrop-blur-sm outline-none animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out"
+          className="fixed inset-0 z-50 m-0 flex min-h-0 h-full w-full items-center justify-center bg-black/60 p-4 outline-none animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out"
           aria-labelledby="room-settings-title"
           onPointerDown={(event) => {
             if (event.target !== event.currentTarget) return;

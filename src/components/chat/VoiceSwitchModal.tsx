@@ -129,7 +129,7 @@ export function VoiceSwitchModal({
           <div
             data-state={open ? "open" : "closed"}
             className={cn(
-              "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0",
+              "fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0",
             )}
           >
             <DialogSurface

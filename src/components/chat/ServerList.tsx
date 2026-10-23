@@ -222,7 +222,7 @@ export default function ServerList({
             className={cn(
               "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
               activeServerId === "@me" &&
-                "rounded-xl bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]",
+                "rounded-xl bg-primary text-primary-foreground",
             )}
             onClick={() => onSelect("@me")}
             aria-label="Direct messages"
@@ -262,7 +262,7 @@ export default function ServerList({
                     className={cn(
                       "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-ui enabled:active:scale-[0.96]",
                       isActiveDm
-                        ? "ring-2 ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)]"
+                        ? "ring-2 ring-primary"
                         : "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
                     )}
                     onClick={() => onSelectDm?.(dm.channelId)}
@@ -356,7 +356,7 @@ export default function ServerList({
                     className={cn(
                       "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full font-bold transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl",
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]"
+                        ? "bg-primary text-primary-foreground"
                         : "bg-rm-rail-item text-rm-text pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
                     )}
                     onClick={() => onSelect(server.id)}
@@ -386,7 +386,7 @@ export default function ServerList({
                           isInLocalVoiceServer ? "true" : "false"
                         }
                         className={cn(
-                          "pointer-events-none absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border text-ui-2xs shadow-[0_4px_12px_rgba(0,0,0,0.28)] ring-[3px] ring-rm-bg-floating transition-colors",
+                          "pointer-events-none absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border text-ui-2xs ring-[3px] ring-rm-bg-floating transition-colors",
                           isInLocalVoiceServer
                             ? "border-primary/40 bg-primary text-primary-foreground"
                             : "border-rm-border bg-rm-bg-elevated text-rm-text-secondary",

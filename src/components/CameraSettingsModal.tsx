@@ -365,7 +365,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
       <DialogPortal>
         <div
           className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm",
+            "fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4",
             "animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
           data-state={isOpen ? "open" : "closed"}

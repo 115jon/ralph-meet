@@ -84,7 +84,7 @@ export function VideoDownloadButton({
               href={getDownloadUrl(src)}
               download={filename}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 pointer-fine:hover:text-white pointer-fine:hover:bg-black/70 transition-ui border border-white/10"
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 text-white/80 pointer-fine:hover:text-white pointer-fine:hover:bg-black/70 transition-ui border border-white/10"
               aria-label="Download"
             >
               <DownloadIcon />
@@ -325,7 +325,7 @@ export function VideoControlBar({
                 : "scale-95 opacity-0 pointer-events-none",
             )}
           >
-            <div className="flex flex-col items-center bg-black/70 backdrop-blur-md rounded-lg px-2 py-3 border border-white/10 shadow-xl">
+            <div className="flex flex-col items-center bg-black/70 rounded-lg px-2 py-3 border border-white/10 shadow-xl">
               <input
                 type="range"
                 min={0}
@@ -363,7 +363,7 @@ export function SplashOverlay({ splashKey, splashIcon }: SplashOverlayProps) {
       key={splashKey}
       className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
     >
-      <div className="w-14 h-14 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white animate-[splash_0.5s_ease-out_forwards]">
+      <div className="w-14 h-14 rounded-full bg-black/40 flex items-center justify-center text-white animate-[splash_0.5s_ease-out_forwards]">
         {splashIcon === "play" ? (
           <PlayIcon className="w-6 h-6" />
         ) : (
@@ -386,7 +386,7 @@ export function BigPlayOverlay({ isViewer, ended }: BigPlayOverlayProps) {
     <div className="absolute inset-0 flex items-center justify-center">
       <div
         className={cn(
-          "rounded-full backdrop-blur-sm flex items-center justify-center transition-transform",
+          "rounded-full flex items-center justify-center transition-transform",
           "w-14 h-14 bg-black/50 border border-white/10 shadow-2xl text-white",
           isViewer && "w-16 h-16",
         )}

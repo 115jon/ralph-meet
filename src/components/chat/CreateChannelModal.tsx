@@ -270,7 +270,7 @@ export default function CreateChannelModal({
               type="button"
               data-base-modal-backdrop
               className={cn(
-                "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-300",
+                "absolute inset-0 border-0 bg-black/60 p-0 animate-in fade-in duration-300",
                 "data-[state=closed]:animate-out data-[state=closed]:fade-out",
               )}
               aria-label="Close create channel modal"

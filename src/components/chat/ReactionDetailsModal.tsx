@@ -202,7 +202,7 @@ export default function ReactionDetailsModal({
         <DialogPortal>
           <div
             data-state={open ? "open" : "closed"}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 sm:p-5"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 sm:p-5"
             onClick={(event) => {
               if (event.target === event.currentTarget) onClose();
             }}

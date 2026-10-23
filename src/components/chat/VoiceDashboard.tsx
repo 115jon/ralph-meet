@@ -636,7 +636,7 @@ export function VoiceDashboard({
                       />
                       <div
                         className={cn(
-                          "absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] backdrop-blur-xl origin-bottom-right",
+                          "absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] origin-bottom-right",
                           !isStreamMenuOpen
                             ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
                             : "animate-in fade-in slide-in-from-bottom-2 duration-200",
@@ -678,7 +678,7 @@ export function VoiceDashboard({
                             className={cn(
                               "w-2 h-2 rounded-full",
                               isStreamingAudio
-                                ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]"
+                                ? "bg-primary"
                                 : "bg-rm-bg-active",
                             )}
                           />
@@ -712,7 +712,7 @@ export function VoiceDashboard({
                             className={cn(
                               "w-2 h-2 rounded-full",
                               alwaysShowStreamPreview
-                                ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]"
+                                ? "bg-primary"
                                 : "bg-rm-bg-active",
                             )}
                           />
@@ -755,7 +755,7 @@ export function VoiceDashboard({
                                     {q.replace("p", "p ")}
                                   </div>
                                   {screenQuality === q && (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--rm-glow)]" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                                   )}
                                 </button>
                               ))}

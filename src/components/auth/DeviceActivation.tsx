@@ -182,7 +182,7 @@ function uniqueParts(parts: Array<string | null | undefined>): string[] {
 const BTN =
   "relative inline-flex h-11 w-full items-center justify-center gap-2.5 overflow-hidden rounded-[10px] px-4 text-ui-base font-medium leading-none text-[var(--rm-text-primary)] transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] [-webkit-tap-highlight-color:transparent] after:pointer-events-none after:absolute after:inset-0 after:bg-current after:opacity-0 after:transition-opacity after:duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:cursor-default active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100 pointer-fine:hover:enabled:after:opacity-[0.07]";
 const BTN_SECONDARY = `${BTN} border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] pointer-fine:hover:enabled:border-[var(--rm-text-ghost)] disabled:opacity-50`;
-const BTN_PRIMARY = `${BTN} bg-[var(--rm-accent)] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(0,0,0,0.3)] disabled:opacity-50`;
+const BTN_PRIMARY = `${BTN} bg-[var(--rm-accent)] font-semibold text-white disabled:opacity-50`;
 
 function Button({
   variant = "secondary",

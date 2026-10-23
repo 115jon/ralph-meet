@@ -118,10 +118,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         className={cn(
           "relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
           isFocused && "ring-2 ring-rm-text/20 z-50",
-          item.isSpeaking &&
-            "ring-2 ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)] z-20",
-          item.isRinging &&
-            "ring-2 ring-primary/50 shadow-[0_6px_18px_-6px_var(--rm-glow)] animate-pulse z-20",
+          item.isSpeaking && "ring-2 ring-primary z-20",
+          item.isRinging && "ring-2 ring-primary/50 animate-pulse z-20",
           !isFocused &&
             !item.isSpeaking &&
             !item.isRinging &&
@@ -210,7 +208,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Preview Paused Placeholder (local screen share hidden for performance) */}
         {isPreviewHidden && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 backdrop-blur-sm">
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70">
             <Icon name="eyeOff" size="xl" className="text-white/50" />
             <span className="text-ui-2xs font-semibold text-white/60 uppercase tracking-[0.08em]">
               Preview paused
@@ -232,7 +230,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               />
             )}
             <div className="relative z-10 flex flex-col items-center justify-center p-1 sm:p-2 w-full h-full overflow-hidden">
-              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg backdrop-blur-md flex items-center justify-center transition-transform duration-200">
+              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg flex items-center justify-center transition-transform duration-200">
                 <Icon
                   name="monitor"
                   size="xs"
@@ -315,7 +313,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Ringing Overlay Label */}
         {item.isRinging && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 pointer-events-none">
-            <span className="bg-rm-bg-surface/80 backdrop-blur rounded-full px-3 py-1 text-ui-xs font-semibold text-rm-text animate-pulse shadow-xl">
+            <span className="bg-rm-bg-surface/80 rounded-full px-3 py-1 text-ui-xs font-semibold text-rm-text animate-pulse shadow-xl">
               Calling...
             </span>
           </div>
@@ -398,7 +396,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               aria-label={isPreviewHidden ? "Resume preview" : "Pause preview"}
               className={cn(
                 PRESS,
-                "flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-ui-2xs font-medium text-white backdrop-blur-md outline-none",
+                "flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-ui-2xs font-medium text-white outline-none",
               )}
             >
               {isPreviewHidden ? (
@@ -421,7 +419,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               aria-label="More options"
               icon="more"
               size="xs"
-              className="rounded-md bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border"
+              className="rounded-md bg-rm-bg-primary/60 border border-rm-border"
               onClick={(e) => {
                 e.stopPropagation();
                 setContextMenu({ x: e.clientX, y: e.clientY, isMini: true });
@@ -431,7 +429,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
         {isTray && (
           <div className="pointer-events-none absolute top-2 right-2 z-30 opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
-            <div className="bg-rm-bg-primary/60 backdrop-blur-md p-1 rounded-lg border border-rm-border">
+            <div className="bg-rm-bg-primary/60 p-1 rounded-lg border border-rm-border">
               <Icon
                 name="chevronDown"
                 size="xs"

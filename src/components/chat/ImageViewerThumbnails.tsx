@@ -31,7 +31,7 @@ export function ImageViewerThumbnails({
 
   return (
     <div className="absolute bottom-3 md:bottom-6 left-1/2 -translate-x-1/2 max-w-[92vw] md:max-w-[90vw] z-50">
-      <div className="flex items-center gap-2 p-2 bg-rm-bg-primary/40 backdrop-blur-xl rounded-2xl border border-rm-border overflow-x-auto shadow-2xl custom-scrollbar no-scrollbar">
+      <div className="flex items-center gap-2 p-2 bg-rm-bg-primary/40 rounded-2xl border border-rm-border overflow-x-auto shadow-2xl custom-scrollbar no-scrollbar">
         {images.map((img, idx) => {
           const isSelected = idx === currentIndex;
           const isAnimated = isAnimatedMedia(

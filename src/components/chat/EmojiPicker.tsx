@@ -781,7 +781,7 @@ export default function EmojiPicker({
                   onOpenChange={(nextOpen) => !nextOpen && onClose()}
                   ariaLabel="Emoji picker"
                   className={cn(
-                    "picker-panel fixed z-60 m-0 flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-3xl border p-0 shadow-[0_8px_30px_rgba(0,0,0,0.12)] outline-none dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] transition-ui ease-out",
+                    "picker-panel fixed z-60 m-0 flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-3xl border p-0 shadow-lg outline-none transition-ui ease-out",
                     "animate-in fade-in zoom-in-95 opacity-100 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
                     placementClasses,
                   )}
@@ -850,7 +850,7 @@ export default function EmojiPicker({
                             </Tooltip>
 
                             {showSkinToneMenu ? (
-                              <div className="picker-panel absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border backdrop-blur-2xl p-2 shadow-2xl">
+                              <div className="picker-panel absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border p-2 shadow-2xl">
                                 {NATIVE_EMOJI_SKIN_TONE_OPTIONS.map(
                                   (option) => {
                                     const optionClapEmoji =
@@ -907,7 +907,7 @@ export default function EmojiPicker({
                                   setGenerateSuccess(null);
                                   setShowSkinToneMenu(false);
                                 }}
-                                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-ui-sm font-semibold text-rm-text transition-transform active:scale-[0.98]"
                               >
                                 <Icon name="magic" size="sm" />
                                 <span className="hidden sm:inline">Create</span>
@@ -1054,7 +1054,7 @@ export default function EmojiPicker({
                                     jumpToSection(CUSTOM_SECTION_ID)
                                   }
                                   className={cn(
-                                    "flex h-11 w-11 items-center justify-center self-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-ui",
+                                    "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-ui",
                                     activeCategory === CUSTOM_SECTION_ID
                                       ? "border-rm-border bg-primary/20"
                                       : "border-rm-border bg-rm-bg-hover pointer-fine:hover:bg-rm-bg-active",

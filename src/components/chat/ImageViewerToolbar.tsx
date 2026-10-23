@@ -163,7 +163,7 @@ export function ImageViewerToolbar({
       {/* Right: Tool groups */}
       <div className="flex shrink-0 items-center gap-2 pointer-events-auto">
         {/* Action buttons pill group */}
-        <div className="flex items-center gap-0.5 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl px-1 py-1 shadow-lg">
+        <div className="flex items-center gap-0.5 bg-rm-bg-elevated/80 border border-rm-border rounded-xl px-1 py-1 shadow-lg">
           {!isVideo && (
             <>
               <button
@@ -362,7 +362,7 @@ export function ImageViewerToolbar({
         </div>
 
         {/* Close button – own pill group */}
-        <div className="bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
+        <div className="bg-rm-bg-elevated/80 border border-rm-border rounded-xl p-1 shadow-lg">
           <button
             type="button"
             onClick={close}

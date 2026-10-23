@@ -1429,7 +1429,7 @@ export default function SoundboardPicker({
                             <button
                               type="button"
                               onClick={() => setActiveView("listenTogether")}
-                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-sky-500/20 via-blue-500/20 to-cyan-500/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-sky-500/20 via-blue-500/20 to-cyan-500/20 px-3 text-ui-sm font-semibold text-rm-text transition-transform active:scale-[0.98]"
                             >
                               <Icon
                                 name="headphones"
@@ -1449,7 +1449,7 @@ export default function SoundboardPicker({
                             <button
                               type="button"
                               onClick={() => setActiveView("radio")}
-                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-ui-sm font-semibold text-rm-text transition-transform active:scale-[0.98]"
                             >
                               <Icon
                                 name="soundboard"
@@ -1469,7 +1469,7 @@ export default function SoundboardPicker({
                             <button
                               type="button"
                               onClick={() => setActiveView("myinstants")}
-                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-ui-sm font-semibold text-rm-text transition-transform active:scale-[0.98]"
                             >
                               <Icon
                                 name="zap"
@@ -1731,7 +1731,7 @@ export default function SoundboardPicker({
                                       style={{
                                         backgroundColor: sound.color,
                                       }}
-                                      className="group relative flex aspect-square flex-col items-center justify-center rounded-xl shadow-[0_4px_0_rgba(0,0,0,0.3)]shadow-[0_2px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[4px] transition-ui p-1 overflow-hidden"
+                                      className="group relative flex aspect-square flex-col items-center justify-center rounded-xlactive:shadow-none active:translate-y-[4px] transition-ui p-1 overflow-hidden"
                                     >
                                       <button
                                         type="button"
@@ -1784,7 +1784,7 @@ export default function SoundboardPicker({
                                           <TooltipTrigger asChild>
                                             <button
                                               type="button"
-                                              className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                              className="flex items-center justify-center p-1 rounded-full bg-black/40 pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                               onClick={(e) =>
                                                 previewSound(
                                                   {
@@ -1896,7 +1896,7 @@ export default function SoundboardPicker({
                                           <TooltipTrigger asChild>
                                             <button
                                               type="button"
-                                              className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                              className="flex items-center justify-center p-1 rounded-full bg-black/40 pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                               onClick={(e) =>
                                                 previewSound(
                                                   {
@@ -1918,7 +1918,7 @@ export default function SoundboardPicker({
                                         </Tooltip>
                                       </div>
 
-                                      <span className="z-10 mt-auto bg-rm-bg-floating/90 backdrop-blur-md px-1 py-0.5 text-ui-2xs leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
+                                      <span className="z-10 mt-auto bg-rm-bg-floating/90 px-1 py-0.5 text-ui-2xs leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
                                         <span className="line-clamp-2">
                                           {sound.title}
                                         </span>
@@ -1978,7 +1978,7 @@ export default function SoundboardPicker({
                                           <button
                                             type="button"
                                             aria-label="Remove from favorites"
-                                            className="transition-ui flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-black text-white shadow-md cursor-pointer opacity-100"
+                                            className="transition-ui flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-black text-white shadow-md cursor-pointer opacity-100"
                                             onClick={(e) =>
                                               toggleFavorite(sound, e)
                                             }
@@ -2001,7 +2001,7 @@ export default function SoundboardPicker({
                                         <TooltipTrigger asChild>
                                           <button
                                             type="button"
-                                            className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-black text-white shadow-md cursor-pointer"
+                                            className="flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-black text-white shadow-md cursor-pointer"
                                             onClick={(e) =>
                                               previewSound(
                                                 {
@@ -2143,7 +2143,7 @@ export default function SoundboardPicker({
                                       <button
                                         type="button"
                                         aria-label={`Preview ${sound.name}`}
-                                        className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-black text-white shadow-md"
+                                        className="flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-black text-white shadow-md"
                                         onClick={(e) =>
                                           previewSound(
                                             {
@@ -2184,7 +2184,7 @@ export default function SoundboardPicker({
                                           <TooltipTrigger asChild>
                                             <button
                                               type="button"
-                                              className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-black text-white shadow-md"
+                                              className="flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-black text-white shadow-md"
                                               onClick={(e) =>
                                                 openEditModal(sound, e)
                                               }
@@ -2199,7 +2199,7 @@ export default function SoundboardPicker({
                                         <button
                                           type="button"
                                           title="Delete"
-                                          className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-destructive/90 text-white shadow-md"
+                                          className="flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-destructive/90 text-white shadow-md"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             deleteTriggerRef.current =
@@ -2223,7 +2223,7 @@ export default function SoundboardPicker({
                                             ? "Remove from favorites"
                                             : "Add to favorites"
                                         }
-                                        className={`transition-ui cursor-pointer flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-black text-white shadow-md ${isFav ? "opacity-100" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"}`}
+                                        className={`transition-ui cursor-pointer flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-black text-white shadow-md ${isFav ? "opacity-100" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"}`}
                                         onClick={(e) =>
                                           toggleFavorite(sound, e)
                                         }
@@ -2308,7 +2308,7 @@ export default function SoundboardPicker({
                                     <TooltipTrigger asChild>
                                       <button
                                         type="button"
-                                        className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-black text-white shadow-md cursor-pointer"
+                                        className="flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-black text-white shadow-md cursor-pointer"
                                         onClick={(e) =>
                                           previewSound(
                                             {
@@ -2338,7 +2338,7 @@ export default function SoundboardPicker({
                                             ? "Remove from favorites"
                                             : "Add to favorites"
                                         }
-                                        className={`transition-ui cursor-pointer flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm pointer-fine:hover:bg-black text-white shadow-md ${isFav ? "opacity-100" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"}`}
+                                        className={`transition-ui cursor-pointer flex items-center justify-center p-1.5 rounded-full bg-black/70 pointer-fine:hover:bg-black text-white shadow-md ${isFav ? "opacity-100" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"}`}
                                         onClick={(e) =>
                                           toggleFavorite(sound, e)
                                         }
@@ -2396,7 +2396,7 @@ export default function SoundboardPicker({
                             <div
                               key={sound.id}
                               style={{ backgroundColor: sound.color }}
-                              className="group relative flex aspect-square flex-col items-center justify-center rounded-xl shadow-[0_4px_0_rgba(0,0,0,0.3)]shadow-[0_2px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[4px] transition-ui p-1 overflow-hidden"
+                              className="group relative flex aspect-square flex-col items-center justify-center rounded-xlactive:shadow-none active:translate-y-[4px] transition-ui p-1 overflow-hidden"
                             >
                               <button
                                 type="button"
@@ -2448,7 +2448,7 @@ export default function SoundboardPicker({
                                   <TooltipTrigger asChild>
                                     <button
                                       type="button"
-                                      className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                      className="flex items-center justify-center p-1 rounded-full bg-black/40 pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                       onClick={(e) =>
                                         previewSound(
                                           {
@@ -2596,7 +2596,7 @@ export default function SoundboardPicker({
                                   <TooltipTrigger asChild>
                                     <button
                                       type="button"
-                                      className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                      className="flex items-center justify-center p-1 rounded-full bg-black/40 pointer-fine:hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                       onClick={(e) =>
                                         previewSound(
                                           {
@@ -2618,7 +2618,7 @@ export default function SoundboardPicker({
                                 </Tooltip>
                               </div>
 
-                              <span className="z-10 mt-auto bg-rm-bg-floating/90 backdrop-blur-md px-1 py-0.5 text-ui-2xs leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
+                              <span className="z-10 mt-auto bg-rm-bg-floating/90 px-1 py-0.5 text-ui-2xs leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
                                 <span className="line-clamp-2">
                                   {station.name}
                                 </span>
@@ -2636,7 +2636,7 @@ export default function SoundboardPicker({
 
           {/* Bottom volume controls */}
           {!compact && activeView === "soundboard" && (
-            <div className="shrink-0 border-t border-rm-border bg-rm-bg-floating backdrop-blur-xl p-3">
+            <div className="shrink-0 border-t border-rm-border bg-rm-bg-floating p-3">
               <div className="flex gap-2 sm:gap-3 items-center w-full">
                 <label className="flex w-0 flex-1 items-center gap-2 rounded-xl bg-rm-bg-surface/50 border border-rm-border px-2 py-2 text-ui-2xs font-bold text-rm-text-muted shadow-inner shadow-black/5 dark:shadow-none overflow-hidden">
                   <Tooltip>
@@ -2744,7 +2744,7 @@ export default function SoundboardPicker({
           <DialogPortal>
             <div
               role="presentation"
-              className="fixed inset-0 z-60 flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 max-md:z-[1200]"
+              className="fixed inset-0 z-60 flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 animate-in fade-in duration-150 max-md:z-[1200]"
               onMouseDown={(event) => {
                 if (event.target === event.currentTarget)
                   setSoundToDelete(null);
@@ -2758,7 +2758,7 @@ export default function SoundboardPicker({
                   event.preventDefault();
                   deleteTriggerRef.current?.focus();
                 }}
-                className="flex w-[320px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface shadow-[0_22px_80px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-150"
+                className="flex w-[320px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface shadow-lg animate-in zoom-in-95 duration-150"
                 onMouseDown={(event) => event.stopPropagation()}
               >
                 <div className="p-4">

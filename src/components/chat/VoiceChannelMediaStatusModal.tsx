@@ -96,7 +96,7 @@ function VoiceStatusMediaTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-uisabled:cursor-not-allowed disabled:opacity-60"
+      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 transition-uisabled:cursor-not-allowed disabled:opacity-60"
     >
       <div
         className="w-full overflow-hidden rounded-lg bg-rm-bg-hover"
@@ -323,7 +323,7 @@ export default function VoiceChannelMediaStatusModal({
           <div
             data-state={open ? "open" : "closed"}
             className={cn(
-              "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm",
+              "fixed inset-0 z-50 bg-black/50",
               "animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
             )}
             onClick={onClose}
@@ -336,7 +336,7 @@ export default function VoiceChannelMediaStatusModal({
             <DialogSurface
               showCloseButton={false}
               className={cn(
-                "picker-panel relative m-0 w-full max-w-[520px] rounded-2xl border p-0 shadow-2xl outline-none backdrop-blur-2xl",
+                "picker-panel relative m-0 w-full max-w-[520px] rounded-2xl border p-0 shadow-2xl outline-none",
                 "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
               )}
               aria-labelledby="voice-channel-media-status-title"

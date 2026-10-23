@@ -1271,7 +1271,7 @@ const MessageItem = memo(
                               "flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-ui-xs font-semibold transition-ui enabled:active:scale-[0.96]",
                               previewOnly && "cursor-default",
                               hasReacted
-                                ? "border-primary/40 bg-primary/10 text-primary shadow-[0_4px_12px_-4px_var(--rm-glow)]"
+                                ? "border-primary/40 bg-primary/10 text-primary"
                                 : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted pointer-fine:hover:border-rm-text-muted/20 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text-secondary",
                             )}
                             onClick={

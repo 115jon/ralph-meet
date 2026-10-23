@@ -209,7 +209,7 @@ export function AudioDeviceMenu({
         className="fixed z-70 animate-in fade-in slide-in-from-bottom-2 duration-200"
         style={{ top: menuPos.top, left: menuPos.left }}
       >
-        <div className="w-[220px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl backdrop-blur-xl">
+        <div className="w-[220px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl">
           {/* Header */}
           <div className="px-3 py-2 border-b border-rm-border rounded-t-xl">
             <div className="flex items-center gap-2">
@@ -327,7 +327,7 @@ export function AudioDeviceMenu({
           onMouseEnter={() => handleDeviceHover(true)}
           onMouseLeave={() => handleDeviceHover(false)}
         >
-          <div className="w-[200px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl backdrop-blur-xl">
+          <div className="w-[200px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl">
             <div className="p-1.5 max-h-[240px] overflow-y-auto custom-scrollbar">
               {devices.map((device) => {
                 const isSelected = device.deviceId === currentDeviceId;

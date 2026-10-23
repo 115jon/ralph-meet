@@ -243,7 +243,7 @@ export const VoiceGrid = React.memo(
                   }
                   className={cn(
                     PRESS,
-                    "flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-ui-2xs font-medium text-white backdrop-blur-md outline-none",
+                    "flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-ui-2xs font-medium text-white outline-none",
                   )}
                 >
                   {isPreviewHidden ? (

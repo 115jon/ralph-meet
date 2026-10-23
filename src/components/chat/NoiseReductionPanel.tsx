@@ -35,7 +35,7 @@ export function NoiseReductionPanel({
   return (
     <div
       className={cn(
-        "rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]",
+        "rounded-xl border border-rm-border bg-rm-bg-surface p-4",
         compact ? "w-[340px] max-w-[calc(100vw-2rem)]" : "w-full",
         className,
       )}

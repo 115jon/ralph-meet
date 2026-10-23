@@ -18,7 +18,7 @@ export function ProfilePreviewWidgetCard({
   return (
     <section
       className={cn(
-        "rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]",
+        "rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4",
         className,
       )}
     >

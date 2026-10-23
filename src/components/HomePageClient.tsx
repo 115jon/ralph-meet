@@ -100,7 +100,7 @@ function HomePageHeader() {
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300 ${
         scrolled
-          ? "border-b border-rm-border bg-rm-bg-primary/88 backdrop-blur-xl"
+          ? "border-b border-rm-border bg-rm-bg-primary/88"
           : "border-b border-transparent bg-transparent"
       }`}
     >
@@ -215,7 +215,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             <button
               type="button"
               onClick={createRoom}
-              className={`flex items-center gap-2 rounded-full bg-rm-accent px-6 py-3 text-ui-sm font-semibold text-white shadow-[0_10px_24px_-12px] shadow-rm-accent transition-colors pointer-fine:hover:bg-rm-accent-hover active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
+              className={`flex items-center gap-2 rounded-full bg-rm-accent px-6 py-3 text-ui-sm font-semibold text-white shadow-rm-accent transition-colors pointer-fine:hover:bg-rm-accent-hover active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
             >
               Start a room
             </button>
@@ -246,7 +246,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           transition={{ ...instant, delay: reduceMotion ? 0 : 0.22 }}
           className="mt-8 w-full lg:mt-0"
         >
-          <div className="max-h-[28vh] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[0_24px_80px_-32px_rgba(0,0,0,0.85)] sm:max-h-[36vh] lg:max-h-none">
+          <div className="max-h-[28vh] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated sm:max-h-[36vh] lg:max-h-none">
             <img
               src="/screenshots/desktop-app.png"
               alt="Ralph Meet desktop app with a live voice room and chat sidebar"

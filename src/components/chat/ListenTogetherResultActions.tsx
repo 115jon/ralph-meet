@@ -105,7 +105,7 @@ export function ListenTogetherMobileActionSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface shadow-[0_-20px_60px_rgba(0,0,0,0.45)]"
+        className="w-full overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-rm-border px-4 py-3">
