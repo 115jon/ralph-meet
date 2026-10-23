@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useUser } from "@kova/react";
-import SettingsAccountTab from "./SettingsAccountTab";
+import SettingsAccountTab, {
+  type ProfileEditorDraft,
+} from "./SettingsAccountTab";
 
 interface ProfileEditorModalProps {
   open: boolean;
@@ -22,6 +24,10 @@ interface ProfileEditorModalProps {
   stacked?: boolean;
   /** Defaults to the Kova user hook's loaded flag. */
   authUserLoaded?: boolean;
+  /** Fixtures and tests only: start with a dirty draft. */
+  initialDraft?: ProfileEditorDraft;
+  /** Fixtures and tests only: start with a failed-save message. */
+  initialError?: string;
 }
 
 export const PROFILE_EDITOR_SURFACE =
@@ -32,6 +38,8 @@ export default function ProfileEditorModal({
   onClose,
   stacked = false,
   authUserLoaded,
+  initialDraft,
+  initialError,
 }: ProfileEditorModalProps) {
   const { isLoaded } = useUser();
 
@@ -42,12 +50,21 @@ export default function ProfileEditorModal({
         <DialogSurface
           showCloseButton={false}
           aria-label="Edit profile"
+          tabIndex={-1}
+          // Land on the surface, not the close button, so nothing draws a
+          // focus ring until the person presses Tab.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            (event.currentTarget as HTMLElement | null)?.focus?.();
+          }}
           className={cn(PROFILE_EDITOR_SURFACE, stacked ? "z-60" : "z-50")}
         >
           <SettingsAccountTab
             authUserLoaded={authUserLoaded ?? isLoaded}
             asModal
             onClose={onClose}
+            initialDraft={initialDraft}
+            initialError={initialError}
           />
         </DialogSurface>
       </DialogPortal>
