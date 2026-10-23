@@ -607,9 +607,8 @@ export default function MobileProfileSheet({
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
       snapPoints={SNAP_POINTS}
-      activeSnapPoint={snap}
-      setActiveSnapPoint={setSnap}
-      fadeFromIndex={0}
+      snapPoint={snap}
+      onSnapPointChange={setSnap}
     >
       <DrawerContent
         aria-label={`${resolvedUser.display_name?.trim() || resolvedUser.username}'s profile`}

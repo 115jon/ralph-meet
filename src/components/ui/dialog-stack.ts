@@ -8,12 +8,22 @@ import * as React from "react";
 export function isDialogTopmost(id: string) {
   if (typeof document === "undefined") return true;
 
+  // Radix dialogs mark open with data-state="open", Base UI drawers with
+  // data-open; both portal to <body> in the order they opened.
+  const surface = '[data-dialog-root-id][data-dialog-back-enabled="true"]';
   const openSurfaces = document.querySelectorAll<HTMLElement>(
-    '[data-dialog-root-id][data-dialog-back-enabled="true"][data-state="open"]',
+    `${surface}[data-state="open"], ${surface}[data-open]`,
   );
   const topmostSurface = openSurfaces.item(openSurfaces.length - 1);
 
   return !topmostSurface || topmostSurface.dataset.dialogRootId === id;
+}
+
+/** True for targets inside a Base UI drawer (ui/drawer.tsx) portal. */
+export function isDrawerLayerTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element && !!target.closest('[data-slot="drawer-portal"]')
+  );
 }
 
 /**
