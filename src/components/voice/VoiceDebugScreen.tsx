@@ -188,13 +188,13 @@ export function VoiceDebugScreen({
           <button
             id="copy-stats-btn"
             onClick={handleCopyStats}
-            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md border border-rm-border bg-rm-bg-surface hover:bg-rm-bg-hover text-rm-text-primary transition-ui min-w-[80px]"
+            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md border border-rm-border bg-rm-bg-surface pointer-fine:hover:bg-rm-bg-hover text-rm-text-primary transition-ui min-w-[80px]"
           >
             Copy Diagnostics
           </button>
           <button
             onClick={onClose}
-            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md bg-rm-status-dnd/10 hover:bg-rm-status-dnd/20 text-rm-status-dnd transition-colors"
+            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md bg-rm-status-dnd/10 pointer-fine:hover:bg-rm-status-dnd/20 text-rm-status-dnd transition-colors"
           >
             ✕ Close
           </button>
@@ -362,7 +362,7 @@ function SidebarItem({
       className={`sm:w-full text-left px-2.5 sm:px-2 py-1 rounded text-ui-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
         isActive
           ? "bg-rm-bg-active text-rm-text"
-          : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+          : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
       }`}
     >
       {label}

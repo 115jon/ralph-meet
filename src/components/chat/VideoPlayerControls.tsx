@@ -169,7 +169,7 @@ export function VideoProgressBar({
           "absolute top-1/2 -translate-y-1/2 rounded-full bg-white shadow-lg transition-opacity",
           dragging
             ? "w-3.5 h-3.5 opacity-100"
-            : "w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-100",
+            : "w-2.5 h-2.5 pointer-fine:opacity-0 pointer-fine:group-hover/bar:opacity-100",
         )}
         style={{ left: `calc(${displayProgress}% - ${dragging ? 7 : 5}px)` }}
       />

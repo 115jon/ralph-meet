@@ -104,7 +104,7 @@ export function ChatHeader({
         />
 
         <button
-          className="group/mobiletext flex min-w-0 max-w-[min(45vw,180px)] items-center gap-1.5 text-left transition-opacity hover:opacity-80 md:hidden"
+          className="group/mobiletext flex min-w-0 max-w-[min(45vw,180px)] items-center gap-1.5 text-left transition-opacity pointer-fine:hover:opacity-80 md:hidden"
           onClick={onMembersClick}
         >
           <Icon
@@ -143,7 +143,7 @@ export function ChatHeader({
           <Icon
             name={channelIcon}
             size="lg"
-            className="text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0"
+            className="text-rm-text-muted transition-colors pointer-fine:group-hover/chname:text-rm-text-secondary shrink-0"
           />
           {isDM && dmUsername ? (
             <Tooltip>
@@ -151,7 +151,7 @@ export function ChatHeader({
                 <h2
                   className={cn(
                     "text-ui-base font-semibold text-rm-text-primary leading-none",
-                    "group-hover/chname:underline underline-offset-2",
+                    "pointer-fine:group-hover/chname:underline underline-offset-2",
                   )}
                 >
                   <InlineEmojiText text={channelName} />
@@ -163,7 +163,7 @@ export function ChatHeader({
             <h2
               className={cn(
                 "text-ui-base font-semibold text-rm-text-primary leading-none",
-                "group-hover/chname:underline underline-offset-2",
+                "pointer-fine:group-hover/chname:underline underline-offset-2",
               )}
             >
               <InlineEmojiText text={channelName} />
@@ -176,7 +176,7 @@ export function ChatHeader({
               "transition-ui shrink-0",
               showChannelDetails
                 ? "rotate-90 text-rm-text"
-                : "text-rm-text-muted group-hover/chname:text-rm-text-secondary",
+                : "text-rm-text-muted pointer-fine:group-hover/chname:text-rm-text-secondary",
             )}
           />
         </button>

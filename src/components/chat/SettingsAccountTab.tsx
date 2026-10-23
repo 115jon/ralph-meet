@@ -326,7 +326,7 @@ function ProfileRailCard({
       onPointerLeave={onHoverChange ? () => onHoverChange(false) : undefined}
     >
       {actions ? (
-        <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/rail:opacity-100 md:group-focus-within/rail:opacity-100">
+        <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:pointer-fine:opacity-0 md:pointer-fine:group-hover/rail:opacity-100 md:group-focus-within/rail:opacity-100">
           {actions}
         </div>
       ) : null}
@@ -972,7 +972,7 @@ function ColorField({
                   type="button"
                   onClick={() => setColorValue(preset)}
                   className={cn(
-                    "h-9 rounded-lg border transition duration-150 pointer-fine:hover:-translate-y-[1px]",
+                    "h-9 rounded-lg border transition duration-150",
                     value === preset
                       ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
                       : "border-white/10",
@@ -1032,7 +1032,7 @@ function ColorField({
           <button
             type="button"
             onClick={toggleOpen}
-            className="group relative block h-[46px] w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition pointer-fine:hover:-translate-y-[1px] pointer-fine:hover:border-white/14"
+            className="group relative block h-[46px] w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition"
             aria-labelledby={labelId}
             aria-describedby={helperText ? helperTextId : undefined}
             aria-expanded={open}
@@ -1068,7 +1068,7 @@ function ColorField({
                   {value ? "Custom color" : "Using generated fallback"}
                 </div>
               </div>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/18 bg-black/18 text-white/86 backdrop-blur-md transition group-hover:bg-black/24">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/18 bg-black/18 text-white/86 backdrop-blur-md transition pointer-fine:group-hover:bg-black/24">
                 <Icon name="eyedropper" size="sm" />
               </div>
             </div>
@@ -1305,7 +1305,7 @@ function DisplayNameStyleDialog({
                           }))
                         }
                         className={cn(
-                          "aspect-square min-w-0 rounded-xl border p-0 transition pointer-fine:hover:-translate-y-[1px]",
+                          "aspect-square min-w-0 rounded-xl border p-0 transition",
                           draftStyle.font === option.id
                             ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
                             : "border-rm-border bg-rm-bg-surface/70 pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-elevated/70",
@@ -1356,7 +1356,7 @@ function DisplayNameStyleDialog({
                       setDraftStyle((prev) => ({ ...prev, effect: option.id }))
                     }
                     className={cn(
-                      "aspect-square min-w-0 rounded-xl border p-0 transition pointer-fine:hover:-translate-y-[1px]",
+                      "aspect-square min-w-0 rounded-xl border p-0 transition",
                       draftStyle.effect === option.id
                         ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
                         : "border-rm-border bg-rm-bg-surface/70 pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-elevated/70",
@@ -1430,7 +1430,7 @@ function DisplayNameStyleDialog({
                         >
                           <span
                             className={cn(
-                              "h-9 w-9 rounded-lg border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
+                              "h-9 w-9 rounded-lg border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition",
                               activeColorSlot === "primary"
                                 ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]"
                                 : "ring-1 ring-transparent",
@@ -1481,7 +1481,7 @@ function DisplayNameStyleDialog({
                         >
                           <span
                             className={cn(
-                              "h-9 w-9 rounded-lg border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
+                              "h-9 w-9 rounded-lg border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition",
                               activeColorSlot === "secondary"
                                 ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]"
                                 : "ring-1 ring-transparent",
@@ -1508,7 +1508,7 @@ function DisplayNameStyleDialog({
                           type="button"
                           onClick={() => applyPresetColor(preset)}
                           className={cn(
-                            "aspect-square w-full rounded-lg border transition duration-150 pointer-fine:hover:-translate-y-[1px]",
+                            "aspect-square w-full rounded-lg border transition duration-150",
                             (activeColorSlot === "primary"
                               ? draftStyle.primaryColor
                               : draftStyle.secondaryColor) === preset
@@ -3162,7 +3162,7 @@ export default function SettingsAccountTab({
                       >
                         {nameplateStaticPreviewUrl ? (
                           <>
-                            <div className="absolute inset-0 transition duration-200 group-hover/rail:opacity-0">
+                            <div className="absolute inset-0 transition duration-200 pointer-fine:group-hover/rail:opacity-0">
                               <UserNameplateLayer
                                 nameplateUrl={nameplateStaticPreviewUrl}
                                 nameplateContentType={
@@ -3175,7 +3175,7 @@ export default function SettingsAccountTab({
                                 playVideo={false}
                               />
                             </div>
-                            <div className="absolute inset-0 opacity-0 transition duration-200 group-hover/rail:opacity-100">
+                            <div className="absolute inset-0 opacity-0 transition duration-200 pointer-fine:group-hover/rail:opacity-100">
                               {isNameplatePreviewHovered &&
                               nameplateHoverPreviewUrl ? (
                                 <UserNameplateLayer
@@ -3351,7 +3351,7 @@ export default function SettingsAccountTab({
                         <div className="relative flex h-[64px] w-[64px] items-center justify-center overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/70">
                           {currentAvatarDecoration ? (
                             <>
-                              <div className="absolute inset-0 transition duration-200 group-hover/rail:opacity-0">
+                              <div className="absolute inset-0 transition duration-200 pointer-fine:group-hover/rail:opacity-0">
                                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.08),_rgba(255,255,255,0)_56%)]" />
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <img
@@ -3366,7 +3366,7 @@ export default function SettingsAccountTab({
                                   />
                                 </div>
                               </div>
-                              <div className="absolute inset-0 opacity-0 transition duration-200 group-hover/rail:opacity-100">
+                              <div className="absolute inset-0 opacity-0 transition duration-200 pointer-fine:group-hover/rail:opacity-100">
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="relative h-[50px] w-[50px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
                                     {isAvatarDecorationPreviewHovered &&
@@ -3570,7 +3570,7 @@ export default function SettingsAccountTab({
                               <button
                                 type="button"
                                 onClick={toggleOpen}
-                                className="relative block h-full w-full overflow-hidden rounded-xl border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition pointer-fine:hover:-translate-y-[1px]"
+                                className="relative block h-full w-full overflow-hidden rounded-xl border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition"
                                 aria-label="Choose banner fallback color"
                                 aria-expanded={open}
                                 title={bannerStatus}
@@ -3596,15 +3596,15 @@ export default function SettingsAccountTab({
                                       "var(--rm-profile-custom-banner-overlay)",
                                   }}
                                 />
-                                <div className="absolute inset-0 bg-black/0 transition group-hover/theme-banner:bg-black/10" />
-                                <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-md border border-white/16 bg-black/20 text-white/88 opacity-0 shadow-[0_10px_22px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/theme-banner:opacity-100">
+                                <div className="absolute inset-0 bg-black/0 transition pointer-fine:group-hover/theme-banner:bg-black/10" />
+                                <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-md border border-white/16 bg-black/20 text-white/88 pointer-fine:opacity-0 shadow-[0_10px_22px_rgba(0,0,0,0.24)] backdrop-blur-sm transition pointer-fine:group-hover/theme-banner:opacity-100">
                                   <Icon name="eyedropper" size="xs" />
                                 </div>
                               </button>
                             )}
                           />
 
-                          <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/theme-banner:opacity-100">
+                          <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:pointer-fine:opacity-0 md:pointer-fine:group-hover/theme-banner:opacity-100">
                             <AccountActionIconButton
                               label="Upload banner"
                               onClick={() => bannerInputRef.current?.click()}
@@ -3797,7 +3797,7 @@ export default function SettingsAccountTab({
                       ref={profileBannerTriggerRef}
                       type="button"
                       onClick={() => setStylesCollapsed(false)}
-                      className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-ui-xs font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition pointer-fine:hover:-translate-x-[40%] lg:flex"
+                      className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-ui-xs font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition"
                       style={previewThemeStyle}
                       aria-label="Show styles"
                     >
@@ -3859,10 +3859,10 @@ export default function SettingsAccountTab({
                           background: "var(--rm-profile-custom-banner-overlay)",
                         }}
                       />
-                      <div className="absolute inset-0 bg-black/0 transition group-hover/preview-banner:bg-black/28" />
+                      <div className="absolute inset-0 bg-black/0 transition pointer-fine:group-hover/preview-banner:bg-black/28" />
                       <span
                         ref={profileBannerActionRef}
-                        className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100"
+                        className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition pointer-fine:group-hover/preview-banner:opacity-100"
                       >
                         <Icon name="edit" size="sm" />
                       </span>
@@ -3959,8 +3959,8 @@ export default function SettingsAccountTab({
                                 })}
                               </div>
                             )}
-                            <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
-                            <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
+                            <span className="absolute inset-0 rounded-full bg-black/0 transition pointer-fine:group-hover/preview-avatar:bg-black/36" />
+                            <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition pointer-fine:group-hover/preview-avatar:opacity-100">
                               <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
                                 <Icon name="edit" size="sm" />
                               </span>
@@ -4071,7 +4071,7 @@ export default function SettingsAccountTab({
                                         event.stopPropagation();
                                         handleOpenCustomStatusEditor();
                                       }}
-                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition pointer-fine:hover:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                      className="pointer-fine:pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] pointer-fine:opacity-0 transition pointer-fine:hover:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 pointer-fine:group-hover/preview-status:pointer-events-auto pointer-fine:group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
                                       aria-label="Edit custom status"
                                     >
                                       <Icon name="edit" size="sm" />
@@ -4089,7 +4089,7 @@ export default function SettingsAccountTab({
                                         event.stopPropagation();
                                         handleClearCustomStatus();
                                       }}
-                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition pointer-fine:hover:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                      className="pointer-fine:pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] pointer-fine:opacity-0 transition pointer-fine:hover:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 pointer-fine:group-hover/preview-status:pointer-events-auto pointer-fine:group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
                                       aria-label="Clear custom status"
                                     >
                                       <Icon name="trash" size="sm" />
@@ -4186,7 +4186,7 @@ export default function SettingsAccountTab({
                                       placeholder="Add pronouns"
                                     />
                                   ) : (
-                                    <span className="rounded-md border border-transparent px-1 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
+                                    <span className="rounded-md border border-transparent px-1 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition pointer-fine:group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
                                       {currentPronouns || "Add pronouns"}
                                     </span>
                                   )}
@@ -4212,7 +4212,7 @@ export default function SettingsAccountTab({
                                 setDisplayNameStyleEditorOpen(true)
                               }
                             >
-                              <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
+                              <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition pointer-fine:group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
                                 <Icon name="paintBrush" size="sm" />
                               </span>
                               <ProfileDisplayName
@@ -4272,7 +4272,7 @@ export default function SettingsAccountTab({
                                 placeholder="Add pronouns"
                               />
                             ) : (
-                              <span className="rounded-md border border-transparent px-1 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
+                              <span className="rounded-md border border-transparent px-1 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition pointer-fine:group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
                                 {currentPronouns || "Add pronouns"}
                               </span>
                             )}
@@ -4284,7 +4284,7 @@ export default function SettingsAccountTab({
                     <div className="mt-5 flex items-center gap-2">
                       <Button
                         type="button"
-                        className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
+                        className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] pointer-fine:hover:opacity-95"
                       >
                         Message
                       </Button>
@@ -4336,7 +4336,7 @@ export default function SettingsAccountTab({
                             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                               Bio
                             </div>
-                            <div className="rounded-lg border border-transparent px-0 py-0.5 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
+                            <div className="rounded-lg border border-transparent px-0 py-0.5 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)] transition pointer-fine:group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
                               {currentBio || (
                                 <span className="text-[color:var(--rm-profile-custom-muted)]">
                                   Add a bio here

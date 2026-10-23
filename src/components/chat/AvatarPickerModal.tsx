@@ -208,7 +208,7 @@ export function AvatarPickerModal({
                   <Icon
                     name="image"
                     size="2xl"
-                    className="mb-4 text-rm-text-muted transition-colors group-hover:text-rm-text"
+                    className="mb-4 text-rm-text-muted transition-colors pointer-fine:group-hover:text-rm-text"
                   />
                   <span className="text-ui-md font-semibold">Upload Image</span>
                   <span className="mt-1 text-ui-xs text-rm-text-muted">
@@ -222,7 +222,7 @@ export function AvatarPickerModal({
                   disabled={Boolean(busyId)}
                   className="group relative flex min-h-[150px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-[background-color,border-color,transform] pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <div className="absolute right-3 top-3 h-16 w-16 rounded-2xl bg-primary/10 transition-transform duration-200 group-hover:rotate-6" />
+                  <div className="absolute right-3 top-3 h-16 w-16 rounded-2xl bg-primary/10 transition-transform duration-200" />
                   <div className="absolute bottom-5 right-9 h-10 w-10 rounded-xl bg-rm-bg-hover" />
                   <div className="relative z-10 mt-auto">
                     <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-hover text-rm-text">
@@ -296,7 +296,7 @@ export function AvatarPickerModal({
                                 className="h-full w-full object-cover outline outline-1 -outline-offset-1 outline-white/10"
                                 loading="lazy"
                               />
-                              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity group-hover/recent:opacity-100">
+                              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity pointer-fine:group-hover/recent:opacity-100">
                                 {isBusy ? (
                                   <Icon
                                     name="loader"
@@ -313,7 +313,7 @@ export function AvatarPickerModal({
                               onClick={() => void handleDelete(item)}
                               disabled={isCurrent || Boolean(busyId)}
                               className={cn(
-                                "absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating text-rm-text-muted opacity-0 shadow-lg transition-[opacity,background-color,color,transform] pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white group-hover/recent:opacity-100 focus-visible:opacity-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35",
+                                "absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating text-rm-text-muted pointer-fine:opacity-0 shadow-lg transition-[opacity,background-color,color,transform] pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white pointer-fine:group-hover/recent:opacity-100 focus-visible:opacity-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35",
                               )}
                               aria-label={
                                 isCurrent

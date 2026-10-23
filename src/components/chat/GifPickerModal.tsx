@@ -2095,7 +2095,7 @@ const GifTile = memo(function GifTile({
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100" />
 
       <Tooltip>
         <TooltipTrigger asChild>
@@ -2106,7 +2106,7 @@ const GifTile = memo(function GifTile({
               onToggleFavorite({ ...gif, duration });
             }}
             className={cn(
-              "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-black/10 opacity-0 shadow-lg transition-ui group-hover:pointer-events-auto group-hover:opacity-100",
+              "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-black/10 pointer-fine:opacity-0 shadow-lg transition-ui pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100",
               favoriteCardBg,
               isFavorite ? "scale-110" : "scale-100",
             )}
@@ -2121,7 +2121,7 @@ const GifTile = memo(function GifTile({
                 "h-4.5 w-4.5 transition-ui",
                 isFavorite
                   ? "fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 scale-110"
-                  : `${favoriteIconBase} fill-transparent group-hover:text-amber-500 dark:group-hover:text-yellow-400`,
+                  : `${favoriteIconBase} fill-transparent pointer-fine:group-hover:text-amber-500 dark:pointer-fine:group-hover:text-yellow-400`,
               )}
               stroke="currentColor"
               strokeWidth="2"

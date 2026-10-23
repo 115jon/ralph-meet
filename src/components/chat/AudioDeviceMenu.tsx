@@ -280,7 +280,7 @@ export function AudioDeviceMenu({
                   }}
                 />
                 <div
-                  className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface opacity-0 shadow-lg transition-opacity group-hover/slider:opacity-100"
+                  className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface opacity-0 shadow-lg transition-opacity pointer-fine:group-hover/slider:opacity-100"
                   style={{
                     left: `calc(${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}% - 6px)`,
                   }}

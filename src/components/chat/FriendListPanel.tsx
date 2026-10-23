@@ -170,7 +170,7 @@ export function FriendListPanel({
                       }}
                       aria-label={`View ${displayName}'s profile`}
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-ui relative">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground ring-1 ring-white/10 pointer-fine:group-hover:ring-white/30 transition-ui relative">
                         {rel.user.avatar_url ? (
                           <AvatarImage
                             src={getAuthAssetUrl(rel.user.avatar_url)}
@@ -203,7 +203,7 @@ export function FriendListPanel({
                               : "Blocked"}
                       </span>
                     </div>
-                    <div className="relative z-20 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className="relative z-20 flex gap-1 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
                       {rel.type === 0 && (
                         <button
                           className="cursor-pointer rounded-lg p-1.5 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-elevated pointer-fine:hover:text-rm-text-secondary outline-none"

@@ -223,7 +223,7 @@ export default function ChannelSettingsModal({
                 >
                   <Icon name="close" size="md" />
                 </button>
-                <span className="text-ui-2xs font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
+                <span className="text-ui-2xs font-bold text-rm-text-muted pointer-fine:group-hover:text-rm-text-secondary">
                   ESC
                 </span>
               </div>

@@ -73,12 +73,12 @@ function ActionRow({
           "cursor-not-allowed opacity-60 pointer-fine:hover:bg-transparent",
       )}
     >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[color:var(--rm-profile-custom-muted)] pointer-fine:group-hover/item:text-[color:var(--rm-profile-custom-text)]">
         {icon}
       </span>
       <span className="truncate">{label}</span>
       {trailing ? (
-        <span className="ml-auto text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">
+        <span className="ml-auto text-[color:var(--rm-profile-custom-muted)] pointer-fine:group-hover/item:text-[color:var(--rm-profile-custom-text)]">
           {trailing}
         </span>
       ) : null}

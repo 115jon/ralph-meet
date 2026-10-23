@@ -133,7 +133,7 @@ export default function CreateChannelModal({
                 "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-ui",
                 type === "text"
                   ? "border-primary"
-                  : "border-rm-border group-hover:border-rm-text-muted/20",
+                  : "border-rm-border pointer-fine:group-hover:border-rm-text-muted/20",
               )}
             >
               {type === "text" && (
@@ -175,7 +175,7 @@ export default function CreateChannelModal({
                 "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-ui",
                 type === "voice"
                   ? "border-primary"
-                  : "border-rm-border group-hover:border-rm-text-muted/20",
+                  : "border-rm-border pointer-fine:group-hover:border-rm-text-muted/20",
               )}
             >
               {type === "voice" && (

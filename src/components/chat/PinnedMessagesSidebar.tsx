@@ -253,7 +253,7 @@ const PinnedMessageItem = ({
                         <Icon name={typeIcon} size="md" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-ui-xs font-semibold text-primary group-hover/file:underline">
+                        <p className="truncate text-ui-xs font-semibold text-primary pointer-fine:group-hover/file:underline">
                           {att.filename}
                         </p>
                         <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
@@ -263,7 +263,7 @@ const PinnedMessageItem = ({
                       <Icon
                         name="download"
                         size="sm"
-                        className="shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary"
+                        className="shrink-0 text-rm-text-muted transition-colors pointer-fine:group-hover/file:text-rm-text-secondary"
                       />
                     </a>
                   );
@@ -273,7 +273,7 @@ const PinnedMessageItem = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-ui -translate-y-1 group-hover:translate-y-0">
+        <div className="flex items-center gap-1.5 shrink-0 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 transition-ui">
           <button
             onClick={() => onJumpToMessage(msg.id)}
             className="px-4 py-1.5 bg-primary pointer-fine:hover:brightness-110 text-primary-foreground font-bold text-ui-2xs rounded-lg transition-ui shadow-lg shadow-primary/10"

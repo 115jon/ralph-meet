@@ -63,7 +63,7 @@ export function StartCallModal({
         className={`flex h-[18px] w-[18px] items-center justify-center rounded-xs border transition-colors ${
           dontAskAgain
             ? "border-primary bg-primary"
-            : "border-rm-text-muted/40 bg-transparent group-hover:border-rm-text-muted/60"
+            : "border-rm-text-muted/40 bg-transparent pointer-fine:group-hover:border-rm-text-muted/60"
         }`}
       >
         {dontAskAgain && (
@@ -87,7 +87,7 @@ export function StartCallModal({
         checked={dontAskAgain}
         onChange={(e) => setDontAskAgain(e.target.checked)}
       />
-      <span className="text-ui-xs text-rm-text-muted group-hover:text-rm-text-secondary transition-colors">
+      <span className="text-ui-xs text-rm-text-muted pointer-fine:group-hover:text-rm-text-secondary transition-colors">
         Don&apos;t ask again
       </span>
     </label>

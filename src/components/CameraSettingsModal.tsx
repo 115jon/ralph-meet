@@ -395,7 +395,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
+                className="p-1 rounded-full text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text transition-ui"
                 aria-label="Close camera settings"
               >
                 <Icon name="close" size="md" />
@@ -423,7 +423,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                 <Select value={selectedDeviceId} onValueChange={selectDevice}>
                   <SelectTrigger
                     aria-label="Select camera device"
-                    className="w-full rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text hover:bg-rm-bg-elevated"
+                    className="w-full rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text pointer-fine:hover:bg-rm-bg-elevated"
                   >
                     <SelectValue placeholder="Select camera device" />
                   </SelectTrigger>
@@ -437,7 +437,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                         key={option.value}
                         value={option.value}
                         textValue={option.label}
-                        className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                        className="text-rm-text-secondary pointer-fine:hover:bg-rm-bg-elevated pointer-fine:hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
                       >
                         <InlineEmojiText text={option.label} />
                       </SelectItem>
@@ -456,7 +456,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploadingBackground}
-                    className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors hover:text-rm-text"
+                    className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors pointer-fine:hover:text-rm-text"
                   >
                     <Icon name="upload" size="xs" />{" "}
                     {isUploadingBackground ? "Uploading" : "Upload Image"}
@@ -483,7 +483,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                           "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-ui",
                           isSelected
                             ? "border-primary bg-primary/5 ring-1 ring-primary"
-                            : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                            : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:border-rm-text/20 pointer-fine:hover:bg-rm-bg-surface/60",
                         )}
                       >
                         {option.id === "none" ? (
@@ -532,7 +532,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                             "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-ui",
                             isSelected
                               ? "border-primary ring-1 ring-primary"
-                              : "border-rm-border hover:border-rm-text/20",
+                              : "border-rm-border pointer-fine:hover:border-rm-text/20",
                           )}
                         >
                           <button
@@ -573,7 +573,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                           <button
                             type="button"
                             onClick={() => void removeBackground(background)}
-                            className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+                            className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 pointer-fine:opacity-0 transition-opacity pointer-fine:hover:text-white pointer-fine:group-hover:opacity-100"
                             aria-label={`Remove ${background.name}`}
                           >
                             <Icon name="trash" size="xs" />
@@ -636,14 +636,14 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-ui-xs font-semibold text-rm-text-muted hover:text-rm-text transition-colors"
+                  className="px-4 py-2 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handlePrimary}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-ui-xs font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui hover:brightness-110 active:scale-[0.96]"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-ui-xs font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui pointer-fine:hover:brightness-110 active:scale-[0.96]"
                 >
                   <span>{isCameraActive ? "Done" : "Turn On Camera"}</span>
                 </button>

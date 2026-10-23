@@ -1243,7 +1243,7 @@ function MediaTabContent({
                   : undefined
               }
             />
-            <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+            <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 pointer-fine:group-hover:opacity-100 transition-opacity flex items-end p-2">
               <span className="text-ui-2xs font-bold text-white truncate">
                 {item.filename}
               </span>
@@ -1593,7 +1593,7 @@ function FilesTabContent({
                   href={getDownloadUrl(item.url)}
                   download={item.filename}
                   onClick={(e) => e.stopPropagation()}
-                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-ui pointer-fine:hover:bg-primary/10 pointer-fine:hover:text-primary group-hover:opacity-100"
+                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted pointer-fine:opacity-0 transition-ui pointer-fine:hover:bg-primary/10 pointer-fine:hover:text-primary pointer-fine:group-hover:opacity-100"
                 >
                   <Icon name="download" size="sm" />
                 </a>
@@ -1921,7 +1921,7 @@ function MemberItem({
           ? "md:bg-transparent md:px-2 md:py-1.5 md:mb-0 md:rounded-md md:border-transparent md:pointer-fine:hover:bg-rm-bg-hover"
           : "md:bg-transparent md:px-2 md:py-1.5 md:mb-0 md:rounded-md md:border-transparent md:pointer-fine:hover:bg-rm-bg-hover", // desktop
         !isOnline &&
-          "opacity-60 grayscale hover:opacity-100 pointer-fine:hover:grayscale-0",
+          "opacity-60 grayscale pointer-fine:hover:opacity-100 pointer-fine:hover:grayscale-0",
       )}
       style={
         hasNameplate && nameplateTheme
@@ -1947,7 +1947,7 @@ function MemberItem({
         </>
       )}
       <div className="relative z-10">
-        <div className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground border border-rm-border transition-ui group-hover:ring-2 group-hover:ring-primary/20">
+        <div className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground border border-rm-border transition-ui pointer-fine:group-hover:ring-2 pointer-fine:group-hover:ring-primary/20">
           {member.user.avatar_url ? (
             <AvatarImage
               src={getAuthAssetUrl(member.user.avatar_url)}
@@ -1992,7 +1992,7 @@ function MemberItem({
                       ? "text-rm-text-primary"
                       : !isOnline
                         ? "text-rm-text-secondary"
-                        : "group-hover:text-rm-text",
+                        : "pointer-fine:group-hover:text-rm-text",
                     roleNameColor && "rm-role-name",
                   )}
                   minContrastRatio={hasNameplate ? 2.8 : undefined}

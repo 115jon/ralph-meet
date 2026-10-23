@@ -407,7 +407,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                       }}
                       aria-label={`View ${displayName}'s profile`}
                     >
-                      <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-ui-sm font-semibold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-ui relative">
+                      <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-ui-sm font-semibold text-primary-foreground ring-1 ring-white/10 pointer-fine:group-hover:ring-white/20 transition-ui relative">
                         {rel.user.avatar_url ? (
                           <AvatarImage
                             src={getAuthAssetUrl(rel.user.avatar_url)}
@@ -448,7 +448,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                     </div>
 
                     {/* Actions */}
-                    <div className="relative z-20 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100">
+                    <div className="relative z-20 flex gap-1 pointer-fine:opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100">
                       {rel.type === 0 && (
                         <IconButton
                           icon="chat"

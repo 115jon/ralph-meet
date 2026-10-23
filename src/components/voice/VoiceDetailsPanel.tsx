@@ -346,14 +346,14 @@ export function VoiceDetailsPanel({
                   <button
                     type="button"
                     onClick={handleDebug}
-                    className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+                    className="text-rm-text-link pointer-fine:hover:underline transition-colors flex items-center gap-1 outline-none"
                   >
                     Debug <ExternalLinkIcon />
                   </button>
                   <button
                     type="button"
                     onClick={handleCopyStats}
-                    className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+                    className="text-rm-text-link pointer-fine:hover:underline transition-colors flex items-center gap-1 outline-none"
                   >
                     {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
                   </button>
@@ -402,7 +402,7 @@ function TabButton({
       className={`pb-2 text-ui-sm font-semibold border-b-2 transition-colors outline-none ${
         isActive
           ? "text-rm-text-link border-rm-text-link"
-          : "text-rm-text-muted border-transparent hover:text-rm-text hover:border-rm-text-muted/30"
+          : "text-rm-text-muted border-transparent pointer-fine:hover:text-rm-text pointer-fine:hover:border-rm-text-muted/30"
       }`}
     >
       {label}

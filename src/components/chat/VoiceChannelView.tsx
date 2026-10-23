@@ -602,7 +602,7 @@ export default function VoiceChannelView({
                       "w-44 sm:w-52 aspect-video shrink-0 transition-ui py-2",
                       focusedId === item.id
                         ? ""
-                        : "opacity-70 hover:opacity-100",
+                        : "opacity-70 pointer-fine:hover:opacity-100",
                     )}
                   >
                     <ParticipantCard

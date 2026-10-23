@@ -540,7 +540,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                     <Icon
                       name="copy"
                       size="xs"
-                      className="opacity-0 group-hover:opacity-60 transition-opacity"
+                      className="opacity-0 pointer-fine:group-hover:opacity-60 transition-opacity"
                     />
                   )}
                 </button>

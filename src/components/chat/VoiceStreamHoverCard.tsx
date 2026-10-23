@@ -93,7 +93,7 @@ export function VoiceStreamHoverCard({
         className={cn(
           "group/stream-thumb relative block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface text-left shadow-lg transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
           hasWatchAction &&
-            "cursor-pointer pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-primary/30 pointer-fine:hover:shadow-xl active:translate-y-0 active:scale-[0.98]",
+            "cursor-pointershadow-xl active:translate-y-0 active:scale-[0.98]",
           !hasWatchAction && "cursor-default",
         )}
       >
@@ -104,7 +104,7 @@ export function VoiceStreamHoverCard({
               alt={`${displayName} stream preview`}
               className={cn(
                 "h-full w-full object-cover transition-transform duration-200",
-                hasWatchAction && "group-hover/stream-thumb:scale-[1.015]",
+                hasWatchAction && "",
               )}
             />
           ) : (
@@ -117,7 +117,8 @@ export function VoiceStreamHoverCard({
         <div
           className={cn(
             "pointer-events-none absolute inset-0 bg-transparent transition-colors duration-200",
-            hasWatchAction && "group-hover/stream-thumb:bg-rm-bg-primary/35",
+            hasWatchAction &&
+              "pointer-fine:group-hover/stream-thumb:bg-rm-bg-primary/35",
           )}
         />
         <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center justify-center">
@@ -125,7 +126,7 @@ export function VoiceStreamHoverCard({
             className={cn(
               "rounded-full border border-rm-border bg-rm-bg-floating/90 px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text shadow-lg backdrop-blur-sm transition-ui",
               hasWatchAction
-                ? "opacity-0 group-hover/stream-thumb:-translate-y-0.5 group-hover/stream-thumb:opacity-100"
+                ? "opacity-0stream-thumb:opacity-100"
                 : "opacity-100",
             )}
           >

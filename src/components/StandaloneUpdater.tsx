@@ -212,7 +212,7 @@ export function StandaloneUpdater() {
       </p>
       {status === "error" && (
         <button
-          className="mt-4 rounded-md bg-rm-accent px-3.5 py-1.5 text-ui-sm font-semibold text-white transition-ui hover:bg-rm-accent-hover enabled:active:scale-[0.96]"
+          className="mt-4 rounded-md bg-rm-accent px-3.5 py-1.5 text-ui-sm font-semibold text-white transition-ui pointer-fine:hover:bg-rm-accent-hover enabled:active:scale-[0.96]"
           style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => window.location.reload()}
         >

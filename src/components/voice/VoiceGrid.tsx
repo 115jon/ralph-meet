@@ -130,7 +130,7 @@ export const VoiceGrid = React.memo(
       return (
         <div
           data-focused-stage="true"
-          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary group/stage cursor-pointer transition-shadow hover:ring-1 hover:ring-rm-border-strong"
+          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary group/stage cursor-pointer transition-shadow pointer-fine:hover:ring-1 pointer-fine:hover:ring-rm-border-strong"
         >
           <StickerReactionsOverlay sfu={voiceActions?.sfu} />
           <button
@@ -225,7 +225,7 @@ export const VoiceGrid = React.memo(
             voiceActions?.togglePreviewHidden && (
               <div
                 data-preview-toggle="true"
-                className="pointer-events-none absolute top-24 left-4 z-50 opacity-0 transition-opacity group-hover/stage:pointer-events-auto group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 md:left-6"
+                className="pointer-fine:pointer-events-none absolute top-24 left-4 z-50 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover/stage:pointer-events-auto pointer-fine:group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 md:left-6"
               >
                 <button
                   type="button"

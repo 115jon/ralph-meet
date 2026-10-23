@@ -294,7 +294,7 @@ function VoiceChannelMediaDisplay({
               <button
                 type="button"
                 aria-label="Change media"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-white/30 pointer-fine:hover:bg-black/75 pointer-fine:hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-white/30 pointer-fine:hover:bg-black/75 pointer-fine:hover:text-white md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onChange();
@@ -314,7 +314,7 @@ function VoiceChannelMediaDisplay({
                 type="button"
                 aria-label="Remove media"
                 disabled={isRemoving}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-destructive/50 pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-destructive/50 pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove();
@@ -473,7 +473,7 @@ function SortableChannelItem({
           <Icon
             name="dragHandle"
             size="xs"
-            className="relative z-20 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40 hover:!opacity-80"
+            className="relative z-20 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing pointer-fine:group-hover:opacity-40 pointer-fine:hover:!opacity-80"
             {...attributes}
             {...listeners}
           />
@@ -500,7 +500,7 @@ function SortableChannelItem({
           )}
           {/* Voice channel uptime — visible by default, hidden on hover */}
           {uptime && (
-            <span className="text-ui-2xs font-medium tabular-nums text-rm-success block group-hover:hidden translate-y-px">
+            <span className="text-ui-2xs font-medium tabular-nums text-rm-success block pointer-fine:group-hover:hidden translate-y-px">
               {uptime}
             </span>
           )}
@@ -509,7 +509,7 @@ function SortableChannelItem({
           <div
             className={cn(
               "relative z-20 items-center gap-1 pointer-coarse:hidden!",
-              uptime ? "hidden group-hover:flex" : "flex",
+              uptime ? "hidden pointer-fine:group-hover:flex" : "flex",
             )}
           >
             {canManage && (
@@ -518,7 +518,7 @@ function SortableChannelItem({
                   <button
                     type="button"
                     aria-label="Channel settings"
-                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
+                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity pointer-fine:group-hover:opacity-60 pointer-fine:hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditChannel(channel);
@@ -537,7 +537,7 @@ function SortableChannelItem({
                 <button
                   type="button"
                   aria-label="Invite to channel"
-                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
+                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity pointer-fine:group-hover:opacity-60 pointer-fine:hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
                   onClick={(e) => {
                     e.stopPropagation();
                     onInviteToChannel(channel);
@@ -591,7 +591,7 @@ function SortableChannelItem({
                   <Icon
                     name="edit"
                     size="xs"
-                    className="shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text"
+                    className="shrink-0 text-rm-text-muted transition-colors pointer-fine:group-hover/text:text-rm-text"
                   />
                 </button>
               </TooltipTrigger>
@@ -622,7 +622,7 @@ function SortableChannelItem({
                       setIsVoiceMediaStatusOpen(true);
                     }}
                   >
-                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-rm-bg-hover text-rm-text-muted transition-colors group-hover/vibe:bg-rm-bg-active group-hover/vibe:text-rm-text">
+                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-rm-bg-hover text-rm-text-muted transition-colors pointer-fine:group-hover/vibe:bg-rm-bg-active pointer-fine:group-hover/vibe:text-rm-text">
                       <Icon name="sparkle" size="sm" />
                     </div>
                     <span className="text-ui-sm font-semibold text-rm-text">
@@ -1045,7 +1045,7 @@ export default function ChannelSidebar({
             <Icon
               name="chevronDown"
               size="xs"
-              className="absolute right-3 bottom-3 text-rm-text/75 dark:text-white/60 group-hover/banner:opacity-100 transition-opacity z-10"
+              className="absolute right-3 bottom-3 text-rm-text/75 dark:text-white/60 pointer-fine:group-hover/banner:opacity-100 transition-opacity z-10"
             />
           </button>
         ) : (
@@ -1758,7 +1758,7 @@ function VoiceChannelMemberRow({
         <UserDisplayName
           text={resolvedIdentity.name}
           displayNameStyle={resolvedDisplayNameStyle}
-          className="flex-1 truncate text-ui-sm font-medium text-rm-text-muted group-hover/vc-user:text-rm-text"
+          className="flex-1 truncate text-ui-sm font-medium text-rm-text-muted pointer-fine:group-hover/vc-user:text-rm-text"
         />
         <div className="ml-auto flex items-center gap-1">
           {shouldShowStreamState && (

@@ -185,7 +185,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
                 alt="Server icon preview"
                 className="h-full w-full object-cover"
               />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
                 <span className="text-ui-2xs font-bold uppercase text-white">
                   Change
                 </span>
@@ -196,9 +196,9 @@ export default function CreateServerModal({ open, onClose }: Props) {
               <Icon
                 name="add"
                 size="lg"
-                className="text-rm-text-muted/40 transition-colors group-hover:text-primary"
+                className="text-rm-text-muted/40 transition-colors pointer-fine:group-hover:text-primary"
               />
-              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 group-hover:text-primary">
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 pointer-fine:group-hover:text-primary">
                 Icon
               </span>
             </div>

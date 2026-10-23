@@ -453,7 +453,9 @@ describe("LinkEmbed - X mixed media", () => {
 
     expect(markup).toContain('href="https://www.twitch.tv/rikohgg"');
     expect(markup).toContain(">twitch.tv/rikohgg<");
-    expect(markup).toContain("text-primary transition-colors hover:underline");
+    expect(markup).toContain(
+      "text-primary transition-colors pointer-fine:hover:underline",
+    );
   });
 
   it("keeps single quoted tweet media in a smaller compact card", () => {

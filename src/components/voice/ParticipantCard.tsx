@@ -125,7 +125,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !isFocused &&
             !item.isSpeaking &&
             !item.isRinging &&
-            "ring-1 ring-rm-border hover:ring-rm-border-strong",
+            "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
         )}
       >
         <button
@@ -182,7 +182,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               )}
             />
             {/* Dark gradient for labels */}
-            <div className="absolute inset-0 bg-linear-to-t from-black/20 via-transparent to-transparent opacity-100 group-hover:opacity-40 transition-opacity" />
+            <div className="absolute inset-0 bg-linear-to-t from-black/20 via-transparent to-transparent opacity-100 pointer-fine:group-hover:opacity-40 transition-opacity" />
           </div>
         )}
 
@@ -382,7 +382,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isScreen && item.isLocal && voiceActions?.togglePreviewHidden && (
           <div
             data-preview-toggle="true"
-            className="pointer-events-none absolute top-2 left-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
+            className="pointer-fine:pointer-events-none absolute top-2 left-2 z-50 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
           >
             <button
               type="button"
@@ -416,7 +416,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Right status (Ellipsis Bottom Right) */}
         {!isTray && (
-          <div className="pointer-events-none absolute bottom-2 right-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100">
+          <div className="pointer-fine:pointer-events-none absolute bottom-2 right-2 z-50 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100">
             <IconButton
               aria-label="More options"
               icon="more"
@@ -430,7 +430,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
         {isTray && (
-          <div className="pointer-events-none absolute top-2 right-2 z-30 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="pointer-events-none absolute top-2 right-2 z-30 opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
             <div className="bg-rm-bg-primary/60 backdrop-blur-md p-1 rounded-lg border border-rm-border">
               <Icon
                 name="chevronDown"
@@ -442,7 +442,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {/* Hover Overlay */}
-        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none" />
+        <div className="absolute inset-0 bg-black opacity-0 pointer-fine:group-hover:opacity-10 transition-opacity pointer-events-none" />
       </div>
 
       {shouldRenderStreamMenu && renderedContextMenu && (

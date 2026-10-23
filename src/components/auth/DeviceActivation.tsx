@@ -180,8 +180,8 @@ function uniqueParts(parts: Array<string | null | undefined>): string[] {
 // ── Small pieces ──────────────────────────────────────────────────────────────
 
 const BTN =
-  "relative inline-flex h-11 w-full items-center justify-center gap-2.5 overflow-hidden rounded-[10px] px-4 text-ui-base font-medium leading-none text-[var(--rm-text-primary)] transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] [-webkit-tap-highlight-color:transparent] after:pointer-events-none after:absolute after:inset-0 after:bg-current after:opacity-0 after:transition-opacity after:duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:cursor-default active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100 [@media(hover:hover)_and_(pointer:fine)]:hover:enabled:after:opacity-[0.07]";
-const BTN_SECONDARY = `${BTN} border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] [@media(hover:hover)_and_(pointer:fine)]:hover:enabled:border-[var(--rm-text-ghost)] disabled:opacity-50`;
+  "relative inline-flex h-11 w-full items-center justify-center gap-2.5 overflow-hidden rounded-[10px] px-4 text-ui-base font-medium leading-none text-[var(--rm-text-primary)] transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] [-webkit-tap-highlight-color:transparent] after:pointer-events-none after:absolute after:inset-0 after:bg-current after:opacity-0 after:transition-opacity after:duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:cursor-default active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100 pointer-fine:hover:enabled:after:opacity-[0.07]";
+const BTN_SECONDARY = `${BTN} border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] pointer-fine:hover:enabled:border-[var(--rm-text-ghost)] disabled:opacity-50`;
 const BTN_PRIMARY = `${BTN} bg-[var(--rm-accent)] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(0,0,0,0.3)] disabled:opacity-50`;
 
 function Button({
@@ -682,7 +682,7 @@ export function DeviceActivation({
             type="button"
             onClick={switchAccount}
             disabled={busy !== null}
-            className="-mr-1 min-h-11 flex-none rounded-lg px-1 text-ui-sm text-[var(--rm-text-secondary)] underline decoration-[var(--rm-accent)]/60 underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:opacity-50 [@media(hover:hover)_and_(pointer:fine)]:hover:text-[var(--rm-text-primary)]"
+            className="-mr-1 min-h-11 flex-none rounded-lg px-1 text-ui-sm text-[var(--rm-text-secondary)] underline decoration-[var(--rm-accent)]/60 underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:opacity-50 pointer-fine:hover:text-[var(--rm-text-primary)]"
           >
             Not you?<span className="sr-only"> Use another account</span>
           </button>
@@ -749,7 +749,7 @@ export function DeviceActivation({
       {copy.action === "enter" ? (
         <a
           href="/activate"
-          className={`${BTN_SECONDARY} mt-[18px] no-underline hover:no-underline`}
+          className={`${BTN_SECONDARY} mt-[18px] no-underline pointer-fine:hover:no-underline`}
         >
           Enter a different code
         </a>

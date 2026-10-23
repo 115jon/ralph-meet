@@ -186,7 +186,7 @@ export default function ShareSnapshotPreview({
                         src={url}
                         alt={attachment.filename}
                         className={cn(
-                          "h-full w-full object-contain transition group-hover/image:brightness-105",
+                          "h-full w-full object-contain transition pointer-fine:group-hover/image:brightness-105",
                           previewMedia ? "max-h-[220px]" : "max-h-[360px]",
                         )}
                         loading="lazy"

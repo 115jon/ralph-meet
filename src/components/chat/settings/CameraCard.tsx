@@ -103,7 +103,7 @@ function BackgroundTile({
           type="button"
           onClick={onRemove}
           aria-label={`Remove ${label}`}
-          className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-sm bg-black/60 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+          className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-sm bg-black/60 text-white pointer-fine:opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
         >
           <Icon name="trash" size="xs" />
         </button>

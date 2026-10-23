@@ -244,7 +244,7 @@ export function ImageViewerToolbar({
                     <Icon
                       name="copy"
                       size="sm"
-                      className="opacity-50 group-hover:opacity-100"
+                      className="opacity-50 pointer-fine:group-hover:opacity-100"
                     />
                   </button>
                 )}
@@ -257,7 +257,7 @@ export function ImageViewerToolbar({
                   <Icon
                     name="link"
                     size="sm"
-                    className="opacity-50 group-hover:opacity-100"
+                    className="opacity-50 pointer-fine:group-hover:opacity-100"
                   />
                 </button>
 
@@ -284,7 +284,7 @@ export function ImageViewerToolbar({
                       "transition-transform duration-200",
                       showDetails
                         ? "rotate-90 opacity-100"
-                        : "opacity-50 group-hover:opacity-100",
+                        : "opacity-50 pointer-fine:group-hover:opacity-100",
                     )}
                   />
                 </button>
@@ -299,7 +299,7 @@ export function ImageViewerToolbar({
                   <Icon
                     name="copyId"
                     size="sm"
-                    className="opacity-50 group-hover:opacity-100"
+                    className="opacity-50 pointer-fine:group-hover:opacity-100"
                   />
                 </button>
 

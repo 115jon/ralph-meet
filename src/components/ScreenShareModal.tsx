@@ -135,7 +135,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                       "group relative overflow-hidden rounded-xl border p-3 text-left transition-ui outline-none",
                       selectedQuality === q.id
                         ? "border-primary/50 bg-primary/10 ring-1 ring-primary/50"
-                        : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                        : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:border-rm-text/20 pointer-fine:hover:bg-rm-bg-surface/60",
                     )}
                   >
                     <div className="mb-1 flex items-center justify-between">
@@ -150,7 +150,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                         >
                           {q.label}
                         </span>
-                        <span className="rounded-md bg-rm-bg-elevated/40 px-1.5 py-0.5 text-ui-2xs font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
+                        <span className="rounded-md bg-rm-bg-elevated/40 px-1.5 py-0.5 text-ui-2xs font-bold text-rm-text-muted pointer-fine:group-hover:text-rm-text-secondary">
                           {q.fps}
                         </span>
                       </div>
@@ -158,7 +158,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                         <Icon name="check" size="sm" className="text-primary" />
                       )}
                     </div>
-                    <p className="line-clamp-1 text-ui-2xs leading-tight text-rm-text-muted group-hover:text-rm-text-secondary">
+                    <p className="line-clamp-1 text-ui-2xs leading-tight text-rm-text-muted pointer-fine:group-hover:text-rm-text-secondary">
                       {q.desc}
                     </p>
 
@@ -184,7 +184,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                   type="button"
                   onClick={() => setWithAudio(!withAudio)}
                   aria-pressed={withAudio}
-                  className="group flex w-full items-center justify-between rounded-xl border border-rm-border bg-rm-bg-surface/40 p-3 text-left transition-ui hover:border-rm-text/20 hover:bg-rm-bg-surface/60 outline-none focus:ring-2 focus:ring-primary/20"
+                  className="group flex w-full items-center justify-between rounded-xl border border-rm-border bg-rm-bg-surface/40 p-3 text-left transition-ui pointer-fine:hover:border-rm-text/20 pointer-fine:hover:bg-rm-bg-surface/60 outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -245,7 +245,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
             <div className="flex items-center justify-end gap-3 border-t border-rm-border bg-rm-bg-surface/20 p-4">
               <button
                 onClick={onClose}
-                className="px-6 py-2 text-ui-sm font-semibold text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+                className="px-6 py-2 text-ui-sm font-semibold text-rm-text-muted/40 transition-colors pointer-fine:hover:text-rm-text outline-none"
               >
                 Cancel
               </button>
@@ -257,7 +257,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                   });
                   onStart({ quality: selectedQuality, withAudio });
                 }}
-                className="flex items-center gap-2 rounded-xl bg-primary px-8 py-2.5 text-ui-sm font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui active:scale-[0.96] hover:brightness-110"
+                className="flex items-center gap-2 rounded-xl bg-primary px-8 py-2.5 text-ui-sm font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui active:scale-[0.96] pointer-fine:hover:brightness-110"
               >
                 <span>Go Live</span>
                 <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground/40" />

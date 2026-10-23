@@ -484,11 +484,7 @@ export function VoiceDashboard({
                         aria-haspopup="dialog"
                       >
                         <span className="relative flex items-center justify-center">
-                          <Icon
-                            name="speaking"
-                            size="md"
-                            className="group-hover:animate-wiggle"
-                          />
+                          <Icon name="speaking" size="md" className="" />
                           {!settings.noiseReductionEnabled && (
                             <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
                               <span className="absolute h-0.5 w-5 -rotate-45 rounded-full bg-current" />
@@ -514,11 +510,7 @@ export function VoiceDashboard({
                       "pointer-fine:hover:text-rm-danger-ink",
                     )}
                   >
-                    <Icon
-                      name="disconnect"
-                      size="lg"
-                      className="group-hover:animate-wiggle"
-                    />
+                    <Icon name="disconnect" size="lg" className="" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12}>
@@ -814,14 +806,10 @@ export function VoiceDashboard({
                         name="camera"
                         state="active"
                         size="md"
-                        className="group-hover:animate-wiggle"
+                        className=""
                       />
                     ) : (
-                      <Icon
-                        name="cameraOff"
-                        size="md"
-                        className="group-hover:animate-wiggle"
-                      />
+                      <Icon name="cameraOff" size="md" className="" />
                     )}
                   </button>
                 </TooltipTrigger>
@@ -862,7 +850,7 @@ export function VoiceDashboard({
                       name="screenShare"
                       state={isScreenSharing ? "active" : "idle"}
                       size="md"
-                      className="group-hover:animate-wiggle"
+                      className=""
                     />
                   </button>
                 </TooltipTrigger>
@@ -884,11 +872,7 @@ export function VoiceDashboard({
                     aria-label="Start an Activity"
                     className={cn(ACTION_BTN, "flex-1", ACTION_REST)}
                   >
-                    <Icon
-                      name="activities"
-                      size="md"
-                      className="group-hover:animate-wiggle"
-                    />
+                    <Icon name="activities" size="md" className="" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12}>
@@ -916,7 +900,7 @@ export function VoiceDashboard({
                         name="soundboard"
                         state={isSoundboardPickerOpen ? "active" : "idle"}
                         size="md"
-                        className="group-hover:animate-wiggle"
+                        className=""
                       />
                     </button>
                   </TooltipTrigger>
@@ -963,7 +947,7 @@ export function VoiceDashboard({
                           name="sticker"
                           state={isStickerPickerOpen ? "active" : "idle"}
                           size="md"
-                          className="group-hover:animate-wiggle"
+                          className=""
                         />
                       </button>
                     </div>

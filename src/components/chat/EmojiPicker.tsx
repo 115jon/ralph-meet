@@ -1021,7 +1021,7 @@ export default function EmojiPicker({
                             type="button"
                             onClick={() => void handleGenerate()}
                             disabled={!prompt.trim() || isGenerating}
-                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-ui-sm font-semibold text-white hover:opacity-90 active:scale-[0.96] transition-ui disabled:cursor-not-allowed disabled:opacity-55"
+                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-ui-sm font-semibold text-white pointer-fine:hover:opacity-90 active:scale-[0.96] transition-ui disabled:cursor-not-allowed disabled:opacity-55"
                           >
                             {isGenerating ? (
                               <Icon

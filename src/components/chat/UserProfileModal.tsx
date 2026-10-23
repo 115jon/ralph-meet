@@ -365,7 +365,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                               <Button
                                 type="button"
                                 onClick={() => void handleMessage()}
-                                className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
+                                className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] pointer-fine:hover:opacity-95"
                                 style={profileThemeStyle}
                               >
                                 <Icon name="chat" size="sm" />

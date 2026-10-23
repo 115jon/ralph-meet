@@ -271,7 +271,7 @@ function PermissionsSidebar({
                   <Icon
                     name="trash"
                     size="xs"
-                    className="opacity-0 group-hover:opacity-100 pointer-fine:hover:text-destructive shrink-0"
+                    className="pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:hover:text-destructive shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteOverride(o.target_id);

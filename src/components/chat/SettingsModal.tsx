@@ -480,7 +480,7 @@ export default function SettingsModal({
                           narrow ? "h-11" : "h-8",
                           current
                             ? "bg-rm-bg-active font-medium text-rm-text"
-                            : "text-rm-text-secondary pointer-fine:enabled:hover:bg-rm-bg-hover pointer-fine:enabled:hover:text-rm-text",
+                            : "text-rm-text-secondary pointer-fine:enabled:pointer-fine:hover:bg-rm-bg-hover pointer-fine:enabled:pointer-fine:hover:text-rm-text",
                         )}
                       >
                         <Icon name={def.icon} size="sm" className="shrink-0" />

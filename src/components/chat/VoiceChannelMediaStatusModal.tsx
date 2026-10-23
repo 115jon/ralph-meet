@@ -96,7 +96,7 @@ function VoiceStatusMediaTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-ui pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-uisabled:cursor-not-allowed disabled:opacity-60"
     >
       <div
         className="w-full overflow-hidden rounded-lg bg-rm-bg-hover"
@@ -381,7 +381,7 @@ export default function VoiceChannelMediaStatusModal({
                       <Icon
                         name="upload"
                         size="2xl"
-                        className="mb-4 text-rm-text-muted group-hover:text-rm-text"
+                        className="mb-4 text-rm-text-muted pointer-fine:group-hover:text-rm-text"
                       />
                     )}
                     <span className="text-ui-lg font-semibold text-rm-text">

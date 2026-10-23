@@ -120,7 +120,7 @@ function HomePageHeader() {
           {!isSignedIn ? (
             <a
               href="/sign-in"
-              className={`rounded-full bg-rm-accent px-4 py-1.5 text-ui-sm font-medium text-white transition-colors hover:bg-rm-accent-hover active:scale-[0.98] ${focusRing}`}
+              className={`rounded-full bg-rm-accent px-4 py-1.5 text-ui-sm font-medium text-white transition-colors pointer-fine:hover:bg-rm-accent-hover active:scale-[0.98] ${focusRing}`}
             >
               Sign In
             </a>
@@ -215,7 +215,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             <button
               type="button"
               onClick={createRoom}
-              className={`flex items-center gap-2 rounded-full bg-rm-accent px-6 py-3 text-ui-sm font-semibold text-white shadow-[0_10px_24px_-12px] shadow-rm-accent transition-colors hover:bg-rm-accent-hover active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
+              className={`flex items-center gap-2 rounded-full bg-rm-accent px-6 py-3 text-ui-sm font-semibold text-white shadow-[0_10px_24px_-12px] shadow-rm-accent transition-colors pointer-fine:hover:bg-rm-accent-hover active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
             >
               Start a room
             </button>
@@ -223,7 +223,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             {isSignedIn ? (
               <a
                 href="/chat"
-                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-ui-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
+                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-ui-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
               >
                 <Icon name="chat" size="sm" />
                 Open chat
@@ -231,7 +231,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             ) : isWindowsUser ? (
               <a
                 href={latestRelease.downloadUrl}
-                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-ui-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
+                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-ui-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
               >
                 <Icon name="download" size="sm" />
                 Download
@@ -419,7 +419,7 @@ function HomePageCTA({
           <button
             type="submit"
             disabled={!room.trim()}
-            className={`flex items-center justify-center gap-2 rounded-lg bg-rm-accent px-6 py-3 font-semibold text-white transition-colors hover:bg-rm-accent-hover disabled:cursor-not-allowed disabled:opacity-50 font-[family-name:var(--font-family-body)] ${focusRing}`}
+            className={`flex items-center justify-center gap-2 rounded-lg bg-rm-accent px-6 py-3 font-semibold text-white transition-colors pointer-fine:hover:bg-rm-accent-hover disabled:cursor-not-allowed disabled:opacity-50 font-[family-name:var(--font-family-body)] ${focusRing}`}
           >
             <span>Join room</span>
             <Icon name="arrowRight" size="sm" />
@@ -447,7 +447,7 @@ function HomePageFooter() {
             href="https://github.com/115jon/ralph-meet"
             target="_blank"
             rel="noreferrer"
-            className={`transition-colors hover:text-rm-text ${focusRing} rounded-sm`}
+            className={`transition-colors pointer-fine:hover:text-rm-text ${focusRing} rounded-sm`}
           >
             GitHub
           </a>
@@ -455,7 +455,7 @@ function HomePageFooter() {
             href="https://github.com/115jon/ralph-meet/releases/latest"
             target="_blank"
             rel="noreferrer"
-            className={`transition-colors hover:text-rm-text ${focusRing} rounded-sm`}
+            className={`transition-colors pointer-fine:hover:text-rm-text ${focusRing} rounded-sm`}
           >
             Download
           </a>

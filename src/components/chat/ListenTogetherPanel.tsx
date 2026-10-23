@@ -1298,7 +1298,7 @@ export function ListenTogetherPanel({
         onKeyDown={handlePaneKeyDown}
         className="group relative hidden min-h-0 cursor-col-resize items-center justify-center rounded-full outline-none lg:flex"
       >
-        <span className="h-16 w-1 rounded-full bg-rm-border transition-colors group-hover:bg-primary/60 group-focus-visible:bg-primary" />
+        <span className="h-16 w-1 rounded-full bg-rm-border transition-colors pointer-fine:group-hover:bg-primary/60 group-focus-visible:bg-primary" />
       </button>
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-rm-border pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">

@@ -944,11 +944,11 @@ const MessageItem = memo(
         {message.reply_to && !hideReplyConnector && (
           <button
             type="button"
-            className="ml-14 mb-1 flex border-0 bg-transparent p-0 text-left items-center gap-2 opacity-60 transition-opacity hover:opacity-100 cursor-pointer group/reply outline-none"
+            className="ml-14 mb-1 flex border-0 bg-transparent p-0 text-left items-center gap-2 opacity-60 transition-opacity pointer-fine:hover:opacity-100 cursor-pointer group/reply outline-none"
             onClick={() => onJump?.(message.reply_to_id!)}
             aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
           >
-            <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
+            <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border pointer-fine:group-hover/reply:border-rm-text-muted transition-colors" />
             <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text-muted relative">
               {replyInfo.avatarUrl ? (
                 <AvatarImage
@@ -991,7 +991,7 @@ const MessageItem = memo(
           {showHeader ? (
             <button
               type="button"
-              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-ui-sm font-semibold text-primary transition-opacity hover:opacity-80 relative"
+              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-ui-sm font-semibold text-primary transition-opacity pointer-fine:hover:opacity-80 relative"
               onClick={() => setShowProfile(true)}
               aria-label={`View ${authorInfo.displayName}'s profile`}
             >
@@ -1009,7 +1009,7 @@ const MessageItem = memo(
               )}
             </button>
           ) : (
-            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 pointer-fine:group-hover:opacity-100 transition-opacity">
               <span className="select-none text-ui-2xs font-medium text-rm-text-muted">
                 {formatMessageTime(message.created_at, formatClientDate)}
               </span>
@@ -1230,7 +1230,7 @@ const MessageItem = memo(
                         <Icon name={typeIcon} size="lg" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-ui-sm font-medium text-primary group-hover/file:underline">
+                        <p className="truncate text-ui-sm font-medium text-primary pointer-fine:group-hover/file:underline">
                           {att.filename}
                         </p>
                         <p className="text-ui-2xs text-rm-text-muted">
@@ -1240,7 +1240,7 @@ const MessageItem = memo(
                       <Icon
                         name="download"
                         size="sm"
-                        className="shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary"
+                        className="shrink-0 text-rm-text-muted transition-colors pointer-fine:group-hover/file:text-rm-text-secondary"
                       />
                     </a>
                   );

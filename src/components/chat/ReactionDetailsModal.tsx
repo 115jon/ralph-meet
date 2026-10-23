@@ -68,7 +68,7 @@ function ReactionUserRow({
           variant="destructive"
           type="button"
           onClick={onRemove}
-          className="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           aria-label={`Remove reaction from ${displayName}`}
         />
       )}

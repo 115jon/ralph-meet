@@ -414,7 +414,7 @@ function PopoverRoles({
                     optimisticRoles?.map((currentRole) => currentRole.id) || [];
                   assignRole(role.id, currentRoles);
                 }}
-                className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] opacity-0 transition-ui pointer-fine:hover:bg-black/8 pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] group-hover:opacity-100"
+                className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] pointer-fine:opacity-0 transition-ui pointer-fine:hover:bg-black/8 pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] pointer-fine:group-hover:opacity-100"
               >
                 <Icon name="close" size="xs" />
               </ButtonBase>

@@ -16,7 +16,7 @@ const badgeVariants = cva(
         destructive: "bg-rm-danger-tint text-rm-danger-ink",
         outline: "border-rm-border-strong text-rm-text",
         ghost: "text-rm-text-secondary",
-        link: "text-rm-accent-ink underline-offset-[3px] [a&]:hover:underline",
+        link: "text-rm-accent-ink underline-offset-[3px] [a&]:pointer-fine:hover:underline",
       },
     },
     defaultVariants: {

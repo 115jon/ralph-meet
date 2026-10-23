@@ -277,7 +277,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
             href={embed.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-ui-base font-semibold text-[#00A8FC] hover:underline leading-snug break-words"
+            className="text-ui-base font-semibold text-[#00A8FC] pointer-fine:hover:underline leading-snug break-words"
           >
             <EmbedInlineText
               text={embed.rawTitle}
@@ -440,14 +440,14 @@ const RemoveEmbedsModal = memo(
           <button
             type="button"
             onClick={onCancel}
-            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-rm-text-secondary hover:text-rm-text-primary hover:bg-rm-bg-hover transition-colors"
+            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-rm-text-secondary pointer-fine:hover:text-rm-text-primary pointer-fine:hover:bg-rm-bg-hover transition-colors"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-white bg-[#da373c] hover:bg-[#a12828] transition-colors"
+            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-white bg-[#da373c] pointer-fine:hover:bg-[#a12828] transition-colors"
           >
             Remove All Embeds
           </button>
@@ -627,7 +627,7 @@ const YouTubeEmbed = memo(
                 {/* Play button */}
                 <button
                   onClick={handlePlay}
-                  className="w-16 h-11 bg-[#FF0000] hover:bg-[#FF0000]/80 rounded-xl flex items-center justify-center transition-colors cursor-pointer shadow-lg"
+                  className="w-16 h-11 bg-[#FF0000] pointer-fine:hover:bg-[#FF0000]/80 rounded-xl flex items-center justify-center transition-colors cursor-pointer shadow-lg"
                   title="Play"
                 >
                   <PlayIcon />
@@ -637,7 +637,7 @@ const YouTubeEmbed = memo(
                   href={embed.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
+                  className="w-10 h-10 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
                   title="Open in YouTube"
                 >
                   <ExternalIcon />
@@ -1444,7 +1444,7 @@ const TikTokEmbed = memo(
                     href={displayEmbed.author.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:underline"
+                    className="pointer-fine:hover:underline"
                   >
                     <EmbedInlineText
                       text={displayEmbed.author.name}
@@ -1467,7 +1467,7 @@ const TikTokEmbed = memo(
               href={displayEmbed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors hover:bg-black/85"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors pointer-fine:hover:bg-black/85"
               title="Open in TikTok"
               aria-label="Open in TikTok"
             >
@@ -1609,7 +1609,7 @@ const TikTokEmbed = memo(
                           type="button"
                           onClick={handlePrevButtonClick}
                           onPointerDown={stopChromePointerPropagation}
-                          className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                          className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
                           aria-label="Previous media"
                         >
                           <InstagramChevronIcon direction="left" />
@@ -1620,7 +1620,7 @@ const TikTokEmbed = memo(
                           type="button"
                           onClick={handleNextButtonClick}
                           onPointerDown={stopChromePointerPropagation}
-                          className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                          className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
                           aria-label="Next media"
                         >
                           <InstagramChevronIcon direction="right" />
@@ -1677,7 +1677,7 @@ const TikTokEmbed = memo(
                   <EmbedInlineText
                     text={captionText}
                     keyPrefix={`${embed.id}-tiktok-caption`}
-                    linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] hover:underline"
+                    linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] pointer-fine:hover:underline"
                   />
                 </p>
               )}
@@ -1689,7 +1689,7 @@ const TikTokEmbed = memo(
                       <button
                         type="button"
                         onClick={handleAudioToggle}
-                        className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
+                        className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transforms-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
                         aria-label={
                           isAudioPlaying
                             ? "Pause audio preview"
@@ -1700,7 +1700,7 @@ const TikTokEmbed = memo(
                           <img
                             src={audioArtworkSrc}
                             alt=""
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            className="h-full w-full object-cover transition-transform duration-300"
                             loading="lazy"
                             referrerPolicy="no-referrer"
                           />
@@ -2279,7 +2279,7 @@ const XEmbed = memo(
                     href={embed.author.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-w-0 truncate font-semibold text-rm-text-primary hover:underline"
+                    className="min-w-0 truncate font-semibold text-rm-text-primary pointer-fine:hover:underline"
                   >
                     <EmbedInlineText
                       text={authorParts.displayName || embed.author.name}
@@ -2305,7 +2305,7 @@ const XEmbed = memo(
                 href={embed.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors hover:text-rm-text-primary"
+                className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text-primary"
                 aria-label="Open post on X"
                 title="Open on X"
               >
@@ -2342,7 +2342,7 @@ const XEmbed = memo(
               href={embed.externalCard.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-ui-xs leading-none text-rm-text-muted/82 transition-colors hover:text-rm-text-primary"
+              className="text-ui-xs leading-none text-rm-text-muted/82 transition-colors pointer-fine:hover:text-rm-text-primary"
             >
               <span className="text-rm-text-muted/72">From </span>
               <span className="font-medium">{externalCardDomain}</span>
@@ -2431,7 +2431,7 @@ const XReferencedTweetCard = memo(
                   href={tweet.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors hover:text-rm-text-primary"
+                  className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text-primary"
                   aria-label="Open quoted post on X"
                   title="Open on X"
                 >
@@ -2568,7 +2568,7 @@ const XExpandableText = memo(
           <EmbedInlineText
             text={text}
             keyPrefix={keyPrefix}
-            linkClassName="text-primary transition-colors hover:underline"
+            linkClassName="text-primary transition-colors pointer-fine:hover:underline"
             compactUrls
           />
         </div>
@@ -2602,7 +2602,7 @@ const XStandaloneTweetText = memo(
       expandedLabel="Show less"
       expandAriaLabel="Expand post text"
       collapseAriaLabel="Collapse post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-ui-sm font-medium text-primary transition-colors hover:text-primary hover:underline"
+      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-ui-sm font-medium text-primary transition-colors pointer-fine:hover:text-primary pointer-fine:hover:underline"
     />
   ),
 );
@@ -2620,7 +2620,7 @@ const XReferencedTweetText = memo(
       expandedLabel="Show less"
       expandAriaLabel="Expand quoted post text"
       collapseAriaLabel="Collapse quoted post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-ui-xs font-medium text-rm-text-muted/80 transition-colors hover:text-rm-text-primary data-[expanded=false]:tracking-[0.24em]"
+      buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-ui-xs font-medium text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text-primary data-[expanded=false]:tracking-[0.24em]"
     />
   ),
 );
@@ -3012,9 +3012,9 @@ const XMediaTile = memo(
         className={
           single
             ? compact
-              ? `h-[180px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 hover:brightness-105`
-              : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 hover:brightness-105`
-            : "h-full w-full object-cover transition-all duration-300 hover:brightness-105"
+              ? `h-[180px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 pointer-fine:hover:brightness-105`
+              : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 pointer-fine:hover:brightness-105`
+            : "h-full w-full object-cover transition-all duration-300 pointer-fine:hover:brightness-105"
         }
         loading="lazy"
         referrerPolicy="no-referrer"
@@ -3459,7 +3459,7 @@ const XGifTile = memo(
                 type="button"
                 onClick={handleTogglePaused}
                 disabled={prefersReducedMotion}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-black/45 transition-colors hover:bg-black/65"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-black/45 transition-colors pointer-fine:hover:bg-black/65"
                 aria-label={playbackPaused ? "Play GIF" : "Pause GIF"}
                 title={
                   prefersReducedMotion
@@ -3482,7 +3482,7 @@ const XGifTile = memo(
               <button
                 type="button"
                 onClick={handleOpenViewer}
-                className="rounded-md bg-black/45 px-2 py-1 text-ui-xs font-semibold tracking-[0.12em] transition-colors hover:bg-black/65"
+                className="rounded-md bg-black/45 px-2 py-1 text-ui-xs font-semibold tracking-[0.12em] transition-colors pointer-fine:hover:bg-black/65"
                 aria-label="Open GIF viewer"
                 title="Open GIF viewer"
               >
@@ -3494,7 +3494,7 @@ const XGifTile = memo(
                   <button
                     type="button"
                     onClick={handleToggleAlt}
-                    className="rounded-md bg-black/45 px-2 py-1 text-ui-xs font-semibold transition-colors hover:bg-black/65"
+                    className="rounded-md bg-black/45 px-2 py-1 text-ui-xs font-semibold transition-colors pointer-fine:hover:bg-black/65"
                     aria-label="Show GIF alt text"
                     aria-controls={altTextId}
                     aria-expanded={altPinned}
@@ -3505,7 +3505,7 @@ const XGifTile = memo(
                   <div
                     id={altTextId}
                     className={cn(
-                      "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-ui-xs leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
+                      "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-ui-xs leading-relaxed text-white shadow-xl transition-opacity duration-150 pointer-fine:group-hover/x-gif-alt:opacity-100",
                       altPinned ? "opacity-100" : "opacity-0",
                     )}
                     role="tooltip"
@@ -3644,7 +3644,7 @@ const RichEmbed = memo(
                 href={embed.author.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-ui-sm text-rm-text-primary hover:underline"
+                className="font-semibold text-ui-sm text-rm-text-primary pointer-fine:hover:underline"
               >
                 <EmbedInlineText
                   text={embed.author.name}
@@ -3698,7 +3698,7 @@ const RichEmbed = memo(
                     <div className="absolute inset-0 flex items-center justify-center gap-3">
                       <button
                         onClick={handlePlay}
-                        className="w-12 h-12 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-12 h-12 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors cursor-pointer"
                         aria-label="Play video"
                       >
                         <PlayIcon />
@@ -3707,7 +3707,7 @@ const RichEmbed = memo(
                         href={embed.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
+                        className="w-10 h-10 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
                         aria-label="Open in new tab"
                       >
                         <ExternalIcon />
@@ -4541,7 +4541,7 @@ const InstagramEmbed = memo(
                     href={displayEmbed.author.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="truncate font-semibold text-rm-text-primary hover:underline"
+                    className="truncate font-semibold text-rm-text-primary pointer-fine:hover:underline"
                   >
                     <EmbedInlineText
                       text={displayEmbed.author.name}
@@ -4571,7 +4571,7 @@ const InstagramEmbed = memo(
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors hover:bg-black/85"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors pointer-fine:hover:bg-black/85"
               title="Open in Instagram"
               aria-label="Open in Instagram"
             >
@@ -4704,7 +4704,7 @@ const InstagramEmbed = memo(
                       type="button"
                       onClick={handlePrevButtonClick}
                       onPointerDown={stopChromePointerPropagation}
-                      className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                      className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
                       aria-label="Previous media"
                     >
                       <InstagramChevronIcon direction="left" />
@@ -4715,7 +4715,7 @@ const InstagramEmbed = memo(
                       type="button"
                       onClick={handleNextButtonClick}
                       onPointerDown={stopChromePointerPropagation}
-                      className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                      className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors pointer-fine:hover:bg-black/72"
                       aria-label="Next media"
                     >
                       <InstagramChevronIcon direction="right" />
@@ -4782,7 +4782,7 @@ const InstagramEmbed = memo(
               <EmbedInlineText
                 text={captionText}
                 keyPrefix={`${embed.id}-instagram-caption`}
-                linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] hover:underline"
+                linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] pointer-fine:hover:underline"
               />
             </p>
           )}
@@ -4792,7 +4792,7 @@ const InstagramEmbed = memo(
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-ui-xs text-rm-text-muted/86 transition-colors hover:text-rm-text-primary"
+              className="text-ui-xs text-rm-text-muted/86 transition-colors pointer-fine:hover:text-rm-text-primary"
             >
               View all {commentCount.toLocaleString()} comments
             </a>
@@ -4805,7 +4805,7 @@ const InstagramEmbed = memo(
                   <button
                     type="button"
                     onClick={handleAudioToggle}
-                    className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
+                    className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transforms-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
                     aria-label={
                       isAudioPlaying
                         ? "Pause audio preview"
@@ -4816,7 +4816,7 @@ const InstagramEmbed = memo(
                       <img
                         src={audioArtworkSrc}
                         alt=""
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        className="h-full w-full object-cover transition-transform duration-300"
                         loading="lazy"
                         referrerPolicy="no-referrer"
                       />
@@ -4982,7 +4982,7 @@ const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           href={embed.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-fit text-ui-sm font-semibold text-[#00A8FC] hover:underline"
+          className="w-fit text-ui-sm font-semibold text-[#00A8FC] pointer-fine:hover:underline"
         >
           View original
         </a>
@@ -5118,7 +5118,7 @@ export const LinkEmbed = memo(
             <button
               type="button"
               onClick={handleXClick}
-              className="absolute -top-2 -right-6 z-20 w-5 h-5 flex items-center justify-center rounded text-rm-text-muted hover:text-rm-text-primary hover:bg-rm-bg-hover opacity-0 group-hover/embedwrap:opacity-100 transition-all"
+              className="absolute -top-2 -right-6 z-20 w-5 h-5 flex items-center justify-center rounded text-rm-text-muted pointer-fine:hover:text-rm-text-primary pointer-fine:hover:bg-rm-bg-hover pointer-fine:opacity-0 pointer-fine:group-hover/embedwrap:opacity-100 transition-all"
               aria-label="Remove embeds"
               title="Remove all embeds (Shift+click to skip confirmation)"
             >

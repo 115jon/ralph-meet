@@ -23,7 +23,7 @@ interface DeleteButtonProps {
 
 const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
   return (
-    <div className="absolute top-1 right-1 opacity-0 group-hover/att:opacity-100 transition-opacity z-20">
+    <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/att:opacity-100 transition-opacity z-20">
       <button
         type="button"
         onClick={(e) => {
@@ -174,7 +174,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                   options.imageClassName,
                   "pointer-events-none",
                   interactive &&
-                    "peer-hover:brightness-105 peer-focus-visible:brightness-105",
+                    "pointer-fine:peer-hover:brightness-105 peer-focus-visible:brightness-105",
                 )}
               />
               {favorite && <GifFavoriteButton gif={favorite} />}
@@ -329,7 +329,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                     className={cn(
                       "w-full h-full object-cover transition-[filter] duration-200 pointer-events-none",
                       interactive &&
-                        "peer-hover:brightness-105 peer-focus-visible:brightness-105",
+                        "pointer-fine:peer-hover:brightness-105 peer-focus-visible:brightness-105",
                     )}
                   />
                   {favorite && <GifFavoriteButton gif={favorite} />}

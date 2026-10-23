@@ -120,7 +120,7 @@ export default function AttachmentList({
             <Icon name="warning" size="xs" />
             {att.is_nsfw ? "Sensitive" : "Normal"}
           </button>
-          <div className="absolute top-1 right-1 opacity-0 group-hover/item:opacity-100 transition-opacity z-10">
+          <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/item:opacity-100 transition-opacity z-10">
             <button
               type="button"
               onClick={() => onRemove(att.id)}
@@ -169,7 +169,7 @@ export default function AttachmentList({
               {p.file.name}
             </span>
           </div>
-          <div className="absolute top-1 right-1 opacity-0 group-hover/pending:opacity-100 transition-opacity z-20">
+          <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/pending:opacity-100 transition-opacity z-20">
             <button
               type="button"
               onClick={() => onCancel(p.tempId)}

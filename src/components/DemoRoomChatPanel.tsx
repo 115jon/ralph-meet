@@ -236,7 +236,7 @@ export function DemoRoomChatPanel({
           <button
             type="button"
             onClick={onUploadBlocked}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
             title="Uploads are in the full app"
             aria-label="Uploads are in the full app"
           >
@@ -262,14 +262,14 @@ export function DemoRoomChatPanel({
           <button
             type="button"
             onClick={() => setShowGifPicker((current) => !current)}
-            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-ui-xs font-semibold tracking-wide text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-primary"
+            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-ui-xs font-semibold tracking-wide text-rm-text-muted transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-primary"
           >
             GIF
           </button>
           <button
             type="submit"
             disabled={!value.trim()}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition pointer-fine:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Send message"
           >
             <Icon name="send" size="sm" />
@@ -329,14 +329,14 @@ export function DemoUploadBlockerModal({
                 <button
                   type="button"
                   onClick={onSignIn}
-                  className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-ui-sm font-semibold text-primary-foreground transition hover:brightness-110"
+                  className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-ui-sm font-semibold text-primary-foreground transition pointer-fine:hover:brightness-110"
                 >
                   Sign in for uploads
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-sm font-semibold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-sm font-semibold text-rm-text-muted transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                 >
                   Stay in demo
                 </button>

@@ -428,7 +428,7 @@ export default function RoomSettingsModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
+                  className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center pointer-fine:hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
                   aria-label="Close room settings"
                 >
                   <Icon name="close" size="md" />
@@ -472,7 +472,7 @@ export default function RoomSettingsModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text transition-ui"
                   aria-label="Close room settings"
                 >
                   <Icon name="close" size="sm" />
@@ -786,7 +786,7 @@ export default function RoomSettingsModal({
                           ].map((opt) => (
                             <div
                               key={opt.id}
-                              className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-ui"
+                              className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border pointer-fine:hover:bg-rm-bg-hover transition-ui"
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-lg bg-rm-bg-surface flex items-center justify-center text-rm-text-muted">
@@ -874,7 +874,7 @@ export default function RoomSettingsModal({
                         >
                           <SelectTrigger
                             aria-label="Select camera device"
-                            className="w-full max-w-[480px] rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text hover:bg-rm-bg-elevated"
+                            className="w-full max-w-[480px] rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text pointer-fine:hover:bg-rm-bg-elevated"
                           >
                             <SelectValue placeholder="Select camera device" />
                           </SelectTrigger>
@@ -894,7 +894,7 @@ export default function RoomSettingsModal({
                                   key={device.deviceId}
                                   value={device.deviceId}
                                   textValue={label}
-                                  className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                                  className="text-rm-text-secondary pointer-fine:hover:bg-rm-bg-elevated pointer-fine:hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
                                 >
                                   <InlineEmojiText text={label} />
                                 </SelectItem>
@@ -931,7 +931,7 @@ export default function RoomSettingsModal({
                                 "group rounded-xl border p-3 text-left outline-none transition-ui",
                                 isSelected
                                   ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                  : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                                  : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:border-rm-text/20 pointer-fine:hover:bg-rm-bg-surface/60",
                               )}
                             >
                               <div className="mb-1 flex items-center justify-between">
@@ -979,7 +979,7 @@ export default function RoomSettingsModal({
                               type="button"
                               onClick={() => fileInputRef.current?.click()}
                               disabled={isUploadingBackground}
-                              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors hover:text-rm-text"
+                              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors pointer-fine:hover:text-rm-text"
                             >
                               <Icon name="upload" size="xs" />{" "}
                               {isUploadingBackground
@@ -1039,7 +1039,7 @@ export default function RoomSettingsModal({
                                 "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-ui",
                                 isSelected
                                   ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                  : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                                  : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:border-rm-text/20 pointer-fine:hover:bg-rm-bg-surface/60",
                               )}
                             >
                               {option.id === "none" ? (
@@ -1092,7 +1092,7 @@ export default function RoomSettingsModal({
                                   "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-ui",
                                   isSelected
                                     ? "border-primary ring-1 ring-primary"
-                                    : "border-rm-border hover:border-rm-text/20",
+                                    : "border-rm-border pointer-fine:hover:border-rm-text/20",
                                 )}
                               >
                                 <button
@@ -1143,7 +1143,7 @@ export default function RoomSettingsModal({
                                   onClick={() =>
                                     void removeBackground(background)
                                   }
-                                  className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+                                  className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 pointer-fine:opacity-0 transition-opacity pointer-fine:hover:text-white pointer-fine:group-hover:opacity-100"
                                   aria-label={`Remove ${background.name}`}
                                 >
                                   <Icon name="trash" size="xs" />
@@ -1160,7 +1160,7 @@ export default function RoomSettingsModal({
                                 href="/sign-in"
                                 target="_blank"
                                 rel="noreferrer"
-                                className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-ui hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
+                                className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-ui pointer-fine:hover:border-primary/50 pointer-fine:hover:from-primary/15 pointer-fine:hover:to-rm-accent/15"
                               >
                                 <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-ui">
                                   <Icon
@@ -1169,7 +1169,7 @@ export default function RoomSettingsModal({
                                     className="text-rm-accent transition-transform"
                                   />
                                 </div>
-                                <span className="text-ui-xs font-semibold text-primary-foreground/90 group-hover:text-primary">
+                                <span className="text-ui-xs font-semibold text-primary-foreground/90 pointer-fine:group-hover:text-primary">
                                   Upload Custom
                                 </span>
                               </a>
@@ -1193,7 +1193,7 @@ export default function RoomSettingsModal({
                     </div>
 
                     {/* Always Preview Video Toggle */}
-                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-ui max-w-[480px]">
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border pointer-fine:hover:bg-rm-bg-hover transition-ui max-w-[480px]">
                       <div>
                         <h4 className="text-ui-sm font-semibold text-rm-text">
                           Always Preview Video
@@ -1275,7 +1275,7 @@ export default function RoomSettingsModal({
                             "rounded-xl border-2 p-1 transition-ui",
                             theme === t.id
                               ? "border-primary ring-2 ring-primary/20"
-                              : "border-rm-border hover:border-rm-text-muted/30",
+                              : "border-rm-border pointer-fine:hover:border-rm-text-muted/30",
                           )}
                         >
                           <div
@@ -1332,7 +1332,7 @@ function TabBtn({
         "shrink-0 flex items-center md:justify-start justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors w-full text-left",
         active
           ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-          : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+          : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
       )}
     >
       {label}

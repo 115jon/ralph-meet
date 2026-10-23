@@ -237,7 +237,9 @@ export default function ServerList({
           <div
             className={cn(
               "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
-              activeServerId === "@me" ? "h-10" : "h-0 group-hover:h-5",
+              activeServerId === "@me"
+                ? "h-10"
+                : "h-0 pointer-fine:group-hover:h-5",
             )}
           />
         </div>
@@ -276,7 +278,7 @@ export default function ServerList({
                         {getDisplayInitial(dm.recipient)}
                       </div>
                     )}
-                    <div className="pointer-events-none fixed left-[80px] z-150 hidden whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text opacity-0 shadow-md transition-opacity group-hover:opacity-100 md:block">
+                    <div className="pointer-events-none fixed left-[80px] z-150 hidden whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text opacity-0 shadow-md transition-opacity pointer-fine:group-hover:opacity-100 md:block">
                       <InlineEmojiText text={displayName} />
                     </div>
                     {(dm.unreadCount ?? 1) > 0 && (
@@ -290,7 +292,7 @@ export default function ServerList({
                   <div
                     className={cn(
                       "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
-                      isActiveDm ? "h-10" : "h-2 group-hover:h-5",
+                      isActiveDm ? "h-10" : "h-2 pointer-fine:group-hover:h-5",
                     )}
                   />
                 </div>
@@ -519,8 +521,8 @@ export default function ServerList({
                   isActive
                     ? "h-10"
                     : hasUnread
-                      ? "h-2 group-hover:h-5"
-                      : "h-0 group-hover:h-5",
+                      ? "h-2 pointer-fine:group-hover:h-5"
+                      : "h-0 pointer-fine:group-hover:h-5",
                 )}
               />
             </div>

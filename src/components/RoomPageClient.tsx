@@ -141,7 +141,7 @@ export default function RoomPageClient() {
             <button
               type="submit"
               disabled={!guestState.name.trim()}
-              className="w-full rounded-xl bg-rm-accent py-3 text-ui-md font-semibold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-ui hover:-translate-y-0.5 hover:bg-rm-accent-hover hover:shadow-xl disabled:opacity-40 cursor-pointer"
+              className="w-full rounded-xl bg-rm-accent py-3 text-ui-md font-semibold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-uishadow-xl disabled:opacity-40 cursor-pointer"
             >
               Join Room
             </button>
@@ -205,7 +205,7 @@ function ControlsBar({
               "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               !isMicOn || !hasMicrophone
                 ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20"
-                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
               !hasMicrophone && "cursor-not-allowed",
             )}
           >
@@ -224,7 +224,7 @@ function ControlsBar({
               "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               isDeafened
                 ? "bg-destructive text-destructive-foreground"
-                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
             )}
           >
             <Icon name="deafen" state={isDeafened ? "off" : "idle"} size="lg" />
@@ -245,7 +245,7 @@ function ControlsBar({
               "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               isCameraOn
                 ? "bg-rm-text text-rm-bg-surface shadow-lg"
-                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
               !hasCamera && "opacity-50 cursor-not-allowed grayscale",
             )}
           >
@@ -269,7 +269,7 @@ function ControlsBar({
               "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               isScreenSharing
                 ? "bg-primary text-primary-foreground"
-                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
             )}
           >
             <Icon
@@ -285,7 +285,7 @@ function ControlsBar({
             type="button"
             title="Leave"
             onClick={handleLeave}
-            className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-[0.96] transition-ui shrink-0"
+            className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg pointer-fine:hover:brightness-110 active:scale-[0.96] transition-ui shrink-0"
           >
             <Icon name="disconnect" size="lg" />
           </button>
@@ -295,7 +295,7 @@ function ControlsBar({
         <button
           type="button"
           onClick={toggleFs}
-          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
+          className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
           title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
         >
           {isFullscreen ? (
@@ -307,7 +307,7 @@ function ControlsBar({
         <button
           type="button"
           onClick={() => setIsSettingsOpen(true)}
-          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
+          className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
           title="Settings"
         >
           <Icon name="settings" size="lg" />
@@ -320,7 +320,7 @@ function ControlsBar({
               "p-2 rounded-xl transition-ui outline-none",
               showMembers
                 ? "text-rm-text bg-rm-bg-active"
-                : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                : "text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover",
             )}
             title={showMembers ? "Hide Members" : "Show Members"}
           >
@@ -384,7 +384,7 @@ function RoomHeader({
           type="button"
           onClick={handleCopyRoomLink}
           className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface/70 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text",
+            "flex h-7 w-7 items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface/70 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
             copyState === "copied" && "border-emerald-400/40 text-emerald-300",
             copyState === "failed" && "border-destructive/40 text-destructive",
           )}
@@ -651,7 +651,7 @@ function RoomVoiceView({
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-ui-xs font-semibold hover:brightness-110 active:scale-[0.96] transition-ui outline-none"
+              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-ui-xs font-semibold pointer-fine:hover:brightness-110 active:scale-[0.96] transition-ui outline-none"
             >
               Check Settings
             </button>
@@ -692,7 +692,7 @@ function RoomVoiceView({
                       "w-44 sm:w-52 aspect-video shrink-0 transition-ui py-2",
                       focusedId === item.id
                         ? ""
-                        : "opacity-70 hover:opacity-100",
+                        : "opacity-70 pointer-fine:hover:opacity-100",
                     )}
                   >
                     <ParticipantCard
