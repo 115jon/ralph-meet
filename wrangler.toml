@@ -152,7 +152,9 @@ remote = true
 port = 8888
 
 [triggers]
-crons = ["0 */6 * * *"]
+# "0 */6 * * *": yt-dlp sync, R2 cleanup, message postprocessing retries.
+# "17 * * * *": collectibles catalog (conditional GET; a 304 costs ~nothing).
+crons = ["0 */6 * * *", "17 * * * *"]
 
 # ── Observability ────────────────────────────────────────────────────────
 
