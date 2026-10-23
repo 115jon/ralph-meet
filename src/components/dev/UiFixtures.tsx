@@ -57,6 +57,16 @@ import coverTidelines from "@/components/dev/assets/cover-tidelines.webp";
 import coverSmallhours from "@/components/dev/assets/cover-smallhours.webp";
 import { SplashScreen } from "@/components/SplashScreen";
 import { VoiceControls } from "@/components/voice/VoiceControls";
+import { MembersTray, VoiceStage } from "@/components/voice/VoiceStage";
+import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
+import {
+  RoomConnecting,
+  RoomJoinForm,
+  RoomMeta,
+} from "@/components/RoomPageClient";
+import { DemoRoomChatPanel } from "@/components/DemoRoomChatPanel";
+import { useCallStore } from "@/stores/useCallStore";
+import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { VoiceHeader } from "@/components/voice/VoiceHeader";
 import { VoiceLanding } from "@/components/voice/VoiceLanding";
@@ -852,30 +862,100 @@ function installListenSearchStub() {
   };
 }
 
-/** `live`: mic muted, deafened, camera on and sharing, so every dock state
- * (rest / muted tint / live accent / solid leave) is visible at once. */
+/** Tile sub-states on one grid (12.13): speaking, ringing, server-muted,
+ * an unwatched remote share (Watch prompt), the local share with its
+ * preview paused, and a camera still loading. */
+const tileStateItems: GridItem[] = [
+  { ...gridItems[0]! },
+  {
+    ...gridItems[1]!,
+    id: "g-ada-ring",
+    isMuted: true,
+    isRinging: true,
+  },
+  { ...gridItems[2]!, isMuted: true, isDeafened: false, serverMute: true },
+  { ...linusScreen, id: "g-linus-unwatched" },
+  {
+    id: "g-me-screen",
+    userId: "u-me",
+    name: "Jon's Stream",
+    stream: null,
+    isLocal: true,
+    type: "screen",
+    isStreaming: true,
+    isMuted: false,
+    isDeafened: false,
+    isSpeaking: false,
+  },
+  {
+    id: "g-grace-cam",
+    userId: "u-grace",
+    name: "Grace Hopper",
+    stream: null,
+    isLocal: false,
+    type: "camera",
+    isStreaming: false,
+    isMuted: false,
+    isDeafened: false,
+    isSpeaking: false,
+  },
+];
+
+/** Eight people, so a phone has to scroll the grid (VC-21). */
+const manyItems: GridItem[] = [
+  ...gridItems,
+  ...["Margaret", "Alan", "Katherine", "Dennis"].map(
+    (name, i): GridItem => ({
+      id: `g-extra-${i}`,
+      userId: `u-extra-${i}`,
+      name,
+      stream: null,
+      isLocal: false,
+      type: "avatar",
+      isStreaming: false,
+      isMuted: i % 2 === 0,
+      isDeafened: false,
+      isSpeaking: false,
+    }),
+  ),
+];
+
 /**
+ * `live`: mic muted, deafened, camera on and sharing, so every dock state
+ * (rest / muted tint / live tint / solid leave) is visible at once.
  * `share`: Linus is sharing his screen (a real frame of the project's GitHub
  * page, served as a stream thumbnail so no MediaStream is needed); `focus`
- * opens it on the stage. `listen`: a seeded Listen Together room with a
- * track playing and the queue panel open; search is answered from a local
- * stub so typing a query fills the left pane.
+ * opens it on the stage. `focusId` puts any tile on stage with the members
+ * tray open. `listen`: a seeded Listen Together room with a track playing
+ * and the queue panel open; search is answered from a local stub.
  */
 function VoiceRoom({
   live = false,
   share = false,
   focus = false,
   listen = false,
+  focusId = null,
+  items: itemsOverride,
+  connectionState = "connected",
 }: {
   live?: boolean;
   share?: boolean;
   focus?: boolean;
   listen?: boolean;
+  focusId?: string | null;
+  items?: GridItem[];
+  connectionState?: string;
 }) {
   const [focusedId, setFocusedId] = useState<string | null>(
-    share && focus ? "g-linus-screen" : null,
+    focusId ?? (share && focus ? "g-linus-screen" : null),
   );
-  const items = share ? [...gridItems, linusScreen] : gridItems;
+  const [showMembers, setShowMembers] = useState(true);
+  const items =
+    itemsOverride ?? (share ? [...gridItems, linusScreen] : gridItems);
+  const focusedItem = items.find((g) => g.id === focusedId) ?? null;
+  const watched: Record<string, boolean> = share ? { "u-linus": true } : {};
+  const thumbnails: Record<string, string> =
+    share || itemsOverride ? { "u-linus": shareFrame, "u-me": shareFrame } : {};
   const linusVoice = share
     ? [
         {
@@ -888,6 +968,11 @@ function VoiceRoom({
         },
       ]
     : [];
+  const voiceActions = {
+    isPreviewHidden: true,
+    togglePreviewHidden: () => {},
+    onToggleWatch: () => {},
+  };
 
   useEffect(() => {
     if (!listen) return;
@@ -931,71 +1016,314 @@ function VoiceRoom({
               />
             </div>
           </div>
+          <div className="shrink-0 bg-rm-bg-secondary">
+            <UserPanel
+              user={users.me!}
+              serverId="s-1"
+              serverName="Ralph HQ"
+              voiceConnected
+              voiceChannelId="ch-lounge"
+              voiceChannelName="Lounge"
+              onVoiceDisconnect={() => {}}
+              onVoiceNavigate={() => {}}
+              isCameraActive={live}
+              hasCamera
+              hasMicrophone
+              sfu={null}
+              gridItems={items}
+              watchersByStreamer={{}}
+              sidebarWidthPx={240}
+            />
+            <div className="h-2 shrink-0" aria-hidden="true" />
+          </div>
         </div>
         <div className="chat-main-content relative flex min-w-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
-          <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden group/cinema">
-            <VoiceHeader
-              channelName="Lounge"
-              connectionState="connected"
-              joined
-              focusedItem={items.find((g) => g.id === focusedId) ?? null}
-              currentScreenQuality={undefined}
-              sfu={null}
-              showTextChat={false}
-              onToggleTextChat={() => {}}
-            />
-            <div className="flex-1 flex flex-col min-h-0 relative">
-              <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
-                <VoiceGrid
+          <VoiceStage
+            header={
+              <VoiceHeader
+                channelName="Lounge"
+                connectionState={connectionState}
+                joined
+                focusedItem={focusedItem}
+                currentScreenQuality={undefined}
+                sfu={null}
+                showTextChat={false}
+                onToggleTextChat={() => {}}
+                onMenuClick={() => {}}
+              />
+            }
+            tray={
+              focusedId && showMembers ? (
+                <MembersTray
                   items={items}
                   focusedId={focusedId}
                   onFocus={setFocusedId}
                   globalDeafened={false}
-                  currentSettings={{ peerSettings: {} }}
-                  watchedStreams={share ? { "u-linus": true } : {}}
-                  streamThumbnails={share ? { "u-linus": shareFrame } : {}}
+                  watchedStreams={watched}
+                  streamThumbnails={thumbnails}
+                  voiceActions={voiceActions}
                 />
-                {listen && (
-                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-rm-scrim">
-                    <div className="flex h-[min(600px,calc(100%-48px))] w-[min(1040px,calc(100%-48px))] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-2xl dark:bg-rm-bg-elevated">
-                      <ListenTogetherPanel
-                        sfu={null}
-                        roomSlug={LISTEN_ROOM}
-                        voiceSessionId="fixture-voice-session"
-                        serverId="s-1"
-                        channelId="ch-lounge"
-                        localUserId="u-me"
-                      />
-                    </div>
-                  </div>
-                )}
+              ) : null
+            }
+            dock={
+              <VoiceControls
+                hasMicrophone
+                isMicOn={!live}
+                toggleMic={() => {}}
+                isDeafened={live}
+                toggleDeafen={() => {}}
+                hasCamera
+                isCameraOn={live}
+                toggleCamera={() => {}}
+                isScreenSharing={live}
+                toggleScreenShare={() => {}}
+                setIsScreenModalOpen={() => {}}
+                focusedItem={focusedItem}
+                setFocusedId={setFocusedId}
+                handleLeave={() => {}}
+                isFullscreen={false}
+                toggleFs={() => {}}
+                fullscreenSupported
+                showMembers={showMembers}
+                setShowMembers={setShowMembers}
+                onOpenActivities={() => {}}
+              />
+            }
+          >
+            <VoiceGrid
+              items={items}
+              focusedId={focusedId}
+              onFocus={setFocusedId}
+              globalDeafened={false}
+              currentSettings={{ peerSettings: {} }}
+              watchedStreams={watched}
+              streamThumbnails={thumbnails}
+              voiceActions={voiceActions}
+            />
+            {listen && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-rm-scrim">
+                <div className="flex h-[min(600px,calc(100%-48px))] w-[min(1040px,calc(100%-48px))] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-2xl dark:bg-rm-bg-elevated">
+                  <ListenTogetherPanel
+                    sfu={null}
+                    roomSlug={LISTEN_ROOM}
+                    voiceSessionId="fixture-voice-session"
+                    serverId="s-1"
+                    channelId="ch-lounge"
+                    localUserId="u-me"
+                  />
+                </div>
               </div>
-              <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
-                <VoiceControls
-                  hasMicrophone
-                  isMicOn={!live}
-                  toggleMic={() => {}}
-                  isDeafened={live}
-                  toggleDeafen={() => {}}
-                  hasCamera
-                  isCameraOn={live}
-                  toggleCamera={() => {}}
-                  isScreenSharing={live}
-                  toggleScreenShare={() => {}}
-                  setIsScreenModalOpen={() => {}}
-                  focusedItem={null}
-                  setFocusedId={setFocusedId}
-                  handleLeave={() => {}}
-                  isFullscreen={false}
-                  toggleFs={() => {}}
-                  showMembers={false}
-                  setShowMembers={() => {}}
-                />
-              </div>
-            </div>
-          </div>
+            )}
+          </VoiceStage>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The /room/$slug meeting (RoomPageClient) without a live session: the same
+ * stage, header and dock the page renders once joined, plus the demo chat.
+ * `room-join` and `room-connecting` show the steps before it.
+ */
+function RoomFixture({ step }: { step: "join" | "connecting" | "room" }) {
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  if (step === "join") {
+    return (
+      <RoomJoinForm
+        slug="design-review"
+        name={name}
+        onNameChange={setName}
+        onSubmit={(e) => e.preventDefault()}
+        warnings={["No microphone detected"]}
+      />
+    );
+  }
+  if (step === "connecting") return <RoomConnecting slug="design-review" />;
+  const focusedItem = gridItems.find((g) => g.id === focusedId) ?? null;
+  return (
+    <VoiceStage
+      className="h-full"
+      header={
+        <VoiceHeader
+          channelName="design-review"
+          titleIcon="soundboard"
+          connectionState="connected"
+          joined
+          focusedItem={focusedItem}
+          currentScreenQuality={undefined}
+          sfu={null}
+          meta={
+            <RoomMeta
+              slug="design-review"
+              focused={!!focusedItem}
+              gridItemsCount={gridItems.length}
+              localScreenWatchers={[]}
+            />
+          }
+        />
+      }
+      dock={
+        <VoiceControls
+          hasMicrophone
+          isMicOn
+          toggleMic={() => {}}
+          isDeafened={false}
+          toggleDeafen={() => {}}
+          hasCamera
+          isCameraOn={false}
+          toggleCamera={() => {}}
+          isScreenSharing={false}
+          toggleScreenShare={() => {}}
+          setIsScreenModalOpen={() => {}}
+          focusedItem={focusedItem}
+          setFocusedId={setFocusedId}
+          handleLeave={() => {}}
+          isFullscreen={false}
+          toggleFs={() => {}}
+          fullscreenSupported
+          showMembers={false}
+          setShowMembers={() => {}}
+          onOpenSettings={() => {}}
+        />
+      }
+    >
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <VoiceGrid
+            items={gridItems}
+            focusedId={focusedId}
+            onFocus={setFocusedId}
+            globalDeafened={false}
+            currentSettings={{ peerSettings: {} }}
+            watchedStreams={{}}
+            streamThumbnails={{}}
+          />
+        </div>
+        <DemoRoomChatPanel
+          sfu={null}
+          guestName="Jon"
+          onUploadBlocked={() => {}}
+          className="h-[42%] shrink-0 md:h-auto"
+        />
+      </div>
+    </VoiceStage>
+  );
+}
+
+/**
+ * DM call region states, rendered by the real DMCallRegion inside the DM
+ * shell (ChatArea mounts it) from seeded call stores.
+ */
+type DmCallStep = "ringing-out" | "ringing-in" | "lobby" | "active" | "video";
+
+function seedDmCall(step: DmCallStep) {
+  const me = { clerk_user_id: "u-me", name: "Jon", ...voiceFlags };
+  const ada = {
+    clerk_user_id: "u-ada",
+    name: "Ada Lovelace",
+    username: "ada",
+    display_name: "Ada Lovelace",
+    ...voiceFlags,
+  };
+  const members =
+    step === "ringing-out"
+      ? [me]
+      : step === "ringing-in" || step === "lobby"
+        ? [ada]
+        : [me, { ...ada, self_mute: true }];
+  useChatStore.setState({
+    voiceChannelStates: { "ch-lounge": voiceMembers, "dm-ada": members },
+  });
+  const joined = step === "active" || step === "video";
+  useCallStore.setState({
+    status:
+      step === "ringing-out"
+        ? "ringing_outgoing"
+        : step === "ringing-in"
+          ? "ringing_incoming"
+          : step === "lobby"
+            ? "idle"
+            : "active",
+    callId: step === "lobby" ? null : "fx-call",
+    remoteUser: {
+      id: "u-ada",
+      username: "ada",
+      display_name: "Ada Lovelace",
+    },
+    channelId: step === "lobby" ? null : "dm-ada",
+    hasConnected: joined,
+    hasJoinedSFU: joined,
+    voiceRoomId: "dm-call-u-ada-u-me",
+  });
+  const callItems: GridItem[] = [
+    { ...gridItems[0]!, isSpeaking: true },
+    { ...gridItems[1]!, isMuted: true },
+    ...(step === "video"
+      ? [
+          {
+            ...linusScreen,
+            id: "g-ada-screen",
+            userId: "u-ada",
+            name: "Ada Lovelace",
+          },
+        ]
+      : []),
+  ];
+  useCallVoiceStore.setState({
+    joined,
+    connectionState: "connected",
+    gridItems: joined ? callItems : [],
+    isMicOn: true,
+    isDeafened: false,
+    hasCamera: true,
+    hasMicrophone: true,
+    focusedId: null,
+    streamThumbnails: step === "video" ? { "u-ada": shareFrame } : {},
+    watchedStreams: step === "video" ? { "u-ada": true } : {},
+    watchersByStreamer: {},
+    toggleMic: () => {},
+    toggleDeafen: () => {},
+    setFocusedId: (id) => useCallVoiceStore.setState({ focusedId: id }),
+  });
+}
+
+function DmCallFixture({ step }: { step: DmCallStep }) {
+  // Seed before the first paint so the region mounts in its final state;
+  // the surface is chosen once per page load.
+  useState(() => seedDmCall(step));
+  useEffect(
+    () => () => {
+      useCallStore.setState({ status: "idle", callId: null, channelId: null });
+      useCallVoiceStore.getState().reset();
+    },
+    [],
+  );
+  return <Shell surface="shell-dm" />;
+}
+
+/** The incoming call card over a server channel (it hides inside the DM). */
+function IncomingCallFixture() {
+  useEffect(() => {
+    useCallStore.setState({
+      status: "ringing_incoming",
+      callId: "fx-call",
+      remoteUser: {
+        id: "u-ada",
+        username: "ada",
+        display_name: "Ada Lovelace",
+      },
+      channelId: "dm-ada",
+    });
+    return () => {
+      useCallStore.setState({ status: "idle", callId: null, channelId: null });
+    };
+  }, []);
+  return (
+    <div className="relative h-full w-full">
+      <Shell surface="shell" />
+      <IncomingCallModal />
     </div>
   );
 }
@@ -1480,6 +1808,47 @@ export default function UiFixtures() {
       break;
     case "voice-landing":
       content = <VoiceLandingFixture />;
+      break;
+    case "voice-focus":
+      content = <VoiceRoom focusId="g-ada" />;
+      break;
+    case "voice-tiles":
+      content = <VoiceRoom items={tileStateItems} />;
+      break;
+    case "voice-many":
+      content = <VoiceRoom items={manyItems} />;
+      break;
+    case "voice-connecting":
+      content = <VoiceRoom connectionState="connecting" />;
+      break;
+    case "voice-reconnecting":
+      content = <VoiceRoom connectionState="reconnecting" />;
+      break;
+    case "voice-failed":
+      content = <VoiceRoom connectionState="failed" />;
+      break;
+    case "room":
+      content = <RoomFixture step="room" />;
+      break;
+    case "room-join":
+      content = <RoomFixture step="join" />;
+      break;
+    case "room-connecting":
+      content = <RoomFixture step="connecting" />;
+      break;
+    case "dm-call-ringing-out":
+    case "dm-call-ringing-in":
+    case "dm-call-lobby":
+    case "dm-call-active":
+    case "dm-call-video":
+      content = (
+        <DmCallFixture
+          step={surfaceName.replace("dm-call-", "") as DmCallStep}
+        />
+      );
+      break;
+    case "incoming-call":
+      content = <IncomingCallFixture />;
       break;
     case "menus":
       content = <Menus />;
