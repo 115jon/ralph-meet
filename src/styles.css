@@ -260,6 +260,9 @@
   /* Semantic colour */
   --rm-badge: #f23f43;
   --rm-success: #23a559;
+  /* Ink on the solid success fill (call Accept, icon-only): white is 3.2:1
+     on #23a559 and 4.4:1 on the light themes' #1a8f4c (>= 3:1 for glyphs). */
+  --rm-on-success: #ffffff;
 
   /* Contrast tokens (Quiet Pro). Every pair is measured per theme:
      - accent-solid + on-accent: the one solid fill per view (>= 4.5:1);
@@ -972,6 +975,7 @@
   --color-rm-badge: var(--rm-badge);
   --color-rm-rail-item: var(--rm-rail-item);
   --color-rm-success: var(--rm-success);
+  --color-rm-on-success: var(--rm-on-success);
   --color-rm-status-online: var(--rm-status-online);
   --color-rm-status-idle: var(--rm-status-idle);
   --color-rm-status-dnd: var(--rm-status-dnd);
