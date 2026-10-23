@@ -431,12 +431,18 @@ export default function VoiceChannelView({
   }, []);
 
   const toggleFs = () => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen();
-      setIsFullscreen(true);
+      // iOS Safari has no element fullscreen (only <video>); don't flip the
+      // state for a request that can't happen.
+      if (!document.fullscreenEnabled || !container.requestFullscreen) return;
+      container
+        .requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => setIsFullscreen(false));
     } else {
-      document.exitFullscreen();
+      void document.exitFullscreen?.().catch(() => {});
       setIsFullscreen(false);
     }
   };

@@ -629,7 +629,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         className={cn(
           "pt-4 pb-4 px-6 flex items-center justify-center transition-ui",
           isFullscreenView
-            ? "pointer-events-none bg-linear-to-t from-black/80 to-transparent pt-12 absolute bottom-0 left-0 right-0 z-50 opacity-0 group-hover:opacity-100"
+            ? "pointer-events-none bg-linear-to-t from-black/80 to-transparent pt-12 absolute bottom-0 left-0 right-0 z-50 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"
             : "relative pb-6",
         )}
       >

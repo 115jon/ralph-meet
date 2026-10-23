@@ -225,7 +225,7 @@ export const VoiceGrid = React.memo(
             voiceActions?.togglePreviewHidden && (
               <div
                 data-preview-toggle="true"
-                className="pointer-events-none absolute top-24 left-4 z-50 opacity-0 transition-opacity group-hover/stage:pointer-events-auto group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 md:left-6"
+                className="pointer-events-none absolute top-24 left-4 z-50 opacity-0 transition-opacity group-hover/stage:pointer-events-auto group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 md:left-6"
               >
                 <button
                   type="button"

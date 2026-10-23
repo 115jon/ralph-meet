@@ -1,3 +1,4 @@
+import { useLongPressMenu } from "@/hooks/useLongPress";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { PRESS } from "@/components/ui/interaction";
@@ -49,6 +50,9 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     y: number;
     isMini?: boolean;
   } | null>(null);
+  const tileLongPress = useLongPressMenu((e) =>
+    setContextMenu({ x: e.clientX, y: e.clientY, isMini: false }),
+  );
   const shouldRenderStreamMenu = contextMenu != null;
   const renderedContextMenu = contextMenu;
   const [dominantColor, setDominantColor] = useState<string | null>(null);
@@ -131,6 +135,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             e.preventDefault();
             setContextMenu({ x: e.clientX, y: e.clientY, isMini: false });
           }}
+          {...tileLongPress}
           aria-label={`Open participant tile for ${item.name}`}
           className="absolute inset-0 z-10 rounded-xl outline-none"
         />
@@ -377,7 +382,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isScreen && item.isLocal && voiceActions?.togglePreviewHidden && (
           <div
             data-preview-toggle="true"
-            className="pointer-events-none absolute top-2 left-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+            className="pointer-events-none absolute top-2 left-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
           >
             <button
               type="button"
@@ -411,7 +416,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Right status (Ellipsis Bottom Right) */}
         {!isTray && (
-          <div className="pointer-events-none absolute bottom-2 right-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+          <div className="pointer-events-none absolute bottom-2 right-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100">
             <IconButton
               aria-label="More options"
               icon="more"
