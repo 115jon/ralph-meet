@@ -2201,6 +2201,23 @@ function OverlaySurface({ surface }: { surface: string }) {
  */
 function VoiceDashboardFixture({ surface }: { surface: string }) {
   useFixtureDevices();
+  // The two menu surfaces mount with their menu open: press the dock control
+  // that owns it once the dashboard has rendered.
+  useEffect(() => {
+    const label =
+      surface === "ov-noise-menu"
+        ? "Noise suppression"
+        : surface === "ov-stream-settings"
+          ? "Stream settings"
+          : null;
+    if (!label) return;
+    const id = window.setTimeout(() => {
+      document
+        .querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+        ?.click();
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [surface]);
   return (
     <OverShell>
       <div className="fixed bottom-0 left-0 z-20 w-[312px] max-md:w-full border-t border-rm-border bg-rm-bg-secondary">

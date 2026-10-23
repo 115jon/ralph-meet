@@ -2779,7 +2779,7 @@ export default function SoundboardPicker({
                     onChange={(event) =>
                       setSendVolume(Number(event.currentTarget.value) / 100)
                     }
-                    className="h-1 w-full min-w-0 cursor-pointer accent-primary"
+                    className="h-1 w-full min-w-0 cursor-pointer"
                   />
                 </label>
                 <label className="flex w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border border-rm-border px-2 py-2 text-ui-xs font-medium text-rm-text-muted">
@@ -2817,7 +2817,7 @@ export default function SoundboardPicker({
                         scheduleVolumePersistence(nextVolume);
                       }
                     }}
-                    className="h-1 w-full min-w-0 cursor-pointer accent-foreground"
+                    className="h-1 w-full min-w-0 cursor-pointer"
                   />
                 </label>
               </div>

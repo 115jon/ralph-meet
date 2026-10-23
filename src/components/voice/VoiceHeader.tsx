@@ -55,6 +55,9 @@ export function VoiceHeader({
   meta,
 }: VoiceHeaderProps) {
   const focusedLabel = getFocusedItemLabel(focusedItem);
+  // The floating header reads white over a camera or screen; over a member's
+  // avatar tile there is no media, so it keeps theme ink (light themes too).
+  const overMedia = Boolean(focusedItem) && focusedItem.type !== "avatar";
 
   const menuButton = onMenuClick && (
     <IconButton
@@ -64,7 +67,7 @@ export function VoiceHeader({
       variant="plain"
       className={cn(
         "md:hidden",
-        focusedItem
+        overMedia
           ? "text-white/80 pointer-fine:hover:text-white"
           : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
       )}
@@ -78,7 +81,7 @@ export function VoiceHeader({
       variant="plain"
       tooltip="Chat"
       className={cn(
-        focusedItem
+        overMedia
           ? "text-white/80 pointer-fine:hover:text-white"
           : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
       )}
@@ -123,25 +126,54 @@ export function VoiceHeader({
   return (
     <div
       data-voice-header="overlay"
-      className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 bg-linear-to-b from-black/70 via-black/35 to-transparent px-4 pt-[calc(var(--safe-area-top,0px)+8px)] pb-8"
+      className={cn(
+        "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-4 pt-[calc(var(--safe-area-top,0px)+8px)] pb-8",
+        overMedia && "bg-linear-to-b from-black/70 via-black/35 to-transparent",
+      )}
     >
       <div className="pointer-events-auto flex min-h-8 min-w-0 flex-wrap items-center gap-2">
         {menuButton}
-        <div className="flex min-w-0 items-center gap-2 text-white/80">
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-2",
+            overMedia ? "text-white/80" : "text-rm-text-secondary",
+          )}
+        >
           <Icon name={titleIcon} size="lg" className="shrink-0" />
-          <h2 className="min-w-0 truncate text-ui-md font-semibold text-white">
+          <h2
+            className={cn(
+              "min-w-0 truncate text-ui-md font-semibold",
+              overMedia ? "text-white" : "text-rm-text",
+            )}
+          >
             <InlineEmojiText text={channelName} />
           </h2>
         </div>
-        <div aria-hidden className="h-4 w-px shrink-0 bg-white/20" />
+        <div
+          aria-hidden
+          className={cn(
+            "h-4 w-px shrink-0",
+            overMedia ? "bg-white/20" : "bg-rm-border-strong",
+          )}
+        />
         <StreamingStatsPanel
           connectionState={connectionState}
           joined={joined}
-          emphasized
+          emphasized={overMedia}
         />
         {meta}
-        <div className="flex min-w-0 items-center gap-2 rounded-full bg-black/45 py-1 pr-3 pl-1">
-          <div className="relative flex size-6 shrink-0 items-center justify-center overflow-visible rounded-full bg-white/10">
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-2 rounded-full py-1 pr-3 pl-1",
+            overMedia ? "bg-black/45 text-white" : "bg-rm-tint-2 text-rm-text",
+          )}
+        >
+          <div
+            className={cn(
+              "relative flex size-6 shrink-0 items-center justify-center overflow-visible rounded-full",
+              overMedia ? "bg-white/10" : "bg-rm-tint-2",
+            )}
+          >
             {focusedItem.avatar ? (
               <AvatarImage
                 src={getAuthAssetUrl(focusedItem.avatar)}
@@ -149,17 +181,23 @@ export function VoiceHeader({
                 display={focusedItem.avatarDisplay}
               />
             ) : (
-              <span className="text-ui-2xs font-semibold text-white">
+              <span className="text-ui-2xs font-semibold">
                 {focusedItem.name[0]}
               </span>
             )}
           </div>
-          <span className="truncate text-ui-xs font-semibold text-white">
+          <span className="truncate text-ui-xs font-semibold">
             <InlineEmojiText text={focusedLabel} />
           </span>
           {focusedWatchers.length > 0 && (
             <>
-              <div aria-hidden className="h-4 w-px shrink-0 bg-white/15" />
+              <div
+                aria-hidden
+                className={cn(
+                  "h-4 w-px shrink-0",
+                  overMedia ? "bg-white/15" : "bg-rm-border-strong",
+                )}
+              />
               <StreamWatcherList
                 watchers={focusedWatchers}
                 variant="inline"

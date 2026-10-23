@@ -16,7 +16,7 @@ import { resolveProfileTheme } from "@/lib/profile-customization";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { MicTestWidget } from "../MicTestWidget";
 import { THEME_CHOICES, useVisibleTheme } from "./AppearancePanel";
 import { describeCameraQuality } from "./CameraCard";
@@ -258,8 +258,15 @@ function AppearanceRail() {
             />
             <div className="min-w-0">
               <p
-                className="text-ui-sm font-semibold"
-                style={{ color: message.color }}
+                // rm-role-name darkens the colour on light themes, as role
+                // colours are in real messages.
+                className="rm-role-name text-ui-sm font-semibold"
+                style={
+                  {
+                    color: message.color,
+                    "--rm-role-color": message.color,
+                  } as CSSProperties
+                }
               >
                 {message.who}
               </p>

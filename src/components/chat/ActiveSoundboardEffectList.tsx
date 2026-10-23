@@ -164,7 +164,7 @@ export function SoundboardPlaybackRow({
             onChange={(event) =>
               handleVolumeChange(Number(event.currentTarget.value) / 100)
             }
-            className="h-4 min-w-0 flex-1 cursor-pointer accent-primary"
+            className="h-4 min-w-0 flex-1 cursor-pointer"
           />
           <span className="w-8 text-right text-ui-2xs tabular-nums text-rm-text-muted">
             {Math.round(playback.volume * 100)}%

@@ -536,7 +536,7 @@ export default function AccountPanel() {
           id="profile"
           layout="stack"
           leading={
-            <span className="relative flex size-11 overflow-hidden rounded-full bg-rm-bg-elevated">
+            <span className="relative flex size-11 overflow-hidden rounded-full bg-rm-tint-2">
               {avatarUrl ? (
                 <AvatarImage src={avatarUrl} alt="" display={avatarDisplay} />
               ) : (

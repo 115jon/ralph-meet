@@ -176,7 +176,7 @@ export function InputSensitivityMeter({
       className={`absolute inset-0 h-2 w-full appearance-none bg-transparent ${
         autoSensitivity
           ? "pointer-events-none cursor-default opacity-0 [&::-moz-range-thumb]:hidden [&::-webkit-slider-thumb]:hidden"
-          : "cursor-ew-resize accent-rm-accent"
+          : "cursor-ew-resize"
       } [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white`}
     />
   );

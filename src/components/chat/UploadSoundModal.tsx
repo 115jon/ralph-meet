@@ -196,7 +196,7 @@ export function UploadSoundModal({
             max="100"
             value={Math.round(soundVolume * 100)}
             onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
-            className="w-full accent-primary h-1.5 bg-rm-border rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+            className="rm-settings-range w-full"
             aria-valuetext={`${Math.round(soundVolume * 100)}%`}
           />
         </div>
