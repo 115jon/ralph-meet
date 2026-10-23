@@ -112,7 +112,7 @@ desktop/installer/Assets/payload.zip
 .codex-logs/
 
 # Analysis / handoff / audit notes that are not part of the shipped product.
-/docs/
+/docs/*
 
 # Owned_Capture_Component — GPLv2 binaries (Forked_Hook_DLL + Owned_Injector)
 # built from OBS win-capture sources for the game-capture-hook feature. The
@@ -146,3 +146,5 @@ mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.prettierrc.json
 # Showcase
 showcase/
 
+!/docs/design-system.md
+!/docs/design-audit.md

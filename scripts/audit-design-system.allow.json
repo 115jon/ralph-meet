@@ -1,0 +1,38 @@
+{
+  "$comment": "Justified exceptions for scripts/audit-design-system.mjs. `file` is a glob relative to the repo root, `rule` is a rule id or `*`, optional `match` is a regex tested against the snippet or the whole line. Every entry needs a `reason`.",
+  "entries": [
+    {
+      "file": "src/components/dev/**",
+      "rule": "*",
+      "reason": "Dev-only fixtures; never shipped."
+    },
+    {
+      "file": "src/components/ui/icon/glyphs.generated.ts",
+      "rule": "*",
+      "reason": "Generated Phosphor path data."
+    },
+    {
+      "file": "src/components/ui/icon/Icon.tsx",
+      "rule": "raw-color",
+      "reason": "Mask rect/stroke inside the SVG mask must be literal #fff/#000; not a theme colour."
+    },
+    {
+      "file": "src/components/ui/menu.ts",
+      "rule": "raw-color",
+      "match": "color-mix\\(in_oklab,var\\(--rm-warning-ink\\)",
+      "reason": "Warning tint mixed from a token; a --rm-warning-tint token would retire this."
+    },
+    {
+      "file": "src/components/chat/settings/primitives.tsx",
+      "rule": "arbitrary-radius",
+      "match": "rounded-\\[3px\\]",
+      "reason": "Search <mark> highlight inside running text; below the radius scale on purpose."
+    },
+    {
+      "file": "src/components/ui/button.tsx",
+      "rule": "slow-motion",
+      "match": "spin_1\\.6s|spin_700ms",
+      "reason": "Spinner loop, not UI motion."
+    }
+  ]
+}
