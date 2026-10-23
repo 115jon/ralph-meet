@@ -9,7 +9,6 @@ import {
   kickMember,
   listServerMembers,
   listUserServers,
-  searchMessages,
   updateServer,
 } from "../server.service";
 
@@ -381,61 +380,6 @@ describe("listServerMembers", () => {
     db.mockQuery("FROM server_members sm", { results: [] });
     const result = await listServerMembers(db as any, SERVER_ID);
     expect(result).toEqual([]);
-  });
-});
-
-// ─── searchMessages ──────────────────────────────────────────────────────────
-
-describe("searchMessages", () => {
-  let db: ReturnType<typeof createMockD1>;
-
-  beforeEach(() => {
-    db = createMockD1();
-  });
-
-  it("returns formatted search results with pagination", async () => {
-    db.mockQuery("FROM messages m", {
-      results: [
-        {
-          id: "m1",
-          channel_id: "c1",
-          author_id: USER_ID,
-          content: "hello world",
-          created_at: NOW,
-          is_pinned: 0,
-          author_username: "testuser",
-          author_avatar_url: null,
-          channel_name: "general",
-        },
-      ],
-    });
-    db.mockQuery(/SELECT COUNT/, { total: 1 });
-
-    const result = await searchMessages(db as any, SERVER_ID, "hello", 25, 0);
-    expect(result.messages).toHaveLength(1);
-    expect(result.messages[0].content).toBe("hello world");
-    expect(result.messages[0].author.username).toBe("testuser");
-    expect(result.messages[0].is_pinned).toBe(false);
-    expect(result.total).toBe(1);
-    expect(result.limit).toBe(25);
-    expect(result.offset).toBe(0);
-  });
-
-  it("passes LIKE query with wildcards", async () => {
-    db.mockQuery("FROM messages m", { results: [] });
-    db.mockQuery(/SELECT COUNT/, { total: 0 });
-
-    await searchMessages(db as any, SERVER_ID, "test", 25, 0);
-
-    db.assertCalledWith("FROM messages m", [SERVER_ID, "%test%"]);
-  });
-
-  it("caps limit at 50", async () => {
-    db.mockQuery("FROM messages m", { results: [] });
-    db.mockQuery(/SELECT COUNT/, { total: 0 });
-
-    const result = await searchMessages(db as any, SERVER_ID, "test", 200, 0);
-    expect(result.limit).toBe(50);
   });
 });
 

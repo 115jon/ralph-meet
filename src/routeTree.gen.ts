@@ -85,6 +85,7 @@ import { Route as ApiChannelsIdVoiceDisconnectRouteImport } from './routes/api/c
 import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
 import { Route as ApiChannelsIdThreadsRouteImport } from './routes/api/channels/$id/threads'
 import { Route as ApiChannelsIdThreadRouteImport } from './routes/api/channels/$id/thread'
+import { Route as ApiChannelsIdSearchRouteImport } from './routes/api/channels/$id/search'
 import { Route as ApiChannelsIdReadStateRouteImport } from './routes/api/channels/$id/read-state'
 import { Route as ApiChannelsIdReactionsRouteImport } from './routes/api/channels/$id/reactions'
 import { Route as ApiChannelsIdPinsRouteImport } from './routes/api/channels/$id/pins'
@@ -489,6 +490,11 @@ const ApiChannelsIdThreadRoute = ApiChannelsIdThreadRouteImport.update({
   path: '/thread',
   getParentRoute: () => ApiChannelsIdRoute,
 } as any)
+const ApiChannelsIdSearchRoute = ApiChannelsIdSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
 const ApiChannelsIdReadStateRoute = ApiChannelsIdReadStateRouteImport.update({
   id: '/read-state',
   path: '/read-state',
@@ -639,6 +645,7 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/search': typeof ApiChannelsIdSearchRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
@@ -733,6 +740,7 @@ export interface FileRoutesByTo {
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/search': typeof ApiChannelsIdSearchRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
@@ -828,6 +836,7 @@ export interface FileRoutesById {
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/search': typeof ApiChannelsIdSearchRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
@@ -924,6 +933,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
+    | '/api/channels/$id/search'
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
@@ -1018,6 +1028,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
+    | '/api/channels/$id/search'
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
@@ -1112,6 +1123,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
+    | '/api/channels/$id/search'
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
@@ -1738,6 +1750,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChannelsIdThreadRouteImport
       parentRoute: typeof ApiChannelsIdRoute
     }
+    '/api/channels/$id/search': {
+      id: '/api/channels/$id/search'
+      path: '/search'
+      fullPath: '/api/channels/$id/search'
+      preLoaderRoute: typeof ApiChannelsIdSearchRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
     '/api/channels/$id/read-state': {
       id: '/api/channels/$id/read-state'
       path: '/read-state'
@@ -2040,6 +2059,7 @@ interface ApiChannelsIdRouteChildren {
   ApiChannelsIdPinsRoute: typeof ApiChannelsIdPinsRoute
   ApiChannelsIdReactionsRoute: typeof ApiChannelsIdReactionsRoute
   ApiChannelsIdReadStateRoute: typeof ApiChannelsIdReadStateRoute
+  ApiChannelsIdSearchRoute: typeof ApiChannelsIdSearchRoute
   ApiChannelsIdThreadRoute: typeof ApiChannelsIdThreadRoute
   ApiChannelsIdThreadsRoute: typeof ApiChannelsIdThreadsRoute
   ApiChannelsIdTypingRoute: typeof ApiChannelsIdTypingRoute
@@ -2055,6 +2075,7 @@ const ApiChannelsIdRouteChildren: ApiChannelsIdRouteChildren = {
   ApiChannelsIdPinsRoute: ApiChannelsIdPinsRoute,
   ApiChannelsIdReactionsRoute: ApiChannelsIdReactionsRoute,
   ApiChannelsIdReadStateRoute: ApiChannelsIdReadStateRoute,
+  ApiChannelsIdSearchRoute: ApiChannelsIdSearchRoute,
   ApiChannelsIdThreadRoute: ApiChannelsIdThreadRoute,
   ApiChannelsIdThreadsRoute: ApiChannelsIdThreadsRoute,
   ApiChannelsIdTypingRoute: ApiChannelsIdTypingRoute,

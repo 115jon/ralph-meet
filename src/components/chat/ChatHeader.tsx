@@ -28,6 +28,8 @@ interface ChatHeaderProps {
   pinnedCount: number;
   showPins: boolean;
   onOpenSearch: () => void;
+  /** Search panel is open: the search button reads as pressed. */
+  showSearch?: boolean;
   onClose?: () => void;
   onCall?: () => void;
   dmUsername?: string;
@@ -48,6 +50,7 @@ export function ChatHeader({
   pinnedCount,
   showPins,
   onOpenSearch,
+  showSearch = false,
   onClose,
   onCall,
   dmUsername,
@@ -234,15 +237,16 @@ export function ChatHeader({
         <div className="flex items-center">
           <button
             type="button"
+            aria-pressed={showSearch}
             className={cn(
-              "hidden md:inline-flex h-8 items-center gap-2 rounded-md bg-rm-tint-1 px-2.5 text-ui-sm font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text",
+              "hidden md:inline-flex h-8 w-[168px] items-center gap-2 rounded-md bg-rm-tint-1 px-2.5 text-ui-sm font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text lg:w-[200px]",
               PRESS,
             )}
             onClick={onOpenSearch}
-            title={`Search ${channelName}`}
+            title={isDM ? "Search this conversation" : "Search messages"}
           >
             <Icon name="search" size="sm" className="shrink-0" />
-            <span className="max-w-[110px] truncate">Search</span>
+            <span className="truncate">Search</span>
           </button>
           <IconButton
             aria-label="Search"

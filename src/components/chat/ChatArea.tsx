@@ -7,7 +7,9 @@ import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
 import { PinModal } from "./PinModal";
 import { PinnedMessagesSidebar } from "./PinnedMessagesSidebar";
-import SearchPanel from "./SearchPanel";
+import SearchPanel, { type SearchScope } from "./SearchPanel";
+import { OPEN_MESSAGE_SEARCH_EVENT } from "./search/open-message-search";
+import { useChatStore } from "@/stores/chat-store";
 import ThreadSidebar from "./ThreadSidebar";
 import { UnreadBanner } from "./UnreadBanner";
 import VirtualMessageList from "./VirtualMessageList";
@@ -186,6 +188,55 @@ export default function ChatArea({
       !!(showMembers && onMembersClick),
   );
 
+  const [searchRequest, setSearchRequest] = useState({ text: "", n: 0 });
+  const serverName = useChatStore(
+    (s) => s.servers.find((server) => server.id === state.activeServerId)?.name,
+  );
+  const searchScope = useMemo<SearchScope | null>(() => {
+    if (isDM) return channelId ? { kind: "channel", channelId } : null;
+    const id = serverId ?? state.activeServerId;
+    return id && id !== "@me" ? { kind: "server", serverId: id } : null;
+  }, [isDM, channelId, serverId, state.activeServerId]);
+  const searchScopeKey = searchScope
+    ? searchScope.kind === "server"
+      ? searchScope.serverId
+      : searchScope.channelId
+    : "none";
+  const searchScopeLabel = isDM ? channelName : (serverName ?? "this server");
+  const closeSearch = useCallback(
+    () => setLocalState({ showSearch: false }),
+    [setLocalState],
+  );
+  const handleSearchJump = useCallback(
+    (targetChannelId: string, messageId: string) => {
+      if (targetChannelId === channelId) {
+        handleJumpToMessage(messageId);
+      } else {
+        window.dispatchEvent(
+          new CustomEvent("navigate-channel", {
+            detail: { channelId: targetChannelId, messageId },
+          }),
+        );
+      }
+    },
+    [channelId, handleJumpToMessage],
+  );
+
+  // The quick switcher (and anything else) can open search with a query.
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: string } | undefined>)
+        .detail;
+      setSearchRequest((prev) => ({
+        text: typeof detail?.text === "string" ? detail.text : "",
+        n: prev.n + 1,
+      }));
+      setLocalState({ showSearch: true });
+    };
+    window.addEventListener(OPEN_MESSAGE_SEARCH_EVENT, open);
+    return () => window.removeEventListener(OPEN_MESSAGE_SEARCH_EVENT, open);
+  }, [setLocalState]);
+
   const computedMembers = useMemo(() => {
     if (isDM && state.user) {
       const dmChannel = state.dmChannels.find((c: any) => c.id === channelId);
@@ -241,7 +292,8 @@ export default function ChatArea({
         pinButtonRef={pinButtonRef}
         pinnedCount={pinnedCount}
         showPins={showPins}
-        onOpenSearch={() => setLocalState({ showSearch: true })}
+        onOpenSearch={() => setLocalState({ showSearch: !showSearch })}
+        showSearch={showSearch}
         onClose={onClose}
         onCall={onCall}
         dmUsername={dmUsername}
@@ -288,29 +340,6 @@ export default function ChatArea({
             />
           </div>
         </div>
-      )}
-
-      {showSearch && state.activeServerId && (
-        <SearchPanel
-          serverId={state.activeServerId}
-          onClose={() => setLocalState({ showSearch: false })}
-          onJump={(targetChannelId, messageId) => {
-            if (targetChannelId === channelId) {
-              handleJumpToMessage(messageId);
-            } else {
-              const event = new CustomEvent("navigate-channel", {
-                detail: { channelId: targetChannelId, messageId },
-              });
-              window.dispatchEvent(event);
-            }
-          }}
-          onNavigate={(targetChannelId) => {
-            const event = new CustomEvent("navigate-channel", {
-              detail: { channelId: targetChannelId },
-            });
-            window.dispatchEvent(event);
-          }}
-        />
       )}
 
       <div className="flex flex-1 min-h-0 min-w-0 flex-row">
@@ -387,69 +416,82 @@ export default function ChatArea({
           </div>
         </div>
 
-        {(showMembers || showChannelDetails) && !threadMessageId && (
+        {showSearch && searchScope ? (
+          <SearchPanel
+            key={`${searchScopeKey}:${searchRequest.n}`}
+            scope={searchScope}
+            scopeLabel={searchScopeLabel}
+            initialText={searchRequest.text}
+            onClose={closeSearch}
+            onJump={handleSearchJump}
+          />
+        ) : (
           <>
-            {onMembersClick && (
-              <div
-                className="lg:hidden fixed inset-0 z-20 bg-rm-scrim animate-in fade-in duration-200"
-                onClick={onMembersClick}
-                aria-hidden="true"
+            {(showMembers || showChannelDetails) && !threadMessageId && (
+              <>
+                {onMembersClick && (
+                  <div
+                    className="lg:hidden fixed inset-0 z-20 bg-rm-scrim animate-in fade-in duration-200"
+                    onClick={onMembersClick}
+                    aria-hidden="true"
+                  />
+                )}
+                <MemberList
+                  members={computedMembers}
+                  onlineUsers={state.onlineUsers}
+                  typingUsers={
+                    state.activeChannelId
+                      ? state.typingUsers[state.activeChannelId]
+                      : undefined
+                  }
+                  currentUserId={state.user?.id}
+                  onBan={canBan ? handleBan : undefined}
+                  onClose={onMembersClick}
+                  channelName={channelName}
+                  channelId={channelId}
+                  serverId={serverId ?? state.activeServerId}
+                  onOpenSearch={() => {
+                    setLocalState({ showSearch: true });
+                  }}
+                  onOpenSettings={
+                    !isDM && canManageChannel && channelSettingsPayload
+                      ? () => setLocalState({ showChannelSettings: true })
+                      : undefined
+                  }
+                  onInviteClick={onInviteClick}
+                  pinnedMessages={state.pinnedMessages}
+                  loadingPins={state.loadingPins}
+                  canUnpin={canPin}
+                  onUnpin={handleUnpin}
+                  onJumpToMessage={handleJumpToMessage}
+                  onOpenThread={(messageId) => {
+                    setLocalState({ threadMessageId: messageId });
+                  }}
+                  showDetails={showChannelDetails}
+                  onToggleDetails={() =>
+                    setLocalState({ showChannelDetails: false })
+                  }
+                  isDM={isDM}
+                />
+              </>
+            )}
+
+            {threadMessageId && channelId && (
+              <ThreadSidebar
+                channelId={channelId}
+                rootMessageId={threadMessageId}
+                currentUserId={state.user?.id}
+                canPin={canPin}
+                canDeleteMessages={canDeleteMessages}
+                onReply={handleReply}
+                onPin={handlePin}
+                onUnpin={handleUnpin}
+                onJump={handleJumpToMessage}
+                onBan={canBan ? handleBan : undefined}
+                onClose={() => setLocalState({ threadMessageId: null })}
               />
             )}
-            <MemberList
-              members={computedMembers}
-              onlineUsers={state.onlineUsers}
-              typingUsers={
-                state.activeChannelId
-                  ? state.typingUsers[state.activeChannelId]
-                  : undefined
-              }
-              currentUserId={state.user?.id}
-              onBan={canBan ? handleBan : undefined}
-              onClose={onMembersClick}
-              channelName={channelName}
-              channelId={channelId}
-              serverId={serverId ?? state.activeServerId}
-              onOpenSearch={() => {
-                setLocalState({ showSearch: true });
-              }}
-              onOpenSettings={
-                !isDM && canManageChannel && channelSettingsPayload
-                  ? () => setLocalState({ showChannelSettings: true })
-                  : undefined
-              }
-              onInviteClick={onInviteClick}
-              pinnedMessages={state.pinnedMessages}
-              loadingPins={state.loadingPins}
-              canUnpin={canPin}
-              onUnpin={handleUnpin}
-              onJumpToMessage={handleJumpToMessage}
-              onOpenThread={(messageId) => {
-                setLocalState({ threadMessageId: messageId });
-              }}
-              showDetails={showChannelDetails}
-              onToggleDetails={() =>
-                setLocalState({ showChannelDetails: false })
-              }
-              isDM={isDM}
-            />
           </>
-        )}
-
-        {threadMessageId && channelId && (
-          <ThreadSidebar
-            channelId={channelId}
-            rootMessageId={threadMessageId}
-            currentUserId={state.user?.id}
-            canPin={canPin}
-            canDeleteMessages={canDeleteMessages}
-            onReply={handleReply}
-            onPin={handlePin}
-            onUnpin={handleUnpin}
-            onJump={handleJumpToMessage}
-            onBan={canBan ? handleBan : undefined}
-            onClose={() => setLocalState({ threadMessageId: null })}
-          />
         )}
       </div>
 
