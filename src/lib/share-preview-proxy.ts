@@ -519,7 +519,15 @@ function getTikTokPlayerApiMedia(
   const videoUrl = getTikTokPlayerApiDirectVideoUrl(item);
   if (!videoUrl) return undefined;
 
-  const durationMs = readPositiveNumber(item?.video_info?.meta?.duration);
+  // `meta.duration` is whole seconds (51 for a 51 s clip). Treat values too
+  // large to be seconds as milliseconds in case the API ever switches.
+  const rawDuration = readPositiveNumber(item?.video_info?.meta?.duration);
+  const durationMs =
+    rawDuration === undefined
+      ? undefined
+      : rawDuration > 6 * 60 * 60
+        ? rawDuration
+        : rawDuration * 1000;
   return [
     {
       type: "video",
