@@ -6,7 +6,7 @@
  *   /ui-fixtures?surface=shell&theme=dark
  *
  * surfaces: shell | shell-empty | shell-dm | friends | voice | voice-live
- *           voice-landing
+ *           voice-share | voice-share-grid | voice-listen | voice-landing
  *           settings | settings-<panel> (&row=<row-id>, &desktop=1)
  *           menus | splash | overlay | mobile | mobile-sidebar
  *           mobile-home (&tab=servers|messages|notifications|you)

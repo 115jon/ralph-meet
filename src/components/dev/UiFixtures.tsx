@@ -35,6 +35,14 @@ import { CatalogFixture, ShopFixture } from "@/components/dev/ShopFixtures";
 import SettingsModal from "@/components/chat/SettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
+import { FloatingListenTogetherPlayer } from "@/components/chat/FloatingListenTogetherPlayer";
+import { ListenTogetherPanel } from "@/components/chat/ListenTogetherPanel";
+import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
+import type {
+  ListenTogetherQueueEntry,
+  ListenTogetherStateSnapshot,
+} from "@/lib/listen-together";
+import shareFrame from "@/components/dev/assets/share-frame.webp";
 import { SplashScreen } from "@/components/SplashScreen";
 import { VoiceControls } from "@/components/voice/VoiceControls";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
@@ -622,16 +630,177 @@ const gridItems: GridItem[] = [
   },
 ];
 
+const linusScreen: GridItem = {
+  id: "g-linus-screen",
+  userId: "u-linus",
+  name: "Linus",
+  stream: null,
+  isLocal: false,
+  type: "screen",
+  isStreaming: true,
+  isMuted: false,
+  isDeafened: false,
+  isSpeaking: false,
+};
+
+const LISTEN_ROOM = "lounge";
+
+/** Album art as an inline SVG: a two-stop gradient with a monogram. */
+function artwork(from: string, to: string, mark: string): string {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">' +
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+    `<stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/>` +
+    '</linearGradient></defs><rect width="160" height="160" fill="url(#g)"/>' +
+    '<circle cx="80" cy="80" r="46" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2"/>' +
+    `<text x="80" y="94" text-anchor="middle" font-family="Figtree, sans-serif" font-size="40" font-weight="600" fill="#fff" opacity="0.92">${mark}</text>` +
+    "</svg>";
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function listenEntry(
+  id: string,
+  title: string,
+  artist: string,
+  album: string,
+  durationMs: number,
+  art: string,
+  requester: { id: string; name: string },
+  requestedAt: number,
+): ListenTogetherQueueEntry {
+  return {
+    entryId: `lt-${id}`,
+    requestedAt,
+    track: {
+      kind: "music",
+      id,
+      provider: "youtube_music",
+      videoId: id,
+      title,
+      artist,
+      album,
+      durationMs,
+      artworkUrl: art,
+      canonicalUrl: `https://music.youtube.com/watch?v=${id}`,
+      sourceLabel: "YouTube Music",
+    },
+    requester: { userId: requester.id, displayName: requester.name },
+  };
+}
+
+function listenSnapshot(now: number): ListenTogetherStateSnapshot {
+  const queue = [
+    listenEntry(
+      "fx-nightdrive",
+      "Night Drive",
+      "Lumen Arc",
+      "Afterglow",
+      254_000,
+      artwork("#5865f2", "#1b1340", "NA"),
+      { id: "u-ada", name: "Ada Lovelace" },
+      now - 540_000,
+    ),
+    listenEntry(
+      "fx-paperboats",
+      "Paper Boats",
+      "The Quiet Kind",
+      "Low Tide",
+      211_000,
+      artwork("#0ea5a4", "#0b2b3a", "PB"),
+      { id: "u-grace", name: "Grace Hopper" },
+      now - 420_000,
+    ),
+    listenEntry(
+      "fx-copperline",
+      "Copper Line",
+      "Marrow & Vale",
+      "Field Notes",
+      198_000,
+      artwork("#f59e0b", "#3b1d0a", "CL"),
+      { id: "u-me", name: "Jon" },
+      now - 300_000,
+    ),
+    listenEntry(
+      "fx-slowfires",
+      "Slow Fires",
+      "Lumen Arc",
+      "Afterglow",
+      276_000,
+      artwork("#ef4444", "#2a0b1d", "SF"),
+      { id: "u-linus", name: "Linus" },
+      now - 120_000,
+    ),
+  ];
+  const current = queue[0]!;
+  return {
+    roomSlug: LISTEN_ROOM,
+    revision: 12,
+    paused: false,
+    currentEntryId: current.entryId,
+    anchorPositionMs: 83_000,
+    anchorUpdatedAt: now,
+    lastUpdatedAt: now,
+    recentlyPlayed: [],
+    queue,
+    currentEntry: current,
+    positionMs: 83_000,
+    durationMs:
+      current.track.kind === "music" ? current.track.durationMs : null,
+  };
+}
+
 /** `live`: mic muted, deafened, camera on and sharing, so every dock state
  * (rest / muted tint / live accent / solid leave) is visible at once. */
-function VoiceRoom({ live = false }: { live?: boolean }) {
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+/**
+ * `share`: Linus is sharing his screen (a real frame of the project's GitHub
+ * page, served as a stream thumbnail so no MediaStream is needed); `focus`
+ * opens it on the stage. `listen`: a seeded Listen Together room with a
+ * track playing, the floating player and the queue panel.
+ */
+function VoiceRoom({
+  live = false,
+  share = false,
+  focus = false,
+  listen = false,
+}: {
+  live?: boolean;
+  share?: boolean;
+  focus?: boolean;
+  listen?: boolean;
+}) {
+  const [focusedId, setFocusedId] = useState<string | null>(
+    share && focus ? "g-linus-screen" : null,
+  );
+  const items = share ? [...gridItems, linusScreen] : gridItems;
+  const linusVoice = share
+    ? [
+        {
+          clerk_user_id: "u-linus",
+          name: "Linus",
+          username: "linus",
+          display_name: "Linus",
+          ...voiceFlags,
+          self_stream: true,
+        },
+      ]
+    : [];
+
+  useEffect(() => {
+    if (!listen) return;
+    useListenTogetherStore
+      .getState()
+      .setSnapshot(LISTEN_ROOM, listenSnapshot(Date.now()));
+    return () => useListenTogetherStore.getState().clearRoom(LISTEN_ROOM);
+  }, [listen]);
   return (
     <div
       className="flex h-full flex-col overflow-hidden bg-rm-bg-primary"
       data-app-layout="true"
     >
       <WebAppTitleBar />
+      {listen && (
+        <FloatingListenTogetherPlayer sfu={null} roomSlug={LISTEN_ROOM} />
+      )}
       <div className="flex flex-1 overflow-hidden relative">
         <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
           <div className="flex min-h-0 flex-1">
@@ -649,6 +818,7 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
                   "ch-lounge": [
                     { clerk_user_id: "u-me", name: "Jon", ...voiceFlags },
                     ...voiceMembers,
+                    ...linusVoice,
                   ],
                 }}
                 localVoiceChannelId="ch-lounge"
@@ -663,7 +833,7 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
               channelName="Lounge"
               connectionState="connected"
               joined
-              focusedItem={gridItems.find((g) => g.id === focusedId) ?? null}
+              focusedItem={items.find((g) => g.id === focusedId) ?? null}
               currentScreenQuality={undefined}
               sfu={null}
               showTextChat={false}
@@ -672,14 +842,27 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
             <div className="flex-1 flex flex-col min-h-0 relative">
               <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
                 <VoiceGrid
-                  items={gridItems}
+                  items={items}
                   focusedId={focusedId}
                   onFocus={setFocusedId}
                   globalDeafened={false}
                   currentSettings={{ peerSettings: {} }}
-                  watchedStreams={{}}
-                  streamThumbnails={{}}
+                  watchedStreams={share ? { "u-linus": true } : {}}
+                  streamThumbnails={share ? { "u-linus": shareFrame } : {}}
                 />
+                {listen && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-rm-scrim">
+                    <div className="flex h-[min(600px,calc(100%-48px))] w-[min(1040px,calc(100%-48px))] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-2xl dark:bg-rm-bg-elevated">
+                      <ListenTogetherPanel
+                        sfu={null}
+                        roomSlug={LISTEN_ROOM}
+                        serverId="s-1"
+                        channelId="ch-lounge"
+                        localUserId="u-me"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
                 <VoiceControls
@@ -1179,6 +1362,15 @@ export default function UiFixtures() {
       break;
     case "voice-live":
       content = <VoiceRoom live />;
+      break;
+    case "voice-share":
+      content = <VoiceRoom share focus />;
+      break;
+    case "voice-share-grid":
+      content = <VoiceRoom share />;
+      break;
+    case "voice-listen":
+      content = <VoiceRoom listen />;
       break;
     case "voice-landing":
       content = <VoiceLandingFixture />;
