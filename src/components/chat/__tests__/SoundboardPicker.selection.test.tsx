@@ -168,7 +168,7 @@ describe("SoundboardPicker selection mode", () => {
       expect(
         screen.queryByRole("button", { name: "Play Local favorite" }),
       ).toBeNull();
-      expect(screen.queryByRole("button", { name: "Add Sound" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add sound" })).toBeNull();
       expect(screen.queryByText("Discover")).toBeNull();
       expect(
         screen.queryByRole("button", { name: "Custom Sounds" }),
@@ -594,7 +594,7 @@ describe("SoundboardPicker selection mode", () => {
     mocks.apiGet.mockResolvedValue({ favorites: [] });
 
     render(<SoundboardPicker onClose={vi.fn()} sfu={null} />);
-    expect(screen.queryByRole("button", { name: "Add Sound" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add sound" })).toBeNull();
     expect(localStorage.getItem("voice-soundboard:dm-call")).toBeNull();
   });
 
@@ -605,7 +605,7 @@ describe("SoundboardPicker selection mode", () => {
 
     render(<SoundboardPicker onClose={vi.fn()} sfu={null} />);
 
-    expect(screen.queryByRole("button", { name: "Add Sound" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add sound" })).toBeNull();
     expect(readAsDataURL).not.toHaveBeenCalled();
     expect(localStorage.getItem("voice-soundboard:dm-call")).toBeNull();
   });
@@ -645,7 +645,10 @@ describe("SoundboardPicker selection mode", () => {
     expect(picker).toHaveClass("z-60");
     expect(picker).not.toHaveClass("inset-0");
     expect(picker).not.toHaveClass("bottom-[calc(100%+10px)]");
-    expect(picker).toHaveClass("md:w-[min(440px,calc(100vw-24px))]");
+    expect(picker).toHaveClass("w-[min(440px,calc(100vw-24px))]");
+    // The shared picker recipe (PickerSurface), not a per-picker one.
+    expect(picker).toHaveClass("rounded-lg", "shadow-lg");
+    expect(picker).not.toHaveClass("rounded-3xl");
     expect(document.querySelector('div[aria-hidden="true"]')).toBeNull();
   });
 

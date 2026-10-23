@@ -387,6 +387,17 @@
   );
   --rm-danger-tint: color-mix(in oklab, var(--rm-danger) 16%, transparent);
   --rm-accent-tint: color-mix(in oklab, var(--rm-accent) 16%, transparent);
+  /* Status tints mix from the ink, so text on them keeps its contrast. */
+  --rm-success-tint: color-mix(
+    in oklab,
+    var(--rm-success-ink) 14%,
+    transparent
+  );
+  --rm-warning-tint: color-mix(
+    in oklab,
+    var(--rm-warning-ink) 14%,
+    transparent
+  );
 }
 
 .light {
@@ -1007,6 +1018,8 @@
   --color-rm-danger-tint: var(--rm-danger-tint);
   --color-rm-success-ink: var(--rm-success-ink);
   --color-rm-warning-ink: var(--rm-warning-ink);
+  --color-rm-success-tint: var(--rm-success-tint);
+  --color-rm-warning-tint: var(--rm-warning-tint);
   --color-rm-field-edge: var(--rm-field-edge);
   --color-rm-tint-1: var(--rm-tint-1);
   --color-rm-tint-2: var(--rm-tint-2);
@@ -1675,45 +1688,6 @@
 .spiderman-light .chat-messages::after,
 .spiderman-dark .chat-messages::after {
   content: none !important;
-}
-
-/* Custom styles for Emoji/Gif/Soundboard Pickers and Modals */
-.picker-panel {
-  background-color: var(--rm-bg-floating) !important;
-  border-color: var(--rm-border) !important;
-}
-
-.picker-header {
-  border-bottom-color: var(--rm-border) !important;
-  background-color: var(--rm-bg-surface) !important;
-  background-image:
-    radial-gradient(circle at top left, var(--rm-accent-dim), transparent 35%),
-    radial-gradient(
-      circle at top right,
-      rgba(229, 9, 20, 0.08),
-      transparent 30%
-    ) !important;
-}
-
-.picker-search-input {
-  background-color: var(--rm-bg-hover) !important;
-  border-color: var(--rm-border) !important;
-  color: var(--rm-text-primary) !important;
-}
-
-.picker-search-input:focus {
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 3px var(--rm-glow) !important;
-}
-
-.picker-pill {
-  background-color: var(--rm-bg-hover) !important;
-  border-color: var(--rm-border) !important;
-  color: var(--rm-text-primary) !important;
-}
-
-.picker-pill:hover {
-  background-color: var(--rm-bg-active) !important;
 }
 
 /* Custom themed scrollbars for Spider-Man */
