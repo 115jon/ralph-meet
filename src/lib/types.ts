@@ -639,6 +639,17 @@ export interface EmbedInfo {
   url: string;
   type: "video" | "rich" | "link" | "image";
   unavailable?: boolean;
+  /**
+   * The link points straight at an image, GIF or video file; render the
+   * media bare (no card). Set by the server's direct-media detection.
+   */
+  direct?: boolean;
+  /**
+   * How a link card shows its image: "large" under the text (the page asked
+   * for summary_large_image or the image is wide) or a small "thumbnail"
+   * beside it. Absent on embeds stored before this existed: treat as large.
+   */
+  imageLayout?: "large" | "thumbnail";
   rawTitle?: string;
   rawDescription?: string;
   author?: EmbedAuthor;
