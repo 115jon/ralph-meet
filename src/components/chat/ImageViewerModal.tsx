@@ -26,6 +26,7 @@ import { ImageViewerNavigation } from "./ImageViewerNavigation";
 import { ImageViewerThumbnails } from "./ImageViewerThumbnails";
 import { ImageViewerToolbar } from "./ImageViewerToolbar";
 import ContextMenu from "./ContextMenu";
+import { VIEWER_BUTTON } from "./ImageViewerToolbar";
 import type { ContextMenuItem } from "./ContextMenu";
 import { useImageViewerState } from "./useImageViewerState";
 
@@ -546,8 +547,10 @@ export const ImageViewerModal: React.FC = () => {
           {hideUi && (
             <div className="absolute top-4 right-4 z-60 bg-rm-bg-elevated/80 border border-rm-border rounded-xl p-1 shadow-lg">
               <button
+                type="button"
                 onClick={close}
-                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className={VIEWER_BUTTON}
+                aria-label="Close media viewer"
               >
                 <Icon name="close" size="md" />
               </button>

@@ -1,7 +1,7 @@
 import { useLongPressMenu } from "@/hooks/useLongPress";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -398,7 +398,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               aria-label={isPreviewHidden ? "Resume preview" : "Pause preview"}
               className={cn(
                 PRESS,
-                "flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-ui-2xs font-medium text-white outline-none",
+                HIT,
+                "flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-ui-2xs font-medium text-white outline-none",
               )}
             >
               {isPreviewHidden ? (

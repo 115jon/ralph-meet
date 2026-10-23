@@ -12,6 +12,8 @@ export function ImageViewerNavigation({
   return (
     <>
       <button
+        type="button"
+        aria-label="Previous media"
         onClick={(e) => {
           e.stopPropagation();
           onPrev();
@@ -22,6 +24,8 @@ export function ImageViewerNavigation({
         <Icon name="chevronLeft" size="3xl" className="hidden md:block" />
       </button>
       <button
+        type="button"
+        aria-label="Next media"
         onClick={(e) => {
           e.stopPropagation();
           onNext();

@@ -142,7 +142,7 @@ describe("ImageViewerContent", () => {
       />,
     );
 
-    expect(markup).toContain("Sensitive Media");
+    expect(markup).toContain("Sensitive media");
     expect(markup).toContain("Hidden by your high media filter.");
     expect(markup).toContain("Show");
   });

@@ -141,6 +141,7 @@ export function ChatHeader({
           type="button"
           className={cn(
             "relative hidden h-8 cursor-pointer items-center gap-2 rounded-md px-2 group/chname transition-colors duration-150 md:flex",
+            HIT,
             showChannelDetails
               ? "bg-rm-tint-2"
               : "pointer-fine:hover:bg-rm-tint-1",
@@ -249,6 +250,7 @@ export function ChatHeader({
             className={cn(
               "hidden md:inline-flex h-8 w-[168px] items-center gap-2 rounded-md bg-rm-tint-1 px-2.5 text-ui-sm font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text lg:w-[200px]",
               PRESS,
+              HIT,
             )}
             onClick={onOpenSearch}
             title={isDM ? "Search this conversation" : "Search messages"}

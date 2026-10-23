@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { useState } from "react";
 
 interface SensitiveMediaFrameProps {
@@ -61,19 +62,24 @@ function SensitiveMediaFrameContent({
         )}
       >
         <div className="space-y-1">
-          <p className="text-ui-sm font-semibold uppercase tracking-[0.18em] text-white/90">
-            Sensitive Media
+          <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white">
+            Sensitive media
           </p>
-          <p className="text-ui-xs font-medium text-white/70">
+          <p className="text-ui-xs text-white/80">
             Hidden by your high media filter.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setRevealed(true)}
-          className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-ui-xs font-bold uppercase tracking-[0.16em] text-white transition pointer-fine:hover:bg-white/18"
+          className={cn(
+            // Media overlay control over the blurred media (6.5).
+            "inline-flex h-8 items-center rounded-md bg-white/15 px-3 text-ui-sm font-medium text-white",
+            PRESS,
+            HIT,
+          )}
         >
-          Show
+          Show media
         </button>
       </div>
     </div>

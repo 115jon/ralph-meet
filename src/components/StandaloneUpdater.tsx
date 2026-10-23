@@ -1,4 +1,5 @@
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { Button } from "@/components/ui/button";
 import { fetchDesktopUpdate, installDesktopUpdate } from "@/lib/desktop-update";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
@@ -211,13 +212,13 @@ export function StandaloneUpdater() {
         {getStandaloneUpdaterStatusText(status, progress)}
       </p>
       {status === "error" && (
-        <button
-          className="mt-4 rounded-md bg-rm-accent px-3.5 py-1.5 text-ui-sm font-semibold text-white transition-ui pointer-fine:hover:bg-rm-accent-hover enabled:active:scale-[0.96]"
+        <Button
+          className="mt-4"
           style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => window.location.reload()}
         >
           Retry startup
-        </button>
+        </Button>
       )}
     </LoadingScreen>
   );

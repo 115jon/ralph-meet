@@ -251,7 +251,11 @@ function ReactionTooltipContent({
           <button
             type="button"
             onClick={onOpenDetails}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-tint-1 transition-[background-color,transform] duration-150 pointer-fine:hover:bg-rm-tint-2 active:scale-[0.97]"
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-lg bg-rm-tint-1",
+              PRESS,
+              HIT,
+            )}
             aria-label={`View all reactions for ${getReactionEmojiLabel(emoji)}`}
           >
             <EmojiToken
@@ -1006,7 +1010,10 @@ const MessageItem = memo(
           {showHeader ? (
             <button
               type="button"
-              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-ui-sm font-semibold text-primary transition-opacity pointer-fine:hover:opacity-80 relative"
+              className={cn(
+                "relative mt-0.5 flex size-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-rm-accent-tint p-0 text-ui-sm font-semibold text-rm-accent-ink transition-opacity pointer-fine:hover:opacity-80",
+                HIT,
+              )}
               onClick={() => setShowProfile(true)}
               aria-label={`View ${authorInfo.displayName}'s profile`}
             >

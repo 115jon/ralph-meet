@@ -46,7 +46,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
-import { HIT, REVEAL } from "@/components/ui/interaction";
+import { DISABLED, HIT, PRESS, REVEAL } from "@/components/ui/interaction";
+import { Spinner } from "@/components/ui/button";
 import {
   SIDEBAR_CATEGORY,
   SIDEBAR_ICON_SLOT,
@@ -302,7 +303,13 @@ function VoiceChannelMediaDisplay({
               <button
                 type="button"
                 aria-label="Change media"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg transition-ui pointer-fine:hover:border-white/30 pointer-fine:hover:bg-black/75 pointer-fine:hover:text-white md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
+                className={cn(
+                  // Media overlay chip over the channel media (6.5).
+                  "flex size-8 items-center justify-center rounded-full bg-black/60 text-white",
+                  PRESS,
+                  HIT,
+                  "md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100 md:pointer-fine:group-focus-within/media:opacity-100",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   onChange();
@@ -322,17 +329,20 @@ function VoiceChannelMediaDisplay({
                 type="button"
                 aria-label="Remove media"
                 disabled={isRemoving}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg transition-ui pointer-fine:hover:border-destructive/50 pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
+                aria-busy={isRemoving || undefined}
+                className={cn(
+                  "flex size-8 items-center justify-center rounded-full bg-black/60 text-white",
+                  PRESS,
+                  HIT,
+                  DISABLED,
+                  "md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100 md:pointer-fine:group-focus-within/media:opacity-100",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove();
                 }}
               >
-                {isRemoving ? (
-                  <Icon name="loader" size="sm" className="animate-spin" />
-                ) : (
-                  <Icon name="trash" size="sm" />
-                )}
+                {isRemoving ? <Spinner /> : <Icon name="trash" size="sm" />}
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8}>

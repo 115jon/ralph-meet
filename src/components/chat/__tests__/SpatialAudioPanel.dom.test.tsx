@@ -47,7 +47,7 @@ describe("SpatialAudioPanel", () => {
       </div>,
     );
 
-    const panel = await screen.findByRole("dialog", { name: "Spatial Audio" });
+    const panel = await screen.findByRole("dialog", { name: "Spatial audio" });
 
     expect(container).not.toContainElement(panel);
     expect(document.body).toContainElement(panel);
@@ -75,7 +75,7 @@ describe("SpatialAudioPanel dismissal", () => {
         onClose={onClose}
       />,
     );
-    const panel = await screen.findByRole("dialog", { name: "Spatial Audio" });
+    const panel = await screen.findByRole("dialog", { name: "Spatial audio" });
     fireEvent.keyDown(panel, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
     trigger.remove();

@@ -1649,7 +1649,10 @@ export default function GifPickerModal({
                           saveQueryToHistory(q);
                           commitProgrammaticSearch(q);
                         }}
-                        className="relative text-left pointer-fine:hover:underline"
+                        className={cn(
+                          "relative text-left pointer-fine:hover:underline",
+                          HIT,
+                        )}
                       >
                         {q}
                       </button>

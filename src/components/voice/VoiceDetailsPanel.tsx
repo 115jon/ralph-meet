@@ -13,6 +13,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ResponsivePopover } from "@/components/ui/popover";
+import { HIT } from "@/components/ui/interaction";
+import { cn } from "@/lib/utils";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
 
 const log = clog("VoiceDetails");
@@ -217,16 +219,22 @@ export function VoiceDetailsPanel({
             <button
               type="button"
               onClick={handleDebug}
-              className="text-rm-text-link pointer-fine:hover:underline transition-colors flex items-center gap-1 outline-none"
+              className={cn(
+                "relative flex items-center gap-1 text-rm-accent-ink outline-none pointer-fine:hover:underline",
+                HIT,
+              )}
             >
               Debug <ExternalLinkIcon />
             </button>
             <button
               type="button"
               onClick={handleCopyStats}
-              className="text-rm-text-link pointer-fine:hover:underline transition-colors flex items-center gap-1 outline-none"
+              className={cn(
+                "relative flex items-center gap-1 text-rm-accent-ink outline-none pointer-fine:hover:underline",
+                HIT,
+              )}
             >
-              {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
+              {copyFeedback ? "Copied" : "Copy stats"} <ClipboardIcon />
             </button>
           </>
         ) : (
@@ -266,11 +274,14 @@ function TabButton({
     <button
       type="button"
       onClick={() => onSelect(id)}
-      className={`pb-2 text-ui-sm font-semibold border-b-2 transition-colors outline-none ${
+      aria-pressed={isActive}
+      className={cn(
+        "relative border-b-2 pb-2 text-ui-sm outline-none transition-colors",
+        HIT,
         isActive
-          ? "text-rm-text-link border-rm-text-link"
-          : "text-rm-text-muted border-transparent pointer-fine:hover:text-rm-text pointer-fine:hover:border-rm-text-muted/30"
-      }`}
+          ? "border-rm-text font-semibold text-rm-text"
+          : "border-transparent font-medium text-rm-text-muted pointer-fine:hover:text-rm-text",
+      )}
     >
       {label}
     </button>

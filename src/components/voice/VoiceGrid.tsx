@@ -1,7 +1,7 @@
 import { Slider } from "@/components/ContextMenu/ContextMenuItems";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { Icon } from "@/components/ui/icon";
 
 import { extractDominantColor } from "@/lib/color-utils";
@@ -244,7 +244,8 @@ export const VoiceGrid = React.memo(
                   }
                   className={cn(
                     PRESS,
-                    "flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-ui-2xs font-medium text-white outline-none",
+                    HIT,
+                    "flex items-center gap-1.5 rounded-md bg-black/60 px-2.5 py-1.5 text-ui-2xs font-medium text-white outline-none",
                   )}
                 >
                   {isPreviewHidden ? (

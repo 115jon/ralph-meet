@@ -4,6 +4,15 @@ import { getWebOrigin } from "@/lib/platform";
 import { formatRelative } from "date-fns";
 import { enUS } from "date-fns/locale";
 import { Icon } from "@/components/ui/icon";
+import { HIT, PRESS } from "@/components/ui/interaction";
+import { cn } from "@/lib/utils";
+
+/** Icon control in the viewer's floating pills: 36px, 44 on touch. */
+export const VIEWER_BUTTON = cn(
+  "flex size-9 items-center justify-center rounded-lg text-rm-text-muted pointer-fine:hover:text-rm-text",
+  PRESS,
+  HIT,
+);
 import {
   ActionSheet,
   type ActionSheetItem,
@@ -245,18 +254,18 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_OUT" })}
-                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className={VIEWER_BUTTON}
                 aria-label="Zoom out"
-                title="Zoom Out"
+                title="Zoom out"
               >
                 <Icon name="zoomOut" size="md" />
               </button>
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_IN" })}
-                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className={VIEWER_BUTTON}
                 aria-label="Zoom in"
-                title="Zoom In"
+                title="Zoom in"
               >
                 <Icon name="zoomIn" size="md" />
               </button>
@@ -268,9 +277,9 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={handleForward}
-                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className={VIEWER_BUTTON}
                 aria-label="Jump to message"
-                title="Jump to Message"
+                title="Jump to message"
               >
                 <Icon name="chat" size="md" />
               </button>
@@ -281,7 +290,7 @@ export function ImageViewerToolbar({
             download={currentImage.filename}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+            className={VIEWER_BUTTON}
             aria-label="Download attachment"
             title="Download"
           >
@@ -371,7 +380,7 @@ export function ImageViewerToolbar({
           <button
             type="button"
             onClick={close}
-            className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+            className={VIEWER_BUTTON}
             aria-label="Close media viewer"
           >
             <Icon name="close" size="md" />

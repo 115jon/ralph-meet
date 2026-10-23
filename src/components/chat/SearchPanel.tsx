@@ -883,8 +883,9 @@ function SearchPanelBody({
             aria-pressed={sort === key}
             onClick={() => changeSort(key)}
             className={cn(
-              "h-6 rounded-[5px] px-2 text-ui-xs font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text aria-pressed:bg-rm-bg-primary aria-pressed:text-rm-text aria-pressed:shadow-[var(--rm-shadow-1)] max-md:h-8 max-md:px-2.5",
+              "h-6 rounded-sm px-2 text-ui-xs font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text aria-pressed:bg-rm-bg-primary aria-pressed:font-semibold aria-pressed:text-rm-text max-md:h-8 max-md:px-2.5",
               PRESS,
+              HIT,
             )}
           >
             {SORT_LABELS[key]}

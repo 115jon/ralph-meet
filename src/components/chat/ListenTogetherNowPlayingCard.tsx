@@ -613,7 +613,13 @@ export function ListenTogetherNowPlayingCard({
             {Math.round(localVolume * 100)}%
           </span>
           <details className="relative shrink-0">
-            <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md text-rm-text-muted outline-none transition-colors duration-150 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text [&::-webkit-details-marker]:hidden">
+            <summary
+              className={cn(
+                "flex size-10 cursor-pointer list-none items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text [&::-webkit-details-marker]:hidden",
+                PRESS,
+                HIT,
+              )}
+            >
               <Icon name="privacy" size="sm" />
               <span className="sr-only">Audio options</span>
             </summary>

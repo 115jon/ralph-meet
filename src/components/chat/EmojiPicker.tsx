@@ -32,7 +32,7 @@ import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import {
   MENU_ITEM,
   MENU_ITEM_DEFAULT,
@@ -197,6 +197,7 @@ function NativeEmojiButton({
       className={cn(
         "flex size-10 items-center justify-center rounded-md",
         PRESS,
+        HIT,
       )}
     >
       <ReadyEmojiPreview
@@ -1050,6 +1051,7 @@ export default function EmojiPicker({
                                   className={cn(
                                     "flex size-10 items-center justify-center self-center rounded-md",
                                     PRESS,
+                                    HIT,
                                     activeCategory === CUSTOM_SECTION_ID &&
                                       "bg-rm-tint-2",
                                   )}
@@ -1089,6 +1091,7 @@ export default function EmojiPicker({
                                     className={cn(
                                       "flex size-10 items-center justify-center self-center rounded-md",
                                       PRESS,
+                                      HIT,
                                       activeCategory === category.id &&
                                         "bg-rm-tint-2",
                                     )}

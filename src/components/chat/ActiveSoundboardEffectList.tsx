@@ -14,13 +14,9 @@ import {
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
 import { useMemo } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface ActiveSoundboardEffectListProps {
   serverId?: string | null;
@@ -187,39 +183,21 @@ export function SoundboardPlaybackRow({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {isOwner && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={handleTogglePause}
-                  aria-label={playback.paused ? "Resume" : "Pause"}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text"
-                >
-                  {playback.paused ? (
-                    <Icon name="play" size="xs" />
-                  ) : (
-                    <Icon name="pause" size="xs" />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {playback.paused ? "Resume" : "Pause"}
-              </TooltipContent>
-            </Tooltip>
+            <IconButton
+              icon={playback.paused ? "play" : "pause"}
+              size="xs"
+              variant="muted"
+              tooltip={playback.paused ? "Resume" : "Pause"}
+              onClick={handleTogglePause}
+            />
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={handleStop}
-                aria-label="Stop"
-                className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-destructive"
-              >
-                <Icon name="stop" size="xs" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Stop</TooltipContent>
-          </Tooltip>
+          <IconButton
+            icon="stop"
+            size="xs"
+            variant="destructive"
+            tooltip="Stop"
+            onClick={handleStop}
+          />
         </div>
       </div>
       {variant === "floating" && (

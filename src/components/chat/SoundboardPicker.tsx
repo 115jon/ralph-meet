@@ -231,6 +231,7 @@ const TILE_ACTION_MEDIA = cn(
 const RAIL_BUTTON = cn(
   "flex size-10 items-center justify-center self-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text",
   PRESS,
+  HIT,
 );
 const RAIL_BUTTON_ON = "bg-rm-tint-2 text-rm-text";
 /** A synthetic event for handlers that only stop propagation. */
