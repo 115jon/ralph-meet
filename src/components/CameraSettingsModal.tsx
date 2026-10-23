@@ -1,33 +1,24 @@
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
-import InlineEmojiText from "@/components/chat/InlineEmojiText";
+/**
+ * Camera settings before (or while) you are on video: a centred dialog on
+ * desktop, a bottom drawer on phones, with the Studio camera rows as the body.
+ *
+ *   <CameraSettingsModal isOpen onClose={close}
+ *     isCameraActive={on} onToggleCamera={toggle} settingsUserId={id} />
+ */
+
+import CameraCard from "@/components/chat/settings/CameraCard";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
-import { createCameraBackgroundEffect } from "@/lib/camera-background-effects";
-import {
-  CAMERA_BACKGROUND_ACCEPT,
-  deleteCameraBackground,
-  getCameraBackgroundValidationError,
-  listCameraBackgrounds,
-  uploadCameraBackground,
-} from "@/lib/camera-backgrounds";
-import { buildCameraVideoConstraints } from "@/lib/camera-quality";
-import { getAuthAssetUrl } from "@/lib/platform";
-import { useMediaDevices } from "@/lib/useMediaDevices";
-import { cn } from "@/lib/utils";
-import {
-  type CameraBackgroundSetting,
-  type CustomCameraBackground,
-  useVoiceSettingsStore,
-} from "@/stores/useVoiceSettingsStore";
-import { Icon } from "@/components/ui/icon";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { VideoPlayer } from "./voice/VideoPlayer";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import type React from "react";
 
 interface CameraSettingsModalProps {
   isOpen: boolean;
@@ -37,29 +28,6 @@ interface CameraSettingsModalProps {
   settingsUserId?: string;
 }
 
-const BACKGROUND_OPTIONS: Array<{
-  id: string;
-  label: string;
-  value: CameraBackgroundSetting;
-}> = [
-  {
-    id: "none",
-    label: "None",
-    value: { type: "none" },
-  },
-  {
-    id: "blur",
-    label: "Blur",
-    value: { type: "blur", strength: "strong" },
-  },
-];
-
-function backgroundOptionId(setting: CameraBackgroundSetting): string {
-  if (setting.type === "blur") return "blur";
-  if (setting.type === "image") return `image-${setting.id}`;
-  return "none";
-}
-
 export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
   isOpen,
   onClose,
@@ -67,591 +35,70 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
   onToggleCamera,
   settingsUserId,
 }) => {
-  const { videoInputs } = useMediaDevices();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const settings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
-  const setDevice = useVoiceSettingsStore((s) => s.setDevice);
-  const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isLoadingBackgrounds, setIsLoadingBackgrounds] = useState(false);
-  const [isUploadingBackground, setIsUploadingBackground] = useState(false);
-  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
-  const webcamStreamRef = useRef<MediaStream | null>(null);
-  const previewEffectRef = useRef<any>(null);
-  const previewRequestIdRef = useRef(0);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    let cancelled = false;
-    setIsLoadingBackgrounds(true);
-    void listCameraBackgrounds()
-      .then((backgrounds) => {
-        if (cancelled) return;
-        updateUserSettings((current) => {
-          const localOnlyBackgrounds = (
-            current.customCameraBackgrounds ?? []
-          ).filter((background) => background.dataUrl && !background.url);
-          const customCameraBackgrounds = [
-            ...backgrounds,
-            ...localOnlyBackgrounds,
-          ];
-          const selectedBackgroundId =
-            current.cameraBackground.type === "image"
-              ? current.cameraBackground.id
-              : null;
-          const selectedBackgroundMissing =
-            !!selectedBackgroundId &&
-            !customCameraBackgrounds.some(
-              (background) => background.id === selectedBackgroundId,
-            );
-
-          return {
-            ...current,
-            cameraBackground: selectedBackgroundMissing
-              ? { type: "none" }
-              : current.cameraBackground,
-            customCameraBackgrounds,
-          };
-        }, settingsUserId);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        const status = (error as any)?.status;
-        setUploadError(
-          status === 401
-            ? "Sign in to sync uploaded backgrounds."
-            : "Could not load saved backgrounds.",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingBackgrounds(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, settingsUserId, updateUserSettings]);
-
-  const selectedBackgroundId = backgroundOptionId(settings.cameraBackground);
-  const selectedDeviceId = settings.videoDeviceId || "default";
-  const latestCameraBackgroundRef = useRef(settings.cameraBackground);
-  const latestCustomCameraBackgroundsRef = useRef(
-    settings.customCameraBackgrounds ?? [],
-  );
-  latestCameraBackgroundRef.current = settings.cameraBackground;
-  latestCustomCameraBackgroundsRef.current =
-    settings.customCameraBackgrounds ?? [];
-
-  const applyPreviewStream = useCallback(
-    async (
-      stream: MediaStream | null,
-      cameraBackground: CameraBackgroundSetting,
-      customCameraBackgrounds: CustomCameraBackground[],
-    ) => {
-      const requestId = ++previewRequestIdRef.current;
-      previewEffectRef.current?.stop?.();
-      previewEffectRef.current = null;
-
-      if (!stream) {
-        setPreviewStream(null);
-        return;
-      }
-
-      const videoTrack = stream.getVideoTracks()[0];
-      if (!videoTrack || cameraBackground.type === "none") {
-        setPreviewStream(stream);
-        return;
-      }
-
-      try {
-        const effect = await createCameraBackgroundEffect(
-          videoTrack,
-          cameraBackground,
-          customCameraBackgrounds,
-        );
-        if (previewRequestIdRef.current !== requestId) {
-          effect?.stop?.();
-          return;
-        }
-        if (effect) {
-          previewEffectRef.current = effect;
-          setPreviewStream(effect.stream);
-        } else {
-          setPreviewStream(stream);
-        }
-      } catch (err) {
-        if (previewRequestIdRef.current === requestId) {
-          console.error("Failed to apply background effect:", err);
-          setPreviewStream(stream);
-        }
-      }
-    },
-    [],
-  );
-
-  // 1. Webcam Stream Lifecycle
-  useEffect(() => {
-    if (!isOpen) return;
-
-    let active = true;
-
-    const startWebcam = async () => {
-      try {
-        const videoConstraints = buildCameraVideoConstraints({
-          deviceId: selectedDeviceId,
-          exactDevice: selectedDeviceId !== "default",
-          qualityId: settings.cameraQuality,
-        });
-        const constraints = {
-          video: videoConstraints,
-          audio: false,
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (!active) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-
-        webcamStreamRef.current = stream;
-        await applyPreviewStream(
-          stream,
-          latestCameraBackgroundRef.current,
-          latestCustomCameraBackgroundsRef.current,
-        );
-      } catch (err) {
-        console.error("Failed to start preview stream:", err);
-        if (active) {
-          webcamStreamRef.current = null;
-          setPreviewStream(null);
-        }
-      }
-    };
-
-    void startWebcam();
-
-    return () => {
-      active = false;
-      previewRequestIdRef.current += 1;
-      previewEffectRef.current?.stop?.();
-      previewEffectRef.current = null;
-      if (webcamStreamRef.current) {
-        webcamStreamRef.current.getTracks().forEach((t) => t.stop());
-        webcamStreamRef.current = null;
-      }
-      setPreviewStream(null);
-    };
-  }, [applyPreviewStream, isOpen, selectedDeviceId, settings.cameraQuality]);
-
-  // 2. Background Effect Lifecycle
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    void applyPreviewStream(
-      webcamStreamRef.current,
-      settings.cameraBackground,
-      settings.customCameraBackgrounds ?? [],
-    );
-  }, [
-    applyPreviewStream,
-    isOpen,
-    settings.cameraBackground,
-    settings.customCameraBackgrounds,
-  ]);
-
-  const selectDevice = (deviceId: string) => {
-    const device = videoInputs.find((d) => d.deviceId === deviceId);
-    setDevice("video", deviceId, settingsUserId, {
-      label: device?.label,
-      groupId: device?.groupId,
-    });
-  };
-
-  const selectBackground = (cameraBackground: CameraBackgroundSetting) => {
-    updateUserSettings(
-      (current) => ({ ...current, cameraBackground }),
-      settingsUserId,
-    );
-  };
-
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
-
-    const validationError = getCameraBackgroundValidationError(file);
-    if (validationError) {
-      setUploadError(validationError);
-      return;
-    }
-
-    setIsUploadingBackground(true);
-    try {
-      const background = await uploadCameraBackground(file);
-      updateUserSettings(
-        (current) => ({
-          ...current,
-          cameraBackground: { type: "image", id: background.id },
-          customCameraBackgrounds: [
-            background,
-            ...(current.customCameraBackgrounds ?? []).filter(
-              (candidate) => candidate.id !== background.id,
-            ),
-          ],
-        }),
-        settingsUserId,
-      );
-      setUploadError(null);
-    } catch (error) {
-      const status = (error as any)?.status;
-      if (status === 401)
-        setUploadError("Sign in to upload synced backgrounds.");
-      else
-        setUploadError(
-          error instanceof Error
-            ? error.message
-            : "Could not upload that image.",
-        );
-    } finally {
-      setIsUploadingBackground(false);
-    }
-  };
-
-  const removeBackground = async (background: CustomCameraBackground) => {
-    if (background.url) {
-      try {
-        await deleteCameraBackground(background.id);
-      } catch (error) {
-        setUploadError(
-          error instanceof Error
-            ? error.message
-            : "Could not remove that background.",
-        );
-        return;
-      }
-    }
-
-    updateUserSettings(
-      (current) => ({
-        ...current,
-        cameraBackground:
-          current.cameraBackground.type === "image" &&
-          current.cameraBackground.id === background.id
-            ? { type: "none" }
-            : current.cameraBackground,
-        customCameraBackgrounds: (current.customCameraBackgrounds ?? []).filter(
-          (candidate) => candidate.id !== background.id,
-        ),
-      }),
-      settingsUserId,
-    );
-    setUploadError(null);
-  };
-
-  const handlePrimary = () => {
-    if (!isCameraActive) onToggleCamera?.();
+  const turnOn = () => {
+    onToggleCamera?.();
     onClose();
   };
-
-  const dropdownOptions = videoInputs.map((d) => ({
-    value: d.deviceId,
-    label: d.label || (d.deviceId === "default" ? "Default Camera" : "Camera"),
-  }));
+  const canTurnOn = !isCameraActive && Boolean(onToggleCamera);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogPortal>
-        <div
-          className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4",
-            "animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
-          )}
-          data-state={isOpen ? "open" : "closed"}
-          onPointerDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (shouldIgnoreSelectDismiss(event.target)) return;
-            onClose();
-          }}
-          role="presentation"
-        >
-          <DialogSurface
-            showCloseButton={false}
-            className={cn(
-              "relative m-0 flex min-h-0 h-full max-h-[640px] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none",
-              "animate-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
-            )}
-            aria-labelledby="camera-settings-title"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-5 pb-4 border-b border-rm-border/50">
-              <h2
-                id="camera-settings-title"
-                className="text-ui-lg font-semibold text-rm-text"
-              >
-                Ready to video chat?
-              </h2>
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-1 rounded-full text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text transition-ui"
-                aria-label="Close camera settings"
-              >
-                <Icon name="close" size="md" />
-              </button>
-            </div>
+    <ResponsiveDialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <ResponsiveDialogContent
+        showCloseButton={false}
+        className="gap-0"
+        dialogClassName="flex max-h-[min(760px,calc(100dvh-32px))] flex-col p-0 md:max-w-lg"
+        drawerClassName="px-0"
+      >
+        <ResponsiveDialogHeader className="relative shrink-0 px-4 pb-2 pt-5 md:px-6 md:pr-14">
+          <ResponsiveDialogTitle className="text-ui-lg font-semibold text-rm-text">
+            Camera
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription className="text-ui-sm text-rm-text-secondary">
+            Pick a camera and background. Changes save as you go.
+          </ResponsiveDialogDescription>
+          <ResponsiveDialogClose asChild>
+            <IconButton
+              aria-label="Close camera settings"
+              icon="close"
+              size="sm"
+              className="absolute right-4 top-4 max-md:hidden"
+            />
+          </ResponsiveDialogClose>
+        </ResponsiveDialogHeader>
 
-            {/* Content */}
-            <div className="flex-1 min-h-0 space-y-5 overflow-y-auto p-5 custom-scrollbar">
-              {/* Live Video Preview Box */}
-              <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black border border-rm-border flex items-center justify-center">
-                {previewStream && (
-                  <VideoPlayer
-                    stream={previewStream}
-                    isLocal={true}
-                    className="h-full w-full object-contain bg-black"
-                  />
-                )}
-              </div>
-
-              {/* Camera dropdown selection */}
-              <div className="space-y-2">
-                <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] ml-1 text-rm-text-muted">
-                  Camera
-                </p>
-                <Select value={selectedDeviceId} onValueChange={selectDevice}>
-                  <SelectTrigger
-                    aria-label="Select camera device"
-                    className="w-full rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text pointer-fine:hover:bg-rm-bg-elevated"
-                  >
-                    <SelectValue placeholder="Select camera device" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    align="start"
-                    className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
-                  >
-                    {dropdownOptions.map((option) => (
-                      <SelectItem
-                        key={option.value}
-                        value={option.value}
-                        textValue={option.label}
-                        className="text-rm-text-secondary pointer-fine:hover:bg-rm-bg-elevated pointer-fine:hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
-                      >
-                        <InlineEmojiText text={option.label} />
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Background selection */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 px-1">
-                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-                    Video Background
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploadingBackground}
-                    className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors pointer-fine:hover:text-rm-text"
-                  >
-                    <Icon name="upload" size="xs" />{" "}
-                    {isUploadingBackground ? "Uploading" : "Upload Image"}
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={CAMERA_BACKGROUND_ACCEPT}
-                    className="hidden"
-                    aria-label="Upload video background image"
-                    onChange={handleUpload}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  {BACKGROUND_OPTIONS.map((option) => {
-                    const isSelected = selectedBackgroundId === option.id;
-                    return (
-                      <button
-                        type="button"
-                        key={option.id}
-                        onClick={() => selectBackground(option.value)}
-                        className={cn(
-                          "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-ui",
-                          isSelected
-                            ? "border-primary bg-primary/5 ring-1 ring-primary"
-                            : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:border-rm-text/20 pointer-fine:hover:bg-rm-bg-surface/60",
-                        )}
-                      >
-                        {option.id === "none" ? (
-                          <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-ui">
-                            <Icon name="ban" size="lg" />
-                          </div>
-                        ) : (
-                          <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-ui">
-                            <div
-                              data-rm-preserve-blur="true"
-                              className="absolute inset-0 bg-linear-to-tr from-primary/30 via-rm-accent/25 to-transparent filter blur-[8px]"
-                            />
-                            <div className="absolute inset-0 bg-black/15" />
-                            <Icon
-                              name="sparkle"
-                              size="lg"
-                              className="relative z-10 text-white/80"
-                            />
-                          </div>
-                        )}
-                        <span
-                          className={cn(
-                            "text-ui-xs font-semibold",
-                            isSelected ? "text-primary" : "text-rm-text",
-                          )}
-                        >
-                          {option.label}
-                        </span>
-                        {isSelected && (
-                          <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                            <Icon name="check" size="xs" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-
-                  {(settings.customCameraBackgrounds ?? []).map(
-                    (background) => {
-                      const isSelected =
-                        selectedBackgroundId === `image-${background.id}`;
-                      return (
-                        <div
-                          key={background.id}
-                          className={cn(
-                            "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-ui",
-                            isSelected
-                              ? "border-primary ring-1 ring-primary"
-                              : "border-rm-border pointer-fine:hover:border-rm-text/20",
-                          )}
-                        >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              selectBackground({
-                                type: "image",
-                                id: background.id,
-                              })
-                            }
-                            className="block w-full p-2 text-left"
-                          >
-                            <img
-                              src={
-                                background.url
-                                  ? getAuthAssetUrl(background.url)
-                                  : background.dataUrl
-                              }
-                              alt=""
-                              className="h-16 w-full rounded-lg object-cover"
-                            />
-                            <div className="mt-2 flex items-center justify-between gap-2 px-1">
-                              <span
-                                className={cn(
-                                  "truncate text-ui-xs font-semibold",
-                                  isSelected ? "text-primary" : "text-rm-text",
-                                )}
-                              >
-                                {background.name}
-                              </span>
-                            </div>
-                          </button>
-                          {isSelected && (
-                            <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
-                              <Icon name="check" size="xs" />
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void removeBackground(background)}
-                            className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 pointer-fine:opacity-0 transition-opacity pointer-fine:hover:text-white pointer-fine:group-hover:opacity-100"
-                            aria-label={`Remove ${background.name}`}
-                          >
-                            <Icon name="trash" size="xs" />
-                          </button>
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-                {isLoadingBackgrounds && (
-                  <p className="px-1 text-ui-xs font-medium text-rm-text-muted">
-                    Loading saved backgrounds...
-                  </p>
-                )}
-                {uploadError && (
-                  <p className="px-1 text-ui-xs font-medium text-destructive">
-                    {uploadError}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between border-t border-rm-border bg-rm-bg-surface/20 p-4">
-              {/* Always preview toggle */}
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateUserSettings(
-                      (current) => ({
-                        ...current,
-                        alwaysPreviewVideo: !current.alwaysPreviewVideo,
-                      }),
-                      settingsUserId,
-                    );
-                  }}
-                  aria-label={`Always preview video: ${settings.alwaysPreviewVideo ? "On" : "Off"}`}
-                  aria-pressed={settings.alwaysPreviewVideo}
-                  className={cn(
-                    "relative w-9 h-5 rounded-full transition-colors duration-200 outline-none",
-                    settings.alwaysPreviewVideo
-                      ? "bg-primary"
-                      : "bg-rm-bg-elevated border border-rm-border",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-transform duration-200",
-                      settings.alwaysPreviewVideo && "translate-x-4.5",
-                    )}
-                  />
-                </button>
-                <span className="text-ui-2xs font-medium text-rm-text-secondary select-none">
-                  Always preview video
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePrimary}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-ui-xs font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui pointer-fine:hover:brightness-110 active:scale-[0.96]"
-                >
-                  <span>{isCameraActive ? "Done" : "Turn On Camera"}</span>
-                </button>
-              </div>
-            </div>
-          </DialogSurface>
+        {/* Only mounted while open, so the preview never runs hidden. */}
+        <div className="@container min-h-0 flex-1 overflow-y-auto overscroll-contain md:px-2">
+          {isOpen ? (
+            <CameraCard
+              settingsUserId={settingsUserId ?? null}
+              autoPreview
+              bare
+            />
+          ) : null}
         </div>
-      </DialogPortal>
-    </Dialog>
+
+        <ResponsiveDialogFooter className="shrink-0 border-t border-rm-border px-4 pt-3 pb-[max(16px,var(--safe-area-bottom,0px))] md:px-6 md:pb-5">
+          {canTurnOn ? (
+            <>
+              <Button type="button" variant="ghost" onClick={onClose}>
+                Not now
+              </Button>
+              <Button type="button" onClick={turnOn}>
+                Turn on camera
+              </Button>
+            </>
+          ) : (
+            <Button type="button" onClick={onClose}>
+              Done
+            </Button>
+          )}
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 };
