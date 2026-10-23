@@ -70,9 +70,11 @@ describe("SettingsHost", () => {
   const originalMatchMedia = window.matchMedia;
 
   // The host lazy-loads the dialog; warm the chunk so findBy stays fast.
+  // The first import transforms the whole settings tree, which can take
+  // longer than the default 10s hook timeout when the full suite runs.
   beforeAll(async () => {
     await import("../SettingsModal");
-  });
+  }, 60_000);
 
   beforeEach(() => {
     useSettingsDialogStore.setState({
