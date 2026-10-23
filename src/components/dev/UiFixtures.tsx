@@ -694,9 +694,9 @@ const linusScreen: GridItem = {
   isSpeaking: false,
 };
 
-const LISTEN_ROOM = "lounge";
+export const LISTEN_ROOM = "lounge";
 
-function listenEntry(
+export function listenEntry(
   id: string,
   title: string,
   artist: string,
@@ -726,7 +726,7 @@ function listenEntry(
   };
 }
 
-function listenSnapshot(now: number): ListenTogetherStateSnapshot {
+export function listenSnapshot(now: number): ListenTogetherStateSnapshot {
   const queue = [
     listenEntry(
       "fx-nightdrive",
@@ -863,7 +863,7 @@ const LISTEN_SEARCH: ListenTogetherSearchResponse = {
  * send anything without a session token, so a placeholder is stored for the
  * fixture's lifetime when the browser has none (a real one is left alone).
  */
-function installListenSearchStub() {
+export function installListenSearchStub() {
   const placeholderSession = getStoredKovaAuthSessionToken()
     ? null
     : "ui-fixture-session";

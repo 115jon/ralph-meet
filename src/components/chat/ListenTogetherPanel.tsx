@@ -39,12 +39,16 @@ import {
   ListenTogetherResultActionTrigger,
 } from "./ListenTogetherResultActions";
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { isWideViewport, useMediaQuery } from "@/hooks/useMediaQuery";
+import { isWideViewport, useIsMobile } from "@/hooks/useMediaQuery";
 import {
   formatListenTogetherDuration,
   useListenTogetherPlaybackState,
 } from "./listen-together-playback";
-import { Icon } from "@/components/ui/icon";
+import { Button, Spinner } from "@/components/ui/button";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { Tabs, tabId } from "@/components/ui/tabs";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   useCallback,
   useDeferredValue,
@@ -72,6 +76,31 @@ function buildResolveFeedback(resolvedCount: number, skippedCount: number) {
     return `Queued ${resolvedCount} ${resolvedLabel}.`;
   }
   return `Queued ${resolvedCount} ${resolvedLabel}, skipped ${skippedCount}.`;
+}
+
+/** Empty state (design system 14.1): icon, title, one line, no card. */
+function ListenTogetherEmpty({
+  icon,
+  title,
+  body,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <Icon
+        name={icon}
+        size="3xl"
+        className="text-rm-text-muted max-md:size-8"
+      />
+      <p className="text-ui-md font-semibold text-rm-text">{title}</p>
+      <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
+        {body}
+      </p>
+    </div>
+  );
 }
 
 function getRequeueTrack(track: ListenTogetherTrack): ListenTogetherTrack {
@@ -130,20 +159,18 @@ export const listenTogetherQueueRowRenderer = {
     return (
       <div
         className={cn(
-          "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors md:gap-3 md:py-3",
-          isCurrent
-            ? "rounded-2xl bg-primary/10"
-            : "pointer-fine:hover:bg-rm-bg-hover/45",
+          "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2.5 transition-colors duration-150 md:gap-3 md:py-3",
+          isCurrent ? "bg-rm-accent-tint" : "pointer-fine:hover:bg-rm-tint-1",
         )}
       >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center text-ui-xs font-semibold tabular-nums text-rm-text-muted">
           {isCurrent ? (
-            <span className="h-2 w-2 rounded-full bg-primary" />
+            <span className="h-2 w-2 rounded-full bg-rm-accent-ink" />
           ) : (
             index + 1
           )}
         </div>
-        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-rm-bg-elevated/60 ring-1 ring-white/5 md:h-11 md:w-11">
+        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-rm-tint-1 md:h-11 md:w-11">
           {entry.track.artworkUrl ? (
             <img
               src={entry.track.artworkUrl}
@@ -176,7 +203,7 @@ export const listenTogetherQueueRowRenderer = {
             )}
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-1.5 text-ui-2xs text-rm-text-muted/75">
-            <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
+            <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
               {entry.requester.avatarUrl ? (
                 <AvatarImage
                   src={getAuthAssetUrl(entry.requester.avatarUrl)}
@@ -203,8 +230,9 @@ export const listenTogetherQueueRowRenderer = {
         </div>
         <div className="flex shrink-0 gap-1">
           {!isCurrent && (
-            <button
-              type="button"
+            <IconButton
+              icon="play"
+              variant="muted"
               onClick={() =>
                 sendQueueCommand({
                   type: "listen_together.play",
@@ -212,14 +240,12 @@ export const listenTogetherQueueRowRenderer = {
                   entryId: entry.entryId,
                 })
               }
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label={`Play ${entry.track.title}`}
-            >
-              <Icon name="play" size="sm" />
-            </button>
+            />
           )}
-          <button
-            type="button"
+          <IconButton
+            icon="trash"
+            variant="destructive"
             onClick={() =>
               sendQueueCommand({
                 type: "listen_together.remove",
@@ -227,11 +253,8 @@ export const listenTogetherQueueRowRenderer = {
                 entryId: entry.entryId,
               })
             }
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors pointer-fine:hover:bg-destructive/10 pointer-fine:hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
             aria-label={`Remove ${entry.track.title}`}
-          >
-            <Icon name="trash" size="sm" />
-          </button>
+          />
         </div>
       </div>
     );
@@ -291,7 +314,8 @@ export function ListenTogetherPanel({
   >("queue");
   const [mobileActionResult, setMobileActionResult] =
     useState<ListenTogetherSearchResult | null>(null);
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
+  const isMobile = useIsMobile();
   const formatDate = useClientDateFormatter();
   const [isPaneDragging, setIsPaneDragging] = useState(false);
 
@@ -343,9 +367,9 @@ export function ListenTogetherPanel({
   );
 
   useEffect(() => {
-    if (!isDesktop) return;
-    setMobileActionResult(null);
-  }, [isDesktop]);
+    if (isMobile) return;
+    setMobileActionsOpen(false);
+  }, [isMobile]);
 
   useEffect(() => {
     queueRequestIdRef.current += 1;
@@ -822,8 +846,9 @@ export function ListenTogetherPanel({
     event.preventDefault();
     event.stopPropagation();
     const actions = getListenTogetherResultActions(result);
-    if (!isDesktop) {
+    if (isMobile) {
       setMobileActionResult(result);
+      setMobileActionsOpen(true);
       return;
     }
     openMenu(
@@ -846,30 +871,6 @@ export function ListenTogetherPanel({
     const clamped = clampListenTogetherPaneRatio(nextRatio);
     paneRatioRef.current = clamped;
     persistWorkspacePaneRatio(clamped);
-  };
-
-  const handleActivityTabKeyDown = (
-    event: React.KeyboardEvent<HTMLButtonElement>,
-  ) => {
-    const tabs: Array<"queue" | "recently-played"> = [
-      "queue",
-      "recently-played",
-    ];
-    const currentIndex = tabs.indexOf(activeRightTab);
-    const nextIndex =
-      event.key === "ArrowRight" || event.key === "ArrowDown"
-        ? (currentIndex + 1) % tabs.length
-        : event.key === "ArrowLeft" || event.key === "ArrowUp"
-          ? (currentIndex - 1 + tabs.length) % tabs.length
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? tabs.length - 1
-              : -1;
-    if (nextIndex < 0) return;
-    event.preventDefault();
-    setActiveRightTab(tabs[nextIndex]);
-    document.getElementById(`listen-together-${tabs[nextIndex]}-tab`)?.focus();
   };
 
   const roomSyncLabel = !roomSlug
@@ -896,18 +897,22 @@ export function ListenTogetherPanel({
       }
       className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3 md:gap-4 md:p-4 lg:grid lg:grid-cols-[minmax(280px,var(--listen-together-left-pane))_8px_minmax(0,1fr)] lg:overflow-hidden"
     >
-      <section className="flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface/35 lg:min-h-0">
+      <section className="flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface lg:min-h-0">
         <div className="border-b border-rm-border px-4 py-4 md:px-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-              <Icon name="headphones" size="sm" className="text-primary" />
+              <Icon
+                name="headphones"
+                size="sm"
+                className="text-rm-accent-ink"
+              />
               Add to queue
             </div>
             <span className="text-ui-2xs text-rm-text-muted">
               YouTube · Spotify
             </span>
           </div>
-          <p className="mt-2 max-w-[32ch] text-ui-xs leading-relaxed text-rm-text-muted">
+          <p className="mt-2 max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
             Search a track or paste a link. Everyone in the room hears the same
             queue.
           </p>
@@ -954,76 +959,68 @@ export function ListenTogetherPanel({
                     setResolveFeedback(null);
                   }}
                   placeholder="Search or paste YouTube / Spotify links"
-                  className="h-11 w-full rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pl-10 pr-4 text-ui-md text-rm-text outline-none transition-[border-color,box-shadow] placeholder:text-rm-text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/15 md:text-ui-sm"
+                  className="h-11 w-full rounded-md border border-rm-field-edge bg-transparent pl-10 pr-4 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted md:h-9 md:text-ui-sm"
                 />
               </div>
               {!isResolveMode && (
-                <button
+                <Button
                   type="submit"
+                  variant="secondary"
+                  loading={isSearching}
                   disabled={!trimmedInput || !voiceSessionHeaders}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-ui-sm font-semibold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-11 md:h-9"
                 >
-                  {isSearching ? (
-                    <Icon name="loader" size="sm" className="animate-spin" />
-                  ) : (
-                    "Search"
-                  )}
-                </button>
+                  Search
+                </Button>
               )}
             </form>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setSearchFilter("track")}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-ui-xs font-semibold transition-colors",
-                  searchFilter === "track"
-                    ? "border-primary/40 bg-primary/20 text-primary"
-                    : "border-rm-border bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text",
-                )}
-              >
-                Tracks
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchFilter("collection")}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-ui-xs font-semibold transition-colors",
-                  searchFilter === "collection"
-                    ? "border-primary/40 bg-primary/20 text-primary"
-                    : "border-rm-border bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text",
-                )}
-              >
-                Collections
-              </button>
-            </div>
+            <Tabs
+              label="Search for"
+              idBase="listen-together-filter"
+              panelId="listen-together-results"
+              items={[
+                { value: "track", label: "Tracks" },
+                { value: "collection", label: "Collections" },
+              ]}
+              value={searchFilter}
+              onValueChange={setSearchFilter}
+              className="h-8"
+            />
             {resolveFeedback && (
-              <div className="rounded-2xl border border-rm-border bg-rm-bg-hover px-3 py-2 text-ui-xs text-rm-text-muted">
+              <div
+                role="status"
+                className="rounded-md bg-rm-tint-1 px-3 py-2 text-ui-sm text-rm-text-secondary"
+              >
                 {resolveFeedback}
               </div>
             )}
             {error && (
-              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-ui-xs text-destructive">
+              <div className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
+                <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
                 {error.message}
               </div>
             )}
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5">
+        <div
+          id="listen-together-results"
+          role="tabpanel"
+          aria-labelledby={tabId("listen-together-filter", searchFilter)}
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5"
+        >
           {isResolving ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-rm-text-muted">
-              <Icon name="loader" size="lg" className="animate-spin" />
-              <span className="text-ui-sm">Resolving link preview...</span>
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-rm-text-secondary">
+              <Spinner className="size-6" />
+              <span className="text-ui-sm">Resolving link preview…</span>
             </div>
           ) : resolvedPreview ? (
             <div className="space-y-3">
               <div
-                className="flex cursor-pointer gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-3 transition-colors pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-primary/15"
-                title="Double-click to play now"
+                className="flex gap-3 rounded-lg bg-rm-accent-tint p-3"
                 onDoubleClick={playResolvedPreview}
               >
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-rm-bg-elevated/60 outline outline-1 outline-black/10 dark:outline-white/10">
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
                   {resolvedPreview.collection?.artworkUrl ||
                   resolvedPreview.tracks[0]?.artworkUrl ? (
                     <img
@@ -1066,13 +1063,17 @@ export function ListenTogetherPanel({
                           .join(" • ")}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
+                    <Button size="sm" onClick={playResolvedPreview}>
+                      <Icon name="play" size="sm" />
+                      Play now
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
                       onClick={queueResolvedPreview}
-                      className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-ui-xs font-semibold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96]"
                     >
                       Queue
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1082,9 +1083,9 @@ export function ListenTogetherPanel({
                     {resolvedPreview.tracks.map((track, index) => (
                       <div
                         key={`${track.id}:${index}`}
-                        className="flex items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/30 px-3 py-2"
+                        className="flex items-center gap-3 rounded-md bg-rm-tint-1 px-3 py-2"
                       >
-                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-rm-bg-elevated/60">
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-sm bg-rm-tint-1">
                           {track.artworkUrl ? (
                             <img
                               src={track.artworkUrl}
@@ -1116,8 +1117,9 @@ export function ListenTogetherPanel({
                 )}
             </div>
           ) : isSearching ? (
-            <div className="flex items-center justify-center py-12 text-rm-text-muted">
-              <Icon name="loader" size="lg" className="animate-spin" />
+            <div className="flex items-center justify-center py-12 text-rm-text-secondary">
+              <Spinner className="size-6" />
+              <span className="sr-only">Loading</span>
             </div>
           ) : isSearchFocused && !trimmedInput && queryHistory.length > 0 ? (
             <div className="space-y-2">
@@ -1134,7 +1136,7 @@ export function ListenTogetherPanel({
                     setIsSearchFocused(true);
                     void runSearch(query);
                   }}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/35 px-3 text-left text-ui-sm text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-ui-sm text-rm-text outline-none transition-colors duration-150 pointer-fine:hover:bg-rm-tint-2 md:min-h-9"
                 >
                   <Icon
                     name="search"
@@ -1146,129 +1148,147 @@ export function ListenTogetherPanel({
               ))}
             </div>
           ) : searchResults.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-ui-sm text-rm-text-muted">
-              {deferredSearchQuery
-                ? "No results yet for that search."
-                : "Search tracks or collections, or paste a YouTube or Spotify link to queue music together."}
-            </div>
+            deferredSearchQuery ? (
+              <ListenTogetherEmpty
+                icon="search"
+                title="No results"
+                body="Nothing matched that search. Try another title or artist, or paste a link."
+              />
+            ) : (
+              <ListenTogetherEmpty
+                icon="headphones"
+                title="Find something to play"
+                body="Search tracks or collections, or paste a YouTube or Spotify link to queue music together."
+              />
+            )
           ) : (
-            <div className="space-y-3">
-              {searchResults.map((result, index) => {
-                const isTrack = result.kind === "track";
-                return (
-                  <div
-                    key={`${result.kind}:${result.id}:${index}`}
-                    onContextMenu={(event) =>
-                      presentResultActions(event, result)
-                    }
-                    onDoubleClick={
-                      isTrack
-                        ? (event) => {
-                            if (
-                              event.target instanceof HTMLElement &&
-                              event.target.closest("button")
-                            ) {
-                              return;
+            <TooltipProvider delayDuration={100}>
+              <div className="space-y-3">
+                {searchResults.map((result, index) => {
+                  const isTrack = result.kind === "track";
+                  return (
+                    <div
+                      key={`${result.kind}:${result.id}:${index}`}
+                      onContextMenu={(event) =>
+                        presentResultActions(event, result)
+                      }
+                      onDoubleClick={
+                        isTrack
+                          ? (event) => {
+                              if (
+                                event.target instanceof HTMLElement &&
+                                event.target.closest("button")
+                              ) {
+                                return;
+                              }
+                              void handleResultAction(result, "play-now");
                             }
-                            void handleResultAction(result, "play-now");
-                          }
-                        : undefined
-                    }
-                    className={cn(
-                      "flex gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/40 p-3 transition-colors",
-                      isTrack &&
-                        "cursor-pointer select-none pointer-fine:hover:border-primary/25 pointer-fine:hover:bg-rm-bg-active/55",
-                    )}
-                    title={isTrack ? "Double-click to play now" : undefined}
-                  >
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-rm-bg-elevated/60">
-                      {result.artworkUrl ? (
-                        <img
-                          src={result.artworkUrl}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                          <Icon name="headphones" size="lg" />
-                        </div>
+                          : undefined
+                      }
+                      className={cn(
+                        "flex gap-3 rounded-lg bg-rm-tint-1 p-3 transition-colors duration-150",
+                        isTrack &&
+                          "select-none pointer-fine:hover:bg-rm-tint-2",
                       )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-ui-sm font-semibold text-rm-text">
-                        {result.title}
-                      </div>
-                      <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
-                        {isTrack
-                          ? [
-                              result.artist,
-                              formatListenTogetherDuration(result.durationMs),
-                            ]
-                              .filter(Boolean)
-                              .join(" • ")
-                          : [result.subtitle, `${result.itemCount} items`]
-                              .filter(Boolean)
-                              .join(" • ")}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {isTrack ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                enqueueTracks(
-                                  [convertSearchTrackToMusicTrack(result)],
-                                  "play-next",
-                                )
-                              }
-                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-ui-xs font-semibold text-primary transition pointer-fine:hover:bg-primary/20"
-                            >
-                              Play Next
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                enqueueTracks(
-                                  [convertSearchTrackToMusicTrack(result)],
-                                  "append",
-                                )
-                              }
-                              className="rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-1.5 text-ui-xs font-semibold text-rm-text transition pointer-fine:hover:bg-rm-bg-active"
-                            >
-                              Queue
-                            </button>
-                            <ListenTogetherResultActionTrigger
-                              label={result.title}
-                              onClick={(event) =>
-                                presentResultActions(event, result)
-                              }
-                            />
-                          </>
+                    >
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
+                        {result.artworkUrl ? (
+                          <img
+                            src={result.artworkUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void queueSourceUrl(result.sourceUrl)
-                              }
-                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-ui-xs font-semibold text-primary transition pointer-fine:hover:bg-primary/20"
-                            >
-                              Queue Collection
-                            </button>
-                            <ListenTogetherResultActionTrigger
-                              label={result.title}
-                              onClick={(event) =>
-                                presentResultActions(event, result)
-                              }
-                            />
-                          </>
+                          <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
+                            <Icon name="headphones" size="lg" />
+                          </div>
                         )}
                       </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-ui-sm font-semibold text-rm-text">
+                          {result.title}
+                        </div>
+                        <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
+                          {isTrack
+                            ? [
+                                result.artist,
+                                formatListenTogetherDuration(result.durationMs),
+                              ]
+                                .filter(Boolean)
+                                .join(" • ")
+                            : [result.subtitle, `${result.itemCount} items`]
+                                .filter(Boolean)
+                                .join(" • ")}
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {isTrack ? (
+                            <>
+                              <IconButton
+                                icon="play"
+                                variant="muted"
+                                tooltip="Play now"
+                                aria-label={`Play ${result.title} now`}
+                                onClick={() =>
+                                  void handleResultAction(result, "play-now")
+                                }
+                              />
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  enqueueTracks(
+                                    [convertSearchTrackToMusicTrack(result)],
+                                    "play-next",
+                                  )
+                                }
+                              >
+                                Play next
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  enqueueTracks(
+                                    [convertSearchTrackToMusicTrack(result)],
+                                    "append",
+                                  )
+                                }
+                              >
+                                Queue
+                              </Button>
+                              <ListenTogetherResultActionTrigger
+                                label={result.title}
+                                onClick={(event) =>
+                                  presentResultActions(event, result)
+                                }
+                              />
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  void queueSourceUrl(result.sourceUrl)
+                                }
+                              >
+                                Queue Collection
+                              </Button>
+                              <ListenTogetherResultActionTrigger
+                                label={result.title}
+                                onClick={(event) =>
+                                  presentResultActions(event, result)
+                                }
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </TooltipProvider>
           )}
         </div>
       </section>
@@ -1298,18 +1318,22 @@ export function ListenTogetherPanel({
         onKeyDown={handlePaneKeyDown}
         className="group relative hidden min-h-0 cursor-col-resize items-center justify-center rounded-full outline-none lg:flex"
       >
-        <span className="h-16 w-1 rounded-full bg-rm-border transition-colors pointer-fine:group-hover:bg-primary/60 group-focus-visible:bg-primary" />
+        <span className="h-16 w-1 rounded-full bg-rm-border-strong transition-colors duration-150 pointer-fine:group-hover:bg-rm-accent-ink group-focus-visible:bg-rm-accent-ink" />
       </button>
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-rm-border pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-        <div className="shrink-0 rounded-3xl border border-rm-border bg-rm-bg-surface/35 p-4 md:p-5">
+        <div className="shrink-0 rounded-lg border border-rm-border bg-rm-bg-surface p-4 md:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-              <Icon name="headphones" size="sm" className="text-primary" />
+              <Icon
+                name="headphones"
+                size="sm"
+                className="text-rm-accent-ink"
+              />
               Now playing
             </div>
             <span className="inline-flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+              <span className="h-1.5 w-1.5 rounded-full bg-rm-accent-ink" />
               {roomSyncLabel}
             </span>
           </div>
@@ -1322,70 +1346,43 @@ export function ListenTogetherPanel({
         </div>
 
         <div className="flex min-h-[260px] min-w-0 flex-1 flex-col pt-4 md:pt-5">
-          <div className="flex shrink-0 items-center justify-between gap-3 pb-3">
-            <div
-              role="tablist"
-              aria-label="Listen Together room activity"
-              className="flex min-w-0 items-center gap-1 rounded-2xl bg-rm-bg-hover/55 p-1"
-            >
-              <button
-                type="button"
-                role="tab"
-                id="listen-together-queue-tab"
-                aria-selected={activeRightTab === "queue"}
-                aria-controls="listen-together-activity-panel"
-                tabIndex={activeRightTab === "queue" ? 0 : -1}
-                onKeyDown={handleActivityTabKeyDown}
-                onClick={() => setActiveRightTab("queue")}
-                className={cn(
-                  "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-ui-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                  activeRightTab === "queue"
-                    ? "bg-rm-bg-surface text-rm-text shadow-sm"
-                    : "text-rm-text-muted pointer-fine:hover:text-rm-text",
-                )}
-              >
-                <Icon name="playlist" size="sm" />
-                Queue
-                <span className="tabular-nums text-ui-2xs text-rm-text-muted">
-                  {snapshot?.queue?.length ?? 0}
-                </span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id="listen-together-recently-played-tab"
-                aria-selected={activeRightTab === "recently-played"}
-                aria-controls="listen-together-activity-panel"
-                tabIndex={activeRightTab === "recently-played" ? 0 : -1}
-                onKeyDown={handleActivityTabKeyDown}
-                onClick={() => setActiveRightTab("recently-played")}
-                className={cn(
-                  "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-ui-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                  activeRightTab === "recently-played"
-                    ? "bg-rm-bg-surface text-rm-text shadow-sm"
-                    : "text-rm-text-muted pointer-fine:hover:text-rm-text",
-                )}
-              >
-                Recently played
-                <span className="tabular-nums text-ui-2xs text-rm-text-muted">
-                  {snapshot?.recentlyPlayed?.length ?? 0}
-                </span>
-              </button>
-            </div>
-          </div>
+          <Tabs
+            label="Listen Together room activity"
+            idBase="listen-together"
+            panelId="listen-together-activity-panel"
+            items={[
+              {
+                value: "queue",
+                label: "Queue",
+                adornment: (
+                  <span className="text-ui-2xs tabular-nums text-rm-text-muted">
+                    {snapshot?.queue?.length ?? 0}
+                  </span>
+                ),
+              },
+              {
+                value: "recently-played",
+                label: "Recently played",
+                adornment: (
+                  <span className="text-ui-2xs tabular-nums text-rm-text-muted">
+                    {snapshot?.recentlyPlayed?.length ?? 0}
+                  </span>
+                ),
+              },
+            ]}
+            value={activeRightTab}
+            onValueChange={setActiveRightTab}
+            className="mb-3 h-9 shrink-0 border-b border-rm-border"
+          />
           <div
             id="listen-together-activity-panel"
             role="tabpanel"
-            aria-labelledby={
-              activeRightTab === "queue"
-                ? "listen-together-queue-tab"
-                : "listen-together-recently-played-tab"
-            }
+            aria-labelledby={tabId("listen-together", activeRightTab)}
             className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1"
           >
             {activeRightTab === "queue" ? (
               snapshot?.queue?.length ? (
-                <div className="divide-y divide-rm-border/70">
+                <div className="flex flex-col gap-1">
                   {snapshot.queue.map((entry, index) => (
                     <ListenTogetherQueueRow
                       key={entry.entryId}
@@ -1400,18 +1397,20 @@ export function ListenTogetherPanel({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-ui-sm text-rm-text-muted">
-                  Nothing is queued yet.
-                </div>
+                <ListenTogetherEmpty
+                  icon="playlist"
+                  title="Queue is empty"
+                  body="Search or paste a link to add the first track."
+                />
               )
             ) : snapshot?.recentlyPlayed?.length ? (
               <div className="space-y-2">
                 {snapshot.recentlyPlayed.map((historyEntry) => (
                   <div
                     key={historyEntry.historyId}
-                    className="flex items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/35 p-3"
+                    className="flex items-center gap-3 rounded-lg bg-rm-tint-1 p-3"
                   >
-                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-rm-bg-elevated/60">
+                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
                       {historyEntry.entry.track.artworkUrl ? (
                         <img
                           src={historyEntry.entry.track.artworkUrl}
@@ -1445,26 +1444,28 @@ export function ListenTogetherPanel({
                         })}
                       </div>
                     </div>
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      variant="secondary"
                       onClick={() =>
                         enqueueTracks(
                           [getRequeueTrack(historyEntry.entry.track)],
                           "append",
                         )
                       }
-                      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated/60 px-3 text-ui-xs font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       <Icon name="playlist" size="sm" />
                       Requeue
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-ui-sm text-rm-text-muted">
-                Nothing has played in this room yet.
-              </div>
+              <ListenTogetherEmpty
+                icon="clock"
+                title="Nothing played yet"
+                body="Tracks show up here after they finish playing in this room."
+              />
             )}
           </div>
         </div>
@@ -1482,12 +1483,13 @@ export function ListenTogetherPanel({
       )}
       {mobileActionResult && (
         <ListenTogetherMobileActionSheet
+          open={mobileActionsOpen && isMobile}
           title={mobileActionResult.title}
           actions={getListenTogetherResultActions(mobileActionResult)}
           onAction={(action) => {
             void handleResultAction(mobileActionResult, action);
           }}
-          onClose={() => setMobileActionResult(null)}
+          onClose={() => setMobileActionsOpen(false)}
         />
       )}
     </div>

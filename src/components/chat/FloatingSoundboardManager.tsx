@@ -173,7 +173,7 @@ export function FloatingSoundboardManager({
         ref={containerRef}
         data-testid="floating-soundboard-manager"
         aria-label="Soundboard manager"
-        className="fixed z-30 w-[min(360px,calc(100vw-24px))] touch-none select-none"
+        className="fixed z-30 w-[min(360px,calc(100vw-24px))] select-none"
         style={{ left: position.x, top: position.y }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -193,7 +193,7 @@ export function FloatingSoundboardManager({
             aria-controls="soundboard-manager-panel"
             onClick={() => setCollapsed(false)}
             onClickCapture={handleDragHandleClick}
-            className="flex min-h-11 items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-floating/95 px-3 text-ui-sm font-semibold text-rm-text shadow-sm transition-[background-color,color,transform] duration-200 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
+            className="flex min-h-11 touch-none items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-floating px-3 text-ui-sm font-semibold text-rm-text shadow-sm transition-[background-color,color,transform] duration-150 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97]"
           >
             <Icon name="speaking" size="sm" className="text-primary" />
             Soundboard
@@ -201,7 +201,7 @@ export function FloatingSoundboardManager({
         ) : (
           <div
             id="soundboard-manager-panel"
-            className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating/95 text-rm-text shadow-lg"
+            className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating text-rm-text shadow-sm"
           >
             <button
               ref={toggleRef}
@@ -212,7 +212,7 @@ export function FloatingSoundboardManager({
               aria-label="Collapse soundboard manager"
               onClick={() => setCollapsed(true)}
               onClickCapture={handleDragHandleClick}
-              className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-rm-border/70 px-3 py-2.5 text-left transition-[background-color,color] duration-200 pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+              className="flex min-h-11 w-full touch-none items-center justify-between gap-3 border-b border-rm-border/70 px-3 py-2.5 text-left transition-[background-color,color] duration-150 pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
               <span className="flex min-w-0 items-center gap-2 text-ui-sm font-semibold">
                 <Icon
@@ -228,7 +228,7 @@ export function FloatingSoundboardManager({
                 className="shrink-0 text-rm-text-muted"
               />
             </button>
-            <div className="max-h-[min(360px,calc(100dvh-112px))] space-y-2 overflow-y-auto p-2.5">
+            <div className="max-h-[min(360px,calc(100dvh-112px))] space-y-2 overflow-y-auto overscroll-contain p-2.5">
               {scopedPlaybacks.map((playback) => (
                 <SoundboardPlaybackRow
                   key={playback.playbackId}

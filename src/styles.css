@@ -290,6 +290,9 @@
   --rm-activity-wordle-tile: #d3d6da;
   --rm-activity-wordle-key: #818384;
   --rm-activity-wordle-ink: #ffffff;
+  /* Wordle's high-contrast setting (colour-blind safe orange / blue). */
+  --rm-activity-wordle-hc-correct: #b45309;
+  --rm-activity-wordle-hc-present: #1d4ed8;
   --rm-activity-warp-bg: #020617;
   --rm-activity-warp-ink: #e2e8f0;
   --rm-activity-warp-ink-muted: #94a3b8;
