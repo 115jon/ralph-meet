@@ -20,6 +20,11 @@ import { resolveInstagramVideoMetadata } from "../instagram-video-resolver";
 
 const workerEnv = env as unknown as Record<string, unknown>;
 
+/** Serve `value` from the main cache key only (the weak-result key is empty). */
+function mainCacheKeyOnly(value: unknown) {
+  return async (key: string) => (key.includes(":weak:") ? null : value);
+}
+
 describe("resolveInstagramVideoMetadata", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -32,27 +37,29 @@ describe("resolveInstagramVideoMetadata", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    hoisted.cacheGetMock.mockResolvedValue({
-      videoUrl: null,
-      thumbnailUrl:
-        "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
-      title: "rukia!",
-      durationSeconds: null,
-      media: [
-        {
-          type: "image",
-          url: "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
-          altText: "rukia!",
-        },
-      ],
-      authorAvatarUrl: null,
-      authorVerified: null,
-      likeCount: 1073,
-      commentCount: 15,
-      viewCount: null,
-      timestamp: "2026-06-23T05:00:00.000Z",
-      audio: null,
-    });
+    hoisted.cacheGetMock.mockImplementation(
+      mainCacheKeyOnly({
+        videoUrl: null,
+        thumbnailUrl:
+          "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
+        title: "rukia!",
+        durationSeconds: null,
+        media: [
+          {
+            type: "image",
+            url: "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
+            altText: "rukia!",
+          },
+        ],
+        authorAvatarUrl: null,
+        authorVerified: null,
+        likeCount: 1073,
+        commentCount: 15,
+        viewCount: null,
+        timestamp: "2026-06-23T05:00:00.000Z",
+        audio: null,
+      }),
+    );
     hoisted.fetchInstagramOEmbedMetadataMock.mockResolvedValue(null);
 
     vi.stubGlobal(
@@ -183,29 +190,31 @@ describe("resolveInstagramVideoMetadata", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    hoisted.cacheGetMock.mockResolvedValue({
-      videoUrl: null,
-      thumbnailUrl:
-        "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
-      title: "rukia!",
-      durationSeconds: null,
-      media: [
-        {
-          type: "image",
-          url: "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
-          width: 2728,
-          height: 1817,
-        },
-      ],
-      authorAvatarUrl:
-        "https://scontent-ord5-1.cdninstagram.com/stale-avatar.jpg?oe=6A53095B",
-      authorVerified: true,
-      likeCount: 1073,
-      commentCount: 15,
-      viewCount: null,
-      timestamp: "2026-06-24T03:40:02.000Z",
-      audio: null,
-    });
+    hoisted.cacheGetMock.mockImplementation(
+      mainCacheKeyOnly({
+        videoUrl: null,
+        thumbnailUrl:
+          "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
+        title: "rukia!",
+        durationSeconds: null,
+        media: [
+          {
+            type: "image",
+            url: "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
+            width: 2728,
+            height: 1817,
+          },
+        ],
+        authorAvatarUrl:
+          "https://scontent-ord5-1.cdninstagram.com/stale-avatar.jpg?oe=6A53095B",
+        authorVerified: true,
+        likeCount: 1073,
+        commentCount: 15,
+        viewCount: null,
+        timestamp: "2026-06-24T03:40:02.000Z",
+        audio: null,
+      }),
+    );
     hoisted.fetchInstagramOEmbedMetadataMock.mockResolvedValue(null);
 
     vi.stubGlobal(
