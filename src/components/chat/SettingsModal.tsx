@@ -609,6 +609,7 @@ export default function SettingsModal({
           pageTitle={noHits ? "No matches" : pageDef.title}
           pageKey={shownPanel}
           onEscape={clearQuery}
+          initialFocus="first"
           width="full"
           // Hidden, not unmounted, while the theme preview sheet is up, so
           // "Back to settings" lands on the same page and row.

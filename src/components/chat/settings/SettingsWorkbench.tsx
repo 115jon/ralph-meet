@@ -223,6 +223,12 @@ export type SettingsWorkbenchProps = {
   mainRef?: (node: HTMLDivElement | null) => void;
   /** Pointer down in the scroller (Studio clears its landing highlight). */
   onBodyPointerDown?: () => void;
+  /**
+   * Where focus lands on open with a fine pointer. "nav" (default) focuses
+   * the nav column itself, so no row draws a focus ring until you Tab;
+   * "first" lets the dialog focus its first control (Studio's search).
+   */
+  initialFocus?: "nav" | "first";
   children: ReactNode;
 };
 
@@ -252,6 +258,7 @@ export function SettingsWorkbench({
   bodyRef,
   mainRef,
   onBodyPointerDown,
+  initialFocus = "nav",
   children,
 }: SettingsWorkbenchProps) {
   const narrow = useIsMobile();
@@ -345,11 +352,13 @@ export function SettingsWorkbench({
             data-settings-workbench=""
             onOpenAutoFocus={(event) => {
               // Phones land on the list or the page heading; coarse tablets
-              // land on the nav so the on-screen keyboard stays down.
+              // land on the nav so the on-screen keyboard stays down; desktop
+              // lands on the nav column unless the caller wants its first
+              // control (a search field).
               const coarse =
                 typeof window !== "undefined" &&
                 window.matchMedia?.("(pointer: coarse)").matches;
-              if (narrow || coarse) {
+              if (narrow || coarse || initialFocus === "nav") {
                 event.preventDefault();
                 (showList || !narrow
                   ? navRef.current
