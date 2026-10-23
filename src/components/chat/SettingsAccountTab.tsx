@@ -1626,7 +1626,7 @@ function ProfileEditor({
 
             <SettingsCard
               title="Profile theme"
-              description="Colors for your profile card."
+              description="Colors for your profile card. Leave them on Auto to follow your app theme."
             >
               <SettingsRow
                 id="profile-background"
@@ -1640,11 +1640,8 @@ function ProfileEditor({
                     value={backgroundColor}
                     fallback={DEFAULT_PROFILE_THEME.background}
                     presets={PROFILE_COLOR_SWATCHES}
-                    onChange={(value) =>
-                      setBackgroundColor(
-                        value ?? DEFAULT_PROFILE_THEME.background,
-                      )
-                    }
+                    onChange={setBackgroundColor}
+                    allowAuto
                   />
                 )}
               </SettingsRow>
@@ -1661,9 +1658,8 @@ function ProfileEditor({
                     value={accentColor}
                     fallback={DEFAULT_PROFILE_THEME.accent}
                     presets={PROFILE_COLOR_SWATCHES}
-                    onChange={(value) =>
-                      setAccentColor(value ?? DEFAULT_PROFILE_THEME.accent)
-                    }
+                    onChange={setAccentColor}
+                    allowAuto
                   />
                 )}
               </SettingsRow>
