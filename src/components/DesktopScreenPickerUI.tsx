@@ -1,4 +1,12 @@
-import { cn } from "@/lib/utils";
+/**
+ * Pieces of the desktop app's screen picker (DesktopScreenPickerModal).
+ * Everything sizes from its container, so the picker reads the same in a
+ * 860px dialog and a 360px phone-width window: the grids drop to one column,
+ * the tabs scroll sideways, and the bottom bar stacks.
+ */
+
+import { Button } from "@/components/ui/button";
+import { Icon, type IconName } from "@/components/ui/icon";
 import {
   Select,
   SelectContent,
@@ -6,7 +14,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Icon } from "@/components/ui/icon";
+import {
+  SCREEN_SHARE_QUALITY_PRESETS,
+  type ScreenShareQualityPreset,
+} from "@/lib/screen-share-support";
+import { cn } from "@/lib/utils";
 
 export interface ScreenSource {
   id: string;
@@ -26,16 +38,49 @@ export interface MediaDeviceSource {
 
 export type Tab = "applications" | "screens" | "devices";
 
-export const QUALITY_PRESETS = [
-  { id: "720p30", label: "720p", fps: 30 },
-  { id: "720p60", label: "720p", fps: 60 },
-  { id: "1080p30", label: "1080p", fps: 30 },
-  { id: "1080p60", label: "1080p", fps: 60 },
-  { id: "1440p30", label: "1440p", fps: 30 },
-  { id: "1440p60", label: "1440p", fps: 60 },
-  { id: "4k30", label: "4K", fps: 30 },
-  { id: "4k60", label: "4K", fps: 60 },
-];
+export const QUALITY_PRESETS = SCREEN_SHARE_QUALITY_PRESETS;
+
+const GRID =
+  "grid grid-cols-1 gap-3 @min-[440px]:grid-cols-2 @min-[680px]:grid-cols-3";
+
+const TILE =
+  "group relative flex flex-col overflow-hidden rounded-lg border bg-rm-bg-surface text-left outline-none transition-[border-color,background-color] duration-150 ease-(--rm-ease-out)";
+
+function tileState(selected: boolean) {
+  return selected
+    ? "border-rm-accent-ink/60 bg-rm-accent-tint"
+    : "border-rm-border pointer-fine:hover:border-rm-border-strong pointer-fine:hover:bg-rm-tint-1";
+}
+
+function SelectedMark() {
+  return (
+    <span className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+      <Icon name="check" size="xs" />
+    </span>
+  );
+}
+
+export function PickerEmpty({
+  icon,
+  title,
+  body,
+}: {
+  icon: IconName;
+  title: string;
+  body?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+      <Icon name={icon} size="3xl" className="text-rm-text-muted" />
+      <p className="text-ui-md font-semibold text-rm-text">{title}</p>
+      {body ? (
+        <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
+          {body}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function DeviceGrid({
   devices,
@@ -48,63 +93,44 @@ export function DeviceGrid({
 }) {
   if (devices.length === 0) {
     return (
-      <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
-        <Icon name="tv" size="3xl" className="opacity-30" />
-        <p className="text-ui-sm">No capture devices found</p>
-        <p className="text-ui-xs text-rm-text-muted/50">
-          Connect a capture card or webcam to share
-        </p>
-      </div>
+      <PickerEmpty
+        icon="tv"
+        title="No capture devices found"
+        body="Connect a capture card or camera to share it."
+      />
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {devices.map((device) => (
-        <button
-          key={device.deviceId}
-          onClick={() => onSelect(device.deviceId)}
-          className={cn(
-            "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-ui outline-none",
-            selectedId === device.deviceId
-              ? "border-primary ring-2 ring-primary/30 bg-primary/5"
-              : "border-rm-border/50 pointer-fine:hover:border-rm-text/30 bg-rm-bg-surface/20",
-          )}
-        >
-          <div className="flex aspect-video w-full items-center justify-center bg-rm-bg-elevated/30">
-            <Icon
-              name="tv"
-              size="2xl"
-              className={cn(
-                "transition-colors",
-                selectedId === device.deviceId
-                  ? "text-primary"
-                  : "text-rm-text-muted/30",
-              )}
-            />
-          </div>
-          <div className="flex items-center gap-2 px-3 py-2">
-            <span
-              className={cn(
-                "truncate text-ui-xs font-semibold",
-                selectedId === device.deviceId
-                  ? "text-primary"
-                  : "text-rm-text",
-              )}
-            >
-              {device.label}
-            </span>
-          </div>
-          {selectedId === device.deviceId && (
-            <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
+    <div role="radiogroup" aria-label="Capture devices" className={GRID}>
+      {devices.map((device) => {
+        const selected = selectedId === device.deviceId;
+        return (
+          <button
+            key={device.deviceId}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onSelect(device.deviceId)}
+            className={cn(TILE, tileState(selected))}
+          >
+            <span className="flex aspect-video w-full items-center justify-center bg-rm-tint-1">
               <Icon
-                name="check"
-                size="xs"
-                className="text-primary-foreground"
+                name="tv"
+                size="2xl"
+                className={
+                  selected ? "text-rm-accent-ink" : "text-rm-text-muted"
+                }
               />
-            </div>
-          )}
-        </button>
-      ))}
+            </span>
+            <span className="flex min-h-11 items-center gap-2 px-3 py-2">
+              <span className="truncate text-ui-sm font-medium text-rm-text">
+                {device.label}
+              </span>
+            </span>
+            {selected ? <SelectedMark /> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -123,93 +149,71 @@ export function SourceGrid({
   onPreview: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div role="radiogroup" aria-label="Sources" className={GRID}>
       {sources.map((source) => {
         const thumb = thumbnails[source.id];
+        const selected = selectedId === source.id;
         return (
           <button
             key={source.id}
+            type="button"
+            role="radio"
+            aria-checked={selected}
             onClick={() => onSelect(source.id)}
             onFocus={() => onPreview(source.id)}
-            onMouseEnter={() => onPreview(source.id)}
-            className={cn(
-              "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-ui pointer-fine:hover:brightness-110 outline-none",
-              selectedId === source.id
-                ? "border-primary ring-2 ring-primary/30 bg-primary/5"
-                : "border-rm-border/50 pointer-fine:hover:border-rm-text/30 bg-rm-bg-surface/20",
-            )}
+            onPointerEnter={() => onPreview(source.id)}
+            className={cn(TILE, tileState(selected))}
           >
-            <div className="relative aspect-video w-full overflow-hidden bg-black/60">
+            <span className="relative block aspect-video w-full overflow-hidden bg-rm-tint-2">
               {thumb ? (
                 <img
                   src={thumb}
-                  alt={source.name}
-                  className="h-full w-full object-contain animate-in fade-in duration-300"
+                  alt=""
+                  className="size-full object-contain"
                   draggable={false}
                 />
               ) : (
-                <div className="flex h-full items-center justify-center">
-                  {source.kind === "monitor" ? (
-                    <Icon
-                      name="monitor"
-                      size="xl"
-                      className="text-rm-text-muted/30"
-                    />
-                  ) : (
-                    <Icon
-                      name="window"
-                      size="xl"
-                      className="text-rm-text-muted/30"
-                    />
-                  )}
-                </div>
-              )}
-              {selectedId === source.id && (
-                <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
+                <span className="flex size-full items-center justify-center">
                   <Icon
-                    name="check"
-                    size="xs"
-                    className="text-primary-foreground"
+                    name={source.kind === "monitor" ? "monitor" : "window"}
+                    size="xl"
+                    className="text-rm-text-muted"
                   />
-                </div>
+                </span>
               )}
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2">
+              {selected ? <SelectedMark /> : null}
+            </span>
+            <span className="flex min-h-11 items-center gap-2 px-3 py-2">
               {source.kind === "window" && source.icon ? (
                 <img
                   src={source.icon}
                   alt=""
-                  className="h-3.5 w-3.5 shrink-0 object-contain"
+                  className="size-4 shrink-0 object-contain"
                   draggable={false}
-                />
-              ) : source.kind === "monitor" ? (
-                <Icon
-                  name="monitor"
-                  size="sm"
-                  className="shrink-0 text-rm-text-muted"
                 />
               ) : (
                 <Icon
-                  name="window"
+                  name={source.kind === "monitor" ? "monitor" : "window"}
                   size="sm"
                   className="shrink-0 text-rm-text-muted"
                 />
               )}
-              <span
-                className={cn(
-                  "truncate text-ui-xs font-semibold",
-                  selectedId === source.id ? "text-primary" : "text-rm-text",
-                )}
-              >
+              <span className="truncate text-ui-sm font-medium text-rm-text">
                 {source.name}
               </span>
-            </div>
+            </span>
           </button>
         );
       })}
     </div>
   );
 }
+
+const TABS = [
+  { key: "applications", icon: "window", label: "Applications" },
+  { key: "screens", icon: "monitor", label: "Entire screen" },
+  { key: "devices", icon: "tv", label: "Devices" },
+] as const satisfies ReadonlyArray<{ key: Tab; icon: string; label: string }>;
 
 export function DesktopScreenPickerTabBar({
   tab,
@@ -219,32 +223,38 @@ export function DesktopScreenPickerTabBar({
   setTab: (t: Tab) => void;
 }) {
   return (
-    <div className="flex border-b border-rm-border bg-rm-bg-surface/30">
-      {(
-        [
-          {
-            key: "applications" as Tab,
-            icon: "window",
-            label: "Applications",
-          },
-          { key: "screens" as Tab, icon: "monitor", label: "Entire Screen" },
-          { key: "devices" as Tab, icon: "tv", label: "Devices" },
-        ] as const
-      ).map((t) => (
-        <button
-          key={t.key}
-          onClick={() => setTab(t.key)}
-          className={cn(
-            "flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-ui-sm font-semibold transition-ui",
-            tab === t.key
-              ? "border-b-2 border-primary text-primary"
-              : "text-rm-text-muted pointer-fine:hover:text-rm-text",
-          )}
-        >
-          <Icon name={t.icon} size="sm" />
-          {t.label}
-        </button>
-      ))}
+    <div
+      role="tablist"
+      aria-label="What to share"
+      className="scrollbar-none flex shrink-0 overflow-x-auto border-b border-rm-border px-2 md:px-4"
+    >
+      {TABS.map((t) => {
+        const active = tab === t.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => setTab(t.key)}
+            className={cn(
+              "relative flex min-h-11 shrink-0 items-center gap-2 px-3 text-ui-sm whitespace-nowrap transition-colors md:min-h-10",
+              active
+                ? "font-semibold text-rm-text"
+                : "font-medium text-rm-text-secondary pointer-fine:hover:text-rm-text",
+            )}
+          >
+            <Icon name={t.icon} size="sm" />
+            {t.label}
+            {active ? (
+              <span
+                aria-hidden
+                className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-rm-text"
+              />
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -262,8 +272,8 @@ export function DesktopScreenPickerBottomBar({
   selectedId,
 }: {
   displayName: string;
-  selectedQ: { label: string; fps: number } | undefined;
-  qualities: typeof QUALITY_PRESETS;
+  selectedQ: Pick<ScreenShareQualityPreset, "label" | "fps"> | undefined;
+  qualities: readonly ScreenShareQualityPreset[];
   selectedQuality: string;
   setQuality: (q: string) => void;
   withAudio: boolean;
@@ -273,78 +283,72 @@ export function DesktopScreenPickerBottomBar({
   selectedId: string | null;
 }) {
   return (
-    <div className="flex items-center justify-between border-t border-rm-border bg-rm-bg-surface/30 px-5 py-3">
-      {/* Left: Source name + quality info */}
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="min-w-0">
-          <div className="truncate text-ui-sm font-semibold text-rm-text max-w-[200px]">
+    <div className="@container shrink-0 border-t border-rm-border px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] md:px-6 md:pb-4">
+      <div className="flex flex-col gap-3 @min-[640px]:flex-row @min-[640px]:items-center">
+        <div className="min-w-0 @min-[640px]:flex-1">
+          <p className="truncate text-ui-sm font-semibold text-rm-text">
             {displayName}
-          </div>
-          <div className="flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
-            <span>{selectedQ?.label || "720p"}</span>
-            <span className="opacity-40">·</span>
-            <span>{selectedQ?.fps || 30} FPS</span>
-          </div>
+          </p>
+          <p className="text-ui-xs text-rm-text-secondary">
+            {selectedQ?.label ?? "720p"} · {selectedQ?.fps ?? 30} FPS
+            {withAudio ? " · with audio" : ""}
+          </p>
         </div>
-      </div>
 
-      {/* Center: Quality selector + Audio toggle */}
-      <div className="flex items-center gap-3">
-        <Select value={selectedQuality} onValueChange={setQuality}>
-          <SelectTrigger
-            aria-label="Select stream quality"
-            className="h-auto rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-1.5 text-ui-xs font-semibold text-rm-text outline-none focus:ring-2 focus:ring-primary/30"
+        <div className="flex items-center gap-2">
+          <Select value={selectedQuality} onValueChange={setQuality}>
+            <SelectTrigger
+              aria-label="Select stream quality"
+              className="h-9 min-w-0 flex-1 text-ui-sm pointer-coarse:min-h-11 @min-[640px]:w-40 @min-[640px]:flex-none"
+            >
+              <SelectValue placeholder="Select quality" />
+            </SelectTrigger>
+            <SelectContent position="popper" align="start">
+              {qualities.map((quality) => (
+                <SelectItem
+                  key={quality.id}
+                  value={quality.id}
+                  textValue={`${quality.label} ${quality.fps} FPS`}
+                >
+                  {quality.label} · {quality.fps} FPS
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            type="button"
+            variant="secondary"
+            aria-pressed={withAudio}
+            onClick={toggleAudio}
+            className={cn(
+              "h-9 shrink-0 pointer-coarse:min-h-11",
+              withAudio && "bg-rm-accent-tint text-rm-accent-ink",
+            )}
           >
-            <SelectValue placeholder="Select quality" />
-          </SelectTrigger>
-          <SelectContent position="popper" align="start">
-            {qualities.map((quality) => (
-              <SelectItem
-                key={quality.id}
-                value={quality.id}
-                textValue={`${quality.label} ${quality.fps}fps`}
-              >
-                {quality.label} · {quality.fps}fps
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <Icon name="music" size="sm" />
+            Share audio
+          </Button>
+        </div>
 
-        <button
-          onClick={toggleAudio}
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-ui-xs font-semibold transition-ui",
-            withAudio
-              ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-rm-border bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
-          )}
-        >
-          <Icon name="music" size="sm" />
-          Audio
-        </button>
-      </div>
-
-      {/* Right: Actions */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-ui-sm font-semibold text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors outline-none"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onStart}
-          disabled={!selectedId}
-          className={cn(
-            "flex items-center gap-2 rounded-xl px-6 py-2 text-ui-sm font-semibold shadow-xl transition-ui active:scale-[0.96]",
-            selectedId
-              ? "bg-primary text-primary-foreground shadow-primary/20 pointer-fine:hover:brightness-110"
-              : "bg-rm-bg-elevated text-rm-text-muted cursor-not-allowed",
-          )}
-        >
-          <span>Go Live</span>
-          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground/40" />
-        </button>
+        <div className="flex flex-col-reverse gap-2 @min-[440px]:flex-row @min-[440px]:justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="pointer-coarse:min-h-11"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={onStart}
+            disabled={!selectedId}
+            className="pointer-coarse:min-h-11"
+          >
+            Go live
+          </Button>
+        </div>
       </div>
     </div>
   );

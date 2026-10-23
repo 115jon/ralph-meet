@@ -49,7 +49,7 @@ describe("dialog positioning regression guard", () => {
     cleanup();
   });
 
-  it("uses the shadcn dialog primitive for screen share positioning", () => {
+  it("uses the shared responsive dialog for web screen share", () => {
     render(
       <ScreenShareModal
         isOpen
@@ -61,10 +61,17 @@ describe("dialog positioning regression guard", () => {
     const markup = document.body.innerHTML;
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-60");
+    // No hand-rolled scrim: the dialog primitive owns overlay and z (13.1).
+    expect(markup).not.toContain("fixed inset-0 z-60");
+    expect(
+      document.querySelector('[data-slot="dialog-content"]'),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("dialog", { name: "Share your screen" }),
+    ).toBeVisible();
   });
 
-  it("uses the shadcn dialog primitive for desktop screen picker positioning", () => {
+  it("uses the shared responsive dialog for the desktop picker", () => {
     render(
       <DesktopScreenPickerModal
         isOpen
@@ -76,7 +83,10 @@ describe("dialog positioning regression guard", () => {
     const markup = document.body.innerHTML;
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-60");
+    expect(markup).not.toContain("fixed inset-0 z-60");
+    expect(
+      document.querySelector('[data-slot="dialog-content"]'),
+    ).not.toBeNull();
   });
 
   it("keeps the desktop picker open when the quality select opens", async () => {
@@ -97,18 +107,17 @@ describe("dialog positioning regression guard", () => {
 
     expect(onClose).not.toHaveBeenCalled();
     expect(
-      document.querySelector('[data-slot="dialog-surface"][data-state="open"]'),
+      document.querySelector('[data-slot="dialog-content"][data-state="open"]'),
     ).not.toBeNull();
     const listbox = screen.getByRole("listbox");
     expect(listbox).toHaveClass("z-60");
     expect(screen.getByRole("option", { name: /1080p/i })).toBeVisible();
 
-    const overlay = document.querySelector('[role="presentation"]');
-    expect(overlay).not.toBeNull();
-    fireEvent.pointerDown(overlay as Element);
+    // Tapping the select's own listbox must not read as an outside press.
+    fireEvent.pointerDown(listbox);
     expect(onClose).not.toHaveBeenCalled();
     expect(
-      document.querySelector('[data-slot="dialog-surface"][data-state="open"]'),
+      document.querySelector('[data-slot="dialog-content"][data-state="open"]'),
     ).not.toBeNull();
   });
 

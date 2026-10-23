@@ -65,12 +65,12 @@ import {
   DISPLAY_NAME_FONT_OPTIONS,
   normalizeDisplayNameStyle,
   normalizeHexColor,
+  PROFILE_BANNER_CHIP_STYLE,
   PROFILE_COLOR_SWATCHES,
   resolveProfileTheme,
   type DisplayNameStyle,
 } from "@/lib/profile-customization";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
-import { getProfileFramePreviewTransform } from "@/lib/profile-frame";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -1000,7 +1000,6 @@ function ProfileEditor({
         : null,
     createdAt: chatUser.created_at ?? user?.createdAt ?? null,
   });
-  const frameTransform = getProfileFramePreviewTransform(currentAvatarDisplay);
   const trimmedPronouns = pronouns.trim();
   const trimmedBio = bio.trim();
   const trimmedStatus = customStatus.trim();
@@ -1386,14 +1385,6 @@ function ProfileEditor({
             <ProfileSurfaceShell
               display={currentAvatarDisplay}
               className="w-full"
-              style={
-                frameTransform.scale < 1
-                  ? {
-                      transform: `scale(${frameTransform.scale})`,
-                      transformOrigin: frameTransform.transformOrigin,
-                    }
-                  : undefined
-              }
               surfaceStyle={{
                 backgroundImage: "var(--rm-profile-custom-surface)",
               }}
@@ -1432,7 +1423,10 @@ function ProfileEditor({
                     )}
                   </span>
                   {trimmedStatus ? (
-                    <span className="min-w-0 truncate rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
+                    <span
+                      className="min-w-0 truncate rounded-full border border-[color:var(--rm-profile-custom-card-border)] px-3 py-1.5 text-ui-sm text-[color:var(--rm-profile-custom-text)]"
+                      style={PROFILE_BANNER_CHIP_STYLE}
+                    >
                       {trimmedStatus}
                     </span>
                   ) : null}

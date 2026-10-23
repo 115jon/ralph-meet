@@ -1,14 +1,12 @@
-import { useMounted } from "@/hooks/useMounted";
-import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent, PointerEvent } from "react";
 import { Icon } from "@/components/ui/icon";
-
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { SFUClient } from "@/lib/sfu-client";
 import { getSoundboardServerKey } from "@/lib/voice/soundboard";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { useMemo } from "react";
+
 import { SoundboardPlaybackRow } from "./ActiveSoundboardEffectList";
+import { FloatingSurface } from "./floating/FloatingSurface";
 
 interface FloatingSoundboardManagerProps {
   serverId?: string | null;
@@ -17,41 +15,21 @@ interface FloatingSoundboardManagerProps {
   sfu: SFUClient | null;
 }
 
+/**
+ * Your sounds that are playing right now, with pause, volume and stop.
+ * Desktop: a resizable panel (top right by default). Phone: a pill naming
+ * how many play; tap for a sheet with the rows. Minimises to a bubble.
+ */
 export function FloatingSoundboardManager({
   serverId,
   serverKey: explicitServerKey,
   localUserId,
   sfu,
 }: FloatingSoundboardManagerProps) {
-  const mounted = useMounted();
   const activePlaybacks = useVoiceSoundboardStore(
     (state) => state.activePlaybacks,
   );
   const serverKey = explicitServerKey ?? getSoundboardServerKey(serverId);
-  const [collapsed, setCollapsed] = useState(false);
-  const [position, setPosition] = useState({ x: 16, y: 16 });
-
-  useEffect(() => {
-    if (mounted) {
-      // Hydration must start from a stable position before reading the viewport.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPosition({
-        x: Math.max(16, window.innerWidth - 360 - 16),
-        y: 16,
-      });
-    }
-  }, [mounted]);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  const dragStateRef = useRef<{
-    pointerId: number;
-    offsetX: number;
-    offsetY: number;
-    startX: number;
-    startY: number;
-    moved: boolean;
-  } | null>(null);
-  const suppressHandleClickRef = useRef(false);
 
   const scopedPlaybacks = useMemo(
     () =>
@@ -65,185 +43,63 @@ export function FloatingSoundboardManager({
     [activePlaybacks, localUserId, serverKey],
   );
 
-  useEffect(() => {
-    const clampToViewport = () => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      setPosition((current) => ({
-        x: Math.min(
-          Math.max(12, current.x),
-          Math.max(12, window.innerWidth - (rect?.width ?? 360) - 12),
-        ),
-        y: Math.min(
-          Math.max(12, current.y),
-          Math.max(12, window.innerHeight - (rect?.height ?? 320) - 12),
-        ),
-      }));
-    };
+  if (scopedPlaybacks.length === 0) return null;
 
-    window.addEventListener("resize", clampToViewport);
-    return () => window.removeEventListener("resize", clampToViewport);
-  }, []);
+  const count = scopedPlaybacks.length;
+  const rows = (
+    <div className="flex flex-col gap-2">
+      {scopedPlaybacks.map((playback) => (
+        <SoundboardPlaybackRow
+          key={playback.playbackId}
+          playback={playback}
+          localUserId={localUserId}
+          serverKey={serverKey}
+          sfu={sfu}
+          variant="floating"
+        />
+      ))}
+    </div>
+  );
 
-  useEffect(() => {
-    toggleRef.current?.focus({ preventScroll: true });
-  }, [collapsed]);
-
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    if (
-      !(event.target as HTMLElement).closest(
-        '[data-soundboard-drag-handle="true"]',
-      )
-    ) {
-      return;
-    }
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-      startX: event.clientX,
-      startY: event.clientY,
-      moved: false,
-    };
-  };
-
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    const hasMoved =
-      Math.abs(event.clientX - dragState.startX) > 4 ||
-      Math.abs(event.clientY - dragState.startY) > 4;
-    if (!hasMoved) return;
-
-    dragState.moved = true;
-    suppressHandleClickRef.current = true;
-    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    setPosition({
-      x: Math.min(
-        Math.max(12, event.clientX - dragState.offsetX),
-        Math.max(12, window.innerWidth - (rect?.width ?? 360) - 12),
-      ),
-      y: Math.min(
-        Math.max(12, event.clientY - dragState.offsetY),
-        Math.max(12, window.innerHeight - (rect?.height ?? 320) - 12),
-      ),
-    });
-  };
-
-  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (
-      !dragStateRef.current ||
-      dragStateRef.current.pointerId !== event.pointerId
-    ) {
-      return;
-    }
-
-    if (dragStateRef.current.moved) {
-      window.setTimeout(() => {
-        suppressHandleClickRef.current = false;
-      }, 0);
-    }
-    dragStateRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
-  };
-
-  const handleDragHandleClick = (event: MouseEvent<HTMLButtonElement>) => {
-    if (!suppressHandleClickRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-    suppressHandleClickRef.current = false;
-  };
-
-  if (!mounted || scopedPlaybacks.length === 0) {
-    return null;
-  }
-
-  return createPortal(
+  return (
     <TooltipProvider delayDuration={100}>
-      <aside
-        ref={containerRef}
-        data-testid="floating-soundboard-manager"
-        aria-label="Soundboard manager"
-        className="fixed z-30 w-[min(360px,calc(100vw-24px))] select-none"
-        style={{ left: position.x, top: position.y }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onLostPointerCapture={() => {
-          dragStateRef.current = null;
-        }}
-      >
-        {collapsed ? (
-          <button
-            ref={toggleRef}
-            type="button"
-            data-soundboard-drag-handle="true"
-            aria-label="Open soundboard manager"
-            aria-expanded="false"
-            aria-controls="soundboard-manager-panel"
-            onClick={() => setCollapsed(false)}
-            onClickCapture={handleDragHandleClick}
-            className="flex min-h-11 touch-none items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-floating px-3 text-ui-sm font-semibold text-rm-text shadow-sm transition-[background-color,color,transform] duration-150 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97]"
-          >
-            <Icon name="speaking" size="sm" className="text-primary" />
-            Soundboard
-          </button>
-        ) : (
-          <div
-            id="soundboard-manager-panel"
-            className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating text-rm-text shadow-sm"
-          >
-            <button
-              ref={toggleRef}
-              type="button"
-              data-soundboard-drag-handle="true"
-              aria-expanded="true"
-              aria-controls="soundboard-manager-panel"
-              aria-label="Collapse soundboard manager"
-              onClick={() => setCollapsed(true)}
-              onClickCapture={handleDragHandleClick}
-              className="flex min-h-11 w-full touch-none items-center justify-between gap-3 border-b border-rm-border/70 px-3 py-2.5 text-left transition-[background-color,color] duration-150 pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
-            >
-              <span className="flex min-w-0 items-center gap-2 text-ui-sm font-semibold">
-                <Icon
-                  name="speaking"
-                  size="sm"
-                  className="shrink-0 text-primary"
-                />
-                Soundboard
-              </span>
-              <Icon
-                name="chevronDown"
-                size="sm"
-                className="shrink-0 text-rm-text-muted"
-              />
-            </button>
-            <div className="max-h-[min(360px,calc(100dvh-112px))] space-y-2 overflow-y-auto overscroll-contain p-2.5">
-              {scopedPlaybacks.map((playback) => (
-                <SoundboardPlaybackRow
-                  key={playback.playbackId}
-                  playback={playback}
-                  localUserId={localUserId}
-                  serverKey={serverKey}
-                  sfu={sfu}
-                  variant="floating"
-                />
-              ))}
-            </div>
+      <FloatingSurface
+        id="soundboard"
+        label="Soundboard manager"
+        title="Soundboard"
+        testId="floating-soundboard-manager"
+        defaultCorner="top-right"
+        width={{ min: 280, max: 440, default: 340 }}
+        phoneWidth={220}
+        minimizeLabel="Collapse soundboard manager"
+        restoreLabel="Open soundboard manager"
+        bubble={
+          <>
+            <Icon name="soundboard" size="lg" />
+            <span className="badge-count absolute top-0.5 right-0.5">
+              {count}
+            </span>
+          </>
+        }
+        compact={
+          <div className="flex h-12 items-center gap-2.5 px-3">
+            <Icon name="soundboard" size="md" className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold">
+              Soundboard
+            </span>
+            <span className="shrink-0 text-ui-xs text-rm-text-secondary">
+              {count} playing
+            </span>
           </div>
-        )}
-      </aside>
-    </TooltipProvider>,
-    document.body,
+        }
+        sheetTitle="Soundboard"
+        sheetDescription={`${count} ${count === 1 ? "sound" : "sounds"} playing`}
+        sheet={rows}
+      >
+        <div className="max-h-[min(360px,calc(100dvh-160px))] overflow-y-auto overscroll-contain p-2.5">
+          {rows}
+        </div>
+      </FloatingSurface>
+    </TooltipProvider>
   );
 }

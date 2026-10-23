@@ -800,3 +800,20 @@ describe("cron fallback while ingest keeps up", () => {
     expect(getStatus()?.last_outcome).toBe("failed");
   });
 });
+
+describe("profile frame layer urls", () => {
+  it("keys layer art by the frame item's sku, also inside bundles", () => {
+    const catalog = normalizeYapperCatalog(fixture, "2026-10-22T00:00:00Z");
+    const frames = catalog.items.filter(
+      (item) => item.kind === "profile_frame",
+    );
+    expect(frames.length).toBeGreaterThan(0);
+    for (const frame of frames) {
+      for (const layer of frame.frame?.layers ?? []) {
+        expect(layer.src).toContain(
+          `/collectibles-shop/${frame.skuId}/${layer.id}/static`,
+        );
+      }
+    }
+  });
+});

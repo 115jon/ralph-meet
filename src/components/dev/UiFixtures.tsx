@@ -13,6 +13,12 @@ import { PublicFixture } from "@/components/dev/public-fixtures";
 import { PickerFixture } from "@/components/dev/picker-fixtures";
 import { EmbedFixture } from "@/components/dev/embed-fixtures";
 import { ActivityFixture } from "@/components/dev/activity-fixtures";
+import { StreamFixture } from "@/components/dev/stream-fixtures";
+import {
+  isFloatingFixture,
+  isStreamFixture,
+} from "@/components/dev/stream-fixture-surfaces";
+import { FloatingFixture } from "@/components/dev/floating-fixtures";
 import {
   isSettingsProfileFixture,
   SettingsProfileFixture,
@@ -119,6 +125,15 @@ import UserProfilePopover from "@/components/chat/UserProfilePopover";
 import UserAccountPopover from "@/components/chat/UserAccountPopover";
 import { AudioDeviceMenu } from "@/components/chat/AudioDeviceMenu";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
+import {
+  applyCollectibleKit,
+  isCollectibleKit,
+} from "@/components/dev/collectible-kit";
+import {
+  ada as spAda,
+  grace as spGrace,
+  me as spMe,
+} from "@/components/dev/sp-fixtures/profiles";
 
 const NOW = Date.parse("2026-10-22T14:32:00Z");
 const at = (minutesAgo: number) =>
@@ -2337,6 +2352,14 @@ export default function UiFixtures() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    const kit = fixtureParam("kit");
+    if (isCollectibleKit(kit)) {
+      applyCollectibleKit(
+        [users.me, users.ada, users.grace, spMe, spAda, spGrace],
+        kit,
+        fixtureParam("frame"),
+      );
+    }
     seedStore(surface);
     setTheme(theme);
     const id = window.setTimeout(() => setReady(true), 0);
@@ -2475,6 +2498,16 @@ export default function UiFixtures() {
         <PickerFixture surface={surfaceName} />
       ) : surfaceName.startsWith("embed-") ? (
         <EmbedFixture surface={surfaceName} />
+      ) : isStreamFixture(surfaceName) ? (
+        <StreamFixture
+          surface={surfaceName}
+          shell={<Shell surface="shell-chat" />}
+        />
+      ) : isFloatingFixture(surfaceName) ? (
+        <FloatingFixture
+          surface={surfaceName}
+          shell={<Shell surface="shell-chat" />}
+        />
       ) : surfaceName.startsWith("act-") ? (
         <ActivityFixture surface={surfaceName} />
       ) : isSettingsProfileFixture(surfaceName) ? (

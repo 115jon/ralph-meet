@@ -331,7 +331,10 @@ export function VoiceDashboard({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="animate-in slide-in-from-bottom-5 duration-300 border-b-0 rounded-b-none">
+      <div
+        data-floating-avoid=""
+        className="animate-in slide-in-from-bottom-5 duration-300 border-b-0 rounded-b-none"
+      >
         <FloatingListenTogetherPlayer
           sfu={sfu}
           roomSlug={roomSlug}

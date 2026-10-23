@@ -1,7 +1,10 @@
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { getProfileEffectStageHeight } from "@/components/chat/ProfileCollectiblesLayer";
+import {
+  PROFILE_EFFECT_STAGE_HEIGHT,
+  PROFILE_EFFECT_STAGE_WIDTH,
+} from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
@@ -54,7 +57,6 @@ interface Props {
 }
 
 /** PopoverContent variant="rich" width. */
-const SURFACE_WIDTH = 360;
 const SECTION_TITLE_CLASS =
   "text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-[color:var(--rm-profile-custom-muted)]";
 
@@ -517,7 +519,6 @@ function DesktopUserProfilePopover({
   const profileThemeStyle = profileTheme.variables;
   const isOnline =
     state.onlineUsers.has(userId) && resolvedStatus !== "offline";
-  const profileEffectStageHeight = getProfileEffectStageHeight(SURFACE_WIDTH);
 
   useEffect(() => {
     setOptimisticRoles(member?.roles);
@@ -681,10 +682,15 @@ function DesktopUserProfilePopover({
             display={resolvedAvatarDisplay}
             className="w-full"
             style={profileThemeStyle}
-            effectStageClassName="left-0 top-0 w-full"
-            effectStageStyle={{ height: profileEffectStageHeight }}
+            // The effect is authored for a 450x880 card: pin it to the top
+            // at that aspect, whatever width the card ends up (a frame
+            // insets it).
+            effectStageClassName="bottom-auto"
+            effectStageStyle={{
+              aspectRatio: `${PROFILE_EFFECT_STAGE_WIDTH} / ${PROFILE_EFFECT_STAGE_HEIGHT}`,
+            }}
           >
-            <div className="max-h-[min(640px,var(--available-height,100dvh))] overflow-y-auto custom-scrollbar">
+            <div className="max-h-[calc(min(640px,var(--available-height,100dvh))-var(--rm-profile-frame-reserve-y,0px))] overflow-y-auto custom-scrollbar">
               <div className="relative">
                 <PopoverBanner
                   bannerUrl={resolvedUser.banner_url}

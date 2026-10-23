@@ -20,7 +20,10 @@ import {
 import { ResponsivePopover } from "@/components/ui/popover";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { resolveProfileTheme } from "@/lib/profile-customization";
+import {
+  PROFILE_BANNER_CHIP_STYLE,
+  resolveProfileTheme,
+} from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -180,7 +183,7 @@ export default function UserAccountPopover({
         surfaceClassName={cn(isMobile && "shadow-none")}
         style={profileTheme.variables}
       >
-        <div className="max-h-[min(620px,var(--available-height,100dvh))] overflow-y-auto custom-scrollbar">
+        <div className="max-h-[calc(min(620px,var(--available-height,100dvh))-var(--rm-profile-frame-reserve-y,0px))] overflow-y-auto custom-scrollbar">
           <div
             className="relative h-28 overflow-hidden"
             style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
@@ -245,7 +248,8 @@ export default function UserAccountPopover({
                 ) : (
                   <button
                     type="button"
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] px-3 py-1.5 text-left transition-opacity pointer-fine:hover:opacity-90 outline-none"
+                    style={PROFILE_BANNER_CHIP_STYLE}
                     aria-label="Edit custom status"
                     onClick={() => setIsEditingCustomStatus(true)}
                   >

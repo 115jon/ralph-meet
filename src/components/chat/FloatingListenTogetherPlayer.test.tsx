@@ -1,26 +1,50 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
 
-const mockedPlayback = vi.hoisted(() => ({
-  currentEntry: { entryId: "entry-1" },
+const mocked = vi.hoisted(() => ({
+  playback: {
+    currentEntry: {
+      entryId: "entry-1",
+      track: { title: "Night Drive", artworkUrl: "https://cdn.test/art.webp" },
+    },
+  } as { currentEntry: unknown },
+  phone: false,
 }));
 
 vi.mock("./listen-together-playback", () => ({
-  useListenTogetherPlaybackState: () => mockedPlayback,
+  useListenTogetherPlaybackState: () => mocked.playback,
+}));
+
+vi.mock("@/hooks/useMediaQuery", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useMediaQuery")>()),
+  useIsMobile: () => mocked.phone,
 }));
 
 vi.mock("./ListenTogetherNowPlayingCard", () => ({
-  ListenTogetherNowPlayingCard: () => (
-    <div data-testid="now-playing-content">Track One</div>
+  ListenTogetherNowPlayingCard: ({ variant }: { variant: string }) => (
+    <div data-testid={`now-playing-${variant}`}>Night Drive</div>
   ),
 }));
 
 describe("FloatingListenTogetherPlayer", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    mocked.playback = {
+      currentEntry: {
+        entryId: "entry-1",
+        track: {
+          title: "Night Drive",
+          artworkUrl: "https://cdn.test/art.webp",
+        },
+      },
+    };
+  });
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
   });
 
@@ -29,40 +53,46 @@ describe("FloatingListenTogetherPlayer", () => {
       HTMLElement.prototype,
       "getBoundingClientRect",
     );
-
     render(<FloatingListenTogetherPlayer sfu={null} roomSlug="voice-room-1" />);
-
     expect(getBoundingClientRect).not.toHaveBeenCalled();
   });
 
-  it("moves with pointer drag while leaving interactive controls available", () => {
+  it("renders nothing when nothing is playing", () => {
+    mocked.playback = { currentEntry: null };
     render(<FloatingListenTogetherPlayer sfu={null} roomSlug="voice-room-1" />);
+    expect(screen.queryByTestId("floating-listen-together-player")).toBeNull();
+  });
 
-    const player = screen.getByTestId("floating-listen-together-player");
-    const setPointerCapture = vi.fn();
-    const releasePointerCapture = vi.fn();
-    player.setPointerCapture = setPointerCapture;
-    player.hasPointerCapture = () => true;
-    player.releasePointerCapture = releasePointerCapture;
-    player.getBoundingClientRect = () =>
-      ({ left: 100, top: 100, width: 340, height: 100 }) as DOMRect;
+  it("shows the mini card on desktop and the pill on a phone", () => {
+    mocked.phone = false;
+    const { unmount } = render(
+      <FloatingListenTogetherPlayer sfu={null} roomSlug="voice-room-1" />,
+    );
+    expect(screen.getByTestId("now-playing-mini")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Minimise now playing" }),
+    ).toBeInTheDocument();
+    unmount();
 
-    fireEvent.pointerDown(player, {
-      button: 0,
-      pointerId: 1,
-      clientX: 120,
-      clientY: 120,
-    });
-    fireEvent.pointerMove(player, {
-      pointerId: 1,
-      clientX: 220,
-      clientY: 200,
-    });
-    fireEvent.pointerUp(player, { pointerId: 1 });
+    mocked.phone = true;
+    render(<FloatingListenTogetherPlayer sfu={null} roomSlug="voice-room-1" />);
+    expect(screen.getByTestId("now-playing-pill")).toBeInTheDocument();
+    expect(screen.queryByTestId("now-playing-mini")).toBeNull();
+    expect(
+      screen.getByTestId("floating-listen-together-player"),
+    ).toHaveAttribute("data-mode", "compact");
+  });
 
-    expect(setPointerCapture).toHaveBeenCalledWith(1);
-    expect(player.style.left).toBe("200px");
-    expect(player.style.top).toBe("180px");
-    expect(releasePointerCapture).toHaveBeenCalledWith(1);
+  it("minimises to the track artwork", () => {
+    window.localStorage.setItem(
+      "rm:floating:v1:listen-together",
+      JSON.stringify({ corner: "bottom-right", minimized: true }),
+    );
+    render(<FloatingListenTogetherPlayer sfu={null} roomSlug="voice-room-1" />);
+    const bubble = screen.getByRole("button", { name: "Open now playing" });
+    expect(bubble.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://cdn.test/art.webp",
+    );
   });
 });

@@ -879,6 +879,17 @@ export function resolveProfileTheme(
   };
 }
 
+/**
+ * Backing for chips that sit on the banner edge (custom status pill). The
+ * card tints are translucent, so on a light banner image white text vanished;
+ * this lays the tint over the opaque card colour instead.
+ */
+export const PROFILE_BANNER_CHIP_STYLE: CSSProperties = {
+  backgroundColor: "var(--rm-profile-custom-background)",
+  backgroundImage:
+    "linear-gradient(var(--rm-profile-custom-card-bg-strong), var(--rm-profile-custom-card-bg-strong))",
+};
+
 export function getProfileThemeVariables(
   input: ProfileCustomizationInput,
 ): CSSProperties {

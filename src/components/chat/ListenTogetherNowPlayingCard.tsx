@@ -36,7 +36,11 @@ interface ListenTogetherNowPlayingCardProps {
   playback: ListenTogetherPlaybackState;
   sfu: SFUClient | null;
   roomSlug?: string | null;
-  variant?: "mini" | "panel";
+  /**
+   * mini: the floating player body. pill: the phone's compact player (art,
+   * title, play/pause). panel: the full card (queue panel, phone sheet).
+   */
+  variant?: "mini" | "pill" | "panel";
   onOpenQueue?: () => void;
   className?: string;
 }
@@ -82,7 +86,7 @@ export function ListenTogetherNowPlayingCard({
   }, [localPlayback]);
 
   if (!currentEntry) {
-    if (variant === "mini") return null;
+    if (variant !== "panel") return null;
     return (
       <div
         className={cn(
@@ -138,7 +142,7 @@ export function ListenTogetherNowPlayingCard({
     />
   ) : (
     <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-      <Icon name="headphones" size={variant === "mini" ? "sm" : "lg"} />
+      <Icon name="headphones" size={variant === "panel" ? "lg" : "sm"} />
     </div>
   );
 
@@ -300,6 +304,57 @@ export function ListenTogetherNowPlayingCard({
       commitSeek();
     }
   };
+
+  const togglePause = () => {
+    sendCommand({
+      type: "listen_together.pause",
+      room_slug: roomSlug,
+      paused: !isPaused,
+      entryId: currentEntry.entryId,
+    });
+  };
+
+  if (variant === "pill") {
+    const progress =
+      progressMax > 0 ? Math.min(1, effectiveSeekValue / progressMax) : 0;
+    return (
+      <div
+        className={cn(
+          "relative flex h-14 items-center gap-3 pr-1.5 pl-2",
+          className,
+        )}
+      >
+        <div className="size-10 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
+          {artwork}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-ui-sm font-semibold text-rm-text">
+            {currentEntry.track.title}
+          </p>
+          <p className="truncate text-ui-xs text-rm-text-secondary">
+            {isPaused ? "Paused" : subtitle}
+          </p>
+        </div>
+        <IconButton
+          icon={isPaused ? "play" : "pause"}
+          size="md"
+          variant="ghost"
+          shape="circle"
+          onClick={togglePause}
+          disabled={!canControl}
+          aria-label={
+            isPaused ? "Resume shared playback" : "Pause shared playback"
+          }
+        />
+        {/* Progress as a hairline along the bottom edge; the sheet seeks. */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-primary"
+          style={{ transform: `scaleX(${progress})` }}
+        />
+      </div>
+    );
+  }
 
   if (variant === "mini") {
     return (

@@ -1,4 +1,10 @@
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { isDesktop } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
 import type { StartScreenShareOptions } from "@/lib/screen-share-types";
@@ -18,6 +24,7 @@ import {
   DesktopScreenPickerBottomBar,
   DesktopScreenPickerTabBar,
   DeviceGrid,
+  PickerEmpty,
   QUALITY_PRESETS,
   SourceGrid,
 } from "./DesktopScreenPickerUI";
@@ -28,6 +35,11 @@ export interface DesktopScreenPickerModalProps {
   onClose: () => void;
   onStart: (options: StartScreenShareOptions) => void;
   availableQualities: string[];
+  /**
+   * The Tauri command bridge. Defaults to `@tauri-apps/api/core` in the
+   * desktop app; fixtures and tests pass a stub.
+   */
+  invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
 interface State {
@@ -124,7 +136,7 @@ function reducer(state: State, action: Action): State {
 
 export const DesktopScreenPickerModal: React.FC<
   DesktopScreenPickerModalProps
-> = ({ isOpen, onClose, onStart, availableQualities }) => {
+> = ({ isOpen, onClose, onStart, availableQualities, invoke }) => {
   const settings = useVoiceSettingsStore((s) => s.getSettings());
   const setScreenShareDefaults = useVoiceSettingsStore(
     (s) => s.setScreenShareDefaults,
@@ -147,9 +159,11 @@ export const DesktopScreenPickerModal: React.FC<
   });
 
   const invokeRef = useRef<((cmd: string, args?: any) => Promise<any>) | null>(
-    null,
+    invoke ?? null,
   );
-  const [invokeReady, setInvokeReady] = useState(!isDesktop());
+  const [invokeReady, setInvokeReady] = useState(
+    Boolean(invoke) || !isDesktop(),
+  );
   const requestedThumbnailsRef = useRef<Set<string> | null>(null);
   const previewBatchKeyRef = useRef<string | null>(null);
   const thumbnailBatchTokenRef = useRef(0);
@@ -163,7 +177,7 @@ export const DesktopScreenPickerModal: React.FC<
 
   // Load the invoke function once
   useEffect(() => {
-    if (isDesktop()) {
+    if (!invokeRef.current && isDesktop()) {
       import("@tauri-apps/api/core")
         .then((mod) => {
           invokeRef.current = mod.invoke;
@@ -531,134 +545,129 @@ export const DesktopScreenPickerModal: React.FC<
     dispatch({ type: "SET_SELECTED_ID", payload: id });
   };
 
+  const ignoreSelectDismiss = (event: {
+    target: EventTarget | null;
+    preventDefault: () => void;
+  }) => {
+    if (shouldIgnoreSelectDismiss(event.target)) event.preventDefault();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogPortal>
-        <div
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
-          data-state={isOpen ? "open" : "closed"}
-          onPointerDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (shouldIgnoreSelectDismiss(event.target)) return;
-            onClose();
-          }}
-          role="presentation"
-        >
-          <DialogSurface
-            showCloseButton={false}
-            className="relative m-0 flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
-            aria-labelledby="screen-picker-title"
-            aria-busy={!invokeReady || state.loading || state.previewLoading}
-            onPointerDownOutside={(event) => {
-              if (shouldIgnoreSelectDismiss(event.target)) {
-                event.preventDefault();
-              }
-            }}
-            onFocusOutside={(event) => {
-              if (shouldIgnoreSelectDismiss(event.target)) {
-                event.preventDefault();
-              }
-            }}
-            onInteractOutside={(event) => {
-              if (shouldIgnoreSelectDismiss(event.target)) {
-                event.preventDefault();
-              }
-            }}
-          >
-            <DesktopScreenPickerTabBar
-              tab={state.tab}
-              setTab={(tab) => dispatch({ type: "SET_TAB", payload: tab })}
-            />
+    <ResponsiveDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <ResponsiveDialogContent
+        showCloseButton={false}
+        aria-busy={!invokeReady || state.loading || state.previewLoading}
+        // Desktop: a large picker dialog. Phone-width windows: a full-height
+        // sheet whose source list scrolls between the tabs and the bar.
+        className="gap-0 p-0"
+        dialogClassName="flex h-[min(640px,calc(100dvh-32px))] flex-col overflow-hidden md:max-w-[min(860px,calc(100%-2rem))]"
+        drawerClassName="h-[calc(100dvh-24px)] px-0 pt-1 pb-0"
+        onPointerDownOutside={ignoreSelectDismiss}
+        onFocusOutside={ignoreSelectDismiss}
+        onInteractOutside={ignoreSelectDismiss}
+      >
+        <ResponsiveDialogHeader className="shrink-0 px-4 pt-2 pb-3 md:px-6 md:pt-5">
+          <ResponsiveDialogTitle>Share your screen</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Pick an app, a screen or a capture device.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-            {/* Content Area */}
-            <div className="min-h-[320px] max-h-[420px] overflow-y-auto p-4">
-              {state.tab === "devices" ? (
-                <DeviceGrid
-                  devices={state.devices}
-                  selectedId={state.selectedId}
-                  onSelect={selectSource}
-                />
-              ) : state.loading || state.previewLoading ? (
-                <div className="flex h-[300px] items-center justify-center">
-                  <Icon
-                    name="loader"
-                    size="2xl"
-                    className="animate-spin text-rm-text-muted"
-                  />
-                </div>
-              ) : filteredSources.length === 0 ? (
-                <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
-                  <Icon name="monitor" size="3xl" className="opacity-30" />
-                  <p className="text-ui-sm">
-                    No{" "}
-                    {state.tab === "applications" ? "applications" : "screens"}{" "}
-                    found
-                  </p>
-                </div>
-              ) : (
-                <SourceGrid
-                  sources={filteredSources}
-                  thumbnails={state.thumbnails}
-                  selectedId={state.selectedId}
-                  onSelect={selectSource}
-                  onPreview={(id) => {
-                    void requestThumbnail(id);
-                  }}
-                />
-              )}
-            </div>
+        <DesktopScreenPickerTabBar
+          tab={state.tab}
+          setTab={(tab) => dispatch({ type: "SET_TAB", payload: tab })}
+        />
 
-            <DesktopScreenPickerBottomBar
-              displayName={displayName}
-              selectedQ={selectedQ}
-              qualities={qualities}
-              selectedQuality={state.selectedQuality}
-              setQuality={(q) => dispatch({ type: "SET_QUALITY", payload: q })}
-              withAudio={state.withAudio}
-              toggleAudio={() => dispatch({ type: "TOGGLE_AUDIO" })}
-              onClose={onClose}
-              onStart={() => {
-                if (!state.selectedId) return;
-                thumbnailBatchTokenRef.current += 1;
-                dispatch({ type: "SET_PREVIEW_LOADING", payload: false });
-                const source = state.sources.find(
-                  (s) => s.id === state.selectedId,
-                );
-                const pickerSelectionElapsedMs = pickerOpenedAtRef.current
-                  ? Math.round(performance.now() - pickerOpenedAtRef.current)
-                  : undefined;
-                logScreenPicker("Starting selected source", {
-                  elapsedMs: pickerSelectionElapsedMs ?? null,
-                  tab: state.tab,
-                  sourceId: state.selectedId,
-                  captureId: source?.capture_id,
-                  sourceName: source?.name ?? selectedDevice?.label,
-                  sourceKind: state.tab === "devices" ? "device" : source?.kind,
-                  quality: state.selectedQuality,
-                  withAudio: state.withAudio,
-                });
-                setScreenShareDefaults({
-                  quality: state.selectedQuality,
-                  withAudio: state.withAudio,
-                });
-                onStart({
-                  quality: state.selectedQuality,
-                  withAudio: state.withAudio,
-                  sourceId: state.selectedId,
-                  captureId: source?.capture_id,
-                  sourceName: source?.name ?? selectedDevice?.label,
-                  sourceKind: state.tab === "devices" ? "device" : source?.kind,
-                  sourceAppName: source?.app_name,
-                  sourceIcon: source?.icon || undefined,
-                  pickerOpenedAt: pickerOpenedAtRef.current ?? undefined,
-                  pickerSelectionElapsedMs,
-                });
-              }}
+        <div className="@container min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 md:px-6">
+          {state.tab === "devices" ? (
+            <DeviceGrid
+              devices={state.devices}
               selectedId={state.selectedId}
+              onSelect={selectSource}
             />
-          </DialogSurface>
+          ) : state.loading || state.previewLoading ? (
+            <div className="flex h-full min-h-40 items-center justify-center">
+              <Icon
+                name="loader"
+                size="2xl"
+                className="animate-spin text-rm-text-muted"
+              />
+              <span className="sr-only">Loading</span>
+            </div>
+          ) : filteredSources.length === 0 ? (
+            <PickerEmpty
+              icon={state.tab === "applications" ? "window" : "monitor"}
+              title={
+                state.tab === "applications"
+                  ? "No open apps to share"
+                  : "No screens found"
+              }
+              body={
+                state.tab === "applications"
+                  ? "Open the app you want to share, or share an entire screen instead."
+                  : undefined
+              }
+            />
+          ) : (
+            <SourceGrid
+              sources={filteredSources}
+              thumbnails={state.thumbnails}
+              selectedId={state.selectedId}
+              onSelect={selectSource}
+              onPreview={(id) => {
+                void requestThumbnail(id);
+              }}
+            />
+          )}
         </div>
-      </DialogPortal>
-    </Dialog>
+
+        <DesktopScreenPickerBottomBar
+          displayName={displayName}
+          selectedQ={selectedQ}
+          qualities={qualities}
+          selectedQuality={state.selectedQuality}
+          setQuality={(q) => dispatch({ type: "SET_QUALITY", payload: q })}
+          withAudio={state.withAudio}
+          toggleAudio={() => dispatch({ type: "TOGGLE_AUDIO" })}
+          onClose={onClose}
+          onStart={() => {
+            if (!state.selectedId) return;
+            thumbnailBatchTokenRef.current += 1;
+            dispatch({ type: "SET_PREVIEW_LOADING", payload: false });
+            const source = state.sources.find((s) => s.id === state.selectedId);
+            const pickerSelectionElapsedMs = pickerOpenedAtRef.current
+              ? Math.round(performance.now() - pickerOpenedAtRef.current)
+              : undefined;
+            logScreenPicker("Starting selected source", {
+              elapsedMs: pickerSelectionElapsedMs ?? null,
+              tab: state.tab,
+              sourceId: state.selectedId,
+              captureId: source?.capture_id,
+              sourceName: source?.name ?? selectedDevice?.label,
+              sourceKind: state.tab === "devices" ? "device" : source?.kind,
+              quality: state.selectedQuality,
+              withAudio: state.withAudio,
+            });
+            setScreenShareDefaults({
+              quality: state.selectedQuality,
+              withAudio: state.withAudio,
+            });
+            onStart({
+              quality: state.selectedQuality,
+              withAudio: state.withAudio,
+              sourceId: state.selectedId,
+              captureId: source?.capture_id,
+              sourceName: source?.name ?? selectedDevice?.label,
+              sourceKind: state.tab === "devices" ? "device" : source?.kind,
+              sourceAppName: source?.app_name,
+              sourceIcon: source?.icon || undefined,
+              pickerOpenedAt: pickerOpenedAtRef.current ?? undefined,
+              pickerSelectionElapsedMs,
+            });
+          }}
+          selectedId={state.selectedId}
+        />
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 };
