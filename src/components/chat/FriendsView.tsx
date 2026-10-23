@@ -351,8 +351,8 @@ export default function FriendsView({
       label="Friends"
       idBase="friends"
       panelId="friends-panel"
-      scrollable={isMobile}
-      className={isMobile ? "h-11 gap-6 px-4" : "h-full self-stretch"}
+      scrollable
+      className={isMobile ? "h-11 gap-6 px-4" : "h-full min-w-0 self-stretch"}
       value={tab}
       onValueChange={(t) => dispatch({ type: "SET_TAB", value: t })}
       items={FRIEND_TABS.map((t) => ({
@@ -390,7 +390,7 @@ export default function FriendsView({
           size="lg"
           className="shrink-0 text-rm-text-muted max-md:hidden"
         />
-        <h1 className="truncate text-ui-md font-semibold text-rm-text">
+        <h1 className="shrink-0 text-ui-md font-semibold whitespace-nowrap text-rm-text">
           Friends
         </h1>
 
