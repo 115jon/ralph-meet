@@ -4,7 +4,10 @@ import { forwardRef } from "react";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
 import type { AvatarDisplay } from "@/lib/avatar-display";
-import { getProfileFrameSurfaceInsetStyle } from "@/lib/profile-frame";
+import {
+  getProfileFrameReserveY,
+  getProfileFrameSurfaceMarginStyle,
+} from "@/lib/profile-frame";
 import { cn } from "@/lib/utils";
 
 export type ProfileSurfaceVariant = "card" | "popover" | "sheet";
@@ -20,21 +23,31 @@ interface ProfileSurfaceShellProps extends React.HTMLAttributes<HTMLDivElement> 
   fit?: "contain" | "cover";
   playAnimation?: boolean;
   renderFrame?: boolean;
-  outsideSurface?: ReactNode;
   children: ReactNode;
 }
 
 const SURFACE_CLASSES: Record<ProfileSurfaceVariant, string> = {
   // Dialog-sized profile card (modal, editor preview): radius 16, no shadow
   // of its own; the dialog that hosts it owns elevation.
-  card: "relative h-full w-full overflow-hidden rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)]",
+  card: "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)]",
+  // MENU_PANEL geometry (12.7): radius 12 and the one floating shadow.
   popover:
-    // MENU_PANEL geometry (12.7): radius 12 and the one floating shadow.
-    "relative h-full w-full overflow-hidden rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-lg",
-  sheet:
-    "relative w-full overflow-hidden bg-rm-bg-primary bg-[var(--rm-profile-custom-background)]",
+    "rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-lg",
+  sheet: "bg-rm-bg-primary bg-[var(--rm-profile-custom-background)]",
 };
 
+/**
+ * The profile card every profile surface draws (popover, account menu,
+ * sheet, settings preview, picker previews), with its collectibles.
+ *
+ * Layering, back to front: back frame art (z-0), the card (z-10: theme
+ * overlay, content, then the profile effect over the content), front frame
+ * art (z-20). With a frame equipped the card is inset inside this box by the
+ * frame's footprint, so the overhang stays inside the box: it never draws
+ * over neighbouring text and a scroller or the viewport never clips it.
+ * `--rm-profile-frame-reserve-y` holds that vertical inset for callers that
+ * cap the card's height.
+ */
 export const ProfileSurfaceShell = forwardRef<
   HTMLDivElement,
   ProfileSurfaceShellProps
@@ -52,50 +65,49 @@ export const ProfileSurfaceShell = forwardRef<
     fit = "contain",
     playAnimation = true,
     renderFrame = true,
-    outsideSurface,
     children,
     ...props
   },
   ref,
 ) {
+  const framed = renderFrame;
   return (
     <div
       ref={ref}
       {...props}
+      data-profile-surface={variant}
       className={cn(
-        "relative isolate",
+        "relative isolate flex flex-col [container-type:inline-size]",
         variant === "sheet"
           ? "overflow-hidden bg-rm-bg-primary bg-[var(--rm-profile-custom-background)]"
           : "overflow-visible",
         className,
       )}
-      style={{
-        ...(variant === "sheet"
-          ? { backgroundImage: "var(--rm-profile-custom-surface)" }
-          : {}),
-        ...style,
-      }}
+      style={
+        {
+          "--rm-profile-frame-reserve-y": framed
+            ? getProfileFrameReserveY(display)
+            : "0px",
+          ...(variant === "sheet"
+            ? { backgroundImage: "var(--rm-profile-custom-surface)" }
+            : {}),
+          ...style,
+        } as CSSProperties
+      }
     >
-      {renderFrame ? (
-        <ProfileFrameLayer
-          display={display}
-          order="back"
-          className="z-10"
-          fitToSurface={variant === "sheet"}
-        />
+      {framed ? (
+        <ProfileFrameLayer display={display} order="back" className="z-0" />
       ) : null}
-      {outsideSurface}
       <div
+        data-profile-card=""
         className={cn(
+          "relative z-10 min-h-0 flex-1 overflow-hidden",
           SURFACE_CLASSES[variant],
-          variant === "sheet" && "absolute inset-x-0 h-auto",
           surfaceClassName,
         )}
         style={{
           backgroundImage: "var(--rm-profile-custom-surface)",
-          ...(variant === "sheet"
-            ? getProfileFrameSurfaceInsetStyle(display)
-            : {}),
+          ...(framed ? getProfileFrameSurfaceMarginStyle(display) : {}),
           ...surfaceStyle,
         }}
       >
@@ -117,18 +129,12 @@ export const ProfileSurfaceShell = forwardRef<
             effectOpacity={effectOpacity}
             fit={fit}
             playAnimation={playAnimation}
-            renderFrame={false}
           />
         </div>
         <div className="relative z-20 h-full">{children}</div>
       </div>
-      {renderFrame ? (
-        <ProfileFrameLayer
-          display={display}
-          order="front"
-          className="z-30"
-          fitToSurface={variant === "sheet"}
-        />
+      {framed ? (
+        <ProfileFrameLayer display={display} order="front" className="z-20" />
       ) : null}
     </div>
   );

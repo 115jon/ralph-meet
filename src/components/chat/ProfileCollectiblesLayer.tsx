@@ -3,8 +3,6 @@ import {
   getProfileEffectLayers,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
-import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
-import { getProfileFrameLayers } from "@/lib/profile-frame";
 import {
   getProfileEffectFallbackAsset,
   getProfileEffectPlaybackSnapshot,
@@ -26,7 +24,6 @@ interface ProfileCollectiblesLayerProps {
   fit?: "contain" | "cover";
   blendMode?: "normal" | "screen";
   playAnimation?: boolean;
-  renderFrame?: boolean;
 }
 
 type MediaKind = "image" | "video";
@@ -324,7 +321,6 @@ export function ProfileCollectiblesLayer({
   fit = "contain",
   blendMode = "normal",
   playAnimation = true,
-  renderFrame = true,
 }: ProfileCollectiblesLayerProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const effect = useMemo(() => getProfileEffect(display), [display]);
@@ -419,13 +415,7 @@ export function ProfileCollectiblesLayer({
     };
   }, [shouldAnimateLayers]);
 
-  const hasFrame =
-    renderFrame &&
-    Boolean(
-      getProfileFrameLayers(display, "back").length ||
-      getProfileFrameLayers(display, "front").length,
-    );
-  if (!fallbackAsset.src && !effectLayers.length && !hasFrame) return null;
+  if (!fallbackAsset.src && !effectLayers.length) return null;
 
   return (
     <div
@@ -435,13 +425,6 @@ export function ProfileCollectiblesLayer({
       )}
       aria-hidden="true"
     >
-      {renderFrame ? (
-        <ProfileFrameLayer
-          display={display}
-          order="back"
-          className="z-0 opacity-80"
-        />
-      ) : null}
       <div className="pointer-events-none absolute inset-0 z-10">
         {!shouldAnimateLayers && fallbackAsset.src ? (
           <EffectMedia
@@ -486,9 +469,6 @@ export function ProfileCollectiblesLayer({
             ))
           : null}
       </div>
-      {renderFrame ? (
-        <ProfileFrameLayer display={display} order="front" className="z-20" />
-      ) : null}
     </div>
   );
 }

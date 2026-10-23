@@ -24,7 +24,6 @@ import type {
   CollectibleKind,
 } from "@/lib/collectibles-catalog";
 import { getDisplayInitial } from "@/lib/display-name";
-import { getProfileFramePreviewTransform } from "@/lib/profile-frame";
 import { cn } from "@/lib/utils";
 import { useState, type CSSProperties } from "react";
 
@@ -218,7 +217,6 @@ export function ProfileCardPreview({
   className?: string;
   style?: CSSProperties;
 }) {
-  const frame = getProfileFramePreviewTransform(display);
   return (
     <div
       className={cn(
@@ -227,13 +225,7 @@ export function ProfileCardPreview({
       )}
       style={{ ...NEUTRAL_PROFILE_THEME, ...style }}
     >
-      <div
-        className="absolute inset-0"
-        style={{
-          transform: frame.scale < 1 ? `scale(${frame.scale})` : undefined,
-          transformOrigin: frame.transformOrigin,
-        }}
-      >
+      <div className="absolute inset-0">
         <ProfileSurfaceShell
           display={display}
           variant="card"
