@@ -1136,7 +1136,8 @@
   outline-offset: 0;
 }
 
-.rm-composer textarea:focus-visible {
+.rm-composer textarea:focus-visible,
+.rm-search-input:focus-visible {
   outline: none;
 }
 
