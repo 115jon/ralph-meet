@@ -10,6 +10,7 @@
  */
 
 import { Button } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import { Icon } from "@/components/ui/icon";
 import { PRESS } from "@/components/ui/interaction";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -336,9 +337,7 @@ function OverrideEditor({
       done();
       onRemoved();
     } catch (err) {
-      setRemoveError(
-        err instanceof Error ? err.message : "Unable to remove this override.",
-      );
+      setRemoveError(describeApiError(err, "remove this override"));
     } finally {
       setRemoving(false);
     }

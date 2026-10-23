@@ -1,4 +1,5 @@
 import { useMounted } from "@/hooks/useMounted";
+import { describeApiError } from "@/lib/api-errors";
 import {
   Tooltip,
   TooltipContent,
@@ -21,7 +22,7 @@ import {
   ActionSheet,
   type ActionSheetItem,
 } from "@/components/ui/action-sheet";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { LONG_PRESS_TARGET, useLongPress } from "@/hooks/useLongPress";
@@ -1291,11 +1292,7 @@ export default function SoundboardPicker({
         },
       });
     } catch (error) {
-      setUploadError(
-        error instanceof Error
-          ? error.message
-          : "Failed to add soundboard clip.",
-      );
+      setUploadError(describeApiError(error, "add that sound"));
     } finally {
       setIsUploading(false);
     }
@@ -2464,8 +2461,12 @@ export default function SoundboardPicker({
               <div className="flex h-full flex-col p-4 overflow-hidden">
                 <div className="flex-1 overflow-y-auto no-scrollbar pb-4 max-md:min-h-0 max-md:overscroll-contain">
                   {isSearchingMyInstants && myInstantsResults.length === 0 ? (
-                    <div className="flex items-center justify-center py-12 text-rm-text-muted">
-                      <Icon name="loader" size="xl" className="animate-spin" />
+                    <div
+                      role="status"
+                      className="flex items-center justify-center py-12 text-rm-text-muted"
+                    >
+                      <Spinner className="size-6" />
+                      <span className="sr-only">Searching</span>
                     </div>
                   ) : myInstantsResults.length === 0 ? (
                     <div className="text-center py-12 text-ui-sm text-rm-text-muted">
@@ -2583,8 +2584,12 @@ export default function SoundboardPicker({
               <div className="flex h-full flex-col p-4 overflow-hidden">
                 <div className="flex-1 overflow-y-auto no-scrollbar pb-4 max-md:min-h-0 max-md:overscroll-contain">
                   {isSearchingRadio && radioResults.length === 0 ? (
-                    <div className="flex items-center justify-center py-12 text-rm-text-muted">
-                      <Icon name="loader" size="xl" className="animate-spin" />
+                    <div
+                      role="status"
+                      className="flex items-center justify-center py-12 text-rm-text-muted"
+                    >
+                      <Spinner className="size-6" />
+                      <span className="sr-only">Searching</span>
                     </div>
                   ) : radioResults.length === 0 ? (
                     <div className="text-center py-12 text-ui-sm text-rm-text-muted">

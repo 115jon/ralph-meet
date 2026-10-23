@@ -209,13 +209,9 @@ export function ShopItemDetail({
                 <Button
                   type="button"
                   onClick={() => onEquip(item)}
-                  disabled={busy}
-                  aria-busy={busy || undefined}
+                  loading={busy}
                   className="h-11 flex-1 md:h-9"
                 >
-                  {busy ? (
-                    <Icon name="loader" size="sm" className="animate-spin" />
-                  ) : null}
                   Equip {copy.one.toLowerCase()}
                 </Button>
               )}

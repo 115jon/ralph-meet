@@ -1175,10 +1175,8 @@ export function VoiceListenTogetherManager({
         });
         setError(roomSlug, {
           code: "PLAYBACK_BLOCKED",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Playback could not start locally",
+          // Shown in the Now Playing card: never the browser's message.
+          message: "Unable to start playback here. Press play to try again.",
         });
       });
     }

@@ -496,12 +496,15 @@ export default function FriendsView({
         </h2>
 
         {loading && filteredFriends.length === 0 && (
-          <div
-            role="status"
-            className="flex items-center justify-center gap-2 py-12 text-rm-text-secondary"
-          >
-            <Icon name="loader" size="md" className="animate-spin" />
-            <span className="text-ui-sm">Loading friends…</span>
+          <div role="status" className="flex flex-col gap-1 px-4 py-2 md:px-2">
+            <span className="sr-only">Loading friends</span>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                aria-hidden
+                className="h-14 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none md:h-12"
+              />
+            ))}
           </div>
         )}
 

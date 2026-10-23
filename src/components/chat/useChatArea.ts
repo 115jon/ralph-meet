@@ -1,4 +1,5 @@
 import { apiPost } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { debugChatScroll } from "@/lib/chat-scroll-debug";
 import { getDisplayName } from "@/lib/display-name";
 import { getGifAttachmentProvider } from "@/lib/gif-picker";
@@ -1157,7 +1158,7 @@ export function useChatArea({
           reason: reason || undefined,
         });
       } catch (err: any) {
-        alert(err.message || "Failed to ban user");
+        alert(describeApiError(err, "ban this member"));
       }
     },
     [state.activeServerId],

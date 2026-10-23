@@ -1,4 +1,5 @@
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
+import { describeApiError } from "@/lib/api-errors";
 import { Button, Spinner } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -678,11 +679,7 @@ function WordleActivityStageContent({
         if (!controller.signal.aborted)
           console.warn("Wordle load failed", error);
         if (!controller.signal.aborted)
-          setPuzzleError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load today's Wordle.",
-          );
+          setPuzzleError(describeApiError(error, "load today's Wordle"));
       });
     return () => controller.abort();
   }, [puzzleDate, loadAttempt]);

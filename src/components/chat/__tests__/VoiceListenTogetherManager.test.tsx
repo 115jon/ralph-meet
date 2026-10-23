@@ -1183,7 +1183,8 @@ describe("VoiceListenTogetherManager", () => {
     await waitFor(() =>
       expect(useListenTogetherStore.getState().rooms["room-1"]?.error).toEqual({
         code: "PLAYBACK_BLOCKED",
-        message: "autoplay blocked",
+        // The browser's own message stays in the log, not on screen.
+        message: "Unable to start playback here. Press play to try again.",
       }),
     );
   });

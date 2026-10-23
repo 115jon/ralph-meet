@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,9 +81,7 @@ export default function VoiceChannelTextStatusModal({
       dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save channel status",
-      );
+      setError(describeApiError(err, "save the channel status"));
     } finally {
       setSaving(false);
     }

@@ -13,6 +13,7 @@
  */
 
 import { Button } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import {
   Dialog,
   DialogDescription,
@@ -308,9 +309,7 @@ export function CollectiblePicker({
       await onApplied(result.user, result.appliedKinds);
       onClose();
     } catch (err) {
-      setApplyError(
-        err instanceof Error ? err.message : "Couldn't apply that. Try again.",
-      );
+      setApplyError(describeApiError(err, "apply that"));
     } finally {
       setApplying(false);
     }
@@ -525,13 +524,10 @@ export function CollectiblePicker({
             <Button
               type="button"
               onClick={handleApply}
-              disabled={!changed || applying}
-              aria-busy={applying || undefined}
+              disabled={!changed}
+              loading={applying}
               className="h-11 flex-1 px-5 md:h-9"
             >
-              {applying ? (
-                <Icon name="loader" size="sm" className="animate-spin" />
-              ) : null}
               {selectedId === NONE_OPTION_ID && changed ? "Remove" : "Apply"}
             </Button>
           </footer>

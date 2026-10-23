@@ -10,7 +10,7 @@
  */
 
 import { MiniAvatar } from "@/components/chat/MiniAvatar";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { HIT, PRESS } from "@/components/ui/interaction";
@@ -995,8 +995,11 @@ function SearchPanelBody({
         <div ref={sentinelRef} aria-hidden="true" className="h-px" />
         <div className="flex justify-center pt-3">
           {state.loadingMore ? (
-            <span className="inline-flex items-center gap-2 text-ui-xs text-rm-text-muted">
-              <Icon name="loader" size="sm" className="animate-spin" />
+            <span
+              role="status"
+              className="inline-flex items-center gap-2 text-ui-xs text-rm-text-muted"
+            >
+              <Spinner />
               Loading more
             </span>
           ) : state.loadMoreFailed ? (

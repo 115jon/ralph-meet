@@ -1,4 +1,5 @@
 import { Button, Spinner } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import { SidePanel, type SidePanelMode } from "@/components/ui/side-panel";
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { Message } from "@/lib/types";
@@ -72,7 +73,7 @@ export default function ThreadSidebar({
         setRoot(data.root);
         setReplies(data.replies);
       } catch (err: any) {
-        if (!silent) setError(err.message || "Failed to load thread");
+        if (!silent) setError(describeApiError(err, "load this thread"));
       } finally {
         if (!silent) setLoading(false);
       }

@@ -7,6 +7,7 @@
  */
 
 import { ShopItemCard } from "@/components/chat/collectibles/ShopItemCard";
+import { describeApiError } from "@/lib/api-errors";
 import { ShopItemDetail } from "@/components/chat/collectibles/ShopItemDetail";
 import type { PreviewIdentity } from "@/components/chat/collectibles/CollectiblePreviews";
 import { useCollectiblesCatalog } from "@/components/chat/collectibles/hooks";
@@ -399,9 +400,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
         updated_at: user.updated_at ?? undefined,
       });
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Couldn't equip that. Try again.",
-      );
+      setActionError(describeApiError(err, "equip that"));
     } finally {
       setBusy(false);
     }

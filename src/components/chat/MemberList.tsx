@@ -1,6 +1,8 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { ButtonBase } from "@/components/ui/button-base";
+import { Button, Spinner } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -343,16 +345,8 @@ export default function MemberList({
         }
       } catch (err: unknown) {
         if (!isActive || controller.signal.aborted) return;
-        let errMsg = `Failed to load ${activeTab}`;
-        if (err instanceof Error) {
-          errMsg = err.message;
-        } else if (typeof err === "string") {
-          errMsg = err;
-        } else if (err && typeof err === "object" && "message" in err) {
-          errMsg = String(err.message);
-        }
         log.error(`Failed to load ${activeTab} tab:`, err);
-        partialState.tabError = errMsg;
+        partialState.tabError = describeApiError(err, `load ${activeTab}`);
       }
 
       if (!isActive || controller.signal.aborted) return;
@@ -1110,7 +1104,7 @@ function MediaTabContent({
   if (items.length === 0)
     return (
       <TabEmptyState
-        icon={<Icon name="image" size="3xl" />}
+        icon={<Icon name="image" size="2xl" />}
         label="No media shared yet"
       />
     );
@@ -1192,7 +1186,7 @@ function PinsTabContent({
   if (!messages || messages.length === 0) {
     return (
       <TabEmptyState
-        icon={<Icon name="pin" size="3xl" />}
+        icon={<Icon name="pin" size="2xl" />}
         label="No pinned messages"
       />
     );
@@ -1266,7 +1260,7 @@ function ThreadsTabContent({
   if (threads.length === 0)
     return (
       <TabEmptyState
-        icon={<Icon name="chat" size="3xl" />}
+        icon={<Icon name="chat" size="2xl" />}
         label="No threads in this channel"
       />
     );
@@ -1337,7 +1331,7 @@ function LinksTabContent({
   if (items.length === 0)
     return (
       <TabEmptyState
-        icon={<Icon name="link" size="3xl" />}
+        icon={<Icon name="link" size="2xl" />}
         label="No links shared yet"
       />
     );
@@ -1423,7 +1417,7 @@ function FilesTabContent({
     const { icon: emptyIcon } = getFileIcon("file.txt");
     return (
       <TabEmptyState
-        icon={<Icon name={emptyIcon} size="3xl" />}
+        icon={<Icon name={emptyIcon} size="2xl" />}
         label="No files shared yet"
       />
     );
@@ -1544,44 +1538,34 @@ function FilesTabContent({
 
 // Shared sub-components
 
-/** Spinner state for text-based tabs (threads, links, files, pins) */
+/** Skeleton rows for the text tabs (threads, links, files, pins), 14.2. */
 function TabSpinnerState() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      <span className="text-ui-xs font-semibold text-rm-text-muted">
-        Loading...
-      </span>
+    <div role="status" className="flex flex-col gap-2 py-2">
+      <span className="sr-only">Loading</span>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          aria-hidden
+          className="h-14 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none"
+        />
+      ))}
     </div>
   );
 }
 
-/** Animated skeleton grid for the Media tab */
+/** Skeleton tiles for the Media tab, at the real tile size. */
 function MediaSkeletonGrid() {
   return (
-    <div className="grid grid-cols-3 gap-1.5">
+    <div role="status" className="grid grid-cols-3 gap-1.5">
+      <span className="sr-only">Loading</span>
       {Array.from({ length: 9 }).map((_, i) => (
         <div
           key={i}
-          className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 relative"
-        >
-          {/* Shimmer animation */}
-          <div className="absolute inset-0 bg-linear-to-r from-transparent via-rm-text-muted/5 to-transparent animate-shimmer" />
-          {/* Fake avatar skeleton */}
-          <div className="absolute top-1.5 right-1.5 z-10 h-6 w-6 rounded-full bg-rm-text-muted/10 animate-pulse" />
-        </div>
+          aria-hidden
+          className="aspect-square animate-pulse rounded-lg bg-rm-tint-1 motion-reduce:animate-none"
+        />
       ))}
-
-      {/* Inline shimmer keyframe */}
-      <style>{`
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        .animate-shimmer {
-          animation: shimmer 1.5s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }
@@ -1621,8 +1605,8 @@ function MediaGridImage({
       return (
         <>
           {!loaded && (
-            <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
-              <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center bg-rm-tint-1 text-rm-text-muted">
+              <Spinner />
             </div>
           )}
           <img
@@ -1648,8 +1632,8 @@ function MediaGridImage({
     return (
       <>
         {!loaded && (
-          <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
-            <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center bg-rm-tint-1 text-rm-text-muted">
+            <Spinner />
           </div>
         )}
         <video
@@ -1677,8 +1661,8 @@ function MediaGridImage({
   return (
     <>
       {!loaded && (
-        <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
-          <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center bg-rm-tint-1 text-rm-text-muted">
+          <Spinner />
         </div>
       )}
       <img
@@ -1696,7 +1680,7 @@ function MediaGridImage({
   );
 }
 
-/** Error state with graphic and retry option */
+/** Whole-tab error: the empty-state anatomy with a danger title (14.3). */
 function TabErrorState({
   message,
   onRetry,
@@ -1705,35 +1689,26 @@ function TabErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-5">
-      {/* Error graphic */}
-      <div className="relative">
-        <div className="h-20 w-20 rounded-2xl bg-destructive/10 flex items-center justify-center border border-destructive/20">
-          <Icon name="offline" size="2xl" className="text-destructive/60" />
-        </div>
-        <div className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-destructive/20 flex items-center justify-center border border-destructive/30">
-          <Icon name="warning" size="sm" className="text-destructive" />
-        </div>
-      </div>
-
-      <div className="text-center space-y-1.5">
-        <p className="text-ui-sm font-semibold text-rm-text">Failed to load</p>
-        <p className="text-ui-xs text-rm-text-muted max-w-[200px] leading-relaxed">
-          {message}
-        </p>
-      </div>
-
-      <ButtonBase
-        onClick={onRetry}
-        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated pointer-fine:hover:bg-rm-tint-1 border border-rm-border rounded-xl text-ui-sm font-semibold text-rm-text transition-colors"
-      >
+    <div
+      role="alert"
+      className="flex flex-col items-center gap-3 px-6 py-12 text-center"
+    >
+      <Icon name="offline" size="2xl" className="text-rm-text-muted" />
+      <p className="text-ui-md font-semibold text-rm-danger-ink">
+        Unable to load this tab
+      </p>
+      <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
+        {message}
+      </p>
+      <Button variant="secondary" onClick={onRetry}>
         <Icon name="refresh" size="sm" />
-        Retry
-      </ButtonBase>
+        Try again
+      </Button>
     </div>
   );
 }
 
+/** Empty tab (14.1): muted illustration and a title, no box. */
 function TabEmptyState({
   icon,
   label,
@@ -1742,9 +1717,9 @@ function TabEmptyState({
   label: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4 text-rm-text-muted">
-      <div className="opacity-20">{icon}</div>
-      <span className="text-ui-sm font-medium">{label}</span>
+    <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <div className="text-rm-text-muted">{icon}</div>
+      <p className="text-ui-md font-semibold text-rm-text">{label}</p>
     </div>
   );
 }
