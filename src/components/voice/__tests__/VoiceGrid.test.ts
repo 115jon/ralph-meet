@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
+import { gridColumnsClass } from "@/components/voice/grid-columns";
 import type { GridItem, VoiceActions } from "@/components/voice/types";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -241,5 +242,46 @@ describe("VoiceGrid focused stage", () => {
     expect(markup).toContain('data-focused-stage="true"');
     expect(markup).toContain('data-preview-toggle="true"');
     expect(markup).toContain("Resume preview");
+  });
+});
+
+describe("VoiceGrid scroll and columns", () => {
+  const avatars = (count: number) =>
+    Array.from({ length: count }, (_, i) =>
+      makeFocusedAvatarItem({ id: `a-${i}`, userId: `u-${i}`, avatar: null }),
+    );
+
+  it("starts an overflowing grid at the top instead of centring it off-screen", () => {
+    const markup = render(avatars(6), null);
+    // `safe center` centres a short grid and falls back to start once the
+    // tiles overflow, so the first rows stay reachable (VC-21).
+    expect(markup).toContain("place-content-[safe_center]");
+    expect(markup).not.toMatch(/place-content-center(?![-\w])/);
+    expect(markup).toContain("overflow-y-auto");
+    expect(markup).toContain("overscroll-contain");
+    // Rows size to the 16:9 tiles rather than squashing them into the box.
+    expect(markup).toContain("auto-rows-max");
+    // The scrollbar is no longer hidden three ways.
+    expect(markup).not.toContain("scrollbar-hide");
+    expect(markup).not.toContain("no-scrollbar");
+  });
+
+  it("uses the spec insets: gap-2/p-4 on phones, gap-3/p-6 from md", () => {
+    const markup = render(avatars(3), null);
+    for (const token of ["gap-2", "md:gap-3", "p-4", "md:p-6"]) {
+      expect(markup).toContain(token);
+    }
+    expect(markup).not.toContain("pt-20");
+  });
+
+  it("picks columns from the stage's own width, capped by head count", () => {
+    expect(gridColumnsClass(1)).toContain("grid-cols-1");
+    expect(gridColumnsClass(4)).toBe("grid-cols-1 @min-[560px]:grid-cols-2");
+    expect(gridColumnsClass(6)).toContain("@min-[1000px]:grid-cols-3");
+    expect(gridColumnsClass(12)).toContain("@min-[1200px]:grid-cols-4");
+    for (const count of [1, 4, 9, 16, 30]) {
+      // Container queries only; no viewport breakpoints in the stage.
+      expect(gridColumnsClass(count)).not.toMatch(/(^|\s)(sm|md|lg|xl):/);
+    }
   });
 });

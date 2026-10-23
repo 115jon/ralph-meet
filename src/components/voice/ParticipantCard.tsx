@@ -16,6 +16,10 @@ import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
 
+/* Tile avatar: 64 by default, 80 from a 320px tile, 112 from 448; 48 in
+ * the 160px members tray. Driven by the tile's own `@container`. */
+const AVATAR_SIZE_TILE = "size-16 @min-[320px]:size-20 @min-[448px]:size-28";
+
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({
     default: mod.StreamContextMenu,
@@ -106,6 +110,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     !isPreviewHidden;
   const shouldShowFocusedStreamOverlay =
     isScreen && isTray && isFocused && shouldRenderThumbnailPoster;
+  const AVATAR_SIZE = isTray ? "size-12" : AVATAR_SIZE_TILE;
   const isLoadingStream =
     (isCamera || isScreen) &&
     !item.stream &&
@@ -116,14 +121,17 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     <>
       <div
         className={cn(
-          "@container isolate relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
-          isFocused && "ring-2 ring-rm-text/20 z-50",
-          item.isSpeaking && "ring-2 ring-primary z-20",
-          item.isRinging && "ring-2 ring-primary/50 animate-pulse z-20",
-          !isFocused &&
-            !item.isSpeaking &&
-            !item.isRinging &&
-            "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
+          // Tile (12.13): surface + hairline ring, its own stacking context
+          // so nothing inside paints over the header or dock (VC-17).
+          "@container isolate relative group aspect-video h-full w-full cursor-pointer overflow-hidden rounded-xl bg-rm-bg-surface",
+          // Speaking is presence green, never the accent (accent = selected).
+          item.isSpeaking
+            ? "ring-2 ring-rm-status-online"
+            : item.isRinging
+              ? "ring-2 ring-rm-status-online/50 motion-safe:animate-pulse"
+              : isFocused
+                ? "ring-2 ring-rm-accent-ink"
+                : "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
         )}
       >
         <button
@@ -144,7 +152,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Selected Overlay */}
         {isFocused && (
-          <div className="absolute inset-0 z-10 bg-black/40 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in duration-300" />
+          <div className="pointer-events-none absolute inset-0 z-10 bg-black/40 animate-in fade-in duration-200" />
         )}
 
         {/* Background Effect */}
@@ -196,7 +204,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {shouldShowFocusedStreamOverlay && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 pointer-events-none animate-in fade-in duration-300">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/30 animate-in fade-in duration-200">
             <Icon
               name="screenShare"
               state="active"
@@ -210,7 +218,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isPreviewHidden && (
           <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70">
             <Icon name="eyeOff" size="xl" className="text-white/50" />
-            <span className="text-ui-2xs font-semibold text-white/60 uppercase tracking-[0.08em]">
+            <span className="text-ui-xs font-medium text-white/70">
               Preview paused
             </span>
           </div>
@@ -221,40 +229,36 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Watch Stream Prompt / Thumbnail Overlay */}
         {shouldShowWatchPrompt && (
-          <div className="absolute inset-0 z-10 bg-rm-bg-primary flex flex-col items-center justify-center p-2 text-center overflow-hidden">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 overflow-hidden bg-rm-bg-surface p-2 text-center @min-[240px]:gap-2">
             {streamThumbnails[item.userId] && (
               <img
                 src={streamThumbnails[item.userId]}
-                className="absolute inset-0 w-full h-full object-cover blur-sm opacity-60 scale-105 pointer-events-none"
-                alt="Stream Preview"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                alt=""
               />
             )}
-            <div className="relative z-10 flex flex-col items-center justify-center p-1 @md:p-2 w-full h-full overflow-hidden">
-              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 @md:w-8 @md:h-8 text-rm-text-muted shadow-lg flex items-center justify-center transition-transform duration-200">
-                <Icon
-                  name="monitor"
-                  size="xs"
-                  className="@md:w-4 @md:h-4 text-rm-text-muted shrink-0"
-                />
-              </div>
-
-              <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 @md:mt-2">
-                <h3 className="text-ui-2xs @md:text-ui-2xs font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
-                  <InlineEmojiText text={`${streamDisplayName}'s Stream`} />
-                </h3>
-              </div>
-
-              <Button
-                size="xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  voiceActions?.onToggleWatch?.(item.userId);
-                }}
-                className="mt-1 max-w-full truncate text-ui-2xs font-semibold uppercase tracking-[0.08em] @md:mt-2 @md:h-7 @md:px-3"
-              >
-                Watch Stream
-              </Button>
-            </div>
+            {/* Theme scrim over the frame so the prompt reads on any image. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-rm-bg-surface/85"
+            />
+            <span className="relative flex size-8 shrink-0 items-center justify-center rounded-lg bg-rm-tint-2 text-rm-text-secondary">
+              <Icon name="monitor" size="sm" />
+            </span>
+            <h3 className="relative w-full truncate px-1 text-ui-xs font-semibold text-rm-text">
+              <InlineEmojiText text={`${streamDisplayName}'s Stream`} />
+            </h3>
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                voiceActions?.onToggleWatch?.(item.userId);
+              }}
+              className="relative max-w-full truncate"
+            >
+              Watch stream
+            </Button>
           </div>
         )}
 
@@ -264,8 +268,12 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !isPreviewHidden &&
           !shouldRenderThumbnailPoster && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4">
+              {/* Avatar size follows the tile's own width, so it never
+                  outgrows a short tile (VC-09): 9/16 of 240 is 135. */}
               {item.avatar ? (
-                <div className="h-20 w-20 overflow-visible rounded-full shadow-lg @md:h-28 @md:w-28">
+                <div
+                  className={cn("overflow-visible rounded-full", AVATAR_SIZE)}
+                >
                   <AvatarImage
                     src={getAuthAssetUrl(item.avatar)}
                     alt={item.name}
@@ -273,10 +281,14 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   />
                 </div>
               ) : (
-                <div className="w-20 h-20 @md:w-28 @md:h-28 flex items-center justify-center bg-black/40 rounded-full shadow-lg">
-                  <span className="text-ui-2xl @md:text-display-lg font-semibold text-white">
-                    {item.name[0]?.toUpperCase()}
-                  </span>
+                <div
+                  className={cn(
+                    "flex items-center justify-center rounded-full bg-rm-tint-2 font-semibold text-rm-text",
+                    AVATAR_SIZE,
+                    isTray ? "text-ui-md" : "text-ui-2xl",
+                  )}
+                >
+                  {item.name[0]?.toUpperCase()}
                 </div>
               )}
 
@@ -312,11 +324,9 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Ringing Overlay Label */}
         {item.isRinging && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 pointer-events-none">
-            <span className="bg-rm-bg-surface/80 rounded-full px-3 py-1 text-ui-xs font-semibold text-rm-text animate-pulse shadow-xl">
-              Calling...
-            </span>
-          </div>
+          <span className="pointer-events-none absolute top-2 left-2 z-10 rounded-sm bg-black/60 px-1.5 py-0.5 text-ui-xs font-medium text-white">
+            Calling…
+          </span>
         )}
 
         {shouldShowWatchers && (
@@ -325,54 +335,46 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
 
-        {/* Status Indicators & Labels */}
-        <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex items-center gap-2">
-          {isScreen ? (
-            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border">
-              <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[120px]">
-                <InlineEmojiText text={streamDisplayName} />
+        {/* Name chip (12.13): a media overlay, so black/60 + white on every
+            theme. Status glyphs render only when there is a status. */}
+        <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex max-w-[calc(100%-3rem)] items-center gap-1 rounded-sm bg-black/60 px-1.5 py-0.5 text-white">
+          {!isScreen && item.isDeafened && (
+            <Icon
+              name="deafen"
+              state="off"
+              size="xs"
+              label="Deafened"
+              className="shrink-0 text-white/80"
+            />
+          )}
+          {!isScreen &&
+            item.isMuted &&
+            (item.serverMute ? (
+              <span className="flex shrink-0 items-center justify-center rounded-xs bg-rm-danger p-0.5 text-rm-on-danger">
+                <Icon name="mic" state="off" size="xs" label="Server muted" />
               </span>
-            </div>
-          ) : (
-            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                {item.isDeafened && (
-                  <Icon
-                    name="deafen"
-                    state="off"
-                    size="xs"
-                    className="text-rm-text-muted shrink-0"
-                  />
-                )}
-                {item.isMuted && (
-                  <Icon
-                    name="mic"
-                    state="off"
-                    size="xs"
-                    className={
-                      item.serverMute
-                        ? "text-destructive shrink-0"
-                        : "text-rm-text-muted shrink-0"
-                    }
-                  />
-                )}
-              </div>
-
-              <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[100px]">
-                <InlineEmojiText text={streamDisplayName} />
-              </span>
-              {isCamera && (
-                <span className="bg-rm-bg-surface/60 px-1.5 rounded-xs text-ui-2xs font-bold text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
-                  <QualityMonitor
-                    track={item.stream?.getVideoTracks()[0]}
-                    signaledQuality={null}
-                    sfu={voiceActions?.sfu}
-                    userId={item.userId}
-                    type="cam"
-                  />
-                </span>
-              )}
-            </div>
+            ) : (
+              <Icon
+                name="mic"
+                state="off"
+                size="xs"
+                label="Muted"
+                className="shrink-0 text-white/80"
+              />
+            ))}
+          <span className="min-w-0 truncate text-ui-xs font-medium">
+            <InlineEmojiText text={streamDisplayName} />
+          </span>
+          {isCamera && (
+            <span className="shrink-0 rounded-xs bg-white/15 px-1 text-ui-2xs font-semibold tabular-nums">
+              <QualityMonitor
+                track={item.stream?.getVideoTracks()[0]}
+                signaledQuality={null}
+                sfu={voiceActions?.sfu}
+                userId={item.userId}
+                type="cam"
+              />
+            </span>
           )}
         </div>
 
@@ -416,10 +418,11 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {!isTray && (
           <div className="pointer-fine:pointer-events-none absolute bottom-2 right-2 z-10 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100">
             <IconButton
-              aria-label="More options"
+              aria-label={`More options for ${item.name}`}
               icon="more"
               size="xs"
-              className="rounded-md bg-rm-bg-primary/60 border border-rm-border"
+              variant="plain"
+              className="bg-black/60 text-white"
               onClick={(e) => {
                 e.stopPropagation();
                 setContextMenu({ x: e.clientX, y: e.clientY, isMini: true });
@@ -427,20 +430,6 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             />
           </div>
         )}
-        {isTray && (
-          <div className="pointer-events-none absolute top-2 right-2 z-10 opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
-            <div className="bg-rm-bg-primary/60 p-1 rounded-lg border border-rm-border">
-              <Icon
-                name="chevronDown"
-                size="xs"
-                className="text-rm-text-muted"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Hover Overlay */}
-        <div className="absolute inset-0 bg-black opacity-0 pointer-fine:group-hover:opacity-10 transition-opacity pointer-events-none" />
       </div>
 
       {shouldRenderStreamMenu && renderedContextMenu && (

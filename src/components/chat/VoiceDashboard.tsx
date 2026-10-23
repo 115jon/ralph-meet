@@ -17,6 +17,7 @@ import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
+import { dockIconState, dockState } from "@/components/ui/dock";
 import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -36,18 +37,18 @@ import { Icon } from "@/components/ui/icon";
 import { NoiseReductionPanel } from "./NoiseReductionPanel";
 import { SpatialAudioPanel } from "./SpatialAudioPanel";
 
-/* Quiet Pro: compact dock row in the sidebar voice panel. Rest = neutral
- * tint; live (camera / screen share on) = the only accent fill; open
- * pickers = stronger neutral tint. */
+/* Quiet Pro: compact dock row in the sidebar voice panel, painted with the
+ * shared dock recipe (`dockState`): rest = neutral tint, open picker =
+ * stronger tint, live camera / share = accent tint + Fill glyph. No solids. */
 const ACTION_BTN = cn(
   PRESS,
   HIT,
   DISABLED,
   "group flex h-8 items-center justify-center rounded-md outline-none",
 );
-const ACTION_REST = "bg-rm-tint-1 text-rm-text";
-const ACTION_OPEN = "bg-rm-tint-3 text-rm-text";
-const ACTION_LIVE = "bg-rm-accent-tint text-rm-accent-ink [--hover-o:0.12]";
+const ACTION_REST = dockState("rest");
+const ACTION_OPEN = dockState("open");
+const ACTION_LIVE = dockState("live");
 const HEADER_ICON_BTN = cn(
   PRESS,
   HIT,
@@ -801,16 +802,11 @@ export function VoiceDashboard({
                       isCameraActive ? ACTION_LIVE : ACTION_REST,
                     )}
                   >
-                    {isCameraActive ? (
-                      <Icon
-                        name="camera"
-                        state="active"
-                        size="md"
-                        className=""
-                      />
-                    ) : (
-                      <Icon name="cameraOff" size="md" className="" />
-                    )}
+                    <Icon
+                      name="camera"
+                      state={dockIconState(isCameraActive ? "live" : "rest")}
+                      size="md"
+                    />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12}>

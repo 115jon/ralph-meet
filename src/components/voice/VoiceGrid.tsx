@@ -13,6 +13,7 @@ import { QualityMonitor } from "./QualityMonitor";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
+import { gridColumnsClass } from "./grid-columns";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({
@@ -130,7 +131,7 @@ export const VoiceGrid = React.memo(
       return (
         <div
           data-focused-stage="true"
-          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary group/stage cursor-pointer transition-shadow pointer-fine:hover:ring-1 pointer-fine:hover:ring-rm-border-strong"
+          className="group/stage relative isolate flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary"
         >
           <StickerReactionsOverlay sfu={voiceActions?.sfu} />
           <button
@@ -195,22 +196,22 @@ export const VoiceGrid = React.memo(
               data-focused-visual="true"
               className="w-full h-full flex items-center justify-center relative overflow-hidden z-10 pointer-events-none"
             >
-              <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-300 relative z-10 w-full h-full p-8 md:p-16">
-                <div className="relative aspect-video w-full max-w-[600px] md:max-w-[800px] lg:max-w-[1000px] flex items-center justify-center">
-                  <div className="w-full h-full shadow-2xl rounded-2xl flex items-center justify-center overflow-hidden bg-rm-bg-elevated/40 transition-ui">
+              <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4 animate-in fade-in zoom-in-[0.97] duration-200 md:p-16">
+                <div className="relative flex aspect-video w-full max-w-[1000px] items-center justify-center">
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-rm-bg-surface ring-1 ring-rm-border">
                     {focusedItem.avatar ? (
                       <img
                         src={getAuthAssetUrl(focusedItem.avatar)}
                         alt={focusedItem.name}
-                        className="w-full h-full object-contain drop-shadow-2xl"
+                        className="h-full w-full object-contain"
                       />
                     ) : (
-                      <span className="text-8xl md:text-9xl font-bold text-white">
+                      <span className="flex size-24 items-center justify-center rounded-full bg-rm-tint-2 text-ui-2xl font-semibold text-rm-text md:size-32">
                         {focusedItem.name[0]?.toUpperCase()}
                       </span>
                     )}
                     {isLoadingStream && (
-                      <div className="absolute inset-0 z-20 animate-in fade-in duration-300">
+                      <div className="absolute inset-0 z-10 animate-in fade-in duration-200">
                         <StreamLoadingIndicator className="bg-rm-bg-surface/90 border border-rm-border" />
                       </div>
                     )}
@@ -225,7 +226,7 @@ export const VoiceGrid = React.memo(
             voiceActions?.togglePreviewHidden && (
               <div
                 data-preview-toggle="true"
-                className="pointer-fine:pointer-events-none absolute top-24 left-4 z-50 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover/stage:pointer-events-auto pointer-fine:group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 md:left-6"
+                className="pointer-fine:pointer-events-none absolute top-16 left-4 z-10 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover/stage:pointer-events-auto pointer-fine:group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 md:left-6"
               >
                 <button
                   type="button"
@@ -273,70 +274,42 @@ export const VoiceGrid = React.memo(
             </Suspense>
           )}
 
-          {showFocusedVolume && (
-            <div className="absolute bottom-6 right-6 z-20 w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="rounded-lg border border-rm-border bg-rm-bg-primary/90 shadow-lg">
-                <div className="flex items-center justify-between px-4 pt-3">
-                  <div className="flex items-center gap-2 text-rm-text">
-                    <Icon
-                      name="voiceChannel"
-                      size="xs"
-                      className="text-rm-text-muted shrink-0"
-                    />
-                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
-                      {isFocusedScreen ? "Stream Volume" : "User Volume"}
-                    </span>
-                  </div>
-                  <span className="text-ui-2xs font-bold tabular-nums text-rm-text-muted">
-                    {focusedPeerVolume}%
-                  </span>
-                </div>
-                <Slider
-                  label={isFocusedScreen ? "Stream Volume" : "User Volume"}
-                  value={focusedPeerVolume}
-                  onChange={(value) => {
-                    if (!focusedUserId) return;
-                    if (isFocusedScreen)
-                      setPeerStreamVolume(focusedUserId, value);
-                    else setPeerVolume(focusedUserId, value);
-                  }}
+          {/* Bottom of the stage: the name chip over the volume card on a
+              phone, side by side above md, both inside the stage (VC-16). */}
+          <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 flex flex-col items-start gap-2 md:flex-row md:items-end md:justify-between">
+            <div className="flex max-w-full items-center gap-1.5 rounded-sm bg-black/60 px-1.5 py-0.5 text-white animate-in fade-in duration-200">
+              {focusedItem.isDeafened && (
+                <Icon
+                  name="deafen"
+                  state="off"
+                  size="xs"
+                  label="Deafened"
+                  className="shrink-0 text-white/80"
                 />
-              </div>
-            </div>
-          )}
-
-          <div className="absolute bottom-6 left-6 z-20 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-rm-bg-primary/85 px-3 py-1.5 rounded-md border border-rm-border flex items-center gap-3 shadow-md">
-              <div className="flex items-center gap-1.5">
-                {focusedItem.isDeafened && (
-                  <Icon
-                    name="deafen"
-                    state="off"
-                    size="xs"
-                    className="text-rm-text-muted shrink-0"
-                  />
-                )}
-                {focusedItem.isMuted && (
+              )}
+              {focusedItem.isMuted &&
+                (focusedItem.serverMute ? (
+                  <span className="flex shrink-0 items-center justify-center rounded-xs bg-rm-danger p-0.5 text-rm-on-danger">
+                    <Icon
+                      name="mic"
+                      state="off"
+                      size="xs"
+                      label="Server muted"
+                    />
+                  </span>
+                ) : (
                   <Icon
                     name="mic"
                     state="off"
                     size="xs"
-                    className={
-                      focusedItem.serverMute
-                        ? "text-destructive shrink-0"
-                        : "text-rm-text-muted shrink-0"
-                    }
+                    label="Muted"
+                    className="shrink-0 text-white/80"
                   />
-                )}
-              </div>
-
-              <p className="text-ui-xs font-semibold text-rm-text">
-                {focusedLabel}
-              </p>
-
+                ))}
+              <p className="truncate text-ui-xs font-medium">{focusedLabel}</p>
               {(focusedItem.type === "screen" ||
                 focusedItem.type === "camera") && (
-                <span className="bg-rm-bg-surface/60 px-1.5 rounded-xs text-ui-2xs font-bold text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
+                <span className="shrink-0 rounded-xs bg-white/15 px-1 text-ui-2xs font-semibold tabular-nums">
                   <QualityMonitor
                     track={focusedItem.stream?.getVideoTracks()[0]}
                     signaledQuality={
@@ -351,6 +324,36 @@ export const VoiceGrid = React.memo(
                 </span>
               )}
             </div>
+
+            {showFocusedVolume && (
+              <div className="pointer-events-auto w-full rounded-lg border border-rm-border bg-rm-bg-surface shadow-lg animate-in fade-in duration-200 md:w-[360px] dark:bg-rm-bg-elevated">
+                <div className="flex items-center justify-between px-4 pt-3">
+                  <div className="flex items-center gap-2 text-rm-text">
+                    <Icon
+                      name="voiceChannel"
+                      size="sm"
+                      className="shrink-0 text-rm-text-muted"
+                    />
+                    <span className="text-ui-xs font-medium">
+                      {isFocusedScreen ? "Stream volume" : "User volume"}
+                    </span>
+                  </div>
+                  <span className="text-ui-xs font-medium tabular-nums text-rm-text-muted">
+                    {focusedPeerVolume}%
+                  </span>
+                </div>
+                <Slider
+                  label={isFocusedScreen ? "Stream Volume" : "User Volume"}
+                  value={focusedPeerVolume}
+                  onChange={(value) => {
+                    if (!focusedUserId) return;
+                    if (isFocusedScreen)
+                      setPeerStreamVolume(focusedUserId, value);
+                    else setPeerVolume(focusedUserId, value);
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       );
@@ -392,24 +395,14 @@ export const VoiceGrid = React.memo(
     return (
       <div className="@container h-full min-h-0 w-full">
         <div
+          data-voice-grid
           className={cn(
-            "grid gap-4 w-full h-full place-content-center items-center pt-20 px-6 pb-6 overflow-y-auto no-scrollbar scrollbar-hide",
-            items.length === 1
-              ? "grid-cols-1 max-w-5xl mx-auto"
-              : items.length === 2
-                ? "grid-cols-1 @3xl:grid-cols-2"
-                : items.length <= 4
-                  ? "grid-cols-1 @lg:grid-cols-2"
-                  : items.length <= 9
-                    ? "grid-cols-1 @lg:grid-cols-2 @5xl:grid-cols-3"
-                    : items.length <= 16
-                      ? "grid-cols-1 @lg:grid-cols-2 @5xl:grid-cols-3 @7xl:grid-cols-4"
-                      : items.length <= 25
-                        ? "grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4 @7xl:grid-cols-5"
-                        : "grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4 @7xl:grid-cols-5 @min-[1536px]:grid-cols-6",
+            // `safe center` centres a short grid but starts at the top once it
+            // overflows, so the first tiles stay reachable (VC-21).
+            "grid h-full w-full auto-rows-max place-content-[safe_center] items-center gap-2 overflow-y-auto overscroll-contain p-4 md:gap-3 md:p-6",
+            gridColumnsClass(items.length),
             className,
           )}
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
           {items.map((item) => (
             <ParticipantCard
