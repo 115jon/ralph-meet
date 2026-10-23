@@ -170,7 +170,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                 </div>
 
                 {/* Card Content */}
-                <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-ui hover:border-primary/30">
+                <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-ui pointer-fine:hover:border-primary/30">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2 items-center">
                       <span className="font-semibold text-sm text-rm-text">

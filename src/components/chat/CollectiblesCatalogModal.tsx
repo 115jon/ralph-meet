@@ -503,7 +503,7 @@ function CatalogItemCard({
         "overflow-hidden rounded-xl border bg-rm-bg-surface transition-colors",
         isSelected
           ? "border-primary/70"
-          : "border-rm-border hover:border-rm-border-strong",
+          : "border-rm-border pointer-fine:hover:border-rm-border-strong",
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -537,8 +537,8 @@ function CatalogItemCard({
           className={cn(
             "h-8 w-full gap-1.5",
             isSelected
-              ? "bg-primary/15 text-primary hover:bg-primary/20"
-              : "bg-primary text-primary-foreground hover:bg-primary/90",
+              ? "bg-primary/15 text-primary pointer-fine:hover:bg-primary/20"
+              : "bg-primary text-primary-foreground pointer-fine:hover:bg-primary/90",
           )}
           onClick={() => handleApply(item)}
           disabled={Boolean(applyingId)}
@@ -707,7 +707,7 @@ export function CollectiblesCatalogModal({
           <Button
             type="button"
             variant="outline"
-            className="h-9 border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+            className="h-9 border-rm-border bg-rm-bg-elevated text-rm-text pointer-fine:hover:bg-rm-bg-hover"
             onClick={handleRefresh}
             disabled={refreshing}
           >
@@ -720,7 +720,7 @@ export function CollectiblesCatalogModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
             aria-label="Close collectibles catalog"
           >
             <Icon name="close" size="md" />
@@ -739,7 +739,7 @@ export function CollectiblesCatalogModal({
                     "shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition-colors",
                     activeKind === kind
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-rm-border bg-rm-bg-elevated text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                      : "border-rm-border bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
                   )}
                 >
                   {KIND_LABELS[kind]}
@@ -768,7 +768,7 @@ export function CollectiblesCatalogModal({
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+                className="h-9 border-rm-border bg-rm-bg-elevated text-rm-text pointer-fine:hover:bg-rm-bg-hover"
                 onClick={() => handleApply(null)}
                 disabled={Boolean(applyingId)}
               >

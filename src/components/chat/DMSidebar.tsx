@@ -157,7 +157,7 @@ export default function DMSidebar({
             "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-1.5 text-left transition-ui outline-none enabled:active:scale-[0.98]",
             isFriendsActive
               ? "bg-rm-bg-active text-rm-text"
-              : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
+              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-elevated/50 pointer-fine:hover:text-rm-text-secondary",
           )}
           onClick={onShowFriends}
         >
@@ -175,7 +175,7 @@ export default function DMSidebar({
             "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-1.5 text-left transition-ui outline-none enabled:active:scale-[0.98]",
             isShopActive
               ? "bg-rm-bg-active text-rm-text"
-              : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
+              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-elevated/50 pointer-fine:hover:text-rm-text-secondary",
           )}
           onClick={onShowShop}
         >

@@ -75,7 +75,7 @@ function renderInline(
             href={linkMatch[2]}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary hover:underline"
+            className="text-primary pointer-fine:hover:underline"
           >
             {linkMatch[1]}
           </a>,
@@ -118,7 +118,7 @@ function renderInline(
           href={cleanUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline break-all"
+          className="text-primary pointer-fine:hover:underline break-all"
         >
           {cleanUrl}
         </a>,

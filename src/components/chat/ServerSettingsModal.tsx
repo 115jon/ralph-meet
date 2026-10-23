@@ -58,7 +58,7 @@ function SettingsSidebar({
           "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
           activeTab === "overview"
             ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-            : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+            : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
         )}
       >
         <Icon name="sliders" size="sm" /> Overview
@@ -72,7 +72,7 @@ function SettingsSidebar({
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "roles"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-              : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+              : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
           <Icon name="shield" size="sm" /> Roles
@@ -90,7 +90,7 @@ function SettingsSidebar({
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "bans"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-              : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+              : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
           <Icon name="ban" size="sm" /> Bans
@@ -105,7 +105,7 @@ function SettingsSidebar({
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "invites"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-              : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+              : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
           <Icon name="link" size="sm" /> Invites
@@ -120,7 +120,7 @@ function SettingsSidebar({
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "audit"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-              : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+              : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
           <Icon name="auditLog" size="sm" /> Audit Log
@@ -153,7 +153,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
           {bans.map((ban: any) => (
             <div
               key={ban.user_id}
-              className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 transition-colors hover:border-rm-text-muted/20"
+              className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 transition-colors pointer-fine:hover:border-rm-text-muted/20"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-sm font-bold text-destructive">
                 {(ban.username ?? "?")[0].toUpperCase()}
@@ -175,7 +175,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
               <button
                 type="button"
                 onClick={() => handleUnban(ban.user_id)}
-                className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-ui hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-ui pointer-fine:hover:border-destructive/30 pointer-fine:hover:bg-destructive/10 pointer-fine:hover:text-destructive"
               >
                 <Icon name="trash" size="xs" /> Unban
               </button>
@@ -236,7 +236,7 @@ function OverviewTab({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-ui hover:border-primary/50 hover:bg-rm-bg-elevated"
+                className="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-ui pointer-fine:hover:border-primary/50 pointer-fine:hover:bg-rm-bg-elevated"
                 aria-label={
                   iconPreview || (currentIconUrl && !removeIcon)
                     ? "Change server icon"
@@ -310,7 +310,7 @@ function OverviewTab({
                         setIconPreview(null);
                       }
                     }}
-                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] w-fit text-rm-text-muted hover:text-destructive transition-colors"
+                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] w-fit text-rm-text-muted pointer-fine:hover:text-destructive transition-colors"
                   >
                     Remove Icon
                   </button>
@@ -391,7 +391,7 @@ function OverviewTab({
             type="button"
             onClick={handleSave}
             disabled={saving || (!name.trim() && !iconFile && !removeIcon)}
-            className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
+            className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
           >
             {saving && (
               <Icon name="loader" size="sm" className="animate-spin" />
@@ -417,7 +417,7 @@ function OverviewTab({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-ui hover:brightness-110"
+                className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-ui pointer-fine:hover:brightness-110"
               >
                 Delete Server
               </button>
@@ -442,7 +442,7 @@ function OverviewTab({
                     type="button"
                     onClick={handleDelete}
                     disabled={deleteText !== initialServerName}
-                    className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-ui hover:brightness-110 disabled:opacity-40"
+                    className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
                   >
                     Delete Forever
                   </button>
@@ -452,7 +452,7 @@ function OverviewTab({
                       setConfirmDelete(false);
                       setDeleteText("");
                     }}
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-rm-text-muted hover:text-rm-text transition-colors outline-none"
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors outline-none"
                   >
                     Cancel
                   </button>
@@ -709,7 +709,7 @@ export default function ServerSettingsModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
+                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center pointer-fine:hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
                 aria-label="Close server settings"
               >
                 <Icon name="close" size="md" />
@@ -732,7 +732,7 @@ export default function ServerSettingsModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui group"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text transition-ui group"
                   aria-label="Close server settings"
                 >
                   <Icon name="close" size="md" />

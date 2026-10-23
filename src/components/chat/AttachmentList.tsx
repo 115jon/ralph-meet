@@ -113,8 +113,8 @@ export default function AttachmentList({
             className={cn(
               "absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-ui-2xs font-bold uppercase tracking-[0.14em] backdrop-blur-sm transition",
               att.is_nsfw
-                ? "bg-amber-500/85 text-black hover:bg-amber-400"
-                : "bg-black/50 text-white/80 hover:bg-black/65 hover:text-white",
+                ? "bg-amber-500/85 text-black pointer-fine:hover:bg-amber-400"
+                : "bg-black/50 text-white/80 pointer-fine:hover:bg-black/65 pointer-fine:hover:text-white",
             )}
           >
             <Icon name="warning" size="xs" />
@@ -124,7 +124,7 @@ export default function AttachmentList({
             <button
               type="button"
               onClick={() => onRemove(att.id)}
-              className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
+              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
             >
               <Icon name="trash" size="sm" />
             </button>
@@ -173,7 +173,7 @@ export default function AttachmentList({
             <button
               type="button"
               onClick={() => onCancel(p.tempId)}
-              className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text/80 hover:text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
+              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text/80 pointer-fine:hover:text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
             >
               <Icon name="close" size="sm" />
             </button>

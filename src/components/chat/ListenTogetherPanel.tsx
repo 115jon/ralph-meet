@@ -131,7 +131,9 @@ export const listenTogetherQueueRowRenderer = {
       <div
         className={cn(
           "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors sm:gap-3 sm:py-3",
-          isCurrent ? "rounded-2xl bg-primary/10" : "hover:bg-rm-bg-hover/45",
+          isCurrent
+            ? "rounded-2xl bg-primary/10"
+            : "pointer-fine:hover:bg-rm-bg-hover/45",
         )}
       >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center text-xs font-bold tabular-nums text-rm-text-muted">
@@ -210,7 +212,7 @@ export const listenTogetherQueueRowRenderer = {
                   entryId: entry.entryId,
                 })
               }
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label={`Play ${entry.track.title}`}
             >
               <Icon name="play" size="sm" />
@@ -225,7 +227,7 @@ export const listenTogetherQueueRowRenderer = {
                 entryId: entry.entryId,
               })
             }
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors pointer-fine:hover:bg-destructive/10 pointer-fine:hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
             aria-label={`Remove ${entry.track.title}`}
           >
             <Icon name="trash" size="sm" />
@@ -959,7 +961,7 @@ export function ListenTogetherPanel({
                 <button
                   type="submit"
                   disabled={!trimmedInput || !voiceSessionHeaders}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-sm font-semibold text-primary transition-transform hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-sm font-semibold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSearching ? (
                     <Icon name="loader" size="sm" className="animate-spin" />
@@ -977,7 +979,7 @@ export function ListenTogetherPanel({
                   "rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
                   searchFilter === "track"
                     ? "border-primary/40 bg-primary/20 text-primary"
-                    : "border-rm-border bg-rm-bg-hover text-rm-text-muted hover:text-rm-text",
+                    : "border-rm-border bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text",
                 )}
               >
                 Tracks
@@ -989,7 +991,7 @@ export function ListenTogetherPanel({
                   "rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
                   searchFilter === "collection"
                     ? "border-primary/40 bg-primary/20 text-primary"
-                    : "border-rm-border bg-rm-bg-hover text-rm-text-muted hover:text-rm-text",
+                    : "border-rm-border bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text",
                 )}
               >
                 Collections
@@ -1017,7 +1019,7 @@ export function ListenTogetherPanel({
           ) : resolvedPreview ? (
             <div className="space-y-3">
               <div
-                className="flex cursor-pointer gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-3 shadow-[0_12px_30px_oklch(0_0_0_/_0.12)] transition-colors hover:border-primary/45 hover:bg-primary/15"
+                className="flex cursor-pointer gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-3 shadow-[0_12px_30px_oklch(0_0_0_/_0.12)] transition-colors pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-primary/15"
                 title="Double-click to play now"
                 onDoubleClick={playResolvedPreview}
               >
@@ -1067,7 +1069,7 @@ export function ListenTogetherPanel({
                     <button
                       type="button"
                       onClick={queueResolvedPreview}
-                      className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition-transform hover:bg-primary/20 active:scale-[0.96]"
+                      className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96]"
                     >
                       Queue
                     </button>
@@ -1132,7 +1134,7 @@ export function ListenTogetherPanel({
                     setIsSearchFocused(true);
                     void runSearch(query);
                   }}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/35 px-3 text-left text-sm text-rm-text transition-colors hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="flex min-h-11 w-full items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/35 px-3 text-left text-sm text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <Icon
                     name="search"
@@ -1175,7 +1177,7 @@ export function ListenTogetherPanel({
                     className={cn(
                       "flex gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/40 p-3 transition-colors",
                       isTrack &&
-                        "cursor-pointer select-none hover:border-primary/25 hover:bg-rm-bg-active/55",
+                        "cursor-pointer select-none pointer-fine:hover:border-primary/25 pointer-fine:hover:bg-rm-bg-active/55",
                     )}
                     title={isTrack ? "Double-click to play now" : undefined}
                   >
@@ -1219,7 +1221,7 @@ export function ListenTogetherPanel({
                                   "play-next",
                                 )
                               }
-                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
+                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition pointer-fine:hover:bg-primary/20"
                             >
                               Play Next
                             </button>
@@ -1231,7 +1233,7 @@ export function ListenTogetherPanel({
                                   "append",
                                 )
                               }
-                              className="rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-1.5 text-xs font-bold text-rm-text transition hover:bg-rm-bg-active"
+                              className="rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-1.5 text-xs font-bold text-rm-text transition pointer-fine:hover:bg-rm-bg-active"
                             >
                               Queue
                             </button>
@@ -1249,7 +1251,7 @@ export function ListenTogetherPanel({
                               onClick={() =>
                                 void queueSourceUrl(result.sourceUrl)
                               }
-                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
+                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition pointer-fine:hover:bg-primary/20"
                             >
                               Queue Collection
                             </button>
@@ -1339,7 +1341,7 @@ export function ListenTogetherPanel({
                   "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   activeRightTab === "queue"
                     ? "bg-rm-bg-surface text-rm-text shadow-sm"
-                    : "text-rm-text-muted hover:text-rm-text",
+                    : "text-rm-text-muted pointer-fine:hover:text-rm-text",
                 )}
               >
                 <Icon name="playlist" size="sm" />
@@ -1361,7 +1363,7 @@ export function ListenTogetherPanel({
                   "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   activeRightTab === "recently-played"
                     ? "bg-rm-bg-surface text-rm-text shadow-sm"
-                    : "text-rm-text-muted hover:text-rm-text",
+                    : "text-rm-text-muted pointer-fine:hover:text-rm-text",
                 )}
               >
                 Recently played
@@ -1451,7 +1453,7 @@ export function ListenTogetherPanel({
                           "append",
                         )
                       }
-                      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated/60 px-3 text-xs font-bold text-rm-text transition-colors hover:bg-rm-bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated/60 px-3 text-xs font-bold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       <Icon name="playlist" size="sm" />
                       Requeue

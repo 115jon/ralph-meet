@@ -273,7 +273,7 @@ function AccountActionIconButton({
           onClick={onClick}
           disabled={disabled}
           className={cn(
-            "h-6 w-6 rounded-md border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_8px_18px_rgba(0,0,0,0.28)] backdrop-blur-sm hover:bg-rm-bg-hover hover:text-rm-text md:h-7 md:w-7",
+            "h-6 w-6 rounded-md border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_8px_18px_rgba(0,0,0,0.28)] backdrop-blur-sm pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text md:h-7 md:w-7",
             className,
           )}
           aria-label={label}
@@ -319,7 +319,7 @@ function ProfileRailCard({
   return (
     <div
       className={cn(
-        "group/rail relative overflow-hidden rounded-lg border border-rm-border/80 bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_14px_28px_rgba(0,0,0,0.22)] transition duration-200 hover:border-rm-border hover:bg-rm-bg-elevated/80",
+        "group/rail relative overflow-hidden rounded-lg border border-rm-border/80 bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_14px_28px_rgba(0,0,0,0.22)] transition duration-200 pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-elevated/80",
         className,
       )}
       onPointerEnter={onHoverChange ? () => onHoverChange(true) : undefined}
@@ -914,7 +914,7 @@ function ColorField({
                   onClick={handleEyeDropperPick}
                   disabled={!supportsEyeDropper || eyeDropperPending}
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text",
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
                     (!supportsEyeDropper || eyeDropperPending) &&
                       "cursor-not-allowed opacity-45",
                   )}
@@ -972,7 +972,7 @@ function ColorField({
                   type="button"
                   onClick={() => setColorValue(preset)}
                   className={cn(
-                    "h-9 rounded-lg border transition duration-150 hover:-translate-y-[1px]",
+                    "h-9 rounded-lg border transition duration-150 pointer-fine:hover:-translate-y-[1px]",
                     value === preset
                       ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
                       : "border-white/10",
@@ -1032,7 +1032,7 @@ function ColorField({
           <button
             type="button"
             onClick={toggleOpen}
-            className="group relative block h-[46px] w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition hover:-translate-y-[1px] hover:border-white/14"
+            className="group relative block h-[46px] w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition pointer-fine:hover:-translate-y-[1px] pointer-fine:hover:border-white/14"
             aria-labelledby={labelId}
             aria-describedby={helperText ? helperTextId : undefined}
             aria-expanded={open}
@@ -1305,10 +1305,10 @@ function DisplayNameStyleDialog({
                           }))
                         }
                         className={cn(
-                          "aspect-square min-w-0 rounded-xl border p-0 transition hover:-translate-y-[1px]",
+                          "aspect-square min-w-0 rounded-xl border p-0 transition pointer-fine:hover:-translate-y-[1px]",
                           draftStyle.font === option.id
                             ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
-                            : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
+                            : "border-rm-border bg-rm-bg-surface/70 pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-elevated/70",
                         )}
                         aria-label={`Select ${option.label} font`}
                         aria-pressed={draftStyle.font === option.id}
@@ -1356,10 +1356,10 @@ function DisplayNameStyleDialog({
                       setDraftStyle((prev) => ({ ...prev, effect: option.id }))
                     }
                     className={cn(
-                      "aspect-square min-w-0 rounded-xl border p-0 transition hover:-translate-y-[1px]",
+                      "aspect-square min-w-0 rounded-xl border p-0 transition pointer-fine:hover:-translate-y-[1px]",
                       draftStyle.effect === option.id
                         ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
-                        : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
+                        : "border-rm-border bg-rm-bg-surface/70 pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-elevated/70",
                     )}
                     aria-label={`Select ${option.label} effect`}
                     aria-pressed={draftStyle.effect === option.id}
@@ -1508,7 +1508,7 @@ function DisplayNameStyleDialog({
                           type="button"
                           onClick={() => applyPresetColor(preset)}
                           className={cn(
-                            "aspect-square w-full rounded-lg border transition duration-150 hover:-translate-y-[1px]",
+                            "aspect-square w-full rounded-lg border transition duration-150 pointer-fine:hover:-translate-y-[1px]",
                             (activeColorSlot === "primary"
                               ? draftStyle.primaryColor
                               : draftStyle.secondaryColor) === preset
@@ -1786,7 +1786,7 @@ function DisplayNameStyleDialog({
                     "flex h-8 w-8 items-center justify-center rounded-full transition",
                     previewMode === "dark"
                       ? "bg-rm-bg-hover text-rm-text shadow-sm"
-                      : "text-rm-text-muted hover:text-rm-text",
+                      : "text-rm-text-muted pointer-fine:hover:text-rm-text",
                   )}
                   aria-label="Show dark preview"
                   aria-pressed={previewMode === "dark"}
@@ -1800,7 +1800,7 @@ function DisplayNameStyleDialog({
                     "flex h-8 w-8 items-center justify-center rounded-full transition",
                     previewMode === "light"
                       ? "bg-rm-bg-hover text-rm-text shadow-sm"
-                      : "text-rm-text-muted hover:text-rm-text",
+                      : "text-rm-text-muted pointer-fine:hover:text-rm-text",
                   )}
                   aria-label="Show light preview"
                   aria-pressed={previewMode === "light"}
@@ -2995,7 +2995,7 @@ export default function SettingsAccountTab({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md hover:bg-rm-bg-hover hover:text-rm-text"
+              className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
               aria-label="Close profile editor"
             >
               <Icon name="close" size="sm" />
@@ -3085,7 +3085,7 @@ export default function SettingsAccountTab({
                 >
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface px-2 py-1 text-ui-sm font-semibold text-rm-text transition hover:bg-rm-bg-hover"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface px-2 py-1 text-ui-sm font-semibold text-rm-text transition pointer-fine:hover:bg-rm-bg-hover"
                   >
                     <span>Main Profile</span>
                     <Icon
@@ -3101,7 +3101,7 @@ export default function SettingsAccountTab({
                         onClick={() => {
                           if (asModal) setStylesCollapsed(true);
                         }}
-                        className="rounded-lg border border-transparent bg-transparent p-1.5 text-rm-text-muted transition hover:border-rm-border hover:bg-rm-bg-hover hover:text-rm-text"
+                        className="rounded-lg border border-transparent bg-transparent p-1.5 text-rm-text-muted transition pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                         aria-label={
                           asModal ? "Hide styles" : "View profile variants"
                         }
@@ -3147,7 +3147,7 @@ export default function SettingsAccountTab({
                               !currentNameplateSelection &&
                               !nameplateFile
                             }
-                            className="text-destructive hover:bg-destructive/12 hover:text-destructive"
+                            className="text-destructive pointer-fine:hover:bg-destructive/12 pointer-fine:hover:text-destructive"
                           >
                             <Icon name="trash" size="xs" />
                           </AccountActionIconButton>
@@ -3245,7 +3245,7 @@ export default function SettingsAccountTab({
                                 anchor === "rail" ? null : "rail",
                               );
                             }}
-                            className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface/70 outline-none transition-[transform,box-shadow] hover:shadow-[0_12px_26px_rgba(0,0,0,0.25)] focus-visible:ring-2 focus-visible:ring-primary"
+                            className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface/70 outline-none transition-[transform,box-shadow] pointer-fine:hover:shadow-[0_12px_26px_rgba(0,0,0,0.25)] focus-visible:ring-2 focus-visible:ring-primary"
                             aria-label="Open avatar actions"
                             aria-haspopup="true"
                             aria-expanded={avatarMenuOpen}
@@ -3339,7 +3339,7 @@ export default function SettingsAccountTab({
                                 handleRemoveCollectible("avatar_decoration")
                               }
                               disabled={!currentAvatarDecoration}
-                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
+                              className="text-destructive pointer-fine:hover:bg-destructive/12 pointer-fine:hover:text-destructive"
                             >
                               <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
@@ -3433,7 +3433,7 @@ export default function SettingsAccountTab({
                       <button
                         type="button"
                         onClick={() => setDisplayNameStyleEditorOpen(true)}
-                        className="flex h-[48px] w-full items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface/60 px-4 pr-11 text-center outline-none transition-transform duration-200 hover:bg-rm-bg-elevated/80 focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_12px_26px_rgba(0,0,0,0.2)]"
+                        className="flex h-[48px] w-full items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface/60 px-4 pr-11 text-center outline-none transition-transform duration-200 pointer-fine:hover:bg-rm-bg-elevated/80 focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_12px_26px_rgba(0,0,0,0.2)]"
                         aria-label={
                           hasDisplayNameStyle
                             ? "Edit display name style"
@@ -3568,7 +3568,7 @@ export default function SettingsAccountTab({
                               <button
                                 type="button"
                                 onClick={toggleOpen}
-                                className="relative block h-full w-full overflow-hidden rounded-xl border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition hover:-translate-y-[1px]"
+                                className="relative block h-full w-full overflow-hidden rounded-xl border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition pointer-fine:hover:-translate-y-[1px]"
                                 aria-label="Choose banner fallback color"
                                 aria-expanded={open}
                                 title={bannerStatus}
@@ -3617,7 +3617,7 @@ export default function SettingsAccountTab({
                                 setBannerPreview(null);
                               }}
                               disabled={!currentBannerUrl && !bannerFile}
-                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
+                              className="text-destructive pointer-fine:hover:bg-destructive/12 pointer-fine:hover:text-destructive"
                             >
                               <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
@@ -3640,7 +3640,7 @@ export default function SettingsAccountTab({
                                 handleRemoveCollectible("profile_effect")
                               }
                               disabled={!currentProfileEffect}
-                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
+                              className="text-destructive pointer-fine:hover:bg-destructive/12 pointer-fine:hover:text-destructive"
                             >
                               <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
@@ -3653,7 +3653,7 @@ export default function SettingsAccountTab({
                               setProfileMenuAnchor(null);
                               handleOpenCollectibles("profile_effect");
                             }}
-                            className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-lg border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
+                            className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-lg border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] pointer-fine:hover:border-rm-border pointer-fine:hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
                             aria-label="Browse profile effects"
                           >
                             <div className="absolute inset-0 flex items-center justify-center px-3">
@@ -3703,7 +3703,7 @@ export default function SettingsAccountTab({
                                 handleRemoveCollectible("profile_frame")
                               }
                               disabled={!currentProfileFrame}
-                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
+                              className="text-destructive pointer-fine:hover:bg-destructive/12 pointer-fine:hover:text-destructive"
                             >
                               <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
@@ -3716,7 +3716,7 @@ export default function SettingsAccountTab({
                               setProfileMenuAnchor(null);
                               handleOpenCollectibles("profile_frame");
                             }}
-                            className="group/profile-frame relative block h-[88px] w-full cursor-pointer overflow-visible rounded-lg border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
+                            className="group/profile-frame relative block h-[88px] w-full cursor-pointer overflow-visible rounded-lg border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] pointer-fine:hover:border-rm-border pointer-fine:hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
                             aria-label="Browse profile frames"
                           >
                             <div className="absolute inset-0 flex items-center justify-center px-3 overflow-visible">
@@ -3795,7 +3795,7 @@ export default function SettingsAccountTab({
                       ref={profileBannerTriggerRef}
                       type="button"
                       onClick={() => setStylesCollapsed(false)}
-                      className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-ui-xs font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition hover:-translate-x-[40%] lg:flex"
+                      className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-ui-xs font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition pointer-fine:hover:-translate-x-[40%] lg:flex"
                       style={previewThemeStyle}
                       aria-label="Show styles"
                     >
@@ -3939,7 +3939,7 @@ export default function SettingsAccountTab({
                                 anchor === "preview" ? null : "preview",
                               );
                             }}
-                            className="group/preview-avatar relative h-28 w-28 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)] transition-[transform,box-shadow] hover:shadow-[0_20px_52px_rgba(0,0,0,0.48)] focus-visible:ring-2 focus-visible:ring-primary"
+                            className="group/preview-avatar relative h-28 w-28 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)] transition-[transform,box-shadow] pointer-fine:hover:shadow-[0_20px_52px_rgba(0,0,0,0.48)] focus-visible:ring-2 focus-visible:ring-primary"
                             aria-label="Open avatar actions"
                             aria-haspopup="true"
                             aria-expanded={avatarMenuOpen}
@@ -4049,7 +4049,7 @@ export default function SettingsAccountTab({
                               />
                             </div>
                           ) : hasCustomStatus ? (
-                            <div className="group/preview-status inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] pl-3 pr-2 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
+                            <div className="group/preview-status inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] pl-3 pr-2 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]">
                               <button
                                 type="button"
                                 className="min-w-0 flex-1 rounded-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
@@ -4069,7 +4069,7 @@ export default function SettingsAccountTab({
                                         event.stopPropagation();
                                         handleOpenCustomStatusEditor();
                                       }}
-                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition pointer-fine:hover:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
                                       aria-label="Edit custom status"
                                     >
                                       <Icon name="edit" size="sm" />
@@ -4087,7 +4087,7 @@ export default function SettingsAccountTab({
                                         event.stopPropagation();
                                         handleClearCustomStatus();
                                       }}
-                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition pointer-fine:hover:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
                                       aria-label="Clear custom status"
                                     >
                                       <Icon name="trash" size="sm" />
@@ -4104,7 +4104,7 @@ export default function SettingsAccountTab({
                               <TooltipTrigger asChild>
                                 <button
                                   type="button"
-                                  className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                                  className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                                   aria-label="Add custom status"
                                   onClick={handleOpenCustomStatusEditor}
                                 >
@@ -4153,7 +4153,7 @@ export default function SettingsAccountTab({
                                   onClick={() =>
                                     setActivePreviewField("pronouns")
                                   }
-                                  className="group/preview-pronouns rounded-md px-1.5 py-0.5 -mx-1.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                                  className="group/preview-pronouns rounded-md px-1.5 py-0.5 -mx-1.5 text-left transition pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                                 >
                                   {activePreviewField === "pronouns" ? (
                                     <input
@@ -4200,7 +4200,7 @@ export default function SettingsAccountTab({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-xl border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                              className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-xl border border-transparent px-3 py-2 pr-12 text-left transition pointer-fine:hover:border-[color:var(--rm-profile-custom-card-border)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                               aria-label={
                                 hasDisplayNameStyle
                                   ? "Edit display name style"
@@ -4242,7 +4242,7 @@ export default function SettingsAccountTab({
                               event.stopPropagation();
                               setActivePreviewField("pronouns");
                             }}
-                            className="group/preview-pronouns -mx-1.5 rounded-md px-1.5 py-0.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                            className="group/preview-pronouns -mx-1.5 rounded-md px-1.5 py-0.5 text-left transition pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                           >
                             {activePreviewField === "pronouns" ? (
                               <input
@@ -4290,7 +4290,7 @@ export default function SettingsAccountTab({
                         type="button"
                         variant="secondary"
                         size="icon"
-                        className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
+                        className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
                         aria-label="Open profile shop"
                       >
                         <Icon name="shop" size="sm" />
@@ -4301,7 +4301,7 @@ export default function SettingsAccountTab({
                       <button
                         type="button"
                         onClick={() => setActivePreviewField("bio")}
-                        className="group/preview-bio block w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                        className="group/preview-bio block w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition pointer-fine:hover:border-[color:var(--rm-profile-custom-text)]/22 pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                       >
                         {activePreviewField === "bio" ? (
                           <div>
@@ -4392,7 +4392,7 @@ export default function SettingsAccountTab({
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)] transition hover:bg-[var(--rm-profile-custom-card-bg)]"
+                    className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)] transition pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                     style={previewThemeStyle}
                   >
                     <Icon name="add" size="sm" />
@@ -4448,7 +4448,7 @@ export default function SettingsAccountTab({
                           </div>
                           <button
                             type="button"
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
                             aria-label={`Remove rotating game slot ${item}`}
                           >
                             <Icon name="trash" size="sm" />
@@ -4530,7 +4530,7 @@ export default function SettingsAccountTab({
                           <Button
                             onClick={() => handleClaimAccount(candidate.id)}
                             disabled={claimingId !== null}
-                            className="bg-amber-500 text-black hover:bg-amber-400"
+                            className="bg-amber-500 text-black pointer-fine:hover:bg-amber-400"
                           >
                             {claimingId === candidate.id ? (
                               <Icon

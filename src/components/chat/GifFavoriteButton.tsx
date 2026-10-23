@@ -62,7 +62,7 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
                 "h-4.5 w-4.5 transition-ui",
                 isFavorite
                   ? "scale-110 fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400"
-                  : "fill-transparent text-current hover:text-amber-500 dark:hover:text-yellow-400",
+                  : "fill-transparent text-current pointer-fine:hover:text-amber-500 dark:pointer-fine:hover:text-yellow-400",
               )}
               stroke="currentColor"
               strokeWidth="2"

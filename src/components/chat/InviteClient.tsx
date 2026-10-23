@@ -149,7 +149,7 @@ export default function InviteClient() {
             {/* Accept Button */}
             <button
               onClick={joinServer}
-              className="w-full rounded-xl bg-rm-accent px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-rm-accent/20 transition-ui hover:bg-rm-accent-hover hover:shadow-rm-accent/30 active:scale-[0.98] cursor-pointer"
+              className="w-full rounded-xl bg-rm-accent px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-rm-accent/20 transition-ui pointer-fine:hover:bg-rm-accent-hover pointer-fine:hover:shadow-rm-accent/30 active:scale-[0.98] cursor-pointer"
             >
               Accept Invite
             </button>
@@ -157,7 +157,7 @@ export default function InviteClient() {
             {/* Decline link */}
             <button
               onClick={() => navigate({ to: "/chat" })}
-              className="text-xs text-rm-text-muted hover:text-rm-text-secondary transition-colors"
+              className="text-xs text-rm-text-muted pointer-fine:hover:text-rm-text-secondary transition-colors"
             >
               No thanks
             </button>
@@ -210,7 +210,7 @@ export default function InviteClient() {
             </div>
             <button
               onClick={() => navigate({ to: "/chat" })}
-              className="rounded-xl bg-rm-bg-hover px-6 py-2.5 text-sm font-medium text-rm-text ring-1 ring-white/[0.06] transition-colors hover:bg-rm-bg-elevated"
+              className="rounded-xl bg-rm-bg-hover px-6 py-2.5 text-sm font-medium text-rm-text ring-1 ring-white/[0.06] transition-colors pointer-fine:hover:bg-rm-bg-elevated"
             >
               Go to Chat
             </button>

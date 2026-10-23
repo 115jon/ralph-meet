@@ -40,7 +40,7 @@ function TipButton({
         <ButtonBase
           onClick={onClick}
           className={cn(
-            "p-1.5 rounded-md hover:bg-white/10 transition-colors",
+            "p-1.5 rounded-md pointer-fine:hover:bg-white/10 transition-colors",
             className,
           )}
           aria-label={label}
@@ -84,7 +84,7 @@ export function VideoDownloadButton({
               href={getDownloadUrl(src)}
               download={filename}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-black/70 transition-ui border border-white/10"
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 pointer-fine:hover:text-white pointer-fine:hover:bg-black/70 transition-ui border border-white/10"
               aria-label="Download"
             >
               <DownloadIcon />
@@ -137,7 +137,7 @@ export function VideoProgressBar({
       ref={progressRef}
       className={cn(
         "group/bar relative rounded-full cursor-pointer mb-2 transition-ui",
-        dragging ? "h-2" : "h-1 hover:h-1.5",
+        dragging ? "h-2" : "h-1 pointer-fine:hover:h-1.5",
       )}
     >
       <input
@@ -280,7 +280,7 @@ export function VideoControlBar({
         {/* Play / Pause / Replay — no tooltip */}
         <ButtonBase
           onClick={togglePlay}
-          className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
+          className="p-1.5 rounded-md pointer-fine:hover:bg-white/10 transition-colors"
           aria-label={ended ? "Replay" : playing ? "Pause" : "Play"}
         >
           {ended ? <PlayAgainIcon /> : playing ? <PauseIcon /> : <PlayIcon />}
@@ -302,7 +302,7 @@ export function VideoControlBar({
         >
           <ButtonBase
             onClick={toggleMute}
-            className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-md pointer-fine:hover:bg-white/10 transition-colors"
             aria-label={muted ? "Unmute" : "Mute"}
             aria-expanded={volumePopoverOpen}
           >

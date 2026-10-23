@@ -273,15 +273,15 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             className={cn(
               "rounded-lg border px-3 py-1.5 text-sm font-medium transition-ui",
               state.isPaused
-                ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
-                : "border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                ? "border-primary/30 bg-primary/10 text-primary pointer-fine:hover:bg-primary/20"
+                : "border-rm-border text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
             )}
           >
             {state.isPaused ? "Resume Invites" : "Pause Invites"}
           </button>
           <button
             onClick={() => dispatch({ type: "TOGGLE_SHOW_CREATE" })}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui pointer-fine:hover:brightness-110"
           >
             <Icon name="add" size="sm" />
             Create invite link
@@ -438,7 +438,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             <button
               onClick={handleCreate}
               disabled={state.creating}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-ui hover:brightness-110 disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
             >
               {state.creating && (
                 <Icon name="loader" size="xs" className="animate-spin" />
@@ -449,7 +449,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
               onClick={() =>
                 dispatch({ type: "TOGGLE_SHOW_CREATE", payload: false })
               }
-              className="rounded-lg px-3 py-2 text-sm text-rm-text-muted hover:text-rm-text transition-colors outline-none"
+              className="rounded-lg px-3 py-2 text-sm text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors outline-none"
             >
               Cancel
             </button>
@@ -500,7 +500,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             return (
               <div
                 key={invite.code}
-                className="grid grid-cols-[1fr_120px_60px_110px_40px] gap-2 items-center border-b border-rm-border/50 px-4 py-3 transition-colors hover:bg-rm-bg-hover/50 last:border-0"
+                className="grid grid-cols-[1fr_120px_60px_110px_40px] gap-2 items-center border-b border-rm-border/50 px-4 py-3 transition-colors pointer-fine:hover:bg-rm-bg-hover/50 last:border-0"
               >
                 {/* Inviter */}
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -531,7 +531,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                 {/* Code */}
                 <button
                   onClick={() => handleCopy(invite.code)}
-                  className="flex items-center gap-1 text-sm text-rm-text-muted hover:text-rm-text transition-colors group"
+                  className="flex items-center gap-1 text-sm text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors group"
                 >
                   <span className="font-mono">{invite.code}</span>
                   {state.copied === invite.code ? (
@@ -561,7 +561,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                 {/* Revoke */}
                 <button
                   onClick={() => handleRevoke(invite.code)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-rm-text-muted hover:bg-destructive/10 hover:text-destructive transition-ui"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:bg-destructive/10 pointer-fine:hover:text-destructive transition-ui"
                   title="Revoke invite"
                 >
                   <Icon name="close" size="sm" />

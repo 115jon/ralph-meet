@@ -93,7 +93,7 @@ export function VoiceStreamHoverCard({
         className={cn(
           "group/stream-thumb relative block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface text-left shadow-lg transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
           hasWatchAction &&
-            "cursor-pointer hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-xl active:translate-y-0 active:scale-[0.98]",
+            "cursor-pointer pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-primary/30 pointer-fine:hover:shadow-xl active:translate-y-0 active:scale-[0.98]",
           !hasWatchAction && "cursor-default",
         )}
       >
@@ -141,7 +141,7 @@ export function VoiceStreamHoverCard({
         className={cn(
           "mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border text-sm font-bold transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
           hasWatchAction
-            ? "border-primary/20 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98]"
+            ? "border-primary/20 bg-primary text-primary-foreground shadow-lg shadow-primary/20 pointer-fine:hover:bg-primary/90 active:scale-[0.98]"
             : "cursor-default border-rm-border bg-rm-bg-elevated/70 text-rm-text-muted",
         )}
       >

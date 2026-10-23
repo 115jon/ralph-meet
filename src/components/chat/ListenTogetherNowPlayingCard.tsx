@@ -121,7 +121,7 @@ export function ListenTogetherNowPlayingCard({
           className: "border-primary/20 bg-primary/10 text-primary",
         };
   const iconButtonClass = cn(
-    "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/6 bg-rm-bg-hover/75 text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+    "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/6 bg-rm-bg-hover/75 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
     !canControl && "cursor-not-allowed opacity-50",
   );
 
@@ -387,7 +387,7 @@ export function ListenTogetherNowPlayingCard({
               <button
                 type="button"
                 onClick={onOpenQueue}
-                className="inline-flex items-center gap-2 rounded-full border border-white/6 bg-rm-bg-hover/75 px-3 py-1.5 text-ui-2xs font-semibold text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-md:h-8 max-md:w-8 max-md:justify-center max-md:gap-0 max-md:px-0"
+                className="inline-flex items-center gap-2 rounded-full border border-white/6 bg-rm-bg-hover/75 px-3 py-1.5 text-ui-2xs font-semibold text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-md:h-8 max-md:w-8 max-md:justify-center max-md:gap-0 max-md:px-0"
                 aria-label="Open listen together queue"
               >
                 <Icon name="playlist" size="sm" />
@@ -538,7 +538,7 @@ export function ListenTogetherNowPlayingCard({
             }}
             disabled={!canControl}
             className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_srgb,var(--primary)_25%,transparent)] transition-transform hover:bg-primary/90 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_srgb,var(--primary)_25%,transparent)] transition-transform pointer-fine:hover:bg-primary/90 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50",
             )}
             aria-label={
               isPaused ? "Resume shared playback" : "Pause shared playback"
@@ -560,7 +560,7 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="inline-flex h-11 items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-4 text-xs font-bold text-rm-text transition-transform hover:bg-rm-bg-active active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-4 text-xs font-bold text-rm-text transition-transform pointer-fine:hover:bg-rm-bg-active active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon name="skip" size="sm" />
             Skip
@@ -575,7 +575,7 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive transition-transform hover:bg-destructive/15 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 sm:ml-2"
+            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive transition-transform pointer-fine:hover:bg-destructive/15 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 sm:ml-2"
             aria-label="Remove current track"
           >
             <Icon name="trash" size="sm" />
@@ -609,7 +609,7 @@ export function ListenTogetherNowPlayingCard({
             {Math.round(localVolume * 100)}%
           </span>
           <details className="relative shrink-0">
-            <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full text-rm-text-muted outline-none transition-colors hover:bg-rm-bg-hover hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/30 [&::-webkit-details-marker]:hidden">
+            <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full text-rm-text-muted outline-none transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/30 [&::-webkit-details-marker]:hidden">
               <Icon name="privacy" size="sm" />
               <span className="sr-only">Audio options</span>
             </summary>
@@ -662,7 +662,7 @@ export function ListenTogetherNowPlayingCard({
                         "min-w-0 flex-1 rounded-md px-2 py-1.5 text-ui-2xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
                         loudnessPreset === preset
                           ? "bg-rm-bg-active text-rm-text shadow-sm"
-                          : "text-rm-text-muted hover:text-rm-text",
+                          : "text-rm-text-muted pointer-fine:hover:text-rm-text",
                       )}
                     >
                       {label}
@@ -685,7 +685,7 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="shrink-0 rounded-full px-2 py-1 font-semibold transition-colors hover:bg-rm-bg-hover hover:text-rm-text disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-full px-2 py-1 font-semibold transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text disabled:cursor-not-allowed disabled:opacity-50"
           >
             Clear queue
           </button>

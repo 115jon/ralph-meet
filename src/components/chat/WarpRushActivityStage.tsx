@@ -1320,7 +1320,7 @@ export function WarpRushActivityStage({
                     "rounded-full border px-4 py-2 text-sm font-bold transition-colors",
                     preset === option
                       ? "border-cyan-200 bg-cyan-300/20 text-white"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-300/35 hover:text-white",
+                      : "border-white/10 bg-white/[0.04] text-slate-300 pointer-fine:hover:border-cyan-300/35 pointer-fine:hover:text-white",
                   )}
                 >
                   {PRESETS[option].label}
@@ -1342,7 +1342,7 @@ export function WarpRushActivityStage({
                     "rounded-full border px-4 py-2 text-sm font-bold transition-colors",
                     renderScale === option.value
                       ? "border-fuchsia-200 bg-fuchsia-300/18 text-white"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-fuchsia-300/35 hover:text-white",
+                      : "border-white/10 bg-white/[0.04] text-slate-300 pointer-fine:hover:border-fuchsia-300/35 pointer-fine:hover:text-white",
                   )}
                 >
                   {option.label}
@@ -1424,7 +1424,7 @@ export function WarpRushActivityStage({
             <button
               type="button"
               onClick={() => restartRef.current()}
-              className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/20 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-cyan-300/28"
+              className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/20 px-5 py-3 text-sm font-bold text-white transition-colors pointer-fine:hover:bg-cyan-300/28"
             >
               <Icon name="reset" size="sm" />
               Restart run

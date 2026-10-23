@@ -32,7 +32,7 @@ const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
             onDelete(id);
           }
         }}
-        className="p-1.5 bg-black/50 hover:bg-rm-badge text-white/80 hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
+        className="p-1.5 bg-black/50 pointer-fine:hover:bg-rm-badge text-white/80 pointer-fine:hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
         aria-label="Delete image"
       >
         <Icon name="trash" size="sm" />
@@ -191,7 +191,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     const att = attachments[0];
     return renderTile(att, 0, {
       frameClassName:
-        "w-fit min-h-[200px] rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-shadow",
+        "w-fit min-h-[200px] rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl pointer-fine:hover:shadow-primary/5 transition-shadow",
       imageClassName:
         "max-w-full max-h-[450px] min-h-[200px] w-auto object-contain transition-[filter]",
       width: 800,

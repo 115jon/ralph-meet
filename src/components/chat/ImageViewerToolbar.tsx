@@ -169,7 +169,7 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_OUT" })}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
                 aria-label="Zoom out"
                 title="Zoom Out"
               >
@@ -178,7 +178,7 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_IN" })}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
                 aria-label="Zoom in"
                 title="Zoom In"
               >
@@ -192,7 +192,7 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={handleForward}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
                 aria-label="Jump to message"
                 title="Jump to Message"
               >
@@ -205,7 +205,7 @@ export function ImageViewerToolbar({
             download={currentImage.filename}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+            className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
             aria-label="Download attachment"
             title="Download"
           >
@@ -223,7 +223,7 @@ export function ImageViewerToolbar({
                 }));
               }}
               className={cn(
-                "p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none",
+                "p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none",
                 showMore && "bg-primary text-primary-foreground",
               )}
               aria-expanded={showMore}
@@ -238,7 +238,7 @@ export function ImageViewerToolbar({
                   <button
                     type="button"
                     onClick={handleCopyImage}
-                    className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none"
+                    className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
                   >
                     Copy Image
                     <Icon
@@ -251,7 +251,7 @@ export function ImageViewerToolbar({
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none"
+                  className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
                 >
                   Copy Link
                   <Icon
@@ -273,7 +273,7 @@ export function ImageViewerToolbar({
                     "w-full px-3 py-2 text-left text-sm flex items-center justify-between group transition-colors outline-none",
                     showDetails
                       ? "bg-primary/20 text-primary"
-                      : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground",
+                      : "text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
                   )}
                 >
                   View Details
@@ -293,7 +293,7 @@ export function ImageViewerToolbar({
                 <button
                   type="button"
                   onClick={handleCopyId}
-                  className="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors"
+                  className="w-full px-3 py-2 text-left text-sm text-destructive pointer-fine:hover:bg-destructive pointer-fine:hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors"
                 >
                   Copy Attachment ID
                   <Icon
@@ -366,7 +366,7 @@ export function ImageViewerToolbar({
           <button
             type="button"
             onClick={close}
-            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+            className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
             aria-label="Close media viewer"
           >
             <Icon name="close" size="md" />

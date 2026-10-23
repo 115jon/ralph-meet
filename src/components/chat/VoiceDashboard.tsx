@@ -661,7 +661,7 @@ export function VoiceDashboard({
                             onChangeStreamSource?.();
                             setIsStreamMenuOpen(false);
                           }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-rm-accent-ink hover:bg-rm-accent-tint rounded-lg transition-colors flex items-center gap-2"
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint rounded-lg transition-colors flex items-center gap-2"
                         >
                           <Icon name="screenShare" size="sm" /> Change Source
                         </button>
@@ -675,8 +675,8 @@ export function VoiceDashboard({
                           className={cn(
                             "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
                             isStreamingAudio
-                              ? "text-rm-accent-ink hover:bg-rm-accent-tint"
-                              : "text-rm-text-muted hover:bg-rm-bg-hover",
+                              ? "text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint"
+                              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover",
                           )}
                         >
                           <span className="flex items-center gap-2">
@@ -708,8 +708,8 @@ export function VoiceDashboard({
                           className={cn(
                             "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
                             alwaysShowStreamPreview
-                              ? "text-rm-accent-ink hover:bg-rm-accent-tint"
-                              : "text-rm-text-muted hover:bg-rm-bg-hover",
+                              ? "text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint"
+                              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover",
                           )}
                         >
                           <span className="flex items-center gap-2">
@@ -746,7 +746,7 @@ export function VoiceDashboard({
                                     "w-full text-left px-3 py-1.5 text-ui-2xs font-medium rounded-md transition-ui flex items-center justify-between group/q outline-none",
                                     screenQuality === q
                                       ? "bg-rm-accent-tint text-rm-accent-ink"
-                                      : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                                      : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
                                   )}
                                 >
                                   <div className="flex items-center gap-2">

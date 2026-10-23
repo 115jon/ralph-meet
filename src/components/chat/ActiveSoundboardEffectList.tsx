@@ -193,7 +193,7 @@ export function SoundboardPlaybackRow({
                   type="button"
                   onClick={handleTogglePause}
                   aria-label={playback.paused ? "Resume" : "Pause"}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-rm-bg-active hover:text-rm-text"
+                  className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text"
                 >
                   {playback.paused ? (
                     <Icon name="play" size="xs" />
@@ -213,7 +213,7 @@ export function SoundboardPlaybackRow({
                 type="button"
                 onClick={handleStop}
                 aria-label="Stop"
-                className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-destructive/20 hover:text-destructive"
+                className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-destructive"
               >
                 <Icon name="stop" size="xs" />
               </button>

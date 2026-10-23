@@ -233,7 +233,7 @@ export function AudioDeviceMenu({
                   "w-full text-left px-3 py-2 text-ui-xs font-medium rounded-lg transition-colors flex items-center justify-between group",
                   showDeviceSubmenu
                     ? "bg-rm-accent/10 text-rm-accent"
-                    : "text-rm-text hover:bg-rm-bg-hover",
+                    : "text-rm-text pointer-fine:hover:bg-rm-bg-hover",
                 )}
               >
                 <span className="flex items-center gap-2 min-w-0 flex-1">
@@ -309,7 +309,7 @@ export function AudioDeviceMenu({
                 onClose();
                 onOpenVoiceSettings();
               }}
-              className="w-full text-left px-3 py-2 text-ui-xs font-medium text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors flex items-center gap-2"
+              className="w-full text-left px-3 py-2 text-ui-xs font-medium text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-colors flex items-center gap-2"
             >
               <Icon name="settings" size="sm" className="opacity-60" />
               Voice Settings
@@ -339,7 +339,7 @@ export function AudioDeviceMenu({
                       "w-full text-left px-3 py-2 text-ui-2xs font-medium rounded-lg transition-ui flex items-center gap-2",
                       isSelected
                         ? "bg-rm-accent/10 text-rm-accent"
-                        : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                        : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
                     )}
                   >
                     <div

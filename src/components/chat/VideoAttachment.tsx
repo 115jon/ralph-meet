@@ -283,7 +283,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
               href={src}
               download={filename}
               onClick={(event) => event.stopPropagation()}
-              className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+              className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition pointer-fine:hover:bg-white/10"
             >
               Download video
             </a>

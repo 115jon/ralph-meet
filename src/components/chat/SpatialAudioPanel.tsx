@@ -358,7 +358,7 @@ export function SpatialAudioPanel({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-xs font-bold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+            className="rounded-md px-2 py-1 text-xs font-bold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
           >
             Close
           </button>
@@ -388,7 +388,7 @@ export function SpatialAudioPanel({
               "rounded-lg px-3 py-2 text-xs font-bold transition-colors",
               state.enabled && localSpatialEnabled && localHighFidelity
                 ? "bg-primary text-primary-foreground"
-                : "bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
+                : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
             )}
           >
             {state.enabled ? "Spatial Enabled" : "Spatial Disabled"}
@@ -398,7 +398,7 @@ export function SpatialAudioPanel({
             onClick={() =>
               commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })
             }
-            className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-xs font-bold text-rm-text-muted hover:text-rm-text"
+            className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-xs font-bold text-rm-text-muted pointer-fine:hover:text-rm-text"
           >
             <Icon name="reset" size="sm" /> Reset
           </button>
@@ -414,7 +414,7 @@ export function SpatialAudioPanel({
                 "rounded-md px-3 py-2 text-xs font-bold transition-colors",
                 state.placementMode === mode.value
                   ? "bg-primary text-primary-foreground"
-                  : "bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
+                  : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
               )}
             >
               {mode.label}
@@ -504,7 +504,7 @@ export function SpatialAudioPanel({
                     zoom: Math.max(0.65, current.zoom - 0.12),
                   }))
                 }
-                className="flex h-8 w-8 items-center justify-center text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
               >
                 <Icon name="minus" size="sm" />
               </button>
@@ -512,7 +512,7 @@ export function SpatialAudioPanel({
                 type="button"
                 title="Reset view"
                 onClick={() => setView({ zoom: 1, panX: 0, panY: 0 })}
-                className="border-x border-rm-border px-2 text-ui-2xs font-bold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                className="border-x border-rm-border px-2 text-ui-2xs font-bold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
               >
                 {Math.round(totalZoom * 100)}%
               </button>
@@ -525,7 +525,7 @@ export function SpatialAudioPanel({
                     zoom: Math.min(1.8, current.zoom + 0.12),
                   }))
                 }
-                className="flex h-8 w-8 items-center justify-center text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
               >
                 <Icon name="add" size="sm" />
               </button>

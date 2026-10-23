@@ -188,7 +188,7 @@ export function AvatarPickerModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition-[background-color,color,transform] hover:bg-rm-bg-hover hover:text-rm-text active:scale-[0.96]"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition-[background-color,color,transform] pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text active:scale-[0.96]"
                 aria-label={closeLabel}
               >
                 <Icon name="close" size="lg" />
@@ -201,7 +201,7 @@ export function AvatarPickerModal({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={Boolean(busyId)}
-                  className="group flex min-h-[150px] flex-col items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 transition-[background-color,border-color,transform] hover:border-primary/45 hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex min-h-[150px] flex-col items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 transition-[background-color,border-color,transform] pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Icon
                     name="image"
@@ -218,7 +218,7 @@ export function AvatarPickerModal({
                   type="button"
                   onClick={() => setShowGifPicker(true)}
                   disabled={Boolean(busyId)}
-                  className="group relative flex min-h-[150px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-[background-color,border-color,transform] hover:border-primary/45 hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group relative flex min-h-[150px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-[background-color,border-color,transform] pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="absolute right-3 top-3 h-16 w-16 rounded-2xl bg-primary/10 transition-transform duration-200 group-hover:rotate-6" />
                   <div className="absolute bottom-5 right-9 h-10 w-10 rounded-xl bg-rm-bg-hover" />
@@ -283,7 +283,7 @@ export function AvatarPickerModal({
                               type="button"
                               onClick={() => onSelectRecent?.(item)}
                               disabled={Boolean(busyId)}
-                              className="relative h-[58px] w-[58px] cursor-pointer overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated outline-none transition-[transform,box-shadow] hover:shadow-[0_0_0_4px_rgba(88,101,242,0.28),0_12px_24px_rgba(0,0,0,0.28)] focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                              className="relative h-[58px] w-[58px] cursor-pointer overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated outline-none transition-[transform,box-shadow] pointer-fine:hover:shadow-[0_0_0_4px_rgba(88,101,242,0.28),0_12px_24px_rgba(0,0,0,0.28)] focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
                               aria-label={`Use ${displayName}'s recent avatar`}
                             >
                               <img
@@ -309,7 +309,7 @@ export function AvatarPickerModal({
                               onClick={() => void handleDelete(item)}
                               disabled={isCurrent || Boolean(busyId)}
                               className={cn(
-                                "absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating text-rm-text-muted opacity-0 shadow-lg transition-[opacity,background-color,color,transform] hover:bg-rm-badge hover:text-white group-hover/recent:opacity-100 focus-visible:opacity-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35",
+                                "absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating text-rm-text-muted opacity-0 shadow-lg transition-[opacity,background-color,color,transform] pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white group-hover/recent:opacity-100 focus-visible:opacity-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35",
                               )}
                               aria-label={
                                 isCurrent

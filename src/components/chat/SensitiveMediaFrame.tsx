@@ -71,7 +71,7 @@ function SensitiveMediaFrameContent({
         <button
           type="button"
           onClick={() => setRevealed(true)}
-          className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-white/18"
+          className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white transition pointer-fine:hover:bg-white/18"
         >
           Show
         </button>

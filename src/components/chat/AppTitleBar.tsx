@@ -67,7 +67,7 @@ export function WebAppTitleBar() {
         <button
           type="button"
           onClick={() => window.history.back()}
-          className="flex h-6 w-6 items-center justify-center rounded-sm border-0 bg-transparent text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+          className="flex h-6 w-6 items-center justify-center rounded-sm border-0 bg-transparent text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
           aria-label="Go back"
         >
           <span aria-hidden="true">&#8249;</span>
@@ -75,7 +75,7 @@ export function WebAppTitleBar() {
         <button
           type="button"
           onClick={() => window.history.forward()}
-          className="flex h-6 w-6 items-center justify-center rounded-sm border-0 bg-transparent text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+          className="flex h-6 w-6 items-center justify-center rounded-sm border-0 bg-transparent text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
           aria-label="Go forward"
         >
           <span aria-hidden="true">&#8250;</span>

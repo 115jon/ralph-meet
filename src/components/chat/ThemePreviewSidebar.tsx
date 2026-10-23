@@ -74,7 +74,7 @@ export default function ThemePreviewSidebar({
         <button
           type="button"
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-bg-elevated text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-bg-elevated text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
         >
           <Icon name="close" size="sm" />
         </button>
@@ -93,7 +93,7 @@ export default function ThemePreviewSidebar({
                   "rounded-2xl border p-2 text-left transition-ui",
                   active
                     ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-hover",
+                    : "border-rm-border bg-rm-bg-elevated/40 pointer-fine:hover:bg-rm-bg-hover",
                 )}
               >
                 <div
@@ -117,7 +117,7 @@ export default function ThemePreviewSidebar({
         <button
           type="button"
           onClick={onBackToSettings}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text transition-colors hover:bg-rm-bg-hover"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover"
         >
           <Icon name="chevronLeft" size="xs" />
           Back to Settings

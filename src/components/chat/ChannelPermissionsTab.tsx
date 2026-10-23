@@ -131,7 +131,7 @@ function PermissionsSidebar({
         </span>
         <ButtonBase
           onClick={() => setIsAddingTarget(!isAddingTarget)}
-          className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10"
+          className="p-1 pointer-fine:hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary pointer-fine:hover:text-rm-text relative z-10"
         >
           {isAddingTarget ? (
             <Icon name="close" size="sm" />
@@ -160,7 +160,7 @@ function PermissionsSidebar({
                         role.color || undefined,
                       )
                     }
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded pointer-fine:hover:bg-rm-bg-hover text-sm text-left"
                   >
                     <div
                       className="w-3 h-3 rounded-full shrink-0"
@@ -195,7 +195,7 @@ function PermissionsSidebar({
                           m.user.avatar_display,
                         )
                       }
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded pointer-fine:hover:bg-rm-bg-hover text-sm text-left"
                     >
                       <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center shrink-0">
                         {m.user.avatar_url ? (
@@ -240,7 +240,7 @@ function PermissionsSidebar({
                   "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors group",
                   selectedTargetId === o.target_id
                     ? "bg-primary/20 text-primary"
-                    : "hover:bg-rm-bg-hover text-rm-text",
+                    : "pointer-fine:hover:bg-rm-bg-hover text-rm-text",
                 )}
               >
                 {o.target_type === "role" ? (
@@ -271,7 +271,7 @@ function PermissionsSidebar({
                   <Icon
                     name="trash"
                     size="xs"
-                    className="opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0"
+                    className="opacity-0 group-hover:opacity-100 pointer-fine:hover:text-destructive shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteOverride(o.target_id);
@@ -337,7 +337,7 @@ function PermissionsEditor({
               return (
                 <div
                   key={perm.mask}
-                  className="flex items-center justify-between pb-4 border-b border-rm-border/30 last:border-0 hover:bg-rm-white/5 rounded px-2 -mx-2 transition-colors"
+                  className="flex items-center justify-between pb-4 border-b border-rm-border/30 last:border-0 pointer-fine:hover:bg-rm-white/5 rounded px-2 -mx-2 transition-colors"
                 >
                   <div className="max-w-[70%]">
                     <div className="text-sm font-semibold text-rm-text">
@@ -355,7 +355,7 @@ function PermissionsEditor({
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
                         isDenied
                           ? "bg-destructive text-white"
-                          : "hover:bg-rm-white/10 text-rm-text-muted",
+                          : "pointer-fine:hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
                       <Icon name="close" size="sm" />
@@ -368,7 +368,7 @@ function PermissionsEditor({
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
                         isInherit
                           ? "bg-slate-500 text-white border border-rm-border"
-                          : "hover:bg-rm-white/10 text-rm-text-muted",
+                          : "pointer-fine:hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
                       <Icon name="neutral" size="sm" />
@@ -379,7 +379,7 @@ function PermissionsEditor({
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
                         isAllowed
                           ? "bg-green-500 text-white"
-                          : "hover:bg-rm-white/10 text-rm-text-muted",
+                          : "pointer-fine:hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
                       <Icon name="check" size="sm" />

@@ -232,7 +232,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                   variant="ghost"
                   size="icon"
                   onClick={onClose}
-                  className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md hover:bg-rm-bg-hover hover:text-rm-text"
+                  className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                   aria-label="Close profile preview"
                 >
                   <Icon name="close" size="sm" />
@@ -375,7 +375,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 type="button"
                                 variant="secondary"
                                 onClick={() => void handleCopyUserId()}
-                                className="h-10 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-[color:var(--rm-profile-custom-text)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)]"
+                                className="h-10 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-[color:var(--rm-profile-custom-text)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                                 style={profileThemeStyle}
                               >
                                 <Icon name="copy" size="sm" />
@@ -458,7 +458,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   onClick={() =>
                                     void handleRelationshipAction("remove")
                                   }
-                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive hover:bg-rm-badge hover:text-white"
+                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white"
                                 >
                                   {loading ? (
                                     <Icon
@@ -479,7 +479,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                     onClick={() =>
                                       void handleRelationshipAction("accept")
                                     }
-                                    className="rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] hover:brightness-105"
+                                    className="rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] pointer-fine:hover:brightness-105"
                                     style={profileThemeStyle}
                                   >
                                     {loading ? (
@@ -499,7 +499,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                     onClick={() =>
                                       void handleRelationshipAction("remove")
                                     }
-                                    className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
+                                    className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                                     style={profileThemeStyle}
                                   >
                                     Decline
@@ -521,7 +521,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   onClick={() =>
                                     void handleRelationshipAction("unblock")
                                   }
-                                  className="w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
+                                  className="w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                                   style={profileThemeStyle}
                                 >
                                   Unblock User
@@ -533,7 +533,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   onClick={() =>
                                     void handleRelationshipAction("add")
                                   }
-                                  className="w-full rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] hover:brightness-105"
+                                  className="w-full rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] pointer-fine:hover:brightness-105"
                                   style={profileThemeStyle}
                                 >
                                   {loading ? (
@@ -553,7 +553,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 <Button
                                   type="button"
                                   onClick={() => void handleMessage()}
-                                  className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
+                                  className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                                   style={profileThemeStyle}
                                 >
                                   <Icon name="chat" size="sm" />
@@ -562,7 +562,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 <Button
                                   type="button"
                                   onClick={() => void handleCopyUserId()}
-                                  className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
+                                  className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                                   style={profileThemeStyle}
                                 >
                                   <Icon name="copy" size="sm" />
@@ -577,7 +577,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   onClick={() =>
                                     void handleRelationshipAction("block")
                                   }
-                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive hover:bg-rm-badge hover:text-white"
+                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white"
                                 >
                                   <Icon name="ban" size="sm" />
                                   Block User

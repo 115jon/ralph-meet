@@ -337,7 +337,7 @@ export function AvatarFrameEditor({
           <button
             type="button"
             onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
             aria-label="Close avatar framing"
           >
             <Icon name="close" size="sm" />
@@ -397,7 +397,7 @@ export function AvatarFrameEditor({
             <Button
               type="button"
               variant="outline"
-              className="border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+              className="border-rm-border bg-rm-bg-elevated text-rm-text pointer-fine:hover:bg-rm-bg-hover"
               onClick={reset}
             >
               <Icon name="reset" size="sm" />
@@ -424,7 +424,7 @@ export function AvatarFrameEditor({
           <Button
             type="button"
             variant="outline"
-            className="border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+            className="border-rm-border bg-rm-bg-elevated text-rm-text pointer-fine:hover:bg-rm-bg-hover"
             onClick={onCancel}
           >
             Cancel
@@ -433,7 +433,7 @@ export function AvatarFrameEditor({
             type="button"
             disabled={!currentDisplay}
             className={cn(
-              "bg-primary text-primary-foreground hover:brightness-110",
+              "bg-primary text-primary-foreground pointer-fine:hover:brightness-110",
               !currentDisplay && "opacity-50",
             )}
             onClick={handleConfirm}

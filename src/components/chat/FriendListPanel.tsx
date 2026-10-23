@@ -51,7 +51,7 @@ export function FriendListPanel({
               "relative cursor-pointer rounded-md border-none px-2.5 py-1 text-ui-2xs font-semibold transition-colors outline-none",
               tab === t
                 ? "bg-rm-bg-elevated text-rm-text shadow-sm"
-                : "text-rm-text-muted hover:bg-rm-bg-elevated hover:text-rm-text-secondary",
+                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-elevated pointer-fine:hover:text-rm-text-secondary",
             )}
             onClick={() => dispatch({ type: "SET_TAB", value: t })}
           >
@@ -66,7 +66,7 @@ export function FriendListPanel({
             "ml-auto cursor-pointer rounded-md border-none px-2.5 py-1 text-ui-2xs font-semibold transition-colors outline-none",
             addFriendMode
               ? "bg-primary/20 text-primary"
-              : "text-primary hover:bg-primary/10",
+              : "text-primary pointer-fine:hover:bg-primary/10",
           )}
           onClick={() =>
             dispatch({ type: "SET_ADD_FRIEND_MODE", value: !addFriendMode })
@@ -95,7 +95,7 @@ export function FriendListPanel({
               onKeyDown={(e) => e.key === "Enter" && handleAddFriend()}
             />
             <button
-              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:brightness-110 disabled:opacity-40"
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors pointer-fine:hover:brightness-110 disabled:opacity-40"
               onClick={handleAddFriend}
               disabled={!addUsername.trim()}
             >
@@ -146,7 +146,7 @@ export function FriendListPanel({
                 return (
                   <div
                     key={rel.user.id}
-                    className="group relative flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-rm-bg-elevated outline-none"
+                    className="group relative flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors pointer-fine:hover:bg-rm-bg-elevated outline-none"
                   >
                     <button
                       type="button"
@@ -206,7 +206,7 @@ export function FriendListPanel({
                     <div className="relative z-20 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       {rel.type === 0 && (
                         <button
-                          className="cursor-pointer rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-elevated hover:text-rm-text-secondary outline-none"
+                          className="cursor-pointer rounded-lg p-1.5 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-elevated pointer-fine:hover:text-rm-text-secondary outline-none"
                           title="Message"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -218,7 +218,7 @@ export function FriendListPanel({
                       )}
                       {rel.type === 2 && (
                         <button
-                          className="cursor-pointer rounded-lg p-1.5 text-primary/60 transition-colors hover:bg-primary/10 hover:text-primary outline-none"
+                          className="cursor-pointer rounded-lg p-1.5 text-primary/60 transition-colors pointer-fine:hover:bg-primary/10 pointer-fine:hover:text-primary outline-none"
                           title="Accept"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -229,7 +229,7 @@ export function FriendListPanel({
                         </button>
                       )}
                       <button
-                        className="cursor-pointer rounded-lg p-1.5 text-destructive/60 transition-colors hover:bg-destructive/10 hover:text-destructive outline-none"
+                        className="cursor-pointer rounded-lg p-1.5 text-destructive/60 transition-colors pointer-fine:hover:bg-destructive/10 pointer-fine:hover:text-destructive outline-none"
                         title={
                           rel.type === 0
                             ? "Remove Friend"

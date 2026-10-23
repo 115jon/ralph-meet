@@ -167,7 +167,7 @@ export default function ChannelSettingsModal({
               </h2>
               <button
                 onClick={onClose}
-                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
+                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center pointer-fine:hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
               >
                 <Icon name="close" size="md" />
               </button>
@@ -194,7 +194,7 @@ export default function ChannelSettingsModal({
                   "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
                   activeTab === "overview"
                     ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-                    : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+                    : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
                 )}
               >
                 <Icon name="sliders" size="sm" /> Overview
@@ -206,7 +206,7 @@ export default function ChannelSettingsModal({
                   "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
                   activeTab === "permissions"
                     ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
-                    : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
+                    : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
                 )}
               >
                 <Icon name="shield" size="sm" /> Permissions
@@ -219,7 +219,7 @@ export default function ChannelSettingsModal({
               <div className="absolute right-6 top-6 z-50 flex flex-col items-center gap-1 hidden md:flex">
                 <button
                   onClick={onClose}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui group"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text transition-ui group"
                 >
                   <Icon name="close" size="md" />
                 </button>
@@ -377,7 +377,7 @@ export default function ChannelSettingsModal({
                         onClick={handleSave}
                         disabled={!hasChanges || saving}
                         className={cn(
-                          "flex max-w-fit items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg transition-ui hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed",
+                          "flex max-w-fit items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed",
                           successFlash
                             ? "bg-green-500 text-white shadow-green-500/20"
                             : "bg-primary text-primary-foreground shadow-primary/20",

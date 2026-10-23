@@ -149,7 +149,7 @@ const SHOP_META_PILL_CLASS =
 const SHOP_INPUT_CLASS =
   "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 text-sm text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:border-primary/50 focus-visible:ring-primary/15";
 const SHOP_SELECT_TRIGGER_CLASS =
-  "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 px-4 py-0 text-sm font-medium text-rm-text shadow-none hover:bg-rm-bg-hover focus:border-primary/50";
+  "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 px-4 py-0 text-sm font-medium text-rm-text shadow-none pointer-fine:hover:bg-rm-bg-hover focus:border-primary/50";
 const SHOP_SELECT_MENU_CLASS =
   "rounded-2xl border-rm-border bg-rm-bg-floating/95 p-1.5 shadow-2xl backdrop-blur-xl";
 const SHOP_RAIL_SHELL_CLASS =
@@ -927,7 +927,7 @@ function CollectionBanner({
       onClick={onClick}
       className={cn(
         SHOP_PANEL_CLASS,
-        "group relative w-full overflow-hidden text-left transition-transform duration-200 hover:-translate-y-1 sm:rounded-3xl",
+        "group relative w-full overflow-hidden text-left transition-transform duration-200 pointer-fine:hover:-translate-y-1 sm:rounded-3xl",
       )}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_34%)]" />
@@ -1095,7 +1095,7 @@ function CollectibleDetailModal({
                               "h-8 w-8 rounded-md border-2 transition-ui",
                               selected
                                 ? "scale-105 border-primary shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
-                                : "border-transparent hover:border-rm-border-strong",
+                                : "border-transparent pointer-fine:hover:border-rm-border-strong",
                             )}
                             style={{ background: swatch }}
                             aria-label={variantLabel(variant) ?? variant.name}
@@ -1122,7 +1122,7 @@ function CollectibleDetailModal({
                               "w-[72px] shrink-0 rounded-xl border p-1.5 text-left transition-ui",
                               selected
                                 ? "border-primary bg-primary/10 shadow-[0_14px_35px_rgba(0,0,0,0.22)]"
-                                : "border-rm-border bg-rm-bg-hover/55 hover:border-rm-border-strong hover:bg-rm-bg-hover",
+                                : "border-rm-border bg-rm-bg-hover/55 pointer-fine:hover:border-rm-border-strong pointer-fine:hover:bg-rm-bg-hover",
                             )}
                             aria-label={`Preview ${candidate.name}`}
                           >
@@ -1185,7 +1185,7 @@ function CollectibleDetailModal({
                     type="button"
                     onClick={onRedeem}
                     disabled={isApplying || isApplyingAny}
-                    className="h-11 rounded-2xl bg-primary text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90"
+                    className="h-11 rounded-2xl bg-primary text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:bg-primary/90"
                   >
                     {isApplying ? (
                       <Icon name="loader" size="sm" className="animate-spin" />
@@ -1200,9 +1200,9 @@ function CollectibleDetailModal({
                     onClick={onEquip}
                     disabled={isApplying || isApplyingAny || isEquipped}
                     className={cn(
-                      "h-11 rounded-2xl border-rm-border bg-rm-bg-hover/70 text-rm-text transition-ui hover:bg-rm-bg-hover",
+                      "h-11 rounded-2xl border-rm-border bg-rm-bg-hover/70 text-rm-text transition-ui pointer-fine:hover:bg-rm-bg-hover",
                       isEquipped &&
-                        "border-primary/25 bg-primary/10 text-primary hover:bg-primary/10",
+                        "border-primary/25 bg-primary/10 text-primary pointer-fine:hover:bg-primary/10",
                     )}
                   >
                     {isApplying ? (
@@ -1242,7 +1242,7 @@ function CollectibleDetailModal({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/82 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/82 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                     aria-label="Close collectible preview"
                   >
                     <Icon name="close" size="md" />
@@ -1337,7 +1337,7 @@ function ShopCard({
 
   return (
     <article
-      className="group relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/95 shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-transform duration-200 hover:-translate-y-1 hover:border-primary/25 sm:rounded-2xl"
+      className="group relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/95 shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-transform duration-200 pointer-fine:hover:-translate-y-1 pointer-fine:hover:border-primary/25 sm:rounded-2xl"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -1440,8 +1440,8 @@ function ShopCard({
             className={cn(
               "h-10 w-full rounded-full px-4 text-sm font-semibold transition-ui sm:w-auto",
               isEquipped
-                ? "cursor-default border-primary/25 bg-primary/10 text-primary hover:bg-primary/10"
-                : "bg-primary text-primary-foreground shadow-[0_10px_30px_var(--rm-glow)] hover:-translate-y-0.5 hover:bg-primary/90",
+                ? "cursor-default border-primary/25 bg-primary/10 text-primary pointer-fine:hover:bg-primary/10"
+                : "bg-primary text-primary-foreground shadow-[0_10px_30px_var(--rm-glow)] pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:bg-primary/90",
             )}
           >
             {isApplying ? (
@@ -1870,7 +1870,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
                 <button
-                  className="shrink-0 border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text lg:hidden"
+                  className="shrink-0 border-none bg-transparent p-1 text-rm-text-muted transition-colors pointer-fine:hover:text-rm-text lg:hidden"
                   onClick={onMenuClick}
                 >
                   <Icon name="menu" size="lg" />
@@ -2052,7 +2052,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                           type="button"
                           onClick={() => setFeaturedFocus(null)}
                           variant="outline"
-                          className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-4 py-2.5 text-sm font-semibold text-rm-text hover:bg-rm-bg-hover sm:w-auto"
+                          className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-4 py-2.5 text-sm font-semibold text-rm-text pointer-fine:hover:bg-rm-bg-hover sm:w-auto"
                         >
                           Back to featured
                         </Button>
@@ -2087,7 +2087,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                           onClick={() =>
                             openFeaturedCollection(spotlightCategory.name)
                           }
-                          className="w-fit rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90 sm:absolute sm:right-8 sm:top-8"
+                          className="w-fit rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:bg-primary/90 sm:absolute sm:right-8 sm:top-8"
                         >
                           Shop the collection
                         </Button>
@@ -2138,7 +2138,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                                 openFeaturedCollection(section.category.name)
                               }
                               variant="outline"
-                              className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-3.5 py-2 text-sm font-medium text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text sm:w-auto"
+                              className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-3.5 py-2 text-sm font-medium text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text sm:w-auto"
                             >
                               Take me there
                             </Button>

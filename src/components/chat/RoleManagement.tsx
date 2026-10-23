@@ -266,7 +266,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
           </span>
           <button
             onClick={startCreate}
-            className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text"
+            className="p-1 pointer-fine:hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary pointer-fine:hover:text-rm-text"
           >
             <Icon name="add" size="sm" />
           </button>
@@ -281,7 +281,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                 state.selectedRole?.id === role.id &&
                   !state.editState.isCreating
                   ? "bg-primary/20 text-primary"
-                  : "hover:bg-rm-bg-hover text-rm-text",
+                  : "pointer-fine:hover:bg-rm-bg-hover text-rm-text",
               )}
             >
               <div
@@ -318,7 +318,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                   !state.editState.isCreating && (
                     <button
                       onClick={() => handleDelete(state.selectedRole!.id)}
-                      className="p-1.5 text-rm-text-muted hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
+                      className="p-1.5 text-rm-text-muted pointer-fine:hover:text-destructive pointer-fine:hover:bg-destructive/10 rounded transition-colors"
                     >
                       <Icon name="trash" size="sm" />
                     </button>
@@ -328,7 +328,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                   disabled={
                     state.editState.saving || !state.editState.name.trim()
                   }
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="bg-primary pointer-fine:hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {state.editState.saving && (
                     <Icon name="loader" size="xs" className="animate-spin" />
@@ -431,7 +431,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                           "flex items-center justify-between p-3 rounded-lg border",
                           hasPerm
                             ? "bg-primary/5 border-primary/20"
-                            : "bg-rm-bg-surface border-rm-border cursor-pointer hover:border-rm-text/20",
+                            : "bg-rm-bg-surface border-rm-border cursor-pointer pointer-fine:hover:border-rm-text/20",
                           isDisabled && "opacity-50 cursor-not-allowed",
                         )}
                         aria-label={perm.name}

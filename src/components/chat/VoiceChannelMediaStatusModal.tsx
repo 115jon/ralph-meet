@@ -96,7 +96,7 @@ function VoiceStatusMediaTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-ui hover:-translate-y-0.5 hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-ui pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div
         className="w-full overflow-hidden rounded-lg bg-rm-bg-hover"
@@ -356,7 +356,7 @@ export default function VoiceChannelMediaStatusModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                   aria-label="Close media status editor"
                 >
                   <Icon name="close" size="lg" />
@@ -369,7 +369,7 @@ export default function VoiceChannelMediaStatusModal({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isBusy}
-                    className="group flex min-h-[138px] flex-col items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group flex min-h-[138px] flex-col items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {uploading ? (
                       <Icon
@@ -396,7 +396,7 @@ export default function VoiceChannelMediaStatusModal({
                     type="button"
                     onClick={() => setShowGifPicker(true)}
                     disabled={isBusy}
-                    className="group relative min-h-[138px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group relative min-h-[138px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <div className="absolute right-3 top-3 h-12 w-12 rounded-2xl bg-rm-bg-hover" />
                     <div className="absolute bottom-3 right-10 h-8 w-8 rounded-xl bg-rm-bg-hover" />

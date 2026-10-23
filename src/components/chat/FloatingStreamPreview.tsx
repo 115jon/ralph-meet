@@ -227,7 +227,7 @@ export default function FloatingStreamPreview({
             type="button"
             data-stream-preview-interactive="true"
             onClick={onNavigateToVoiceChannel}
-            className="absolute left-3 top-3 z-20 flex max-w-[70%] items-center gap-1.5 rounded-md bg-black/40 px-2.5 py-1 text-ui-base font-semibold tracking-tight text-white/90 transition hover:text-white hover:underline"
+            className="absolute left-3 top-3 z-20 flex max-w-[70%] items-center gap-1.5 rounded-md bg-black/40 px-2.5 py-1 text-ui-base font-semibold tracking-tight text-white/90 transition pointer-fine:hover:text-white pointer-fine:hover:underline"
           >
             <Icon name="back" size="sm" className="shrink-0" />
             <InlineEmojiText text={channelName} className="truncate" />
@@ -244,7 +244,7 @@ export default function FloatingStreamPreview({
               size="xs"
               tooltip="Stream Settings"
               aria-label="Open stream settings"
-              className="border border-white/10 bg-black/55 text-white/85 hover:bg-black/70 hover:text-white"
+              className="border border-white/10 bg-black/55 text-white/85 pointer-fine:hover:bg-black/70 pointer-fine:hover:text-white"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
                 setMenuPosition((current) =>
@@ -259,7 +259,7 @@ export default function FloatingStreamPreview({
               tooltip={primaryActionTooltip}
               aria-label={primaryActionAriaLabel}
               className={cn(
-                "border border-white/10 bg-black/55 text-white/85 hover:bg-destructive hover:text-destructive-foreground",
+                "border border-white/10 bg-black/55 text-white/85 pointer-fine:hover:bg-destructive pointer-fine:hover:text-destructive-foreground",
                 "transition-colors",
               )}
               onClick={() => {

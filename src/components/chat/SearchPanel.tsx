@@ -266,7 +266,7 @@ export default function SearchPanel({
           <SheetClose asChild>
             <button
               type="button"
-              className="flex size-10 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-colors outline-none hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/60"
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-colors outline-none pointer-fine:hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/60"
               aria-label="Close search panel"
             >
               <Icon name="close" size="sm" />
@@ -360,7 +360,7 @@ const SearchResultItem = ({
   return (
     <button
       type="button"
-      className="mb-1 w-full cursor-pointer rounded-xl border-none bg-transparent p-3 text-left transition-ui hover:bg-rm-bg-hover group/item outline-none"
+      className="mb-1 w-full cursor-pointer rounded-xl border-none bg-transparent p-3 text-left transition-ui pointer-fine:hover:bg-rm-bg-hover group/item outline-none"
       onClick={() => {
         if (onJump) {
           onJump(msg.channel_id, msg.id);

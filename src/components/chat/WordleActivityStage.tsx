@@ -471,7 +471,7 @@ function HowToPlayModal({
               type="button"
               onClick={onClose}
               aria-label="Close how to play"
-              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-secondary transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
             >
               <Icon name="close" size="xl" />
             </button>
@@ -1260,7 +1260,7 @@ function WordleActivityStageContent({
             }}
             aria-label="Open hints"
             title="Hints"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors pointer-fine:hover:bg-rm-bg-hover"
           >
             <Icon name="lightbulb" size="xl" />
           </button>
@@ -1269,7 +1269,7 @@ function WordleActivityStageContent({
             onClick={() => setView("stats")}
             aria-label="Open channel stats"
             title="Stats"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors pointer-fine:hover:bg-rm-bg-hover"
           >
             <Icon name="stats" size="xl" />
           </button>
@@ -1279,7 +1279,7 @@ function WordleActivityStageContent({
             onClick={() => setSettingsOpen(true)}
             aria-label="Open Wordle settings"
             title="Settings"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors pointer-fine:hover:bg-rm-bg-hover"
           >
             <Icon name="settings" size="2xl" />
           </button>
@@ -1473,7 +1473,7 @@ function WordleActivityStageContent({
               type="button"
               onClick={dismissHintNotice}
               aria-label="Dismiss hint notice"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-rm-text-secondary transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
             >
               <Icon name="close" size="md" />
             </button>
@@ -1529,7 +1529,7 @@ function WordleActivityStageContent({
                   type="button"
                   onClick={closeHints}
                   aria-label="Close hints"
-                  className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
+                  className="flex h-10 w-10 items-center justify-center rounded-full transition-colors pointer-fine:hover:bg-rm-bg-hover"
                 >
                   <Icon name="close" size="xl" />
                 </button>

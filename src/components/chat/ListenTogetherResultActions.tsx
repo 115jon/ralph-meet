@@ -20,7 +20,7 @@ export function ListenTogetherResultActionTrigger({
       type="button"
       aria-label={`More actions for ${label}`}
       onClick={onClick}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <Icon name="more" size="sm" />
     </button>
@@ -119,7 +119,7 @@ export function ListenTogetherMobileActionSheet({
             type="button"
             aria-label="Close actions"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <Icon name="close" size="sm" />
           </button>
@@ -134,7 +134,7 @@ export function ListenTogetherMobileActionSheet({
                 onClose();
               }}
               className={cn(
-                "flex min-h-12 items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                "flex min-h-12 items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                 action.id === "play-now" && "text-primary",
               )}
             >

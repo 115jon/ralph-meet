@@ -40,7 +40,9 @@ export function MentionAutocomplete({
               onMouseEnter={() => setLocalState({ mentionIndex: i })}
               className={cn(
                 "w-full flex items-center gap-2 px-3 py-2 transition-colors",
-                i === mentionIndex ? "bg-rm-accent/10" : "hover:bg-rm-bg-hover",
+                i === mentionIndex
+                  ? "bg-rm-accent/10"
+                  : "pointer-fine:hover:bg-rm-bg-hover",
               )}
             >
               <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-ui-2xs font-bold text-rm-text-muted border border-rm-border">
