@@ -17,7 +17,9 @@ import InviteModal from "@/components/chat/InviteModal";
 import { MobileNavigationSheet } from "@/components/chat/MobileNavigationSheet";
 import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
 import { SettingsHost } from "@/components/chat/SettingsHost";
+import { ActionSheet } from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Drawer,
   DrawerContent,
@@ -1013,13 +1015,26 @@ function ActionSheetFixture() {
   );
 }
 
-/** The bottom Drawer primitive over the phone chat. */
+/**
+ * The bottom Drawer primitive over the phone chat: a field (soft keyboard), a
+ * long list that must scroll on touch without dragging the sheet, and a
+ * nested action sheet.
+ */
 function DrawerFixture() {
   const [open, setOpen] = useState(true);
+  const [actionsOpen, setActionsOpen] = useState(false);
   return (
     <div className="relative h-full w-full">
       <MobileFixture surface="mobile" />
-      <Drawer open={open} onOpenChange={setOpen}>
+      {open ? null : (
+        <Button
+          className="absolute top-24 left-4 z-10"
+          onClick={() => setOpen(true)}
+        >
+          Open drawer
+        </Button>
+      )}
+      <Drawer open={open} onOpenChange={setOpen} repositionInputs>
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>Invite to Ralph HQ</DrawerTitle>
@@ -1027,12 +1042,31 @@ function DrawerFixture() {
               Anyone with the link can join. It expires in 7 days.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="mx-4 flex min-h-12 items-center rounded-lg border border-rm-border bg-rm-bg-primary px-3 text-ui-base text-rm-text-secondary">
-            meet.115jon.com/invite/k3q9xz
-          </div>
+          <input
+            aria-label="Search members"
+            placeholder="Search members"
+            className="mx-4 min-h-12 rounded-lg border border-rm-border bg-rm-bg-primary px-3 text-ui-base text-rm-text"
+          />
+          <ul
+            data-testid="drawer-fixture-list"
+            className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4"
+          >
+            {Array.from({ length: 40 }, (_, index) => (
+              <li
+                key={index}
+                className="flex min-h-12 items-center border-b border-rm-border text-ui-base text-rm-text"
+              >
+                Member {index + 1}
+              </li>
+            ))}
+          </ul>
           <DrawerFooter>
-            <Button size="lg" className="min-h-11 w-full">
-              Copy link
+            <Button
+              size="lg"
+              className="min-h-11 w-full"
+              onClick={() => setActionsOpen(true)}
+            >
+              More actions
             </Button>
             <Button
               size="lg"
@@ -1043,21 +1077,74 @@ function DrawerFixture() {
               Done
             </Button>
           </DrawerFooter>
+          <ActionSheet
+            open={actionsOpen}
+            onOpenChange={setActionsOpen}
+            title="Invite actions"
+            items={[
+              { label: "Copy link", onClick: () => {} },
+              { label: "Share", onClick: () => {} },
+              { label: "Revoke link", onClick: () => {}, variant: "danger" },
+            ]}
+          />
         </DrawerContent>
       </Drawer>
     </div>
   );
 }
 
+/**
+ * A drawer opened from inside a Radix Dialog (the image viewer's action
+ * sheet, the voice status modal's emoji picker): the drawer must take taps,
+ * focus and typing, and closing it must leave the dialog open.
+ */
+function DrawerOverDialogFixture() {
+  const [dialogOpen, setDialogOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  return (
+    <div className="relative h-full w-full">
+      <MobileFixture surface="mobile" />
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogTitle>Set a status</DialogTitle>
+          <Button onClick={() => setDrawerOpen(true)}>Pick emoji</Button>
+          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <DrawerContent>
+              <DrawerHeader>
+                <DrawerTitle>Emoji</DrawerTitle>
+              </DrawerHeader>
+              <input
+                aria-label="Search emoji"
+                placeholder="Search emoji"
+                className="mx-4 min-h-12 rounded-lg border border-rm-border bg-rm-bg-primary px-3 text-ui-base text-rm-text"
+              />
+              <DrawerFooter>
+                <Button
+                  size="lg"
+                  className="min-h-11 w-full"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  Done
+                </Button>
+              </DrawerFooter>
+            </DrawerContent>
+          </Drawer>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 /** Member profile drawer over the phone chat. `mobile-profile-me` is self. */
 function MobileProfileFixture({ self }: { self: boolean }) {
+  const [open, setOpen] = useState(true);
   return (
     <div className="relative h-full w-full">
       <MobileFixture surface="mobile" />
       <MobileProfileSheet
-        open
+        open={open}
         user={self ? users.me! : { ...users.ada!, bio: "First programmer." }}
-        onClose={() => {}}
+        onClose={() => setOpen(false)}
         onOpenProfileEditor={() => {}}
       />
     </div>
@@ -1114,6 +1201,9 @@ export default function UiFixtures() {
       break;
     case "drawer":
       content = <DrawerFixture />;
+      break;
+    case "drawer-over-dialog":
+      content = <DrawerOverDialogFixture />;
       break;
     case "mobile-home":
       content = <MobileHomeFixture />;
