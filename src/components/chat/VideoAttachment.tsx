@@ -271,10 +271,10 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
         <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
           <Icon name="alert" size="2xl" className="text-amber-300" />
           <div>
-            <p className="text-sm font-bold">
+            <p className="text-ui-sm font-semibold">
               This video cannot be played here
             </p>
-            <p className="mt-1 max-w-[320px] text-xs leading-5 text-white/70">
+            <p className="mt-1 max-w-[320px] text-ui-xs leading-5 text-white/70">
               The desktop video engine may not support this file&apos;s codec.
             </p>
           </div>
@@ -283,7 +283,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
               href={src}
               download={filename}
               onClick={(event) => event.stopPropagation()}
-              className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition pointer-fine:hover:bg-white/10"
+              className="rounded-lg border border-white/20 px-3 py-2 text-ui-xs font-semibold text-white transition pointer-fine:hover:bg-white/10"
             >
               Download video
             </a>

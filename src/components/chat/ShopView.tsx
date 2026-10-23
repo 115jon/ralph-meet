@@ -650,7 +650,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               placeholder="Search the shop"
               enterKeyHint="search"
               autoComplete="off"
-              className="h-11 w-full rounded-lg border border-rm-field-edge bg-rm-bg-surface ps-9 pe-3 text-base text-rm-text outline-none placeholder:text-rm-text-muted focus-visible:border-rm-focus md:h-9 md:text-ui-sm"
+              className="h-11 w-full rounded-lg border border-rm-field-edge bg-rm-bg-surface ps-9 pe-3 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted focus-visible:border-rm-focus md:h-9 md:text-ui-sm"
             />
           </div>
         </div>

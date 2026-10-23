@@ -157,7 +157,7 @@ export default function ChannelSettingsModal({
               className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
               style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
             >
-              <h2 className="text-ui-sm font-bold tracking-widest text-rm-text-muted truncate">
+              <h2 className="text-ui-sm font-semibold tracking-widest text-rm-text-muted truncate">
                 <Icon
                   name={channelIcon}
                   size="xs"
@@ -191,7 +191,7 @@ export default function ChannelSettingsModal({
               <button
                 onClick={() => setActiveTab("overview")}
                 className={cn(
-                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
                   activeTab === "overview"
                     ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
                     : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -203,7 +203,7 @@ export default function ChannelSettingsModal({
               <button
                 onClick={() => setActiveTab("permissions")}
                 className={cn(
-                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
                   activeTab === "permissions"
                     ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
                     : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -233,7 +233,7 @@ export default function ChannelSettingsModal({
                   <div className="animate-in fade-in duration-150 w-full h-full">
                     <h2
                       id="channel-settings-title"
-                      className="mb-6 text-xl font-bold text-rm-text"
+                      className="mb-6 text-ui-xl font-semibold text-rm-text"
                     >
                       Permissions
                     </h2>
@@ -247,7 +247,7 @@ export default function ChannelSettingsModal({
                   <div className="animate-in fade-in duration-150 w-full">
                     <h2
                       id="channel-settings-title"
-                      className="mb-6 text-xl font-bold text-rm-text"
+                      className="mb-6 text-ui-xl font-semibold text-rm-text"
                     >
                       Channel Overview
                     </h2>
@@ -258,7 +258,7 @@ export default function ChannelSettingsModal({
                         <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted block">
                           Channel Type
                         </span>
-                        <div className="inline-flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm font-medium text-rm-text-secondary">
+                        <div className="inline-flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-ui-sm font-medium text-rm-text-secondary">
                           <Icon
                             name={channelIcon}
                             size="sm"
@@ -367,7 +367,7 @@ export default function ChannelSettingsModal({
 
                       {/* Error */}
                       {error && (
-                        <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                        <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-ui-sm text-destructive">
                           {error}
                         </div>
                       )}
@@ -377,7 +377,7 @@ export default function ChannelSettingsModal({
                         onClick={handleSave}
                         disabled={!hasChanges || saving}
                         className={cn(
-                          "flex max-w-fit items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed",
+                          "flex max-w-fit items-center gap-2 rounded-xl px-5 py-2.5 text-ui-sm font-semibold shadow-lg transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed",
                           successFlash
                             ? "bg-green-500 text-white shadow-green-500/20"
                             : "bg-primary text-primary-foreground shadow-primary/20",

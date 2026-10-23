@@ -5,8 +5,8 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 const SIZES = {
-  16: "size-4 text-[9px]",
-  20: "size-5 text-[10px]",
+  16: "size-4 text-ui-2xs",
+  20: "size-5 text-ui-2xs",
   24: "size-6 text-ui-2xs",
   32: "size-8 text-ui-xs",
   36: "size-9 text-ui-sm",

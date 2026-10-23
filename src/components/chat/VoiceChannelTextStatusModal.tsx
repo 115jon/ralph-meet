@@ -129,7 +129,7 @@ export default function VoiceChannelTextStatusModal({
                   >
                     What are we chatting about?
                   </h2>
-                  <p className="mt-2 text-sm text-rm-text-muted sm:text-ui-base">
+                  <p className="mt-2 text-ui-sm text-rm-text-muted sm:text-ui-base">
                     Let others know what you&apos;re up to in the voice channel.
                   </p>
                 </div>
@@ -138,7 +138,7 @@ export default function VoiceChannelTextStatusModal({
               <div className="px-6 pb-6 pt-5">
                 <label
                   htmlFor="voice-channel-status-text"
-                  className="mb-2 block text-sm font-bold text-rm-text"
+                  className="mb-2 block text-ui-sm font-semibold text-rm-text"
                 >
                   Status
                 </label>
@@ -204,7 +204,7 @@ export default function VoiceChannelTextStatusModal({
                 </div>
 
                 {error ? (
-                  <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
                     {error}
                   </div>
                 ) : null}

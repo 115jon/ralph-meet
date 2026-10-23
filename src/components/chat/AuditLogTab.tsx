@@ -93,7 +93,10 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
       }
 
       return (
-        <div key={key} className="text-xs text-rm-text-muted mt-1 flex gap-2">
+        <div
+          key={key}
+          className="text-ui-xs text-rm-text-muted mt-1 flex gap-2"
+        >
           <span className="font-semibold text-rm-text-secondary">{key}:</span>
           <span className="truncate max-w-[200px]" title={displayValue}>
             {displayValue}
@@ -114,7 +117,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
 
   if (state.error) {
     return (
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-ui-sm text-destructive">
         {state.error}
       </div>
     );
@@ -124,10 +127,12 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted text-center space-y-2">
         <div className="h-12 w-12 rounded-full bg-rm-bg-hover flex items-center justify-center mb-2">
-          <span className="text-xl">📋</span>
+          <span className="text-ui-xl">📋</span>
         </div>
         <h3 className="text-rm-text font-semibold">No recent activity</h3>
-        <p className="text-sm">There are no audit logs for this server yet.</p>
+        <p className="text-ui-sm">
+          There are no audit logs for this server yet.
+        </p>
       </div>
     );
   }
@@ -136,12 +141,12 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
     <div className="animate-in fade-in duration-150 w-full pb-8">
       <h2
         id="server-settings-title"
-        className="mb-6 text-xl font-bold text-rm-text"
+        className="mb-6 text-ui-xl font-semibold text-rm-text"
       >
         Audit Log
       </h2>
 
-      <p className="text-sm text-rm-text-muted mb-6">
+      <p className="text-ui-sm text-rm-text-muted mb-6">
         A record of recent administrative actions taken in this server.
       </p>
 
@@ -163,7 +168,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                       display={log.actor.avatar_display}
                     />
                   ) : (
-                    <span className="text-xs font-bold">
+                    <span className="text-ui-xs font-semibold">
                       {getDisplayInitial(log.actor)}
                     </span>
                   )}
@@ -173,16 +178,16 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                 <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-ui pointer-fine:hover:border-primary/30">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2 items-center">
-                      <span className="font-semibold text-sm text-rm-text">
+                      <span className="font-semibold text-ui-sm text-rm-text">
                         <InlineEmojiText text={actorDisplayName} />
                       </span>
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
+                      <span className="text-ui-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
                         {formatActionType(log.action_type)}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-xs text-rm-text-muted mb-3 flex items-center gap-2">
+                  <div className="text-ui-xs text-rm-text-muted mb-3 flex items-center gap-2">
                     <span>
                       {formatDate(log.created_at, {
                         year: "numeric",
@@ -204,7 +209,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                   </div>
 
                   {log.reason && (
-                    <div className="mt-2 text-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
+                    <div className="mt-2 text-ui-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
                       <InlineEmojiText text={`"${log.reason}"`} />
                     </div>
                   )}

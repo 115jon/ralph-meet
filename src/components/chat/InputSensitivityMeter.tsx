@@ -190,7 +190,7 @@ export function InputSensitivityMeter({
       {...(labelledBy ? {} : { htmlFor: "input-sensitivity" })}
     >
       {labelledBy ? null : (
-        <span className="text-sm font-semibold text-rm-text">
+        <span className="text-ui-sm font-semibold text-rm-text">
           Input sensitivity
         </span>
       )}

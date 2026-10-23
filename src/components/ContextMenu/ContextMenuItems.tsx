@@ -122,7 +122,7 @@ export const MenuItem = memo(
           <div className="flex flex-col overflow-hidden">
             <span
               className={cn(
-                "truncate text-sm",
+                "truncate text-ui-sm",
                 boldLabel ? "font-bold" : "font-medium",
               )}
             >
@@ -188,7 +188,7 @@ export const Slider = memo(
 
     return (
       <div className="shrink-0 px-2 py-2" onMouseEnter={onMouseEnter}>
-        <p className="mb-2 text-xs font-bold text-rm-text">{label}</p>
+        <p className="mb-2 text-ui-xs font-semibold text-rm-text">{label}</p>
         <div className="group/slider relative h-1 rounded-full bg-rm-bg-primary">
           <div
             className="absolute left-0 top-0 h-full rounded-full bg-primary transition-ui"

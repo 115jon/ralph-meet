@@ -388,7 +388,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
             <div className="flex items-center justify-between p-5 pb-4 border-b border-rm-border/50">
               <h2
                 id="camera-settings-title"
-                className="text-lg font-bold text-rm-text"
+                className="text-ui-lg font-semibold text-rm-text"
               >
                 Ready to video chat?
               </h2>
@@ -506,7 +506,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                         )}
                         <span
                           className={cn(
-                            "text-xs font-bold",
+                            "text-ui-xs font-semibold",
                             isSelected ? "text-primary" : "text-rm-text",
                           )}
                         >
@@ -557,7 +557,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                             <div className="mt-2 flex items-center justify-between gap-2 px-1">
                               <span
                                 className={cn(
-                                  "truncate text-xs font-bold",
+                                  "truncate text-ui-xs font-semibold",
                                   isSelected ? "text-primary" : "text-rm-text",
                                 )}
                               >
@@ -584,12 +584,12 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                   )}
                 </div>
                 {isLoadingBackgrounds && (
-                  <p className="px-1 text-xs font-medium text-rm-text-muted">
+                  <p className="px-1 text-ui-xs font-medium text-rm-text-muted">
                     Loading saved backgrounds...
                   </p>
                 )}
                 {uploadError && (
-                  <p className="px-1 text-xs font-medium text-destructive">
+                  <p className="px-1 text-ui-xs font-medium text-destructive">
                     {uploadError}
                   </p>
                 )}
@@ -636,14 +636,14 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-xs font-bold text-rm-text-muted hover:text-rm-text transition-colors"
+                  className="px-4 py-2 text-ui-xs font-semibold text-rm-text-muted hover:text-rm-text transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handlePrimary}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-primary-foreground shadow-xl shadow-primary/20 transition-ui hover:brightness-110 active:scale-[0.96]"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-ui-xs font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui hover:brightness-110 active:scale-[0.96]"
                 >
                   <span>{isCameraActive ? "Done" : "Turn On Camera"}</span>
                 </button>

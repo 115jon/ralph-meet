@@ -150,7 +150,7 @@ export function ImageViewerToolbar({
           <UserDisplayName
             user={context}
             fallback="Unknown User"
-            className="block truncate text-sm font-bold leading-none text-rm-text drop-shadow-md"
+            className="block truncate text-ui-sm font-semibold leading-none text-rm-text drop-shadow-md"
           />
           {formattedDate && (
             <span className="truncate text-ui-2xs font-medium text-rm-text-muted drop-shadow-md">
@@ -238,7 +238,7 @@ export function ImageViewerToolbar({
                   <button
                     type="button"
                     onClick={handleCopyImage}
-                    className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
+                    className="w-full px-3 py-2 text-left text-ui-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
                   >
                     Copy Image
                     <Icon
@@ -251,7 +251,7 @@ export function ImageViewerToolbar({
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
+                  className="w-full px-3 py-2 text-left text-ui-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
                 >
                   Copy Link
                   <Icon
@@ -270,7 +270,7 @@ export function ImageViewerToolbar({
                     }));
                   }}
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center justify-between group transition-colors outline-none",
+                    "w-full px-3 py-2 text-left text-ui-sm flex items-center justify-between group transition-colors outline-none",
                     showDetails
                       ? "bg-primary/20 text-primary"
                       : "text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
@@ -293,7 +293,7 @@ export function ImageViewerToolbar({
                 <button
                   type="button"
                   onClick={handleCopyId}
-                  className="w-full px-3 py-2 text-left text-sm text-destructive pointer-fine:hover:bg-destructive pointer-fine:hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors"
+                  className="w-full px-3 py-2 text-left text-ui-sm text-destructive pointer-fine:hover:bg-destructive pointer-fine:hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors"
                 >
                   Copy Attachment ID
                   <Icon
@@ -308,7 +308,7 @@ export function ImageViewerToolbar({
                     className="absolute top-full right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-rm-border bg-rm-bg-elevated p-4 shadow-xl animate-in slide-in-from-top-2 fade-in duration-200 cursor-default outline-none md:top-0 md:right-[calc(100%+8px)] md:mt-0 md:w-64 md:max-w-64 md:slide-in-from-right-4"
                     aria-label="Image details panel"
                   >
-                    <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
+                    <h3 className="text-rm-text font-semibold mb-3 text-ui-sm flex items-center gap-2">
                       <Icon name="info" size="sm" className="text-primary" />
                       {isAnimatedMedia
                         ? "GIF Details"
@@ -321,7 +321,7 @@ export function ImageViewerToolbar({
                         <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                           Filename
                         </div>
-                        <div className="text-xs text-rm-text break-all bg-rm-bg-surface/40 p-2 rounded border border-rm-border font-mono">
+                        <div className="text-ui-xs text-rm-text break-all bg-rm-bg-surface/40 p-2 rounded border border-rm-border font-mono">
                           {currentImage.filename}
                         </div>
                       </div>
@@ -330,7 +330,7 @@ export function ImageViewerToolbar({
                           <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                             Dimensions
                           </div>
-                          <div className="text-sm text-rm-text font-medium">
+                          <div className="text-ui-sm text-rm-text font-medium">
                             {dimensions
                               ? `${dimensions.width}×${dimensions.height}`
                               : "—"}
@@ -340,7 +340,7 @@ export function ImageViewerToolbar({
                           <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                             Size
                           </div>
-                          <div className="text-sm text-rm-text font-medium">
+                          <div className="text-ui-sm text-rm-text font-medium">
                             {formatBytes(currentImage.size_bytes)}
                           </div>
                         </div>
@@ -349,7 +349,7 @@ export function ImageViewerToolbar({
                         <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                           Type
                         </div>
-                        <div className="text-xs text-rm-text-muted font-mono">
+                        <div className="text-ui-xs text-rm-text-muted font-mono">
                           {currentImage.content_type}
                         </div>
                       </div>

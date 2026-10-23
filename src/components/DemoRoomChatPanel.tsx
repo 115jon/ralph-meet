@@ -165,7 +165,9 @@ export function DemoRoomChatPanel({
               <Icon name="chat" size="sm" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-rm-text">Temporary Chat</h2>
+              <h2 className="text-ui-sm font-semibold text-rm-text">
+                Temporary Chat
+              </h2>
               <p className="text-ui-2xs font-medium text-rm-text-muted">
                 Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
               </p>
@@ -185,10 +187,10 @@ export function DemoRoomChatPanel({
       >
         {messages.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-primary/40 p-4 text-center">
-            <p className="text-sm font-semibold text-rm-text">
+            <p className="text-ui-sm font-semibold text-rm-text">
               No messages yet
             </p>
-            <p className="mt-1 text-xs text-rm-text-muted">
+            <p className="mt-1 text-ui-xs text-rm-text-muted">
               Say hi before this room forgets the conversation in{" "}
               {DEMO_CHAT_TTL_MINUTES} minutes.
             </p>
@@ -200,7 +202,7 @@ export function DemoRoomChatPanel({
               className="group rounded-2xl bg-rm-bg-primary/55 p-3 ring-1 ring-white/5"
             >
               <div className="mb-1 flex items-center justify-between gap-3">
-                <span className="truncate text-xs font-bold text-rm-text">
+                <span className="truncate text-ui-xs font-semibold text-rm-text">
                   <InlineEmojiText text={message.author_name} />
                 </span>
                 <time
@@ -211,7 +213,7 @@ export function DemoRoomChatPanel({
                 </time>
               </div>
               {message.content && (
-                <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-rm-text/90">
+                <p className="whitespace-pre-wrap wrap-break-word text-ui-sm leading-relaxed text-rm-text/90">
                   <InlineEmojiText text={message.content} />
                 </p>
               )}
@@ -255,12 +257,12 @@ export function DemoRoomChatPanel({
             maxLength={DEMO_CHAT_MAX_CONTENT_LENGTH}
             aria-label="Message this demo room"
             placeholder="Message this room"
-            className="custom-scrollbar max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm font-medium text-rm-text outline-none placeholder:text-rm-text-muted/55"
+            className="custom-scrollbar max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-ui-sm font-medium text-rm-text outline-none placeholder:text-rm-text-muted/55"
           />
           <button
             type="button"
             onClick={() => setShowGifPicker((current) => !current)}
-            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-xs font-bold tracking-wide text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-primary"
+            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-ui-xs font-semibold tracking-wide text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-primary"
           >
             GIF
           </button>
@@ -310,31 +312,31 @@ export function DemoUploadBlockerModal({
               </div>
               <h2
                 id="demo-upload-blocker-title"
-                className="text-xl font-semibold text-rm-text"
+                className="text-ui-xl font-semibold text-rm-text"
               >
                 Uploads are in the full app
               </h2>
-              <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">
+              <p className="mt-2 text-ui-sm leading-relaxed text-rm-text-muted">
                 Sign in to Ralph Meet to upload images and files with persistent
                 chat, attachment storage, and the full server experience.
               </p>
             </div>
             <div className="space-y-3 px-6 py-5">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100/90">
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-ui-sm text-emerald-100/90">
                 You can try out our GIF implementation for a limited time.
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
                   onClick={onSignIn}
-                  className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110"
+                  className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-ui-sm font-semibold text-primary-foreground transition hover:brightness-110"
                 >
                   Sign in for uploads
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-sm font-bold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-sm font-semibold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
                 >
                   Stay in demo
                 </button>

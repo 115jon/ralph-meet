@@ -16,7 +16,7 @@ export function DeviceCodeDisplay({ userCode }: { userCode: string }) {
         <span
           aria-hidden="true"
           data-testid="device-user-code"
-          className="inline-flex select-text items-center gap-3 font-mono text-[28px] font-semibold leading-none tracking-[0.16em] text-rm-text tabular-nums"
+          className="inline-flex select-text items-center gap-3 font-mono text-ui-2xl font-semibold leading-none tracking-[0.16em] text-rm-text tabular-nums"
         >
           {groups.map((group, index) => (
             <span key={index} className="inline-flex items-center gap-3">

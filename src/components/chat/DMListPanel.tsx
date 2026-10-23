@@ -109,7 +109,7 @@ export function DMListPanel({
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-rm-border outline-none pointer-fine:hover:ring-rm-border-strong"
+                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-ui-xs font-semibold text-primary-foreground ring-1 ring-rm-border outline-none pointer-fine:hover:ring-rm-border-strong"
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({

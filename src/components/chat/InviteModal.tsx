@@ -213,7 +213,7 @@ export default function InviteModal({
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-rm-text-muted">
+              <p className="text-ui-xs text-rm-text-muted">
                 Share this link with others to let them join your server.
               </p>
               <Button

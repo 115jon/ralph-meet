@@ -1259,7 +1259,7 @@ function DisplayNameStyleDialog({
             <div>
               <h2
                 id={dialogTitleId}
-                className="text-xl font-semibold text-rm-text"
+                className="text-ui-xl font-semibold text-rm-text"
               >
                 Change display name style
               </h2>
@@ -1323,7 +1323,7 @@ function DisplayNameStyleDialog({
                             "flex h-full items-center justify-center overflow-hidden text-center font-bold leading-none",
                             option.id === "eight-bit"
                               ? "text-ui-2xs tracking-[0.02em] sm:text-ui-2xs"
-                              : "text-[20px] sm:text-[21px]",
+                              : "text-ui-xl sm:text-ui-xl",
                           )}
                         />
                       </button>
@@ -1371,7 +1371,7 @@ function DisplayNameStyleDialog({
                         font: DEFAULT_DISPLAY_NAME_STYLE.font,
                         effect: option.id,
                       }}
-                      className="flex h-full items-center justify-center overflow-hidden px-2 text-center text-ui-sm font-semibold sm:text-[14px]"
+                      className="flex h-full items-center justify-center overflow-hidden px-2 text-center text-ui-sm font-semibold sm:text-ui-sm"
                     />
                   </button>
                 ))}
@@ -1631,7 +1631,7 @@ function DisplayNameStyleDialog({
                               display={avatarDisplay}
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-[28px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                            <div className="flex h-full w-full items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
                               {displayName.charAt(0).toUpperCase()}
                             </div>
                           )}
@@ -1642,7 +1642,7 @@ function DisplayNameStyleDialog({
                         <ProfileDisplayName
                           text={displayName}
                           displayNameStyle={draftStyle}
-                          className="block truncate text-[22px] font-semibold tracking-[-0.035em]"
+                          className="block truncate text-ui-xl font-semibold tracking-[-0.035em]"
                           backgroundColor={previewSurfaceBackground}
                           readableFallbackColor={previewSurfaceText}
                         />
@@ -1686,7 +1686,7 @@ function DisplayNameStyleDialog({
                           display={avatarDisplay}
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-ui-sm font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-ui-sm font-semibold text-[color:var(--rm-profile-custom-button-text)]">
                           {displayName.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -1696,7 +1696,7 @@ function DisplayNameStyleDialog({
                         <ProfileDisplayName
                           text={displayName}
                           displayNameStyle={draftStyle}
-                          className="block truncate text-[14px] font-semibold"
+                          className="block truncate text-ui-sm font-semibold"
                           backgroundColor={chatPreviewBackground}
                           readableFallbackColor={chatPreviewText}
                         />
@@ -1746,7 +1746,7 @@ function DisplayNameStyleDialog({
                           display={avatarDisplay}
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-ui-sm font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-ui-sm font-semibold text-[color:var(--rm-profile-custom-button-text)]">
                           {displayName.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -1755,7 +1755,7 @@ function DisplayNameStyleDialog({
                       <ProfileDisplayName
                         text={displayName}
                         displayNameStyle={draftStyle}
-                        className="relative block min-w-0 flex-1 truncate text-[17px] font-semibold text-[color:var(--rm-profile-custom-text)]"
+                        className="relative block min-w-0 flex-1 truncate text-ui-md font-semibold text-[color:var(--rm-profile-custom-text)]"
                         minContrastRatio={2.8}
                       />
                     </div>
@@ -2949,7 +2949,7 @@ export default function SettingsAccountTab({
   if (!user) {
     return (
       <div className="animate-in fade-in duration-150">
-        <h1 className="text-2xl font-bold text-rm-text mb-6 hidden md:block">
+        <h1 className="text-ui-2xl font-semibold text-rm-text mb-6 hidden md:block">
           My Account
         </h1>
         <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-6">
@@ -2962,12 +2962,12 @@ export default function SettingsAccountTab({
               )}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-rm-text">
+              <h2 className="text-ui-sm font-semibold text-rm-text">
                 {authUserLoaded
                   ? "Account profile unavailable"
                   : "Loading account profile"}
               </h2>
-              <p className="mt-1 text-sm leading-6 text-rm-text-secondary">
+              <p className="mt-1 text-ui-sm leading-6 text-rm-text-secondary">
                 {authUserLoaded
                   ? "Your chat session is active, but the auth profile did not load. Other settings are still available."
                   : "We are still resolving your Ralph Auth profile."}
@@ -3004,8 +3004,10 @@ export default function SettingsAccountTab({
         ) : null
       ) : (
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-rm-text">Edit Profile</h1>
-          <p className="mt-2 text-sm text-rm-text-muted">
+          <h1 className="text-ui-2xl font-semibold text-rm-text">
+            Edit Profile
+          </h1>
+          <p className="mt-2 text-ui-sm text-rm-text-muted">
             Update your collectibles and profile surfaces in one place.
           </p>
         </div>
@@ -3043,7 +3045,7 @@ export default function SettingsAccountTab({
           )}
         >
           {asModal && error ? (
-            <div className="m-4 mb-0 flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <div className="m-4 mb-0 flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
               <Icon name="warning" size="sm" />
               <span>{error}</span>
             </div>
@@ -3260,7 +3262,7 @@ export default function SettingsAccountTab({
                                   }
                                 />
                               ) : (
-                                <div className="flex h-full w-full items-center justify-center bg-rm-bg-elevated text-xl font-bold text-rm-text">
+                                <div className="flex h-full w-full items-center justify-center bg-rm-bg-elevated text-ui-xl font-semibold text-rm-text">
                                   {getDisplayInitial({
                                     name: currentDisplayName,
                                   })}
@@ -3376,7 +3378,7 @@ export default function SettingsAccountTab({
                                       />
                                     ) : (
                                       <>
-                                        <div className="flex h-full w-full items-center justify-center rounded-full bg-rm-bg-elevated text-xl font-bold text-white/80">
+                                        <div className="flex h-full w-full items-center justify-center rounded-full bg-rm-bg-elevated text-ui-xl font-semibold text-white/80">
                                           {getDisplayInitial({
                                             name: currentDisplayName,
                                           })}
@@ -3951,7 +3953,7 @@ export default function SettingsAccountTab({
                                 display={currentAvatarDisplay}
                               />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
+                              <div className="flex h-full w-full items-center justify-center rounded-full text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-text)]">
                                 {getDisplayInitial({
                                   name: currentDisplayName,
                                 })}
@@ -4136,7 +4138,7 @@ export default function SettingsAccountTab({
                               <ProfileDisplayName
                                 text={currentDisplayName}
                                 displayNameStyle={displayNameStyle}
-                                className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                                className="truncate text-ui-xl font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
                                 backgroundColor={previewTheme.backgroundColor}
                                 readableFallbackColor={previewTheme.textColor}
                               />
@@ -4216,7 +4218,7 @@ export default function SettingsAccountTab({
                               <ProfileDisplayName
                                 text={currentDisplayName}
                                 displayNameStyle={displayNameStyle}
-                                className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                                className="truncate text-ui-xl font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
                                 backgroundColor={previewTheme.backgroundColor}
                                 readableFallbackColor={previewTheme.textColor}
                               />
@@ -4322,7 +4324,7 @@ export default function SettingsAccountTab({
                                   event.currentTarget.blur();
                                 }
                               }}
-                              className="min-h-[74px] w-full resize-none bg-transparent text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                              className="min-h-[74px] w-full resize-none bg-transparent text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                               placeholder="Add a bio here"
                             />
                             <div className="mt-2 text-right text-ui-2xs text-[color:var(--rm-profile-custom-muted)]">
@@ -4334,7 +4336,7 @@ export default function SettingsAccountTab({
                             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                               Bio
                             </div>
-                            <div className="rounded-lg border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
+                            <div className="rounded-lg border border-transparent px-0 py-0.5 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
                               {currentBio || (
                                 <span className="text-[color:var(--rm-profile-custom-muted)]">
                                   Add a bio here
@@ -4349,7 +4351,7 @@ export default function SettingsAccountTab({
                         <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                           {previewReferenceDate.label}
                         </div>
-                        <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">
+                        <div className="mt-2 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
                           {previewReferenceDate.value}
                         </div>
                       </div>
@@ -4392,7 +4394,7 @@ export default function SettingsAccountTab({
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)] transition pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
+                    className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-text)] transition pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
                     style={previewThemeStyle}
                   >
                     <Icon name="add" size="sm" />
@@ -4439,7 +4441,7 @@ export default function SettingsAccountTab({
                         >
                           <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg bg-[linear-gradient(135deg,_#f2c94c,_#f97316_72%,_#7c2d12)]" />
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)]">
+                            <div className="truncate text-ui-sm font-semibold text-[color:var(--rm-profile-custom-text)]">
                               Rotating game slot {item}
                             </div>
                             <div className="mt-1 text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
@@ -4458,7 +4460,7 @@ export default function SettingsAccountTab({
                     </div>
                   </ProfilePreviewWidgetCard>
                   {error ? (
-                    <div className="flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
+                    <div className="flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
                       <Icon name="warning" size="sm" />
                       <span>{error}</span>
                     </div>
@@ -4480,15 +4482,15 @@ export default function SettingsAccountTab({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-bold text-rm-text">
+                  <h3 className="text-ui-sm font-semibold text-rm-text">
                     Claim Existing Ralph Meet Account
                   </h3>
-                  <p className="mt-1 text-sm leading-6 text-rm-text-secondary">
+                  <p className="mt-1 text-ui-sm leading-6 text-rm-text-secondary">
                     Pull your servers, messages, DMs, and profile history into
                     this Ralph Auth login.
                   </p>
                   {claimError ? (
-                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-ui-sm text-destructive">
                       <Icon name="warning" size="sm" />
                       {claimError}
                     </div>
@@ -4509,20 +4511,20 @@ export default function SettingsAccountTab({
                                   display={candidate.avatar_display}
                                 />
                               ) : (
-                                <div className="flex h-full w-full items-center justify-center text-sm font-bold text-rm-text-muted">
+                                <div className="flex h-full w-full items-center justify-center text-ui-sm font-semibold text-rm-text-muted">
                                   {getDisplayInitial(candidate)}
                                 </div>
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-bold text-rm-text">
+                              <p className="truncate text-ui-sm font-semibold text-rm-text">
                                 <InlineEmojiText
                                   text={
                                     candidate.display_name || candidate.username
                                   }
                                 />
                               </p>
-                              <p className="truncate text-xs text-rm-text-muted">
+                              <p className="truncate text-ui-xs text-rm-text-muted">
                                 @{candidate.username}
                               </p>
                             </div>
@@ -4554,10 +4556,10 @@ export default function SettingsAccountTab({
           {!asModal && hasChanges ? (
             <div className="mt-6 flex flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-rm-text">
+                <p className="text-ui-sm font-semibold text-rm-text">
                   Don&apos;t forget to save your changes.
                 </p>
-                <p className="mt-1 text-xs text-rm-text-muted">
+                <p className="mt-1 text-ui-xs text-rm-text-muted">
                   Reset this draft or save it when you&apos;re ready.
                 </p>
               </div>
@@ -4587,10 +4589,10 @@ export default function SettingsAccountTab({
         <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[120] flex justify-center px-4 md:bottom-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-rm-text">
+              <p className="text-ui-sm font-semibold text-rm-text">
                 Don&apos;t forget to save your changes.
               </p>
-              <p className="mt-1 text-xs text-rm-text-muted">
+              <p className="mt-1 text-ui-xs text-rm-text-muted">
                 Reset this draft or save it when you&apos;re ready.
               </p>
             </div>

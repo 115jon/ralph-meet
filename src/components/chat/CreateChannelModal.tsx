@@ -124,7 +124,7 @@ export default function CreateChannelModal({
             </div>
             <div className="flex-1">
               <div className="text-rm-text font-semibold">Text</div>
-              <div className="text-rm-text-muted text-xs">
+              <div className="text-rm-text-muted text-ui-xs">
                 Send messages, images, GIFs, and more.
               </div>
             </div>
@@ -166,7 +166,7 @@ export default function CreateChannelModal({
             </div>
             <div className="flex-1">
               <div className="text-rm-text font-semibold">Voice</div>
-              <div className="text-rm-text-muted text-xs">
+              <div className="text-rm-text-muted text-ui-xs">
                 Hang out with voice, video, and screen share.
               </div>
             </div>
@@ -217,7 +217,9 @@ export default function CreateChannelModal({
           />
         </div>
         {error && (
-          <p className="mt-1 text-xs font-semibold text-destructive">{error}</p>
+          <p className="mt-1 text-ui-xs font-semibold text-destructive">
+            {error}
+          </p>
         )}
       </div>
     </div>
@@ -308,7 +310,7 @@ export default function CreateChannelModal({
                 )}
                 Create Channel
               </h2>
-              <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">
+              <p className="mb-6 text-center text-ui-sm font-medium text-rm-text-muted">
                 in {type === "text" ? "Text Channels" : "Voice Channels"}
               </p>
 

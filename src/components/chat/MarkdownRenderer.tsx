@@ -156,7 +156,7 @@ export const MarkdownRenderer = React.memo(({ content }: Props) => {
     parts.push(
       <pre
         key={`cb-${match.index}`}
-        className="my-1.5 overflow-x-auto rounded-lg bg-rm-bg-elevated p-3 text-xs leading-relaxed text-rm-text-secondary border border-rm-border"
+        className="my-1.5 overflow-x-auto rounded-lg bg-rm-bg-elevated p-3 text-ui-xs leading-relaxed text-rm-text-secondary border border-rm-border"
       >
         <code>{match[1].trim()}</code>
       </pre>,

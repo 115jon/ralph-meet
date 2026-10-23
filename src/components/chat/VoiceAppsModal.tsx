@@ -110,7 +110,7 @@ export function VoiceAppsModal({
             </div>
             <div>
               <div className="font-bold text-rm-text">Activities</div>
-              <div className="mt-1 text-xs text-rm-text-muted leading-relaxed">
+              <div className="mt-1 text-ui-xs text-rm-text-muted leading-relaxed">
                 Play games, watch videos, and hang out with friends in the voice
                 channel.
               </div>
@@ -129,10 +129,10 @@ export function VoiceAppsModal({
               <WordleLogo />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-rm-text">
+              <div className="text-ui-sm font-semibold text-rm-text">
                 Daily Wordle
               </div>
-              <div className="mt-1 text-xs leading-5 text-rm-text-muted">
+              <div className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
                 Play the shared daily puzzle in the voice stage with group
                 progress and streaks.
               </div>
@@ -146,20 +146,20 @@ export function VoiceAppsModal({
               <WarpRushLogo />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-sm font-semibold text-rm-text">
+              <div className="flex items-center gap-2 text-ui-sm font-semibold text-rm-text">
                 Warp Rush 3D
                 <span className="rounded-full border border-cyan-300/40 bg-cyan-400/10 px-2 py-0.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-cyan-100">
                   GPU Stress
                 </span>
               </div>
-              <div className="mt-1 text-xs leading-5 text-rm-text-muted">
+              <div className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
                 A hardware-acceleration workout with instanced debris, bloom,
                 live FPS telemetry, and a shared voice-session leaderboard.
               </div>
             </div>
           </button>
           {participants.length > 1 && (
-            <div className="mt-3 text-xs text-rm-text-muted">
+            <div className="mt-3 text-ui-xs text-rm-text-muted">
               {participants.length} people are in this voice session.
             </div>
           )}
@@ -216,7 +216,7 @@ export function VoiceAppsModal({
                   {backButton}
                   <h2
                     id="voice-apps-title"
-                    className="text-sm font-bold text-rm-text"
+                    className="text-ui-sm font-semibold text-rm-text"
                   >
                     {title}
                   </h2>

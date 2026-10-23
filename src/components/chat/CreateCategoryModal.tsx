@@ -133,7 +133,7 @@ export default function CreateCategoryModal({
                 <Icon name="tag" size="xl" className="text-rm-text/40" />
                 Create Category
               </h2>
-              <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">
+              <p className="mb-6 text-center text-ui-sm font-medium text-rm-text-muted">
                 Categories help you organize your channels and keep things tidy.
               </p>
 

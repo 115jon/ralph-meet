@@ -57,7 +57,9 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         style={{ paddingTop: "max(0px, var(--safe-area-top, 0px))" }}
       >
         <Icon name="pin" size="lg" className="text-rm-text-muted" />
-        <h2 className="font-bold text-lg text-rm-text">Pinned Messages</h2>
+        <h2 className="font-semibold text-ui-lg text-rm-text">
+          Pinned Messages
+        </h2>
         <div className="flex-1" />
         <button
           type="button"
@@ -153,7 +155,7 @@ const PinnedMessageItem = ({
     <div className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pointer-fine:hover:bg-rm-bg-elevated/80 transition-ui relative overflow-hidden flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-4 min-w-0">
-          <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform duration-200">
+          <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-ui-md font-semibold text-primary border border-rm-border transition-transform duration-200">
             {authorInfo.avatarUrl ? (
               <AvatarImage
                 src={getAuthAssetUrl(authorInfo.avatarUrl)}
@@ -169,7 +171,7 @@ const PinnedMessageItem = ({
           </div>
           <div className="flex flex-col min-w-0 pt-0.5">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-bold text-ui-base text-rm-text truncate">
+              <span className="font-semibold text-ui-base text-rm-text truncate">
                 {authorInfo.displayName}
               </span>
               <span className="text-ui-2xs text-rm-text-muted font-medium shrink-0">
@@ -182,7 +184,7 @@ const PinnedMessageItem = ({
             </div>
 
             {msg.content && (
-              <div className="text-[14px] text-rm-text-secondary leading-[1.4] break-words">
+              <div className="text-ui-sm text-rm-text-secondary leading-[1.4] break-words">
                 <MarkdownRenderer content={msg.content} />
                 {msg.updated_at && (
                   <span
@@ -251,7 +253,7 @@ const PinnedMessageItem = ({
                         <Icon name={typeIcon} size="md" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-ui-xs font-bold text-primary group-hover/file:underline">
+                        <p className="truncate text-ui-xs font-semibold text-primary group-hover/file:underline">
                           {att.filename}
                         </p>
                         <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">

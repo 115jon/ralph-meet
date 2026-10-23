@@ -110,7 +110,7 @@ function DraggableAvatar({
               display={participant.avatarDisplay ?? null}
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center text-xs font-bold text-rm-text">
+            <span className="flex h-full w-full items-center justify-center text-ui-xs font-semibold text-rm-text">
               {participant.name[0]?.toUpperCase()}
             </span>
           )}
@@ -348,17 +348,17 @@ export function SpatialAudioPanel({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-sm font-semibold text-rm-text">
+            <h3 className="text-ui-sm font-semibold text-rm-text">
               Spatial Audio
             </h3>
-            <p className="mt-1 text-xs text-rm-text-muted">
+            <p className="mt-1 text-ui-xs text-rm-text-muted">
               Shared room placement for everyone in this voice session.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-xs font-bold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+            className="rounded-md px-2 py-1 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
           >
             Close
           </button>
@@ -366,7 +366,7 @@ export function SpatialAudioPanel({
 
         {blocked && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
-            <div className="flex items-center gap-2 text-xs text-amber-200">
+            <div className="flex items-center gap-2 text-ui-xs text-amber-200">
               <Icon name="warning" size="sm" />
               High Fidelity Audio is required to hear spatial audio.
             </div>
@@ -385,7 +385,7 @@ export function SpatialAudioPanel({
               commit({ enabled: nextEnabled });
             }}
             className={cn(
-              "rounded-lg px-3 py-2 text-xs font-bold transition-colors",
+              "rounded-lg px-3 py-2 text-ui-xs font-semibold transition-colors",
               state.enabled && localSpatialEnabled && localHighFidelity
                 ? "bg-primary text-primary-foreground"
                 : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
@@ -398,7 +398,7 @@ export function SpatialAudioPanel({
             onClick={() =>
               commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })
             }
-            className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-xs font-bold text-rm-text-muted pointer-fine:hover:text-rm-text"
+            className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:text-rm-text"
           >
             <Icon name="reset" size="sm" /> Reset
           </button>
@@ -411,7 +411,7 @@ export function SpatialAudioPanel({
               type="button"
               onClick={() => commit({ placementMode: mode.value })}
               className={cn(
-                "rounded-md px-3 py-2 text-xs font-bold transition-colors",
+                "rounded-md px-3 py-2 text-ui-xs font-semibold transition-colors",
                 state.placementMode === mode.value
                   ? "bg-primary text-primary-foreground"
                   : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
@@ -430,7 +430,7 @@ export function SpatialAudioPanel({
           ].map(([label, key, min, max]) => (
             <label
               key={key}
-              className="space-y-2 text-xs font-bold text-rm-text-muted"
+              className="space-y-2 text-ui-xs font-semibold text-rm-text-muted"
             >
               <span className="flex justify-between">
                 <span>{label}</span>

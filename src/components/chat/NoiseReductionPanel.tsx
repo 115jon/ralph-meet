@@ -49,7 +49,7 @@ export function NoiseReductionPanel({
             </span>
           </div>
           <div className="space-y-1">
-            <h3 className="text-ui-base font-bold text-rm-text">
+            <h3 className="text-ui-base font-semibold text-rm-text">
               Suppress background noise before your voice leaves the app
             </h3>
             <p className="text-ui-xs leading-relaxed text-rm-text-muted">
@@ -94,7 +94,7 @@ export function NoiseReductionPanel({
           <Icon name="privacy" size="xs" className="text-emerald-400" />
           Powered By
         </div>
-        <div className="text-sm font-semibold tracking-tight text-rm-text">
+        <div className="text-ui-sm font-semibold tracking-tight text-rm-text">
           {providerLabel}
         </div>
       </div>

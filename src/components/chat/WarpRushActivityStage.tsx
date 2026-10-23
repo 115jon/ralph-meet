@@ -1135,10 +1135,10 @@ export function WarpRushActivityStage({
                     <Icon name="activities" size="sm" />
                     Warp Rush 3D
                   </div>
-                  <h2 className="mt-2 text-2xl font-black leading-none text-white sm:text-[2rem]">
+                  <h2 className="mt-2 text-ui-2xl font-black leading-none text-white sm:text-ui-2xl">
                     Shared tunnel sprint
                   </h2>
-                  <p className="mt-2 max-w-[34ch] text-sm leading-6 text-slate-300">
+                  <p className="mt-2 max-w-[34ch] text-ui-sm leading-6 text-slate-300">
                     Same seed, same hazards, live ghost ships. Draft the pilot
                     ahead and compare acceleration modes without changing the
                     sim.
@@ -1161,7 +1161,7 @@ export function WarpRushActivityStage({
                   <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
                     Score
                   </div>
-                  <div className="mt-2 text-2xl font-black text-cyan-200">
+                  <div className="mt-2 text-ui-2xl font-black text-cyan-200">
                     {formatStat(score)}
                   </div>
                 </div>
@@ -1169,7 +1169,7 @@ export function WarpRushActivityStage({
                   <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
                     Best
                   </div>
-                  <div className="mt-2 text-2xl font-black text-fuchsia-200">
+                  <div className="mt-2 text-ui-2xl font-black text-fuchsia-200">
                     {formatStat(bestScore)}
                   </div>
                 </div>
@@ -1180,7 +1180,7 @@ export function WarpRushActivityStage({
                   </div>
                   <div
                     className={cn(
-                      "mt-2 text-sm font-bold",
+                      "mt-2 text-ui-sm font-semibold",
                       slipstreamActive ? "text-emerald-200" : "text-slate-200",
                     )}
                   >
@@ -1194,7 +1194,7 @@ export function WarpRushActivityStage({
                     <Icon name="members" size="xs" />
                     Rival
                   </div>
-                  <div className="mt-2 text-sm font-bold text-slate-100">
+                  <div className="mt-2 text-ui-sm font-semibold text-slate-100">
                     {nearestRivalGap === null
                       ? "Open tunnel"
                       : `${nearestRivalGap.toFixed(1)}m ahead`}
@@ -1204,7 +1204,7 @@ export function WarpRushActivityStage({
             </div>
 
             {failureReason && (
-              <div className="rounded-full border border-amber-300/28 bg-slate-950/72 px-4 py-2 text-xs text-amber-50 backdrop-blur-xl">
+              <div className="rounded-full border border-amber-300/28 bg-slate-950/72 px-4 py-2 text-ui-xs text-amber-50 backdrop-blur-xl">
                 {failureReason}
               </div>
             )}
@@ -1235,7 +1235,7 @@ export function WarpRushActivityStage({
                       key={entry.userId}
                       className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5"
                     >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/15 text-xs font-black text-cyan-100">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/15 text-ui-xs font-black text-cyan-100">
                         {index + 1}
                       </div>
                       {avatar ? (
@@ -1245,12 +1245,12 @@ export function WarpRushActivityStage({
                           className="h-10 w-10 rounded-full object-cover"
                         />
                       ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-400/15 text-sm font-black text-fuchsia-100">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-400/15 text-ui-sm font-black text-fuchsia-100">
                           {displayName.slice(0, 1).toUpperCase()}
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold text-white">
+                        <div className="truncate text-ui-sm font-semibold text-white">
                           {displayName}
                         </div>
                         <div className="mt-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
@@ -1265,7 +1265,7 @@ export function WarpRushActivityStage({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-lg font-black text-cyan-100">
+                        <div className="text-ui-lg font-black text-cyan-100">
                           {formatStat(entry.best)}
                         </div>
                         <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
@@ -1276,7 +1276,7 @@ export function WarpRushActivityStage({
                   );
                 })
               ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-center text-sm text-slate-300">
+                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-center text-ui-sm text-slate-300">
                   Launch the activity in the same voice session and live rivals
                   will start ghosting into the tunnel.
                 </div>
@@ -1291,16 +1291,16 @@ export function WarpRushActivityStage({
               <Icon name="spatial" size="sm" />
               Controls
             </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
               Mouse / touch steer
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
               WASD trim
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
               Draft a ghost
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
               Space restart
             </span>
           </div>
@@ -1317,7 +1317,7 @@ export function WarpRushActivityStage({
                   type="button"
                   onClick={() => setPreset(option)}
                   className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-bold transition-colors",
+                    "rounded-full border px-4 py-2 text-ui-sm font-semibold transition-colors",
                     preset === option
                       ? "border-cyan-200 bg-cyan-300/20 text-white"
                       : "border-white/10 bg-white/[0.04] text-slate-300 pointer-fine:hover:border-cyan-300/35 pointer-fine:hover:text-white",
@@ -1339,7 +1339,7 @@ export function WarpRushActivityStage({
                   type="button"
                   onClick={() => setRenderScale(option.value)}
                   className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-bold transition-colors",
+                    "rounded-full border px-4 py-2 text-ui-sm font-semibold transition-colors",
                     renderScale === option.value
                       ? "border-fuchsia-200 bg-fuchsia-300/18 text-white"
                       : "border-white/10 bg-white/[0.04] text-slate-300 pointer-fine:hover:border-fuchsia-300/35 pointer-fine:hover:text-white",
@@ -1350,7 +1350,7 @@ export function WarpRushActivityStage({
               ))}
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <div className="mt-3 flex flex-wrap gap-2 text-ui-xs">
               <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-200">
                 {perfStats.fps} FPS
               </div>
@@ -1389,8 +1389,10 @@ export function WarpRushActivityStage({
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10 text-amber-200">
               <Icon name="warning" size="xl" />
             </div>
-            <h3 className="mt-4 text-3xl font-black text-white">Hull breach</h3>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
+            <h3 className="mt-4 text-ui-2xl font-black text-white">
+              Hull breach
+            </h3>
+            <p className="mt-3 text-ui-sm leading-6 text-slate-300">
               Breach confirmed. The race sim stays fixed-step across refresh
               rates now, so acceleration changes should affect render cost, not
               the course itself.
@@ -1400,7 +1402,7 @@ export function WarpRushActivityStage({
                 <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                   Run
                 </div>
-                <div className="mt-1 text-3xl font-black text-cyan-200">
+                <div className="mt-1 text-ui-2xl font-black text-cyan-200">
                   {formatStat(score)}
                 </div>
               </div>
@@ -1408,7 +1410,7 @@ export function WarpRushActivityStage({
                 <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                   Best
                 </div>
-                <div className="mt-1 text-3xl font-black text-fuchsia-200">
+                <div className="mt-1 text-ui-2xl font-black text-fuchsia-200">
                   {formatStat(bestScore)}
                 </div>
               </div>
@@ -1416,7 +1418,7 @@ export function WarpRushActivityStage({
                 <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                   Live FPS
                 </div>
-                <div className="mt-1 text-3xl font-black text-emerald-200">
+                <div className="mt-1 text-ui-2xl font-black text-emerald-200">
                   {perfStats.fps}
                 </div>
               </div>
@@ -1424,7 +1426,7 @@ export function WarpRushActivityStage({
             <button
               type="button"
               onClick={() => restartRef.current()}
-              className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/20 px-5 py-3 text-sm font-bold text-white transition-colors pointer-fine:hover:bg-cyan-300/28"
+              className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/20 px-5 py-3 text-ui-sm font-semibold text-white transition-colors pointer-fine:hover:bg-cyan-300/28"
             >
               <Icon name="reset" size="sm" />
               Restart run

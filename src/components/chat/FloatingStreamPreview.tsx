@@ -210,10 +210,10 @@ export default function FloatingStreamPreview({
 
           {(isPreviewPaused || !previewStream) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black px-8 text-center">
-              <p className="text-lg font-bold tracking-tight text-white">
+              <p className="text-ui-lg font-semibold tracking-tight text-white">
                 {pausedTitle}
               </p>
-              <p className="mt-2 text-sm font-medium text-white/70">
+              <p className="mt-2 text-ui-sm font-medium text-white/70">
                 {pausedDescription}
               </p>
             </div>
@@ -233,7 +233,7 @@ export default function FloatingStreamPreview({
             <InlineEmojiText text={channelName} className="truncate" />
           </button>
 
-          <div className="absolute bottom-3 left-3 z-20 max-w-[55%] rounded-md bg-black/40 px-2.5 py-1 text-sm font-bold tracking-tight text-white">
+          <div className="absolute bottom-3 left-3 z-20 max-w-[55%] rounded-md bg-black/40 px-2.5 py-1 text-ui-sm font-semibold tracking-tight text-white">
             <InlineEmojiText text={displayName} className="truncate" />
           </div>
 

@@ -171,7 +171,7 @@ function PopoverAvatar({
   return (
     <div className="relative z-30 -mt-12 px-4">
       <div className="relative inline-block rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.24)]">
-        <div className="relative flex h-[84px] w-[84px] items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-2xl font-bold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_12px_30px_rgba(0,0,0,0.34)]">
+        <div className="relative flex h-[84px] w-[84px] items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_12px_30px_rgba(0,0,0,0.34)]">
           {avatarUrl ? (
             <AvatarImage
               src={getAuthAssetUrl(avatarUrl)}
@@ -309,13 +309,13 @@ function RoleAssignmentDropdown({
       className="absolute right-0 top-7 z-70 w-48 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-xl animate-in fade-in zoom-in-95"
     >
       {loadingRoles ? (
-        <div className="p-3 text-center text-xs text-[color:var(--rm-profile-custom-muted)]">
+        <div className="p-3 text-center text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
           Loading...
         </div>
       ) : (
         <div className="max-h-48 overflow-y-auto custom-scrollbar">
           {assignableRoles.length === 0 ? (
-            <div className="p-2 text-center text-xs text-[color:var(--rm-profile-custom-muted)]">
+            <div className="p-2 text-center text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
               No custom roles available
             </div>
           ) : (
@@ -335,7 +335,7 @@ function RoleAssignmentDropdown({
                     assignRole(role.id, currentRoles);
                   }}
                   className={cn(
-                    "group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]",
+                    "group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-ui-xs transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]",
                     hasRole
                       ? "font-medium text-[color:var(--rm-profile-custom-text)]"
                       : "text-[color:var(--rm-profile-custom-muted)]",
@@ -934,7 +934,7 @@ function DesktopUserProfilePopover({
                           <ProfileDisplayName
                             text={resolvedDisplayName}
                             displayNameStyle={resolvedUser.display_name_style}
-                            className="text-xl font-bold leading-tight text-[color:var(--rm-profile-custom-text)]"
+                            className="text-ui-xl font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
                             backgroundColor={profileTheme.backgroundColor}
                             readableFallbackColor={profileTheme.textColor}
                           />
@@ -943,7 +943,7 @@ function DesktopUserProfilePopover({
                         <ProfileDisplayName
                           text={resolvedDisplayName}
                           displayNameStyle={resolvedUser.display_name_style}
-                          className="text-xl font-bold leading-tight text-[color:var(--rm-profile-custom-text)]"
+                          className="text-ui-xl font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
                           backgroundColor={profileTheme.backgroundColor}
                           readableFallbackColor={profileTheme.textColor}
                         />
@@ -966,7 +966,7 @@ function DesktopUserProfilePopover({
                       ) : null}
                     </div>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
                       {isMe ? (
                         <button
                           type="button"
@@ -993,7 +993,7 @@ function DesktopUserProfilePopover({
                     </div>
 
                     {resolvedUser.custom_status?.trim() ? (
-                      <p className="mt-3 text-sm italic text-[color:var(--rm-profile-custom-muted)]">
+                      <p className="mt-3 text-ui-sm italic text-[color:var(--rm-profile-custom-muted)]">
                         {resolvedUser.custom_status.trim()}
                       </p>
                     ) : null}
@@ -1001,7 +1001,7 @@ function DesktopUserProfilePopover({
                 </div>
 
                 {resolvedUser.bio?.trim() ? (
-                  <div className="mt-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 px-4 py-3 text-sm leading-6 text-[color:var(--rm-profile-custom-text)] shadow-[0_16px_32px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+                  <div className="mt-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 px-4 py-3 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)] shadow-[0_16px_32px_rgba(0,0,0,0.18)] backdrop-blur-sm">
                     {resolvedUser.bio.trim()}
                   </div>
                 ) : null}
@@ -1029,7 +1029,7 @@ function DesktopUserProfilePopover({
                     <input
                       type="text"
                       aria-label={`Message ${resolvedUsername}`}
-                      className="w-full bg-transparent text-xs font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                      className="w-full bg-transparent text-ui-xs font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                       placeholder={`Message @${resolvedUsername}`}
                     />
                     <Icon
@@ -1044,7 +1044,7 @@ function DesktopUserProfilePopover({
                   <button
                     type="button"
                     onClick={handleOpenProfileEditor}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition pointer-fine:hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition pointer-fine:hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
                     <Icon name="edit" size="sm" />
                     Edit Profile

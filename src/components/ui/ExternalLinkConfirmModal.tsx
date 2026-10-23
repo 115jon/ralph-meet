@@ -52,15 +52,15 @@ export function ExternalLinkConfirmModal({
           <ResponsiveDialogTitle className="pr-8 text-ui-lg font-semibold">
             Leaving Ralph Meet
           </ResponsiveDialogTitle>
-          <ResponsiveDialogDescription className="mt-1 text-sm text-rm-text-muted">
+          <ResponsiveDialogDescription className="mt-1 text-ui-sm text-rm-text-muted">
             This link is taking you to the following website
           </ResponsiveDialogDescription>
 
-          <div className="mt-5 max-h-24 overflow-auto rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-3 text-sm leading-5 text-rm-text-secondary [overflow-wrap:anywhere]">
+          <div className="mt-5 max-h-24 overflow-auto rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-3 text-ui-sm leading-5 text-rm-text-secondary [overflow-wrap:anywhere]">
             {pending.url}
           </div>
 
-          <label className="mt-3 flex cursor-pointer items-center gap-3 text-sm text-rm-text-secondary">
+          <label className="mt-3 flex cursor-pointer items-center gap-3 text-ui-sm text-rm-text-secondary">
             <input
               type="checkbox"
               checked={trustDomain}

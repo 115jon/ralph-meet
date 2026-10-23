@@ -60,7 +60,7 @@ export const PinModal: React.FC<PinModalProps> = ({
 
   const details = (
     <>
-      <div className="text-rm-text-muted text-[14px] mb-6 leading-relaxed">
+      <div className="text-rm-text-muted text-ui-sm mb-6 leading-relaxed">
         {isPin ? (
           <InlineEmojiText
             text={`Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`}
@@ -73,7 +73,7 @@ export const PinModal: React.FC<PinModalProps> = ({
       {/* Message Preview */}
       <div className="rounded-xl border border-rm-border bg-rm-bg-elevated/40 p-4 mb-6">
         <div className="flex gap-3 mb-2">
-          <div className="relative h-10 w-10 shrink-0 overflow-visible rounded-full bg-primary/10 text-sm font-bold text-primary flex items-center justify-center border border-rm-border">
+          <div className="relative h-10 w-10 shrink-0 overflow-visible rounded-full bg-primary/10 text-ui-sm font-semibold text-primary flex items-center justify-center border border-rm-border">
             {message.author?.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(message.author.avatar_url)}
@@ -88,7 +88,7 @@ export const PinModal: React.FC<PinModalProps> = ({
             <div className="flex items-center gap-2">
               <UserDisplayName
                 user={message.author}
-                className="block truncate text-[14px] font-bold text-rm-text"
+                className="block truncate text-ui-sm font-semibold text-rm-text"
               />
               <span className="text-ui-2xs text-rm-text-muted font-medium">
                 {new Date(message.created_at).toLocaleTimeString([], {
@@ -97,7 +97,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                 })}
               </span>
             </div>
-            <div className="text-[14px] text-rm-text-secondary leading-relaxed wrap-break-word">
+            <div className="text-ui-sm text-rm-text-secondary leading-relaxed wrap-break-word">
               <MarkdownRenderer content={message.content} />
               {message.updated_at && (
                 <span className="ml-1 text-ui-2xs text-rm-text-muted">

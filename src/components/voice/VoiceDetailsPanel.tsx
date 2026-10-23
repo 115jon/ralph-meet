@@ -295,7 +295,7 @@ export function VoiceDetailsPanel({
           >
             {/* Header */}
             <div className="px-4 pt-4 pb-2">
-              <h3 className="text-ui-base font-bold text-rm-text tracking-tight">
+              <h3 className="text-ui-base font-semibold text-rm-text tracking-tight">
                 Voice Details
               </h3>
             </div>
@@ -463,7 +463,7 @@ function ConnectionTab({
               <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
                 {card.label}
               </p>
-              <p className="mt-1 text-ui-xs font-bold text-rm-text">
+              <p className="mt-1 text-ui-xs font-semibold text-rm-text">
                 {card.value}
               </p>
             </div>
@@ -489,7 +489,7 @@ function ConnectionTab({
             <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
               {card.label}
             </p>
-            <p className="mt-1 text-ui-xs font-bold text-rm-text">
+            <p className="mt-1 text-ui-xs font-semibold text-rm-text">
               {card.value}
             </p>
           </div>
@@ -610,7 +610,7 @@ function PrivacyTab() {
           <LockIcon className="text-rm-success" size={20} />
         </div>
         <div>
-          <p className="text-[14px] font-bold text-rm-text">
+          <p className="text-ui-sm font-semibold text-rm-text">
             End-to-End Encrypted
           </p>
           <p className="text-ui-xs text-rm-text-muted">

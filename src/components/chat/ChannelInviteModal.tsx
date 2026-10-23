@@ -163,7 +163,7 @@ export default function ChannelInviteModal({
                 className="text-rm-accent-ink"
               />
             </ResponsiveDialogTitle>
-            <ResponsiveDialogDescription className="mt-0.5 flex items-center gap-1 text-sm text-rm-text-muted">
+            <ResponsiveDialogDescription className="mt-0.5 flex items-center gap-1 text-ui-sm text-rm-text-muted">
               Recipients will land in <Icon name="textChannel" size="xs" />
               <InlineEmojiText text={channel.name} />
             </ResponsiveDialogDescription>
@@ -196,11 +196,11 @@ export default function ChannelInviteModal({
           {/* Friends list */}
           <div className="flex-1 overflow-y-auto px-3 custom-scrollbar min-h-0">
             {friends.length === 0 ? (
-              <div className="px-3 py-8 text-center text-sm text-rm-text-muted">
+              <div className="px-3 py-8 text-center text-ui-sm text-rm-text-muted">
                 No friends to invite. Add some friends first!
               </div>
             ) : filteredFriends.length === 0 ? (
-              <div className="px-3 py-8 text-center text-sm text-rm-text-muted">
+              <div className="px-3 py-8 text-center text-ui-sm text-rm-text-muted">
                 No friends matching &quot;{state.search}&quot;
               </div>
             ) : (
@@ -223,14 +223,14 @@ export default function ChannelInviteModal({
                         />
                       </div>
                     ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-sm font-semibold text-primary">
                         {displayName[0].toUpperCase()}
                       </div>
                     )}
 
                     {/* Name */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-rm-text truncate">
+                      <p className="text-ui-sm font-semibold text-rm-text truncate">
                         <InlineEmojiText text={displayName} />
                       </p>
                     </div>
@@ -256,7 +256,7 @@ export default function ChannelInviteModal({
           <div className="border-t border-rm-border px-6 py-4">
             <label
               htmlFor={inviteLinkInputId}
-              className="mb-2 block text-xs font-medium text-rm-text-muted"
+              className="mb-2 block text-ui-xs font-medium text-rm-text-muted"
             >
               Or, send a server invite link to a friend
             </label>

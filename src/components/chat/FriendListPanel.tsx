@@ -80,12 +80,12 @@ export function FriendListPanel({
       {/* Add friend form */}
       {addFriendMode && (
         <div className="border-b border-rm-border px-3 py-3">
-          <p className="mb-2 text-xs text-rm-text-muted">
+          <p className="mb-2 text-ui-xs text-rm-text-muted">
             Add a friend by their username
           </p>
           <div className="flex gap-2">
             <input
-              className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-1.5 text-sm text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+              className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-1.5 text-ui-sm text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
               aria-label="Friend username"
               placeholder="Enter a username"
               value={addUsername}
@@ -95,7 +95,7 @@ export function FriendListPanel({
               onKeyDown={(e) => e.key === "Enter" && handleAddFriend()}
             />
             <button
-              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors pointer-fine:hover:brightness-110 disabled:opacity-40"
+              className="rounded-lg bg-primary px-3 py-1.5 text-ui-xs font-semibold text-primary-foreground transition-colors pointer-fine:hover:brightness-110 disabled:opacity-40"
               onClick={handleAddFriend}
               disabled={!addUsername.trim()}
             >
@@ -103,7 +103,7 @@ export function FriendListPanel({
             </button>
           </div>
           {addStatus && (
-            <p className="mt-2 text-xs text-primary">{addStatus}</p>
+            <p className="mt-2 text-ui-xs text-primary">{addStatus}</p>
           )}
         </div>
       )}
@@ -128,7 +128,7 @@ export function FriendListPanel({
               ) : (
                 <Icon name="members" size="xl" className="opacity-20" />
               )}
-              <span className="text-xs">
+              <span className="text-ui-xs">
                 {tab === "online"
                   ? "No friends online"
                   : tab === "all"
@@ -170,7 +170,7 @@ export function FriendListPanel({
                       }}
                       aria-label={`View ${displayName}'s profile`}
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-ui relative">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-ui relative">
                         {rel.user.avatar_url ? (
                           <AvatarImage
                             src={getAuthAssetUrl(rel.user.avatar_url)}

@@ -66,8 +66,10 @@ export default function ThemePreviewSidebar({
           <Icon name="eye" size="md" />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-bold text-rm-text">Preview Theme</h2>
-          <p className="text-xs text-rm-text-muted">
+          <h2 className="text-ui-lg font-semibold text-rm-text">
+            Preview Theme
+          </h2>
+          <p className="text-ui-xs text-rm-text-muted">
             Switch themes and see the current screen update live.
           </p>
         </div>
@@ -101,7 +103,7 @@ export default function ThemePreviewSidebar({
                 />
                 <span
                   className={cn(
-                    "text-xs font-bold",
+                    "text-ui-xs font-semibold",
                     active ? "text-primary" : "text-rm-text",
                   )}
                 >
@@ -117,7 +119,7 @@ export default function ThemePreviewSidebar({
         <button
           type="button"
           onClick={onBackToSettings}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-ui-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover"
         >
           <Icon name="chevronLeft" size="xs" />
           Back to Settings

@@ -28,7 +28,7 @@ export function AppTitleBarContent({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 items-center justify-center gap-1.5 text-ui-xs font-bold tracking-wider text-rm-text-muted select-none",
+        "flex min-w-0 items-center justify-center gap-1.5 text-ui-xs font-semibold tracking-wider text-rm-text-muted select-none",
         className,
       )}
       aria-label={

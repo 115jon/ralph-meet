@@ -112,7 +112,7 @@ function HomePageHeader() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-elevated text-rm-text ring-1 ring-rm-border">
             <HomeIcon className="h-4 w-4" />
           </div>
-          <span className="text-base font-semibold tracking-tight text-rm-text font-[family-name:var(--font-family-body)]">
+          <span className="text-ui-md font-semibold tracking-tight text-rm-text font-[family-name:var(--font-family-body)]">
             Ralph Meet
           </span>
         </a>
@@ -120,7 +120,7 @@ function HomePageHeader() {
           {!isSignedIn ? (
             <a
               href="/sign-in"
-              className={`rounded-full bg-rm-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-rm-accent-hover active:scale-[0.98] ${focusRing}`}
+              className={`rounded-full bg-rm-accent px-4 py-1.5 text-ui-sm font-medium text-white transition-colors hover:bg-rm-accent-hover active:scale-[0.98] ${focusRing}`}
             >
               Sign In
             </a>
@@ -191,7 +191,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...instant, delay: reduceMotion ? 0 : 0.05 }}
-            className="mb-5 text-balance text-5xl font-normal leading-[1.05] tracking-tight text-rm-text sm:text-6xl lg:text-7xl font-[family-name:var(--font-family-display)]"
+            className="mb-5 text-balance text-display-lg font-normal leading-[1.05] tracking-tight text-rm-text sm:text-display-lg font-[family-name:var(--font-family-display)]"
           >
             Hang out in <em className="italic text-rm-accent">real time</em>
           </motion.h1>
@@ -200,7 +200,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...instant, delay: reduceMotion ? 0 : 0.12 }}
-            className="mb-8 max-w-[36ch] text-pretty text-base leading-relaxed text-rm-text-secondary sm:text-lg font-[family-name:var(--font-family-body)]"
+            className="mb-8 max-w-[36ch] text-pretty text-ui-md leading-relaxed text-rm-text-secondary sm:text-ui-lg font-[family-name:var(--font-family-body)]"
           >
             Voice rooms, video, and chat on Cloudflare&apos;s edge. Share a
             link.
@@ -215,7 +215,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             <button
               type="button"
               onClick={createRoom}
-              className={`flex items-center gap-2 rounded-full bg-rm-accent px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-12px] shadow-rm-accent transition-colors hover:bg-rm-accent-hover active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
+              className={`flex items-center gap-2 rounded-full bg-rm-accent px-6 py-3 text-ui-sm font-semibold text-white shadow-[0_10px_24px_-12px] shadow-rm-accent transition-colors hover:bg-rm-accent-hover active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
             >
               Start a room
             </button>
@@ -223,7 +223,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             {isSignedIn ? (
               <a
                 href="/chat"
-                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
+                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-ui-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
               >
                 <Icon name="chat" size="sm" />
                 Open chat
@@ -231,7 +231,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             ) : isWindowsUser ? (
               <a
                 href={latestRelease.downloadUrl}
-                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
+                className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-ui-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
               >
                 <Icon name="download" size="sm" />
                 Download
@@ -279,7 +279,7 @@ function HomePageFeatures() {
           initial={reduceMotion ? false : { opacity: 0, y: 16 }}
           animate={isInView ? { opacity: 1, y: 0 } : undefined}
           transition={instant}
-          className="mb-16 max-w-2xl text-balance text-4xl font-normal tracking-tight text-rm-text sm:text-5xl md:text-6xl font-[family-name:var(--font-family-display)]"
+          className="mb-16 max-w-2xl text-balance text-display font-normal tracking-tight text-rm-text sm:text-display-lg font-[family-name:var(--font-family-display)]"
         >
           Rooms you can drop into
         </motion.h2>
@@ -291,10 +291,10 @@ function HomePageFeatures() {
           className="grid items-center gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16"
         >
           <div>
-            <h3 className="mb-3 text-3xl font-normal tracking-tight text-rm-text sm:text-4xl font-[family-name:var(--font-family-display)]">
+            <h3 className="mb-3 text-ui-2xl font-normal tracking-tight text-rm-text sm:text-display font-[family-name:var(--font-family-display)]">
               Voice that stays open
             </h3>
-            <p className="max-w-[42ch] text-base leading-relaxed text-rm-text-secondary font-[family-name:var(--font-family-body)]">
+            <p className="max-w-[42ch] text-ui-md leading-relaxed text-rm-text-secondary font-[family-name:var(--font-family-body)]">
               Friends see you&apos;re around and hop in. No calendar, no lobby,
               no waiting for someone to start the call.
             </p>
@@ -318,10 +318,10 @@ function HomePageFeatures() {
           transition={{ ...instant, delay: reduceMotion ? 0 : 0.14 }}
           className="mt-24"
         >
-          <h3 className="mb-3 text-3xl font-normal tracking-tight text-rm-text sm:text-4xl font-[family-name:var(--font-family-display)]">
+          <h3 className="mb-3 text-ui-2xl font-normal tracking-tight text-rm-text sm:text-display font-[family-name:var(--font-family-display)]">
             Chat that keeps the thread
           </h3>
-          <p className="mb-8 max-w-[46ch] text-base leading-relaxed text-rm-text-secondary font-[family-name:var(--font-family-body)]">
+          <p className="mb-8 max-w-[46ch] text-ui-md leading-relaxed text-rm-text-secondary font-[family-name:var(--font-family-body)]">
             Channels for topics, GIFs, files, and the leftover jokes from voice.
             The hangout continues after you mute.
           </p>
@@ -344,11 +344,11 @@ function HomePageFeatures() {
           transition={{ ...instant, delay: reduceMotion ? 0 : 0.2 }}
           className="mt-20 grid gap-8 border-t border-rm-border pt-10 sm:grid-cols-2"
         >
-          <p className="max-w-[36ch] text-lg leading-relaxed text-rm-text font-[family-name:var(--font-family-body)]">
+          <p className="max-w-[36ch] text-ui-lg leading-relaxed text-rm-text font-[family-name:var(--font-family-body)]">
             Routed through Cloudflare&apos;s global edge so the path stays
             short, wherever people join from.
           </p>
-          <ul className="flex flex-col gap-3 text-sm text-rm-text-secondary font-[family-name:var(--font-family-body)] sm:items-end">
+          <ul className="flex flex-col gap-3 text-ui-sm text-rm-text-secondary font-[family-name:var(--font-family-body)] sm:items-end">
             <li>300+ Cloudflare edge locations</li>
             <li>Open source on GitHub</li>
           </ul>
@@ -383,7 +383,7 @@ function HomePageCTA({
           initial={reduceMotion ? false : { opacity: 0, y: 16 }}
           animate={isInView ? { opacity: 1, y: 0 } : undefined}
           transition={instant}
-          className="mb-4 max-w-xl text-4xl font-normal tracking-tight text-rm-text sm:text-5xl md:text-6xl font-[family-name:var(--font-family-display)]"
+          className="mb-4 max-w-xl text-display font-normal tracking-tight text-rm-text sm:text-display-lg font-[family-name:var(--font-family-display)]"
         >
           Already have a room?
         </motion.h2>
@@ -391,7 +391,7 @@ function HomePageCTA({
           initial={reduceMotion ? false : { opacity: 0, y: 16 }}
           animate={isInView ? { opacity: 1, y: 0 } : undefined}
           transition={{ ...instant, delay: reduceMotion ? 0 : 0.08 }}
-          className="mb-8 max-w-[40ch] text-base text-rm-text-secondary font-[family-name:var(--font-family-body)]"
+          className="mb-8 max-w-[40ch] text-ui-md text-rm-text-secondary font-[family-name:var(--font-family-body)]"
         >
           Paste the code or link. No account required.
         </motion.p>
@@ -414,7 +414,7 @@ function HomePageCTA({
             placeholder="Room code or link"
             spellCheck={false}
             autoComplete="off"
-            className="h-full w-full rounded-lg bg-transparent px-4 py-3 text-base font-medium text-rm-text outline-none placeholder:text-rm-text-muted font-[family-name:var(--font-family-body)]"
+            className="h-full w-full rounded-lg bg-transparent px-4 py-3 text-ui-md font-medium text-rm-text outline-none placeholder:text-rm-text-muted font-[family-name:var(--font-family-body)]"
           />
           <button
             type="submit"
@@ -438,11 +438,11 @@ function HomePageFooter() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-elevated text-rm-text ring-1 ring-rm-border">
             <HomeIcon className="h-4 w-4" />
           </div>
-          <span className="text-sm font-medium text-rm-text font-[family-name:var(--font-family-body)]">
+          <span className="text-ui-sm font-medium text-rm-text font-[family-name:var(--font-family-body)]">
             Ralph Meet
           </span>
         </div>
-        <div className="flex items-center gap-6 text-sm text-rm-text-muted font-[family-name:var(--font-family-body)]">
+        <div className="flex items-center gap-6 text-ui-sm text-rm-text-muted font-[family-name:var(--font-family-body)]">
           <a
             href="https://github.com/115jon/ralph-meet"
             target="_blank"
@@ -489,7 +489,7 @@ export default function HomePageClient() {
     <div className="relative flex min-h-[100dvh] flex-col bg-rm-bg-primary">
       <a
         href="#home-hero"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-rm-accent focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-rm-accent focus:px-3 focus:py-2 focus:text-ui-sm focus:font-semibold focus:text-white"
       >
         Skip to content
       </a>

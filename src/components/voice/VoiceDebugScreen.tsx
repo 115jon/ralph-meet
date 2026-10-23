@@ -180,7 +180,7 @@ export function VoiceDebugScreen({
       <div className="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-rm-border bg-rm-bg-surface gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rm-status-online animate-pulse shrink-0" />
-          <span className="font-bold text-ui-sm sm:text-ui-base text-rm-text tracking-tight truncate">
+          <span className="font-semibold text-ui-sm sm:text-ui-base text-rm-text tracking-tight truncate">
             <InlineEmojiText text={`RTC DEBUG: ${data.roomSlug}`} />
           </span>
         </div>
@@ -208,7 +208,7 @@ export function VoiceDebugScreen({
           <div className="flex sm:hidden items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-none">
             <InlineEmojiText
               text={channelName}
-              className="text-ui-xs font-bold text-rm-text shrink-0"
+              className="text-ui-xs font-semibold text-rm-text shrink-0"
             />
             <span
               className={`text-ui-2xs font-semibold shrink-0 ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
@@ -254,7 +254,7 @@ export function VoiceDebugScreen({
             <div className="space-y-1">
               <InlineEmojiText
                 text={channelName}
-                className="text-[14px] font-bold text-rm-text"
+                className="text-ui-sm font-semibold text-rm-text"
               />
               <p
                 className={`text-ui-2xs font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
@@ -474,7 +474,7 @@ function OverviewCard({ label, value }: { label: string; value: string }) {
       <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
         {label}
       </p>
-      <p className="mt-1 text-[14px] font-bold text-rm-text">{value}</p>
+      <p className="mt-1 text-ui-sm font-semibold text-rm-text">{value}</p>
     </div>
   );
 }
@@ -526,7 +526,7 @@ function TransportSection({ data }: { data: DebugData }) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-[14px] font-bold text-rm-status-idle border-b border-rm-border pb-2">
+      <h2 className="text-ui-sm font-semibold text-rm-status-idle border-b border-rm-border pb-2">
         Transport · {data.participantId || "unknown"}
       </h2>
 
@@ -662,7 +662,7 @@ function OutboundSection({ data }: { data: DebugData }) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-[14px] font-bold text-rm-status-idle border-b border-rm-border pb-2">
+      <h2 className="text-ui-sm font-semibold text-rm-status-idle border-b border-rm-border pb-2">
         Outbound
       </h2>
 
@@ -721,7 +721,7 @@ function InboundSection({
 
   return (
     <div className="space-y-5">
-      <h2 className="text-[14px] font-bold text-rm-status-idle border-b border-rm-border pb-2">
+      <h2 className="text-ui-sm font-semibold text-rm-status-idle border-b border-rm-border pb-2">
         Inbound · {trackName}
       </h2>
 

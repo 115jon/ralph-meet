@@ -256,11 +256,11 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
   };
 
   const selectStyle =
-    "w-full rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none transition-ui focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
+    "w-full rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-ui-sm text-rm-text outline-none transition-ui focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
 
   return (
     <div className="animate-in fade-in duration-150 w-full">
-      <h2 className="mb-6 text-xl font-bold text-rm-text">Invites</h2>
+      <h2 className="mb-6 text-ui-xl font-semibold text-rm-text">Invites</h2>
 
       {/* Header row */}
       <div className="mb-4 flex items-center justify-between">
@@ -271,7 +271,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
           <button
             onClick={handleTogglePause}
             className={cn(
-              "rounded-lg border px-3 py-1.5 text-sm font-medium transition-ui",
+              "rounded-lg border px-3 py-1.5 text-ui-sm font-medium transition-ui",
               state.isPaused
                 ? "border-primary/30 bg-primary/10 text-primary pointer-fine:hover:bg-primary/20"
                 : "border-rm-border text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
@@ -281,7 +281,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
           </button>
           <button
             onClick={() => dispatch({ type: "TOGGLE_SHOW_CREATE" })}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui pointer-fine:hover:brightness-110"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-ui-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui pointer-fine:hover:brightness-110"
           >
             <Icon name="add" size="sm" />
             Create invite link
@@ -438,7 +438,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             <button
               onClick={handleCreate}
               disabled={state.creating}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-ui-sm font-semibold text-primary-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
             >
               {state.creating && (
                 <Icon name="loader" size="xs" className="animate-spin" />
@@ -449,7 +449,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
               onClick={() =>
                 dispatch({ type: "TOGGLE_SHOW_CREATE", payload: false })
               }
-              className="rounded-lg px-3 py-2 text-sm text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors outline-none"
+              className="rounded-lg px-3 py-2 text-ui-sm text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors outline-none"
             >
               Cancel
             </button>
@@ -459,7 +459,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
 
       {/* Paused banner */}
       {state.isPaused && (
-        <div className="mb-4 rounded-lg border border-amber-500/20 dark:border-yellow-500/20 bg-amber-500/5 dark:bg-yellow-500/5 px-4 py-2.5 text-sm text-amber-800 dark:text-yellow-400">
+        <div className="mb-4 rounded-lg border border-amber-500/20 dark:border-yellow-500/20 bg-amber-500/5 dark:bg-yellow-500/5 px-4 py-2.5 text-ui-sm text-amber-800 dark:text-yellow-400">
           All invites are currently paused. No new members can join via invite
           links.
         </div>
@@ -474,8 +474,8 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
       ) : state.invites.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Icon name="link" size="3xl" className="mb-3 text-rm-text-muted/30" />
-          <p className="text-sm text-rm-text-muted">No active invites</p>
-          <p className="text-xs text-rm-text-muted/60 mt-1">
+          <p className="text-ui-sm text-rm-text-muted">No active invites</p>
+          <p className="text-ui-xs text-rm-text-muted/60 mt-1">
             Create an invite link to let others join{" "}
             <InlineEmojiText text={serverName} />
           </p>
@@ -511,12 +511,12 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                       className="h-8 w-8 rounded-full object-cover shrink-0"
                     />
                   ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-xs font-semibold text-primary">
                       {getDisplayInitial(member?.user)}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-rm-text truncate">
+                    <p className="text-ui-sm font-semibold text-rm-text truncate">
                       {inviterDisplayName}
                     </p>
                     {invite.channel_name && (
@@ -531,7 +531,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                 {/* Code */}
                 <button
                   onClick={() => handleCopy(invite.code)}
-                  className="flex items-center gap-1 text-sm text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors group"
+                  className="flex items-center gap-1 text-ui-sm text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors group"
                 >
                   <span className="font-mono">{invite.code}</span>
                   {state.copied === invite.code ? (
@@ -546,7 +546,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                 </button>
 
                 {/* Uses */}
-                <span className="text-sm text-rm-text-muted">
+                <span className="text-ui-sm text-rm-text-muted">
                   {invite.uses}
                   {invite.max_uses ? `/${invite.max_uses}` : ""}
                 </span>

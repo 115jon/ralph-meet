@@ -61,17 +61,17 @@ function SensitiveMediaFrameContent({
         )}
       >
         <div className="space-y-1">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/90">
+          <p className="text-ui-sm font-semibold uppercase tracking-[0.18em] text-white/90">
             Sensitive Media
           </p>
-          <p className="text-xs font-medium text-white/70">
+          <p className="text-ui-xs font-medium text-white/70">
             Hidden by your high media filter.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setRevealed(true)}
-          className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white transition pointer-fine:hover:bg-white/18"
+          className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-ui-xs font-bold uppercase tracking-[0.16em] text-white transition pointer-fine:hover:bg-white/18"
         >
           Show
         </button>

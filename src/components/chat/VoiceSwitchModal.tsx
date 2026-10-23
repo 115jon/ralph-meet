@@ -96,7 +96,7 @@ export function VoiceSwitchModal({
         checked={dontAskAgain}
         onChange={(e) => setDontAskAgain(e.target.checked)}
       />
-      <span className="text-xs text-rm-text-muted group-hover:text-rm-text-secondary transition-colors">
+      <span className="text-ui-xs text-rm-text-muted group-hover:text-rm-text-secondary transition-colors">
         Don&apos;t ask again
       </span>
     </label>
@@ -158,7 +158,7 @@ export function VoiceSwitchModal({
               </div>
 
               {/* ── Body ───────────────────────────────────────────── */}
-              <div className="px-4 pt-3 pb-5 text-sm text-rm-text-secondary leading-relaxed">
+              <div className="px-4 pt-3 pb-5 text-ui-sm text-rm-text-secondary leading-relaxed">
                 {bodyText}
                 <span className="font-semibold text-rm-text">{targetName}</span>
                 ?

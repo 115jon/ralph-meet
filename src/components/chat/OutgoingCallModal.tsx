@@ -57,7 +57,7 @@ export function OutgoingCallModal() {
               display={activeCallee.avatarDisplay}
             />
           ) : (
-            <div className="h-full w-full flex items-center justify-center text-3xl font-bold text-rm-text-muted">
+            <div className="h-full w-full flex items-center justify-center text-ui-2xl font-semibold text-rm-text-muted">
               {activeCallee.displayName[0]?.toUpperCase()}
             </div>
           )}
@@ -66,10 +66,10 @@ export function OutgoingCallModal() {
 
       {/* Callee info */}
       <div className="text-center">
-        <h2 className="text-xl font-bold text-rm-text md:text-white">
+        <h2 className="text-ui-xl font-semibold text-rm-text md:text-white">
           <InlineEmojiText text={activeCallee.displayName} />
         </h2>
-        <p className="text-sm text-rm-text-muted mt-1">
+        <p className="text-ui-sm text-rm-text-muted mt-1">
           <span className="inline-flex items-center gap-1.5">
             Calling
             <span className="inline-flex gap-0.5">

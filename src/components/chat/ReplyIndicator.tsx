@@ -41,7 +41,7 @@ export function ReplyIndicator({
           </div>
           <UserDisplayName
             user={replyTo.author}
-            className="block whitespace-nowrap text-ui-xs font-bold text-rm-accent-ink"
+            className="block whitespace-nowrap text-ui-xs font-semibold text-rm-accent-ink"
           />
         </div>
         <span className="truncate text-ui-xs font-medium text-rm-text-muted ml-1">

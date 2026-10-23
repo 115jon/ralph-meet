@@ -202,7 +202,7 @@ export default function CommandMenu() {
               value={search}
               onValueChange={setSearch}
               placeholder="Where would you like to go?"
-              className="rm-search-input h-12 w-full bg-transparent text-ui-base text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-14 max-md:text-[16px]"
+              className="rm-search-input h-12 w-full bg-transparent text-ui-base text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-14 max-md:text-ui-md"
             />
             <kbd
               className={cn(

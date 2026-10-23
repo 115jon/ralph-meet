@@ -842,7 +842,7 @@ function SearchPanelBody({
         }
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        className="rm-search-input h-7 min-w-[8ch] flex-1 bg-transparent text-ui-sm text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-8 max-md:text-[16px]"
+        className="rm-search-input h-7 min-w-[8ch] flex-1 bg-transparent text-ui-sm text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-8 max-md:text-ui-md"
       />
       <span id={`${inputId}-hint`} className="sr-only">
         Type from:, mentions:, in:, has:, before:, after:, during: or pinned: to

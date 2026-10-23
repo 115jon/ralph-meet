@@ -277,8 +277,8 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
       {/* Add friend form */}
       {addFriendMode && (
         <div className="border-b border-rm-border px-6 py-4 bg-rm-bg-primary">
-          <p className="mb-1 text-sm font-medium text-rm-text">Add Friend</p>
-          <p className="mb-3 text-xs text-rm-text-muted">
+          <p className="mb-1 text-ui-sm font-medium text-rm-text">Add Friend</p>
+          <p className="mb-3 text-ui-xs text-rm-text-muted">
             You can add friends by their username.
           </p>
           <div className="flex gap-2 max-w-lg">
@@ -302,7 +302,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
             </Button>
           </div>
           {addStatus && (
-            <p className="mt-2 text-xs text-primary">{addStatus}</p>
+            <p className="mt-2 text-ui-xs text-primary">{addStatus}</p>
           )}
         </div>
       )}
@@ -332,7 +332,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           {loading && (
             <div className="flex items-center justify-center gap-2 py-12 text-primary/60">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <span className="text-sm font-medium">Loading friends...</span>
+              <span className="text-ui-sm font-medium">Loading friends...</span>
             </div>
           )}
 
@@ -407,7 +407,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                       }}
                       aria-label={`View ${displayName}'s profile`}
                     >
-                      <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-sm font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-ui relative">
+                      <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-ui-sm font-semibold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-ui relative">
                         {rel.user.avatar_url ? (
                           <AvatarImage
                             src={getAuthAssetUrl(rel.user.avatar_url)}
@@ -428,9 +428,9 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                     <div className="min-w-0 flex-1">
                       <UserDisplayName
                         user={rel.user}
-                        className="block truncate text-sm font-medium text-rm-text"
+                        className="block truncate text-ui-sm font-medium text-rm-text"
                       />
-                      <span className="text-xs text-rm-text-muted">
+                      <span className="text-ui-xs text-rm-text-muted">
                         {rel.type === 0
                           ? rel.user.status === "online"
                             ? "Online"

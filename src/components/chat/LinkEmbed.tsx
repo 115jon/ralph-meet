@@ -264,7 +264,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
     >
       <div className="p-3 flex flex-col gap-1.5">
         {!bare && embed.provider && (
-          <div className="text-[12px] font-semibold text-rm-text-muted/80">
+          <div className="text-ui-xs font-semibold text-rm-text-muted/80">
             <EmbedInlineText
               text={embed.provider.name}
               keyPrefix={`${embed.id}-provider`}
@@ -277,7 +277,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
             href={embed.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[15px] font-bold text-[#00A8FC] hover:underline leading-snug break-words"
+            className="text-ui-base font-semibold text-[#00A8FC] hover:underline leading-snug break-words"
           >
             <EmbedInlineText
               text={embed.rawTitle}
@@ -287,7 +287,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
         )}
 
         {!bare && embed.rawDescription && (
-          <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words mt-0.5 opacity-90 line-clamp-3">
+          <div className="text-ui-sm leading-relaxed whitespace-pre-wrap break-words mt-0.5 opacity-90 line-clamp-3">
             <EmbedInlineText
               text={embed.rawDescription}
               keyPrefix={`${embed.id}-description`}
@@ -298,7 +298,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
         {children}
 
         {!bare && embed.footer && (
-          <div className="flex items-center gap-2 text-[12px] text-rm-text-muted/80 mt-1">
+          <div className="flex items-center gap-2 text-ui-xs text-rm-text-muted/80 mt-1">
             {embed.footer.iconURL && (
               <img
                 src={embed.footer.iconURL}
@@ -427,27 +427,27 @@ const RemoveEmbedsModal = memo(
         className="relative w-full max-w-[440px] rounded-xl bg-rm-bg-surface border border-rm-border shadow-2xl p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-bold text-rm-text-primary mb-2">
+        <h2 className="text-ui-xl font-semibold text-rm-text-primary mb-2">
           Are you sure?
         </h2>
-        <p className="text-[14px] text-rm-text-secondary leading-relaxed">
+        <p className="text-ui-sm text-rm-text-secondary leading-relaxed">
           This will remove all embeds on this message for everyone.
         </p>
-        <p className="text-[12px] text-rm-text-muted mt-2 mb-6">
+        <p className="text-ui-xs text-rm-text-muted mt-2 mb-6">
           Hold shift when clearing embeds to skip this modal.
         </p>
         <div className="flex justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="px-5 py-2.5 rounded-md text-[14px] font-medium text-rm-text-secondary hover:text-rm-text-primary hover:bg-rm-bg-hover transition-colors"
+            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-rm-text-secondary hover:text-rm-text-primary hover:bg-rm-bg-hover transition-colors"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="px-5 py-2.5 rounded-md text-[14px] font-medium text-white bg-[#da373c] hover:bg-[#a12828] transition-colors"
+            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-white bg-[#da373c] hover:bg-[#a12828] transition-colors"
           >
             Remove All Embeds
           </button>
@@ -1438,7 +1438,7 @@ const TikTokEmbed = memo(
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[14px] font-semibold leading-tight text-rm-text-primary">
+              <div className="truncate text-ui-sm font-semibold leading-tight text-rm-text-primary">
                 {displayEmbed.author?.url ? (
                   <a
                     href={displayEmbed.author.url}
@@ -1458,7 +1458,7 @@ const TikTokEmbed = memo(
                   />
                 )}
               </div>
-              <div className="text-[12px] text-rm-text-muted/82">
+              <div className="text-ui-xs text-rm-text-muted/82">
                 {timestampText || "TikTok"}
               </div>
             </div>
@@ -1651,20 +1651,20 @@ const TikTokEmbed = memo(
 
               <div className="flex items-center justify-between gap-3 text-rm-text-primary">
                 <div className="flex items-center gap-3">
-                  <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+                  <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium [font-variant-numeric:tabular-nums]">
                     <InstagramHeartIcon />
                     {formatInstagramMetricCount(likeCount) && (
                       <span>{formatInstagramMetricCount(likeCount)}</span>
                     )}
                   </div>
-                  <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+                  <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium [font-variant-numeric:tabular-nums]">
                     <InstagramCommentIcon />
                     {formatInstagramMetricCount(commentCount) && (
                       <span>{formatInstagramMetricCount(commentCount)}</span>
                     )}
                   </div>
                   {formatInstagramMetricCount(viewCount) && (
-                    <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
+                    <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
                       <InstagramViewsIcon />
                       <span>{formatInstagramMetricCount(viewCount)}</span>
                     </div>
@@ -1673,7 +1673,7 @@ const TikTokEmbed = memo(
               </div>
 
               {captionText && (
-                <p className="text-[13px] leading-relaxed text-rm-text-primary">
+                <p className="text-ui-sm leading-relaxed text-rm-text-primary">
                   <EmbedInlineText
                     text={captionText}
                     keyPrefix={`${embed.id}-tiktok-caption`}
@@ -1684,7 +1684,7 @@ const TikTokEmbed = memo(
 
               {displayEmbed.audio &&
                 (displayEmbed.audio.title || displayEmbed.audio.artist) && (
-                  <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-[12px] text-rm-text-secondary">
+                  <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-ui-xs text-rm-text-secondary">
                     {audioPlaybackUrl ? (
                       <button
                         type="button"
@@ -1777,7 +1777,7 @@ const TikTokEmbed = memo(
                   </div>
                 )}
 
-              <div className="flex items-center gap-2 text-[11px] text-rm-text-muted/78">
+              <div className="flex items-center gap-2 text-ui-2xs text-rm-text-muted/78">
                 <img
                   src={TIKTOK_ICON_URL}
                   alt=""
@@ -2100,7 +2100,7 @@ const XMetricBar = memo(({ metrics }: { metrics?: EmbedMetrics }) => {
   if (items.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rm-border/45 pt-2.5 text-[12px] text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rm-border/45 pt-2.5 text-ui-xs text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
       {items.map((item) => {
         const formattedValue =
           item.value > 0 ? formatXMetricCount(item.value) : null;
@@ -2139,7 +2139,7 @@ const XFooterBar = memo(
     return (
       <div
         className={cn(
-          "flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-rm-text-muted/80",
+          "flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-xs text-rm-text-muted/80",
           bordered ? "border-t border-rm-border/45 pt-2.5" : "pt-0.5",
         )}
       >
@@ -2185,7 +2185,7 @@ const XExternalCardChip = memo(
 
     return (
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-start p-3">
-        <div className="max-w-[calc(100%-1.5rem)] rounded-md bg-black/82 px-2.5 py-1.5 text-[12px] leading-snug text-white shadow-sm backdrop-blur-sm">
+        <div className="max-w-[calc(100%-1.5rem)] rounded-md bg-black/82 px-2.5 py-1.5 text-ui-xs leading-snug text-white shadow-sm backdrop-blur-sm">
           <span className="block max-w-full truncate">
             <EmbedInlineText
               text={label}
@@ -2274,7 +2274,7 @@ const XEmbed = memo(
                 />
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5 text-[14px] leading-tight">
+                <div className="flex min-w-0 items-center gap-1.5 text-ui-sm leading-tight">
                   <a
                     href={embed.author.url}
                     target="_blank"
@@ -2342,7 +2342,7 @@ const XEmbed = memo(
               href={embed.externalCard.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[12px] leading-none text-rm-text-muted/82 transition-colors hover:text-rm-text-primary"
+              className="text-ui-xs leading-none text-rm-text-muted/82 transition-colors hover:text-rm-text-primary"
             >
               <span className="text-rm-text-muted/72">From </span>
               <span className="font-medium">{externalCardDomain}</span>
@@ -2404,7 +2404,7 @@ const XReferencedTweetCard = memo(
                 />
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5 text-[13px] leading-tight">
+                <div className="flex min-w-0 items-center gap-1.5 text-ui-sm leading-tight">
                   <span className="min-w-0 truncate font-semibold text-rm-text-primary">
                     <EmbedInlineText
                       text={authorParts.displayName || tweet.author.name}
@@ -2597,12 +2597,12 @@ const XStandaloneTweetText = memo(
       collapsedLinesClassName="line-clamp-5"
       estimatedCollapsedLines={X_STANDALONE_TWEET_COLLAPSED_LINES}
       estimatedCollapsedChars={X_STANDALONE_TWEET_COLLAPSED_CHAR_THRESHOLD}
-      textClassName="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95"
+      textClassName="text-ui-sm leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95"
       collapsedLabel="Show more"
       expandedLabel="Show less"
       expandAriaLabel="Expand post text"
       collapseAriaLabel="Collapse post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-[14px] font-medium text-primary transition-colors hover:text-primary hover:underline"
+      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-ui-sm font-medium text-primary transition-colors hover:text-primary hover:underline"
     />
   ),
 );
@@ -2615,12 +2615,12 @@ const XReferencedTweetText = memo(
       collapsedLinesClassName="line-clamp-4"
       estimatedCollapsedLines={X_REFERENCED_TWEET_COLLAPSED_LINES}
       estimatedCollapsedChars={X_REFERENCED_TWEET_COLLAPSED_CHAR_THRESHOLD}
-      textClassName="text-[13px] leading-5 whitespace-pre-wrap break-words text-rm-text-primary/90"
+      textClassName="text-ui-sm leading-5 whitespace-pre-wrap break-words text-rm-text-primary/90"
       collapsedLabel="..."
       expandedLabel="Show less"
       expandAriaLabel="Expand quoted post text"
       collapseAriaLabel="Collapse quoted post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-[12px] font-medium text-rm-text-muted/80 transition-colors hover:text-rm-text-primary data-[expanded=false]:tracking-[0.24em]"
+      buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-ui-xs font-medium text-rm-text-muted/80 transition-colors hover:text-rm-text-primary data-[expanded=false]:tracking-[0.24em]"
     />
   ),
 );
@@ -2998,9 +2998,9 @@ const XMediaTile = memo(
         className={
           single
             ? compact
-              ? `flex h-[180px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
-              : `flex h-[180px] max-h-[420px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
-            : "flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted"
+              ? `flex h-[180px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-ui-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
+              : `flex h-[180px] max-h-[420px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-ui-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
+            : "flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-ui-xs font-semibold text-rm-text-muted"
         }
       >
         Media unavailable
@@ -3060,7 +3060,7 @@ const XMediaTile = memo(
           {content}
           {overlay}
           {extraCount > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-ui-2xl font-semibold text-white">
               +{extraCount}
             </div>
           )}
@@ -3086,7 +3086,7 @@ const XMediaTile = memo(
           {content}
           {overlay}
           {extraCount > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-ui-2xl font-semibold text-white">
               +{extraCount}
             </div>
           )}
@@ -3099,7 +3099,7 @@ const XMediaTile = memo(
         {content}
         {overlay}
         {extraCount > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-ui-2xl font-semibold text-white">
             +{extraCount}
           </div>
         )}
@@ -3427,7 +3427,7 @@ const XGifTile = memo(
             aria-label={`${displayAltText} unavailable`}
             className={cn(
               single ? singleMediaClass : "h-full w-full",
-              "flex items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted",
+              "flex items-center justify-center bg-rm-bg-surface px-4 text-center text-ui-xs font-semibold text-rm-text-muted",
             )}
           >
             GIF unavailable
@@ -3482,7 +3482,7 @@ const XGifTile = memo(
               <button
                 type="button"
                 onClick={handleOpenViewer}
-                className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold tracking-[0.12em] transition-colors hover:bg-black/65"
+                className="rounded-md bg-black/45 px-2 py-1 text-ui-xs font-semibold tracking-[0.12em] transition-colors hover:bg-black/65"
                 aria-label="Open GIF viewer"
                 title="Open GIF viewer"
               >
@@ -3494,7 +3494,7 @@ const XGifTile = memo(
                   <button
                     type="button"
                     onClick={handleToggleAlt}
-                    className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-black/65"
+                    className="rounded-md bg-black/45 px-2 py-1 text-ui-xs font-semibold transition-colors hover:bg-black/65"
                     aria-label="Show GIF alt text"
                     aria-controls={altTextId}
                     aria-expanded={altPinned}
@@ -3505,7 +3505,7 @@ const XGifTile = memo(
                   <div
                     id={altTextId}
                     className={cn(
-                      "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-[12px] leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
+                      "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-ui-xs leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
                       altPinned ? "opacity-100" : "opacity-0",
                     )}
                     role="tooltip"
@@ -3644,7 +3644,7 @@ const RichEmbed = memo(
                 href={embed.author.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-bold text-[14px] text-rm-text-primary hover:underline"
+                className="font-semibold text-ui-sm text-rm-text-primary hover:underline"
               >
                 <EmbedInlineText
                   text={embed.author.name}
@@ -3987,7 +3987,7 @@ function InstagramImage({
       <div
         role="img"
         aria-label="Media unavailable"
-        className="flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted"
+        className="flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-ui-xs font-semibold text-rm-text-muted"
       >
         Media unavailable
       </div>
@@ -4535,7 +4535,7 @@ const InstagramEmbed = memo(
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 text-[14px] leading-tight">
+              <div className="flex items-center gap-1.5 text-ui-sm leading-tight">
                 {displayEmbed.author?.url ? (
                   <a
                     href={displayEmbed.author.url}
@@ -4561,7 +4561,7 @@ const InstagramEmbed = memo(
                 )}
               </div>
               {timestampText && (
-                <div className="text-[12px] text-rm-text-muted/82">
+                <div className="text-ui-xs text-rm-text-muted/82">
                   {timestampText}
                 </div>
               )}
@@ -4746,20 +4746,20 @@ const InstagramEmbed = memo(
 
           <div className="flex items-center justify-between gap-3 text-rm-text-primary">
             <div className="flex items-center gap-3">
-              <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+              <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium [font-variant-numeric:tabular-nums]">
                 <InstagramHeartIcon />
                 {formatInstagramMetricCount(likeCount) && (
                   <span>{formatInstagramMetricCount(likeCount)}</span>
                 )}
               </div>
-              <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+              <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium [font-variant-numeric:tabular-nums]">
                 <InstagramCommentIcon />
                 {formatInstagramMetricCount(commentCount) && (
                   <span>{formatInstagramMetricCount(commentCount)}</span>
                 )}
               </div>
               {formatInstagramMetricCount(viewCount) && (
-                <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
+                <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
                   <InstagramViewsIcon />
                   <span>{formatInstagramMetricCount(viewCount)}</span>
                 </div>
@@ -4773,7 +4773,7 @@ const InstagramEmbed = memo(
           </div>
 
           {captionText && (
-            <p className="text-[13px] leading-relaxed text-rm-text-primary">
+            <p className="text-ui-sm leading-relaxed text-rm-text-primary">
               {displayEmbed.author?.name && (
                 <span className="mr-1 font-semibold">
                   {displayEmbed.author.name}
@@ -4792,7 +4792,7 @@ const InstagramEmbed = memo(
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[12px] text-rm-text-muted/86 transition-colors hover:text-rm-text-primary"
+              className="text-ui-xs text-rm-text-muted/86 transition-colors hover:text-rm-text-primary"
             >
               View all {commentCount.toLocaleString()} comments
             </a>
@@ -4800,7 +4800,7 @@ const InstagramEmbed = memo(
 
           {displayEmbed.audio &&
             (displayEmbed.audio.title || displayEmbed.audio.artist) && (
-              <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-[12px] text-rm-text-secondary">
+              <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-ui-xs text-rm-text-secondary">
                 {audioPlaybackUrl ? (
                   <button
                     type="button"
@@ -4887,7 +4887,7 @@ const InstagramEmbed = memo(
               </div>
             )}
 
-          <div className="flex items-center gap-2 text-[11px] text-rm-text-muted/78">
+          <div className="flex items-center gap-2 text-ui-2xs text-rm-text-muted/78">
             <img
               src={INSTAGRAM_ICON_URL}
               alt=""
@@ -4968,21 +4968,21 @@ const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
     <BaseEmbed embed={embed} width={420}>
       <div className="flex flex-col gap-2 py-1">
         {embed.author?.name ? (
-          <div className="text-[14px] font-semibold text-rm-text-primary">
+          <div className="text-ui-sm font-semibold text-rm-text-primary">
             <EmbedInlineText
               text={embed.author.name}
               keyPrefix={`${embed.id}-unavailable-author`}
             />
           </div>
         ) : null}
-        <p className="text-[14px] leading-relaxed text-rm-text-muted">
+        <p className="text-ui-sm leading-relaxed text-rm-text-muted">
           This post is no longer available
         </p>
         <a
           href={embed.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-fit text-[13px] font-semibold text-[#00A8FC] hover:underline"
+          className="w-fit text-ui-sm font-semibold text-[#00A8FC] hover:underline"
         >
           View original
         </a>

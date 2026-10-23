@@ -330,7 +330,9 @@ export const VoiceGrid = React.memo(
                 )}
               </div>
 
-              <p className="text-xs font-bold text-rm-text">{focusedLabel}</p>
+              <p className="text-ui-xs font-semibold text-rm-text">
+                {focusedLabel}
+              </p>
 
               {(focusedItem.type === "screen" ||
                 focusedItem.type === "camera") && (

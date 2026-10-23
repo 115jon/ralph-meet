@@ -71,7 +71,7 @@ export default function VoiceChannelStatusPreview({
         <div
           className={cn(
             "min-w-0 break-words text-rm-text-secondary",
-            compact ? "text-ui-xs leading-4" : "text-sm leading-5",
+            compact ? "text-ui-xs leading-4" : "text-ui-sm leading-5",
           )}
         >
           <MarkdownRenderer content={text} />

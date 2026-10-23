@@ -490,10 +490,10 @@ export default function RoomSettingsModal({
               >
                 {activeTab === "voice" && (
                   <div className="animate-in fade-in duration-150">
-                    <h1 className="text-xl font-bold text-rm-text mb-1">
+                    <h1 className="text-ui-xl font-semibold text-rm-text mb-1">
                       Voice Settings
                     </h1>
-                    <p className="text-sm text-rm-text-muted mb-8">
+                    <p className="text-ui-sm text-rm-text-muted mb-8">
                       Configure your media devices and audio processing.
                     </p>
 
@@ -533,7 +533,7 @@ export default function RoomSettingsModal({
                               <SelectTrigger
                                 id="room-settings-input-device"
                                 aria-label="Select input device"
-                                className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
+                                className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-ui-sm text-rm-text outline-none"
                               >
                                 <SelectValue placeholder="Select input device" />
                               </SelectTrigger>
@@ -591,7 +591,7 @@ export default function RoomSettingsModal({
                               <SelectTrigger
                                 id="room-settings-output-device"
                                 aria-label="Select output device"
-                                className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
+                                className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-ui-sm text-rm-text outline-none"
                               >
                                 <SelectValue placeholder="Select output device" />
                               </SelectTrigger>
@@ -652,7 +652,7 @@ export default function RoomSettingsModal({
                             >
                               Output Volume
                             </label>
-                            <span className="text-sm font-bold text-rm-accent tabular-nums">
+                            <span className="text-ui-sm font-semibold text-rm-accent tabular-nums">
                               {vSettings.outputVolume}%
                             </span>
                           </div>
@@ -680,7 +680,7 @@ export default function RoomSettingsModal({
                               >
                                 Input Sensitivity
                               </label>
-                              <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                              <span className="text-ui-sm font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
                                 {vSettings.sensitivity}dB
                               </span>
                             </div>
@@ -793,7 +793,7 @@ export default function RoomSettingsModal({
                                   {opt.icon}
                                 </div>
                                 <div>
-                                  <h4 className="text-ui-sm font-bold text-rm-text">
+                                  <h4 className="text-ui-sm font-semibold text-rm-text">
                                     {opt.label}
                                   </h4>
                                   <p className="text-ui-2xs text-rm-text-muted">
@@ -834,10 +834,10 @@ export default function RoomSettingsModal({
                 {activeTab === "camera" && (
                   <div className="animate-in fade-in duration-150 space-y-8">
                     <div>
-                      <h1 className="text-xl font-bold text-rm-text mb-1">
+                      <h1 className="text-ui-xl font-semibold text-rm-text mb-1">
                         Camera Settings
                       </h1>
-                      <p className="text-sm text-rm-text-muted">
+                      <p className="text-ui-sm text-rm-text-muted">
                         Configure your video input, capture quality, and
                         background preferences.
                       </p>
@@ -938,7 +938,7 @@ export default function RoomSettingsModal({
                                 <div className="flex items-center gap-1.5">
                                   <span
                                     className={cn(
-                                      "text-xs font-bold",
+                                      "text-ui-xs font-semibold",
                                       isSelected
                                         ? "text-primary"
                                         : "text-rm-text",
@@ -1062,7 +1062,7 @@ export default function RoomSettingsModal({
                               )}
                               <span
                                 className={cn(
-                                  "text-xs font-bold",
+                                  "text-ui-xs font-semibold",
                                   isSelected ? "text-primary" : "text-rm-text",
                                 )}
                               >
@@ -1123,7 +1123,7 @@ export default function RoomSettingsModal({
                                   <div className="mt-2 flex items-center justify-between gap-2 px-1">
                                     <span
                                       className={cn(
-                                        "truncate text-xs font-bold",
+                                        "truncate text-ui-xs font-semibold",
                                         isSelected
                                           ? "text-primary"
                                           : "text-rm-text",
@@ -1169,7 +1169,7 @@ export default function RoomSettingsModal({
                                     className="text-rm-accent transition-transform"
                                   />
                                 </div>
-                                <span className="text-xs font-bold text-primary-foreground/90 group-hover:text-primary">
+                                <span className="text-ui-xs font-semibold text-primary-foreground/90 group-hover:text-primary">
                                   Upload Custom
                                 </span>
                               </a>
@@ -1181,12 +1181,12 @@ export default function RoomSettingsModal({
                         )}
                       </div>
                       {isLoadingBackgrounds && (
-                        <p className="px-1 text-xs font-medium text-rm-text-muted">
+                        <p className="px-1 text-ui-xs font-medium text-rm-text-muted">
                           Loading saved backgrounds...
                         </p>
                       )}
                       {uploadError && (
-                        <p className="px-1 text-xs font-medium text-destructive">
+                        <p className="px-1 text-ui-xs font-medium text-destructive">
                           {uploadError}
                         </p>
                       )}
@@ -1195,7 +1195,7 @@ export default function RoomSettingsModal({
                     {/* Always Preview Video Toggle */}
                     <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-ui max-w-[480px]">
                       <div>
-                        <h4 className="text-ui-sm font-bold text-rm-text">
+                        <h4 className="text-ui-sm font-semibold text-rm-text">
                           Always Preview Video
                         </h4>
                         <p className="text-ui-2xs text-rm-text-muted">
@@ -1235,10 +1235,10 @@ export default function RoomSettingsModal({
 
                 {activeTab === "appearance" && (
                   <div className="animate-in fade-in duration-150">
-                    <h1 className="text-xl font-bold text-rm-text mb-1">
+                    <h1 className="text-ui-xl font-semibold text-rm-text mb-1">
                       Appearance
                     </h1>
-                    <p className="text-sm text-rm-text-muted mb-8">
+                    <p className="text-ui-sm text-rm-text-muted mb-8">
                       Choose your preferred theme.
                     </p>
 
@@ -1281,7 +1281,7 @@ export default function RoomSettingsModal({
                           <div
                             className={cn("h-16 rounded-lg mb-2", t.preview)}
                           />
-                          <span className="text-xs font-bold text-rm-text">
+                          <span className="text-ui-xs font-semibold text-rm-text">
                             {t.label}
                           </span>
                         </button>
@@ -1294,10 +1294,10 @@ export default function RoomSettingsModal({
                           <Icon name="monitor" size="lg" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-bold text-rm-text mb-1">
+                          <h4 className="text-ui-sm font-semibold text-rm-text mb-1">
                             Visual Comfort
                           </h4>
-                          <p className="text-xs text-rm-text-muted">
+                          <p className="text-ui-xs text-rm-text-muted">
                             Our dark mode uses true black and slate tones to
                             reduce eye strain.
                           </p>
@@ -1329,7 +1329,7 @@ function TabBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        "shrink-0 flex items-center md:justify-start justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-ui-sm md:text-sm font-bold md:font-medium transition-colors w-full text-left",
+        "shrink-0 flex items-center md:justify-start justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors w-full text-left",
         active
           ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
           : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",

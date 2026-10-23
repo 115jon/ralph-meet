@@ -84,7 +84,7 @@ export function ListenTogetherNowPlayingCard({
       <TooltipProvider delayDuration={100}>
         <div
           className={cn(
-            "rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted",
+            "rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-ui-sm text-rm-text-muted",
             className,
           )}
         >
@@ -151,8 +151,8 @@ export function ListenTogetherNowPlayingCard({
   const titleTriggerClassName = cn(
     "block truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-elevated",
     variant === "mini"
-      ? "text-ui-sm font-bold leading-tight text-rm-text"
-      : "text-base font-semibold text-rm-text",
+      ? "text-ui-sm font-semibold leading-tight text-rm-text"
+      : "text-ui-md font-semibold text-rm-text",
   );
 
   const sendCommand = (payload: Record<string, unknown>) => {
@@ -328,7 +328,7 @@ export function ListenTogetherNowPlayingCard({
                       sideOffset={10}
                       className="max-w-[280px]"
                     >
-                      <p className="break-words text-sm font-semibold">
+                      <p className="break-words text-ui-sm font-semibold">
                         {currentEntry.track.title}
                       </p>
                     </TooltipContent>
@@ -471,12 +471,12 @@ export function ListenTogetherNowPlayingCard({
                     sideOffset={10}
                     className="max-w-[320px]"
                   >
-                    <p className="break-words text-sm font-semibold">
+                    <p className="break-words text-ui-sm font-semibold">
                       {currentEntry.track.title}
                     </p>
                   </TooltipContent>
                 </Tooltip>
-                <div className="mt-1 truncate text-xs text-rm-text-muted sm:text-sm">
+                <div className="mt-1 truncate text-ui-xs text-rm-text-muted sm:text-ui-sm">
                   {subtitle}
                 </div>
               </div>
@@ -486,7 +486,7 @@ export function ListenTogetherNowPlayingCard({
                 </span>
               )}
             </div>
-            <div className="mt-3 flex min-w-0 items-center gap-2 text-xs text-rm-text-muted">
+            <div className="mt-3 flex min-w-0 items-center gap-2 text-ui-xs text-rm-text-muted">
               <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
                 {requesterAvatar}
               </div>
@@ -520,7 +520,7 @@ export function ListenTogetherNowPlayingCard({
         </div>
 
         {error && (
-          <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-ui-xs text-destructive">
             {error.message}
           </div>
         )}
@@ -560,7 +560,7 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="inline-flex h-11 items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-4 text-xs font-bold text-rm-text transition-transform pointer-fine:hover:bg-rm-bg-active active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-4 text-ui-xs font-semibold text-rm-text transition-transform pointer-fine:hover:bg-rm-bg-active active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon name="skip" size="sm" />
             Skip
@@ -605,7 +605,7 @@ export function ListenTogetherNowPlayingCard({
             }}
             className="h-8 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
           />
-          <span className="min-w-9 text-right text-xs tabular-nums text-rm-text-muted">
+          <span className="min-w-9 text-right text-ui-xs tabular-nums text-rm-text-muted">
             {Math.round(localVolume * 100)}%
           </span>
           <details className="relative shrink-0">
@@ -616,7 +616,9 @@ export function ListenTogetherNowPlayingCard({
             <div className="absolute bottom-12 right-0 z-20 w-56 rounded-2xl border border-rm-border bg-rm-bg-floating p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-bold text-rm-text">Loudness</div>
+                  <div className="text-ui-xs font-semibold text-rm-text">
+                    Loudness
+                  </div>
                   <div className="text-ui-2xs text-rm-text-muted">
                     Smooth out big volume changes.
                   </div>

@@ -114,7 +114,7 @@ export default function MessageShareModal({
                   >
                     Share Message
                   </h2>
-                  <p className="text-xs text-rm-text-muted">
+                  <p className="text-ui-xs text-rm-text-muted">
                     Creates a public snapshot link
                   </p>
                 </div>
@@ -190,7 +190,7 @@ export default function MessageShareModal({
               )}
 
               {error && (
-                <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-ui-sm text-destructive">
                   {error}
                 </div>
               )}

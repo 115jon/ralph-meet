@@ -36,7 +36,7 @@ function PlaceholderStreamPreview({
           <Icon name="stream" size="xl" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-rm-text">
+          <p className="text-ui-sm font-semibold text-rm-text">
             {isCurrentUser ? "Your stream is live" : `${displayName} is live`}
           </p>
           <p className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
@@ -139,7 +139,7 @@ export function VoiceStreamHoverCard({
         disabled={!hasWatchAction}
         onClick={handleWatchStream}
         className={cn(
-          "mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border text-sm font-bold transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
+          "mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border text-ui-sm font-semibold transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
           hasWatchAction
             ? "border-primary/20 bg-primary text-primary-foreground shadow-lg shadow-primary/20 pointer-fine:hover:bg-primary/90 active:scale-[0.98]"
             : "cursor-default border-rm-border bg-rm-bg-elevated/70 text-rm-text-muted",

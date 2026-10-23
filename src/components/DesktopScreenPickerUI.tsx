@@ -50,8 +50,8 @@ export function DeviceGrid({
     return (
       <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
         <Icon name="tv" size="3xl" className="opacity-30" />
-        <p className="text-sm">No capture devices found</p>
-        <p className="text-xs text-rm-text-muted/50">
+        <p className="text-ui-sm">No capture devices found</p>
+        <p className="text-ui-xs text-rm-text-muted/50">
           Connect a capture card or webcam to share
         </p>
       </div>
@@ -85,7 +85,7 @@ export function DeviceGrid({
           <div className="flex items-center gap-2 px-3 py-2">
             <span
               className={cn(
-                "truncate text-xs font-semibold",
+                "truncate text-ui-xs font-semibold",
                 selectedId === device.deviceId
                   ? "text-primary"
                   : "text-rm-text",
@@ -197,7 +197,7 @@ export function SourceGrid({
               )}
               <span
                 className={cn(
-                  "truncate text-xs font-semibold",
+                  "truncate text-ui-xs font-semibold",
                   selectedId === source.id ? "text-primary" : "text-rm-text",
                 )}
               >
@@ -235,7 +235,7 @@ export function DesktopScreenPickerTabBar({
           key={t.key}
           onClick={() => setTab(t.key)}
           className={cn(
-            "flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold transition-ui",
+            "flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-ui-sm font-semibold transition-ui",
             tab === t.key
               ? "border-b-2 border-primary text-primary"
               : "text-rm-text-muted hover:text-rm-text",
@@ -277,7 +277,7 @@ export function DesktopScreenPickerBottomBar({
       {/* Left: Source name + quality info */}
       <div className="flex items-center gap-3 min-w-0">
         <div className="min-w-0">
-          <div className="truncate text-sm font-bold text-rm-text max-w-[200px]">
+          <div className="truncate text-ui-sm font-semibold text-rm-text max-w-[200px]">
             {displayName}
           </div>
           <div className="flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
@@ -293,7 +293,7 @@ export function DesktopScreenPickerBottomBar({
         <Select value={selectedQuality} onValueChange={setQuality}>
           <SelectTrigger
             aria-label="Select stream quality"
-            className="h-auto rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-1.5 text-xs font-bold text-rm-text outline-none focus:ring-2 focus:ring-primary/30"
+            className="h-auto rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-1.5 text-ui-xs font-semibold text-rm-text outline-none focus:ring-2 focus:ring-primary/30"
           >
             <SelectValue placeholder="Select quality" />
           </SelectTrigger>
@@ -313,7 +313,7 @@ export function DesktopScreenPickerBottomBar({
         <button
           onClick={toggleAudio}
           className={cn(
-            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-ui",
+            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-ui-xs font-semibold transition-ui",
             withAudio
               ? "border-primary/30 bg-primary/10 text-primary"
               : "border-rm-border bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
@@ -328,7 +328,7 @@ export function DesktopScreenPickerBottomBar({
       <div className="flex items-center gap-2">
         <button
           onClick={onClose}
-          className="px-4 py-2 text-sm font-bold text-rm-text-muted hover:text-rm-text transition-colors outline-none"
+          className="px-4 py-2 text-ui-sm font-semibold text-rm-text-muted hover:text-rm-text transition-colors outline-none"
         >
           Cancel
         </button>
@@ -336,7 +336,7 @@ export function DesktopScreenPickerBottomBar({
           onClick={onStart}
           disabled={!selectedId}
           className={cn(
-            "flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-semibold shadow-xl transition-ui active:scale-[0.96]",
+            "flex items-center gap-2 rounded-xl px-6 py-2 text-ui-sm font-semibold shadow-xl transition-ui active:scale-[0.96]",
             selectedId
               ? "bg-primary text-primary-foreground shadow-primary/20 hover:brightness-110"
               : "bg-rm-bg-elevated text-rm-text-muted cursor-not-allowed",

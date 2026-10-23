@@ -126,11 +126,11 @@ export function UpdateChecker() {
       {status === "available" && (
         <>
           <div className="flex flex-col gap-1.5">
-            <p className="text-sm font-semibold text-rm-text">
+            <p className="text-ui-sm font-semibold text-rm-text">
               Update available — v{updateInfo?.version}
             </p>
             {updateInfo?.body && (
-              <p className="text-xs text-rm-text-muted leading-relaxed line-clamp-3">
+              <p className="text-ui-xs text-rm-text-muted leading-relaxed line-clamp-3">
                 {updateInfo.body}
               </p>
             )}
@@ -154,7 +154,7 @@ export function UpdateChecker() {
 
       {status === "downloading" && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-sm font-semibold text-rm-text">
+          <p className="text-ui-sm font-semibold text-rm-text">
             Downloading update...
           </p>
           <div className="h-1 rounded-full bg-rm-bg-active overflow-hidden mt-1">
@@ -163,22 +163,22 @@ export function UpdateChecker() {
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-xs text-rm-text-muted">{progress}%</p>
+          <p className="text-ui-xs text-rm-text-muted">{progress}%</p>
         </div>
       )}
 
       {status === "ready" && (
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-rm-text">
+          <p className="text-ui-sm font-semibold text-rm-text">
             Update installed!
           </p>
-          <p className="text-xs text-rm-text-muted">Restarting...</p>
+          <p className="text-ui-xs text-rm-text-muted">Restarting...</p>
         </div>
       )}
 
       {status === "error" && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-sm font-semibold text-rm-text">Update failed</p>
+          <p className="text-ui-sm font-semibold text-rm-text">Update failed</p>
           <div className="flex gap-2 mt-1">
             <button
               className="rounded-lg bg-rm-accent px-3.5 py-1.5 text-ui-sm font-semibold text-white transition-ui hover:bg-rm-accent-hover active:scale-[0.96]"

@@ -1090,7 +1090,7 @@ function MembersTabContent({
       )}
 
       {sortedOnline.length === 0 && sortedOffline.length === 0 && (
-        <div className="py-4 text-center text-xs text-rm-text-muted">
+        <div className="py-4 text-center text-ui-xs text-rm-text-muted">
           No members found
         </div>
       )}
@@ -1297,7 +1297,7 @@ function PinsTabContent({
                     getDisplayInitial(msg.author)
                   )}
                 </div>
-                <span className="text-ui-xs font-bold text-rm-text-primary truncate">
+                <span className="text-ui-xs font-semibold text-rm-text-primary truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
                 <span className="text-ui-2xs text-rm-text-muted ml-auto shrink-0">
@@ -1370,7 +1370,7 @@ function ThreadsTabContent({
                     getDisplayInitial(thread.author)
                   )}
                 </div>
-                <span className="text-ui-xs font-bold text-rm-text-primary truncate">
+                <span className="text-ui-xs font-semibold text-rm-text-primary truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
               </div>
@@ -1441,7 +1441,7 @@ function LinksTabContent({
                   getDisplayInitial(item.author)
                 )}
               </div>
-              <span className="text-ui-xs font-bold text-rm-text-primary truncate">
+              <span className="text-ui-xs font-semibold text-rm-text-primary truncate">
                 <InlineEmojiText text={displayName} />
               </span>
               {channelName && (
@@ -1543,7 +1543,7 @@ function FilesTabContent({
               <Icon name={fileTypeIcon} size="xl" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-ui-sm font-bold text-rm-text-primary truncate">
+              <div className="text-ui-sm font-semibold text-rm-text-primary truncate">
                 {item.filename}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
@@ -1616,7 +1616,7 @@ function TabSpinnerState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-3">
       <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      <span className="text-ui-xs font-bold text-rm-text-muted">
+      <span className="text-ui-xs font-semibold text-rm-text-muted">
         Loading...
       </span>
     </div>
@@ -1784,7 +1784,7 @@ function TabErrorState({
       </div>
 
       <div className="text-center space-y-1.5">
-        <p className="text-[14px] font-bold text-rm-text-primary">
+        <p className="text-ui-sm font-semibold text-rm-text-primary">
           Failed to load
         </p>
         <p className="text-ui-xs text-rm-text-muted max-w-[200px] leading-relaxed">
@@ -1794,7 +1794,7 @@ function TabErrorState({
 
       <ButtonBase
         onClick={onRetry}
-        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-bold text-rm-text-primary transition-colors"
+        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-semibold text-rm-text-primary transition-colors"
       >
         <Icon name="refresh" size="sm" />
         Retry
@@ -1947,7 +1947,7 @@ function MemberItem({
         </>
       )}
       <div className="relative z-10">
-        <div className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-ui group-hover:ring-2 group-hover:ring-primary/20">
+        <div className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground border border-rm-border transition-ui group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
             <AvatarImage
               src={getAuthAssetUrl(member.user.avatar_url)}

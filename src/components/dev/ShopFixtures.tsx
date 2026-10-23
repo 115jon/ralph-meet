@@ -85,7 +85,7 @@ export function CatalogFixture({ surface }: { surface: string }) {
             </h2>
             <button
               type="button"
-              className="w-fit rounded-lg border border-rm-border px-3 py-2 text-sm"
+              className="w-fit rounded-lg border border-rm-border px-3 py-2 text-ui-sm"
               onClick={() => setOpen(true)}
             >
               Open picker

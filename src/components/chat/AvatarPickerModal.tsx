@@ -179,11 +179,13 @@ export function AvatarPickerModal({
               <div>
                 <h2
                   id="avatar-picker-title"
-                  className="text-[24px] font-semibold tracking-tight"
+                  className="text-ui-2xl font-semibold tracking-tight"
                 >
                   {title}
                 </h2>
-                <p className="mt-1 text-sm text-rm-text-muted">{description}</p>
+                <p className="mt-1 text-ui-sm text-rm-text-muted">
+                  {description}
+                </p>
               </div>
               <button
                 type="button"
@@ -208,8 +210,8 @@ export function AvatarPickerModal({
                     size="2xl"
                     className="mb-4 text-rm-text-muted transition-colors group-hover:text-rm-text"
                   />
-                  <span className="text-base font-bold">Upload Image</span>
-                  <span className="mt-1 text-xs text-rm-text-muted">
+                  <span className="text-ui-md font-semibold">Upload Image</span>
+                  <span className="mt-1 text-ui-xs text-rm-text-muted">
                     Choose an image from your device
                   </span>
                 </button>
@@ -226,10 +228,10 @@ export function AvatarPickerModal({
                     <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-hover text-rm-text">
                       <Icon name="sparkle" size="sm" />
                     </div>
-                    <span className="block text-base font-bold">
+                    <span className="block text-ui-md font-semibold">
                       Choose GIF
                     </span>
-                    <span className="mt-1 block text-xs text-rm-text-muted">
+                    <span className="mt-1 block text-ui-xs text-rm-text-muted">
                       Open the GIF picker
                     </span>
                   </div>
@@ -258,8 +260,10 @@ export function AvatarPickerModal({
                 <section>
                   <div className="mb-3 flex items-end justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-bold">Recent Avatars</h3>
-                      <p className="mt-1 text-xs text-rm-text-muted">
+                      <h3 className="text-ui-md font-semibold">
+                        Recent Avatars
+                      </h3>
+                      <p className="mt-1 text-ui-xs text-rm-text-muted">
                         Access your 6 most recent avatar uploads.
                       </p>
                     </div>
@@ -324,7 +328,7 @@ export function AvatarPickerModal({
                       })}
                     </div>
                   ) : !loading ? (
-                    <p className="rounded-xl border border-dashed border-rm-border px-4 py-5 text-center text-sm text-rm-text-muted">
+                    <p className="rounded-xl border border-dashed border-rm-border px-4 py-5 text-center text-ui-sm text-rm-text-muted">
                       Your uploaded avatars will appear here.
                     </p>
                   ) : null}
@@ -332,7 +336,7 @@ export function AvatarPickerModal({
               ) : null}
 
               {error ? (
-                <p className="rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p className="rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-ui-sm text-destructive">
                   {error}
                 </p>
               ) : null}

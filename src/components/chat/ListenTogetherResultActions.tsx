@@ -111,7 +111,7 @@ export function ListenTogetherMobileActionSheet({
         <div className="flex items-center justify-between border-b border-rm-border px-4 py-3">
           <h2
             id={titleId}
-            className="min-w-0 truncate text-sm font-bold text-rm-text"
+            className="min-w-0 truncate text-ui-sm font-semibold text-rm-text"
           >
             {title}
           </h2>
@@ -134,7 +134,7 @@ export function ListenTogetherMobileActionSheet({
                 onClose();
               }}
               className={cn(
-                "flex min-h-12 items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                "flex min-h-12 items-center gap-3 rounded-2xl px-3 text-left text-ui-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                 action.id === "play-now" && "text-primary",
               )}
             >

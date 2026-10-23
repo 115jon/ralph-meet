@@ -589,7 +589,7 @@ export const DesktopScreenPickerModal: React.FC<
               ) : filteredSources.length === 0 ? (
                 <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
                   <Icon name="monitor" size="3xl" className="opacity-30" />
-                  <p className="text-sm">
+                  <p className="text-ui-sm">
                     No{" "}
                     {state.tab === "applications" ? "applications" : "screens"}{" "}
                     found

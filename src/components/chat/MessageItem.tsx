@@ -208,7 +208,7 @@ function ToolbarEmojiButton({
             value={item.insertText}
             customEmojiMap={customEmojiMap}
             className="h-5 w-5"
-            fallbackClassName="text-base"
+            fallbackClassName="text-ui-md"
           />
         </Button>
       </TooltipTrigger>
@@ -257,7 +257,7 @@ function ReactionTooltipContent({
               customEmojiMap={customEmojiMap}
               size="large"
               className="h-8 w-8"
-              fallbackClassName="text-2xl leading-none"
+              fallbackClassName="text-ui-2xl leading-none"
             />
           </button>
         ) : (
@@ -267,7 +267,7 @@ function ReactionTooltipContent({
               customEmojiMap={customEmojiMap}
               size="large"
               className="h-8 w-8"
-              fallbackClassName="text-2xl leading-none"
+              fallbackClassName="text-ui-2xl leading-none"
             />
           </div>
         )}
@@ -625,7 +625,7 @@ const MessageItem = memo(
                 value={item.insertText}
                 customEmojiMap={quickReactionEmojiMap}
                 className="h-5 w-5"
-                fallbackClassName="text-base"
+                fallbackClassName="text-ui-md"
               />
             </button>
           ))}
@@ -811,7 +811,7 @@ const MessageItem = memo(
                     value={item.insertText}
                     customEmojiMap={quickReactionEmojiMap}
                     className="h-5 w-5"
-                    fallbackClassName="text-base"
+                    fallbackClassName="text-ui-md"
                   />
                 </button>
               ))}
@@ -991,7 +991,7 @@ const MessageItem = memo(
           {showHeader ? (
             <button
               type="button"
-              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-sm font-semibold text-primary transition-opacity hover:opacity-80 relative"
+              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-ui-sm font-semibold text-primary transition-opacity hover:opacity-80 relative"
               onClick={() => setShowProfile(true)}
               aria-label={`View ${authorInfo.displayName}'s profile`}
             >
@@ -1285,7 +1285,7 @@ const MessageItem = memo(
                               customEmojiMap={reactionEmojiMap}
                               size="reaction"
                               className="h-5 w-5"
-                              fallbackClassName="max-w-[84px] truncate text-xs"
+                              fallbackClassName="max-w-[84px] truncate text-ui-xs"
                             />
                             <span className="tabular-nums text-ui-xs opacity-80">
                               {reaction.count}
@@ -1296,7 +1296,7 @@ const MessageItem = memo(
                           side="top"
                           sideOffset={8}
                           className={cn(
-                            "pointer-events-auto hidden max-w-xs text-xs sm:block",
+                            "pointer-events-auto hidden max-w-xs text-ui-xs sm:block",
                           )}
                         >
                           <ReactionTooltipContent
@@ -1696,13 +1696,13 @@ function DeleteMessageModal({
               <div>
                 <h2
                   id="delete-message-title"
-                  className="text-lg font-bold text-rm-text"
+                  className="text-ui-lg font-semibold text-rm-text"
                 >
                   Delete Message
                 </h2>
                 <p
                   id="delete-message-description"
-                  className="mt-1 text-sm text-rm-text-muted"
+                  className="mt-1 text-ui-sm text-rm-text-muted"
                 >
                   Are you sure you want to delete this message?
                 </p>
@@ -1735,7 +1735,7 @@ function DeleteMessageModal({
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
+            <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-ui-sm leading-tight">
               <p className="text-ui-xs font-bold uppercase text-emerald-400">
                 Protip:
               </p>
@@ -1749,14 +1749,14 @@ function DeleteMessageModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+                className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-ui-sm font-semibold text-rm-text-secondary transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={onConfirm}
-                className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition pointer-fine:hover:brightness-110"
+                className="rounded-lg bg-destructive px-4 py-2.5 text-ui-sm font-semibold text-white transition pointer-fine:hover:brightness-110"
               >
                 Delete
               </button>

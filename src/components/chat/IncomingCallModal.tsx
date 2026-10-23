@@ -131,7 +131,7 @@ export function IncomingCallModal() {
                     display={activeCaller.avatarDisplay}
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-rm-text-muted">
+                  <div className="h-full w-full flex items-center justify-center text-ui-2xl font-semibold text-rm-text-muted">
                     {activeCaller.displayName[0]?.toUpperCase()}
                   </div>
                 )}
@@ -142,7 +142,7 @@ export function IncomingCallModal() {
             <DialogTitle className="text-ui-md font-semibold text-rm-text">
               <InlineEmojiText text={activeCaller.displayName} />
             </DialogTitle>
-            <DialogDescription className="text-xs text-rm-text-muted mt-0.5 mb-5">
+            <DialogDescription className="text-ui-xs text-rm-text-muted mt-0.5 mb-5">
               Incoming Call...
             </DialogDescription>
 

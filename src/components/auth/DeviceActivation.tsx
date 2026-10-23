@@ -180,7 +180,7 @@ function uniqueParts(parts: Array<string | null | undefined>): string[] {
 // ── Small pieces ──────────────────────────────────────────────────────────────
 
 const BTN =
-  "relative inline-flex h-11 w-full items-center justify-center gap-2.5 overflow-hidden rounded-[10px] px-4 text-[15px] font-medium leading-none text-[var(--rm-text-primary)] transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] [-webkit-tap-highlight-color:transparent] after:pointer-events-none after:absolute after:inset-0 after:bg-current after:opacity-0 after:transition-opacity after:duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:cursor-default active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100 [@media(hover:hover)_and_(pointer:fine)]:hover:enabled:after:opacity-[0.07]";
+  "relative inline-flex h-11 w-full items-center justify-center gap-2.5 overflow-hidden rounded-[10px] px-4 text-ui-base font-medium leading-none text-[var(--rm-text-primary)] transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] [-webkit-tap-highlight-color:transparent] after:pointer-events-none after:absolute after:inset-0 after:bg-current after:opacity-0 after:transition-opacity after:duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:cursor-default active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100 [@media(hover:hover)_and_(pointer:fine)]:hover:enabled:after:opacity-[0.07]";
 const BTN_SECONDARY = `${BTN} border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] [@media(hover:hover)_and_(pointer:fine)]:hover:enabled:border-[var(--rm-text-ghost)] disabled:opacity-50`;
 const BTN_PRIMARY = `${BTN} bg-[var(--rm-accent)] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(0,0,0,0.3)] disabled:opacity-50`;
 
@@ -223,7 +223,7 @@ function Heading({
     <h1
       ref={headingRef}
       tabIndex={-1}
-      className="text-balance text-2xl font-semibold leading-tight tracking-[-0.02em] outline-none [overflow-wrap:anywhere]"
+      className="text-balance text-ui-2xl font-semibold leading-tight tracking-[-0.02em] outline-none [overflow-wrap:anywhere]"
     >
       {children}
     </h1>
@@ -232,7 +232,7 @@ function Heading({
 
 function Sub({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-1 text-pretty text-[15px] text-[var(--rm-text-secondary)] [overflow-wrap:anywhere]">
+    <p className="mt-1 text-pretty text-ui-base text-[var(--rm-text-secondary)] [overflow-wrap:anywhere]">
       {children}
     </p>
   );
@@ -552,12 +552,12 @@ export function DeviceActivation({
               const next = formatDeviceCode(e.target.value);
               if (next !== e.target.value) e.target.value = next;
             }}
-            className="h-11 w-full rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] px-3 text-center font-mono text-xl font-medium uppercase tracking-[0.12em] text-[var(--rm-text-primary)] tabular-nums outline-none transition-[border-color,box-shadow] duration-150 placeholder:tracking-[0.12em] placeholder:text-[var(--rm-text-muted)] focus:border-[var(--rm-accent)] focus:shadow-[0_0_0_3px_var(--rm-accent-dim)] aria-[invalid=true]:border-[var(--rm-status-dnd)]/70"
+            className="h-11 w-full rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] px-3 text-center font-mono text-ui-xl font-medium uppercase tracking-[0.12em] text-[var(--rm-text-primary)] tabular-nums outline-none transition-[border-color,box-shadow] duration-150 placeholder:tracking-[0.12em] placeholder:text-[var(--rm-text-muted)] focus:border-[var(--rm-accent)] focus:shadow-[0_0_0_3px_var(--rm-accent-dim)] aria-[invalid=true]:border-[var(--rm-status-dnd)]/70"
           />
           <p
             id="code-error"
             role="alert"
-            className="text-sm text-[var(--rm-status-dnd)] empty:hidden"
+            className="text-ui-sm text-[var(--rm-status-dnd)] empty:hidden"
           >
             {message}
           </p>
@@ -609,25 +609,25 @@ export function DeviceActivation({
         <Logo />
         <Heading headingRef={headingRef}>Sign in to Ralph Meet?</Heading>
         <Sub>Make sure this matches the code on your device.</Sub>
-        <p className="mt-[18px] rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-secondary)] p-3 text-center font-mono text-[30px] font-medium leading-tight tracking-[0.08em] tabular-nums">
+        <p className="mt-[18px] rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-secondary)] p-3 text-center font-mono text-ui-2xl font-medium leading-tight tracking-[0.08em] tabular-nums">
           <span aria-hidden="true">{request.userCode}</span>
           <span className="sr-only">
             Code: {spelledDeviceCode(request.userCode)}
           </span>
         </p>
         {devicePrimary || place || ip ? (
-          <dl className="mt-3.5 text-sm">
+          <dl className="mt-3.5 text-ui-sm">
             {devicePrimary ? (
               <div className="grid grid-cols-1 gap-0.5 border-t border-[var(--rm-border)] py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:gap-3">
                 <dt className="text-[var(--rm-text-muted)]">Device</dt>
                 <dd className="min-w-0 text-[var(--rm-text-secondary)] [overflow-wrap:anywhere]">
                   {devicePrimary}
                   {hostname ? (
-                    <span className="block text-[13px] text-[var(--rm-text-muted)]">
+                    <span className="block text-ui-sm text-[var(--rm-text-muted)]">
                       {hostname}
                     </span>
                   ) : null}
-                  <span className="mt-0.5 block text-xs italic text-[var(--rm-text-muted)]">
+                  <span className="mt-0.5 block text-ui-xs italic text-[var(--rm-text-muted)]">
                     Reported by the device
                   </span>
                 </dd>
@@ -640,7 +640,7 @@ export function DeviceActivation({
                   {place || ip}
                   {place && ip ? (
                     <span
-                      className="block truncate text-[13px] text-[var(--rm-text-muted)] tabular-nums"
+                      className="block truncate text-ui-sm text-[var(--rm-text-muted)] tabular-nums"
                       title={ip}
                     >
                       {ip}
@@ -654,7 +654,7 @@ export function DeviceActivation({
         <div className="mt-3.5 flex items-center gap-3 rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] px-3 py-2.5">
           <span
             aria-hidden="true"
-            className="relative grid h-9 w-9 flex-none place-items-center overflow-hidden rounded-full bg-[var(--rm-bg-active)] text-[13px] font-semibold"
+            className="relative grid h-9 w-9 flex-none place-items-center overflow-hidden rounded-full bg-[var(--rm-bg-active)] text-ui-sm font-semibold"
           >
             {initials(name, email)}
             {user?.image ? (
@@ -673,7 +673,7 @@ export function DeviceActivation({
           <span className="flex min-w-0 flex-1 flex-col leading-snug">
             <span className="truncate font-medium">{displayName}</span>
             {name ? (
-              <span className="truncate text-[13px] text-[var(--rm-text-muted)]">
+              <span className="truncate text-ui-sm text-[var(--rm-text-muted)]">
                 {email}
               </span>
             ) : null}
@@ -682,7 +682,7 @@ export function DeviceActivation({
             type="button"
             onClick={switchAccount}
             disabled={busy !== null}
-            className="-mr-1 min-h-11 flex-none rounded-lg px-1 text-sm text-[var(--rm-text-secondary)] underline decoration-[var(--rm-accent)]/60 underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:opacity-50 [@media(hover:hover)_and_(pointer:fine)]:hover:text-[var(--rm-text-primary)]"
+            className="-mr-1 min-h-11 flex-none rounded-lg px-1 text-ui-sm text-[var(--rm-text-secondary)] underline decoration-[var(--rm-accent)]/60 underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:opacity-50 [@media(hover:hover)_and_(pointer:fine)]:hover:text-[var(--rm-text-primary)]"
           >
             Not you?<span className="sr-only"> Use another account</span>
           </button>
@@ -708,11 +708,11 @@ export function DeviceActivation({
         </div>
         <p
           role="alert"
-          className="mt-3 text-sm text-[var(--rm-status-dnd)] empty:hidden"
+          className="mt-3 text-ui-sm text-[var(--rm-status-dnd)] empty:hidden"
         >
           {inlineError}
         </p>
-        <p className="mt-3.5 text-pretty text-[13px] text-[var(--rm-text-muted)]">
+        <p className="mt-3.5 text-pretty text-ui-sm text-[var(--rm-text-muted)]">
           Only approve if you started this sign-in yourself.
         </p>
         {live}
@@ -773,7 +773,7 @@ export function DeviceActivation({
           >
             Sign in again
           </Button>
-          <p className="text-[13px] text-[var(--rm-text-muted)]">
+          <p className="text-ui-sm text-[var(--rm-text-muted)]">
             Manage two-factor in your{" "}
             <a
               href={`${getKovaAuthUrl()}/settings`}

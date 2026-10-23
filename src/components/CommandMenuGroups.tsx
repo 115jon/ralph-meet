@@ -72,7 +72,7 @@ export function ServerIcon({
     <span
       aria-hidden="true"
       className={cn(
-        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-rm-tint-2 text-[9px] font-semibold text-rm-text-secondary",
+        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-rm-tint-2 text-ui-2xs font-semibold text-rm-text-secondary",
         className,
       )}
     >

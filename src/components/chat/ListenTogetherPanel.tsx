@@ -136,7 +136,7 @@ export const listenTogetherQueueRowRenderer = {
             : "pointer-fine:hover:bg-rm-bg-hover/45",
         )}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center text-xs font-bold tabular-nums text-rm-text-muted">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center text-ui-xs font-semibold tabular-nums text-rm-text-muted">
           {isCurrent ? (
             <span className="h-2 w-2 rounded-full bg-primary" />
           ) : (
@@ -157,10 +157,10 @@ export const listenTogetherQueueRowRenderer = {
           )}
         </div>
         <div className="min-w-0">
-          <div className="truncate text-ui-sm font-bold text-rm-text sm:text-sm">
+          <div className="truncate text-ui-sm font-semibold text-rm-text sm:text-ui-sm">
             {entry.track.title}
           </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-ui-2xs text-rm-text-muted sm:gap-2 sm:text-xs">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-ui-2xs text-rm-text-muted sm:gap-2 sm:text-ui-xs">
             <span className="truncate">
               {entry.track.artist || entry.track.sourceLabel}
             </span>
@@ -907,7 +907,7 @@ export function ListenTogetherPanel({
               YouTube · Spotify
             </span>
           </div>
-          <p className="mt-2 max-w-[32ch] text-xs leading-relaxed text-rm-text-muted">
+          <p className="mt-2 max-w-[32ch] text-ui-xs leading-relaxed text-rm-text-muted">
             Search a track or paste a link. Everyone in the room hears the same
             queue.
           </p>
@@ -954,14 +954,14 @@ export function ListenTogetherPanel({
                     setResolveFeedback(null);
                   }}
                   placeholder="Search or paste YouTube / Spotify links"
-                  className="h-11 w-full rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pl-10 pr-4 text-base text-rm-text outline-none transition-[border-color,box-shadow] placeholder:text-rm-text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/15 sm:text-sm"
+                  className="h-11 w-full rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pl-10 pr-4 text-ui-md text-rm-text outline-none transition-[border-color,box-shadow] placeholder:text-rm-text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/15 sm:text-ui-sm"
                 />
               </div>
               {!isResolveMode && (
                 <button
                   type="submit"
                   disabled={!trimmedInput || !voiceSessionHeaders}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-sm font-semibold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-ui-sm font-semibold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSearching ? (
                     <Icon name="loader" size="sm" className="animate-spin" />
@@ -976,7 +976,7 @@ export function ListenTogetherPanel({
                 type="button"
                 onClick={() => setSearchFilter("track")}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
+                  "rounded-full border px-3 py-1.5 text-ui-xs font-semibold transition-colors",
                   searchFilter === "track"
                     ? "border-primary/40 bg-primary/20 text-primary"
                     : "border-rm-border bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text",
@@ -988,7 +988,7 @@ export function ListenTogetherPanel({
                 type="button"
                 onClick={() => setSearchFilter("collection")}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
+                  "rounded-full border px-3 py-1.5 text-ui-xs font-semibold transition-colors",
                   searchFilter === "collection"
                     ? "border-primary/40 bg-primary/20 text-primary"
                     : "border-rm-border bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text",
@@ -998,12 +998,12 @@ export function ListenTogetherPanel({
               </button>
             </div>
             {resolveFeedback && (
-              <div className="rounded-2xl border border-rm-border bg-rm-bg-hover px-3 py-2 text-xs text-rm-text-muted">
+              <div className="rounded-2xl border border-rm-border bg-rm-bg-hover px-3 py-2 text-ui-xs text-rm-text-muted">
                 {resolveFeedback}
               </div>
             )}
             {error && (
-              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-ui-xs text-destructive">
                 {error.message}
               </div>
             )}
@@ -1014,7 +1014,7 @@ export function ListenTogetherPanel({
           {isResolving ? (
             <div className="flex flex-col items-center justify-center gap-3 py-12 text-rm-text-muted">
               <Icon name="loader" size="lg" className="animate-spin" />
-              <span className="text-sm">Resolving link preview...</span>
+              <span className="text-ui-sm">Resolving link preview...</span>
             </div>
           ) : resolvedPreview ? (
             <div className="space-y-3">
@@ -1042,11 +1042,11 @@ export function ListenTogetherPanel({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold text-rm-text">
+                  <div className="truncate text-ui-sm font-semibold text-rm-text">
                     {resolvedPreview.collection?.title ??
                       resolvedPreview.tracks[0]?.title}
                   </div>
-                  <div className="mt-1 truncate text-xs text-rm-text-muted">
+                  <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
                     {resolvedPreview.collection
                       ? [
                           resolvedPreview.collection.subtitle,
@@ -1069,7 +1069,7 @@ export function ListenTogetherPanel({
                     <button
                       type="button"
                       onClick={queueResolvedPreview}
-                      className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96]"
+                      className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-ui-xs font-semibold text-primary transition-transform pointer-fine:hover:bg-primary/20 active:scale-[0.96]"
                     >
                       Queue
                     </button>
@@ -1098,7 +1098,7 @@ export function ListenTogetherPanel({
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-xs font-bold text-rm-text">
+                          <div className="truncate text-ui-xs font-semibold text-rm-text">
                             {track.title}
                           </div>
                           <div className="truncate text-ui-2xs text-rm-text-muted">
@@ -1134,7 +1134,7 @@ export function ListenTogetherPanel({
                     setIsSearchFocused(true);
                     void runSearch(query);
                   }}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/35 px-3 text-left text-sm text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="flex min-h-11 w-full items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/35 px-3 text-left text-ui-sm text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <Icon
                     name="search"
@@ -1146,7 +1146,7 @@ export function ListenTogetherPanel({
               ))}
             </div>
           ) : searchResults.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
+            <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-ui-sm text-rm-text-muted">
               {deferredSearchQuery
                 ? "No results yet for that search."
                 : "Search tracks or collections, or paste a YouTube or Spotify link to queue music together."}
@@ -1195,10 +1195,10 @@ export function ListenTogetherPanel({
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold text-rm-text">
+                      <div className="truncate text-ui-sm font-semibold text-rm-text">
                         {result.title}
                       </div>
-                      <div className="mt-1 truncate text-xs text-rm-text-muted">
+                      <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
                         {isTrack
                           ? [
                               result.artist,
@@ -1221,7 +1221,7 @@ export function ListenTogetherPanel({
                                   "play-next",
                                 )
                               }
-                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition pointer-fine:hover:bg-primary/20"
+                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-ui-xs font-semibold text-primary transition pointer-fine:hover:bg-primary/20"
                             >
                               Play Next
                             </button>
@@ -1233,7 +1233,7 @@ export function ListenTogetherPanel({
                                   "append",
                                 )
                               }
-                              className="rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-1.5 text-xs font-bold text-rm-text transition pointer-fine:hover:bg-rm-bg-active"
+                              className="rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-1.5 text-ui-xs font-semibold text-rm-text transition pointer-fine:hover:bg-rm-bg-active"
                             >
                               Queue
                             </button>
@@ -1251,7 +1251,7 @@ export function ListenTogetherPanel({
                               onClick={() =>
                                 void queueSourceUrl(result.sourceUrl)
                               }
-                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition pointer-fine:hover:bg-primary/20"
+                              className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-ui-xs font-semibold text-primary transition pointer-fine:hover:bg-primary/20"
                             >
                               Queue Collection
                             </button>
@@ -1338,7 +1338,7 @@ export function ListenTogetherPanel({
                 onKeyDown={handleActivityTabKeyDown}
                 onClick={() => setActiveRightTab("queue")}
                 className={cn(
-                  "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                  "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-ui-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   activeRightTab === "queue"
                     ? "bg-rm-bg-surface text-rm-text shadow-sm"
                     : "text-rm-text-muted pointer-fine:hover:text-rm-text",
@@ -1360,7 +1360,7 @@ export function ListenTogetherPanel({
                 onKeyDown={handleActivityTabKeyDown}
                 onClick={() => setActiveRightTab("recently-played")}
                 className={cn(
-                  "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                  "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-ui-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   activeRightTab === "recently-played"
                     ? "bg-rm-bg-surface text-rm-text shadow-sm"
                     : "text-rm-text-muted pointer-fine:hover:text-rm-text",
@@ -1400,7 +1400,7 @@ export function ListenTogetherPanel({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
+                <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-ui-sm text-rm-text-muted">
                   Nothing is queued yet.
                 </div>
               )
@@ -1425,10 +1425,10 @@ export function ListenTogetherPanel({
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold text-rm-text">
+                      <div className="truncate text-ui-sm font-semibold text-rm-text">
                         {historyEntry.entry.track.title}
                       </div>
-                      <div className="mt-1 truncate text-xs text-rm-text-muted">
+                      <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
                         {[
                           historyEntry.entry.track.artist,
                           historyEntry.entry.track.sourceLabel,
@@ -1453,7 +1453,7 @@ export function ListenTogetherPanel({
                           "append",
                         )
                       }
-                      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated/60 px-3 text-xs font-bold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated/60 px-3 text-ui-xs font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       <Icon name="playlist" size="sm" />
                       Requeue
@@ -1462,7 +1462,7 @@ export function ListenTogetherPanel({
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
+              <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-ui-sm text-rm-text-muted">
                 Nothing has played in this room yet.
               </div>
             )}

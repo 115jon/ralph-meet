@@ -1026,7 +1026,7 @@ export default function ChannelSidebar({
             onClick={handleServerHeaderClick}
           >
             <div className="server-banner-content relative z-10 text-white flex flex-col items-start w-full">
-              <h1 className="font-black text-[20px] tracking-wide leading-tight uppercase truncate max-w-full drop-shadow-md">
+              <h1 className="font-black text-ui-xl tracking-wide leading-tight uppercase truncate max-w-full drop-shadow-md">
                 {serverName.split(" ").map((word, i) => (
                   <span key={i} className="block">
                     <InlineEmojiText text={word} />
@@ -1034,7 +1034,7 @@ export default function ChannelSidebar({
                 ))}
               </h1>
               <div className="flex items-center gap-2 mt-1 opacity-90">
-                <span className="font-black text-lg text-white/50">
+                <span className="font-black text-ui-lg text-white/50">
                   {isMiku ? "01" : "🕸️"}
                 </span>
                 <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
@@ -1758,7 +1758,7 @@ function VoiceChannelMemberRow({
         <UserDisplayName
           text={resolvedIdentity.name}
           displayNameStyle={resolvedDisplayNameStyle}
-          className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text"
+          className="flex-1 truncate text-ui-sm font-medium text-rm-text-muted group-hover/vc-user:text-rm-text"
         />
         <div className="ml-auto flex items-center gap-1">
           {shouldShowStreamState && (

@@ -176,8 +176,8 @@ export default function ThreadSidebar({
         }}
       >
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-bold text-rm-text">Thread</h2>
-          <span className="text-xs text-rm-text-muted">
+          <h2 className="text-ui-sm font-semibold text-rm-text">Thread</h2>
+          <span className="text-ui-xs text-rm-text-muted">
             {replies.length} {replies.length === 1 ? "reply" : "replies"}
           </span>
         </div>
@@ -206,7 +206,7 @@ export default function ThreadSidebar({
             />
           </div>
         ) : error ? (
-          <div className="flex h-full items-center justify-center text-sm text-destructive">
+          <div className="flex h-full items-center justify-center text-ui-sm text-destructive">
             {error}
           </div>
         ) : (
@@ -320,12 +320,12 @@ function ThreadReplyInput({
             }
           }}
           placeholder="Reply to thread…"
-          className="flex-1 bg-transparent text-sm text-rm-text outline-none placeholder:text-rm-text-muted/30"
+          className="flex-1 bg-transparent text-ui-sm text-rm-text outline-none placeholder:text-rm-text-muted/30"
         />
         <button
           onClick={handleSubmit}
           disabled={!value.trim() || sending}
-          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-30"
+          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-ui-xs font-semibold text-primary-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-30"
         >
           {sending ? "…" : "Send"}
         </button>

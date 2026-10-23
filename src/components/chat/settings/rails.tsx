@@ -91,7 +91,7 @@ function ProfileRail() {
         </div>
         <div className="relative z-30 -mt-10 px-4">
           <div className="relative inline-block rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
-            <div className="relative flex size-[68px] items-center justify-center overflow-hidden rounded-full bg-[var(--rm-profile-custom-button-bg)] text-xl font-bold text-[color:var(--rm-profile-custom-button-text)]">
+            <div className="relative flex size-[68px] items-center justify-center overflow-hidden rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
               {user.avatar_url ? (
                 <AvatarImage
                   src={getAuthAssetUrl(user.avatar_url)}
@@ -111,7 +111,7 @@ function ProfileRail() {
           <ProfileDisplayName
             text={displayName}
             displayNameStyle={user.display_name_style}
-            className="text-ui-lg font-bold leading-tight text-[color:var(--rm-profile-custom-text)]"
+            className="text-ui-lg font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
             backgroundColor={theme.backgroundColor}
             readableFallbackColor={theme.textColor}
           />

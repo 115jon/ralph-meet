@@ -47,7 +47,7 @@ const DESKTOP_MAX_SURFACE_HEIGHT = 620;
 const ACTION_CARD_CLASS =
   "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
 const ACTION_ROW_CLASS =
-  "group/item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium text-[color:var(--rm-profile-custom-text)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
+  "group/item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
 
 function ActionRow({
   icon,
@@ -286,7 +286,7 @@ export default function UserAccountPopover({
             <div className="relative z-20 px-4 pb-4">
               <div className="-mt-10 flex items-end gap-3">
                 <div className="relative shrink-0">
-                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-2xl font-bold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
+                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
                     {user.avatar_url ? (
                       <AvatarImage
                         src={getAuthAssetUrl(user.avatar_url)}
@@ -353,7 +353,7 @@ export default function UserAccountPopover({
                 <ProfileDisplayName
                   text={displayName}
                   displayNameStyle={user.display_name_style}
-                  className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                  className="truncate text-ui-xl font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
                   backgroundColor={profileTheme.backgroundColor}
                   readableFallbackColor={profileTheme.textColor}
                 />

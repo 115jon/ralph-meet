@@ -272,7 +272,7 @@ export default function ServerList({
                         display={dm.recipient.avatar_display}
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-rail-item text-sm font-bold text-rm-text">
+                      <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-rail-item text-ui-sm font-semibold text-rm-text">
                         {getDisplayInitial(dm.recipient)}
                       </div>
                     )}
@@ -415,7 +415,7 @@ export default function ServerList({
                 >
                   {voiceSummary ? (
                     <div className="p-3">
-                      <p className="truncate text-sm font-semibold">
+                      <p className="truncate text-ui-sm font-semibold">
                         <InlineEmojiText text={server.name} />
                       </p>
                       <p className="mt-1 text-ui-2xs font-medium text-rm-text-muted">
@@ -448,7 +448,7 @@ export default function ServerList({
                                     size="sm"
                                     className="shrink-0 text-rm-text-secondary"
                                   />
-                                  <span className="truncate text-xs font-semibold">
+                                  <span className="truncate text-ui-xs font-semibold">
                                     <InlineEmojiText
                                       text={channel.channelName}
                                     />

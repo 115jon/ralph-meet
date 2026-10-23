@@ -345,11 +345,11 @@ export default function VoiceChannelMediaStatusModal({
                 <div>
                   <h2
                     id="voice-channel-media-status-title"
-                    className="text-[32px] font-semibold tracking-tight text-rm-text"
+                    className="text-ui-2xl font-semibold tracking-tight text-rm-text"
                   >
                     Set the vibe
                   </h2>
-                  <p className="mt-2 text-sm text-rm-text-muted">
+                  <p className="mt-2 text-ui-sm text-rm-text-muted">
                     Pick something and it will be set right away.
                   </p>
                 </div>
@@ -384,10 +384,10 @@ export default function VoiceChannelMediaStatusModal({
                         className="mb-4 text-rm-text-muted group-hover:text-rm-text"
                       />
                     )}
-                    <span className="text-ui-lg font-bold text-rm-text">
+                    <span className="text-ui-lg font-semibold text-rm-text">
                       Server Uploads
                     </span>
-                    <span className="mt-1 text-xs text-rm-text-muted">
+                    <span className="mt-1 text-ui-xs text-rm-text-muted">
                       Upload your own image or clip
                     </span>
                   </button>
@@ -404,10 +404,10 @@ export default function VoiceChannelMediaStatusModal({
                       <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-rm-bg-hover text-rm-text">
                         <Icon name="sparkle" size="lg" />
                       </div>
-                      <span className="text-ui-lg font-bold text-rm-text">
+                      <span className="text-ui-lg font-semibold text-rm-text">
                         Choose GIF
                       </span>
-                      <span className="mt-1 text-xs text-rm-text-muted">
+                      <span className="mt-1 text-ui-xs text-rm-text-muted">
                         Open the GIF picker
                       </span>
                     </div>
@@ -431,11 +431,11 @@ export default function VoiceChannelMediaStatusModal({
                 {loadingRecents || hasRecents ? (
                   <div>
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-bold text-rm-text">
+                      <h3 className="text-ui-sm font-semibold text-rm-text">
                         Recents
                       </h3>
                       {loadingRecents ? (
-                        <span className="text-xs text-rm-text-muted">
+                        <span className="text-ui-xs text-rm-text-muted">
                           Loading...
                         </span>
                       ) : null}
@@ -454,7 +454,7 @@ export default function VoiceChannelMediaStatusModal({
                 ) : null}
 
                 {error ? (
-                  <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
                     {error}
                   </div>
                 ) : null}

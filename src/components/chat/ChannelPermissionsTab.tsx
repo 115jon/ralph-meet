@@ -160,7 +160,7 @@ function PermissionsSidebar({
                         role.color || undefined,
                       )
                     }
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded pointer-fine:hover:bg-rm-bg-hover text-sm text-left"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded pointer-fine:hover:bg-rm-bg-hover text-ui-sm text-left"
                   >
                     <div
                       className="w-3 h-3 rounded-full shrink-0"
@@ -195,7 +195,7 @@ function PermissionsSidebar({
                           m.user.avatar_display,
                         )
                       }
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded pointer-fine:hover:bg-rm-bg-hover text-sm text-left"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded pointer-fine:hover:bg-rm-bg-hover text-ui-sm text-left"
                     >
                       <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center shrink-0">
                         {m.user.avatar_url ? (
@@ -221,7 +221,7 @@ function PermissionsSidebar({
             </div>
           )}
           {availableRoles.length === 0 && availableMembers.length === 0 && (
-            <p className="p-2 text-xs text-rm-text-muted text-center">
+            <p className="p-2 text-ui-xs text-rm-text-muted text-center">
               Everyone is added.
             </p>
           )}
@@ -237,7 +237,7 @@ function PermissionsSidebar({
                 key={o.target_id}
                 onClick={() => setSelectedTargetId(o.target_id)}
                 className={cn(
-                  "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors group",
+                  "w-full flex items-center gap-2 px-2 py-1.5 rounded text-ui-sm text-left transition-colors group",
                   selectedTargetId === o.target_id
                     ? "bg-primary/20 text-primary"
                     : "pointer-fine:hover:bg-rm-bg-hover text-rm-text",
@@ -306,7 +306,7 @@ function PermissionsEditor({
       {selectedOverride ? (
         <>
           <div className="p-5 border-b border-rm-border flex items-center gap-3">
-            <span className="font-bold text-lg text-rm-text flex items-center gap-2">
+            <span className="font-semibold text-ui-lg text-rm-text flex items-center gap-2">
               {selectedOverride.target_type === "role" ? (
                 <div
                   className="w-4 h-4 rounded-full inline-block"
@@ -340,10 +340,10 @@ function PermissionsEditor({
                   className="flex items-center justify-between pb-4 border-b border-rm-border/30 last:border-0 pointer-fine:hover:bg-rm-white/5 rounded px-2 -mx-2 transition-colors"
                 >
                   <div className="max-w-[70%]">
-                    <div className="text-sm font-semibold text-rm-text">
+                    <div className="text-ui-sm font-semibold text-rm-text">
                       {perm.name}
                     </div>
-                    <div className="text-xs text-rm-text-secondary mt-1">
+                    <div className="text-ui-xs text-rm-text-secondary mt-1">
                       {perm.desc}
                     </div>
                   </div>

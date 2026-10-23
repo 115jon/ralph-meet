@@ -325,11 +325,11 @@ export function AvatarFrameEditor({
             <div className="min-w-0">
               <h2
                 id="avatar-frame-title"
-                className="truncate text-sm font-bold text-rm-text"
+                className="truncate text-ui-sm font-semibold text-rm-text"
               >
                 Frame avatar
               </h2>
-              <p className="text-xs text-rm-text-muted">
+              <p className="text-ui-xs text-rm-text-muted">
                 Original image stays unchanged
               </p>
             </div>
@@ -366,7 +366,7 @@ export function AvatarFrameEditor({
                 }}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-rm-text-muted">
+              <div className="flex h-full w-full items-center justify-center text-ui-sm font-semibold text-rm-text-muted">
                 Loading
               </div>
             )}
@@ -405,10 +405,10 @@ export function AvatarFrameEditor({
             </Button>
             {currentDisplay && (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-rm-text-muted">
+                <span className="text-ui-xs font-semibold text-rm-text-muted">
                   Preview
                 </span>
-                <div className="h-10 w-10 overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                <div className="h-10 w-10 overflow-hidden rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground">
                   <AvatarImage
                     src={image.src}
                     alt={`${displayName} preview`}

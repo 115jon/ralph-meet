@@ -176,7 +176,7 @@ function ProfileHeader({
     <>
       <div className="px-5">
         <div className="relative inline-block">
-          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-[var(--rm-profile-custom-button-bg)] text-3xl font-bold text-[color:var(--rm-profile-custom-button-text)] ring-[5px] ring-[color:var(--rm-profile-custom-card-border)]">
+          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)] ring-[5px] ring-[color:var(--rm-profile-custom-card-border)]">
             {user.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(user.avatar_url)}
@@ -197,7 +197,7 @@ function ProfileHeader({
       </div>
 
       <div className="px-5 mt-3">
-        <div className="text-[28px] font-semibold leading-tight">
+        <div className="text-ui-2xl font-semibold leading-tight">
           <ProfileDisplayName
             text={displayName}
             displayNameStyle={user.display_name_style}
@@ -206,7 +206,7 @@ function ProfileHeader({
             readableFallbackColor={profileTheme.textColor}
           />
         </div>
-        <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] font-medium">
+        <p className="text-ui-sm text-[color:var(--rm-profile-custom-muted)] font-medium">
           @{user.username.toLowerCase()}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
@@ -274,7 +274,7 @@ function ProfileActions({
             type="button"
             onClick={onOpenProfileEditor}
             className={cn(
-              "flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] py-3 text-ui-base font-bold text-[color:var(--rm-profile-custom-button-text)] transition-[filter] pointer-fine:hover:brightness-110",
+              "flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] py-3 text-ui-base font-semibold text-[color:var(--rm-profile-custom-button-text)] transition-[filter] pointer-fine:hover:brightness-110",
               PRESS,
             )}
           >
@@ -365,7 +365,7 @@ function ProfileCards({
           <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-2">
             Bio
           </h3>
-          <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] leading-relaxed">
+          <p className="text-ui-sm text-[color:var(--rm-profile-custom-muted)] leading-relaxed">
             {user.bio.trim()}
           </p>
         </div>

@@ -112,12 +112,12 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                 </div>
                 <h2
                   id="screen-share-title"
-                  className="text-xl font-semibold text-rm-text"
+                  className="text-ui-xl font-semibold text-rm-text"
                 >
                   Share Your Screen
                 </h2>
               </div>
-              <p className="text-sm text-rm-text-muted">
+              <p className="text-ui-sm text-rm-text-muted">
                 Choose your stream quality and settings. Higher settings require
                 more bandwidth and CPU.
               </p>
@@ -142,7 +142,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
-                            "text-sm font-semibold",
+                            "text-ui-sm font-semibold",
                             selectedQuality === q.id
                               ? "text-primary"
                               : "text-rm-text",
@@ -198,7 +198,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                       <Icon name="music" size="md" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-rm-text">
+                      <div className="text-ui-xs font-semibold text-rm-text">
                         Share Audio
                       </div>
                       <div className="text-ui-2xs text-rm-text-muted">
@@ -245,7 +245,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
             <div className="flex items-center justify-end gap-3 border-t border-rm-border bg-rm-bg-surface/20 p-4">
               <button
                 onClick={onClose}
-                className="px-6 py-2 text-sm font-bold text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+                className="px-6 py-2 text-ui-sm font-semibold text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
               >
                 Cancel
               </button>
@@ -257,7 +257,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                   });
                   onStart({ quality: selectedQuality, withAudio });
                 }}
-                className="flex items-center gap-2 rounded-xl bg-primary px-8 py-2.5 text-sm font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui active:scale-[0.96] hover:brightness-110"
+                className="flex items-center gap-2 rounded-xl bg-primary px-8 py-2.5 text-ui-sm font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui active:scale-[0.96] hover:brightness-110"
               >
                 <span>Go Live</span>
                 <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground/40" />

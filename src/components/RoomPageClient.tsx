@@ -102,17 +102,17 @@ export default function RoomPageClient() {
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">
               <Icon name="soundboard" size="2xl" className="text-rm-accent" />
             </div>
-            <h1 className="text-2xl font-semibold text-rm-text">
+            <h1 className="text-ui-2xl font-semibold text-rm-text">
               Join Meeting
             </h1>
-            <p className="text-center text-sm text-rm-text-muted">
+            <p className="text-center text-ui-sm text-rm-text-muted">
               Room: <span className="font-semibold text-rm-text">{slug}</span>
             </p>
           </div>
 
           <form onSubmit={handleNameSubmit} className="flex flex-col gap-4">
             {preflightWarnings.length > 0 && (
-              <div className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-xs font-medium text-warning">
+              <div className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-ui-xs font-medium text-warning">
                 {preflightWarnings[0]}. You can still join, then check input
                 settings from the call controls.
               </div>
@@ -120,7 +120,7 @@ export default function RoomPageClient() {
             <div className="space-y-2">
               <label
                 htmlFor="name"
-                className="text-xs font-semibold text-rm-text-muted"
+                className="text-ui-xs font-semibold text-rm-text-muted"
               >
                 Your Name
               </label>
@@ -141,7 +141,7 @@ export default function RoomPageClient() {
             <button
               type="submit"
               disabled={!guestState.name.trim()}
-              className="w-full rounded-xl bg-rm-accent py-3 text-base font-bold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-ui hover:-translate-y-0.5 hover:bg-rm-accent-hover hover:shadow-xl disabled:opacity-40 cursor-pointer"
+              className="w-full rounded-xl bg-rm-accent py-3 text-ui-md font-semibold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-ui hover:-translate-y-0.5 hover:bg-rm-accent-hover hover:shadow-xl disabled:opacity-40 cursor-pointer"
             >
               Join Room
             </button>
@@ -377,7 +377,7 @@ function RoomHeader({
     >
       <div className="flex items-center gap-3 pointer-events-auto">
         <Icon name="soundboard" size="sm" className="text-rm-accent" />
-        <span className="text-sm font-bold text-rm-text tracking-tight">
+        <span className="text-ui-sm font-semibold text-rm-text tracking-tight">
           {slug}
         </span>
         <button
@@ -448,7 +448,7 @@ function RoomHeader({
           </>
         )}
         <div className="h-4 w-px bg-rm-border" />
-        <span className="text-xs text-rm-text-muted">
+        <span className="text-ui-xs text-rm-text-muted">
           {gridItemsCount} in room
         </span>
       </div>
@@ -603,7 +603,7 @@ function RoomVoiceView({
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border animate-pulse">
           <Icon name="soundboard" size="2xl" className="text-rm-accent" />
         </div>
-        <span className="text-sm font-semibold text-rm-text-muted">
+        <span className="text-ui-sm font-semibold text-rm-text-muted">
           Connecting to {slug}…
         </span>
       </div>
@@ -621,10 +621,10 @@ function RoomVoiceView({
       {isFileDragging && (
         <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
           <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
-            <p className="text-sm font-semibold text-rm-text">
+            <p className="text-ui-sm font-semibold text-rm-text">
               Uploads unlock in the full app
             </p>
-            <p className="mt-1 text-xs font-medium text-rm-text-muted">
+            <p className="mt-1 text-ui-xs font-medium text-rm-text-muted">
               Drop to see how to sign in. GIFs still work here.
             </p>
           </div>
@@ -641,7 +641,7 @@ function RoomVoiceView({
 
       <div className="flex-1 flex flex-col min-h-0 relative">
         {audioStalled && isMicOn && (
-          <div className="z-50 bg-destructive text-destructive-foreground px-4 py-3 flex items-center justify-between text-sm font-medium shadow-md shrink-0">
+          <div className="z-50 bg-destructive text-destructive-foreground px-4 py-3 flex items-center justify-between text-ui-sm font-medium shadow-md shrink-0">
             <div className="flex items-center gap-2">
               <Icon name="mic" state="off" size="sm" className="shrink-0" />
               <span>
@@ -651,7 +651,7 @@ function RoomVoiceView({
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-xs font-bold hover:brightness-110 active:scale-[0.96] transition-ui outline-none"
+              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-ui-xs font-semibold hover:brightness-110 active:scale-[0.96] transition-ui outline-none"
             >
               Check Settings
             </button>

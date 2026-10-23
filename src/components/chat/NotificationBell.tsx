@@ -184,7 +184,7 @@ export function NotificationInbox({
             "tracking-tight",
             page
               ? "text-ui-xl font-semibold text-rm-text"
-              : "text-ui-base font-bold text-rm-text-primary md:text-ui-sm",
+              : "text-ui-base font-semibold text-rm-text-primary md:text-ui-sm",
           )}
         >
           {page ? "Notifications" : "Inbox"}

@@ -562,7 +562,7 @@ export default function VoiceChannelView({
                       <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-cyan-200/80">
                         Loading Activity
                       </div>
-                      <div className="mt-3 text-2xl font-bold">
+                      <div className="mt-3 text-ui-2xl font-semibold">
                         Preparing the stage...
                       </div>
                     </div>

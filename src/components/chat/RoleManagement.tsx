@@ -277,7 +277,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
               key={role.id}
               onClick={() => selectRole(role)}
               className={cn(
-                "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
+                "w-full flex items-center gap-2 px-2 py-1.5 rounded text-ui-sm text-left transition-colors",
                 state.selectedRole?.id === role.id &&
                   !state.editState.isCreating
                   ? "bg-primary/20 text-primary"
@@ -292,7 +292,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
             </button>
           ))}
           {state.editState.isCreating && (
-            <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left bg-primary/20 text-primary">
+            <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-ui-sm text-left bg-primary/20 text-primary">
               <div className="w-3 h-3 rounded-full shrink-0 bg-[#99aab5]" />
               <span className="truncate italic">New Role</span>
             </div>
@@ -305,7 +305,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
         {state.selectedRole || state.editState.isCreating ? (
           <>
             <div className="p-4 border-b border-rm-border flex justify-between items-center">
-              <h3 className="font-bold text-rm-text flex items-center gap-2">
+              <h3 className="font-semibold text-rm-text flex items-center gap-2">
                 <Icon name="shield" size="sm" /> Edit Role
                 {state.selectedRole?.is_default && (
                   <span className="text-ui-2xs bg-rm-bg-elevated px-1.5 py-0.5 rounded uppercase tracking-widest text-rm-text-muted">
@@ -328,7 +328,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                   disabled={
                     state.editState.saving || !state.editState.name.trim()
                   }
-                  className="bg-primary pointer-fine:hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="bg-primary pointer-fine:hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded text-ui-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {state.editState.saving && (
                     <Icon name="loader" size="xs" className="animate-spin" />
@@ -340,7 +340,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
 
             <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
               {state.error && (
-                <div className="bg-destructive/10 text-destructive text-xs p-3 rounded">
+                <div className="bg-destructive/10 text-destructive text-ui-xs p-3 rounded">
                   {state.error}
                 </div>
               )}
@@ -363,7 +363,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                       })
                     }
                     disabled={state.selectedRole?.is_default}
-                    className="w-full rounded bg-rm-bg-surface border border-rm-border px-3 py-2 text-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
+                    className="w-full rounded bg-rm-bg-surface border border-rm-border px-3 py-2 text-ui-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
                   />
                 </div>
 
@@ -399,7 +399,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                       }
                       placeholder="#000000"
                       disabled={state.selectedRole?.is_default}
-                      className="w-32 rounded bg-rm-bg-surface border border-rm-border px-3 py-1.5 text-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50 font-mono"
+                      className="w-32 rounded bg-rm-bg-surface border border-rm-border px-3 py-1.5 text-ui-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50 font-mono"
                     />
                   </div>
                 </div>
@@ -408,7 +408,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
               <div className="h-px bg-rm-border my-6" />
 
               <div>
-                <h4 className="text-sm font-bold text-rm-text mb-4">
+                <h4 className="text-ui-sm font-semibold text-rm-text mb-4">
                   Permissions
                 </h4>
                 <div className="space-y-2">
@@ -439,13 +439,13 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                         <div>
                           <div
                             className={cn(
-                              "font-medium text-sm",
+                              "font-medium text-ui-sm",
                               hasPerm ? "text-primary" : "text-rm-text",
                             )}
                           >
                             {perm.name}
                           </div>
-                          <div className="text-xs text-rm-text-secondary mt-0.5">
+                          <div className="text-ui-xs text-rm-text-secondary mt-0.5">
                             {perm.desc}
                           </div>
                         </div>
@@ -470,7 +470,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-rm-text-muted">
             <Icon name="sliders" size="3xl" className="mb-4 opacity-20" />
-            <p className="text-sm font-medium">Select a role to edit</p>
+            <p className="text-ui-sm font-medium">Select a role to edit</p>
           </div>
         )}
       </div>

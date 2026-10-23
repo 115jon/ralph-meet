@@ -817,7 +817,7 @@ export default function EmojiPicker({
                               }}
                               placeholder="Search emoji and your creations"
                               aria-label="Search emoji and your creations"
-                              className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                              className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-ui-sm outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                             />
                           </div>
 
@@ -840,7 +840,7 @@ export default function EmojiPicker({
                                       className="h-6 w-6"
                                     />
                                   ) : (
-                                    <span className="text-xl">👏</span>
+                                    <span className="text-ui-xl">👏</span>
                                   )}
                                 </button>
                               </TooltipTrigger>
@@ -884,9 +884,9 @@ export default function EmojiPicker({
                                             className="h-5 w-5"
                                           />
                                         ) : (
-                                          <span className="text-base">👏</span>
+                                          <span className="text-ui-md">👏</span>
                                         )}
-                                        <span className="text-sm font-semibold">
+                                        <span className="text-ui-sm font-semibold">
                                           {option.label}
                                         </span>
                                       </button>
@@ -907,7 +907,7 @@ export default function EmojiPicker({
                                   setGenerateSuccess(null);
                                   setShowSkinToneMenu(false);
                                 }}
-                                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
                               >
                                 <Icon name="magic" size="sm" />
                                 <span className="hidden sm:inline">Create</span>
@@ -941,7 +941,7 @@ export default function EmojiPicker({
                               setGenerateError(null);
                               setGenerateSuccess(null);
                             }}
-                            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active"
+                            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-ui-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active"
                           >
                             <Icon name="chevronLeft" size="xs" />
                             Back
@@ -979,7 +979,7 @@ export default function EmojiPicker({
                               }}
                               rows={3}
                               placeholder="Cyber raccoon smirking with pixel sunglasses"
-                              className="picker-search-input w-full resize-none rounded-2xl border px-4 py-3 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                              className="picker-search-input w-full resize-none rounded-2xl border px-4 py-3 text-ui-sm outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                             />
                             <div className="mt-1 text-right text-ui-2xs text-rm-text-muted">
                               {prompt.trim().length} /{" "}
@@ -1004,16 +1004,16 @@ export default function EmojiPicker({
                                 setGenerateSuccess(null);
                               }}
                               placeholder="Optional. We can generate one for you."
-                              className="picker-search-input h-11 w-full rounded-2xl border px-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                              className="picker-search-input h-11 w-full rounded-2xl border px-4 text-ui-sm outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                             />
                           </div>
                           {generateError ? (
-                            <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                            <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-ui-sm text-destructive">
                               {generateError}
                             </div>
                           ) : null}
                           {generateSuccess ? (
-                            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+                            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-ui-sm text-emerald-800 dark:text-emerald-200">
                               {generateSuccess}
                             </div>
                           ) : null}
@@ -1021,7 +1021,7 @@ export default function EmojiPicker({
                             type="button"
                             onClick={() => void handleGenerate()}
                             disabled={!prompt.trim() || isGenerating}
-                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-white hover:opacity-90 active:scale-[0.96] transition-ui disabled:cursor-not-allowed disabled:opacity-55"
+                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-ui-sm font-semibold text-white hover:opacity-90 active:scale-[0.96] transition-ui disabled:cursor-not-allowed disabled:opacity-55"
                           >
                             {isGenerating ? (
                               <Icon
@@ -1122,7 +1122,7 @@ export default function EmojiPicker({
                                 <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
                                   Search Results
                                 </div>
-                                <div className="mt-1 text-sm text-rm-text-muted">
+                                <div className="mt-1 text-ui-sm text-rm-text-muted">
                                   {customSearchResults.length +
                                     nativeSearchResults.length}{" "}
                                   matches for "{deferredSearch}"
@@ -1186,7 +1186,7 @@ export default function EmojiPicker({
 
                               {customSearchResults.length === 0 &&
                               nativeSearchResults.length === 0 ? (
-                                <div className="rounded-3xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
+                                <div className="rounded-3xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-ui-sm text-rm-text-muted">
                                   No emoji matched "{deferredSearch}".
                                 </div>
                               ) : null}
@@ -1235,7 +1235,7 @@ export default function EmojiPicker({
                                       )}
                                     </div>
                                   ) : (
-                                    <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
+                                    <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-ui-sm text-rm-text-muted">
                                       Your recently used emoji will show up
                                       here.
                                     </div>
@@ -1278,11 +1278,11 @@ export default function EmojiPicker({
                                   false
                                 ) ? (
                                   loadingGeneratedEmojis ? (
-                                    <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
+                                    <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-ui-sm text-rm-text-muted">
                                       Loading your creations...
                                     </div>
                                   ) : generatedEmojiError ? (
-                                    <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                                    <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
                                       {generatedEmojiError}
                                     </div>
                                   ) : generatedEmojis.length > 0 ? (
@@ -1304,10 +1304,10 @@ export default function EmojiPicker({
                                           className="text-primary"
                                         />
                                       </div>
-                                      <div className="text-sm font-semibold text-rm-text">
+                                      <div className="text-ui-sm font-semibold text-rm-text">
                                         No custom emoji yet
                                       </div>
-                                      <div className="mt-1 text-sm text-rm-text-muted">
+                                      <div className="mt-1 text-ui-sm text-rm-text-muted">
                                         Use the composer button above to
                                         generate your first one.
                                       </div>
@@ -1378,11 +1378,11 @@ export default function EmojiPicker({
                             accentClassName="bg-primary/20"
                           />
                           {loadingGeneratedEmojis ? (
-                            <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
+                            <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-ui-sm text-rm-text-muted">
                               Loading your creations...
                             </div>
                           ) : generatedEmojiError ? (
-                            <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                            <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
                               {generatedEmojiError}
                             </div>
                           ) : generatedEmojis.length > 0 ? (
@@ -1396,7 +1396,7 @@ export default function EmojiPicker({
                               ))}
                             </div>
                           ) : (
-                            <div className="rounded-3xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
+                            <div className="rounded-3xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-ui-sm text-rm-text-muted">
                               Your creations will show up here as soon as you
                               generate them.
                             </div>

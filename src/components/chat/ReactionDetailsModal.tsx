@@ -44,7 +44,7 @@ function ReactionUserRow({
 
   return (
     <div className="group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors pointer-fine:hover:bg-rm-bg-hover">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-sm font-bold text-rm-text-muted">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-ui-sm font-semibold text-rm-text-muted">
         {avatarUrl ? (
           <AvatarImage
             src={avatarUrl}
@@ -56,10 +56,10 @@ function ReactionUserRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-rm-text">
+        <p className="truncate text-ui-sm font-semibold text-rm-text">
           <InlineEmojiText text={displayName} />
         </p>
-        <p className="truncate text-xs text-rm-text-muted">@{username}</p>
+        <p className="truncate text-ui-xs text-rm-text-muted">@{username}</p>
       </div>
       {canManageReactions && (
         <IconButton
@@ -105,9 +105,9 @@ function ReactionGroupButton({
         customEmojiMap={customEmojiMap}
         size="large"
         className="h-8 w-8 shrink-0"
-        fallbackClassName="text-2xl leading-none"
+        fallbackClassName="text-ui-2xl leading-none"
       />
-      <span className="tabular-nums text-sm font-semibold">
+      <span className="tabular-nums text-ui-sm font-semibold">
         {reaction.count}
       </span>
     </button>
@@ -176,7 +176,7 @@ export default function ReactionDetailsModal({
                 />
               ))
             ) : (
-              <p className="py-4 text-center text-sm text-rm-text-muted">
+              <p className="py-4 text-center text-ui-sm text-rm-text-muted">
                 No users found for this reaction.
               </p>
             )}

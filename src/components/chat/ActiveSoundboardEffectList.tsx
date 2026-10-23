@@ -178,7 +178,7 @@ export function SoundboardPlaybackRow({
           <div className="flex flex-col min-w-0">
             <InlineEmojiText
               text={playback.name}
-              className="truncate text-xs font-bold"
+              className="truncate text-ui-xs font-semibold"
             />
             <span className="text-ui-2xs font-normal text-rm-text-muted truncate">
               <InlineEmojiText text={authorInfo.displayName} />

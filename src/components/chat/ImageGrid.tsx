@@ -337,7 +337,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                   {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
                   {isLastVisible && hasMore && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
-                      <span className="text-2xl font-semibold text-white">
+                      <span className="text-ui-2xl font-semibold text-white">
                         +{count - 10}
                       </span>
                     </div>

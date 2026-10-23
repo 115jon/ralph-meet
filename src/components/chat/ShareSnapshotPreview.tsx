@@ -95,13 +95,13 @@ export default function ShareSnapshotPreview({
       )}
     >
       {originalEdited && (
-        <div className="mb-4 rounded-lg border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+        <div className="mb-4 rounded-lg border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-ui-sm text-amber-800 dark:text-amber-200">
           Original message has since been edited.
         </div>
       )}
 
       <div className="mb-3 flex items-start gap-3">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-sm font-bold text-primary">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-ui-sm font-semibold text-primary">
           {avatarUrl ? (
             <AvatarImage
               src={avatarUrl}
@@ -114,11 +114,11 @@ export default function ShareSnapshotPreview({
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h3 className="text-sm font-bold text-rm-text">
+            <h3 className="text-ui-sm font-semibold text-rm-text">
               <InlineEmojiText text={displayName} />
             </h3>
             {createdAt && (
-              <time className="text-xs text-rm-text-muted">
+              <time className="text-ui-xs text-rm-text-muted">
                 {formatDate(createdAt, {
                   month: "short",
                   day: "numeric",
@@ -130,7 +130,7 @@ export default function ShareSnapshotPreview({
             )}
           </div>
           {source && (
-            <p className="mt-0.5 truncate text-xs text-rm-text-muted">
+            <p className="mt-0.5 truncate text-ui-xs text-rm-text-muted">
               <InlineEmojiText
                 text={`${source.server_name ?? ""} / #${source.channel_name ?? ""}`}
               />
@@ -144,7 +144,9 @@ export default function ShareSnapshotPreview({
           <MarkdownRenderer content={content} />
         </div>
       ) : (
-        <p className="text-sm italic text-rm-text-muted">(attachment only)</p>
+        <p className="text-ui-sm italic text-rm-text-muted">
+          (attachment only)
+        </p>
       )}
 
       {embeds.length > 0 && (
@@ -227,7 +229,7 @@ export default function ShareSnapshotPreview({
       )}
 
       {omittedAttachmentCount > 0 && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text-muted">
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-ui-sm text-rm-text-muted">
           {imageAttachments.length > 0 || videoAttachments.length > 0 ? (
             <Icon name="paperclip" size="sm" className="shrink-0" />
           ) : (
@@ -246,7 +248,7 @@ export default function ShareSnapshotPreview({
           {reactions.map((reaction) => (
             <span
               key={reaction.emoji}
-              className="rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary"
+              className="rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-ui-xs font-semibold text-rm-text-secondary"
             >
               <span className="inline-flex items-center gap-1.5">
                 <EmojiToken
@@ -260,7 +262,7 @@ export default function ShareSnapshotPreview({
             </span>
           ))}
           {replyCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-ui-xs font-semibold text-rm-text-secondary">
               <Icon name="chat" size="xs" />
               {replyCount}
             </span>

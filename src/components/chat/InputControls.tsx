@@ -81,7 +81,7 @@ export function InputControls({
     <div className="ml-2 mt-0.5 flex items-center gap-0.5 text-rm-text-muted md:gap-1">
       <div className="relative">
         {showFavoriteNotice && (
-          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-yellow-500/30 dark:border-yellow-300/20 bg-rm-bg-floating px-3 py-1.5 text-xs font-bold text-yellow-800 dark:text-yellow-200 shadow-2xl animate-in fade-in slide-in-from-bottom-1">
+          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-yellow-500/30 dark:border-yellow-300/20 bg-rm-bg-floating px-3 py-1.5 text-ui-xs font-semibold text-yellow-800 dark:text-yellow-200 shadow-2xl animate-in fade-in slide-in-from-bottom-1">
             Added to Favorites
           </div>
         )}

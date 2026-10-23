@@ -1417,7 +1417,7 @@ export default function SoundboardPicker({
                       onChange={(event) => setSearch(event.target.value)}
                       aria-label="Search soundboard sounds"
                       placeholder="Search soundboard"
-                      className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                      className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-ui-sm outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                   </div>
 
@@ -1429,7 +1429,7 @@ export default function SoundboardPicker({
                             <button
                               type="button"
                               onClick={() => setActiveView("listenTogether")}
-                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-sky-500/20 via-blue-500/20 to-cyan-500/20 px-3 text-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-sky-500/20 via-blue-500/20 to-cyan-500/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
                             >
                               <Icon
                                 name="headphones"
@@ -1449,7 +1449,7 @@ export default function SoundboardPicker({
                             <button
                               type="button"
                               onClick={() => setActiveView("radio")}
-                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
                             >
                               <Icon
                                 name="soundboard"
@@ -1469,7 +1469,7 @@ export default function SoundboardPicker({
                             <button
                               type="button"
                               onClick={() => setActiveView("myinstants")}
-                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-ui-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
                             >
                               <Icon
                                 name="zap"
@@ -1493,16 +1493,16 @@ export default function SoundboardPicker({
                 <button
                   type="button"
                   onClick={() => setActiveView("soundboard")}
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-ui-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active"
                 >
                   <Icon name="chevronLeft" size="xs" />
                   Back
                 </button>
                 <div className="min-w-0 flex-1 text-right">
-                  <div className="truncate text-sm font-semibold tracking-[0.12em] text-rm-text">
+                  <div className="truncate text-ui-sm font-semibold tracking-[0.12em] text-rm-text">
                     Listen Together
                   </div>
-                  <div className="truncate text-xs text-rm-text-muted">
+                  <div className="truncate text-ui-xs text-rm-text-muted">
                     Synced room playback with a shared queue
                   </div>
                 </div>
@@ -1513,7 +1513,7 @@ export default function SoundboardPicker({
                   <button
                     type="button"
                     onClick={() => setActiveView("soundboard")}
-                    className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active"
+                    className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-ui-sm font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-active"
                   >
                     <Icon name="chevronLeft" size="xs" />
                     Back
@@ -1545,7 +1545,7 @@ export default function SoundboardPicker({
                           ? "Search Radio Stations..."
                           : "Search MyInstants..."
                       }
-                      className="picker-search-input h-10 w-full rounded-2xl border pl-9 pr-3 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                      className="picker-search-input h-10 w-full rounded-2xl border pl-9 pr-3 text-ui-sm outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                   </div>
                 </div>
@@ -1554,7 +1554,7 @@ export default function SoundboardPicker({
             {(uploadError || (activeView === "radio" && roomError)) && (
               <div
                 role="alert"
-                className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-ui-xs text-destructive"
               >
                 {activeView === "radio" && roomError
                   ? roomError.message
@@ -1717,7 +1717,7 @@ export default function SoundboardPicker({
                         {!collapsedCategories[FAVORITES_SECTION_ID] && (
                           <div className="grid grid-cols-4 gap-2">
                             {visibleFavorites.length === 0 ? (
-                              <div className="col-span-4 text-center py-4 text-xs text-rm-text-muted">
+                              <div className="col-span-4 text-center py-4 text-ui-xs text-rm-text-muted">
                                 {isDirectMessageScope
                                   ? "No member-server favorites yet."
                                   : "No favorites yet. Search MyInstants to add some!"}
@@ -1961,7 +1961,7 @@ export default function SoundboardPicker({
                                         <EmojiToken
                                           value={sound.emoji}
                                           className="h-6 w-6 object-contain block"
-                                          fallbackClassName="text-xl leading-none block"
+                                          fallbackClassName="text-ui-xl leading-none block"
                                         />
                                       ) : (
                                         <Icon
@@ -2121,7 +2121,7 @@ export default function SoundboardPicker({
                                     <EmojiToken
                                       value={sound.emoji}
                                       className="h-6 w-6 object-contain block"
-                                      fallbackClassName="text-xl leading-none block"
+                                      fallbackClassName="text-ui-xl leading-none block"
                                     />
                                   ) : (
                                     <Icon
@@ -2167,7 +2167,7 @@ export default function SoundboardPicker({
                                           <EmojiToken
                                             value={sound.emoji}
                                             className="h-4 w-4 shrink-0"
-                                            fallbackClassName="text-sm shrink-0"
+                                            fallbackClassName="text-ui-sm shrink-0"
                                           />
                                         )}
                                         <span className="truncate">
@@ -2377,7 +2377,7 @@ export default function SoundboardPicker({
                       <Icon name="loader" size="xl" className="animate-spin" />
                     </div>
                   ) : myInstantsResults.length === 0 ? (
-                    <div className="text-center py-12 text-sm text-rm-text-muted">
+                    <div className="text-center py-12 text-ui-sm text-rm-text-muted">
                       No sounds found for "{myInstantsQuery}"
                     </div>
                   ) : (
@@ -2491,7 +2491,7 @@ export default function SoundboardPicker({
                       <Icon name="loader" size="xl" className="animate-spin" />
                     </div>
                   ) : radioResults.length === 0 ? (
-                    <div className="text-center py-12 text-sm text-rm-text-muted">
+                    <div className="text-center py-12 text-ui-sm text-rm-text-muted">
                       No stations found for "{radioQuery}"
                     </div>
                   ) : (
@@ -2764,13 +2764,13 @@ export default function SoundboardPicker({
                 <div className="p-4">
                   <h2
                     id="delete-sound-title"
-                    className="text-lg font-semibold text-rm-text"
+                    className="text-ui-lg font-semibold text-rm-text"
                   >
                     Delete Sound
                   </h2>
                   <div
                     id="delete-sound-description"
-                    className="mt-2 text-sm text-rm-text-muted flex flex-col gap-2"
+                    className="mt-2 text-ui-sm text-rm-text-muted flex flex-col gap-2"
                   >
                     Are you sure you want to delete this sound?
                     <div className="flex items-center justify-center p-3 mt-1 bg-rm-bg-hover rounded-lg border border-rm-border gap-2 font-bold text-rm-text">
@@ -2778,7 +2778,7 @@ export default function SoundboardPicker({
                         <EmojiToken
                           value={soundToDelete.emoji}
                           className="h-5 w-5"
-                          fallbackClassName="text-base"
+                          fallbackClassName="text-ui-md"
                         />
                       )}
                       <InlineEmojiText text={soundToDelete.name} />
@@ -2788,14 +2788,14 @@ export default function SoundboardPicker({
                 <div className="flex gap-2 bg-rm-bg-floating p-4 border-t border-rm-border">
                   <button
                     type="button"
-                    className="flex-1 rounded-xl bg-rm-bg-hover pointer-fine:hover:bg-rm-bg-active py-2 text-sm font-bold text-rm-text transition-colors"
+                    className="flex-1 rounded-xl bg-rm-bg-hover pointer-fine:hover:bg-rm-bg-active py-2 text-ui-sm font-semibold text-rm-text transition-colors"
                     onClick={() => setSoundToDelete(null)}
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
-                    className="flex-1 rounded-xl bg-destructive py-2 text-sm font-bold text-white shadow-lg transition-colors pointer-fine:hover:bg-destructive/90"
+                    className="flex-1 rounded-xl bg-destructive py-2 text-ui-sm font-semibold text-white shadow-lg transition-colors pointer-fine:hover:bg-destructive/90"
                     onClick={async (event) => {
                       await handleDeleteSound(soundToDelete.id, event);
                       setSoundToDelete(null);

@@ -34,7 +34,7 @@ export function HoveredMentionTooltip({
             displayName[0].toUpperCase()
           )}
         </div>
-        <span className="text-xs font-semibold text-rm-text-primary">
+        <span className="text-ui-xs font-semibold text-rm-text-primary">
           <InlineEmojiText text={displayName} />
         </span>
       </div>

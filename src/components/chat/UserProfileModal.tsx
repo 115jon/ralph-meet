@@ -242,7 +242,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
               <div className="min-h-0 flex-1 overflow-y-auto bg-rm-bg-primary custom-scrollbar">
                 <div className="h-full pb-24 md:pb-28 lg:pb-8">
                   {profileError ? (
-                    <div className="m-4 mb-0 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    <div className="m-4 mb-0 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
                       {profileError}
                     </div>
                   ) : null}
@@ -308,7 +308,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   display={resolvedUser.avatar_display}
                                 />
                               ) : (
-                                <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
+                                <div className="flex h-full w-full items-center justify-center rounded-full text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-text)]">
                                   {getDisplayInitial({ name: displayName })}
                                 </div>
                               )}
@@ -338,7 +338,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                             <ProfileDisplayName
                               text={displayName}
                               displayNameStyle={resolvedUser.display_name_style}
-                              className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                              className="truncate text-ui-xl font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
                               backgroundColor={profileTheme.backgroundColor}
                               readableFallbackColor={profileTheme.textColor}
                             />
@@ -390,7 +390,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                                   Bio
                                 </div>
-                                <div className="rounded-lg border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)]">
+                                <div className="rounded-lg border border-transparent px-0 py-0.5 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)]">
                                   {bio || (
                                     <span className="text-[color:var(--rm-profile-custom-muted)]">
                                       This profile hasn&apos;t added a bio yet.
@@ -404,7 +404,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                               <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                                 {profileReferenceDate.label}
                               </div>
-                              <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">
+                              <div className="mt-2 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
                                 {profileReferenceDate.value}
                               </div>
                             </div>

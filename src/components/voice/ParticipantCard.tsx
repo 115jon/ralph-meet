@@ -276,7 +276,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 </div>
               ) : (
                 <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full shadow-lg">
-                  <span className="text-3xl sm:text-5xl font-bold text-white">
+                  <span className="text-ui-2xl sm:text-display-lg font-semibold text-white">
                     {item.name[0]?.toUpperCase()}
                   </span>
                 </div>
@@ -315,7 +315,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Ringing Overlay Label */}
         {item.isRinging && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 pointer-events-none">
-            <span className="bg-rm-bg-surface/80 backdrop-blur rounded-full px-3 py-1 text-xs font-bold text-rm-text animate-pulse shadow-xl">
+            <span className="bg-rm-bg-surface/80 backdrop-blur rounded-full px-3 py-1 text-ui-xs font-semibold text-rm-text animate-pulse shadow-xl">
               Calling...
             </span>
           </div>

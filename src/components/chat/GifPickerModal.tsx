@@ -1411,7 +1411,7 @@ export default function GifPickerModal({
         drawerOverlayClassName={effectiveOverlayZIndexClassName}
       >
         <div className="picker-header flex items-center justify-between border-b px-4 py-3">
-          <div className="flex items-center gap-1.5 text-sm font-bold text-rm-text">
+          <div className="flex items-center gap-1.5 text-ui-sm font-semibold text-rm-text">
             <button
               type="button"
               onClick={() => handleMediaTypeChange("gifs")}
@@ -1529,7 +1529,7 @@ export default function GifPickerModal({
             >
               <Icon name="back" size="lg" />
             </button>
-            <h3 className="truncate text-sm font-semibold text-rm-text">
+            <h3 className="truncate text-ui-sm font-semibold text-rm-text">
               Favorite {mediaLabel}
             </h3>
           </div>
@@ -1622,7 +1622,7 @@ export default function GifPickerModal({
                           selectSuggestion(suggestion);
                         }}
                         className={cn(
-                          "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold transition",
+                          "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-ui-sm font-semibold transition",
                           activeSuggestionIndex === index
                             ? "bg-rm-bg-active text-rm-text"
                             : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
@@ -1663,7 +1663,7 @@ export default function GifPickerModal({
                       >
                         <SelectTrigger
                           aria-label="GIF provider"
-                          className="picker-pill h-11 rounded-xl border pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition shadow-sm dark:shadow-none"
+                          className="picker-pill h-11 rounded-xl border pl-3 pr-9 text-ui-sm font-semibold text-rm-text outline-none transition shadow-sm dark:shadow-none"
                         >
                           <SelectValue placeholder="GIF provider" />
                         </SelectTrigger>
@@ -1684,7 +1684,7 @@ export default function GifPickerModal({
                       </Select>
                     </>
                   ) : (
-                    <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text shadow-sm dark:shadow-none">
+                    <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-ui-sm font-semibold text-rm-text shadow-sm dark:shadow-none">
                       {getGifProviderLabel(provider)}
                     </div>
                   )}
@@ -1714,7 +1714,7 @@ export default function GifPickerModal({
                       e.stopPropagation();
                       clearRecentQueries();
                     }}
-                    className="text-xs font-semibold text-destructive pointer-fine:hover:text-destructive transition"
+                    className="text-ui-xs font-semibold text-destructive pointer-fine:hover:text-destructive transition"
                   >
                     Clear All
                   </button>
@@ -1723,7 +1723,7 @@ export default function GifPickerModal({
                   {recentQueries.map((q) => (
                     <div
                       key={q}
-                      className="picker-pill inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1 text-xs font-semibold transition shadow-sm dark:shadow-none"
+                      className="picker-pill inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1 text-ui-xs font-semibold transition shadow-sm dark:shadow-none"
                     >
                       <button
                         type="button"
@@ -1787,7 +1787,9 @@ export default function GifPickerModal({
                   <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white/75">
                     {latestFavoritePreview ? "Latest saved" : "Your picks"}
                   </span>
-                  <span className="mt-1 text-lg font-semibold">Favorites</span>
+                  <span className="mt-1 text-ui-lg font-semibold">
+                    Favorites
+                  </span>
                 </div>
               </button>
               <button
@@ -1817,7 +1819,9 @@ export default function GifPickerModal({
                   <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white/75">
                     {providerLabel}
                   </span>
-                  <span className="mt-1 text-lg font-semibold">Trending</span>
+                  <span className="mt-1 text-ui-lg font-semibold">
+                    Trending
+                  </span>
                 </div>
               </button>
               {categories.map((category) => (
@@ -1835,7 +1839,7 @@ export default function GifPickerModal({
                     className="h-full w-full object-cover transition-transform duration-200"
                   />
                   <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
-                  <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-semibold capitalize text-white drop-shadow-md">
+                  <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-ui-lg font-semibold capitalize text-white drop-shadow-md">
                     {category.label}
                   </div>
                 </button>
@@ -1844,7 +1848,7 @@ export default function GifPickerModal({
           )}
 
           {mode === "categories" && categoriesLoading ? (
-            <div className="py-8 text-center text-sm font-medium text-rm-text-muted">
+            <div className="py-8 text-center text-ui-sm font-medium text-rm-text-muted">
               Loading {providerLabel} {mediaLabel} categories…
             </div>
           ) : null}
@@ -1852,13 +1856,13 @@ export default function GifPickerModal({
           {mode === "categories" &&
           !categoriesLoading &&
           categories.length === 0 ? (
-            <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
+            <div className="flex h-40 items-center justify-center text-center text-ui-sm font-medium text-rm-text-muted">
               No {providerLabel} {mediaLabel} categories available right now.
             </div>
           ) : null}
 
           {error ? (
-            <div className="mb-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+            <div className="mb-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-ui-sm font-medium text-destructive">
               {error}
             </div>
           ) : null}
@@ -1906,7 +1910,7 @@ export default function GifPickerModal({
           ) : (mode === "search" || mode === "featured") &&
             !loading &&
             !error ? (
-            <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
+            <div className="flex h-40 items-center justify-center text-center text-ui-sm font-medium text-rm-text-muted">
               {getNoResultsMessage()}
             </div>
           ) : null}
@@ -2234,7 +2238,7 @@ function GifLoadingSkeleton({
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="text-center text-xs font-semibold uppercase tracking-wide text-rm-text-muted flex items-center justify-center gap-2">
+      <div className="text-center text-ui-xs font-semibold uppercase tracking-wide text-rm-text-muted flex items-center justify-center gap-2">
         {compact && (
           <svg
             className="animate-spin h-3.5 w-3.5 text-rm-text-muted"

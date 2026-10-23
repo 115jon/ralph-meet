@@ -147,7 +147,7 @@ export function VoiceHeader({
                 </div>
                 <span
                   className={cn(
-                    "truncate text-xs font-bold",
+                    "truncate text-ui-xs font-semibold",
                     focusedItem ? "text-white" : "text-rm-text/90",
                   )}
                 >

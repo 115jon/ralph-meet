@@ -965,7 +965,7 @@ function ActionSheetFixture() {
                 key={emoji}
                 type="button"
                 aria-label={`React with ${emoji}`}
-                className="flex h-11 w-11 items-center justify-center rounded-lg bg-rm-tint-1 text-xl"
+                className="flex h-11 w-11 items-center justify-center rounded-lg bg-rm-tint-1 text-ui-xl"
               >
                 {emoji}
               </button>

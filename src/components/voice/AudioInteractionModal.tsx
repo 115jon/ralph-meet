@@ -48,11 +48,11 @@ export function AudioInteractionModal({
               <div className="space-y-2">
                 <h2
                   id="audio-modal-title"
-                  className="text-xl font-bold text-rm-text tracking-tight"
+                  className="text-ui-xl font-semibold text-rm-text tracking-tight"
                 >
                   Interaction Required
                 </h2>
-                <p className="text-sm text-rm-text-muted leading-relaxed">
+                <p className="text-ui-sm text-rm-text-muted leading-relaxed">
                   Browsers require user interaction before they will play audio.
                   Just click okay to continue.
                 </p>

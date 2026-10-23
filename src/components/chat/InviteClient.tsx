@@ -88,7 +88,7 @@ export default function InviteClient() {
               size="2xl"
               className="animate-spin text-rm-accent"
             />
-            <p className="text-sm text-rm-text-muted">Loading invite...</p>
+            <p className="text-ui-sm text-rm-text-muted">Loading invite...</p>
           </div>
         )}
 
@@ -103,7 +103,7 @@ export default function InviteClient() {
               </span>
             </div>
 
-            <p className="text-sm text-rm-text-muted -mt-2">
+            <p className="text-ui-sm text-rm-text-muted -mt-2">
               You've been invited to join a server
             </p>
 
@@ -117,16 +117,16 @@ export default function InviteClient() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <span className="text-xl font-bold text-white/80">
+                  <span className="text-ui-xl font-semibold text-white/80">
                     {invite.server.name.charAt(0).toUpperCase()}
                   </span>
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-lg font-bold text-rm-text">
+                <h2 className="truncate text-ui-lg font-semibold text-rm-text">
                   <InlineEmojiText text={invite.server.name} />
                 </h2>
-                <div className="flex items-center gap-1.5 text-sm text-rm-text-muted">
+                <div className="flex items-center gap-1.5 text-ui-sm text-rm-text-muted">
                   <Icon name="members" size="sm" />
                   <span>
                     {invite.server.member_count.toLocaleString()}{" "}
@@ -137,7 +137,7 @@ export default function InviteClient() {
             </div>
 
             {/* Inviter info */}
-            <p className="text-xs text-rm-text-muted">
+            <p className="text-ui-xs text-rm-text-muted">
               Invited by{" "}
               <span className="font-semibold text-rm-text-secondary">
                 <InlineEmojiText
@@ -149,7 +149,7 @@ export default function InviteClient() {
             {/* Accept Button */}
             <button
               onClick={joinServer}
-              className="w-full rounded-xl bg-rm-accent px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-rm-accent/20 transition-ui pointer-fine:hover:bg-rm-accent-hover pointer-fine:hover:shadow-rm-accent/30 active:scale-[0.98] cursor-pointer"
+              className="w-full rounded-xl bg-rm-accent px-6 py-3.5 text-ui-sm font-semibold text-white shadow-lg shadow-rm-accent/20 transition-ui pointer-fine:hover:bg-rm-accent-hover pointer-fine:hover:shadow-rm-accent/30 active:scale-[0.98] cursor-pointer"
             >
               Accept Invite
             </button>
@@ -157,7 +157,7 @@ export default function InviteClient() {
             {/* Decline link */}
             <button
               onClick={() => navigate({ to: "/chat" })}
-              className="text-xs text-rm-text-muted pointer-fine:hover:text-rm-text-secondary transition-colors"
+              className="text-ui-xs text-rm-text-muted pointer-fine:hover:text-rm-text-secondary transition-colors"
             >
               No thanks
             </button>
@@ -174,7 +174,7 @@ export default function InviteClient() {
                 className="animate-spin text-rm-accent"
               />
             </div>
-            <p className="text-sm font-medium text-rm-text">
+            <p className="text-ui-sm font-medium text-rm-text">
               Joining <InlineEmojiText text={invite?.server.name ?? ""} />
               ...
             </p>
@@ -188,10 +188,10 @@ export default function InviteClient() {
               <Icon name="check" size="xl" className="text-emerald-400" />
             </div>
             <div className="text-center">
-              <h2 className="text-lg font-bold text-rm-text">
+              <h2 className="text-ui-lg font-semibold text-rm-text">
                 Joined <InlineEmojiText text={invite?.server.name ?? ""} />!
               </h2>
-              <p className="mt-1 text-sm text-rm-text-muted">
+              <p className="mt-1 text-ui-sm text-rm-text-muted">
                 Redirecting to chat...
               </p>
             </div>
@@ -205,12 +205,14 @@ export default function InviteClient() {
               <Icon name="close" size="xl" className="text-destructive" />
             </div>
             <div className="text-center">
-              <h2 className="text-lg font-bold text-rm-text">Invite Invalid</h2>
-              <p className="mt-1 text-sm text-rm-text-muted">{errorMsg}</p>
+              <h2 className="text-ui-lg font-semibold text-rm-text">
+                Invite Invalid
+              </h2>
+              <p className="mt-1 text-ui-sm text-rm-text-muted">{errorMsg}</p>
             </div>
             <button
               onClick={() => navigate({ to: "/chat" })}
-              className="rounded-xl bg-rm-bg-hover px-6 py-2.5 text-sm font-medium text-rm-text ring-1 ring-white/[0.06] transition-colors pointer-fine:hover:bg-rm-bg-elevated"
+              className="rounded-xl bg-rm-bg-hover px-6 py-2.5 text-ui-sm font-medium text-rm-text ring-1 ring-white/[0.06] transition-colors pointer-fine:hover:bg-rm-bg-elevated"
             >
               Go to Chat
             </button>

@@ -599,7 +599,7 @@ export function VoiceDashboard({
                       </span>
                     )}
                   </div>
-                  <p className="truncate text-ui-xs font-bold text-rm-text">
+                  <p className="truncate text-ui-xs font-semibold text-rm-text">
                     {streamSourceTitle}
                   </p>
                   <p className="truncate text-ui-2xs text-rm-text-muted">
@@ -661,7 +661,7 @@ export function VoiceDashboard({
                             onChangeStreamSource?.();
                             setIsStreamMenuOpen(false);
                           }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint rounded-lg transition-colors flex items-center gap-2"
+                          className="w-full text-left px-3 py-2 text-ui-xs font-medium text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint rounded-lg transition-colors flex items-center gap-2"
                         >
                           <Icon name="screenShare" size="sm" /> Change Source
                         </button>
@@ -673,7 +673,7 @@ export function VoiceDashboard({
                             setIsStreamMenuOpen(false);
                           }}
                           className={cn(
-                            "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
+                            "w-full text-left px-3 py-2 text-ui-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
                             isStreamingAudio
                               ? "text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint"
                               : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover",
@@ -706,7 +706,7 @@ export function VoiceDashboard({
                             setIsStreamMenuOpen(false);
                           }}
                           className={cn(
-                            "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
+                            "w-full text-left px-3 py-2 text-ui-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
                             alwaysShowStreamPreview
                               ? "text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint"
                               : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover",

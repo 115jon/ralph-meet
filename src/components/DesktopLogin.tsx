@@ -434,9 +434,9 @@ function announcementFor(view: View, state: DeviceSignInHookState): string {
 // ---------------------------------------------------------------------------
 
 const titleClass =
-  "text-[30px] leading-[1.1] font-normal tracking-[-0.01em] text-rm-text outline-none [font-family:var(--font-display)]";
+  "text-ui-2xl leading-[1.1] font-normal tracking-[-0.01em] text-rm-text outline-none [font-family:var(--font-display)]";
 const bodyClass =
-  "max-w-[300px] text-sm leading-relaxed text-pretty text-rm-text-secondary";
+  "max-w-[300px] text-ui-sm leading-relaxed text-pretty text-rm-text-secondary";
 
 function useFocusOnMount<T extends HTMLElement>(enabled: boolean) {
   const ref = useRef<T>(null);
@@ -528,7 +528,7 @@ function PendingPanel({
         <DeviceCodeDisplay userCode={userCode} />
       </div>
 
-      <div className="mt-4 flex h-5 items-center justify-center gap-2 text-[13px] text-rm-text-muted">
+      <div className="mt-4 flex h-5 items-center justify-center gap-2 text-ui-sm text-rm-text-muted">
         {secondsLeft !== null ? (
           <span className="tabular-nums">
             Code expires in {formatSeconds(secondsLeft)}
@@ -542,7 +542,7 @@ function PendingPanel({
       </div>
 
       {openFailed && (
-        <p className="mt-3 text-[13px] leading-relaxed text-rm-text-secondary">
+        <p className="mt-3 text-ui-sm leading-relaxed text-rm-text-secondary">
           Couldn't open your browser. Copy the link and open it yourself.
         </p>
       )}

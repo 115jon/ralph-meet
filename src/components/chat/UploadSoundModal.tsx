@@ -92,7 +92,7 @@ export function UploadSoundModal({
         <div>
           <label
             htmlFor={fileInputId}
-            className="block text-ui-sm font-bold text-rm-text mb-2"
+            className="block text-ui-sm font-semibold text-rm-text mb-2"
           >
             File <span className="text-destructive">*</span>
           </label>
@@ -102,11 +102,11 @@ export function UploadSoundModal({
           >
             <div className="flex items-center gap-2 text-rm-text-muted truncate pr-2">
               <Icon name="upload" size="sm" />
-              <span className="text-sm truncate">
+              <span className="text-ui-sm truncate">
                 {file ? file.name : "Choose a file"}
               </span>
             </div>
-            <span className="bg-rm-bg-active pointer-fine:hover:bg-rm-bg-floating text-rm-text text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 border border-rm-border">
+            <span className="bg-rm-bg-active pointer-fine:hover:bg-rm-bg-floating text-rm-text text-ui-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 border border-rm-border">
               Browse
             </span>
           </label>
@@ -126,7 +126,7 @@ export function UploadSoundModal({
         <div className="flex-1">
           <label
             htmlFor={soundNameInputId}
-            className="block text-ui-sm font-bold text-rm-text mb-2"
+            className="block text-ui-sm font-semibold text-rm-text mb-2"
           >
             Sound Name <span className="text-destructive">*</span>
           </label>
@@ -144,7 +144,7 @@ export function UploadSoundModal({
         <div className="w-[160px] relative">
           <label
             htmlFor={emojiButtonId}
-            className="block text-ui-sm font-bold text-rm-text mb-2"
+            className="block text-ui-sm font-semibold text-rm-text mb-2"
           >
             Related Emoji
           </label>
@@ -153,7 +153,7 @@ export function UploadSoundModal({
             id={emojiButtonId}
             type="button"
             onClick={() => setIsEmojiPickerOpen(true)}
-            className="w-full h-11 flex items-center justify-center gap-2 bg-rm-bg-hover border border-rm-border rounded-xl px-3 text-sm text-rm-text-muted pointer-fine:hover:border-primary/50 transition-colors"
+            className="w-full h-11 flex items-center justify-center gap-2 bg-rm-bg-hover border border-rm-border rounded-xl px-3 text-ui-sm text-rm-text-muted pointer-fine:hover:border-primary/50 transition-colors"
             aria-haspopup="dialog"
             aria-expanded={isEmojiPickerOpen}
           >
@@ -161,7 +161,7 @@ export function UploadSoundModal({
               <EmojiToken
                 value={relatedEmoji}
                 className="h-6 w-6 object-contain block"
-                fallbackClassName="text-xl leading-none block"
+                fallbackClassName="text-ui-xl leading-none block"
               />
             ) : (
               <>
@@ -190,7 +190,7 @@ export function UploadSoundModal({
       <div>
         <label
           htmlFor={soundVolumeInputId}
-          className="block text-ui-sm font-bold text-rm-text mb-2"
+          className="block text-ui-sm font-semibold text-rm-text mb-2"
         >
           Sound Volume
         </label>

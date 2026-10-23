@@ -219,7 +219,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
       </div>
 
       {state.uploadError && (
-        <p className="mb-3 text-center text-xs font-medium text-destructive">
+        <p className="mb-3 text-center text-ui-xs font-medium text-destructive">
           {state.uploadError}
         </p>
       )}
@@ -313,7 +313,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
               <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text">
                 Create a Server
               </h2>
-              <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">
+              <p className="mb-6 text-center text-ui-sm font-medium text-rm-text-muted">
                 Your server is where you and your friends hang out.
               </p>
 

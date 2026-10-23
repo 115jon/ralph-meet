@@ -55,7 +55,7 @@ function SettingsSidebar({
         type="button"
         onClick={() => setActiveTab("overview")}
         className={cn(
-          "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+          "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
           activeTab === "overview"
             ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
             : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -69,7 +69,7 @@ function SettingsSidebar({
           type="button"
           onClick={() => setActiveTab("roles")}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "roles"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -87,7 +87,7 @@ function SettingsSidebar({
             fetchBans();
           }}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "bans"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -102,7 +102,7 @@ function SettingsSidebar({
           type="button"
           onClick={() => setActiveTab("invites")}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "invites"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -117,7 +117,7 @@ function SettingsSidebar({
           type="button"
           onClick={() => setActiveTab("audit")}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-ui-sm font-semibold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "audit"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -137,7 +137,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
     <div className="animate-in fade-in duration-150 w-full">
       <h2
         id="server-settings-title"
-        className="mb-6 text-xl font-bold text-rm-text"
+        className="mb-6 text-ui-xl font-semibold text-rm-text"
       >
         Bans
       </h2>
@@ -147,7 +147,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
           bans…
         </div>
       ) : bans.length === 0 ? (
-        <p className="text-rm-text-muted text-sm">No banned users.</p>
+        <p className="text-rm-text-muted text-ui-sm">No banned users.</p>
       ) : (
         <div className="space-y-2 max-w-xl">
           {bans.map((ban: any) => (
@@ -155,15 +155,15 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
               key={ban.user_id}
               className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 transition-colors pointer-fine:hover:border-rm-text-muted/20"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-sm font-bold text-destructive">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-ui-sm font-semibold text-destructive">
                 {(ban.username ?? "?")[0].toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-rm-text truncate">
+                <p className="text-ui-sm font-semibold text-rm-text truncate">
                   {ban.username ?? ban.user_id}
                 </p>
                 {ban.reason && (
-                  <p className="text-xs text-rm-text-muted truncate">
+                  <p className="text-ui-xs text-rm-text-muted truncate">
                     Reason: {ban.reason}
                   </p>
                 )}
@@ -175,7 +175,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
               <button
                 type="button"
                 onClick={() => handleUnban(ban.user_id)}
-                className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-ui pointer-fine:hover:border-destructive/30 pointer-fine:hover:bg-destructive/10 pointer-fine:hover:text-destructive"
+                className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-ui-xs font-semibold text-rm-text-secondary transition-ui pointer-fine:hover:border-destructive/30 pointer-fine:hover:bg-destructive/10 pointer-fine:hover:text-destructive"
               >
                 <Icon name="trash" size="xs" /> Unban
               </button>
@@ -221,7 +221,7 @@ function OverviewTab({
     <div className="animate-in fade-in duration-150 w-full">
       <h2
         id="server-settings-title"
-        className="mb-6 text-xl font-bold text-rm-text"
+        className="mb-6 text-ui-xl font-semibold text-rm-text"
       >
         Server Overview
       </h2>
@@ -318,7 +318,7 @@ function OverviewTab({
               </div>
             </div>
             {iconError && (
-              <p className="text-xs font-medium text-destructive">
+              <p className="text-ui-xs font-medium text-destructive">
                 {iconError}
               </p>
             )}
@@ -372,7 +372,7 @@ function OverviewTab({
                 key={label}
                 className="flex items-center justify-between gap-4 rounded-lg border border-rm-border bg-rm-bg-primary px-3 py-2"
               >
-                <span className="text-sm font-medium text-rm-text-secondary">
+                <span className="text-ui-sm font-medium text-rm-text-secondary">
                   {label}
                 </span>
                 <input
@@ -391,7 +391,7 @@ function OverviewTab({
             type="button"
             onClick={handleSave}
             disabled={saving || (!name.trim() && !iconFile && !removeIcon)}
-            className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
+            className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-ui-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
           >
             {saving && (
               <Icon name="loader" size="sm" className="animate-spin" />
@@ -409,7 +409,7 @@ function OverviewTab({
               <Icon name="warning" size="sm" />
               Danger Zone
             </h3>
-            <p className="text-sm text-rm-text-secondary mb-2">
+            <p className="text-ui-sm text-rm-text-secondary mb-2">
               Deleting a server is permanent and cannot be undone. All messages,
               roles, and channels will be lost.
             </p>
@@ -417,13 +417,13 @@ function OverviewTab({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-ui pointer-fine:hover:brightness-110"
+                className="rounded-xl bg-destructive px-5 py-2.5 text-ui-sm font-semibold text-destructive-foreground transition-ui pointer-fine:hover:brightness-110"
               >
                 Delete Server
               </button>
             ) : (
               <div className="space-y-3 mt-4 bg-rm-bg-surface/50 p-4 rounded-xl border border-destructive/10">
-                <p className="text-sm text-rm-text-muted">
+                <p className="text-ui-sm text-rm-text-muted">
                   Type{" "}
                   <strong className="text-rm-text font-bold select-all">
                     {initialServerName}
@@ -435,14 +435,14 @@ function OverviewTab({
                   value={deleteText}
                   onChange={(e) => setDeleteText(e.target.value)}
                   placeholder="Server name"
-                  className="w-full max-w-sm rounded-xl border border-destructive/20 bg-rm-bg-surface px-4 py-2.5 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-destructive/30 focus:ring-2 focus:ring-destructive/20"
+                  className="w-full max-w-sm rounded-xl border border-destructive/20 bg-rm-bg-surface px-4 py-2.5 text-ui-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-destructive/30 focus:ring-2 focus:ring-destructive/20"
                 />
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"
                     onClick={handleDelete}
                     disabled={deleteText !== initialServerName}
-                    className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
+                    className="rounded-xl bg-destructive px-5 py-2 text-ui-sm font-semibold text-destructive-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-40"
                   >
                     Delete Forever
                   </button>
@@ -452,7 +452,7 @@ function OverviewTab({
                       setConfirmDelete(false);
                       setDeleteText("");
                     }}
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors outline-none"
+                    className="rounded-xl px-4 py-2 text-ui-sm font-medium text-rm-text-muted pointer-fine:hover:text-rm-text transition-colors outline-none"
                   >
                     Cancel
                   </button>
@@ -703,7 +703,7 @@ export default function ServerSettingsModal({
               className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
               style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
             >
-              <h2 className="text-ui-sm font-bold tracking-widest text-rm-text-muted truncate">
+              <h2 className="text-ui-sm font-semibold tracking-widest text-rm-text-muted truncate">
                 {initialServerName}
               </h2>
               <button
@@ -752,7 +752,7 @@ export default function ServerSettingsModal({
                   <div className="animate-in fade-in duration-150">
                     <h2
                       id="server-settings-title"
-                      className="mb-6 text-xl font-bold text-rm-text"
+                      className="mb-6 text-ui-xl font-semibold text-rm-text"
                     >
                       Roles
                     </h2>
