@@ -36,6 +36,8 @@ import { useDialogBackButton } from "@/hooks/useBackButton";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 
+const preventDefault = (event: Event) => event.preventDefault();
+
 /** Marks a portal as a floating layer a Radix dialog must not treat as outside. */
 export const FLOATING_LAYER_ATTR = "data-rm-floating-layer";
 
@@ -251,9 +253,15 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
           >
             {/*
              * Pauses the focus trap of a Radix dialog under this popover
-             * (Radix keeps one scope stack); see ui/drawer.tsx.
+             * (Radix keeps one scope stack); see ui/drawer.tsx. Its own
+             * auto-focus is off so Base UI's `initialFocus` / return focus
+             * decide where focus goes, not "first focusable".
              */}
-            <FocusScope asChild>
+            <FocusScope
+              asChild
+              onMountAutoFocus={preventDefault}
+              onUnmountAutoFocus={preventDefault}
+            >
               <div className="contents">{children}</div>
             </FocusScope>
           </PopoverPrimitive.Popup>
