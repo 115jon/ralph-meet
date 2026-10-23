@@ -176,7 +176,7 @@ type VariantMeta = {
   variantColor?: string;
 };
 
-export type CollectiblesSyncTrigger = "cron" | "manual" | "request";
+export type CollectiblesSyncTrigger = "cron" | "manual" | "request" | "ingest";
 
 export type CatalogValidationOptions = {
   minItems?: number;
@@ -208,6 +208,12 @@ export const REQUEST_REFRESH_COOLDOWN_MS = 1000 * 60 * 10;
 export const MANUAL_SYNC_COOLDOWN_MS = 1000 * 60 * 5;
 /** D1 caps a row/string at 2,000,000 bytes; keep headroom. */
 export const MAX_ENCODED_PAYLOAD_BYTES = 1_800_000;
+/** Minimum gap between ingest uploads (a not-modified ping is free). */
+export const INGEST_COOLDOWN_MS = 1000 * 60 * 5;
+/** A cron/request fetch failure is only a warning this soon after an ingest. */
+export const INGEST_FALLBACK_WINDOW_MS = 1000 * 60 * 60 * 2;
+/** Cap on an uploaded (decompressed) upstream body; the real one is ~3.5 MB. */
+export const MAX_INGEST_BODY_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_CATALOG_VALIDATION: Required<CatalogValidationOptions> = {
   minItems: 100,
   minCategories: 5,
@@ -216,6 +222,12 @@ export const DEFAULT_CATALOG_VALIDATION: Required<CatalogValidationOptions> = {
 };
 
 const CACHE_SOURCE = "discord-collectibles";
+/**
+ * Second status row, written only by ingests. last_attempt_at is the last
+ * upload (rate limit); last_success_at is the last good ingest, upload or
+ * not-modified ping (cron fallback window).
+ */
+const INGEST_STATUS_SOURCE = "discord-collectibles:ingest";
 const GZIP_PREFIX = "gz1:";
 const MEMORY_RECHECK_MS = 1000 * 60 * 5;
 const MAX_ERROR_LENGTH = 500;
@@ -251,6 +263,25 @@ export class CatalogStorageError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CatalogStorageError";
+  }
+}
+
+/** A not-modified ingest whose ETag is not the one we hold. */
+export class CatalogIngestConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CatalogIngestConflictError";
+  }
+}
+
+/**
+ * A cron/request upstream fetch failed while a recent ingest keeps the
+ * catalog current. Logged as a warning and not recorded as a failure.
+ */
+export class CatalogFetchDeferredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CatalogFetchDeferredError";
   }
 }
 
@@ -956,7 +987,7 @@ function isCatalogStale(
   );
 }
 
-async function readSyncStatusRow(db: D1Database) {
+async function readSyncStatusRow(db: D1Database, source = CACHE_SOURCE) {
   return db
     .prepare(
       `SELECT source, last_attempt_at, last_success_at, last_failure_at, last_error,
@@ -965,7 +996,7 @@ async function readSyncStatusRow(db: D1Database) {
      FROM collectible_catalog_sync_status
      WHERE source = ?`,
     )
-    .bind(CACHE_SOURCE)
+    .bind(source)
     .first<SyncStatusRow>();
 }
 
@@ -1030,6 +1061,13 @@ async function recordSyncAttempt(
     last_duration_ms: Date.now() - attempt.startedAtMs,
   };
 
+  await writeSyncStatusRow(db, row);
+  const status = rowToSyncStatus(row);
+  memorySyncStatus = status;
+  return status;
+}
+
+async function writeSyncStatusRow(db: D1Database, row: SyncStatusRow) {
   try {
     await db
       .prepare(
@@ -1072,10 +1110,6 @@ async function recordSyncAttempt(
       describeError(error),
     );
   }
-
-  const status = rowToSyncStatus(row);
-  memorySyncStatus = status;
-  return status;
 }
 
 // ── Memory cache ────────────────────────────────────────────────────────────
@@ -1108,12 +1142,15 @@ function withFreshness(
 
 // ── Upstream ────────────────────────────────────────────────────────────────
 
+type UpstreamResult =
+  | { notModified: true; etag: string | null }
+  | { notModified: false; etag: string | null; raw: unknown[] };
+
+type UpstreamSource = (knownEtag: string | null) => Promise<UpstreamResult>;
+
 async function fetchYapperCatalog(
   cachedEtag: string | null,
-): Promise<
-  | { notModified: true; etag: string | null }
-  | { notModified: false; etag: string | null; raw: unknown[] }
-> {
+): Promise<UpstreamResult> {
   const response = await fetch(YAPPER_CATALOG_URL, {
     headers: {
       ...YAPPER_HEADERS,
@@ -1151,6 +1188,7 @@ async function fetchYapperCatalog(
 async function syncCollectiblesCatalogOnce(
   db: D1Database,
   options: SyncCollectiblesOptions,
+  upstream: UpstreamSource = fetchYapperCatalog,
 ): Promise<CollectiblesCatalog> {
   const trigger = options.trigger ?? "manual";
   const startedAtMs = Date.now();
@@ -1168,7 +1206,7 @@ async function syncCollectiblesCatalogOnce(
     : null;
 
   try {
-    const result = await fetchYapperCatalog(knownEtag);
+    const result = await upstream(knownEtag);
     let catalog: CollectiblesCatalog;
     let outcome: CollectiblesSyncOutcome;
     let etag = result.etag;
@@ -1204,6 +1242,7 @@ async function syncCollectiblesCatalogOnce(
     const entry = primeMemoryCatalog(catalog, etag, catalog.syncedAt);
     return { ...entry.catalog, stale: false, sync: status };
   } catch (error) {
+    await deferIfCoveredByIngest(db, trigger, startedAtMs, error);
     await recordSyncAttempt(db, statusRow, {
       trigger,
       outcome: error instanceof CatalogValidationError ? "rejected" : "failed",
@@ -1212,6 +1251,41 @@ async function syncCollectiblesCatalogOnce(
     });
     throw error;
   }
+}
+
+/**
+ * Throws CatalogFetchDeferredError (after a warning) when a cron/request
+ * fetch failed but an ingest succeeded within INGEST_FALLBACK_WINDOW_MS, so
+ * a blocked upstream does not pile up failures while ingest keeps up.
+ */
+async function deferIfCoveredByIngest(
+  db: D1Database,
+  trigger: CollectiblesSyncTrigger,
+  startedAtMs: number,
+  error: unknown,
+) {
+  if (trigger !== "cron" && trigger !== "request") return;
+  if (
+    error instanceof CatalogValidationError ||
+    error instanceof CatalogStorageError
+  ) {
+    return;
+  }
+  const ingest = await readSyncStatusRow(db, INGEST_STATUS_SOURCE).catch(
+    () => null,
+  );
+  const lastIngestMs = Date.parse(ingest?.last_success_at ?? "");
+  if (
+    Number.isNaN(lastIngestMs) ||
+    startedAtMs - lastIngestMs > INGEST_FALLBACK_WINDOW_MS
+  ) {
+    return;
+  }
+  const message = describeError(error);
+  console.warn(
+    `Collectibles ${trigger} sync failed; ingest at ${ingest?.last_success_at} keeps the catalog current: ${message}`,
+  );
+  throw new CatalogFetchDeferredError(message);
 }
 
 /**
@@ -1248,6 +1322,7 @@ function scheduleBackgroundRefresh(
   lastRequestRefreshAtMs = now;
   waitUntil(
     syncCollectiblesCatalog(db, { trigger: "request" }).catch((error) => {
+      if (error instanceof CatalogFetchDeferredError) return;
       console.error(
         "Collectibles background refresh failed:",
         describeError(error),
@@ -1334,6 +1409,152 @@ export function manualSyncRetryAfterMs(
   const lastAttemptMs = Date.parse(status.lastAttemptAt ?? "");
   if (Number.isNaN(lastAttemptMs)) return 0;
   return Math.max(0, lastAttemptMs + MANUAL_SYNC_COOLDOWN_MS - now);
+}
+
+// ── Ingest (upstream fetched off Cloudflare and pushed here) ────────────────
+
+export type CollectiblesIngestInput =
+  /** The raw upstream body as fetched, plus its ETag. */
+  | { notModified?: false; body: string; etag: string | null }
+  /** Upstream answered 304 to `etag`; only refreshes syncedAt. */
+  | { notModified: true; etag: string };
+
+export type CollectiblesIngestState = {
+  /** ETag of the stored catalog; null when absent or from another normaliser. */
+  etag: string | null;
+  syncedAt: string | null;
+  formatVersion: number;
+  /** Last upload attempt, for the ingest rate limit. */
+  lastUploadAt: string | null;
+};
+
+export async function getCollectiblesIngestState(
+  db: D1Database,
+): Promise<CollectiblesIngestState> {
+  await ensureCatalogTables(db);
+  const [row, ingest] = await Promise.all([
+    readCatalogCache(db),
+    readSyncStatusRow(db, INGEST_STATUS_SOURCE),
+  ]);
+  const cached = row ? await parseCachedCatalog(row) : null;
+  const current = cached?.normalizerVersion === CATALOG_NORMALIZER_VERSION;
+  return {
+    etag: current ? (row?.etag ?? null) : null,
+    syncedAt: row?.synced_at ?? null,
+    formatVersion: CATALOG_NORMALIZER_VERSION,
+    lastUploadAt: ingest?.last_attempt_at ?? null,
+  };
+}
+
+/** Milliseconds until another ingest upload is accepted (0 = now). */
+export function ingestRetryAfterMs(
+  state: Pick<CollectiblesIngestState, "lastUploadAt">,
+  now = Date.now(),
+) {
+  const lastMs = Date.parse(state.lastUploadAt ?? "");
+  if (Number.isNaN(lastMs)) return 0;
+  return Math.max(0, lastMs + INGEST_COOLDOWN_MS - now);
+}
+
+function ingestUpstream(input: CollectiblesIngestInput): UpstreamSource {
+  return async (knownEtag) => {
+    if (input.notModified) {
+      if (!knownEtag || input.etag !== knownEtag) {
+        throw new CatalogIngestConflictError(
+          "Not-modified ingest does not match the stored ETag; upload the body",
+        );
+      }
+      return { notModified: true, etag: knownEtag };
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(input.body);
+    } catch {
+      throw new CatalogValidationError("Upstream catalog is not valid JSON");
+    }
+    assertUpstreamShape(raw);
+    return { notModified: false, etag: input.etag, raw };
+  };
+}
+
+async function recordIngestAttempt(
+  db: D1Database,
+  previous: SyncStatusRow | null,
+  attempt: {
+    uploaded: boolean;
+    startedAtMs: number;
+    outcome: CollectiblesSyncOutcome;
+    error?: unknown;
+  },
+) {
+  const now = new Date().toISOString();
+  const succeeded =
+    attempt.outcome === "updated" || attempt.outcome === "not_modified";
+  await writeSyncStatusRow(db, {
+    source: INGEST_STATUS_SOURCE,
+    last_attempt_at: attempt.uploaded
+      ? now
+      : (previous?.last_attempt_at ?? null),
+    last_success_at: succeeded ? now : (previous?.last_success_at ?? null),
+    last_failure_at: succeeded ? (previous?.last_failure_at ?? null) : now,
+    last_error: succeeded
+      ? null
+      : describeError(attempt.error ?? "Unknown ingest failure"),
+    last_outcome: attempt.outcome,
+    consecutive_failures: succeeded
+      ? 0
+      : (previous?.consecutive_failures ?? 0) + 1,
+    item_count: 0,
+    category_count: 0,
+    counts_json: null,
+    last_trigger: "ingest",
+    last_duration_ms: Date.now() - attempt.startedAtMs,
+  });
+}
+
+/**
+ * Stores an upstream catalog fetched outside Cloudflare (upstream blocks
+ * Workers egress). Same normalise → validate → store path and status row as
+ * the cron, recorded with trigger "ingest". Waits for an in-flight sync
+ * instead of joining it, so the pushed payload is never dropped.
+ */
+export async function ingestCollectiblesCatalog(
+  db: D1Database,
+  input: CollectiblesIngestInput,
+  options: Pick<SyncCollectiblesOptions, "validation"> = {},
+): Promise<CollectiblesCatalog> {
+  const startedAtMs = Date.now();
+  const uploaded = !input.notModified;
+  await ensureCatalogTables(db);
+  const previous = await readSyncStatusRow(db, INGEST_STATUS_SOURCE);
+
+  if (inFlightCatalogSync) await inFlightCatalogSync.catch(() => undefined);
+  const tracked = syncCollectiblesCatalogOnce(
+    db,
+    { ...options, trigger: "ingest" },
+    ingestUpstream(input),
+  ).finally(() => {
+    if (inFlightCatalogSync === tracked) inFlightCatalogSync = null;
+  });
+  inFlightCatalogSync = tracked;
+
+  try {
+    const catalog = await tracked;
+    await recordIngestAttempt(db, previous, {
+      uploaded,
+      startedAtMs,
+      outcome: catalog.sync?.lastOutcome ?? "updated",
+    });
+    return catalog;
+  } catch (error) {
+    await recordIngestAttempt(db, previous, {
+      uploaded,
+      startedAtMs,
+      outcome: error instanceof CatalogValidationError ? "rejected" : "failed",
+      error,
+    });
+    throw error;
+  }
 }
 
 /** Parses COLLECTIBLES_ADMIN_USER_IDS ("id1, id2"); unset means nobody. */
