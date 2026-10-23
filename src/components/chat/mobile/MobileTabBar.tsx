@@ -58,6 +58,7 @@ export function MobileTabBar({ className }: { className?: string }) {
   return (
     <nav
       aria-label="Primary"
+      data-floating-avoid=""
       className={cn(
         "shrink-0 border-t border-rm-border bg-rm-bg-secondary pb-[var(--safe-area-bottom,0px)]",
         className,

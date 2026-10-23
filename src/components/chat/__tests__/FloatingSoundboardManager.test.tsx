@@ -41,6 +41,8 @@ describe("FloatingSoundboardManager", () => {
   });
 
   beforeEach(() => {
+    // Players remember corner and minimised state; start each test fresh.
+    window.localStorage.clear();
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -92,20 +94,19 @@ describe("FloatingSoundboardManager", () => {
     expect(
       screen.getByRole("button", { name: "Collapse soundboard manager" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Collapse soundboard manager" }),
-    ).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("floating-soundboard-manager")).not.toHaveClass(
       "bottom-4",
     );
     expect(screen.getByText("Airhorn")).toBeInTheDocument();
     expect(screen.queryByText("2 active")).not.toBeInTheDocument();
-    // Only the drag handle blocks touch panning; the list must scroll.
+    // Only the drag header blocks touch panning; the list must scroll.
     expect(screen.getByTestId("floating-soundboard-manager")).not.toHaveClass(
       "touch-none",
     );
     expect(
-      screen.getByRole("button", { name: "Collapse soundboard manager" }),
+      screen
+        .getByRole("button", { name: "Collapse soundboard manager" })
+        .closest("header"),
     ).toHaveClass("touch-none");
   });
 
@@ -122,7 +123,9 @@ describe("FloatingSoundboardManager", () => {
     expect(screen.getByText("Soundboard")).toBeInTheDocument();
     expect(screen.getByText("Airhorn")).toBeInTheDocument();
     expect(screen.getByText("Drumroll")).toBeInTheDocument();
-    expect(screen.getAllByRole("slider")).toHaveLength(2);
+    expect(screen.getAllByRole("slider", { name: /^Volume for/ })).toHaveLength(
+      2,
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Collapse soundboard manager" }),
@@ -134,7 +137,7 @@ describe("FloatingSoundboardManager", () => {
     expect(screen.queryByText("Airhorn")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open soundboard manager" }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toHaveFocus();
   });
 
   it("does not require Pointer Capture APIs", () => {
@@ -207,8 +210,9 @@ describe("FloatingSoundboardManager", () => {
     });
   });
 
-  it("drags from both the header and collapsed trigger without toggling", async () => {
+  it("drags from both the header and the minimised bubble without toggling", async () => {
     const user = userEvent.setup();
+    window.localStorage.clear();
     render(
       <FloatingSoundboardManager
         serverId="server-1"
@@ -221,49 +225,58 @@ describe("FloatingSoundboardManager", () => {
     manager.setPointerCapture = vi.fn();
     manager.hasPointerCapture = () => false;
     manager.releasePointerCapture = vi.fn();
-    const header = screen.getByRole("button", {
-      name: "Collapse soundboard manager",
-    });
+    expect(manager).toHaveAttribute("data-corner", "top-right");
 
-    fireEvent.pointerDown(header, {
+    // Header title: a drag snaps to the bottom-left quadrant it lands in.
+    const title = screen.getByText("Soundboard");
+    fireEvent.pointerDown(title, {
       button: 0,
       pointerId: 1,
-      clientX: 10,
-      clientY: 10,
+      clientX: 900,
+      clientY: 80,
     });
     fireEvent.pointerMove(manager, {
       pointerId: 1,
-      clientX: 110,
-      clientY: 110,
+      clientX: 600,
+      clientY: 400,
+    });
+    fireEvent.pointerMove(manager, {
+      pointerId: 1,
+      clientX: 100,
+      clientY: 700,
     });
     fireEvent.pointerUp(manager, { pointerId: 1 });
-    fireEvent.click(header);
+    expect(manager).toHaveAttribute("data-corner", "bottom-left");
+    expect(manager).toHaveAttribute("data-mode", "full");
 
-    expect(manager).toHaveStyle({ left: "100px", top: "100px" });
-    expect(header).toHaveAttribute("aria-expanded", "true");
-
-    await user.click(header);
-    const trigger = screen.getByRole("button", {
+    await user.click(
+      screen.getByRole("button", { name: "Collapse soundboard manager" }),
+    );
+    const bubble = screen.getByRole("button", {
       name: "Open soundboard manager",
     });
 
-    fireEvent.pointerDown(trigger, {
+    // Dragging the bubble moves it and doesn't count as the restoring tap.
+    fireEvent.pointerDown(bubble, {
       button: 0,
       pointerId: 2,
-      clientX: 10,
-      clientY: 10,
+      clientX: 40,
+      clientY: 700,
     });
     fireEvent.pointerMove(manager, {
       pointerId: 2,
-      clientX: 210,
-      clientY: 210,
+      clientX: 500,
+      clientY: 300,
+    });
+    fireEvent.pointerMove(manager, {
+      pointerId: 2,
+      clientX: 1000,
+      clientY: 60,
     });
     fireEvent.pointerUp(manager, { pointerId: 2 });
-    fireEvent.click(trigger);
+    fireEvent.click(bubble);
 
-    expect(manager).toHaveStyle({ left: "200px", top: "200px" });
-    expect(
-      screen.getByRole("button", { name: "Open soundboard manager" }),
-    ).toHaveAttribute("aria-expanded", "false");
+    expect(manager).toHaveAttribute("data-corner", "top-right");
+    expect(manager).toHaveAttribute("data-mode", "bubble");
   });
 });

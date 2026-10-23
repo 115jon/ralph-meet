@@ -99,6 +99,7 @@ export default function MessageInput({
 
   return (
     <div
+      data-floating-avoid=""
       className="z-10 px-2 md:px-4 pt-0 relative"
       // 16px on desktop; on phones the home indicator inset replaces most of it.
       style={{
