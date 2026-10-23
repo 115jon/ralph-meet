@@ -27,6 +27,7 @@ export const ICONS = {
   download: { glyph: "download-simple" },
   upload: { glyph: "upload-simple" },
   menu: { glyph: "list" },
+  home: { glyph: "house", fill: true },
   back: { glyph: "arrow-left" },
   arrowRight: { glyph: "arrow-right" },
   externalLink: { glyph: "arrow-square-out" },
@@ -84,7 +85,7 @@ export const ICONS = {
   help: { glyph: "question" },
 
   /* People */
-  account: { glyph: "user" },
+  account: { glyph: "user", fill: true },
   invite: { glyph: "user-plus", fill: true },
   userRemove: { glyph: "user-minus" },
   userCheck: { glyph: "user-check" },

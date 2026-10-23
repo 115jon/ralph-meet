@@ -88,7 +88,10 @@ export default function MessageInput({
   return (
     <div
       className="z-10 px-2 md:px-4 pt-0 relative"
-      style={{ paddingBottom: "calc(16px + var(--safe-area-bottom, 0px))" }}
+      // 16px on desktop; on phones the home indicator inset replaces most of it.
+      style={{
+        paddingBottom: "calc(max(8px, var(--safe-area-bottom, 0px)) + 8px)",
+      }}
     >
       <div className="rm-composer group relative flex flex-col rounded-lg border border-rm-border bg-rm-bg-elevated transition-[border-color,box-shadow] focus-within:border-rm-border-strong">
         {shouldRenderReply && replyTo && (

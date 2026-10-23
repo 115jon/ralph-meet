@@ -13,7 +13,7 @@ export const MENU_PANEL =
 
 /** Row geometry and ink. Pair with one highlight below. */
 export const MENU_ITEM =
-  "group flex min-h-8 w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-ui-sm font-medium outline-none select-none disabled:cursor-default disabled:opacity-45 aria-disabled:cursor-default aria-disabled:opacity-45";
+  "group flex min-h-8 pointer-coarse:min-h-11 w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-ui-sm font-medium outline-none select-none disabled:cursor-default disabled:opacity-45 aria-disabled:cursor-default aria-disabled:opacity-45";
 
 export const MENU_ITEM_DEFAULT =
   "text-rm-text pointer-fine:hover:enabled:bg-rm-tint-2 focus-visible:bg-rm-tint-2";

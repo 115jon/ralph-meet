@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { HIT, PRESS } from "@/components/ui/interaction";
 import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
+import { containsSlot, isDialogTopmost } from "@/components/ui/dialog-stack";
 
 type DialogRootContextValue = {
   id: string;
@@ -23,17 +24,6 @@ type DialogProps = React.ComponentProps<typeof DialogPrimitive.Root> & {
 const DialogRootContext = React.createContext<DialogRootContextValue | null>(
   null,
 );
-
-function isDialogTopmost(id: string) {
-  if (typeof document === "undefined") return true;
-
-  const openSurfaces = document.querySelectorAll<HTMLElement>(
-    '[data-dialog-root-id][data-dialog-back-enabled="true"][data-state="open"]',
-  );
-  const topmostSurface = openSurfaces.item(openSurfaces.length - 1);
-
-  return !topmostSurface || topmostSurface.dataset.dialogRootId === id;
-}
 
 function Dialog({
   open,
@@ -142,20 +132,6 @@ type DialogContentProps = React.ComponentProps<
   showCloseButton?: boolean;
 };
 
-function containsDialogPrimitive(
-  children: React.ReactNode,
-  primitive: unknown,
-): boolean {
-  return React.Children.toArray(children).some((child) => {
-    if (!React.isValidElement(child)) return false;
-    if (child.type === primitive) return true;
-    return containsDialogPrimitive(
-      (child.props as { children?: React.ReactNode }).children,
-      primitive,
-    );
-  });
-}
-
 const DialogSurface = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
@@ -173,8 +149,8 @@ const DialogSurface = React.forwardRef<
   ref,
 ) {
   const rootContext = React.useContext(DialogRootContext);
-  const hasTitle = containsDialogPrimitive(children, DialogTitle);
-  const hasDescription = containsDialogPrimitive(children, DialogDescription);
+  const hasTitle = containsSlot(children, "title");
+  const hasDescription = containsSlot(children, "description");
   const hasDescribedBy = props["aria-describedby"] !== undefined;
   const accessibleLabel = props["aria-label"] ?? "Dialog";
   const ignoreSelectDismiss = <
@@ -335,6 +311,9 @@ function DialogDescription({
     />
   );
 }
+
+Object.assign(DialogTitle, { rmSlot: "title" });
+Object.assign(DialogDescription, { rmSlot: "description" });
 
 export {
   Dialog,

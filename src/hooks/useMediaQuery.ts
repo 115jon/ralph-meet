@@ -95,3 +95,43 @@ export function useMediaQuery(query: string): boolean {
     () => false,
   );
 }
+
+/**
+ * The one phone breakpoint: below Tailwind's `md` (768px). CSS uses `md:`;
+ * JS uses these, so layout and behavior switch at the same width.
+ */
+export const MOBILE_MAX_WIDTH_PX = 767;
+export const MOBILE_QUERY = `(max-width: ${MOBILE_MAX_WIDTH_PX}px)`;
+
+/** Event-time check (click handlers, positioning). */
+export function isMobileViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof window.matchMedia === "function") {
+    return window.matchMedia(MOBILE_QUERY).matches;
+  }
+  return window.innerWidth <= MOBILE_MAX_WIDTH_PX;
+}
+
+function subscribeToViewport(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const mediaQuery =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia(MOBILE_QUERY)
+      : null;
+  mediaQuery?.addEventListener?.("change", listener);
+  // Resize too: covers environments without matchMedia change events.
+  window.addEventListener("resize", listener);
+  return () => {
+    mediaQuery?.removeEventListener?.("change", listener);
+    window.removeEventListener("resize", listener);
+  };
+}
+
+/** True below `md`. Server render and first paint assume desktop. */
+export function useIsMobile(): boolean {
+  return useSyncExternalStore(
+    subscribeToViewport,
+    isMobileViewport,
+    () => false,
+  );
+}

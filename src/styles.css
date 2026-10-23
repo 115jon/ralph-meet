@@ -1025,6 +1025,26 @@
     height: 100%;
   }
 
+  /*
+   * Safe-area insets for the web build (parity with mobile/index.html). The
+   * Tauri shells overwrite these inline on <html> with native values.
+   * Components read var(--safe-area-*, 0px).
+   */
+  :root {
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Follow the dynamic viewport (browser toolbars, keyboard) on phones. */
+  @supports (height: 100dvh) {
+    html,
+    body {
+      height: 100dvh;
+    }
+  }
+
   /* Custom scrollbar — Discord style */
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
@@ -1812,4 +1832,25 @@
 
 .auth-split [data-ra-element="cardFooter"] {
   text-align: center;
+}
+
+/*
+ * Drawer (vaul) motion: vaul ships 500ms; Quiet Pro caps UI motion under
+ * 300ms on the same iOS drawer curve. Doubled attribute beats vaul's injected
+ * stylesheet. Reduced motion keeps the scrim fade and drops the slide.
+ */
+[data-vaul-drawer][data-vaul-drawer] {
+  transition-duration: 280ms;
+  animation-duration: 280ms;
+}
+
+[data-vaul-overlay][data-vaul-overlay] {
+  animation-duration: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-vaul-drawer][data-vaul-drawer] {
+    transition-duration: 1ms;
+    animation-duration: 1ms;
+  }
 }
