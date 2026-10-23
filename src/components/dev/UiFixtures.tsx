@@ -35,14 +35,26 @@ import { CatalogFixture, ShopFixture } from "@/components/dev/ShopFixtures";
 import SettingsModal from "@/components/chat/SettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
-import { FloatingListenTogetherPlayer } from "@/components/chat/FloatingListenTogetherPlayer";
 import { ListenTogetherPanel } from "@/components/chat/ListenTogetherPanel";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
+import {
+  clearStoredKovaAuthSessionToken,
+  getStoredKovaAuthSessionToken,
+  setStoredKovaAuthSessionToken,
+} from "@/lib/desktop-auth";
 import type {
   ListenTogetherQueueEntry,
+  ListenTogetherSearchResponse,
   ListenTogetherStateSnapshot,
 } from "@/lib/listen-together";
 import shareFrame from "@/components/dev/assets/share-frame.webp";
+import coverNightdrive from "@/components/dev/assets/cover-nightdrive.webp";
+import coverPaperboats from "@/components/dev/assets/cover-paperboats.webp";
+import coverCopperline from "@/components/dev/assets/cover-copperline.webp";
+import coverSlowfires from "@/components/dev/assets/cover-slowfires.webp";
+import coverGlasshouse from "@/components/dev/assets/cover-glasshouse.webp";
+import coverTidelines from "@/components/dev/assets/cover-tidelines.webp";
+import coverSmallhours from "@/components/dev/assets/cover-smallhours.webp";
 import { SplashScreen } from "@/components/SplashScreen";
 import { VoiceControls } from "@/components/voice/VoiceControls";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
@@ -645,19 +657,6 @@ const linusScreen: GridItem = {
 
 const LISTEN_ROOM = "lounge";
 
-/** Album art as an inline SVG: a two-stop gradient with a monogram. */
-function artwork(from: string, to: string, mark: string): string {
-  const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">' +
-    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
-    `<stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/>` +
-    '</linearGradient></defs><rect width="160" height="160" fill="url(#g)"/>' +
-    '<circle cx="80" cy="80" r="46" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2"/>' +
-    `<text x="80" y="94" text-anchor="middle" font-family="Figtree, sans-serif" font-size="40" font-weight="600" fill="#fff" opacity="0.92">${mark}</text>` +
-    "</svg>";
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-
 function listenEntry(
   id: string,
   title: string,
@@ -696,7 +695,7 @@ function listenSnapshot(now: number): ListenTogetherStateSnapshot {
       "Lumen Arc",
       "Afterglow",
       254_000,
-      artwork("#5865f2", "#1b1340", "NA"),
+      coverNightdrive,
       { id: "u-ada", name: "Ada Lovelace" },
       now - 540_000,
     ),
@@ -706,7 +705,7 @@ function listenSnapshot(now: number): ListenTogetherStateSnapshot {
       "The Quiet Kind",
       "Low Tide",
       211_000,
-      artwork("#0ea5a4", "#0b2b3a", "PB"),
+      coverPaperboats,
       { id: "u-grace", name: "Grace Hopper" },
       now - 420_000,
     ),
@@ -716,7 +715,7 @@ function listenSnapshot(now: number): ListenTogetherStateSnapshot {
       "Marrow & Vale",
       "Field Notes",
       198_000,
-      artwork("#f59e0b", "#3b1d0a", "CL"),
+      coverCopperline,
       { id: "u-me", name: "Jon" },
       now - 300_000,
     ),
@@ -726,7 +725,7 @@ function listenSnapshot(now: number): ListenTogetherStateSnapshot {
       "Lumen Arc",
       "Afterglow",
       276_000,
-      artwork("#ef4444", "#2a0b1d", "SF"),
+      coverSlowfires,
       { id: "u-linus", name: "Linus" },
       now - 120_000,
     ),
@@ -749,13 +748,118 @@ function listenSnapshot(now: number): ListenTogetherStateSnapshot {
   };
 }
 
+const LISTEN_SEARCH: ListenTogetherSearchResponse = {
+  filter: "track",
+  cursor: null,
+  results: [
+    {
+      kind: "track",
+      id: "fx-glasshouse",
+      provider: "youtube_music",
+      videoId: "fx-glasshouse",
+      title: "Glasshouse",
+      artist: "Lumen Arc",
+      album: "Afterglow",
+      durationMs: 232_000,
+      artworkUrl: coverGlasshouse,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-glasshouse",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "track",
+      id: "fx-tidelines",
+      provider: "youtube_music",
+      videoId: "fx-tidelines",
+      title: "Tidelines",
+      artist: "Lumen Arc",
+      album: "Afterglow",
+      durationMs: 187_000,
+      artworkUrl: coverTidelines,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-tidelines",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "track",
+      id: "fx-smallhours",
+      provider: "youtube_music",
+      videoId: "fx-smallhours",
+      title: "Small Hours (Live at Roundhouse)",
+      artist: "Lumen Arc",
+      album: "Live 2025",
+      durationMs: 305_000,
+      artworkUrl: coverSmallhours,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-smallhours",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "track",
+      id: "fx-slowfires-s",
+      provider: "youtube_music",
+      videoId: "fx-slowfires",
+      title: "Slow Fires",
+      artist: "Lumen Arc",
+      album: "Afterglow",
+      durationMs: 276_000,
+      artworkUrl: coverSlowfires,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-slowfires",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "collection",
+      id: "fx-afterglow",
+      provider: "youtube_music",
+      title: "Afterglow",
+      subtitle: "Album by Lumen Arc",
+      itemCount: 11,
+      artworkUrl: coverNightdrive,
+      sourceUrl: "https://music.youtube.com/playlist?list=fx-afterglow",
+    },
+  ],
+};
+
+/**
+ * Answers the panel's search request from the seed above so the surface
+ * looks in use without a network. Installed only while the listen fixture
+ * is mounted; every other request passes through. The API client refuses to
+ * send anything without a session token, so a placeholder is stored for the
+ * fixture's lifetime when the browser has none (a real one is left alone).
+ */
+function installListenSearchStub() {
+  const placeholderSession = getStoredKovaAuthSessionToken()
+    ? null
+    : "ui-fixture-session";
+  if (placeholderSession) setStoredKovaAuthSessionToken(placeholderSession);
+  const original = window.fetch;
+  window.fetch = async (input, init) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    if (url.includes("/api/listen-together/search")) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      return new Response(JSON.stringify(LISTEN_SEARCH), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return original(input, init);
+  };
+  return () => {
+    window.fetch = original;
+    if (placeholderSession) clearStoredKovaAuthSessionToken();
+  };
+}
+
 /** `live`: mic muted, deafened, camera on and sharing, so every dock state
  * (rest / muted tint / live accent / solid leave) is visible at once. */
 /**
  * `share`: Linus is sharing his screen (a real frame of the project's GitHub
  * page, served as a stream thumbnail so no MediaStream is needed); `focus`
  * opens it on the stage. `listen`: a seeded Listen Together room with a
- * track playing, the floating player and the queue panel.
+ * track playing and the queue panel open; search is answered from a local
+ * stub so typing a query fills the left pane.
  */
 function VoiceRoom({
   live = false,
@@ -787,10 +891,14 @@ function VoiceRoom({
 
   useEffect(() => {
     if (!listen) return;
+    const restoreFetch = installListenSearchStub();
     useListenTogetherStore
       .getState()
       .setSnapshot(LISTEN_ROOM, listenSnapshot(Date.now()));
-    return () => useListenTogetherStore.getState().clearRoom(LISTEN_ROOM);
+    return () => {
+      restoreFetch();
+      useListenTogetherStore.getState().clearRoom(LISTEN_ROOM);
+    };
   }, [listen]);
   return (
     <div
@@ -798,9 +906,6 @@ function VoiceRoom({
       data-app-layout="true"
     >
       <WebAppTitleBar />
-      {listen && (
-        <FloatingListenTogetherPlayer sfu={null} roomSlug={LISTEN_ROOM} />
-      )}
       <div className="flex flex-1 overflow-hidden relative">
         <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
           <div className="flex min-h-0 flex-1">
@@ -856,6 +961,7 @@ function VoiceRoom({
                       <ListenTogetherPanel
                         sfu={null}
                         roomSlug={LISTEN_ROOM}
+                        voiceSessionId="fixture-voice-session"
                         serverId="s-1"
                         channelId="ch-lounge"
                         localUserId="u-me"
