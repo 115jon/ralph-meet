@@ -20,6 +20,7 @@ function HardwareAccelerationRow() {
   const [pendingHardwareAcceleration, setPendingHardwareAcceleration] =
     useState<boolean | null>(null);
   const [restarting, setRestarting] = useState(false);
+  const [restartError, setRestartError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,19 +45,33 @@ function HardwareAccelerationRow() {
 
   const confirmHardwareAccelerationChange = async () => {
     if (pendingHardwareAcceleration === null) return;
+    const previous = hardwareAcceleration;
     setRestarting(true);
+    setRestartError(null);
     updateDesktopSettings({
       hardwareAcceleration: pendingHardwareAcceleration,
     });
+    let saved = false;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("set_hardware_acceleration", {
         enabled: pendingHardwareAcceleration,
       });
+      saved = true;
       await restartDesktopApp();
     } catch (error) {
       log.error("Failed to change hardware acceleration:", error);
-      setPendingHardwareAcceleration(null);
+      // Keep the confirm open with the reason.
+      if (saved) {
+        setRestartError(
+          "Saved, but Ralph Meet couldn't restart. Quit and reopen the app to apply it.",
+        );
+      } else {
+        updateDesktopSettings({ hardwareAcceleration: previous });
+        setRestartError(
+          "Unable to change hardware acceleration. Try again, or restart the app first.",
+        );
+      }
       setRestarting(false);
     }
   };
@@ -75,11 +90,14 @@ function HardwareAccelerationRow() {
           />
           <RestartAppDialog
             open={pendingHardwareAcceleration !== null}
-            onOpenChange={(open) =>
-              !open && !restarting && setPendingHardwareAcceleration(null)
-            }
+            onOpenChange={(open) => {
+              if (open || restarting) return;
+              setPendingHardwareAcceleration(null);
+              setRestartError(null);
+            }}
             onConfirm={confirmHardwareAccelerationChange}
             restarting={restarting}
+            error={restartError}
             title={
               pendingHardwareAcceleration
                 ? "Turn on hardware acceleration?"

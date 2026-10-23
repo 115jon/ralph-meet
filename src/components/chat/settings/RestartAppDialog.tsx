@@ -11,6 +11,7 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
+import { RowError } from "./primitives";
 
 export interface RestartAppDialogProps {
   open: boolean;
@@ -24,6 +25,8 @@ export interface RestartAppDialogProps {
   description?: ReactNode;
   /** Restart in flight: the confirm button spins and Cancel is disabled. */
   restarting?: boolean;
+  /** Why the last attempt failed; the dialog stays open to retry. */
+  error?: ReactNode;
 }
 
 const DEFAULT_DESCRIPTION =
@@ -41,6 +44,7 @@ export function RestartAppDialog({
   title,
   description = DEFAULT_DESCRIPTION,
   restarting = false,
+  error,
 }: RestartAppDialogProps) {
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
@@ -51,6 +55,7 @@ export function RestartAppDialog({
             {description}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
+        {error ? <RowError className="mt-0">{error}</RowError> : null}
         <ResponsiveDialogFooter>
           <Button
             type="button"
