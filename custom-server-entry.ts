@@ -41,7 +41,17 @@ import {
   type BackgroundTaskEnvelope,
 } from "./src/lib/background-tasks";
 import { retryR2Cleanup } from "./src/services/r2-cleanup.service";
-import { syncCollectiblesCatalog } from "./src/lib/collectibles-catalog";
+import {
+  COLLECTIBLES_SYNC_CRON,
+  syncCollectiblesCatalog,
+} from "./src/lib/collectibles-catalog";
+import {
+  runScheduledJobs,
+  selectScheduledJobs,
+} from "./src/lib/scheduled-jobs";
+
+/** wrangler.toml [triggers]: maintenance jobs run every 6h. */
+const MAINTENANCE_CRON = "0 */6 * * *";
 import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
@@ -474,36 +484,49 @@ export default {
   },
 
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    ctx.waitUntil(
-      Promise.all([
-        syncYtDlpUpstream(true).catch((error) => {
-          console.error("yt-dlp upstream sync failed:", error);
-        }),
-        retryR2Cleanup(env.DB, env.BUCKET).catch((error) => {
-          console.error("R2 cleanup retry failed:", error);
-        }),
-        retryMessagePostprocessing(env).catch((error) => {
-          console.error("Message postprocessing retry failed:", error);
-        }),
-        syncCollectiblesCatalog(env.DB)
-          .then((catalog) => {
-            console.info("Collectibles catalog sync completed", {
-              source: catalog.source,
-              categories: catalog.categories.length,
-              items: catalog.items.length,
-              syncedAt: catalog.syncedAt,
-            });
-          })
-          .catch((error) => {
-            console.error("Collectibles catalog sync failed:", error);
-            throw error;
-          }),
-      ]).then(() => undefined),
-    );
+    const jobs = selectScheduledJobs(controller.cron, {
+      maintenance: {
+        crons: [MAINTENANCE_CRON],
+        jobs: [
+          {
+            name: "yt-dlp upstream sync",
+            run: () => syncYtDlpUpstream(true),
+          },
+          {
+            name: "R2 cleanup retry",
+            run: () => retryR2Cleanup(env.DB, env.BUCKET),
+          },
+          {
+            name: "Message postprocessing retry",
+            run: () => retryMessagePostprocessing(env),
+          },
+        ],
+      },
+      collectibles: {
+        crons: [COLLECTIBLES_SYNC_CRON],
+        jobs: [
+          {
+            name: "Collectibles catalog sync",
+            run: async () => {
+              const catalog = await syncCollectiblesCatalog(env.DB, {
+                trigger: "cron",
+              });
+              console.info("Collectibles catalog sync completed", {
+                categories: catalog.categories.length,
+                items: catalog.items.length,
+                outcome: catalog.sync?.lastOutcome,
+                syncedAt: catalog.syncedAt,
+              });
+            },
+          },
+        ],
+      },
+    });
+    await runScheduledJobs(jobs, (promise) => ctx.waitUntil(promise));
   },
 
   async queue(

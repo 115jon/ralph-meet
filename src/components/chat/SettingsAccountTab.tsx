@@ -12,7 +12,7 @@ import {
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { useMounted } from "@/hooks/useMounted";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
+import { CollectiblePicker } from "@/components/chat/collectibles/CollectiblePicker";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
 import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
@@ -4676,11 +4676,13 @@ export default function SettingsAccountTab({
         onApply={setDisplayNameStyle}
       />
       {collectiblesKind && (
-        <CollectiblesCatalogModal
-          initialKind={collectiblesKind}
+        <CollectiblePicker
+          open
+          kind={collectiblesKind}
           currentDisplay={currentAvatarDisplay}
           avatarSrc={currentAvatarSrc}
           displayName={currentDisplayName}
+          username={currentUsername ? `@${currentUsername}` : undefined}
           onClose={() => setCollectiblesKind(null)}
           onApplied={async (updatedUser, appliedKinds) => {
             await syncCollectibleState(updatedUser, appliedKinds);

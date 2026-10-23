@@ -230,9 +230,12 @@ const DialogSurface = React.forwardRef<
         <DialogPrimitive.Close
           data-slot="dialog-close"
           className={cn(
-            "absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-']):not([data-icon])]:size-4",
+            "top-3 right-3 inline-flex size-8 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-']):not([data-icon])]:size-4",
             PRESS,
             HIT,
+            // After PRESS: tailwind-merge keeps the last position utility,
+            // and PRESS's `relative` would otherwise drop this into the flow.
+            "absolute",
           )}
         >
           <Icon name="close" size="sm" />

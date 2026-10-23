@@ -14,6 +14,8 @@
  *           search | search-idle | search-results | search-filtered
  *           search-empty | search-loading | search-error | search-dm
  *           command-menu (&q=)
+ *           shop | catalog-decorations | catalog-effects
+ *           catalog-nameplates | catalog-frames
  */
 
 import { createFileRoute, notFound } from "@tanstack/react-router";
