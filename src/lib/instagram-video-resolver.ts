@@ -222,7 +222,14 @@ function readInstagramUrlExpiryEpochSeconds(
   return null;
 }
 
-function getInstagramMetadataCacheTtl(result: InstagramVideoResult): number {
+/**
+ * Seconds a resolved result stays usable: bounded by the earliest signed CDN
+ * URL in it (`oe` / `x-expires`) minus a safety window. Also drives the
+ * route's browser `Cache-Control`.
+ */
+export function getInstagramMetadataCacheTtl(
+  result: InstagramVideoResult,
+): number {
   const expiries = [
     result.videoUrl,
     result.thumbnailUrl,
@@ -1056,6 +1063,12 @@ export async function resolveInstagramVideoMetadata(
   if (!canonicalUrl) return null;
 
   const cacheKey = `instagram-video:${canonicalUrl}`;
+  // A thumbnail-only ("weak") result found while session secrets are set is
+  // kept apart with a short TTL: long enough that every view inside the
+  // window is a cache hit, short enough that a full result is retried soon.
+  // Before, it was written under the main key and then rejected on read, so
+  // each view re-ran the whole scrape (~3 s in production).
+  const weakCacheKey = `instagram-video:weak:${canonicalUrl}`;
   const load = async () => {
     const hasSessionSecrets = Boolean(getInstagramSessionSecrets());
     if (!options?.bypassCache) {
@@ -1068,15 +1081,26 @@ export async function resolveInstagramVideoMetadata(
       ) {
         return cached;
       }
+      if (hasSessionSecrets) {
+        const weak = await cacheGet<InstagramVideoResult>(weakCacheKey);
+        if (hasResolvedInstagramMetadata(weak)) return weak;
+      }
     }
 
     const result = await fetchInstagramMedia(canonicalUrl);
     if (hasResolvedInstagramMetadata(result)) {
-      const ttlSeconds =
-        hasSessionSecrets && isInstagramWeakFallbackResult(result)
-          ? INSTAGRAM_WEAK_FALLBACK_TTL
-          : getInstagramMetadataCacheTtl(result);
-      void cacheSet(cacheKey, result, ttlSeconds);
+      if (hasSessionSecrets && isInstagramWeakFallbackResult(result)) {
+        void cacheSet(
+          weakCacheKey,
+          result,
+          Math.min(
+            INSTAGRAM_WEAK_FALLBACK_TTL,
+            getInstagramMetadataCacheTtl(result),
+          ),
+        );
+      } else {
+        void cacheSet(cacheKey, result, getInstagramMetadataCacheTtl(result));
+      }
     }
 
     return result;

@@ -86,6 +86,8 @@ interface VideoAttachmentSurfaceProps {
   brandingKey?: string | null;
   showDownload: boolean;
   onSurfaceClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Intrinsic size from the poster or the video metadata. */
+  onMediaDimensions?: (width: number, height: number) => void;
   onVideoError: () => void;
   onVideoCanPlay: () => void;
   onPlay?: React.ReactEventHandler<HTMLVideoElement>;
@@ -121,6 +123,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
   brandingKey,
   showDownload,
   onSurfaceClick,
+  onMediaDimensions,
   onVideoError,
   onVideoCanPlay,
   onPlay,
@@ -153,6 +156,12 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
       playsInline
       onError={onVideoError}
       onCanPlay={onVideoCanPlay}
+      onLoadedMetadata={(event) => {
+        const { videoWidth, videoHeight } = event.currentTarget;
+        if (videoWidth && videoHeight) {
+          onMediaDimensions?.(videoWidth, videoHeight);
+        }
+      }}
       onPlay={onPlay}
       onPause={onPause}
       onEnded={onEnded}
@@ -187,6 +196,12 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
       )}
       style={posterOverlayStyle}
       draggable={false}
+      onLoad={(event) => {
+        const { naturalWidth, naturalHeight } = event.currentTarget;
+        if (naturalWidth && naturalHeight) {
+          onMediaDimensions?.(naturalWidth, naturalHeight);
+        }
+      }}
       {...(referrerPolicy ? { referrerPolicy } : {})}
     />
   ) : null;
@@ -323,6 +338,18 @@ const VideoAttachment = memo(function VideoAttachment({
   const isViewer = variant === "viewer";
   const isAnimated = playbackMode === "animated";
   const [mediaError, setMediaError] = useState(false);
+  // Embeds stored without sizes (direct links whose header could not be read,
+  // older X/TikTok rows) used to leave the play overlay in the browser's
+  // default 300x150 video box under a full-size poster. Measure instead.
+  const [measuredAspectRatio, setMeasuredAspectRatio] = useState<
+    number | undefined
+  >(undefined);
+  const handleMediaDimensions = useCallback((width: number, height: number) => {
+    const next = width / height;
+    setMeasuredAspectRatio((current) =>
+      current && Math.abs(current - next) < 0.01 ? current : next,
+    );
+  }, []);
   const activePlaybackRef = useRef(false);
   const onPlayRef = useRef(onPlay);
   const onStopRef = useRef(onStop);
@@ -382,7 +409,7 @@ const VideoAttachment = memo(function VideoAttachment({
   const resolvedAspectRatio =
     Number.isFinite(aspectRatio) && aspectRatio && aspectRatio > 0
       ? aspectRatio
-      : undefined;
+      : measuredAspectRatio;
   const constrainedWidth = resolvedAspectRatio
     ? Math.min(maxWidth, maxHeight * resolvedAspectRatio)
     : maxWidth;
@@ -521,6 +548,9 @@ const VideoAttachment = memo(function VideoAttachment({
         brandingKey={brandingKey}
         showDownload={showDownload}
         onSurfaceClick={handleSurfaceClick}
+        onMediaDimensions={
+          aspectRatio && aspectRatio > 0 ? undefined : handleMediaDimensions
+        }
         onVideoError={handleVideoError}
         onVideoCanPlay={handleVideoCanPlay}
         onPlay={handleVideoPlay}

@@ -15,6 +15,11 @@ import {
   unwrapProxyMediaUrl,
 } from "@/lib/gif-favorite-item";
 import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
+import {
+  hydrationKey,
+  loadEmbedHydration,
+  peekEmbedHydration,
+} from "@/lib/embed-hydration-cache";
 import { cn } from "@/lib/utils";
 import { Icon, type IconSize } from "@/components/ui/icon";
 import { HIT } from "@/components/ui/interaction";
@@ -32,6 +37,15 @@ import {
   useState,
 } from "react";
 import { EmbedFrame } from "./EmbedFrame";
+import {
+  DIRECT_MEDIA_MAX_HEIGHT,
+  DIRECT_MEDIA_MAX_WIDTH,
+  SOCIAL_UNAVAILABLE_IMAGE,
+  getDirectMediaBox,
+  getSpotifyEmbedUrl,
+  getSpotifyPlayerHeight,
+  getXSingleImageBoxStyle,
+} from "./embed-layout";
 import EmojiToken from "./EmojiToken";
 import { RemoveEmbedsDialog } from "./RemoveEmbedsDialog";
 import { GifFavoriteButton } from "./GifFavoriteButton";
@@ -429,6 +443,27 @@ const PauseIcon = ({ size = "sm" }: { size?: IconSize }) => (
   <Icon name="pause" state="active" size={size} className="text-white" />
 );
 
+/**
+ * "Open on <site>" corner button for media overlays. It sits in the top-right
+ * corner, never beside the play button, so the play button stays dead centre
+ * whatever the frame size.
+ */
+const OverlayOpenLink = ({ href, label }: { href: string; label: string }) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className={cn(
+      "absolute right-2 top-2 z-10 inline-flex size-8 items-center justify-center rounded-full bg-black/60 text-white transition-colors pointer-fine:hover:bg-black/80",
+      HIT,
+    )}
+    title={label}
+    aria-label={label}
+  >
+    <Icon name="externalLink" size="sm" className="text-white" />
+  </a>
+);
+
 function getAspectRatio(
   width?: number | null,
   height?: number | null,
@@ -558,33 +593,27 @@ const YouTubeEmbed = memo(
                 <img
                   src={embed.thumbnail.url}
                   alt={embed.rawTitle || "YouTube video"}
+                  loading="lazy"
                   className="absolute inset-0 w-full h-full object-cover"
                   data-media-element="true"
                   data-media-url={embed.thumbnail.url}
                   data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
                 />
               )}
-              {/* Overlay buttons */}
-              <div className="absolute inset-0 flex items-center justify-center gap-3">
-                {/* Play button */}
-                <button
-                  onClick={handlePlay}
-                  className="w-16 h-11 bg-[#FF0000] pointer-fine:hover:bg-[#FF0000]/80 rounded-xl flex items-center justify-center transition-colors cursor-pointer shadow-lg"
-                  title="Play"
-                >
+              {/* The whole frame plays; the red mark is centred on it. */}
+              <button
+                type="button"
+                onClick={handlePlay}
+                className="group/yt absolute inset-0 flex cursor-pointer items-center justify-center focus-visible:outline-none"
+                aria-label={
+                  embed.rawTitle ? `Play ${embed.rawTitle}` : "Play video"
+                }
+              >
+                <span className="flex h-11 w-16 items-center justify-center rounded-xl bg-[#FF0000] shadow-lg transition-colors pointer-fine:group-hover/yt:bg-[#FF0000]/80 group-focus-visible/yt:ring-2 group-focus-visible/yt:ring-white">
                   <PlayIcon />
-                </button>
-                {/* Open in new tab */}
-                <a
-                  href={embed.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors shadow-lg"
-                  title="Open in YouTube"
-                >
-                  <ExternalIcon />
-                </a>
-              </div>
+                </span>
+              </button>
+              <OverlayOpenLink href={embed.url} label="Open in YouTube" />
             </>
           )}
         </div>
@@ -616,7 +645,9 @@ type TikTokPlayerState =
   | { mode: "loading" }
   | { mode: "ready" }
   | { mode: "iframe" }
-  | { mode: "error" };
+  | { mode: "error" }
+  /** The server confirmed the post is gone (deleted or private). */
+  | { mode: "missing" };
 
 type MediaDimensions = {
   width: number;
@@ -795,11 +826,48 @@ function getTikTokCaptionText(embed: EmbedInfo): string | undefined {
   );
 }
 
+function isWeakTikTokHydrationPayload(
+  payload: TikTokHydrationPayload,
+): boolean {
+  const media = payload.media ?? [];
+  const hasVideo =
+    Boolean(payload.videoUrl) || media.some((entry) => entry.type === "video");
+  const hasSlideshow =
+    payload.postType === "slideshow" &&
+    media.some((entry) => entry.type === "image");
+  return !hasVideo && !hasSlideshow;
+}
+
+function embedHasDirectTikTokMedia(embed: EmbedInfo): boolean {
+  return (
+    Boolean(embed.media?.some((entry) => entry.type === "video")) ||
+    Boolean(embed.video?.url && embed.video.kind === "direct")
+  );
+}
+
 function hydrateTikTokEmbed(
   embed: EmbedInfo,
   payload: TikTokHydrationPayload | null,
 ): EmbedInfo {
   if (!payload) return embed;
+
+  // A cover-only answer (tikwm fallback) must not replace a stored video.
+  if (
+    isWeakTikTokHydrationPayload(payload) &&
+    embedHasDirectTikTokMedia(embed)
+  ) {
+    return {
+      ...embed,
+      author: embed.author
+        ? {
+            ...embed.author,
+            iconURL: payload.authorAvatarUrl || embed.author.iconURL,
+          }
+        : embed.author,
+      timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
+      audio: payload.audio ?? embed.audio ?? undefined,
+    };
+  }
 
   const media = payload.media?.length ? payload.media : embed.media;
   const firstVideo = media?.find((entry) => entry.type === "video");
@@ -832,8 +900,9 @@ function hydrateTikTokEmbed(
       ? `https://www.tiktok.com/@${payload.authorHandle}`
       : undefined);
   const nextAuthorName = embed.author?.name || payload.authorName;
+  // Signed avatar URLs expire too: prefer the fresh one.
   const nextAuthorIcon =
-    embed.author?.iconURL || payload.authorAvatarUrl || undefined;
+    payload.authorAvatarUrl || embed.author?.iconURL || undefined;
   const nextAuthor = nextAuthorName
     ? {
         name: nextAuthorName,
@@ -868,7 +937,7 @@ function hydrateTikTokEmbed(
       views: embed.metrics?.views ?? payload.viewCount ?? undefined,
     },
     timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
-    audio: embed.audio ?? payload.audio ?? undefined,
+    audio: payload.audio ?? embed.audio ?? undefined,
     footer: {
       text: "TikTok",
     },
@@ -889,11 +958,27 @@ const TikTokEmbed = memo(
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
   }) => {
+    const tiktokHydrationKey = hydrationKey("/api/tiktok-video", embed.url);
+    // Read once per mount; the key cannot change (the card is keyed on it).
+    const [cachedHydration] = useState(() =>
+      peekEmbedHydration<TikTokHydrationPayload>(tiktokHydrationKey),
+    );
     const [hydratedPayload, setHydratedPayload] =
-      useState<TikTokHydrationPayload | null>(null);
-    const [player, setPlayer] = useState<TikTokPlayerState>(() => ({
-      mode: getTikTokRenderableMedia(embed).length === 0 ? "loading" : "idle",
-    }));
+      useState<TikTokHydrationPayload | null>(() =>
+        cachedHydration?.status === "ok" ? cachedHydration.payload : null,
+      );
+    const [player, setPlayer] = useState<TikTokPlayerState>(() =>
+      cachedHydration?.status === "missing"
+        ? { mode: "missing" }
+        : cachedHydration?.status === "ok"
+          ? { mode: "ready" }
+          : {
+              mode:
+                getTikTokRenderableMedia(embed).length === 0
+                  ? "loading"
+                  : "idle",
+            },
+    );
     const [activeIndex, setActiveIndex] = useState(0);
     const [measuredMediaDimensions, setMeasuredMediaDimensions] = useState<
       Record<string, MediaDimensions>
@@ -974,16 +1059,22 @@ const TikTokEmbed = memo(
     const commentCount = displayEmbed.metrics?.comments;
     const viewCount = displayEmbed.metrics?.views;
     const slideWidthPercent = media.length > 0 ? 100 / media.length : 100;
-    const audioArtworkSrc = displayEmbed.audio?.artworkUrl
-      ? getAuthAssetUrl(
-          buildProxyMediaPath(displayEmbed.audio.artworkUrl, displayEmbed.url),
-        )
-      : null;
-    const audioPlaybackUrl = displayEmbed.audio?.url
-      ? getMediaUrl(
-          buildProxyMediaPath(displayEmbed.audio.url, displayEmbed.url),
-        )
-      : null;
+    const isMissing = player.mode === "missing";
+    const audioArtworkSrc =
+      !isMissing && displayEmbed.audio?.artworkUrl
+        ? getAuthAssetUrl(
+            buildProxyMediaPath(
+              displayEmbed.audio.artworkUrl,
+              displayEmbed.url,
+            ),
+          )
+        : null;
+    const audioPlaybackUrl =
+      !isMissing && displayEmbed.audio?.url
+        ? getMediaUrl(
+            buildProxyMediaPath(displayEmbed.audio.url, displayEmbed.url),
+          )
+        : null;
     const aspectRatioStyle =
       activeMedia?.width && activeMedia?.height
         ? `${activeMedia.width}/${activeMedia.height}`
@@ -996,6 +1087,7 @@ const TikTokEmbed = memo(
       resolvedMedia.some((item) => item.type === "video") ||
       displayEmbed.video?.kind === "direct";
     const hasRenderableMedia =
+      !isMissing &&
       media.length > 0 &&
       (hasPersistentInlineMedia || player.mode !== "iframe");
     const iframeUrl =
@@ -1011,59 +1103,53 @@ const TikTokEmbed = memo(
           })();
 
     useEffect(() => {
-      if (!displayEmbed.url || fetchedRef.current) return;
+      if (!embed.url || fetchedRef.current) return;
+      // Already answered from the shared cache in the initial state.
+      if (cachedHydration) {
+        fetchedRef.current = true;
+        return;
+      }
 
       fetchedRef.current = true;
-      const controller =
-        typeof AbortController !== "undefined" ? new AbortController() : null;
       let isActive = true;
 
-      fetch(
-        apiUrl(
-          `/api/tiktok-video?videoUrl=${encodeURIComponent(displayEmbed.url)}`,
-        ),
-        controller ? { signal: controller.signal } : undefined,
-      )
-        .then((res) => {
-          if (!res.ok) throw new Error(`${res.status}`);
-          return res.json() as Promise<TikTokHydrationPayload>;
-        })
-        .then((payload) => {
-          if (!isActive) return;
-          setHydratedPayload(payload);
-          setPlayer(
-            payload.videoUrl ||
+      // Shared across mounts: a card scrolled back into view (the list is
+      // virtualised) reuses the answer instead of fetching again.
+      void loadEmbedHydration<TikTokHydrationPayload>(
+        tiktokHydrationKey,
+        apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(embed.url)}`),
+      ).then((result) => {
+        if (!isActive) return;
+        if (result.status === "missing") {
+          setPlayer({ mode: "missing" });
+          return;
+        }
+        const payload = result.status === "ok" ? result.payload : null;
+        if (payload) setHydratedPayload(payload);
+        setPlayer(
+          payload &&
+            (payload.videoUrl ||
               payload.media?.length ||
               payload.coverUrl ||
               payload.audio ||
-              payload.title
-              ? { mode: "ready" }
-              : hasPersistentInlineMedia || hasDirectVideoMedia
-                ? { mode: "error" }
-                : { mode: "iframe" },
-          );
-        })
-        .catch((error) => {
-          if (!isActive) return;
-          if (error instanceof DOMException && error.name === "AbortError")
-            return;
-          setPlayer(
-            hasPersistentInlineMedia || hasDirectVideoMedia
+              payload.title)
+            ? { mode: "ready" }
+            : hasPersistentInlineMedia || hasDirectVideoMedia
               ? { mode: "error" }
               : { mode: "iframe" },
-          );
-        });
+        );
+      });
 
       return () => {
         isActive = false;
-        controller?.abort();
       };
     }, [
-      displayEmbed.url,
+      cachedHydration,
+      embed.url,
       hasDirectVideoMedia,
       hasPersistentInlineMedia,
-      media.length,
       hydrationSignature,
+      tiktokHydrationKey,
     ]);
 
     const handleVideoError = useCallback(() => {
@@ -1361,7 +1447,7 @@ const TikTokEmbed = memo(
         <article ref={containerRef} className="flex flex-col gap-3">
           <header className="flex items-center gap-3">
             <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-rm-bg-surface/70 ring-1 ring-rm-border/60">
-              {displayEmbed.author?.iconURL ? (
+              {!isMissing && displayEmbed.author?.iconURL ? (
                 <img
                   src={getAuthAssetUrl(
                     buildProxyMediaPath(
@@ -1753,6 +1839,20 @@ const TikTokEmbed = memo(
               className="relative overflow-hidden rounded-lg border border-rm-border/55 bg-black/95"
               style={{ aspectRatio: "9/16" }}
             >
+              {isMissing ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                  <img
+                    src={SOCIAL_UNAVAILABLE_IMAGE}
+                    alt=""
+                    data-testid="tiktok-unavailable"
+                    className="size-36 rounded-xl"
+                    draggable={false}
+                  />
+                  <p className="text-ui-sm font-medium text-white/80">
+                    This TikTok is no longer available
+                  </p>
+                </div>
+              ) : null}
               {(player.mode === "iframe" || player.mode === "ready") &&
                 iframeUrl && (
                   <iframe
@@ -1821,10 +1921,8 @@ const TikTokEmbed = memo(
 );
 
 const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
-  // Build the embed URL from the original Spotify URL
-  const spotifyEmbedUrl = embed.url
-    .replace("open.spotify.com/", "open.spotify.com/embed/")
-    .replace(/\?.*$/, "");
+  const spotifyEmbedUrl = getSpotifyEmbedUrl(embed.url);
+  const playerHeight = getSpotifyPlayerHeight(embed.url);
 
   // Spotify iframe handles ALL rendering — we use a bare BaseEmbed (no title/desc/thumbnail)
   return (
@@ -1836,7 +1934,12 @@ const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
         sandbox={EMBED_WIDGET_SANDBOX}
         allow="clipboard-write; encrypted-media; fullscreen; picture-in-picture"
         className="rounded-xl"
-        style={{ width: "100%", maxWidth: 400, minWidth: 280, height: 80 }}
+        style={{
+          width: "100%",
+          maxWidth: 400,
+          minWidth: 0,
+          height: playerHeight,
+        }}
         loading="lazy"
       />
     </BaseEmbed>
@@ -2898,6 +3001,13 @@ const XMediaTile = memo(
               : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-[filter] duration-150 ease-(--rm-ease-out) pointer-fine:hover:brightness-105`
             : "h-full w-full object-cover transition-[filter] duration-150 ease-(--rm-ease-out) pointer-fine:hover:brightness-105"
         }
+        // Reserve the single image's box from its known size so the message
+        // row does not grow (and the list jump) when the image arrives.
+        style={
+          single && !compact
+            ? getXSingleImageBoxStyle(attachment.width, attachment.height)
+            : undefined
+        }
         loading="lazy"
         referrerPolicy="no-referrer"
         onError={() => setImageError(true)}
@@ -3577,24 +3687,22 @@ const RichEmbed = memo(
                     )}
                   />
                   {embed.video && (
-                    <div className="absolute inset-0 flex items-center justify-center gap-3">
+                    <>
                       <button
+                        type="button"
                         onClick={handlePlay}
-                        className="w-12 h-12 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                        className="group/play absolute inset-0 flex cursor-pointer items-center justify-center focus-visible:outline-none"
                         aria-label="Play video"
                       >
-                        <PlayIcon />
+                        <span className="flex size-14 items-center justify-center rounded-full bg-black/60 transition-colors pointer-fine:group-hover/play:bg-black/80 group-focus-visible/play:ring-2 group-focus-visible/play:ring-white">
+                          <PlayIcon />
+                        </span>
                       </button>
-                      <a
+                      <OverlayOpenLink
                         href={embed.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-10 h-10 bg-black/60 pointer-fine:hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
-                        aria-label="Open in new tab"
-                      >
-                        <ExternalIcon />
-                      </a>
-                    </div>
+                        label="Open in new tab"
+                      />
+                    </>
                   )}
                 </>
               )}
@@ -3918,8 +4026,20 @@ const InstagramEmbed = memo(
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
   }) => {
+    const instagramHydrationKey = hydrationKey(
+      "/api/instagram-video",
+      embed.url,
+    );
+    const [cachedHydration] = useState(() =>
+      peekEmbedHydration<InstagramHydrationPayload>(instagramHydrationKey),
+    );
     const [hydratedPayload, setHydratedPayload] =
-      useState<InstagramHydrationPayload | null>(null);
+      useState<InstagramHydrationPayload | null>(() =>
+        cachedHydration?.status === "ok" ? cachedHydration.payload : null,
+      );
+    const [isGone, setIsGone] = useState(
+      () => cachedHydration?.status === "missing",
+    );
     const [activeIndex, setActiveIndex] = useState(0);
     const [dragOffset, setDragOffset] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
@@ -3988,10 +4108,15 @@ const InstagramEmbed = memo(
 
     useEffect(() => {
       if (!embed.url || fetchedRef.current || !needsHydration) return;
+      if (cachedHydration) {
+        fetchedRef.current = true;
+        return;
+      }
       if (typeof IntersectionObserver === "undefined") return;
 
       const el = trackRef.current;
       if (!el) return;
+      let isActive = true;
 
       const observer = new IntersectionObserver(
         (entries) => {
@@ -3999,28 +4124,26 @@ const InstagramEmbed = memo(
           fetchedRef.current = true;
           observer.disconnect();
 
-          fetch(
+          void loadEmbedHydration<InstagramHydrationPayload>(
+            instagramHydrationKey,
             apiUrl(
               `/api/instagram-video?videoUrl=${encodeURIComponent(embed.url)}`,
             ),
-          )
-            .then((res) => {
-              if (!res.ok) throw new Error(`${res.status}`);
-              return res.json() as Promise<InstagramHydrationPayload>;
-            })
-            .then((payload) => {
-              setHydratedPayload(payload);
-            })
-            .catch(() => {
-              setHydratedPayload(null);
-            });
+          ).then((result) => {
+            if (!isActive) return;
+            if (result.status === "ok") setHydratedPayload(result.payload);
+            if (result.status === "missing") setIsGone(true);
+          });
         },
         { threshold: 0.2 },
       );
 
       observer.observe(el);
-      return () => observer.disconnect();
-    }, [embed.url, needsHydration]);
+      return () => {
+        isActive = false;
+        observer.disconnect();
+      };
+    }, [cachedHydration, embed.url, instagramHydrationKey, needsHydration]);
 
     const goToIndex = useCallback(
       (index: number) => {
@@ -4274,6 +4397,10 @@ const InstagramEmbed = memo(
       },
       [onMediaStop],
     );
+
+    if (isGone) {
+      return <UnavailableSocialEmbed embed={displayEmbed} />;
+    }
 
     return (
       <BaseEmbed embed={displayEmbed} width={392} bare>
@@ -4690,6 +4817,7 @@ function getInstagramFallbackTitle(url: string): string {
 }
 
 const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
+  const [imageFailed, setImageFailed] = useState(false);
   const providerName = embed.provider?.name?.toLowerCase();
   const displayEmbed = useMemo<EmbedInfo>(
     () =>
@@ -4699,28 +4827,67 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
     [embed, providerName],
   );
   const thumbnailSrc =
-    embed.provider?.name?.toLowerCase() === "instagram" && embed.thumbnail?.url
+    providerName === "instagram" && embed.thumbnail?.url
       ? getAuthAssetUrl(buildProxyMediaPath(embed.thumbnail.url, embed.url))
       : embed.thumbnail?.url;
+  const width = embed.thumbnail?.width;
+  const height = embed.thumbnail?.height;
+  const showImage = Boolean(thumbnailSrc) && !imageFailed;
+  // Pages that ask for a summary card (or send a small/square image) get a
+  // thumbnail beside the text; a square logo blown up to full width read as
+  // a broken layout. Embeds stored before `imageLayout` existed stay large.
+  const layout = embed.imageLayout ?? "large";
+
+  if (showImage && layout === "thumbnail") {
+    return (
+      <BaseEmbed embed={displayEmbed} width={432} bare>
+        <div className="flex items-start gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <EmbedCardText embed={displayEmbed} />
+          </div>
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0"
+            tabIndex={-1}
+            aria-hidden="true"
+          >
+            <img
+              src={thumbnailSrc}
+              alt=""
+              loading="lazy"
+              className="size-20 rounded-md bg-rm-bg-elevated object-cover"
+              referrerPolicy="no-referrer"
+              onError={() => setImageFailed(true)}
+              data-media-element="true"
+              data-media-url={embed.thumbnail?.url || embed.url}
+              data-media-download-url={thumbnailSrc}
+            />
+          </a>
+        </div>
+      </BaseEmbed>
+    );
+  }
 
   return (
     <BaseEmbed embed={displayEmbed} width={432}>
-      {thumbnailSrc && (
+      {showImage && (
         <a href={embed.url} target="_blank" rel="noopener noreferrer">
           <img
             src={thumbnailSrc}
-            alt="Thumbnail"
-            width={embed.thumbnail?.width}
-            height={embed.thumbnail?.height}
-            className="w-full rounded-md object-cover max-h-[300px]"
-            style={
-              embed.thumbnail?.width && embed.thumbnail?.height
-                ? {
-                    aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
-                  }
-                : { minHeight: 160 }
-            }
+            alt=""
+            loading="lazy"
+            width={width}
+            height={height}
+            className="w-full rounded-md bg-rm-bg-elevated object-cover max-h-[300px]"
+            // Reserve the box so the row does not grow when the image loads.
+            style={{
+              aspectRatio:
+                width && height ? `${width} / ${height}` : "1.91 / 1",
+            }}
             referrerPolicy="no-referrer"
+            onError={() => setImageFailed(true)}
             data-media-element="true"
             data-media-url={embed.thumbnail?.url || embed.url}
             data-media-download-url={thumbnailSrc}
@@ -4731,33 +4898,243 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
-const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+/** Provider, title and description for a card laid out by its caller. */
+function EmbedCardText({ embed }: { embed: EmbedInfo }) {
   return (
-    <BaseEmbed embed={embed} width={420}>
-      <div className="flex flex-col gap-2 py-1">
-        {embed.author?.name ? (
-          <div className="text-ui-sm font-semibold text-rm-text">
-            <EmbedInlineText
-              text={embed.author.name}
-              keyPrefix={`${embed.id}-unavailable-author`}
-            />
-          </div>
-        ) : null}
-        <p className="text-ui-sm leading-relaxed text-rm-text-muted">
-          This post is no longer available
-        </p>
+    <>
+      {embed.provider && (
+        <div className="text-ui-xs font-semibold text-rm-text-muted/80">
+          <EmbedInlineText
+            text={embed.provider.name}
+            keyPrefix={`${embed.id}-provider`}
+          />
+        </div>
+      )}
+      {embed.rawTitle && (
         <a
           href={embed.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-fit text-ui-sm font-semibold text-rm-accent-ink pointer-fine:hover:underline"
+          className="text-ui-base font-semibold text-rm-accent-ink pointer-fine:hover:underline leading-snug break-words"
         >
-          View original
+          <EmbedInlineText
+            text={embed.rawTitle}
+            keyPrefix={`${embed.id}-title`}
+          />
         </a>
+      )}
+      {embed.rawDescription && (
+        <div className="text-ui-sm leading-relaxed whitespace-pre-wrap break-words opacity-90 line-clamp-3">
+          <EmbedInlineText
+            text={embed.rawDescription}
+            keyPrefix={`${embed.id}-description`}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+function getUnavailableMessage(embed: EmbedInfo): string {
+  const provider = embed.provider?.name?.toLowerCase();
+  if (provider === "tiktok") return "This TikTok is no longer available";
+  if (provider === "youtube") return "This video is no longer available";
+  return "This post is no longer available";
+}
+
+const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  return (
+    <BaseEmbed embed={embed} width={420} bare>
+      <div className="flex items-center gap-3" data-testid="embed-unavailable">
+        <img
+          src={SOCIAL_UNAVAILABLE_IMAGE}
+          alt=""
+          className="size-16 shrink-0 rounded-lg"
+          draggable={false}
+        />
+        <div className="flex min-w-0 flex-col gap-1">
+          {embed.provider?.name ? (
+            <div className="text-ui-xs font-semibold text-rm-text-muted/80">
+              <EmbedInlineText
+                text={embed.provider.name}
+                keyPrefix={`${embed.id}-unavailable-provider`}
+              />
+            </div>
+          ) : null}
+          {embed.author?.name ? (
+            <div className="truncate text-ui-sm font-semibold text-rm-text">
+              <EmbedInlineText
+                text={embed.author.name}
+                keyPrefix={`${embed.id}-unavailable-author`}
+              />
+            </div>
+          ) : null}
+          <p className="text-ui-sm leading-snug text-rm-text-muted">
+            {getUnavailableMessage(embed)}
+          </p>
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-fit text-ui-sm font-semibold text-rm-accent-ink pointer-fine:hover:underline"
+          >
+            View original
+          </a>
+        </div>
       </div>
     </BaseEmbed>
   );
 });
+
+// ─── Direct media links ──────────────────────────────────────────────────
+
+function getDirectMediaFilename(url: string, fallback: string): string {
+  try {
+    const name = new URL(url).pathname.split("/").filter(Boolean).pop();
+    return name ? decodeURIComponent(name) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function DirectMediaFallback({ embed }: { embed: EmbedInfo }) {
+  let host = embed.url;
+  try {
+    host = new URL(embed.url).hostname.replace(/^www\./, "");
+  } catch {
+    /* keep raw */
+  }
+  return (
+    <EmbedFrame width={320}>
+      <a
+        href={embed.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 p-3"
+      >
+        <Icon name="image" size="lg" className="shrink-0 text-rm-text-muted" />
+        <span className="min-w-0">
+          <span className="block truncate text-ui-sm font-medium text-rm-accent-ink">
+            {getDirectMediaFilename(embed.url, "Media")}
+          </span>
+          <span className="block truncate text-ui-xs text-rm-text-muted">
+            {host}
+          </span>
+        </span>
+      </a>
+    </EmbedFrame>
+  );
+}
+
+/**
+ * A link straight to an image, GIF or video file: the media itself, no card
+ * (like an attachment). The box is reserved from the sizes the server read
+ * out of the file header, so the message row does not jump when it loads.
+ */
+const DirectMediaEmbed = memo(
+  ({
+    embed,
+    messageId,
+    onJumpToMessage,
+    onMediaPlay,
+    onMediaStop,
+  }: {
+    embed: EmbedInfo;
+    messageId?: string;
+    onJumpToMessage?: (messageId: string) => void;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
+  }) => {
+    const [failed, setFailed] = useState(false);
+    const { open } = useImageViewerActions();
+    const image = embed.media?.find((item) => item.type === "image");
+    const video =
+      embed.video?.kind === "direct" && embed.video.url ? embed.video : null;
+
+    if (failed || (!image && !video)) {
+      return <DirectMediaFallback embed={embed} />;
+    }
+
+    if (video) {
+      const box = getDirectMediaBox(video.width, video.height);
+      return (
+        <div className="max-w-full" data-testid="direct-media-video">
+          <DirectVideoEmbed
+            src={video.url}
+            filename={getDirectMediaFilename(video.url, "video.mp4")}
+            maxWidth={box?.width ?? DIRECT_MEDIA_MAX_WIDTH}
+            maxHeight={DIRECT_MEDIA_MAX_HEIGHT}
+            aspectRatio={box?.aspectRatio}
+            referrerPolicy="no-referrer"
+            onVideoError={() => setFailed(true)}
+            showDurationBadge
+            durationBadgeSeconds={video.durationSeconds}
+            onPlay={onMediaPlay}
+            onStop={onMediaStop}
+          />
+        </div>
+      );
+    }
+
+    const item = image!;
+    const box = getDirectMediaBox(item.width, item.height);
+    const filename = getDirectMediaFilename(item.url, "image");
+    const openViewer = () => {
+      open(
+        [
+          {
+            id: `direct-${messageId ?? "embed"}-${item.url}`,
+            message_id: messageId,
+            filename,
+            file_key: item.url,
+            url: item.url,
+            content_type: item.contentType || "image/jpeg",
+            size_bytes: 0,
+            alt_text: item.altText ?? null,
+          },
+        ],
+        0,
+        { onJumpToMessage },
+      );
+    };
+
+    return (
+      <button
+        type="button"
+        onClick={openViewer}
+        className="block max-w-full cursor-zoom-in overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rm-accent"
+        style={
+          box
+            ? {
+                width: `min(100%, ${box.width}px)`,
+                aspectRatio: box.aspectRatio,
+              }
+            : { maxWidth: `min(100%, ${DIRECT_MEDIA_MAX_WIDTH}px)` }
+        }
+        aria-label={item.isGif ? "Open GIF" : "Open image"}
+        data-media-element="true"
+        data-media-url={item.url}
+        data-media-download-url={item.url}
+        data-media-filename={filename}
+      >
+        <img
+          src={item.url}
+          alt={item.altText || ""}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className={cn(
+            "block",
+            box
+              ? "h-full w-full object-contain"
+              : "h-auto max-h-[300px] w-auto max-w-full",
+          )}
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      </button>
+    );
+  },
+);
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
@@ -4818,6 +5195,16 @@ export const LinkEmbed = memo(
     // Provider-specific routing
     if (embed.unavailable) {
       embedContent = <UnavailableSocialEmbed embed={embed} />;
+    } else if (embed.direct) {
+      embedContent = (
+        <DirectMediaEmbed
+          embed={embed}
+          messageId={messageId}
+          onJumpToMessage={onJumpToMessage}
+          onMediaPlay={onMediaPlay}
+          onMediaStop={onMediaStop}
+        />
+      );
     } else if (providerName === "youtube" && embed.video?.url) {
       embedContent = (
         <YouTubeEmbed
@@ -4891,7 +5278,11 @@ export const LinkEmbed = memo(
               type="button"
               onClick={handleXClick}
               className={cn(
-                "absolute -top-2 -right-6 z-20 flex size-5 items-center justify-center rounded-sm text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
+                // Fine pointers: just outside the card's corner, revealed on
+                // hover. Touch: on the corner itself as a filled chip, since
+                // a full-width card on a phone leaves no gutter and the old
+                // -right-6 position was clipped off-screen.
+                "absolute z-20 flex size-5 items-center justify-center text-rm-text-muted transition-colors pointer-fine:-top-2 pointer-fine:-right-6 pointer-fine:rounded-sm pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text pointer-coarse:-top-2 pointer-coarse:-right-2 pointer-coarse:rounded-full pointer-coarse:border pointer-coarse:border-rm-border pointer-coarse:bg-rm-bg-elevated",
                 HIT,
                 // REVEAL, scoped to this embed (the message row is also a
                 // `group`): hidden until hover/focus on fine pointers, always

@@ -2,19 +2,34 @@ import type { EmbedInfo } from "@/lib/types";
 import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
 import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
 import {
-  fetchTikTokProxyMetadata,
+  fetchTikTokProxyLookup,
   lookupInstagramOEmbed,
 } from "@/lib/share-preview-proxy";
 import {
   isTwitterUnavailablePayload,
   isUnavailableSocialStatus,
 } from "@/lib/social-embed-availability";
+import { cacheGet, cacheSet } from "@/lib/cache";
+import { getBotUserAgent } from "@/lib/platform";
+import { singleFlight } from "@/lib/single-flight";
+import {
+  parseHtmlMeta,
+  readPositiveInt,
+  resolvePreviewAssetUrl,
+} from "@/lib/html-meta";
+import {
+  MEDIA_SNIFF_BYTES,
+  readLeadingBytes,
+  sniffImageDimensions,
+  sniffMp4Dimensions,
+} from "@/lib/media-sniff";
 import { clog } from "@/lib/console-logger";
 
 const log = clog("EmbedFetcher");
 const twitterLog = clog("embed:twitter");
 
-const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+/** Most embeds a single message gets. */
+export const MAX_EMBEDS_PER_MESSAGE = 3;
 const X_ICON_URL =
   "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
 const X_EMBED_HOSTS = new Set([
@@ -61,6 +76,110 @@ function buildUnavailableEmbed(
   };
 }
 
+// ── URL extraction ──────────────────────────────────────────────────────────
+
+const TRAILING_PUNCTUATION = /[.,;:!?'"*_~]+$/;
+
+function trimUnbalancedClosers(url: string): string {
+  let trimmed = url;
+  const pairs: Array<[string, string]> = [
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+  ];
+  for (let guard = 0; guard < 8; guard += 1) {
+    const before = trimmed;
+    trimmed = trimmed.replace(TRAILING_PUNCTUATION, "");
+    for (const [open, close] of pairs) {
+      if (!trimmed.endsWith(close)) continue;
+      const opens = trimmed.split(open).length - 1;
+      const closes = trimmed.split(close).length - 1;
+      if (closes > opens) trimmed = trimmed.slice(0, -1);
+    }
+    if (trimmed === before) break;
+  }
+  return trimmed;
+}
+
+/**
+ * URLs in a message that should get embeds, in order. Mirrors how the client
+ * linkifies (MarkdownRenderer): trailing punctuation and an unbalanced closing
+ * bracket are not part of the URL (`(see https://a.b/c).` -> `https://a.b/c`),
+ * and URLs inside inline code or code blocks are not linkified so they get no
+ * embed either.
+ */
+export function extractEmbedUrls(
+  content: string,
+  limit = MAX_EMBEDS_PER_MESSAGE,
+): string[] {
+  const withoutCode = content
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`\n]*`/g, " ");
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const match of withoutCode.matchAll(/https?:\/\/[^\s<>"'`]+/gi)) {
+    const candidate = trimUnbalancedClosers(match[0]);
+    let normalized: string;
+    try {
+      const parsed = new URL(candidate);
+      if (!parsed.hostname.includes(".")) continue;
+      normalized = parsed.toString();
+    } catch {
+      continue;
+    }
+    // Keep what the user typed (stored embeds key on it), dedupe on the
+    // parsed form.
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    urls.push(candidate);
+    if (urls.length >= limit) break;
+  }
+  return urls;
+}
+
+// ── Outcomes ────────────────────────────────────────────────────────────────
+
+/**
+ * Thrown by a provider fetcher when the upstream failed in a way worth
+ * retrying (network error, timeout, 408/425/429, 5xx). Anything else that
+ * yields no embed (404, a page without metadata, a non-HTML file type) is a
+ * permanent "none" and must not hold the message's other embeds hostage.
+ */
+export class TransientEmbedError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "TransientEmbedError";
+  }
+}
+
+export function isTransientStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function isTransientFetchError(error: unknown): boolean {
+  if (error instanceof TransientEmbedError) return true;
+  if (error instanceof TypeError) return true; // network / DNS / TLS
+  if (error instanceof DOMException) {
+    return error.name === "AbortError" || error.name === "TimeoutError";
+  }
+  return false;
+}
+
+export type EmbedUrlOutcome =
+  | { url: string; status: "ok"; embed: EmbedInfo; stale?: boolean }
+  | { url: string; status: "none" }
+  | { url: string; status: "retry"; reason: string };
+
+export interface EmbedExtractionResult {
+  embeds: EmbedInfo[];
+  /** At least one URL hit a transient failure; the caller should retry. */
+  hadFailures: boolean;
+  outcomes: EmbedUrlOutcome[];
+}
+
 export async function extractAndProcessEmbeds(
   content: string,
 ): Promise<EmbedInfo[]> {
@@ -68,46 +187,187 @@ export async function extractAndProcessEmbeds(
   return result.embeds;
 }
 
-export interface EmbedExtractionResult {
-  embeds: EmbedInfo[];
-  hadFailures: boolean;
-}
-
+/**
+ * Resolve every embeddable URL in `content`. A transient failure for one URL
+ * never drops the others: successful URLs are returned, and a URL that failed
+ * transiently keeps the embed it already had (`previous`, matched by URL) so
+ * a retry can fill it in later.
+ */
 export async function extractAndProcessEmbedsWithStatus(
   content: string,
+  options?: { previous?: EmbedInfo[]; bypassCache?: boolean },
 ): Promise<EmbedExtractionResult> {
-  const matches = content.match(URL_REGEX);
-  if (!matches || matches.length === 0)
-    return { embeds: [], hadFailures: false };
+  const urls = extractEmbedUrls(content);
+  if (urls.length === 0) {
+    return { embeds: [], hadFailures: false, outcomes: [] };
+  }
 
-  // Limit to 3 embeds max per message to prevent abuse
-  const urls = [...new Set(matches)].slice(0, 3);
-
-  const embedPromises = urls.map((url) => fetchEmbedMetadata(url));
-  const results = await Promise.allSettled(embedPromises);
+  const previousByUrl = new Map(
+    (options?.previous ?? []).map((embed) => [embed.url, embed]),
+  );
+  const outcomes = await Promise.all(
+    urls.map((url) =>
+      resolveEmbedUrl(url, { bypassCache: options?.bypassCache }),
+    ),
+  );
 
   const embeds: EmbedInfo[] = [];
   let hadFailures = false;
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value) {
-      embeds.push(result.value);
-    } else {
+  for (const outcome of outcomes) {
+    if (outcome.status === "ok") {
+      embeds.push(outcome.embed);
+    } else if (outcome.status === "retry") {
       hadFailures = true;
-      log.error(
-        "Failed to fetch embed metadata:",
-        result.status === "rejected" ? result.reason : "no metadata returned",
-      );
+      log.warn("Embed fetch failed transiently; will retry", {
+        url: outcome.url,
+        reason: outcome.reason,
+      });
+      const previous = previousByUrl.get(outcome.url);
+      if (previous) embeds.push(previous);
     }
   }
 
-  return { embeds, hadFailures };
+  return { embeds, hadFailures, outcomes };
+}
+
+// ── URL-level cache ─────────────────────────────────────────────────────────
+//
+// The embed persisted on the message (D1) is the primary copy; this cache
+// only stops the same URL from being re-scraped when it is posted again, when
+// a message is edited, or when a retry runs. Entries outlive their freshness
+// so a stale embed can stand in when the refetch fails transiently
+// (stale-on-error). Transient failures are never cached; permanent "no embed"
+// results are, briefly (negative cache).
+
+const EMBED_CACHE_VERSION = "v2";
+const EMBED_CACHE_STALE_GRACE_SECONDS = 3 * 24 * 60 * 60;
+const EMBED_FRESH_SECONDS = 6 * 60 * 60;
+/** Signed media URLs and engagement counts go stale quickly. */
+const SOCIAL_EMBED_FRESH_SECONDS = 20 * 60;
+const UNAVAILABLE_EMBED_FRESH_SECONDS = 6 * 60 * 60;
+export const EMBED_NEGATIVE_CACHE_SECONDS = 60 * 60;
+
+export interface EmbedCacheEntry {
+  v: 2;
+  status: "ok" | "none";
+  embed?: EmbedInfo;
+  /** Epoch ms after which the entry is stale. */
+  freshUntil: number;
+}
+
+export function embedCacheKey(url: string): string {
+  const key = `${EMBED_CACHE_VERSION}:embed:${url}`;
+  // KV keys max out at 512 bytes.
+  return key.length <= 480
+    ? key
+    : `${EMBED_CACHE_VERSION}:embed:h:${nextEmbedId(url)}:${url.slice(0, 300)}`;
+}
+
+function isSocialEmbedUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return (
+      isXPostHostname(hostname) ||
+      hostname.includes("tiktok.com") ||
+      hostname.includes("instagram.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function embedFreshSeconds(url: string, embed: EmbedInfo): number {
+  if (embed.unavailable) return UNAVAILABLE_EMBED_FRESH_SECONDS;
+  return isSocialEmbedUrl(url)
+    ? SOCIAL_EMBED_FRESH_SECONDS
+    : EMBED_FRESH_SECONDS;
+}
+
+const embedFlights = new Map<string, Promise<EmbedUrlOutcome>>();
+
+async function resolveEmbedUrl(
+  url: string,
+  options?: { bypassCache?: boolean },
+): Promise<EmbedUrlOutcome> {
+  const key = embedCacheKey(url);
+  const run = async (): Promise<EmbedUrlOutcome> => {
+    const cached = options?.bypassCache
+      ? null
+      : await cacheGet<EmbedCacheEntry>(key);
+    const now = Date.now();
+    if (cached?.v === 2 && cached.freshUntil > now) {
+      return cached.status === "ok" && cached.embed
+        ? { url, status: "ok", embed: { ...cached.embed, url } }
+        : { url, status: "none" };
+    }
+
+    const outcome = await fetchEmbedOutcome(url);
+
+    if (outcome.status === "retry") {
+      if (cached?.v === 2 && cached.status === "ok" && cached.embed) {
+        return {
+          url,
+          status: "ok",
+          embed: { ...cached.embed, url },
+          stale: true,
+        };
+      }
+      return outcome;
+    }
+
+    const freshSeconds =
+      outcome.status === "ok"
+        ? embedFreshSeconds(url, outcome.embed)
+        : EMBED_NEGATIVE_CACHE_SECONDS;
+    const entry: EmbedCacheEntry =
+      outcome.status === "ok"
+        ? {
+            v: 2,
+            status: "ok",
+            embed: outcome.embed,
+            freshUntil: now + freshSeconds * 1000,
+          }
+        : { v: 2, status: "none", freshUntil: now + freshSeconds * 1000 };
+    void cacheSet(
+      key,
+      entry,
+      outcome.status === "ok"
+        ? freshSeconds + EMBED_CACHE_STALE_GRACE_SECONDS
+        : freshSeconds,
+    );
+    return outcome;
+  };
+  // A forced refresh must not join a cached flight already in progress.
+  return options?.bypassCache ? run() : singleFlight(embedFlights, key, run);
+}
+
+async function fetchEmbedOutcome(url: string): Promise<EmbedUrlOutcome> {
+  try {
+    const embed = await fetchEmbedMetadata(url);
+    return embed ? { url, status: "ok", embed } : { url, status: "none" };
+  } catch (error) {
+    if (isTransientFetchError(error)) {
+      return {
+        url,
+        status: "retry",
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+    log.error("Embed fetch failed permanently:", url, error);
+    return { url, status: "none" };
+  }
 }
 
 async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
-  const parsed = new URL(url);
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
   const hostname = parsed.hostname.toLowerCase();
 
-  if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
+  if (isYouTubeHostname(hostname)) {
     return await fetchYouTubeData(url);
   }
 
@@ -123,15 +383,21 @@ async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
     return await fetchTikTokDataRefreshed(url);
   }
 
-  if (
-    hostname.includes("spotify.com") ||
-    hostname.includes("open.spotify.com")
-  ) {
+  if (hostname === "open.spotify.com" || hostname === "spotify.link") {
     return await fetchSpotifyData(url);
   }
 
-  // Default OpenGraph fallback
+  // Default: an OpenGraph page or a direct image/video file.
   return await fetchOpenGraphData(url);
+}
+
+function isYouTubeHostname(hostname: string): boolean {
+  const normalized = normalizeHostname(hostname);
+  return (
+    normalized === "youtu.be" ||
+    normalized === "youtube.com" ||
+    normalized.endsWith(".youtube.com")
+  );
 }
 
 function normalizeHostname(hostname: string): string {
@@ -175,20 +441,55 @@ function extractTweetScreenName(parsed: URL): string {
 
 // ── Provider Fetchers ─────────────────────────────────────────────────────────
 
+/** The 11-character video id from any YouTube URL shape we embed. */
+export function extractYouTubeVideoId(rawUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  const hostname = normalizeHostname(parsed.hostname);
+  const idPattern = /^[A-Za-z0-9_-]{6,20}$/;
+  if (hostname === "youtu.be") {
+    const id = parsed.pathname.split("/").filter(Boolean)[0];
+    return id && idPattern.test(id) ? id : null;
+  }
+  const fromQuery = parsed.searchParams.get("v");
+  if (fromQuery && idPattern.test(fromQuery)) return fromQuery;
+  const pathMatch = parsed.pathname.match(
+    /^\/(?:shorts|live|embed|v|e)\/([A-Za-z0-9_-]{6,20})(?:[/?#]|$)/,
+  );
+  return pathMatch?.[1] ?? null;
+}
+
 async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
-  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+  const videoId = extractYouTubeVideoId(url);
+  // Channel, playlist and search pages are ordinary OpenGraph pages.
+  if (!videoId) return await fetchOpenGraphData(url);
+
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(
+    `https://www.youtube.com/watch?v=${videoId}`,
+  )}&format=json`;
   const res = await safeFetch(oembedUrl);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    if (isTransientStatus(res.status)) {
+      throw new TransientEmbedError("YouTube oEmbed unavailable", res.status);
+    }
+    // 400/404: removed or never existed.
+    if (res.status === 404 || res.status === 400) {
+      return buildUnavailableEmbed(
+        url,
+        { name: "YouTube", url: "https://www.youtube.com" },
+        { color: "#FF0000" },
+      );
+    }
+    // 401/403: private or embedding disabled. The watch page still has a
+    // title and thumbnail, so fall back to a link card.
+    return await fetchOpenGraphData(url);
+  }
 
   const data = (await readJsonCapped(res)) as any;
-  const videoIdMatch =
-    url.match(/[?&]v=([^&]+)/) ||
-    url.match(/youtu\.be\/([^?]+)/) ||
-    url.match(/youtube\.com\/shorts\/([^?&/]+)/);
-  const videoId = videoIdMatch ? videoIdMatch[1] : null;
-
-  if (!videoId) return null;
-
   const isShort = /youtube\.com\/shorts\//i.test(url);
   const videoDimensions = await fetchYouTubeVideoDimensions(videoId, url);
   const fallbackDimensions = isShort
@@ -424,7 +725,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
     try {
       twitterLog.info(`Trying API: ${apiUrl}`);
       const res = await safeFetch(apiUrl, {
-        headers: { "User-Agent": "RalphMeet/1.0 (+https://ralph.dev)" },
+        headers: { "User-Agent": getBotUserAgent() },
       });
       twitterLog.info(
         `API response status: ${res.status}, content-type: ${res.headers.get("content-type")}`,
@@ -447,7 +748,9 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       }
 
       if (!res.ok) {
-        sawTransient = true;
+        // Only 5xx/429-style failures are worth a retry; any other 4xx just
+        // means this mirror cannot help.
+        if (isTransientStatus(res.status)) sawTransient = true;
         const errBody =
           typeof data === "string"
             ? data
@@ -459,7 +762,9 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       }
 
       if (!contentType.includes("json")) {
-        sawTransient = true;
+        // api.vxtwitter.com answers a missing tweet with a 200 HTML page.
+        // That is "no data here", not an outage, so it must not block the
+        // unavailable tombstone below.
         twitterLog.info(`API returned non-JSON content-type: ${contentType}`);
         continue;
       }
@@ -609,6 +914,10 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       { name: "X", url: "https://x.com" },
       { color: "#1D9BF0", footerIcon: X_ICON_URL },
     );
+  }
+
+  if (sawTransient) {
+    throw new TransientEmbedError("X embed mirrors are unavailable");
   }
 
   return null;
@@ -1429,6 +1738,13 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
         { color: "#E1306C" },
       );
     }
+    // oEmbed threw (status 0) or is rate limited/down: try again later.
+    if (oembedLookup.status === 0 || isTransientStatus(oembedLookup.status)) {
+      throw new TransientEmbedError(
+        "Instagram metadata unavailable",
+        oembedLookup.status,
+      );
+    }
     return null;
   }
 
@@ -1484,12 +1800,22 @@ async function fetchTikTokDataRefreshed(
   const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
   const [oembedResult, proxyResult] = await Promise.allSettled([
     safeFetch(oembedUrl),
-    fetchTikTokProxyMetadata(url),
+    fetchTikTokProxyLookup(url),
   ]);
 
   const res = oembedResult.status === "fulfilled" ? oembedResult.value : null;
-  const proxyData =
+  const proxyLookup =
     proxyResult.status === "fulfilled" ? proxyResult.value : null;
+  const proxyData = proxyLookup?.metadata ?? null;
+  // oEmbed keeps answering 200 with a generic player for a deleted post, so
+  // TikTok's player API ("nil_core_data") is the signal that counts.
+  if (proxyLookup?.unavailable && !proxyData) {
+    return buildUnavailableEmbed(
+      url,
+      { name: "TikTok", url: "https://www.tiktok.com" },
+      { color: "#FF0050" },
+    );
+  }
   if (!res?.ok && !proxyData) {
     if (res && isUnavailableSocialStatus(res.status)) {
       return buildUnavailableEmbed(
@@ -1497,6 +1823,10 @@ async function fetchTikTokDataRefreshed(
         { name: "TikTok", url: "https://www.tiktok.com" },
         { color: "#FF0050" },
       );
+    }
+    const oembedTransient = !res || isTransientStatus(res.status);
+    if (oembedTransient && (proxyLookup?.transient ?? true)) {
+      throw new TransientEmbedError("TikTok metadata unavailable", res?.status);
     }
     return null;
   }
@@ -1590,145 +1920,273 @@ async function fetchTikTokDataRefreshed(
   };
 }
 
-async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
-  const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
-  const res = await safeFetch(oembedUrl);
-  if (!res.ok) return null;
+// ── OpenGraph pages and direct media ────────────────────────────────────────
 
-  const data = (await readJsonCapped(res)) as any;
+const PREVIEW_ACCEPT =
+  "text/html,application/xhtml+xml;q=0.9,image/avif,image/webp,image/*;q=0.8,video/*;q=0.7,*/*;q=0.5";
+const DIRECT_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+]);
+const DIRECT_VIDEO_TYPES = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+]);
+const DIRECT_MEDIA_EXTENSION =
+  /\.(?:png|jpe?g|gif|webp|avif|mp4|m4v|webm|mov)$/i;
+const MAX_TITLE_LENGTH = 256;
+const MAX_DESCRIPTION_LENGTH = 350;
 
-  // Extract video ID from the oEmbed HTML or URL
-  const videoIdMatch =
-    data.html?.match(/data-video-id="([^"]+)"/) || url.match(/video\/(\d+)/);
-  const videoId = videoIdMatch ? videoIdMatch[1] : null;
-  if (!videoId) return null;
+/**
+ * Many sites (Reddit, for one) only serve OpenGraph tags to known
+ * link-preview crawlers and answer anything else with a bot wall, so the
+ * preview fetch identifies as one. The contact URL comes from config.
+ */
+export function getLinkPreviewUserAgent(): string {
+  return getBotUserAgent().replace(
+    "RalphMeetBot/1.0;",
+    "RalphMeetBot/1.0; Discordbot/2.0;",
+  );
+}
+
+function clipText(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
+}
+
+async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+    return null;
+  }
+
+  const looksLikeMedia = DIRECT_MEDIA_EXTENSION.test(parsedUrl.pathname);
+  const res = await safeFetch(url, {
+    redirect: "follow",
+    headers: {
+      "User-Agent": getLinkPreviewUserAgent(),
+      Accept: PREVIEW_ACCEPT,
+      "Accept-Language": "en-US,en;q=0.8",
+      // Only the header bytes are needed to size a file.
+      ...(looksLikeMedia ? { Range: `bytes=0-${MEDIA_SNIFF_BYTES - 1}` } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    if (isTransientStatus(res.status)) {
+      throw new TransientEmbedError(
+        `Link preview fetch failed with ${res.status}`,
+        res.status,
+      );
+    }
+    return null;
+  }
+
+  const finalUrl = res.url || url;
+  const contentType = (res.headers.get("content-type") ?? "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  if (
+    DIRECT_IMAGE_TYPES.has(contentType) ||
+    DIRECT_VIDEO_TYPES.has(contentType)
+  ) {
+    const bytes = await readLeadingBytes(res.body);
+    return buildDirectMediaEmbed(url, contentType, bytes);
+  }
+
+  if (!contentType.includes("html")) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+
+  return buildOpenGraphEmbed(url, finalUrl, await readTextCapped(res));
+}
+
+/**
+ * An embed for a link that points straight at an image, GIF or video file.
+ * Rendered as bare media (no card), sized from the file header so the
+ * message row does not jump when it loads.
+ */
+export function buildDirectMediaEmbed(
+  url: string,
+  contentType: string,
+  bytes: Uint8Array,
+): EmbedInfo | null {
+  // The page CSP only allows https media.
+  const mediaUrl = resolvePreviewAssetUrl(url, url);
+  if (!mediaUrl) return null;
+
+  const isVideo = contentType.startsWith("video/");
+  const dimensions = isVideo
+    ? contentType === "video/webm"
+      ? null
+      : sniffMp4Dimensions(bytes)
+    : sniffImageDimensions(bytes);
+  const width = dimensions?.width;
+  const height = dimensions?.height;
+
+  if (isVideo) {
+    return {
+      id: nextEmbedId(url),
+      url,
+      type: "video",
+      direct: true,
+      video: {
+        url: mediaUrl,
+        kind: "direct",
+        contentType,
+        ...(width && height ? { width, height } : {}),
+      },
+      fields: [],
+    };
+  }
+
+  return {
+    id: nextEmbedId(url),
+    url,
+    type: "image",
+    direct: true,
+    thumbnail: { url: mediaUrl, ...(width && height ? { width, height } : {}) },
+    media: [
+      {
+        type: "image",
+        url: mediaUrl,
+        contentType,
+        ...(width && height ? { width, height } : {}),
+        ...(contentType === "image/gif" ? { isGif: true } : {}),
+      },
+    ],
+    fields: [],
+  };
+}
+
+export function buildOpenGraphEmbed(
+  url: string,
+  finalUrl: string,
+  html: string,
+): EmbedInfo | null {
+  const meta = parseHtmlMeta(html);
+  const title = meta.first("og:title", "twitter:title") ?? meta.title;
+  if (!title) return null;
+
+  const description = meta.first(
+    "og:description",
+    "twitter:description",
+    "description",
+  );
+  const ogImage = meta.first("og:image:secure_url", "og:image", "og:image:url");
+  const image = resolvePreviewAssetUrl(
+    ogImage ?? meta.first("twitter:image", "twitter:image:src"),
+    finalUrl,
+  );
+  const width = ogImage
+    ? readPositiveInt(meta.get("og:image:width"))
+    : undefined;
+  const height = ogImage
+    ? readPositiveInt(meta.get("og:image:height"))
+    : undefined;
+  const twitterCard = meta.get("twitter:card")?.toLowerCase();
+  const imageLayout: EmbedInfo["imageLayout"] = !image
+    ? undefined
+    : twitterCard === "summary_large_image" || twitterCard === "player"
+      ? "large"
+      : twitterCard === "summary"
+        ? "thumbnail"
+        : width && height && width >= 400 && width >= height * 1.2
+          ? "large"
+          : "thumbnail";
+
+  let origin: URL;
+  try {
+    origin = new URL(finalUrl);
+  } catch {
+    origin = new URL(url);
+  }
+  const hostname = origin.hostname.replace(/^www\./i, "");
+  const ogType = meta.get("og:type")?.toLowerCase();
 
   const embed: EmbedInfo = {
     id: nextEmbedId(url),
     url,
-    type: "video",
-    rawTitle: `TikTok · ${data.author_name || "Unknown"}`,
-    rawDescription: data.title,
-    author: data.author_name
-      ? {
-          name: data.author_name,
-          url: data.author_url,
-        }
+    type: ogType?.includes("video") ? "video" : "link",
+    rawTitle: clipText(title, MAX_TITLE_LENGTH),
+    rawDescription: description
+      ? clipText(description, MAX_DESCRIPTION_LENGTH)
       : undefined,
     provider: {
-      name: "TikTok",
-      url: data.provider_url || "https://www.tiktok.com",
+      name: meta.get("og:site_name") ?? hostname,
+      url: `${origin.protocol}//${origin.host}`,
     },
-    color: "#FF0050",
-    video: {
-      url: `https://www.tiktok.com/player/v1/${videoId}`,
-      width: 325,
-      height: 738,
-      kind: "player",
-    },
-    thumbnail: data.thumbnail_url
-      ? {
-          url: data.thumbnail_url,
-          width: data.thumbnail_width,
-          height: data.thumbnail_height,
-        }
-      : undefined,
     fields: [],
   };
+
+  if (image) {
+    embed.thumbnail = {
+      url: image,
+      ...(width && height ? { width, height } : {}),
+    };
+    embed.imageLayout = imageLayout;
+  }
 
   return embed;
 }
 
-async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
+/** `open.spotify.com/intl-de/track/x` -> `open.spotify.com/track/x`. */
+export function normalizeSpotifyUrl(rawUrl: string): string {
   try {
-    const res = await safeFetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      },
-    });
-
-    if (!res.ok || !res.headers.get("content-type")?.includes("text/html")) {
-      return null;
-    }
-
-    const html = await readTextCapped(res);
-
-    const titleMatch =
-      html.match(/<meta property="og:title" content="([^"]+)"/i) ||
-      html.match(/<title>([^<]+)<\/title>/i);
-    const descMatch =
-      html.match(/<meta property="og:description" content="([^"]+)"/i) ||
-      html.match(/<meta name="description" content="([^"]+)"/i);
-    const imgMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-    const siteNameMatch = html.match(
-      /<meta property="og:site_name" content="([^"]+)"/i,
-    );
-    const typeMatch = html.match(/<meta property="og:type" content="([^"]+)"/i);
-
-    if (!titleMatch) return null;
-
-    const hostname = new URL(url).hostname;
-
-    const embed: EmbedInfo = {
-      id: nextEmbedId(url),
-      url,
-      type: typeMatch?.[1]?.includes("video") ? "video" : "link",
-      rawTitle: titleMatch?.[1] || hostname,
-      rawDescription: descMatch?.[1],
-      fields: [],
-    };
-
-    if (siteNameMatch?.[1]) {
-      embed.provider = {
-        name: siteNameMatch[1],
-        url: `https://${hostname}`,
-      };
-    }
-
-    if (imgMatch?.[1]) {
-      embed.thumbnail = {
-        url: imgMatch[1],
-      };
-    }
-
-    return embed;
+    const parsed = new URL(rawUrl);
+    parsed.pathname = parsed.pathname.replace(/^\/intl-[a-z-]+(?=\/)/i, "");
+    return parsed.toString();
   } catch {
-    return null;
+    return rawUrl;
   }
 }
 
 async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
-  try {
-    const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
-    const res = await safeFetch(oembedUrl);
-    if (!res.ok) return await fetchOpenGraphData(url);
-
-    const data = (await readJsonCapped(res)) as any;
-
-    return {
-      id: nextEmbedId(url),
-      url,
-      type: "link",
-      rawTitle: data.title,
-      rawDescription: data.author_name
-        ? `Spotify - ${data.author_name}`
-        : "Spotify",
-      provider: {
-        name: "Spotify",
-        url: "https://spotify.com/",
-      },
-      color: "#1DB954",
-      thumbnail: data.thumbnail_url
-        ? {
-            url: data.thumbnail_url,
-            width: data.thumbnail_width ?? 300,
-            height: data.thumbnail_height ?? 300,
-          }
-        : undefined,
-      fields: [],
-    };
-  } catch {
+  const canonicalUrl = normalizeSpotifyUrl(url);
+  const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(canonicalUrl)}`;
+  const res = await safeFetch(oembedUrl);
+  if (!res.ok) {
+    if (isTransientStatus(res.status)) {
+      throw new TransientEmbedError("Spotify oEmbed unavailable", res.status);
+    }
     return await fetchOpenGraphData(url);
   }
+
+  const data = (await readJsonCapped(res)) as any;
+
+  return {
+    id: nextEmbedId(url),
+    url,
+    type: "link",
+    rawTitle: data.title,
+    rawDescription: data.author_name
+      ? `Spotify - ${data.author_name}`
+      : "Spotify",
+    provider: {
+      name: "Spotify",
+      url: "https://spotify.com/",
+    },
+    color: "#1DB954",
+    thumbnail: data.thumbnail_url
+      ? {
+          url: data.thumbnail_url,
+          width: data.thumbnail_width ?? 300,
+          height: data.thumbnail_height ?? 300,
+        }
+      : undefined,
+    fields: [],
+  };
 }

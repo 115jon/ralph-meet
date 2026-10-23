@@ -1,16 +1,25 @@
 import { getBotUserAgent } from "@/lib/platform";
 import { createFileRoute } from "@tanstack/react-router";
 import { cacheGet, cacheSet } from "@/lib/cache";
-import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { fetchTikTokProxyLookup } from "@/lib/share-preview-proxy";
 import { clog } from "@/lib/console-logger";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 
 const log = clog("tiktok-video");
 
-// Tikwm signed URLs are valid for ~1 hour. Cache for 50 minutes to stay fresh
-// while minimising tikwm hits. KV key is just the canonical TikTok video URL.
-const TIKTOK_VIDEO_TTL = 50 * 60; // 50 minutes in seconds
-const TIKTOK_VIDEO_CACHE_CONTROL = "public, max-age=2700";
+// TikTok signed media URLs carry an `x-expires` epoch (about an hour out).
+// KV keeps a result for up to 50 minutes, but a cached result is only served
+// while every signature in it has more than the safety window left, and the
+// browser may cache it only until that point too. Before, a 49-minute-old KV
+// hit went out with `public, max-age=2700`, so a browser could keep replaying
+// media URLs for over an hour after they had expired.
+const TIKTOK_VIDEO_TTL = 50 * 60;
+const TIKTOK_VIDEO_CACHE_CONTROL = "private, max-age=2700";
+const TIKTOK_SIGNATURE_SAFETY_SECONDS = 5 * 60;
+const TIKTOK_BROWSER_CACHE_MAX_SECONDS = 45 * 60;
+/** A post TikTok confirmed gone: remember it so every view is not a lookup. */
+export const TIKTOK_GONE_TTL = 10 * 60;
+const TIKTOK_GONE_CACHE_CONTROL = `private, max-age=${TIKTOK_GONE_TTL}`;
 
 export interface TikTokVideoResult {
   videoUrl: string | null;
@@ -97,7 +106,96 @@ export function hasTikTokVideoResultContent(
   );
 }
 
-const GET = async ({ request }: any) => {
+function readTikTokSignatureExpiry(
+  rawUrl: string | null | undefined,
+): number | null {
+  if (!rawUrl) return null;
+
+  try {
+    const rawValue = new URL(rawUrl).searchParams.get("x-expires");
+    if (!rawValue) return null;
+    const parsedValue = Number(rawValue);
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Earliest `x-expires` across every signed URL in the result. */
+export function earliestTikTokSignatureExpiry(
+  result: TikTokVideoResult,
+): number | null {
+  const urls = [
+    result.videoUrl,
+    result.coverUrl,
+    result.authorAvatarUrl,
+    result.audio?.url,
+    result.audio?.artworkUrl,
+    ...(result.media ?? []).flatMap((item) => [item.url, item.thumbnailUrl]),
+  ];
+  const expiries = urls
+    .map((url) => readTikTokSignatureExpiry(url))
+    .filter((value): value is number => value !== null);
+  if (expiries.length === 0) return null;
+  return Math.min(...expiries);
+}
+
+export function isTikTokVideoResultFresh(
+  result: TikTokVideoResult,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): boolean {
+  const expiry = earliestTikTokSignatureExpiry(result);
+  if (expiry === null) return true;
+  return expiry - nowSeconds > TIKTOK_SIGNATURE_SAFETY_SECONDS;
+}
+
+export function tiktokVideoCacheControl(
+  result: TikTokVideoResult,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): string {
+  const expiry = earliestTikTokSignatureExpiry(result);
+  if (expiry === null) return TIKTOK_VIDEO_CACHE_CONTROL;
+
+  const ttl = expiry - nowSeconds - TIKTOK_SIGNATURE_SAFETY_SECONDS;
+  if (ttl < 30) return "no-store";
+  return `private, max-age=${Math.min(
+    TIKTOK_BROWSER_CACHE_MAX_SECONDS,
+    Math.floor(ttl),
+  )}`;
+}
+
+/** KV lifetime: never past the point the signatures stop being fresh. */
+export function tiktokVideoKvTtl(
+  result: TikTokVideoResult,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): number {
+  const expiry = earliestTikTokSignatureExpiry(result);
+  if (expiry === null) return TIKTOK_VIDEO_TTL;
+  return Math.max(
+    60,
+    Math.min(
+      TIKTOK_VIDEO_TTL,
+      expiry - nowSeconds - TIKTOK_SIGNATURE_SAFETY_SECONDS,
+    ),
+  );
+}
+
+export function tiktokVideoCacheKey(lookupUrl: string): string {
+  return `v1:tiktok-video:${lookupUrl}`;
+}
+
+export function tiktokGoneCacheKey(lookupUrl: string): string {
+  return `v1:tiktok-video:gone:${lookupUrl}`;
+}
+
+function goneResponse(): Response {
+  return Response.json(
+    { error: "This TikTok is no longer available", unavailable: true },
+    { status: 404, headers: { "Cache-Control": TIKTOK_GONE_CACHE_CONTROL } },
+  );
+}
+
+export const GET = async ({ request }: any) => {
   const url = new URL(request.url);
   const videoUrl = url.searchParams.get("videoUrl");
 
@@ -130,39 +228,72 @@ const GET = async ({ request }: any) => {
       { status: 400 },
     );
   }
-  const resolvedLookupUrl = canonicalizeTikTokLookupUrl(
-    await resolveTikTokLookupUrl(initialLookupUrl),
-  );
-  if (!resolvedLookupUrl) {
-    return Response.json(
-      { error: "Only TikTok URLs are supported" },
-      { status: 400 },
-    );
-  }
-  const lookupUrls = buildTikTokMetadataLookupUrls(
-    initialLookupUrl,
-    resolvedLookupUrl,
-  );
-  const cacheKeys = lookupUrls.map(
-    (lookupUrl) => `v1:tiktok-video:${lookupUrl}`,
-  );
 
   try {
-    for (const cacheKey of cacheKeys) {
-      const cached = await cacheGet<TikTokVideoResult>(cacheKey);
-      if (hasTikTokVideoResultContent(cached)) {
+    // Hits for the URL as given skip the short-link HEAD round trip.
+    const initialCached = await cacheGet<TikTokVideoResult>(
+      tiktokVideoCacheKey(initialLookupUrl),
+    );
+    if (
+      hasTikTokVideoResultContent(initialCached) &&
+      isTikTokVideoResultFresh(initialCached)
+    ) {
+      return Response.json(initialCached, {
+        headers: { "Cache-Control": tiktokVideoCacheControl(initialCached) },
+      });
+    }
+    if (await cacheGet<boolean>(tiktokGoneCacheKey(initialLookupUrl))) {
+      return goneResponse();
+    }
+
+    const resolvedLookupUrl = canonicalizeTikTokLookupUrl(
+      await resolveTikTokLookupUrl(initialLookupUrl),
+    );
+    if (!resolvedLookupUrl) {
+      return Response.json(
+        { error: "Only TikTok URLs are supported" },
+        { status: 400 },
+      );
+    }
+    const lookupUrls = buildTikTokMetadataLookupUrls(
+      initialLookupUrl,
+      resolvedLookupUrl,
+    );
+
+    if (resolvedLookupUrl !== initialLookupUrl) {
+      const cached = await cacheGet<TikTokVideoResult>(
+        tiktokVideoCacheKey(resolvedLookupUrl),
+      );
+      if (
+        hasTikTokVideoResultContent(cached) &&
+        isTikTokVideoResultFresh(cached)
+      ) {
         return Response.json(cached, {
-          headers: {
-            "Cache-Control": TIKTOK_VIDEO_CACHE_CONTROL,
-          },
+          headers: { "Cache-Control": tiktokVideoCacheControl(cached) },
         });
       }
     }
 
     let meta = null;
+    let unavailable = false;
+    let transient = false;
     for (const lookupUrl of lookupUrls) {
-      meta = await fetchTikTokProxyMetadata(lookupUrl);
-      if (meta) break;
+      const lookup = await fetchTikTokProxyLookup(lookupUrl);
+      if (lookup.metadata) {
+        meta = lookup.metadata;
+        break;
+      }
+      unavailable ||= lookup.unavailable;
+      transient ||= lookup.transient;
+    }
+
+    if (!meta && unavailable) {
+      for (const lookupUrl of lookupUrls) {
+        cacheSet(tiktokGoneCacheKey(lookupUrl), true, TIKTOK_GONE_TTL).catch(
+          () => {},
+        );
+      }
+      return goneResponse();
     }
 
     const result: TikTokVideoResult = {
@@ -184,9 +315,17 @@ const GET = async ({ request }: any) => {
     };
 
     if (!hasTikTokVideoResultContent(result)) {
+      // Not confirmed gone: an upstream was down or returned nothing. The
+      // client keeps the stored embed (or the player iframe) and may retry.
       return Response.json(
         { error: "Could not resolve TikTok media" },
-        { status: 404 },
+        {
+          status: transient ? 503 : 502,
+          headers: {
+            "Cache-Control": "no-store",
+            ...(transient ? { "Retry-After": "60" } : {}),
+          },
+        },
       );
     }
 
@@ -195,23 +334,19 @@ const GET = async ({ request }: any) => {
       cacheLookupUrls.add(meta.canonicalUrl);
     }
 
+    const kvTtl = tiktokVideoKvTtl(result);
     for (const lookupUrl of cacheLookupUrls) {
-      cacheSet(`v1:tiktok-video:${lookupUrl}`, result, TIKTOK_VIDEO_TTL).catch(
-        () => {},
-      );
+      cacheSet(tiktokVideoCacheKey(lookupUrl), result, kvTtl).catch(() => {});
     }
 
     return Response.json(result, {
-      headers: {
-        // Tell the browser/CF edge to cache for 45 min (slightly under KV TTL)
-        "Cache-Control": TIKTOK_VIDEO_CACHE_CONTROL,
-      },
+      headers: { "Cache-Control": tiktokVideoCacheControl(result) },
     });
   } catch (e) {
     log.error("fetch failed:", e);
     return Response.json(
       { error: "Failed to resolve TikTok video" },
-      { status: 502 },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
 };

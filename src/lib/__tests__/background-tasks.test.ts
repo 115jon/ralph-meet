@@ -18,6 +18,7 @@ import {
   consumeBackgroundTaskBatch,
   scheduleMessagePostprocessing,
   retryMessagePostprocessing,
+  messagePostprocessingRetryDelayMs,
   type MessagePostprocessingTask,
   scheduleServerMemberCacheInvalidation,
   type BackgroundTaskEnvelope,
@@ -577,5 +578,180 @@ describe("background task queue", () => {
         sql.includes("DELETE FROM message_postprocessing_jobs"),
       ),
     ).toBe(true);
+  });
+
+  function recordingDb(options: { attempts?: number } = {}) {
+    const calls: Array<{ sql: string; args: unknown[] }> = [];
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind(...args: unknown[]) {
+            calls.push({ sql, args });
+            return {
+              async first() {
+                return sql.includes("SELECT attempts")
+                  ? { attempts: options.attempts ?? 0 }
+                  : null;
+              },
+              async all() {
+                return { results: [] };
+              },
+              async run() {
+                return { success: true, meta: { changes: 1 } };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+    return { db, calls };
+  }
+
+  it("keeps the job and queues a delayed, silent retry when embeds failed transiently", async () => {
+    const { db, calls } = recordingDb({ attempts: 0 });
+    const send = vi.fn(async () => undefined);
+    const message = createMessage(
+      createMessagePostprocessingTask({
+        messageId: "message-1",
+        channelId: "channel-1",
+        revision: 1,
+      }),
+      "message-task-partial",
+    );
+    processMessagePostprocessingTaskMock.mockResolvedValue({
+      retryEmbeds: true,
+    });
+
+    const env = {
+      ...consumerEnv(createCache(vi.fn(async () => undefined))),
+      DB: db,
+      BACKGROUND_TASKS: successfulQueue(send),
+    };
+    await consumeBackgroundTaskBatch(
+      {
+        queue: "ralph-meet-background-tasks",
+        messages: [message],
+      } as unknown as MessageBatch<unknown>,
+      env,
+    );
+
+    expect(message.ack).toHaveBeenCalledOnce();
+    expect(message.retry).not.toHaveBeenCalled();
+    expect(
+      calls.some(({ sql }) =>
+        sql.includes("DELETE FROM message_postprocessing_jobs"),
+      ),
+    ).toBe(false);
+    const upsert = calls.find(({ sql }) =>
+      sql.includes("ON CONFLICT(message_id, revision) DO UPDATE SET"),
+    );
+    expect(upsert?.sql).toContain("notify = 0");
+    expect(upsert?.args.slice(0, 4)).toEqual(["message-1", 1, "channel-1", 1]);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: expect.objectContaining({
+          type: "message.postprocess",
+          messageId: "message-1",
+          notify: false,
+        }),
+      }),
+      { contentType: "json", delaySeconds: 60 },
+    );
+  });
+
+  it("gives up and clears the job once embed retries are exhausted", async () => {
+    const { db, calls } = recordingDb({ attempts: 9 });
+    const send = vi.fn(async () => undefined);
+    const message = createMessage(
+      createMessagePostprocessingTask({
+        messageId: "message-1",
+        channelId: "channel-1",
+        revision: 1,
+      }),
+      "message-task-exhausted",
+    );
+    processMessagePostprocessingTaskMock.mockResolvedValue({
+      retryEmbeds: true,
+    });
+
+    await consumeBackgroundTaskBatch(
+      {
+        queue: "ralph-meet-background-tasks",
+        messages: [message],
+      } as unknown as MessageBatch<unknown>,
+      {
+        ...consumerEnv(createCache(vi.fn(async () => undefined))),
+        DB: db,
+        BACKGROUND_TASKS: successfulQueue(send),
+      },
+    );
+
+    expect(send).not.toHaveBeenCalled();
+    expect(
+      calls.some(({ sql }) =>
+        sql.includes("DELETE FROM message_postprocessing_jobs"),
+      ),
+    ).toBe(true);
+  });
+
+  it("backs embed retries off exponentially up to the cap", () => {
+    expect(messagePostprocessingRetryDelayMs(1)).toBe(60_000);
+    expect(messagePostprocessingRetryDelayMs(2)).toBe(120_000);
+    expect(messagePostprocessingRetryDelayMs(5)).toBe(16 * 60_000);
+    expect(messagePostprocessingRetryDelayMs(20)).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it("defers cron-retried rows whose embeds still fail instead of clearing them", async () => {
+    const { db, calls } = recordingDb({ attempts: 2 });
+    const realDb = db as unknown as {
+      prepare(sql: string): { bind(...args: unknown[]): unknown };
+    };
+    const originalPrepare = realDb.prepare.bind(realDb);
+    realDb.prepare = (sql: string) => {
+      const statement = originalPrepare(sql) as {
+        bind(...args: unknown[]): Record<string, unknown>;
+      };
+      if (!sql.includes("SELECT message_id")) return statement;
+      return {
+        bind: (...args: unknown[]) => ({
+          ...statement.bind(...args),
+          async all() {
+            return {
+              results: [
+                {
+                  message_id: "message-1",
+                  channel_id: "channel-1",
+                  revision: 1,
+                  notify: 0,
+                  attempts: 2,
+                },
+              ],
+            };
+          },
+        }),
+      };
+    };
+    processMessagePostprocessingTaskMock.mockResolvedValue({
+      retryEmbeds: true,
+    });
+
+    await retryMessagePostprocessing(
+      {
+        CACHE: createCache(vi.fn(async () => undefined)),
+        DB: db,
+        MEETING_ROOM: {} as DurableObjectNamespace,
+      },
+      5,
+    );
+
+    expect(
+      calls.some(({ sql }) =>
+        sql.includes("DELETE FROM message_postprocessing_jobs"),
+      ),
+    ).toBe(false);
+    const upsert = calls.find(({ sql }) =>
+      sql.includes("ON CONFLICT(message_id, revision) DO UPDATE SET"),
+    );
+    expect(upsert?.args[3]).toBe(3);
   });
 });

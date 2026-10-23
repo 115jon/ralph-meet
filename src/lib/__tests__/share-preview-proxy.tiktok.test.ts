@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchTikTokProxyMetadata } from "../share-preview-proxy";
+import {
+  fetchTikTokProxyLookup,
+  fetchTikTokProxyMetadata,
+} from "../share-preview-proxy";
 
 const TIKTOK_AUDIO_URL =
   "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg";
@@ -203,6 +206,86 @@ describe("fetchTikTokProxyMetadata", () => {
         durationSeconds: 61.667,
       },
     ]);
+  });
+
+  it("reads the player api duration as seconds, as TikTok sends it", async () => {
+    // Recorded from the live player API: a 51 s clip reports `duration: 51`.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.includes("/player/api/v1/items")) {
+          return Response.json({
+            items: [
+              {
+                id_str: "7646427256587308308",
+                author_info: { unique_id: "killa_cop_" },
+                video_info: {
+                  meta: { duration: 51, width: 576, height: 880 },
+                  url_list: [
+                    "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+                  ],
+                },
+              },
+            ],
+          });
+        }
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+
+    const result = await fetchTikTokProxyMetadata(
+      "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
+    );
+
+    expect(result?.media?.[0]?.durationSeconds).toBe(51);
+  });
+
+  it("reports a post the player api calls nil_core_data as unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.includes("/player/api/v1/items")) {
+          return Response.json({
+            extra: { fatal_item_ids: [] },
+            results: [
+              {
+                code: "nil_core_data",
+                id_str: "7644940658603592973",
+              },
+            ],
+            status_code: 0,
+          });
+        }
+        throw new Error(`tikwm should not be asked: ${url}`);
+      }) as unknown as typeof fetch,
+    );
+
+    await expect(
+      fetchTikTokProxyLookup(
+        "https://www.tiktok.com/@irlquandale/video/7644940658603592973",
+      ),
+    ).resolves.toEqual({ metadata: null, unavailable: true, transient: false });
+  });
+
+  it("flags a player api outage as transient rather than unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.includes("/player/api/v1/items")) {
+          return new Response("busy", { status: 503 });
+        }
+        return Response.json({ code: -1 });
+      }) as unknown as typeof fetch,
+    );
+
+    await expect(
+      fetchTikTokProxyLookup(
+        "https://www.tiktok.com/@someone/video/7644940658603592973",
+      ),
+    ).resolves.toEqual({ metadata: null, unavailable: false, transient: true });
   });
 
   it("prefers the uncropped TikTok origin cover for video posters", async () => {

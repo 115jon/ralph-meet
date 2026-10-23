@@ -5,9 +5,12 @@
  * LinkEmbed renders from the `embed` prop, but TikTok and Instagram cards also
  * fetch `/api/tiktok-video` / `/api/instagram-video` to hydrate, and every
  * provider image goes through `/api/proxy-media?url=...`. The fixture stubs
- * both: hydration fetches get a 404 (cards render from the static data), and
+ * both: hydration fetches get a 503 (cards render from the static data), a
+ * URL containing `irlquandale` gets the 404 a deleted post returns, one
+ * containing `loading.fixture` never answers (the loading state), and
  * proxied media whose real URL is a `data:` image is unwrapped so it loads
- * without the server.
+ * without the server. Payloads recorded from the real pipeline live in
+ * embed-fixture-payloads.ts.
  *
  * Surfaces:
  *   embed-generic   BaseEmbed link with image, without image, colour stripe, unavailable
@@ -18,9 +21,37 @@
  *   embed-social    Instagram single image
  *   embed-carousel  Instagram + TikTok photo carousels (dots, chevrons)
  *   embed-music     Spotify + TikTok audio chip
+ *   embed-youtube   recorded YouTube landscape + portrait
+ *   embed-links     recorded GitHub, article (large image), Reddit (thumbnail),
+ *                   legacy card whose image 404s
+ *   embed-direct    direct PNG, GIF and an MP4 the server could not size
+ *   embed-x-video   recorded X video, plus one stored without sizes
+ *   embed-states    TikTok loading, TikTok deleted after it was stored,
+ *                   stored tombstones (TikTok, X)
+ *   embed-spotify   recorded Spotify album + track
  */
 import type { EmbedInfo, EmbedMedia } from "@/lib/types";
 import { LinkEmbed } from "@/components/chat/LinkEmbed";
+import {
+  legacyLinkBrokenImage,
+  recordedArticle,
+  recordedDirectGif,
+  recordedDirectMp4,
+  recordedDirectPng,
+  recordedGitHub,
+  recordedInstagramReel,
+  recordedReddit,
+  recordedSpotifyAlbum,
+  recordedTikTokGone,
+  recordedTikTokVideo,
+  recordedXGone,
+  recordedXVideo,
+  recordedYouTubePortrait,
+  recordedYouTubeVideo,
+  tiktokAwaitingHydration,
+  tiktokDeletedSinceStored,
+  xVideoWithoutSize,
+} from "./embed-fixture-payloads";
 
 /* ------------------------------------------------------------------ */
 /* Stubs                                                                */
@@ -53,7 +84,19 @@ function installEmbedStubs() {
           ? input.href
           : input.url;
     if (/\/api\/(tiktok|instagram)-video\b/.test(url)) {
-      return Promise.resolve(new Response("{}", { status: 404 }));
+      const target = decodeURIComponent(url);
+      if (target.includes("loading.fixture")) {
+        return new Promise<Response>(() => {});
+      }
+      if (target.includes("irlquandale")) {
+        return Promise.resolve(
+          Response.json(
+            { error: "This TikTok is no longer available", unavailable: true },
+            { status: 404 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 503 }));
     }
     return originalFetch(input, init);
   };
@@ -454,6 +497,37 @@ const SURFACES: Record<string, Array<[string, EmbedInfo]>> = {
     ["TikTok photo carousel", tiktokCarousel],
   ],
   "embed-music": [["Spotify", spotify]],
+  "embed-youtube": [
+    ["YouTube (recorded)", recordedYouTubeVideo],
+    ["YouTube portrait (recorded)", recordedYouTubePortrait],
+  ],
+  "embed-links": [
+    ["GitHub repo, large image (recorded)", recordedGitHub],
+    ["Article, large image (recorded)", recordedArticle],
+    ["Reddit, small thumbnail (recorded)", recordedReddit],
+    ["Legacy card, image 404s", legacyLinkBrokenImage],
+  ],
+  "embed-direct": [
+    ["Direct PNG (recorded)", recordedDirectPng],
+    ["Direct GIF (recorded)", recordedDirectGif],
+    ["Direct MP4, unsized (recorded)", recordedDirectMp4],
+  ],
+  "embed-x-video": [
+    ["X video (recorded)", recordedXVideo],
+    ["X video stored without sizes", xVideoWithoutSize],
+  ],
+  "embed-states": [
+    ["TikTok (recorded)", recordedTikTokVideo],
+    ["TikTok loading", tiktokAwaitingHydration],
+    ["TikTok deleted after it was stored", tiktokDeletedSinceStored],
+    ["TikTok tombstone (recorded)", recordedTikTokGone],
+    ["X tombstone (recorded)", recordedXGone],
+    ["Instagram reel, thumbnail only (recorded)", recordedInstagramReel],
+  ],
+  "embed-spotify": [
+    ["Spotify album (recorded)", recordedSpotifyAlbum],
+    ["Spotify track", spotify],
+  ],
 };
 
 export function EmbedFixture({ surface }: { surface: string }) {
