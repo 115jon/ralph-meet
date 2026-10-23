@@ -1,7 +1,10 @@
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { REVEAL } from "@/components/ui/interaction";
+import { describeApiError } from "@/lib/api-errors";
 import { createCameraBackgroundEffect } from "@/lib/camera-background-effects";
 import {
   CAMERA_BACKGROUND_ACCEPT,
@@ -14,7 +17,7 @@ import {
   CAMERA_QUALITY_PROFILES,
   buildCameraVideoConstraints,
 } from "@/lib/camera-quality";
-import { getAuthAssetUrl } from "@/lib/platform";
+import { getAuthAssetUrl, isDesktop } from "@/lib/platform";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import type {
@@ -23,7 +26,13 @@ import type {
 } from "@/stores/useVoiceSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useShallow } from "zustand/shallow";
 import { VideoPlayer } from "../../voice/VideoPlayer";
 import {
@@ -34,6 +43,11 @@ import {
   SettingsSelect,
   type RowIds,
 } from "./primitives";
+import {
+  classifyMediaError,
+  describeMediaProblem,
+  useDeviceAccess,
+} from "./useDeviceAccess";
 
 const BACKGROUND_OPTIONS: Array<{
   id: string;
@@ -49,6 +63,9 @@ export function describeCameraQuality(id: string) {
   return profile ? `${profile.label}, ${profile.fps} fps` : id;
 }
 
+/** Why the preview is not showing video. */
+type PreviewProblem = "denied" | "missing" | "busy" | "unknown" | null;
+
 function BackgroundTile({
   selected,
   label,
@@ -59,7 +76,7 @@ function BackgroundTile({
   selected: boolean;
   label: string;
   onSelect: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   onRemove?: () => void;
 }) {
   return (
@@ -99,33 +116,101 @@ function BackgroundTile({
         </span>
       </button>
       {onRemove ? (
-        <button
-          type="button"
-          onClick={onRemove}
+        // Sits on the photo, so it keeps its own scrim and ink.
+        <IconButton
           aria-label={`Remove ${label}`}
-          className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-sm bg-black/60 text-white pointer-fine:opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-        >
-          <Icon name="trash" size="xs" />
-        </button>
+          icon="trash"
+          size="xs"
+          variant="plain"
+          onClick={onRemove}
+          className={cn(
+            "absolute right-1.5 top-1.5 bg-black/60 text-white",
+            REVEAL,
+          )}
+        />
       ) : null}
     </div>
   );
 }
 
-export default function CameraCard() {
+/**
+ * The compact empty block (14.1) that replaces the preview when there is no
+ * camera, or no permission to use it.
+ */
+function PreviewState({
+  title,
+  body,
+  action,
+  busy,
+  onAction,
+}: {
+  title: string;
+  body: string;
+  action: string;
+  busy?: boolean;
+  onAction: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      className="flex w-full max-w-[480px] flex-col items-center gap-3 rounded-md bg-rm-tint-1 px-6 py-8 text-center"
+    >
+      <Icon name="cameraOff" size="2xl" className="text-rm-text-muted" />
+      <div className="flex flex-col gap-1">
+        <p className="text-ui-md font-semibold text-rm-text">{title}</p>
+        <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
+          {body}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        loading={busy}
+        onClick={onAction}
+      >
+        {action}
+      </Button>
+    </div>
+  );
+}
+
+export type CameraCardProps = {
+  /**
+   * Whose voice settings to edit. Defaults to the signed-in user; rooms pass
+   * their room-scoped id.
+   */
+  settingsUserId?: string | null;
+  /** Start the preview on mount (the camera dialog). Studio waits to be asked. */
+  autoPreview?: boolean;
+  /** Rows only, without the card frame (the camera dialog is the frame). */
+  bare?: boolean;
+};
+
+export default function CameraCard({
+  settingsUserId: settingsUserIdProp,
+  autoPreview = false,
+  bare = false,
+}: CameraCardProps = {}) {
   const { user } = useUser();
-  const settingsUserId = user?.id ?? null;
+  const settingsUserId =
+    settingsUserIdProp !== undefined ? settingsUserIdProp : (user?.id ?? null);
   const { videoInputs } = useMediaDevices();
+  const { status: accessStatus, rescan } = useDeviceAccess("videoinput");
+  const accessNone = accessStatus === "none";
   const vSettings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(settingsUserId)),
   );
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
 
-  // The preview turns the camera on, so it waits to be asked.
-  const [previewOn, setPreviewOn] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  // The preview turns the camera on, so it waits to be asked (unless the
+  // surface exists to show it).
+  const [previewOn, setPreviewOn] = useState(autoPreview);
+  const [previewProblem, setPreviewProblem] = useState<PreviewProblem>(null);
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const [effectError, setEffectError] = useState(false);
   const webcamStreamRef = useRef<MediaStream | null>(null);
   const previewEffectRef = useRef<any>(null);
   const previewRequestIdRef = useRef(0);
@@ -141,6 +226,8 @@ export default function CameraCard() {
   latestCustomCameraBackgroundsRef.current =
     vSettings.customCameraBackgrounds ?? [];
 
+  const noCamera = accessNone || previewProblem === "missing";
+
   const applyPreviewStream = useCallback(
     async (
       stream: MediaStream | null,
@@ -150,6 +237,7 @@ export default function CameraCard() {
       const requestId = ++previewRequestIdRef.current;
       previewEffectRef.current?.stop?.();
       previewEffectRef.current = null;
+      setEffectError(false);
 
       if (!stream) {
         setPreviewStream(null);
@@ -178,9 +266,10 @@ export default function CameraCard() {
         } else {
           setPreviewStream(stream);
         }
-      } catch (err) {
+      } catch {
         if (previewRequestIdRef.current === requestId) {
-          console.error("Failed to apply background effect:", err);
+          // Show the plain camera and say why the background is missing.
+          setEffectError(true);
           setPreviewStream(stream);
         }
       }
@@ -224,11 +313,11 @@ export default function CameraCard() {
       })
       .catch((error) => {
         if (cancelled) return;
-        const status = (error as any)?.status;
+        // Guests in a room have no account to sync to; say so plainly.
         setUploadError(
-          status === 401
+          (error as { status?: number })?.status === 401
             ? "Sign in to sync uploaded backgrounds."
-            : "Couldn't load your saved backgrounds.",
+            : describeApiError(error, "load your saved backgrounds"),
         );
       })
       .finally(() => {
@@ -242,7 +331,7 @@ export default function CameraCard() {
 
   // Webcam stream lifecycle, only while the preview is on.
   useEffect(() => {
-    if (!previewOn) return undefined;
+    if (!previewOn || accessNone) return undefined;
     let active = true;
 
     const startWebcam = async () => {
@@ -264,21 +353,20 @@ export default function CameraCard() {
           return;
         }
 
-        setPreviewError(null);
+        setPreviewProblem(null);
         webcamStreamRef.current = stream;
         await applyPreviewStream(
           stream,
           latestCameraBackgroundRef.current,
           latestCustomCameraBackgroundsRef.current,
         );
+        // A first grant turns "Camera 1" into real names.
+        void rescan();
       } catch (err) {
-        console.error("Failed to start tab camera preview:", err);
         if (active) {
           webcamStreamRef.current = null;
           setPreviewStream(null);
-          setPreviewError(
-            "Couldn't start your camera. Check that Ralph Meet has camera permission and no other app is using it.",
-          );
+          setPreviewProblem(classifyMediaError(err));
         }
       }
     };
@@ -297,8 +385,11 @@ export default function CameraCard() {
       setPreviewStream(null);
     };
   }, [
+    accessNone,
     applyPreviewStream,
     previewOn,
+    previewAttempt,
+    rescan,
     vSettings.videoDeviceId,
     vSettings.cameraQuality,
   ]);
@@ -317,6 +408,13 @@ export default function CameraCard() {
     vSettings.cameraBackground,
     vSettings.customCameraBackgrounds,
   ]);
+
+  const retryPreview = async () => {
+    setPreviewProblem(null);
+    await rescan();
+    setPreviewOn(true);
+    setPreviewAttempt((n) => n + 1);
+  };
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -347,15 +445,11 @@ export default function CameraCard() {
       );
       setUploadError(null);
     } catch (error) {
-      const status = (error as any)?.status;
-      if (status === 401)
-        setUploadError("Sign in to upload synced backgrounds.");
-      else
-        setUploadError(
-          error instanceof Error
-            ? error.message
-            : "Couldn't upload that image. Try another.",
-        );
+      setUploadError(
+        (error as { status?: number })?.status === 401
+          ? "Sign in to upload backgrounds."
+          : describeApiError(error, "upload that image"),
+      );
     } finally {
       setIsUploadingBackground(false);
     }
@@ -366,11 +460,7 @@ export default function CameraCard() {
       try {
         await deleteCameraBackground(background.id);
       } catch (error) {
-        setUploadError(
-          error instanceof Error
-            ? error.message
-            : "Couldn't remove that background. Try again.",
-        );
+        setUploadError(describeApiError(error, "remove that background"));
         return;
       }
     }
@@ -417,67 +507,109 @@ export default function CameraCard() {
       settingsUserId ?? undefined,
     );
 
-  return (
-    <SettingsCard id="camera">
-      <SettingsRow
-        id="camera-preview"
-        layout="block"
-        footer={previewError ? <RowError>{previewError}</RowError> : null}
-      >
-        {() => (
-          <div className="relative flex aspect-video w-full max-w-[480px] items-center justify-center overflow-hidden rounded-md bg-black">
-            {previewOn && previewStream ? (
-              <VideoPlayer
-                stream={previewStream}
-                isLocal={true}
-                className="h-full w-full bg-black object-contain"
-              />
-            ) : (
-              <Icon
-                name="cameraOff"
-                size="2xl"
-                className="text-white/40"
-                aria-hidden
-              />
-            )}
-            <Button
-              type="button"
-              variant={previewOn ? "secondary" : "default"}
-              size="sm"
-              aria-pressed={previewOn}
-              onClick={() => {
-                setPreviewError(null);
-                setPreviewOn((on) => !on);
-              }}
-              className={cn(
-                "absolute bottom-3 left-1/2 -translate-x-1/2",
-                previewOn && "bg-black/60 text-white [--hover-o:0.16]",
-              )}
-            >
-              <Icon name={previewOn ? "cameraOff" : "camera"} size="sm" />
-              {previewOn ? "Stop preview" : "Preview camera"}
-            </Button>
-          </div>
-        )}
-      </SettingsRow>
+  const starting = previewOn && !previewStream && !previewProblem && !noCamera;
 
-      <SettingsRow id="camera">
-        {(ids) => (
-          <SettingsSelect
-            ids={ids}
-            value={selectedCamera}
-            options={cameraOptions}
-            renderLabel={(option) => <InlineEmojiText text={option.label} />}
-            onValueChange={(val) => {
-              const device = videoInputs.find((d) => d.deviceId === val);
-              setDevice("video", val, settingsUserId ?? undefined, {
-                label: device?.label,
-                groupId: device?.groupId,
-              });
-            }}
+  const deniedBody = isDesktop()
+    ? "Allow Ralph Meet to use your camera in your system's privacy settings, then try again."
+    : "Allow camera access from the lock icon in your browser's address bar. If it's already allowed, check your system's privacy settings.";
+
+  let preview: ReactNode;
+  if (noCamera) {
+    preview = (
+      <PreviewState
+        title="No camera found"
+        body="Plug in a camera, then try again."
+        action="Retry"
+        onAction={() => void retryPreview()}
+      />
+    );
+  } else if (previewProblem === "denied") {
+    preview = (
+      <PreviewState
+        title="Camera access is off"
+        body={deniedBody}
+        action="Try again"
+        onAction={() => void retryPreview()}
+      />
+    );
+  } else {
+    preview = (
+      // A media surface: the black frame and white ink are the video's.
+      <div className="relative flex aspect-video w-full max-w-[480px] items-center justify-center overflow-hidden rounded-md bg-black">
+        {previewOn && previewStream ? (
+          <VideoPlayer
+            stream={previewStream}
+            isLocal={true}
+            className="h-full w-full bg-black object-contain"
+          />
+        ) : starting ? (
+          <span role="status" className="flex items-center justify-center">
+            <Spinner className="size-6 text-white/70" />
+            <span className="sr-only">Starting camera</span>
+          </span>
+        ) : (
+          <Icon
+            name="cameraOff"
+            size="2xl"
+            className="text-white/40"
+            aria-hidden
           />
         )}
+        <Button
+          type="button"
+          variant={previewOn ? "secondary" : "default"}
+          size="sm"
+          aria-pressed={previewOn}
+          onClick={() => {
+            setPreviewProblem(null);
+            setPreviewOn((on) => !on);
+          }}
+          className={cn(
+            "absolute bottom-3 left-1/2 -translate-x-1/2",
+            previewOn && "bg-black/60 text-white [--hover-o:0.16]",
+          )}
+        >
+          <Icon name={previewOn ? "cameraOff" : "camera"} size="sm" />
+          {previewOn ? "Stop preview" : "Preview camera"}
+        </Button>
+      </div>
+    );
+  }
+
+  const previewFooter =
+    previewProblem === "busy" || previewProblem === "unknown" ? (
+      <RowError>{describeMediaProblem(previewProblem, "videoinput")}</RowError>
+    ) : effectError ? (
+      <RowError>
+        Unable to apply that background. Your camera shows without it.
+      </RowError>
+    ) : null;
+
+  const rows = (
+    <>
+      <SettingsRow id="camera-preview" layout="block" footer={previewFooter}>
+        {() => preview}
       </SettingsRow>
+
+      {noCamera ? null : (
+        <SettingsRow id="camera">
+          {(ids) => (
+            <SettingsSelect
+              ids={ids}
+              value={selectedCamera}
+              options={cameraOptions}
+              renderLabel={(option) => <InlineEmojiText text={option.label} />}
+              onValueChange={(val) => {
+                const device = videoInputs.find((d) => d.deviceId === val);
+                setDevice("video", val, settingsUserId ?? undefined, {
+                  label: device?.label,
+                  groupId: device?.groupId,
+                });
+              }}
+            />
+          )}
+        </SettingsRow>
+      )}
 
       <SettingsRow id="camera-quality">
         {(ids) => (
@@ -606,6 +738,11 @@ export default function CameraCard() {
           />
         )}
       </SettingsRow>
-    </SettingsCard>
+    </>
   );
+
+  if (bare) {
+    return <ul className="divide-y divide-rm-border">{rows}</ul>;
+  }
+  return <SettingsCard id="camera">{rows}</SettingsCard>;
 }
