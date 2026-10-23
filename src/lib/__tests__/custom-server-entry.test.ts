@@ -172,6 +172,7 @@ describe("custom server soundboard media rate limiting", () => {
 
   it("syncs the catalog on its hourly cron and isolates its failure", async () => {
     syncCollectiblesCatalog.mockClear();
+    retryMessagePostprocessing.mockClear();
     syncCollectiblesCatalog.mockRejectedValueOnce(new Error("upstream 403"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     const waitUntil = vi.fn();
@@ -186,11 +187,15 @@ describe("custom server soundboard media rate limiting", () => {
     expect(syncCollectiblesCatalog).toHaveBeenCalledWith(env.DB, {
       trigger: "cron",
     });
-    expect(waitUntil).toHaveBeenCalledTimes(1);
-    await expect(waitUntil.mock.calls[0][0]).resolves.toMatchObject({
-      ok: false,
-      error: "upstream 403",
-    });
+    // The hourly cron also sweeps message postprocessing (embed retries).
+    expect(retryMessagePostprocessing).toHaveBeenCalledWith(env);
+    expect(waitUntil).toHaveBeenCalledTimes(2);
+    const results = await Promise.all(
+      waitUntil.mock.calls.map((call) => call[0]),
+    );
+    expect(results).toContainEqual(
+      expect.objectContaining({ ok: false, error: "upstream 403" }),
+    );
   });
 });
 
