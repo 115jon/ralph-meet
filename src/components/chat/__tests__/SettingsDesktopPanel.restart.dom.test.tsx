@@ -103,4 +103,44 @@ describe("DesktopPanel hardware acceleration restart", () => {
       expect(mocks.invoke).toHaveBeenCalledWith("restart_app");
     });
   });
+
+  it("keeps the confirm open with the reason when the change fails", async () => {
+    mocks.updateSettings.mockClear();
+    mocks.invoke.mockImplementation(async (command) => {
+      if (command === "get_hardware_acceleration") return true;
+      if (command === "set_hardware_acceleration") {
+        throw new Error("ipc: command not found");
+      }
+      return undefined;
+    });
+
+    render(
+      <SettingsContext.Provider
+        value={{
+          env: { desktop: true },
+          query: "",
+          target: null,
+          registerEscape: () => () => {},
+          openProfileEditor: () => {},
+          openThemePreview: () => {},
+        }}
+      >
+        <DesktopPanel />
+      </SettingsContext.Provider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Hardware acceleration" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Restart now" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to change hardware acceleration.",
+    );
+    expect(screen.getByRole("button", { name: "Restart now" })).toBeVisible();
+    expect(screen.queryByText(/ipc: command not found/)).toBeNull();
+    expect(mocks.updateSettings).toHaveBeenLastCalledWith({
+      hardwareAcceleration: true,
+    });
+  });
 });

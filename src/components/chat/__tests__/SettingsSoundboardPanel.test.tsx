@@ -83,7 +83,7 @@ describe("SoundboardSettings", () => {
     });
   });
 
-  it("clears a selected leave sound", async () => {
+  it("clears a selected leave sound after confirming", async () => {
     useSoundSettingsStore.setState({
       currentUser: "user-1",
       userSettings: {
@@ -108,6 +108,15 @@ describe("SoundboardSettings", () => {
     render(<SoundboardSettings userId="user-1" servers={servers} />);
 
     await user.click(screen.getByRole("button", { name: /clear leave/i }));
+    // Nothing changes until the inline confirm is accepted.
+    expect(
+      useSoundSettingsStore.getState().getSettings("user-1")
+        .voiceLeaveSoundboard["*"]?.sound?.soundId,
+    ).toBe("pop");
+    expect(
+      screen.getByText(/Pop stops playing when you leave a voice channel/),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Clear sound" }));
 
     expect(
       useSoundSettingsStore.getState().getSettings("user-1")

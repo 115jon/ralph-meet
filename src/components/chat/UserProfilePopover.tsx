@@ -6,8 +6,10 @@ import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { RowError } from "@/components/chat/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { ButtonBase } from "@/components/ui/button-base";
+import { HIT, REVEAL } from "@/components/ui/interaction";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -23,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { apiGet, apiPut } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -32,16 +35,9 @@ import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { UserStatusDot, type UserStatus } from "./UserStatusDot";
 import InlineEmojiText from "./InlineEmojiText";
-import { useChatStore } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { Icon } from "@/components/ui/icon";
-import {
-  useCallback,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
 interface Props {
@@ -59,8 +55,6 @@ interface Props {
 
 /** PopoverContent variant="rich" width. */
 const SURFACE_WIDTH = 360;
-const POPOVER_ACTION_BUTTON_CLASS =
-  "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]";
 const SECTION_TITLE_CLASS =
   "text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-[color:var(--rm-profile-custom-muted)]";
 
@@ -90,70 +84,28 @@ type LocalAction =
   | Partial<LocalState>
   | ((prev: LocalState) => Partial<LocalState>);
 
-function TooltipIconButton({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <ButtonBase className={cn(POPOVER_ACTION_BUTTON_CLASS, className)}>
-          {children}
-        </ButtonBase>
-      </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={10}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function PopoverBanner({
   bannerUrl,
   bannerContentType,
-  canManageRoles,
-  isMe,
 }: {
   bannerUrl?: string | null;
   bannerContentType?: string | null;
-  canManageRoles: boolean;
-  isMe: boolean;
 }) {
   return (
     <div
-      className="relative h-[112px] overflow-hidden rounded-t-[inherit]"
+      className="relative h-28 overflow-hidden rounded-t-[inherit]"
       style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
     >
       <ProfileAssetLayer
         url={bannerUrl}
         contentType={bannerContentType}
-        alt="Profile banner"
+        alt=""
         className="opacity-95"
       />
       <div
         className="absolute inset-0"
         style={{ background: "var(--rm-profile-custom-banner-overlay)" }}
       />
-      <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-        {canManageRoles ? (
-          <TooltipIconButton label="Mod View">
-            <Icon name="sword" size="sm" />
-          </TooltipIconButton>
-        ) : null}
-        {!isMe ? (
-          <TooltipIconButton label="Friends">
-            <Icon name="userCheck" size="sm" />
-          </TooltipIconButton>
-        ) : null}
-        <TooltipIconButton label="More Options">
-          <Icon name="more" size="sm" />
-        </TooltipIconButton>
-      </div>
     </div>
   );
 }
@@ -174,7 +126,7 @@ function PopoverAvatar({
   return (
     <div className="relative z-30 -mt-12 px-4">
       <div className="relative inline-block rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1.5">
-        <div className="relative flex h-[84px] w-[84px] items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
+        <div className="relative flex size-20 items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
           {avatarUrl ? (
             <AvatarImage
               src={getAuthAssetUrl(avatarUrl)}
@@ -188,7 +140,7 @@ function PopoverAvatar({
         <div className="absolute bottom-1 right-1 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
           <UserStatusDot
             status={isOnline ? status : "offline"}
-            className="h-5 w-5 border-rm-bg-primary"
+            className="size-4"
           />
         </div>
       </div>
@@ -245,8 +197,9 @@ function PopoverMutuals({
             })}
           </div>
           <span className="text-ui-2xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
-            {mutualFriends.count} Mutual Friend
-            {mutualFriends.count === 1 ? "" : "s"}
+            {mutualFriends.count === 1
+              ? "1 mutual friend"
+              : `${mutualFriends.count} mutual friends`}
           </span>
         </div>
       ) : null}
@@ -278,8 +231,9 @@ function PopoverMutuals({
             ))}
           </div>
           <span className="text-ui-2xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
-            {mutualServers.count} Mutual Server
-            {mutualServers.count === 1 ? "" : "s"}
+            {mutualServers.count === 1
+              ? "1 mutual server"
+              : `${mutualServers.count} mutual servers`}
           </span>
         </div>
       ) : null}
@@ -313,8 +267,11 @@ function RoleAssignmentMenu({
           <DropdownMenuTrigger
             render={
               <ButtonBase
-                aria-label="Manage Roles"
-                className="flex size-6 items-center justify-center rounded-sm text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
+                aria-label="Add a role"
+                className={cn(
+                  "relative flex size-6 items-center justify-center rounded-sm text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]",
+                  HIT,
+                )}
               />
             }
           >
@@ -322,16 +279,15 @@ function RoleAssignmentMenu({
           </DropdownMenuTrigger>
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={8}>
-          Manage Roles
+          Add a role
         </TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" aria-label="Manage Roles">
+      {/* Opened from the popover: the stacked layer above it (11.1). */}
+      <DropdownMenuContent align="end" aria-label="Roles" stacked>
         {loadingRoles ? (
-          <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
+          <DropdownMenuItem disabled>Loading roles…</DropdownMenuItem>
         ) : assignableRoles.length === 0 ? (
-          <DropdownMenuItem disabled>
-            No custom roles available
-          </DropdownMenuItem>
+          <DropdownMenuItem disabled>No roles to assign yet</DropdownMenuItem>
         ) : (
           assignableRoles.map((role) => {
             const hasRole = Boolean(
@@ -401,14 +357,18 @@ function PopoverRoles({
             </span>
             {canManageRoles ? (
               <ButtonBase
-                aria-label={`Remove role ${role.name}`}
+                aria-label={`Remove the ${role.name} role`}
                 onClick={(event) => {
                   event.stopPropagation();
                   const currentRoles =
                     optimisticRoles?.map((currentRole) => currentRole.id) || [];
                   assignRole(role.id, currentRoles);
                 }}
-                className="rounded-xs p-0.5 text-[color:var(--rm-profile-custom-muted)] pointer-fine:opacity-0 transition-ui pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"
+                className={cn(
+                  "relative rounded-xs p-0.5 text-[color:var(--rm-profile-custom-muted)] pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]",
+                  HIT,
+                  REVEAL,
+                )}
               >
                 <Icon name="close" size="xs" />
               </ButtonBase>
@@ -497,6 +457,10 @@ function DesktopUserProfilePopover({
   );
 
   const popupRef = useRef<HTMLDivElement>(null);
+  const primaryRef = useRef<HTMLButtonElement>(null);
+  const { openDm } = useChatActions();
+  const [error, setError] = useState<string | null>(null);
+  const [openingDm, setOpeningDm] = useState(false);
   const [localState, setLocalState] = useReducer(
     (previous: LocalState, next: LocalAction) => ({
       ...previous,
@@ -579,9 +543,13 @@ function DesktopUserProfilePopover({
           mutualServers: data.mutualServers ?? INITIAL_STATE.mutualServers,
         });
       })
-      .catch(console.error)
+      .catch((cause) =>
+        setError(
+          describeApiError(cause, `load ${displayName || username}'s profile`),
+        ),
+      )
       .finally(() => setLocalState({ loadingProfile: false }));
-  }, [isMe, userId]);
+  }, [isMe, userId, displayName, username]);
 
   useEffect(() => {
     fetchUserProfile();
@@ -605,8 +573,8 @@ function DesktopUserProfilePopover({
         `/api/servers/${state.activeServerId}/roles`,
       );
       setLocalState({ serverRoles: data });
-    } catch (error) {
-      console.error("Failed to fetch roles:", error);
+    } catch (cause) {
+      setError(describeApiError(cause, "load this server's roles"));
     } finally {
       setLocalState({ loadingRoles: false });
     }
@@ -649,10 +617,27 @@ function DesktopUserProfilePopover({
           roles,
         });
       })
-      .catch((error) => {
-        console.error("Failed to assign role:", error);
+      .catch((cause) => {
         setOptimisticRoles(member?.roles);
+        setError(
+          describeApiError(cause, `update ${resolvedDisplayName}'s roles`),
+        );
       });
+  };
+
+  const handleMessage = async () => {
+    setOpeningDm(true);
+    setError(null);
+    const channelId = await openDm(userId);
+    setOpeningDm(false);
+    if (!channelId) {
+      setError(
+        `Unable to open your messages with ${resolvedDisplayName}. Check your connection and try again.`,
+      );
+      return;
+    }
+    state.dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
+    onClose();
   };
 
   const handleOpenProfileEditor = () => {
@@ -683,8 +668,9 @@ function DesktopUserProfilePopover({
           align={align}
           sideOffset={10}
           variant="rich"
-          // Focus the panel itself so a banner tooltip doesn't pop on open.
-          initialFocus={popupRef}
+          // Land on the primary action (Message / Edit profile), not the
+          // first role chip or a tooltip trigger.
+          initialFocus={primaryRef}
           aria-label={`User profile for ${resolvedUsername}`}
           // The profile surface is the panel: it carries the radius, border
           // and shadow, and its frame art may overhang the edge.
@@ -703,8 +689,6 @@ function DesktopUserProfilePopover({
                 <PopoverBanner
                   bannerUrl={resolvedUser.banner_url}
                   bannerContentType={resolvedUser.banner_content_type}
-                  canManageRoles={canManageRoles}
-                  isMe={isMe}
                 />
 
                 <PopoverAvatar
@@ -719,29 +703,13 @@ function DesktopUserProfilePopover({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        {isMe ? (
-                          <button
-                            type="button"
-                            onClick={handleOpenProfileEditor}
-                            className="rounded-md text-left pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/65 pointer-fine:hover:underline-offset-4"
-                          >
-                            <ProfileDisplayName
-                              text={resolvedDisplayName}
-                              displayNameStyle={resolvedUser.display_name_style}
-                              className="text-ui-lg font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
-                              backgroundColor={profileTheme.backgroundColor}
-                              readableFallbackColor={profileTheme.textColor}
-                            />
-                          </button>
-                        ) : (
-                          <ProfileDisplayName
-                            text={resolvedDisplayName}
-                            displayNameStyle={resolvedUser.display_name_style}
-                            className="text-ui-lg font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
-                            backgroundColor={profileTheme.backgroundColor}
-                            readableFallbackColor={profileTheme.textColor}
-                          />
-                        )}
+                        <ProfileDisplayName
+                          text={resolvedDisplayName}
+                          displayNameStyle={resolvedUser.display_name_style}
+                          className="text-ui-lg font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
+                          backgroundColor={profileTheme.backgroundColor}
+                          readableFallbackColor={profileTheme.textColor}
+                        />
 
                         <UserPlatformIndicators
                           userId={userId}
@@ -752,26 +720,10 @@ function DesktopUserProfilePopover({
                           color="var(--rm-profile-custom-muted)"
                           offlineColor="var(--rm-profile-custom-ghost)"
                         />
-
-                        {!isMe ? (
-                          <ButtonBase className="text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]">
-                            <Icon name="fileAdd" size="sm" />
-                          </ButtonBase>
-                        ) : null}
                       </div>
 
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
-                        {isMe ? (
-                          <button
-                            type="button"
-                            onClick={handleOpenProfileEditor}
-                            className="rounded-md text-left pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/55 pointer-fine:hover:underline-offset-4"
-                          >
-                            @{resolvedUsername}
-                          </button>
-                        ) : (
-                          <span>@{resolvedUsername}</span>
-                        )}
+                        <span>@{resolvedUsername}</span>
 
                         {resolvedUser.pronouns?.trim() ? (
                           <>
@@ -816,34 +768,33 @@ function DesktopUserProfilePopover({
                   menuProps={roleMenuProps}
                 />
 
-                {!isMe ? (
-                  <div className="relative z-20 mt-1 px-4 pb-4">
-                    <div className="group flex items-center justify-between rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors pointer-fine:hover:border-[color:var(--rm-profile-custom-ghost)] focus-within:border-[color:var(--rm-profile-custom-muted)]">
-                      <input
-                        type="text"
-                        aria-label={`Message ${resolvedUsername}`}
-                        className="w-full bg-transparent text-ui-xs font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                        placeholder={`Message @${resolvedUsername}`}
-                      />
-                      <Icon
-                        name="emoji"
-                        size="sm"
-                        className="ml-2 shrink-0 cursor-pointer text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative z-20 px-4 pb-4">
+                <div className="relative z-20 flex flex-col gap-3 px-4 pb-4">
+                  {error ? <RowError className="mt-0">{error}</RowError> : null}
+                  {isMe ? (
                     <Button
+                      ref={primaryRef}
                       variant="secondary"
+                      size="lg"
                       onClick={handleOpenProfileEditor}
                       className="w-full"
                     >
                       <Icon name="edit" size="sm" />
-                      Edit Profile
+                      Edit profile
                     </Button>
-                  </div>
-                )}
+                  ) : (
+                    <Button
+                      ref={primaryRef}
+                      variant="secondary"
+                      size="lg"
+                      loading={openingDm}
+                      onClick={() => void handleMessage()}
+                      className="w-full"
+                    >
+                      <Icon name="chat" size="sm" />
+                      Message
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </ProfileSurfaceShell>

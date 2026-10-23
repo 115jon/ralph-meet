@@ -1,7 +1,9 @@
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { Tabs, tabId } from "@/components/ui/tabs";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import {
   MEDIA_CONTENT_FILTER_OPTIONS,
   type MediaContentFilter,
@@ -10,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useUser } from "@kova/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import {
   ConfirmStrip,
   RadioList,
@@ -266,23 +268,25 @@ function ShareItem({
         <ConfirmStrip
           consequence="Anyone with this link will see that it's gone. You can't undo this."
           confirmLabel="Revoke link"
+          irreversible
           busy={revoking}
-          onCancel={cancelConfirm}
+          error={revokeError}
+          onCancel={() => {
+            setRevokeError(null);
+            cancelConfirm();
+          }}
           onConfirm={() => {
             setRevoking(true);
             setRevokeError(null);
-            void onRevoke(share.id)
-              .catch(() =>
-                setRevokeError("Couldn't revoke this link. Try again."),
+            onRevoke(share.id)
+              .then(() => finishConfirm())
+              .catch((err: unknown) =>
+                setRevokeError(describeApiError(err, "revoke this link")),
               )
-              .finally(() => {
-                setRevoking(false);
-                finishConfirm();
-              });
+              .finally(() => setRevoking(false));
           }}
         />
       ) : null}
-      {revokeError ? <RowError>{revokeError}</RowError> : null}
     </li>
   );
 }
@@ -292,6 +296,8 @@ function SharedMessagesRow() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"current" | "all">("current");
+  const tabsId = useId();
+  const panelId = useId();
 
   const loadShares = useCallback(() => {
     let cancelled = false;
@@ -299,10 +305,10 @@ function SharedMessagesRow() {
       .then((data) => {
         if (!cancelled) setShares(data.shares);
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         if (!cancelled) {
           setShares([]);
-          setError(err?.message || "Couldn't load shared messages. Try again.");
+          setError(describeApiError(err, "load your shared messages"));
         }
       })
       .finally(() => {
@@ -340,33 +346,26 @@ function SharedMessagesRow() {
       {(ids) => (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div
-              role="group"
-              aria-labelledby={ids.labelId}
-              className="inline-flex rounded-md bg-rm-tint-1 p-0.5"
-            >
-              {(
-                [
-                  ["current", `Live (${currentShares.length})`],
-                  ["all", `All (${shares.length})`],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={filter === id}
-                  onClick={() => setFilter(id)}
-                  className={cn(
-                    "h-7 rounded-[6px] px-3 text-ui-sm font-medium transition-colors duration-150",
-                    filter === id
-                      ? "bg-rm-bg-surface text-rm-text shadow-[var(--rm-shadow-1)] dark:bg-rm-tint-3"
-                      : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              label="Shared links to show"
+              idBase={tabsId}
+              panelId={panelId}
+              className="h-9"
+              value={filter}
+              onValueChange={setFilter}
+              items={[
+                {
+                  value: "current",
+                  label: "Live",
+                  adornment: <TabCount>{currentShares.length}</TabCount>,
+                },
+                {
+                  value: "all",
+                  label: "All",
+                  adornment: <TabCount>{shares.length}</TabCount>,
+                },
+              ]}
+            />
             <Button
               type="button"
               variant="ghost"
@@ -387,32 +386,47 @@ function SharedMessagesRow() {
             </Button>
           </div>
 
-          {loading ? (
-            <p
-              role="status"
-              className="flex items-center gap-2 text-ui-sm text-rm-text-secondary"
-            >
-              <Icon name="loader" size="sm" className="animate-spin" />
-              Loading shared messages…
-            </p>
-          ) : error ? (
-            <RowError>{error}</RowError>
-          ) : visibleShares.length === 0 ? (
-            <p className="text-ui-sm text-rm-text-secondary">
-              {filter === "current"
-                ? "No live links. Share a message from its menu to make one."
-                : "You haven't shared any messages yet."}
-            </p>
-          ) : (
-            <ul className="divide-y divide-rm-border">
-              {visibleShares.map((share) => (
-                <ShareItem key={share.id} share={share} onRevoke={revoke} />
-              ))}
-            </ul>
-          )}
+          <div
+            role="tabpanel"
+            id={panelId}
+            aria-labelledby={tabId(tabsId, filter)}
+            aria-describedby={ids.descId}
+          >
+            {loading ? (
+              <p
+                role="status"
+                className="flex items-center gap-2 text-ui-sm text-rm-text-secondary"
+              >
+                <Spinner className="size-4" />
+                Loading shared messages…
+              </p>
+            ) : error ? (
+              <RowError>{error}</RowError>
+            ) : visibleShares.length === 0 ? (
+              <p className="text-ui-sm text-rm-text-secondary">
+                {filter === "current"
+                  ? "No live links. Share a message from its menu to make one."
+                  : "You haven't shared any messages yet."}
+              </p>
+            ) : (
+              <ul className="divide-y divide-rm-border">
+                {visibleShares.map((share) => (
+                  <ShareItem key={share.id} share={share} onRevoke={revoke} />
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </SettingsRow>
+  );
+}
+
+function TabCount({ children }: { children: number }) {
+  return (
+    <span className="min-w-5 rounded-sm bg-rm-tint-2 px-1.5 text-center text-ui-2xs font-semibold leading-5 tabular-nums text-rm-text-secondary">
+      {children}
+    </span>
   );
 }
 

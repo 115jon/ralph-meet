@@ -1,10 +1,20 @@
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { RowError } from "@/components/chat/settings/primitives";
+import { Spinner } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { DISABLED, HIT, PRESS, REVEAL } from "@/components/ui/interaction";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { apiDelete, apiGet } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
+import type { GifPickerItem } from "@/lib/gif-picker";
 import { getApiBaseUrl, getAuthAssetUrl } from "@/lib/platform";
 import { buildProxyMediaUrl } from "@/lib/proxy-media-url";
 import { cn } from "@/lib/utils";
-import type { GifPickerItem } from "@/lib/gif-picker";
-import { Icon } from "@/components/ui/icon";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
@@ -26,6 +36,7 @@ interface AvatarPickerModalProps {
   showRecent?: boolean;
   title?: string;
   description?: string;
+  /** @deprecated The dialog's own close button names itself; kept for callers. */
   closeLabel?: string;
 }
 
@@ -76,6 +87,18 @@ async function gifToFile(item: GifPickerItem): Promise<File> {
   );
 }
 
+/** A large choice tile (upload / GIF). */
+const TILE = cn(
+  "flex min-h-36 flex-col items-center justify-center gap-1 rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-6 text-center outline-none",
+  PRESS,
+  DISABLED,
+);
+
+/**
+ * Avatar (or banner) picker: upload, GIF, or a recent upload. A form-width
+ * dialog on desktop, a bottom drawer on phones; opened from settings, so the
+ * dialog sits on the stacked layer.
+ */
 export function AvatarPickerModal({
   open,
   displayName,
@@ -84,12 +107,11 @@ export function AvatarPickerModal({
   onUpload,
   onSelectRecent,
   showRecent = true,
-  title = "Select an Image",
-  description = "Choose a new avatar or use one of your recent uploads.",
-  closeLabel = "Close avatar picker",
+  title = "Choose an image",
+  description = "Upload a new avatar or reuse one of your recent uploads.",
 }: AvatarPickerModalProps) {
   const [items, setItems] = useState<AvatarUploadItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(showRecent);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,11 +131,7 @@ export function AvatarPickerModal({
       })
       .catch((cause) => {
         if (!cancelled) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Unable to load recent avatars.",
-          );
+          setError(describeApiError(cause, "load your recent avatars"));
         }
       })
       .finally(() => {
@@ -127,8 +145,12 @@ export function AvatarPickerModal({
 
   const handleUpload = async (file: File) => {
     setError(null);
-    await onUpload(file);
-    onClose();
+    try {
+      await onUpload(file);
+      onClose();
+    } catch (cause) {
+      setError(describeApiError(cause, "upload that image"));
+    }
   };
 
   const handleGifSelect = async (item: GifPickerItem) => {
@@ -136,10 +158,8 @@ export function AvatarPickerModal({
     setError(null);
     try {
       await handleUpload(await gifToFile(item));
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Unable to use that GIF.",
-      );
+    } catch {
+      setError("Unable to use that GIF. Choose another one and try again.");
     } finally {
       setBusyId(null);
       setShowGifPicker(false);
@@ -156,194 +176,184 @@ export function AvatarPickerModal({
       });
       setItems((current) => current.filter(({ id }) => id !== item.id));
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to delete that avatar.",
-      );
+      setError(describeApiError(cause, "delete that avatar"));
     } finally {
       setBusyId(null);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <div className="fixed inset-0 z-50 bg-black/65" />
-        <div className="fixed inset-0 z-60 flex items-center justify-center overflow-y-auto p-4">
-          <DialogSurface
-            showCloseButton={false}
-            className="relative my-auto w-full max-w-[520px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary text-rm-text shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+    >
+      <ResponsiveDialogContent
+        // Opened from settings: the stacked layer (11.1).
+        dialogClassName="z-60 max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain md:max-w-md"
+      >
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            {description}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={Boolean(busyId)}
+            className={TILE}
           >
-            <header className="flex items-start justify-between gap-4 border-b border-rm-border px-6 py-5">
+            <Icon
+              name="image"
+              size="xl"
+              className="mb-2 text-rm-text-secondary"
+            />
+            <span className="text-ui-base font-medium text-rm-text">
+              Upload image
+            </span>
+            <span className="text-ui-xs text-rm-text-secondary">
+              From your device
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowGifPicker(true)}
+            disabled={Boolean(busyId)}
+            className={TILE}
+          >
+            <Icon
+              name="gif"
+              size="xl"
+              className="mb-2 text-rm-text-secondary"
+            />
+            <span className="text-ui-base font-medium text-rm-text">
+              Choose GIF
+            </span>
+            <span className="text-ui-xs text-rm-text-secondary">
+              Search for a GIF
+            </span>
+          </button>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          aria-label="Upload avatar image"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            if (!file.type.startsWith("image/")) {
+              setError("Choose an image file, such as a PNG, JPG or GIF.");
+              return;
+            }
+            void handleUpload(file);
+          }}
+        />
+
+        {showRecent ? (
+          <section
+            aria-labelledby="avatar-picker-recent"
+            className="flex flex-col gap-3"
+          >
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <h2
-                  id="avatar-picker-title"
-                  className="text-ui-2xl font-semibold tracking-tight"
+                <h3
+                  id="avatar-picker-recent"
+                  className="text-ui-md font-semibold text-rm-text"
                 >
-                  {title}
-                </h2>
-                <p className="mt-1 text-ui-sm text-rm-text-muted">
-                  {description}
+                  Recent avatars
+                </h3>
+                <p className="mt-1 text-ui-sm text-rm-text-secondary">
+                  Your last 6 uploads.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition-[background-color,color,transform] pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text active:scale-[0.96]"
-                aria-label={closeLabel}
-              >
-                <Icon name="close" size="lg" />
-              </button>
-            </header>
-
-            <div className="space-y-5 px-6 pb-6 pt-5">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={Boolean(busyId)}
-                  className="group flex min-h-[150px] flex-col items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 transition-[background-color,border-color,transform] pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Icon
-                    name="image"
-                    size="2xl"
-                    className="mb-4 text-rm-text-muted transition-colors pointer-fine:group-hover:text-rm-text"
-                  />
-                  <span className="text-ui-md font-semibold">Upload Image</span>
-                  <span className="mt-1 text-ui-xs text-rm-text-muted">
-                    Choose an image from your device
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowGifPicker(true)}
-                  disabled={Boolean(busyId)}
-                  className="group relative flex min-h-[150px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-[background-color,border-color,transform] pointer-fine:hover:border-primary/45 pointer-fine:hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <div className="absolute right-3 top-3 h-16 w-16 rounded-2xl bg-primary/10 transition-transform duration-200" />
-                  <div className="absolute bottom-5 right-9 h-10 w-10 rounded-xl bg-rm-bg-hover" />
-                  <div className="relative z-10 mt-auto">
-                    <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-hover text-rm-text">
-                      <Icon name="sparkle" size="sm" />
-                    </div>
-                    <span className="block text-ui-md font-semibold">
-                      Choose GIF
-                    </span>
-                    <span className="mt-1 block text-ui-xs text-rm-text-muted">
-                      Open the GIF picker
-                    </span>
-                  </div>
-                </button>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                aria-label="Upload avatar image"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (!file) return;
-                  if (!file.type.startsWith("image/")) {
-                    setError("Please choose an image file for your avatar.");
-                    return;
-                  }
-                  void handleUpload(file);
-                }}
-              />
-
-              {showRecent ? (
-                <section>
-                  <div className="mb-3 flex items-end justify-between gap-3">
-                    <div>
-                      <h3 className="text-ui-md font-semibold">
-                        Recent Avatars
-                      </h3>
-                      <p className="mt-1 text-ui-xs text-rm-text-muted">
-                        Access your 6 most recent avatar uploads.
-                      </p>
-                    </div>
-                    {loading ? (
-                      <Icon
-                        name="loader"
-                        size="sm"
-                        className="animate-spin text-rm-text-muted"
-                      />
-                    ) : null}
-                  </div>
-
-                  {items.length > 0 ? (
-                    <div className="flex flex-wrap gap-3">
-                      {items.map((item) => {
-                        const isCurrent = item.avatar_url === currentAvatarUrl;
-                        const isBusy = busyId === item.id;
-                        return (
-                          <div key={item.id} className="group/recent relative">
-                            <button
-                              type="button"
-                              onClick={() => onSelectRecent?.(item)}
-                              disabled={Boolean(busyId)}
-                              className="relative h-[58px] w-[58px] cursor-pointer overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated outline-none transition-[transform,box-shadow] pointer-fine:hover:shadow-[0_0_0_4px_rgba(88,101,242,0.28),0_12px_24px_rgba(0,0,0,0.28)] focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
-                              aria-label={`Use ${displayName}'s recent avatar`}
-                            >
-                              <img
-                                src={getAuthAssetUrl(item.avatar_url)}
-                                alt=""
-                                className="h-full w-full object-cover outline outline-1 -outline-offset-1 outline-white/10"
-                                loading="lazy"
-                              />
-                              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity pointer-fine:group-hover/recent:opacity-100">
-                                {isBusy ? (
-                                  <Icon
-                                    name="loader"
-                                    size="sm"
-                                    className="animate-spin"
-                                  />
-                                ) : (
-                                  <Icon name="upload" size="sm" />
-                                )}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleDelete(item)}
-                              disabled={isCurrent || Boolean(busyId)}
-                              className={cn(
-                                "absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating text-rm-text-muted pointer-fine:opacity-0 shadow-lg transition-[opacity,background-color,color,transform] pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white pointer-fine:group-hover/recent:opacity-100 focus-visible:opacity-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35",
-                              )}
-                              aria-label={
-                                isCurrent
-                                  ? "Change active avatar before deleting it"
-                                  : "Delete recent avatar"
-                              }
-                            >
-                              <Icon name="trash" size="xs" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : !loading ? (
-                    <p className="rounded-xl border border-dashed border-rm-border px-4 py-5 text-center text-ui-sm text-rm-text-muted">
-                      Your uploaded avatars will appear here.
-                    </p>
-                  ) : null}
-                </section>
-              ) : null}
-
-              {error ? (
-                <p className="rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-ui-sm text-destructive">
-                  {error}
-                </p>
+              {loading ? (
+                <span className="text-rm-text-muted">
+                  <Spinner />
+                  <span className="sr-only">Loading</span>
+                </span>
               ) : null}
             </div>
-          </DialogSurface>
-        </div>
-      </DialogPortal>
+
+            {items.length > 0 ? (
+              <ul className="flex flex-wrap gap-3">
+                {items.map((item) => {
+                  const isCurrent = item.avatar_url === currentAvatarUrl;
+                  const isBusy = busyId === item.id;
+                  return (
+                    <li key={item.id} className="group relative">
+                      <button
+                        type="button"
+                        onClick={() => onSelectRecent?.(item)}
+                        disabled={Boolean(busyId)}
+                        aria-current={isCurrent || undefined}
+                        aria-label={
+                          isCurrent
+                            ? `${displayName}'s current avatar`
+                            : "Use this recent avatar"
+                        }
+                        className={cn(
+                          "size-14 overflow-hidden rounded-full bg-rm-tint-2 outline-none",
+                          PRESS,
+                          DISABLED,
+                          isCurrent &&
+                            "ring-2 ring-rm-accent-ink ring-offset-2 ring-offset-rm-bg-surface dark:ring-offset-rm-bg-elevated",
+                        )}
+                      >
+                        <img
+                          src={getAuthAssetUrl(item.avatar_url)}
+                          alt=""
+                          className="size-full object-cover"
+                          loading="lazy"
+                        />
+                        {isBusy ? (
+                          // Media overlay over a photo (6.5).
+                          <span className="absolute inset-0 grid place-items-center bg-black/60 text-white">
+                            <Spinner />
+                          </span>
+                        ) : null}
+                      </button>
+                      {!isCurrent ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(item)}
+                          disabled={Boolean(busyId)}
+                          aria-label="Delete this recent avatar"
+                          className={cn(
+                            "flex size-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-surface text-rm-text-secondary outline-none pointer-fine:hover:text-rm-danger-ink dark:bg-rm-bg-elevated",
+                            PRESS,
+                            HIT,
+                            DISABLED,
+                            REVEAL,
+                            // After PRESS (`relative`): pin to the corner.
+                            "absolute -top-1 -right-1",
+                          )}
+                        >
+                          <Icon name="trash" size="xs" />
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : !loading && !error ? (
+              <p className="text-ui-sm text-rm-text-secondary">
+                Avatars you upload will show up here.
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
+        {error ? <RowError className="mt-0">{error}</RowError> : null}
+      </ResponsiveDialogContent>
 
       <Suspense fallback={null}>
         <GifPickerModal
@@ -355,6 +365,6 @@ export function AvatarPickerModal({
           onSelect={handleGifSelect}
         />
       </Suspense>
-    </Dialog>
+    </ResponsiveDialog>
   );
 }

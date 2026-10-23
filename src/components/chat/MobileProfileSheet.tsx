@@ -3,18 +3,24 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { Drawer, DrawerContent, DrawerHandle } from "@/components/ui/drawer";
 import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
+import { Button } from "@/components/ui/button";
 import { ButtonBase } from "@/components/ui/button-base";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
 import { apiGet, apiPost } from "@/lib/api-client";
 
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
 import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { UserStatusDot } from "./UserStatusDot";
+import {
+  normalizeUserStatus,
+  USER_STATUS_LABELS,
+  type UserStatus,
+  UserStatusDot,
+} from "./UserStatusDot";
 import InlineEmojiText from "./InlineEmojiText";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { Icon } from "@/components/ui/icon";
@@ -68,10 +74,20 @@ const EMPTY_MUTUAL_SERVERS: MutualServerSummary = {
   items: [],
 };
 
-const BANNER_BUTTON = cn(
-  "inline-flex size-10 items-center justify-center rounded-full bg-black/35 text-white transition-colors duration-150 pointer-fine:hover:bg-black/50 disabled:opacity-60",
-  PRESS,
-);
+/**
+ * Round toolbar buttons over the banner. Media-overlay ink only when a banner
+ * image sits behind them; otherwise they read from the profile theme.
+ */
+function bannerButtonClass(hasBannerImage: boolean) {
+  return cn(
+    "inline-flex size-10 items-center justify-center rounded-full disabled:cursor-not-allowed",
+    hasBannerImage
+      ? "bg-black/35 text-white" // ds-allow:palette-color media overlay on a banner image
+      : "bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)]",
+    PRESS,
+    HIT,
+  );
+}
 
 function ProfileBanner({
   bannerUrl,
@@ -82,7 +98,7 @@ function ProfileBanner({
 }) {
   return (
     <div
-      className="relative h-[140px] shrink-0 overflow-hidden"
+      className="relative h-35 shrink-0 overflow-hidden"
       style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
     >
       <ProfileAssetLayer
@@ -102,56 +118,41 @@ function ProfileBanner({
 /** Pinned over the banner; stays put while the profile scrolls. */
 function ProfileToolbar({
   onClose,
-  isMe,
   friendAction,
-  onOpenProfileEditor,
+  hasBannerImage,
 }: {
   onClose: () => void;
-  isMe: boolean;
   /** "add" shows Add friend, "sent" a disabled pending state, null nothing. */
   friendAction: { state: "add" | "sent"; onAdd: () => void } | null;
-  onOpenProfileEditor: () => void;
+  hasBannerImage: boolean;
 }) {
+  const buttonClass = bannerButtonClass(hasBannerImage);
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex items-center justify-between p-3 pt-4 [&>*]:pointer-events-auto">
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pt-[max(16px,var(--safe-area-top,0px))] [&>*]:pointer-events-auto">
       <button
         type="button"
         onClick={onClose}
         aria-label="Close profile"
-        className={BANNER_BUTTON}
+        className={buttonClass}
       >
         <Icon name="back" size="lg" />
       </button>
-      <div className="flex items-center gap-2">
-        {friendAction ? (
-          <button
-            type="button"
-            aria-label={
-              friendAction.state === "sent"
-                ? "Friend request sent"
-                : "Add friend"
-            }
-            disabled={friendAction.state === "sent"}
-            onClick={friendAction.onAdd}
-            className={BANNER_BUTTON}
-          >
-            <Icon
-              name={friendAction.state === "sent" ? "userCheck" : "invite"}
-              size="md"
-            />
-          </button>
-        ) : null}
-        {isMe ? (
-          <button
-            type="button"
-            aria-label="Edit profile"
-            onClick={onOpenProfileEditor}
-            className={BANNER_BUTTON}
-          >
-            <Icon name="edit" size="md" />
-          </button>
-        ) : null}
-      </div>
+      {friendAction ? (
+        <button
+          type="button"
+          aria-label={
+            friendAction.state === "sent" ? "Friend request sent" : "Add friend"
+          }
+          disabled={friendAction.state === "sent"}
+          onClick={friendAction.onAdd}
+          className={buttonClass}
+        >
+          <Icon
+            name={friendAction.state === "sent" ? "userCheck" : "invite"}
+            size="md"
+          />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -171,12 +172,15 @@ function ProfileHeader({
 }) {
   const displayName = user.display_name?.trim() || user.username;
   const profileTheme = resolveProfileTheme(user);
+  const status: UserStatus = isOnline
+    ? normalizeUserStatus(user.status ?? "online")
+    : "offline";
 
   return (
     <>
-      <div className="px-5">
+      <div className="px-4">
         <div className="relative inline-block">
-          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)] ring-[5px] ring-[color:var(--rm-profile-custom-card-border)]">
+          <div className="relative flex size-22 items-center justify-center overflow-visible rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)] ring-4 ring-[color:var(--rm-profile-custom-background)]">
             {user.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(user.avatar_url)}
@@ -187,17 +191,19 @@ function ProfileHeader({
               displayName[0].toUpperCase()
             )}
           </div>
-          <div className="absolute bottom-0 right-0 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
+          <div className="absolute bottom-0 right-0 z-20 rounded-full bg-[var(--rm-profile-custom-background)] p-1">
             <UserStatusDot
-              status={isOnline ? (user.status ?? "online") : "offline"}
-              className="h-6 w-6"
+              status={status}
+              label={USER_STATUS_LABELS[status]}
+              cutoutClassName="bg-[var(--rm-profile-custom-background)]"
+              className="size-5"
             />
           </div>
         </div>
       </div>
 
-      <div className="px-5 mt-3">
-        <div className="text-ui-2xl font-semibold leading-tight">
+      <div className="mt-3 px-4">
+        <h2 className="text-ui-2xl font-semibold leading-tight">
           <ProfileDisplayName
             text={displayName}
             displayNameStyle={user.display_name_style}
@@ -205,8 +211,8 @@ function ProfileHeader({
             backgroundColor={profileTheme.backgroundColor}
             readableFallbackColor={profileTheme.textColor}
           />
-        </div>
-        <p className="text-ui-sm text-[color:var(--rm-profile-custom-muted)] font-medium">
+        </h2>
+        <p className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
           @{user.username.toLowerCase()}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
@@ -222,26 +228,28 @@ function ProfileHeader({
         </div>
 
         {user.custom_status && (
-          <p className="text-ui-sm text-[color:var(--rm-profile-custom-muted)] mt-1 italic">
+          <p className="mt-1 text-ui-sm italic text-[color:var(--rm-profile-custom-muted)]">
             {user.custom_status}
           </p>
         )}
 
         {!isMe && (mutualFriends.count > 0 || mutualServers.count > 0) && (
-          <div className="flex items-center gap-2 mt-2 text-ui-sm text-[color:var(--rm-profile-custom-muted)] font-medium">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
             {mutualFriends.count > 0 && (
               <span>
-                {mutualFriends.count} Mutual Friend
-                {mutualFriends.count === 1 ? "" : "s"}
+                {mutualFriends.count === 1
+                  ? "1 mutual friend"
+                  : `${mutualFriends.count} mutual friends`}
               </span>
             )}
             {mutualFriends.count > 0 && mutualServers.count > 0 && (
-              <span>·</span>
+              <span aria-hidden="true">·</span>
             )}
             {mutualServers.count > 0 && (
               <span>
-                {mutualServers.count} Mutual Server
-                {mutualServers.count === 1 ? "" : "s"}
+                {mutualServers.count === 1
+                  ? "1 mutual server"
+                  : `${mutualServers.count} mutual servers`}
               </span>
             )}
           </div>
@@ -252,7 +260,14 @@ function ProfileHeader({
 }
 
 const ROUND_ACTION =
-  "flex h-14 w-14 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] transition-colors duration-150 pointer-fine:group-hover:bg-[var(--rm-profile-custom-card-bg)]";
+  "flex size-14 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]";
+const ROUND_ACTION_BUTTON = cn(
+  "group flex flex-col items-center gap-2",
+  PRESS,
+  "after:hidden",
+);
+const ROUND_ACTION_LABEL =
+  "text-ui-xs font-medium text-[color:var(--rm-profile-custom-muted)]";
 
 function ProfileActions({
   isMe,
@@ -267,31 +282,22 @@ function ProfileActions({
   onOpenProfileEditor: () => void;
 }) {
   return (
-    <div className="px-5 mt-5">
+    <div className="mt-5 px-4">
       {isMe ? (
-        <div>
-          <button
-            type="button"
-            onClick={onOpenProfileEditor}
-            className={cn(
-              "flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] py-3 text-ui-base font-semibold text-[color:var(--rm-profile-custom-button-text)] transition-[filter] pointer-fine:hover:brightness-110",
-              PRESS,
-            )}
-          >
-            <Icon name="edit" size="md" />
-            Edit Main Profile
-          </button>
-        </div>
+        <Button
+          size="lg"
+          onClick={onOpenProfileEditor}
+          className="w-full bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)]"
+        >
+          <Icon name="edit" size="md" />
+          Edit profile
+        </Button>
       ) : (
         <div className="flex items-center justify-center gap-8">
           <button
             type="button"
             onClick={handleMessage}
-            className={cn(
-              "group flex flex-col items-center gap-2",
-              PRESS,
-              "after:hidden",
-            )}
+            className={ROUND_ACTION_BUTTON}
           >
             <span className={ROUND_ACTION}>
               <Icon
@@ -300,19 +306,13 @@ function ProfileActions({
                 className="text-[color:var(--rm-profile-custom-text)]"
               />
             </span>
-            <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
-              Message
-            </span>
+            <span className={ROUND_ACTION_LABEL}>Message</span>
           </button>
           {handleCall ? (
             <button
               type="button"
               onClick={handleCall}
-              className={cn(
-                "group flex flex-col items-center gap-2",
-                PRESS,
-                "after:hidden",
-              )}
+              className={ROUND_ACTION_BUTTON}
             >
               <span className={ROUND_ACTION}>
                 <Icon
@@ -321,9 +321,7 @@ function ProfileActions({
                   className="text-[color:var(--rm-profile-custom-text)]"
                 />
               </span>
-              <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
-                Call
-              </span>
+              <span className={ROUND_ACTION_LABEL}>Call</span>
             </button>
           ) : null}
         </div>
@@ -332,14 +330,19 @@ function ProfileActions({
   );
 }
 
+const PROFILE_CARD =
+  "rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4";
+const CARD_EYEBROW =
+  "text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]";
+const MOD_ROW = cn(
+  "-mx-2 flex min-h-11 items-center gap-3 rounded-md px-2 text-start text-rm-danger-ink",
+  PRESS,
+);
+
 function ProfileCards({
   user,
   memberRoles,
   profileReferenceDate,
-  hasModActions,
-  canManage,
-  canKick,
-  canBanPerm,
   onBan,
   onKick,
   onClose,
@@ -347,10 +350,7 @@ function ProfileCards({
   user: User;
   memberRoles: Role[] | undefined;
   profileReferenceDate: { label: string; value: string };
-  hasModActions: boolean;
-  canManage: boolean;
-  canKick: boolean;
-  canBanPerm: boolean;
+  /** Passed only when the viewer may ban / kick this member. */
   onBan?: (userId: string, username: string) => void;
   onKick?: (userId: string, username: string) => void;
   onClose: () => void;
@@ -359,128 +359,87 @@ function ProfileCards({
     memberRoles?.filter((role) => !role.is_default) ?? [];
 
   return (
-    <div className="px-5 mt-6 space-y-3 pb-10">
+    <div className="mt-6 flex flex-col gap-4 px-4 pb-10">
       {user.bio?.trim() && (
-        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-2">
-            Bio
-          </h3>
-          <p className="text-ui-sm text-[color:var(--rm-profile-custom-muted)] leading-relaxed">
+        <section className={PROFILE_CARD}>
+          <h3 className={cn(CARD_EYEBROW, "mb-2")}>Bio</h3>
+          <p className="text-ui-sm leading-relaxed text-[color:var(--rm-profile-custom-text)]">
             {user.bio.trim()}
           </p>
-        </div>
+        </section>
       )}
 
-      <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-        <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
+      <section className={PROFILE_CARD}>
+        <h3 className={cn(CARD_EYEBROW, "mb-2")}>
           {profileReferenceDate.label}
         </h3>
-        <div className="flex items-center gap-3 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-          <div className="flex items-center gap-2">
-            <Icon
-              name="calendar"
-              size="sm"
-              className="text-[color:var(--rm-profile-custom-muted)]"
-            />
-            <span>{profileReferenceDate.value}</span>
-          </div>
+        <div className="flex items-center gap-2 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
+          <Icon
+            name="calendar"
+            size="sm"
+            className="text-[color:var(--rm-profile-custom-muted)]"
+          />
+          <span>{profileReferenceDate.value}</span>
         </div>
-      </div>
+      </section>
 
       {visibleMemberRoles.length > 0 && (
-        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
-            Roles
-          </h3>
+        <section className={PROFILE_CARD}>
+          <h3 className={cn(CARD_EYEBROW, "mb-3")}>Roles</h3>
           <div className="flex flex-wrap gap-2">
             {visibleMemberRoles.map((role) => (
               <div
                 key={role.id}
-                className="flex items-center gap-1.5 rounded-full bg-[var(--rm-profile-custom-card-bg)] pl-2 pr-3 py-1 border border-[color:var(--rm-profile-custom-card-border)] text-ui-xs font-medium"
+                className="flex items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] py-1 pl-2 pr-3 text-ui-xs font-medium"
               >
-                <div
-                  className="h-3 w-3 rounded-full shrink-0"
+                <span
+                  aria-hidden="true"
+                  className="size-3 shrink-0 rounded-full"
+                  // User-chosen role colour; theme ink when the role has none.
                   style={{
-                    backgroundColor: role.color || "#94a3b8",
+                    backgroundColor: role.color || "var(--rm-text-muted)",
                   }}
                 />
-                <span className="text-[color:var(--rm-profile-custom-muted)]">
+                <span className="text-[color:var(--rm-profile-custom-text)]">
                   <InlineEmojiText text={role.name} />
                 </span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {hasModActions && (
-        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
-            Moderator Actions
-          </h3>
-          <div className="space-y-0.5">
-            {canManage && (
-              <ButtonBase
-                disabled
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed"
-              >
-                <Icon
-                  name="settings"
-                  size="xl"
-                  className="text-[color:var(--rm-profile-custom-muted)] shrink-0"
-                />
-                <span className="text-ui-base font-medium text-[color:var(--rm-profile-custom-text)]">
-                  Manage
-                </span>
-              </ButtonBase>
-            )}
-            {canKick && onKick && (
+      {onKick || onBan ? (
+        <section className={PROFILE_CARD}>
+          <h3 className={cn(CARD_EYEBROW, "mb-2")}>Moderator actions</h3>
+          <div className="flex flex-col">
+            {onKick && (
               <ButtonBase
                 onClick={() => {
                   onKick(user.id, user.username);
                   onClose();
                 }}
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
+                className={MOD_ROW}
               >
-                <Icon
-                  name="userRemove"
-                  size="xl"
-                  className="text-destructive shrink-0"
-                />
-                <span className="text-ui-base font-medium text-destructive">
-                  Kick
-                </span>
+                <Icon name="userRemove" size="md" className="shrink-0" />
+                <span className="text-ui-base font-medium">Kick</span>
               </ButtonBase>
             )}
-            {canBanPerm && onBan && (
+            {onBan && (
               <ButtonBase
                 onClick={() => {
                   onBan(user.id, user.username);
                   onClose();
                 }}
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
+                className={MOD_ROW}
               >
-                <Icon
-                  name="ban"
-                  size="xl"
-                  className="text-destructive shrink-0"
-                />
-                <span className="text-ui-base font-medium text-destructive">
-                  Ban
-                </span>
+                <Icon name="ban" size="md" className="shrink-0" />
+                <span className="text-ui-base font-medium">Ban</span>
               </ButtonBase>
             )}
           </div>
-        </div>
-      )}
-
-      <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
-            Note (only visible to you)
-          </span>
-        </div>
-      </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -520,6 +479,7 @@ export default function MobileProfileSheet({
     ? (activeProfileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS)
     : EMPTY_MUTUAL_SERVERS;
   const profileThemeStyle = resolveProfileTheme(resolvedUser).variables;
+  const hasBannerImage = Boolean(resolvedUser.banner_url);
   const isOnline = onlineUsers.has(user.id);
   const member = members.find((m) => m.user.id === user.id);
   const memberRoles = roles || member?.roles;
@@ -533,8 +493,6 @@ export default function MobileProfileSheet({
     myMember?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
   const canKick = hasPermission(myTotalPerms, PERMISSIONS.KICK_MEMBERS);
   const canBanPerm = hasPermission(myTotalPerms, PERMISSIONS.BAN_MEMBERS);
-  const canManage = hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER);
-  const hasModActions = !isMe && (canKick || canBanPerm || canManage);
 
   useEffect(() => {
     if (isMe || !user.id) return;
@@ -585,7 +543,7 @@ export default function MobileProfileSheet({
     onClose();
   };
 
-  // 0 blocked, 1 friends, 2 incoming, 3 outgoing (see UserProfileModal).
+  // 0 friend, 1 blocked, 2 incoming, 3 outgoing (see FriendsView).
   const relationship = relationships.find((entry) => entry.user.id === user.id);
   const friendAction =
     isMe || (relationship && relationship.type !== 3)
@@ -623,12 +581,18 @@ export default function MobileProfileSheet({
           surfaceClassName="inset-y-0"
         >
           <div className="relative flex h-full flex-col">
-            <DrawerHandle className="absolute inset-x-0 top-0 z-50 bg-white/60" />
+            <DrawerHandle
+              className={cn(
+                "absolute inset-x-0 top-0 z-20",
+                hasBannerImage
+                  ? "bg-white/60" // ds-allow:palette-color media overlay on a banner image
+                  : "bg-[var(--rm-profile-custom-card-border)]",
+              )}
+            />
             <ProfileToolbar
               onClose={onClose}
-              isMe={isMe}
               friendAction={friendAction}
-              onOpenProfileEditor={onOpenProfileEditor}
+              hasBannerImage={hasBannerImage}
             />
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <ProfileBanner
@@ -647,7 +611,8 @@ export default function MobileProfileSheet({
                 <ProfileActions
                   isMe={isMe}
                   handleMessage={handleMessage}
-                  handleCall={relationship?.type === 0 ? undefined : handleCall}
+                  // Anyone but a blocked user can be called.
+                  handleCall={relationship?.type === 1 ? undefined : handleCall}
                   onOpenProfileEditor={onOpenProfileEditor}
                 />
 
@@ -655,12 +620,8 @@ export default function MobileProfileSheet({
                   user={resolvedUser}
                   memberRoles={memberRoles}
                   profileReferenceDate={profileReferenceDate}
-                  hasModActions={hasModActions}
-                  canManage={canManage}
-                  canKick={canKick}
-                  canBanPerm={canBanPerm}
-                  onBan={onBan}
-                  onKick={onKick}
+                  onBan={!isMe && canBanPerm ? onBan : undefined}
+                  onKick={!isMe && canKick ? onKick : undefined}
                   onClose={onClose}
                 />
               </div>

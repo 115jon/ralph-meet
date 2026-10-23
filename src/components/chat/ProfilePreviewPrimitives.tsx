@@ -18,7 +18,7 @@ export function ProfilePreviewWidgetCard({
   return (
     <section
       className={cn(
-        "rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4",
+        "rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4",
         className,
       )}
     >
@@ -76,7 +76,15 @@ export function ProfileSurfaceBackdrop({
         className="absolute inset-0 opacity-80"
         style={{ background: "var(--rm-profile-custom-banner-overlay)" }}
       />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.16)_0%,_rgba(255,255,255,0.04)_34%,_transparent_58%),linear-gradient(180deg,_rgba(8,10,16,0.08)_0%,_rgba(8,10,16,0.24)_42%,_rgba(8,10,16,0.64)_100%)]" />
+      {/* Fade into the profile surface so text below the backdrop stays
+          legible in every theme (no fixed black/white wash). */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(180deg, transparent 0%, color-mix(in oklab, var(--rm-profile-custom-background) 64%, transparent) 100%)",
+        }}
+      />
     </div>
   );
 }

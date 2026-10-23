@@ -72,10 +72,20 @@ export interface ResolvedProfileTheme {
   isLightSurface: boolean | null;
 }
 
+/**
+ * The colour pair the server stores and validates when a user has not picked
+ * a profile theme. Server code (sync, update-profile, users/me, services) keeps
+ * writing these hex values; the client treats a stored pair equal to them as
+ * "no custom colours" and resolves to the app theme instead (see
+ * `resolveProfileTheme`). Never write CSS variables to the database.
+ */
 export const DEFAULT_PROFILE_THEME = {
   accent: "#5865F2",
   background: "#161A22",
 } as const;
+
+/** Alias that names the role of `DEFAULT_PROFILE_THEME` on the client. */
+export const LEGACY_DEFAULT_PROFILE_COLORS = DEFAULT_PROFILE_THEME;
 
 const LEGACY_DEFAULT_PROFILE_THEME = {
   accent: "#0B0BE6",
@@ -741,9 +751,63 @@ export function createRandomDisplayNameStyle() {
   } satisfies DisplayNameStyle;
 }
 
+/**
+ * True when the profile has no custom colours: both fields empty/invalid, the
+ * pre-2025 legacy pair, or the server's stored default pair.
+ */
+export function hasCustomProfileColors(input: ProfileCustomizationInput) {
+  const { profile_accent_color: accent, profile_background_color: background } =
+    sanitizeProfileCustomizationInput(input);
+  const accentIsDefault =
+    accent === null || accent === DEFAULT_PROFILE_THEME.accent;
+  const backgroundIsDefault =
+    background === null || background === DEFAULT_PROFILE_THEME.background;
+  return !(accentIsDefault && backgroundIsDefault);
+}
+
+/**
+ * Profile variables for a user without custom colours: every value points at
+ * the app's `--rm-*` theme tokens, so profiles follow light and dark themes.
+ * Client-only; these strings are never valid input for the server.
+ */
+function resolveThemeTokenProfile(banner: string | null): ResolvedProfileTheme {
+  return {
+    variables: {
+      "--rm-profile-custom-background": "var(--rm-bg-surface)",
+      "--rm-profile-custom-accent": "var(--rm-accent-solid)",
+      "--rm-profile-custom-accent-muted": "var(--rm-accent-tint)",
+      "--rm-profile-custom-text": "var(--rm-text-primary)",
+      "--rm-profile-custom-muted": "var(--rm-text-secondary)",
+      "--rm-profile-custom-ghost": "var(--rm-text-muted)",
+      "--rm-profile-custom-card-bg": "var(--rm-tint-1)",
+      "--rm-profile-custom-card-bg-strong": "var(--rm-tint-2)",
+      "--rm-profile-custom-card-border": "var(--rm-border)",
+      "--rm-profile-custom-button-bg": "var(--rm-accent-solid)",
+      "--rm-profile-custom-button-text": "var(--rm-on-accent)",
+      "--rm-profile-custom-button-shadow": "transparent",
+      "--rm-profile-custom-surface": "var(--rm-bg-surface)",
+      "--rm-profile-custom-surface-overlay": "none",
+      "--rm-profile-custom-surface-overlay-strong": "none",
+      "--rm-profile-custom-banner-fallback": banner ?? "var(--rm-accent-tint)",
+      "--rm-profile-custom-banner-overlay": "none",
+    } as CSSProperties,
+    // null tells ProfileDisplayName to read the rendered background instead.
+    backgroundColor: null,
+    textColor: null,
+    accentColor: null,
+    isLightSurface: null,
+  };
+}
+
 export function resolveProfileTheme(
   input: ProfileCustomizationInput,
 ): ResolvedProfileTheme {
+  if (!hasCustomProfileColors(input)) {
+    return resolveThemeTokenProfile(
+      normalizeHexColor(input.profile_banner_color),
+    );
+  }
+
   const {
     profile_accent_color: resolvedAccent,
     profile_background_color: resolvedBackground,

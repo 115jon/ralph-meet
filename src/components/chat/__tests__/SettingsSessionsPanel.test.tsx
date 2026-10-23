@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
-import { apiGet } from "@/lib/api-client";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { apiDelete, apiGet } from "@/lib/api-client";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SessionsPanel from "../settings/SessionsPanel";
 
@@ -73,5 +79,70 @@ describe("SessionsPanel", () => {
     expect(screen.getByText(/2 hours ago/)).toBeInTheDocument();
     expect(screen.getByText(/Unknown time/)).toBeInTheDocument();
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+
+  it("does not claim there are no other devices after a failed load", async () => {
+    vi.mocked(apiGet).mockRejectedValue(
+      Object.assign(new Error("Authentication required"), { status: 401 }),
+    );
+
+    render(<SessionsPanel />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.queryByText("No other devices are signed in."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Authentication required")).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your session has ended. Sign in again to load your sessions.",
+    );
+    expect(screen.getByRole("button", { name: /Try again/ })).toBeVisible();
+  });
+
+  it("shows a failed sign-out on the device's own row", async () => {
+    vi.mocked(apiGet).mockResolvedValue({
+      sessions: [
+        {
+          id: "here",
+          isCurrent: true,
+          activity: { browserName: "Firefox", deviceType: "Desktop" },
+        },
+        {
+          id: "phone",
+          isCurrent: false,
+          lastActiveAt: Date.now(),
+          activity: { browserName: "Safari", deviceType: "Mobile" },
+        },
+      ],
+    });
+    vi.mocked(apiDelete).mockRejectedValue(
+      Object.assign(new Error("D1_ERROR"), { status: 500 }),
+    );
+
+    render(<SessionsPanel />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign out Mobile · Safari" }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign out device" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const confirm = screen.getByRole("group", {
+      name: /Mobile · Safari will be signed out/,
+    });
+    expect(confirm).toHaveTextContent(
+      "Unable to sign out this device. Try again in a moment.",
+    );
+    expect(screen.queryByText(/D1_ERROR/)).toBeNull();
   });
 });

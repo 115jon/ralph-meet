@@ -13,6 +13,10 @@ import { PublicFixture } from "@/components/dev/public-fixtures";
 import { PickerFixture } from "@/components/dev/picker-fixtures";
 import { EmbedFixture } from "@/components/dev/embed-fixtures";
 import { ActivityFixture } from "@/components/dev/activity-fixtures";
+import {
+  isSettingsProfileFixture,
+  SettingsProfileFixture,
+} from "@/components/dev/sp-fixtures";
 import ChatArea from "@/components/chat/ChatArea";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import ContextMenu from "@/components/chat/ContextMenu";
@@ -2473,6 +2477,17 @@ export default function UiFixtures() {
         <EmbedFixture surface={surfaceName} />
       ) : surfaceName.startsWith("act-") ? (
         <ActivityFixture surface={surfaceName} />
+      ) : isSettingsProfileFixture(surfaceName) ? (
+        <SettingsProfileFixture
+          surface={surfaceName}
+          shell={
+            surfaceName.startsWith("sp-sheet") ? (
+              <MobileFixture surface="mobile" />
+            ) : (
+              <Shell surface="shell" />
+            )
+          }
+        />
       ) : isSearchFixture(surfaceName) ? (
         <SearchFixture
           surface={surfaceName}

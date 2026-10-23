@@ -16,6 +16,10 @@ beforeAll(() => {
   HTMLElement.prototype.releasePointerCapture = vi.fn();
 });
 
+vi.mock("@/components/chat/settings/CameraCard", () => ({
+  default: () => <div data-testid="camera-card" />,
+}));
+
 vi.mock("@/lib/useMediaDevices", () => ({
   useMediaDevices: () => ({
     videoInputs: [],
@@ -108,16 +112,20 @@ describe("dialog positioning regression guard", () => {
     ).not.toBeNull();
   });
 
-  it("uses the shadcn dialog primitive for camera settings positioning", () => {
+  it("uses the shared responsive dialog for camera settings", () => {
     render(<CameraSettingsModal isOpen onClose={() => {}} />);
     const markup = document.body.innerHTML;
-    const scrollRegion = document.querySelector<HTMLElement>(
-      ".flex-1.space-y-5.overflow-y-auto",
+    const content = document.querySelector<HTMLElement>(
+      '[data-slot="dialog-content"]',
     );
+    const scrollRegion =
+      content?.querySelector<HTMLElement>(".overflow-y-auto");
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-50");
+    expect(content).not.toBeNull();
+    expect(screen.getByRole("dialog", { name: "Camera" })).toBeVisible();
     expect(scrollRegion).not.toBeNull();
     expect(scrollRegion).toHaveClass("min-h-0");
+    expect(screen.getByTestId("camera-card")).toBeVisible();
   });
 });

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { apiDelete, apiGet } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { useClientReferenceTime } from "@/lib/client-date-format";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -55,6 +56,7 @@ function SessionItem({
     triggerRef: confirmTriggerRef,
   } = useConfirm();
   const [revoking, setRevoking] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const isMobile = Boolean(session.activity?.isMobile);
   const browserName =
     session.activity?.browserName ||
@@ -102,13 +104,20 @@ function SessionItem({
           consequence={`${title} will be signed out and need to sign in again.`}
           confirmLabel="Sign out device"
           busy={revoking}
-          onCancel={cancelConfirm}
+          error={revokeError}
+          onCancel={() => {
+            setRevokeError(null);
+            cancelConfirm();
+          }}
           onConfirm={() => {
             setRevoking(true);
-            void onRevoke(session.id).finally(() => {
-              setRevoking(false);
-              finishConfirm();
-            });
+            setRevokeError(null);
+            onRevoke(session.id)
+              .then(() => finishConfirm())
+              .catch((err: unknown) =>
+                setRevokeError(describeApiError(err, "sign out this device")),
+              )
+              .finally(() => setRevoking(false));
           }}
         />
       ) : null}
@@ -116,20 +125,38 @@ function SessionItem({
   );
 }
 
+/** Placeholder rows at the real row height while sessions load. */
+function SessionSkeleton() {
+  return (
+    <div role="status" className="flex flex-col gap-3">
+      <span className="sr-only">Loading sessions</span>
+      {[0, 1].map((index) => (
+        <div key={index} aria-hidden="true" className="flex items-center gap-3">
+          <span className="size-10 shrink-0 animate-pulse rounded-full bg-rm-tint-1 motion-reduce:animate-none" />
+          <span className="flex flex-1 flex-col gap-1.5">
+            <span className="h-4 w-40 max-w-full animate-pulse rounded-xs bg-rm-tint-1 motion-reduce:animate-none" />
+            <span className="h-3 w-56 max-w-full animate-pulse rounded-xs bg-rm-tint-1 motion-reduce:animate-none" />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SessionsPanel() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const referenceTime = useClientReferenceTime();
 
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
-    setSessionError(null);
+    setLoadError(null);
     try {
       const data = await apiGet<{ sessions: any[] }>("/api/sessions");
       setSessions(data.sessions);
-    } catch (err: any) {
-      setSessionError(err.message || "Couldn't load sessions. Try again.");
+    } catch (err: unknown) {
+      setLoadError(describeApiError(err, "load your sessions"));
     } finally {
       setSessionsLoading(false);
     }
@@ -139,37 +166,39 @@ export default function SessionsPanel() {
     void fetchSessions();
   }, [fetchSessions]);
 
+  /** Throws on failure; the row shows the error in its confirm strip. */
   const handleRevokeSession = async (sessionId: string) => {
-    try {
-      await apiDelete("/api/sessions", { sessionId });
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    } catch (err: any) {
-      setSessionError(err.message || "Couldn't sign out that device.");
-    }
+    await apiDelete("/api/sessions", { sessionId });
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
   };
 
   const currentSessions = sessions.filter((session) => session.isCurrent);
   const otherSessions = sessions.filter((session) => !session.isCurrent);
   const loadingFirst = sessionsLoading && sessions.length === 0;
+  // Nothing is known about other devices until a load succeeds.
+  const unknown = loadingFirst || (Boolean(loadError) && sessions.length === 0);
 
   return (
     <>
       <SettingsCard id="this-device">
-        <SettingsRow
-          id="current-session"
-          layout="block"
-          hideLabel
-          footer={sessionError ? <RowError>{sessionError}</RowError> : null}
-        >
+        <SettingsRow id="current-session" layout="block" hideLabel>
           {() =>
             loadingFirst ? (
-              <p
-                role="status"
-                className="flex items-center gap-2 text-ui-sm text-rm-text-secondary"
-              >
-                <Icon name="loader" size="sm" className="animate-spin" />
-                Loading sessions…
-              </p>
+              <SessionSkeleton />
+            ) : loadError ? (
+              <div className="flex flex-col items-start gap-2">
+                <RowError className="mt-0 self-stretch">{loadError}</RowError>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  loading={sessionsLoading}
+                  onClick={() => void fetchSessions()}
+                >
+                  <Icon name="refresh" size="sm" />
+                  Try again
+                </Button>
+              </div>
             ) : currentSessions.length > 0 ? (
               <ul>
                 {currentSessions.map((session) => (
@@ -184,9 +213,7 @@ export default function SessionsPanel() {
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-ui-sm text-rm-text-secondary">
-                  {sessionError
-                    ? "Couldn't load your sessions."
-                    : "We couldn't find this device's session."}
+                  We couldn't find this device's session.
                 </p>
                 <Button
                   type="button"
@@ -206,7 +233,15 @@ export default function SessionsPanel() {
       <SettingsCard id="other-devices">
         <SettingsRow id="other-sessions" layout="block" hideLabel>
           {() =>
-            loadingFirst ? null : otherSessions.length > 0 ? (
+            unknown ? (
+              loadingFirst ? (
+                <SessionSkeleton />
+              ) : (
+                <p className="text-ui-sm text-rm-text-secondary">
+                  Your other devices show here once your sessions load.
+                </p>
+              )
+            ) : otherSessions.length > 0 ? (
               <ul className="divide-y divide-rm-border">
                 {otherSessions.map((session) => (
                   <SessionItem

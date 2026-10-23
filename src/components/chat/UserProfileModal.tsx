@@ -1,30 +1,45 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
-import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
-import {
-  PROFILE_SURFACE_ASPECT_RATIO,
-  ProfilePreviewWidgetCard,
-  ProfileSurfaceBackdrop,
-} from "@/components/chat/ProfilePreviewPrimitives";
-import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
+import {
+  UserStatusDot,
+  type UserStatus,
+} from "@/components/chat/UserStatusDot";
+import { ConfirmStrip, RowError } from "@/components/chat/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Icon } from "@/components/ui/icon";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { resolveProfileReferenceDate } from "@/lib/profile-dates";
 import { resolveProfileTheme } from "@/lib/profile-customization";
+import { resolveProfileReferenceDate } from "@/lib/profile-dates";
 import type { User } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { Icon } from "@/components/ui/icon";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 interface Props {
   open: boolean;
   user: User;
   onClose: () => void;
+  /** Open with the block confirmation showing (fixtures). */
+  initialBlockConfirm?: boolean;
 }
 
 type JoinedMemberRecord = {
@@ -60,35 +75,56 @@ type ProfileResponse = {
 
 type RelationshipAction = "add" | "remove" | "accept" | "block" | "unblock";
 
-const EMPTY_MUTUAL_FRIENDS: MutualFriendSummary = { count: 0, items: [] };
-const EMPTY_MUTUAL_SERVERS: MutualServerSummary = { count: 0, items: [] };
-const STATUS_CLASS_NAMES: Record<string, string> = {
-  online: "bg-emerald-500",
-  idle: "bg-amber-500",
-  dnd: "bg-rm-badge",
-  offline: "bg-rm-text-muted/40",
-};
-const STATUS_LABELS: Record<string, string> = {
+const STATUS_LABELS: Record<UserStatus, string> = {
   online: "Online",
   idle: "Idle",
   dnd: "Do Not Disturb",
   offline: "Offline",
 };
 
-function StatRow({ label, value }: { label: string; value: string }) {
+/** Verb phrases for describeApiError, read after "Unable to". */
+const ACTION_COPY: Record<RelationshipAction, (name: string) => string> = {
+  add: (name) => `send ${name} a friend request`,
+  accept: (name) => `accept ${name}'s friend request`,
+  remove: (name) => `update your friendship with ${name}`,
+  block: (name) => `block ${name}`,
+  unblock: (name) => `unblock ${name}`,
+};
+
+const EYEBROW =
+  "text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted";
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5">
-      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-        {label}
-      </span>
-      <span className="truncate text-right text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
-        {value}
-      </span>
-    </div>
+    <section className="flex flex-col gap-2">
+      <h3 className={EYEBROW}>{title}</h3>
+      {children}
+    </section>
   );
 }
 
-export default function UserProfileModal({ open, user, onClose }: Props) {
+function Chip({ media, label }: { media: ReactNode; label: ReactNode }) {
+  return (
+    <li className="flex min-w-0 max-w-full items-center gap-2 rounded-full bg-rm-tint-1 py-1 pr-3 pl-1">
+      <span className="relative flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-tint-2 text-ui-2xs font-semibold text-rm-text-secondary">
+        {media}
+      </span>
+      <span className="min-w-0 truncate text-ui-sm text-rm-text">{label}</span>
+    </li>
+  );
+}
+
+/**
+ * The full profile card (Friends menu → Profile). A content-width dialog on
+ * desktop, a bottom drawer on phones; one scroller either way. Only sections
+ * backed by real data: about, member since, mutual servers and friends.
+ */
+export default function UserProfileModal({
+  open,
+  user,
+  onClose,
+  initialBlockConfirm = false,
+}: Props) {
   const relationships = useChatStore((state) => state.relationships);
   const currentUser = useChatStore((state) => state.user);
   const memberRecord = useChatStore(
@@ -99,9 +135,13 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
   );
   const { openDm, loadRelationships, dispatch } = useChatActions();
 
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<RelationshipAction | "message" | null>(null);
   const [profileData, setProfileData] = useState<ProfileResponse | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmBlock, setConfirmBlock] = useState(initialBlockConfirm);
+  const [blockError, setBlockError] = useState<string | null>(null);
+  const blockTriggerRef = useRef<HTMLButtonElement>(null);
 
   const relationship = relationships.find((entry) => entry.user.id === user.id);
   const seededUser =
@@ -110,22 +150,23 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
   const isMe = currentUser?.id === resolvedUser.id;
   const displayName = getDisplayName(resolvedUser);
   const profileTheme = resolveProfileTheme(resolvedUser);
-  const profileThemeStyle = profileTheme.variables;
-  const profileReferenceDate = resolveProfileReferenceDate({
+  const referenceDate = resolveProfileReferenceDate({
     joinedAt: memberRecord?.joined_at,
     createdAt: resolvedUser.created_at ?? null,
   });
-  const mutualFriends = !isMe
-    ? (profileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS)
-    : EMPTY_MUTUAL_FRIENDS;
-  const mutualServers = !isMe
-    ? (profileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS)
-    : EMPTY_MUTUAL_SERVERS;
+  // "Unknown" when neither date is on record: not worth a section.
+  const hasReferenceDate = Boolean(
+    memberRecord?.joined_at || resolvedUser.created_at,
+  );
+  const mutualFriends = isMe ? null : profileData?.mutualFriends;
+  const mutualServers = isMe ? null : profileData?.mutualServers;
   const customStatus = resolvedUser.custom_status?.trim() ?? "";
   const pronouns = resolvedUser.pronouns?.trim() ?? "";
   const bio = resolvedUser.bio?.trim() ?? "";
-  const resolvedStatus = resolvedUser.status ?? "offline";
-  const resolvedStatusLabel = STATUS_LABELS[resolvedStatus] ?? "Offline";
+  const status = (resolvedUser.status ?? "offline") as UserStatus;
+  const statusLabel = STATUS_LABELS[status] ?? STATUS_LABELS.offline;
+  const isBlocked = relationship?.type === 1;
+  const fallbackName = getDisplayName(user);
 
   useEffect(() => {
     void loadRelationships();
@@ -139,27 +180,24 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
 
     void apiGet<ProfileResponse>(`/api/users/${user.id}/profile`)
       .then((data) => {
-        if (cancelled) return;
-        setProfileData(data);
+        if (!cancelled) setProfileData(data);
       })
       .catch((error) => {
         if (cancelled) return;
         setProfileError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load the latest profile preview.",
+          describeApiError(error, `load ${fallbackName}'s profile`),
         );
       });
 
     return () => {
       cancelled = true;
     };
-  }, [isMe, user.id]);
+  }, [isMe, user.id, fallbackName]);
 
-  const handleRelationshipAction = useCallback(
+  const runRelationshipAction = useCallback(
     async (action: RelationshipAction) => {
-      setLoading(true);
-
+      setBusy(action);
+      setActionError(null);
       try {
         if (action === "add") {
           await apiPost("/api/friends", { username: resolvedUser.username });
@@ -168,546 +206,341 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
             target_user_id: resolvedUser.id,
             action,
           });
-        } else if (action === "remove" || action === "unblock") {
+        } else {
           await apiDelete("/api/friends", { target_user_id: resolvedUser.id });
         }
-
         await loadRelationships();
+        return true;
+      } catch (error) {
+        const copy = describeApiError(error, ACTION_COPY[action](displayName));
+        if (action === "block") setBlockError(copy);
+        else setActionError(copy);
+        return false;
       } finally {
-        setLoading(false);
+        setBusy(null);
       }
     },
-    [loadRelationships, resolvedUser.id, resolvedUser.username],
+    [displayName, loadRelationships, resolvedUser.id, resolvedUser.username],
   );
 
-  const handleMessage = useCallback(async () => {
+  const cancelBlock = useCallback(() => {
+    setConfirmBlock(false);
+    setBlockError(null);
+    requestAnimationFrame(() => blockTriggerRef.current?.focus());
+  }, []);
+
+  const handleBlock = async () => {
+    if (await runRelationshipAction("block")) setConfirmBlock(false);
+  };
+
+  const handleMessage = async () => {
     if (isMe) return;
-
+    setBusy("message");
+    setActionError(null);
     const channelId = await openDm(resolvedUser.id);
-    if (!channelId) return;
-
+    setBusy(null);
+    if (!channelId) {
+      setActionError(
+        `Unable to open your messages with ${displayName}. Check your connection and try again.`,
+      );
+      return;
+    }
     dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
     onClose();
-  }, [dispatch, isMe, onClose, openDm, resolvedUser.id]);
+  };
 
-  const handleCopyUserId = useCallback(async () => {
+  const handleCopyUserId = async () => {
     try {
       await navigator.clipboard.writeText(resolvedUser.id);
     } catch {
-      // Ignore clipboard failures and keep the preview usable.
+      // Clipboard can be unavailable (insecure context); the ID is not lost.
     }
-  }, [resolvedUser.id]);
+  };
+
+  const relationshipButtons = (() => {
+    const pending = busy !== null;
+    switch (relationship?.type) {
+      case 0:
+        return (
+          <Button
+            variant="secondary"
+            loading={busy === "remove"}
+            disabled={pending && busy !== "remove"}
+            onClick={() => void runRelationshipAction("remove")}
+          >
+            <Icon name="userRemove" size="sm" />
+            Remove friend
+          </Button>
+        );
+      case 1:
+        return (
+          <Button
+            variant="secondary"
+            loading={busy === "unblock"}
+            disabled={pending && busy !== "unblock"}
+            onClick={() => void runRelationshipAction("unblock")}
+          >
+            Unblock
+          </Button>
+        );
+      case 2:
+        return (
+          <>
+            <Button
+              variant="secondary"
+              loading={busy === "accept"}
+              disabled={pending && busy !== "accept"}
+              onClick={() => void runRelationshipAction("accept")}
+            >
+              <Icon name="check" size="sm" />
+              Accept request
+            </Button>
+            <Button
+              variant="ghost"
+              loading={busy === "remove"}
+              disabled={pending && busy !== "remove"}
+              onClick={() => void runRelationshipAction("remove")}
+            >
+              Decline
+            </Button>
+          </>
+        );
+      case 3:
+        return (
+          <Button variant="secondary" disabled>
+            Friend request sent
+          </Button>
+        );
+      default:
+        return (
+          <Button
+            variant="secondary"
+            loading={busy === "add"}
+            disabled={pending && busy !== "add"}
+            onClick={() => void runRelationshipAction("add")}
+          >
+            <Icon name="invite" size="sm" />
+            Add friend
+          </Button>
+        );
+    }
+  })();
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <div
-          className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center bg-black/62 p-4 animate-in fade-in duration-200",
-            "data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
-          )}
-          data-state={open ? "open" : "closed"}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              onClose();
-            }
-          }}
-          role="presentation"
-        >
-          <DialogSurface
-            showCloseButton={false}
-            className={cn(
-              "relative m-0 w-full overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-primary shadow-2xl outline-none animate-in zoom-in-95 duration-200",
-              "data-[state=closed]:animate-out data-[state=closed]:zoom-out-95",
-            )}
-            style={{
-              width: "min(1240px, calc(100vw - 32px))",
-              height: "min(860px, calc(100dvh - 32px))",
-            }}
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <ResponsiveDialogContent
+        showCloseButton={false}
+        onEscapeKeyDown={(event) => {
+          // Escape backs out of the block confirmation before the profile.
+          if (!confirmBlock) return;
+          event.preventDefault();
+          cancelBlock();
+        }}
+        style={profileTheme.variables}
+        className="gap-0"
+        drawerClassName="px-0"
+        dialogClassName="flex max-h-[min(720px,calc(100dvh-32px))] flex-col overflow-hidden p-0 md:max-w-lg"
+      >
+        <ResponsiveDialogTitle className="sr-only">
+          {`${displayName}'s profile`}
+        </ResponsiveDialogTitle>
+        <ResponsiveDialogDescription className="sr-only">
+          {`@${resolvedUser.username}, ${statusLabel}`}
+        </ResponsiveDialogDescription>
+
+        <ResponsiveDialogClose asChild>
+          <IconButton
+            icon="close"
+            size="sm"
+            // The dialog close step (12.8) over a banner photo: a surface chip.
+            iconSize="sm"
+            aria-label="Close profile"
+            className="absolute top-3 right-3 z-20 bg-rm-bg-surface text-rm-text-secondary max-md:hidden dark:bg-rm-bg-elevated"
+          />
+        </ResponsiveDialogClose>
+
+        <div className="flex flex-col md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain">
+          <div
+            className="relative h-28 shrink-0 overflow-hidden max-md:mx-4 max-md:rounded-lg"
+            style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
           >
-            <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-rm-bg-primary">
-              <div className="pointer-events-none absolute right-5 top-5 z-30">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={onClose}
-                  className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-                  aria-label="Close profile preview"
-                >
-                  <Icon name="close" size="sm" />
-                </Button>
-              </div>
+            <ProfileAssetLayer
+              url={resolvedUser.banner_url}
+              contentType={resolvedUser.banner_content_type}
+              alt=""
+            />
+          </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto bg-rm-bg-primary custom-scrollbar">
-                <div className="h-full pb-24 md:pb-28 lg:pb-8">
-                  {profileError ? (
-                    <div className="m-4 mb-0 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
-                      {profileError}
-                    </div>
-                  ) : null}
-
-                  <div className="relative z-0 min-w-0 overflow-visible bg-rm-bg-elevated md:grid md:grid-cols-[minmax(0,388px)_minmax(0,520px)] md:justify-center md:gap-6 md:px-5 md:py-5 lg:grid-cols-[minmax(0,400px)_minmax(0,540px)] lg:gap-8 lg:px-8 lg:py-8">
-                    <div
-                      className="pointer-events-none absolute inset-0 z-0"
-                      style={{
-                        ...profileThemeStyle,
-                        backgroundImage: "var(--rm-profile-custom-surface)",
-                      }}
-                    />
-                    <ProfileSurfaceBackdrop
-                      bannerUrl={resolvedUser.banner_url}
-                      bannerContentType={resolvedUser.banner_content_type}
-                    />
-                    <div
-                      className="pointer-events-none absolute inset-0 z-10"
-                      style={{
-                        background:
-                          "var(--rm-profile-custom-surface-overlay-strong)",
-                      }}
-                    />
-
-                    <ProfileSurfaceShell
+          <div className="flex flex-col gap-6 px-4 pb-2 md:px-6 md:pb-6">
+            <div className="flex flex-col gap-3">
+              <div className="relative -mt-10 size-20 shrink-0 max-md:ml-2">
+                <div className="flex size-full items-center justify-center overflow-hidden rounded-full bg-rm-tint-3 text-ui-2xl font-semibold text-rm-text ring-4 ring-rm-bg-surface dark:ring-rm-bg-elevated">
+                  {resolvedUser.avatar_url ? (
+                    <AvatarImage
+                      src={getAuthAssetUrl(resolvedUser.avatar_url)}
+                      alt=""
                       display={resolvedUser.avatar_display}
-                      className="relative z-10 mx-auto mt-16 mb-14 w-full max-w-[400px] self-start"
-                      style={profileThemeStyle}
-                      surfaceStyle={{
-                        aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
-                      }}
-                    >
-                      <div
-                        className="relative h-[18%] min-h-[128px] w-full overflow-hidden"
-                        style={{
-                          background:
-                            "var(--rm-profile-custom-banner-fallback)",
-                        }}
-                      >
-                        <ProfileAssetLayer
-                          url={resolvedUser.banner_url}
-                          contentType={resolvedUser.banner_content_type}
-                          alt="Profile banner"
-                          className="opacity-94"
-                        />
-                        <div
-                          className="absolute inset-0"
-                          style={{
-                            background:
-                              "var(--rm-profile-custom-banner-overlay)",
-                          }}
-                        />
-                      </div>
-
-                      <div className="relative z-20 px-6 pb-7">
-                        <div className="-mt-9">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)]">
-                              {resolvedUser.avatar_url ? (
-                                <AvatarImage
-                                  src={getAuthAssetUrl(resolvedUser.avatar_url)}
-                                  alt={displayName}
-                                  display={resolvedUser.avatar_display}
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center rounded-full text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-text)]">
-                                  {getDisplayInitial({ name: displayName })}
-                                </div>
-                              )}
-                              <div className="absolute bottom-1 right-1 rounded-full border-4 border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
-                                <span
-                                  className={cn(
-                                    "block h-4 w-4 rounded-full",
-                                    STATUS_CLASS_NAMES[resolvedStatus] ??
-                                      STATUS_CLASS_NAMES.offline,
-                                  )}
-                                />
-                              </div>
-                            </div>
-
-                            {customStatus ? (
-                              <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
-                                <div className="inline-flex max-w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left">
-                                  <span className="truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
-                                    {customStatus}
-                                  </span>
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-
-                          <div className="mt-4">
-                            <ProfileDisplayName
-                              text={displayName}
-                              displayNameStyle={resolvedUser.display_name_style}
-                              className="truncate text-ui-xl font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
-                              backgroundColor={profileTheme.backgroundColor}
-                              readableFallbackColor={profileTheme.textColor}
-                            />
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-                              <span>@{resolvedUser.username}</span>
-                              {pronouns ? (
-                                <>
-                                  <span
-                                    aria-hidden="true"
-                                    className="text-[color:var(--rm-profile-custom-muted)]/60"
-                                  >
-                                    •
-                                  </span>
-                                  <span className="rounded-md border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
-                                    {pronouns}
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                          </div>
-
-                          {!isMe ? (
-                            <div className="mt-5 flex items-center gap-2">
-                              <Button
-                                type="button"
-                                onClick={() => void handleMessage()}
-                                className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] pointer-fine:hover:opacity-95"
-                                style={profileThemeStyle}
-                              >
-                                <Icon name="chat" size="sm" />
-                                Message
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={() => void handleCopyUserId()}
-                                className="h-10 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
-                                style={profileThemeStyle}
-                              >
-                                <Icon name="copy" size="sm" />
-                                Copy ID
-                              </Button>
-                            </div>
-                          ) : null}
-
-                          <div className="mt-5 space-y-5">
-                            <div className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3">
-                              <div className="space-y-1">
-                                <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-                                  Bio
-                                </div>
-                                <div className="rounded-lg border border-transparent px-0 py-0.5 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)]">
-                                  {bio || (
-                                    <span className="text-[color:var(--rm-profile-custom-muted)]">
-                                      This profile hasn&apos;t added a bio yet.
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-                                {profileReferenceDate.label}
-                              </div>
-                              <div className="mt-2 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
-                                {profileReferenceDate.value}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </ProfileSurfaceShell>
-
-                    <aside className="relative z-10 mt-6 w-full max-w-[540px] self-start justify-self-center md:mt-0 md:flex md:h-full md:min-h-0 md:flex-col">
-                      <div
-                        className="flex items-center gap-5 border-b border-[color:var(--rm-profile-custom-card-border)] pb-3"
-                        style={profileThemeStyle}
-                      >
-                        {["Board", "Connections", "Activity"].map(
-                          (tab, index) => (
-                            <button
-                              key={tab}
-                              type="button"
-                              className={cn(
-                                "pb-2 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
-                                index === 0 &&
-                                  "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
-                              )}
-                            >
-                              {tab}
-                            </button>
-                          ),
-                        )}
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-between">
-                        <div
-                          className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]"
-                          style={profileThemeStyle}
-                        >
-                          {displayName}&apos;s widgets
-                        </div>
-                      </div>
-
-                      <div className="mt-4 space-y-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-                        {!isMe ? (
-                          <ProfilePreviewWidgetCard
-                            title="Relationship"
-                            subtitle="Quick actions"
-                          >
-                            <div className="space-y-3">
-                              {relationship?.type === 0 ? (
-                                <Button
-                                  type="button"
-                                  disabled={loading}
-                                  onClick={() =>
-                                    void handleRelationshipAction("remove")
-                                  }
-                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white"
-                                >
-                                  {loading ? (
-                                    <Icon
-                                      name="loader"
-                                      size="sm"
-                                      className="animate-spin"
-                                    />
-                                  ) : (
-                                    <Icon name="userRemove" size="sm" />
-                                  )}
-                                  Remove Friend
-                                </Button>
-                              ) : relationship?.type === 2 ? (
-                                <div className="grid gap-2 md:grid-cols-2">
-                                  <Button
-                                    type="button"
-                                    disabled={loading}
-                                    onClick={() =>
-                                      void handleRelationshipAction("accept")
-                                    }
-                                    className="rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] pointer-fine:hover:brightness-105"
-                                    style={profileThemeStyle}
-                                  >
-                                    {loading ? (
-                                      <Icon
-                                        name="loader"
-                                        size="sm"
-                                        className="animate-spin"
-                                      />
-                                    ) : (
-                                      <Icon name="check" size="sm" />
-                                    )}
-                                    Accept
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    disabled={loading}
-                                    onClick={() =>
-                                      void handleRelationshipAction("remove")
-                                    }
-                                    className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
-                                    style={profileThemeStyle}
-                                  >
-                                    Decline
-                                  </Button>
-                                </div>
-                              ) : relationship?.type === 3 ? (
-                                <Button
-                                  type="button"
-                                  disabled
-                                  className="w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/75 text-[color:var(--rm-profile-custom-muted)]"
-                                  style={profileThemeStyle}
-                                >
-                                  Friend Request Sent
-                                </Button>
-                              ) : relationship?.type === 1 ? (
-                                <Button
-                                  type="button"
-                                  disabled={loading}
-                                  onClick={() =>
-                                    void handleRelationshipAction("unblock")
-                                  }
-                                  className="w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
-                                  style={profileThemeStyle}
-                                >
-                                  Unblock User
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  disabled={loading}
-                                  onClick={() =>
-                                    void handleRelationshipAction("add")
-                                  }
-                                  className="w-full rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] pointer-fine:hover:brightness-105"
-                                  style={profileThemeStyle}
-                                >
-                                  {loading ? (
-                                    <Icon
-                                      name="loader"
-                                      size="sm"
-                                      className="animate-spin"
-                                    />
-                                  ) : (
-                                    <Icon name="invite" size="sm" />
-                                  )}
-                                  Add Friend
-                                </Button>
-                              )}
-
-                              <div className="grid gap-2 md:grid-cols-2">
-                                <Button
-                                  type="button"
-                                  onClick={() => void handleMessage()}
-                                  className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
-                                  style={profileThemeStyle}
-                                >
-                                  <Icon name="chat" size="sm" />
-                                  Message
-                                </Button>
-                                <Button
-                                  type="button"
-                                  onClick={() => void handleCopyUserId()}
-                                  className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]"
-                                  style={profileThemeStyle}
-                                >
-                                  <Icon name="copy" size="sm" />
-                                  Copy ID
-                                </Button>
-                              </div>
-
-                              {relationship?.type !== 1 ? (
-                                <Button
-                                  type="button"
-                                  disabled={loading}
-                                  onClick={() =>
-                                    void handleRelationshipAction("block")
-                                  }
-                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive pointer-fine:hover:bg-rm-badge pointer-fine:hover:text-white"
-                                >
-                                  <Icon name="ban" size="sm" />
-                                  Block User
-                                </Button>
-                              ) : null}
-                            </div>
-                          </ProfilePreviewWidgetCard>
-                        ) : null}
-
-                        <ProfilePreviewWidgetCard
-                          title="Mutuals"
-                          subtitle="Shared circles"
-                        >
-                          <div className="space-y-4">
-                            <div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-                                  Friends
-                                </span>
-                                <span className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
-                                  {mutualFriends.count}
-                                </span>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {mutualFriends.items.length > 0 ? (
-                                  mutualFriends.items.map((friend) => (
-                                    <div
-                                      key={friend.id}
-                                      className="flex min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-1 pl-1 pr-3"
-                                    >
-                                      <div className="relative h-7 w-7 overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)]">
-                                        {friend.avatar_url ? (
-                                          <AvatarImage
-                                            src={getAuthAssetUrl(
-                                              friend.avatar_url,
-                                            )}
-                                            alt={getDisplayName(friend)}
-                                            display={friend.avatar_display}
-                                          />
-                                        ) : (
-                                          <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-[color:var(--rm-profile-custom-text)]">
-                                            {getDisplayInitial(friend)}
-                                          </div>
-                                        )}
-                                      </div>
-                                      <span className="max-w-[180px] truncate text-ui-sm text-[color:var(--rm-profile-custom-text)]">
-                                        {getDisplayName(friend)}
-                                      </span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-                                    No shared friends yet.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-                                  Servers
-                                </span>
-                                <span className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
-                                  {mutualServers.count}
-                                </span>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {mutualServers.items.length > 0 ? (
-                                  mutualServers.items.map((server) => (
-                                    <div
-                                      key={server.id}
-                                      className="flex min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-1 pl-1 pr-3"
-                                    >
-                                      <div className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)] text-ui-2xs font-bold text-[color:var(--rm-profile-custom-text)]">
-                                        {server.icon_url ? (
-                                          <img
-                                            src={getAuthAssetUrl(
-                                              server.icon_url,
-                                            )}
-                                            alt={server.name}
-                                            className="h-full w-full object-cover"
-                                          />
-                                        ) : (
-                                          server.name.charAt(0).toUpperCase()
-                                        )}
-                                      </div>
-                                      <span className="max-w-[180px] truncate text-ui-sm text-[color:var(--rm-profile-custom-text)]">
-                                        <InlineEmojiText text={server.name} />
-                                      </span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-                                    No shared servers right now.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </ProfilePreviewWidgetCard>
-
-                        <ProfilePreviewWidgetCard
-                          title="Details"
-                          subtitle="Profile snapshot"
-                        >
-                          <div className="space-y-3">
-                            <StatRow
-                              label="Status"
-                              value={resolvedStatusLabel}
-                            />
-                            <StatRow
-                              label={profileReferenceDate.label}
-                              value={profileReferenceDate.value}
-                            />
-                            <StatRow
-                              label="Pronouns"
-                              value={pronouns || "Not set"}
-                            />
-                          </div>
-                        </ProfilePreviewWidgetCard>
-                      </div>
-                    </aside>
-                  </div>
+                    />
+                  ) : (
+                    getDisplayInitial({ name: displayName })
+                  )}
                 </div>
+                <span className="absolute right-0 bottom-0 rounded-full bg-rm-bg-surface p-1 dark:bg-rm-bg-elevated">
+                  <UserStatusDot status={status} className="size-4" />
+                </span>
               </div>
+
+              <div className="min-w-0">
+                <ProfileDisplayName
+                  text={displayName}
+                  displayNameStyle={resolvedUser.display_name_style}
+                  className="block truncate text-ui-lg font-semibold text-rm-text"
+                />
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-ui-sm text-rm-text-secondary">
+                  <span className="break-words">@{resolvedUser.username}</span>
+                  {pronouns ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{pronouns}</span>
+                    </>
+                  ) : null}
+                  <span aria-hidden="true">·</span>
+                  <span>{statusLabel}</span>
+                </p>
+                {customStatus ? (
+                  <p className="mt-2 text-ui-sm text-pretty text-rm-text">
+                    {customStatus}
+                  </p>
+                ) : null}
+              </div>
+
+              {!isMe ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    loading={busy === "message"}
+                    disabled={busy !== null && busy !== "message"}
+                    onClick={() => void handleMessage()}
+                  >
+                    <Icon name="chat" size="sm" />
+                    Message
+                  </Button>
+                  {relationshipButtons}
+                  <TooltipProvider>
+                    <IconButton
+                      icon="copy"
+                      variant="muted"
+                      iconSize="sm"
+                      tooltip="Copy user ID"
+                      onClick={() => void handleCopyUserId()}
+                    />
+                  </TooltipProvider>
+                </div>
+              ) : null}
+
+              {actionError ? (
+                <RowError className="mt-0">{actionError}</RowError>
+              ) : null}
+              {profileError ? (
+                <RowError className="mt-0">{profileError}</RowError>
+              ) : null}
             </div>
-          </DialogSurface>
+
+            {bio ? (
+              <Section title="About me">
+                <p className="max-w-[62ch] text-ui-sm whitespace-pre-line text-pretty text-rm-text">
+                  {bio}
+                </p>
+              </Section>
+            ) : null}
+
+            {hasReferenceDate ? (
+              <Section title={referenceDate.label}>
+                <p className="text-ui-sm text-rm-text">{referenceDate.value}</p>
+              </Section>
+            ) : null}
+
+            {mutualServers && mutualServers.count > 0 ? (
+              <Section title={`Mutual servers · ${mutualServers.count}`}>
+                <ul className="flex flex-wrap gap-2">
+                  {mutualServers.items.map((server) => (
+                    <Chip
+                      key={server.id}
+                      media={
+                        server.icon_url ? (
+                          <img
+                            src={getAuthAssetUrl(server.icon_url)}
+                            alt=""
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          server.name.charAt(0).toUpperCase()
+                        )
+                      }
+                      label={<InlineEmojiText text={server.name} />}
+                    />
+                  ))}
+                </ul>
+              </Section>
+            ) : null}
+
+            {mutualFriends && mutualFriends.count > 0 ? (
+              <Section title={`Mutual friends · ${mutualFriends.count}`}>
+                <ul className="flex flex-wrap gap-2">
+                  {mutualFriends.items.map((friend) => (
+                    <Chip
+                      key={friend.id}
+                      media={
+                        friend.avatar_url ? (
+                          <AvatarImage
+                            src={getAuthAssetUrl(friend.avatar_url)}
+                            alt=""
+                            display={friend.avatar_display}
+                          />
+                        ) : (
+                          getDisplayInitial(friend)
+                        )
+                      }
+                      label={getDisplayName(friend)}
+                    />
+                  ))}
+                </ul>
+              </Section>
+            ) : null}
+
+            {!isMe && !isBlocked ? (
+              <div className="@container border-t border-rm-border pt-1">
+                {confirmBlock ? (
+                  <ConfirmStrip
+                    consequence={`Block ${displayName}? They'll be removed from your friends and can't send you friend requests. You can unblock them later.`}
+                    confirmLabel={`Block ${displayName}`}
+                    onConfirm={() => void handleBlock()}
+                    onCancel={cancelBlock}
+                    busy={busy === "block"}
+                    error={blockError}
+                  />
+                ) : (
+                  <Button
+                    ref={blockTriggerRef}
+                    variant="destructive"
+                    size="sm"
+                    className="mt-3"
+                    disabled={busy !== null}
+                    onClick={() => setConfirmBlock(true)}
+                  >
+                    <Icon name="ban" size="sm" />
+                    Block
+                  </Button>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </DialogPortal>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
