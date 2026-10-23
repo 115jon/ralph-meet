@@ -1,5 +1,7 @@
 "use client";
 
+import { CALL_ACCEPT } from "@/components/ui/dock";
+import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -119,11 +121,11 @@ export function IncomingCallModal() {
         >
           <div
             data-state={dialogOpen ? "open" : "closed"}
-            className="pointer-events-auto flex flex-col items-center w-[280px] rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[var(--rm-shadow-3)] p-6 animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+            className="pointer-events-auto flex w-[280px] flex-col items-center rounded-xl border border-rm-border bg-rm-bg-surface p-6 shadow-2xl animate-in fade-in zoom-in-[0.97] duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-[0.97] dark:bg-rm-bg-elevated"
           >
             {/* Avatar with theme-aware pulsing outline */}
             <div className="relative mb-4">
-              <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-visible bg-rm-bg-surface">
+              <div className="size-18 overflow-visible rounded-full bg-rm-tint-2 ring-2 ring-rm-status-online/60 motion-safe:animate-pulse">
                 {avatarSrc ? (
                   <AvatarImage
                     src={avatarSrc}
@@ -131,7 +133,7 @@ export function IncomingCallModal() {
                     display={activeCaller.avatarDisplay}
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center text-ui-2xl font-semibold text-rm-text-muted">
+                  <div className="flex h-full w-full items-center justify-center text-ui-2xl font-semibold text-rm-text">
                     {activeCaller.displayName[0]?.toUpperCase()}
                   </div>
                 )}
@@ -142,8 +144,8 @@ export function IncomingCallModal() {
             <DialogTitle className="text-ui-md font-semibold text-rm-text">
               <InlineEmojiText text={activeCaller.displayName} />
             </DialogTitle>
-            <DialogDescription className="text-ui-xs text-rm-text-muted mt-0.5 mb-5">
-              Incoming Call...
+            <DialogDescription className="mt-1 mb-6 text-ui-sm text-rm-text-secondary">
+              Incoming call…
             </DialogDescription>
 
             {/* Buttons */}
@@ -173,7 +175,7 @@ export function IncomingCallModal() {
                       size="lg"
                       onClick={handleAccept}
                       aria-label="Join Call"
-                      className="w-16 bg-emerald-600 text-white"
+                      className={cn("w-16", CALL_ACCEPT)}
                     >
                       <Icon name="call" size="lg" />
                     </Button>
