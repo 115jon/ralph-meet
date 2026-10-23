@@ -24,6 +24,7 @@ export function Tabs<T extends string>({
   onValueChange,
   idBase,
   panelId,
+  scrollable = false,
   className,
 }: {
   /** Accessible name for the tab list. */
@@ -34,16 +35,24 @@ export function Tabs<T extends string>({
   /** Stable prefix for tab ids; defaults to a generated id. */
   idBase?: string;
   panelId?: string;
+  /**
+   * Narrow containers (phone pages): the list scrolls sideways, swipeable on
+   * touch, and fades the edge that has more tabs past it so a clipped last
+   * tab reads as "more", not as a cut-off label.
+   */
+  scrollable?: boolean;
   className?: string;
 }) {
   const generated = React.useId();
   const base = idBase ?? generated;
+  const listRef = React.useRef<HTMLDivElement | null>(null);
   const refs = React.useRef<(HTMLButtonElement | null)[]>([]);
   const index = Math.max(
     0,
     items.findIndex((item) => item.value === value),
   );
   const [box, setBox] = React.useState({ x: 0, w: 0 });
+  const [fade, setFade] = React.useState({ start: false, end: false });
 
   React.useLayoutEffect(() => {
     const el = refs.current[index];
@@ -55,6 +64,44 @@ export function Tabs<T extends string>({
     ro.observe(el);
     return () => ro.disconnect();
   }, [index, items.length]);
+
+  const updateFade = React.useCallback(() => {
+    const list = listRef.current;
+    if (!list || !scrollable) return;
+    const max = list.scrollWidth - list.clientWidth;
+    // RTL scrollLeft runs 0 -> -max; compare magnitudes.
+    const pos = Math.abs(list.scrollLeft);
+    setFade((prev) => {
+      const next = { start: pos > 1, end: max - pos > 1 };
+      return prev.start === next.start && prev.end === next.end ? prev : next;
+    });
+  }, [scrollable]);
+
+  React.useLayoutEffect(() => {
+    if (!scrollable) return;
+    updateFade();
+    const list = listRef.current;
+    if (!list || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(updateFade);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [scrollable, updateFade, items.length]);
+
+  // Keep the selected tab in view when it changes (keyboard or a tap on a
+  // half-visible tab). Instant: tab switches are frequent (9.6).
+  React.useEffect(() => {
+    if (!scrollable) return;
+    const list = listRef.current;
+    const el = refs.current[index];
+    if (!list || !el) return;
+    const start = el.offsetLeft;
+    const end = start + el.offsetWidth;
+    if (start < list.scrollLeft) list.scrollLeft = start;
+    else if (end > list.scrollLeft + list.clientWidth)
+      list.scrollLeft = end - list.clientWidth;
+  }, [index, scrollable]);
+
+  const mask = scrollable ? fadeMask(fade) : undefined;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     const count = items.length;
@@ -71,10 +118,19 @@ export function Tabs<T extends string>({
 
   return (
     <div
+      ref={listRef}
       role="tablist"
       aria-label={label}
       aria-orientation="horizontal"
-      className={cn("relative flex items-stretch gap-4", className)}
+      data-scrollable={scrollable || undefined}
+      className={cn(
+        "relative flex items-stretch gap-4",
+        scrollable &&
+          "min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-none",
+        className,
+      )}
+      style={mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
+      onScroll={scrollable ? updateFade : undefined}
       onKeyDown={onKeyDown}
     >
       {items.map((item, i) => {
@@ -93,11 +149,11 @@ export function Tabs<T extends string>({
             tabIndex={selected ? 0 : -1}
             onClick={() => onValueChange(item.value)}
             className={cn(
-              "relative inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm font-medium outline-none [-webkit-tap-highlight-color:transparent]",
+              "relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-ui-sm outline-none [-webkit-tap-highlight-color:transparent] pointer-coarse:min-h-11",
               HIT,
               selected
-                ? "text-rm-text"
-                : "text-rm-text-muted pointer-fine:hover:text-rm-text",
+                ? "font-semibold text-rm-text"
+                : "font-medium text-rm-text-secondary pointer-fine:hover:text-rm-text",
             )}
           >
             {item.label}
@@ -112,6 +168,14 @@ export function Tabs<T extends string>({
       />
     </div>
   );
+}
+
+/** 24px fades on whichever inline edge has more tabs past it. */
+function fadeMask({ start, end }: { start: boolean; end: boolean }) {
+  if (!start && !end) return undefined;
+  const from = start ? "transparent 0, black 24px" : "black 0";
+  const to = end ? "black calc(100% - 24px), transparent 100%" : "black 100%";
+  return `linear-gradient(to right, ${from}, ${to})`;
 }
 
 /** The id `Tabs` gives a tab, for the panel's `aria-labelledby`. */

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import {
   Tooltip,
   TooltipContent,
@@ -86,25 +86,29 @@ export function ChatHeader({
 
   return (
     <header
-      className="relative z-20 flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary px-2.5 md:px-4"
+      className="relative z-20 flex shrink-0 items-center justify-between gap-2 border-b border-rm-border bg-rm-bg-primary px-4 max-md:pl-2"
       style={{
         height: "calc(48px + var(--safe-area-top, 0px))",
         paddingTop: "var(--safe-area-top, 0px)",
       }}
     >
-      <div className="flex items-center gap-1 group">
+      <div className="flex min-w-0 items-center gap-2">
         <IconButton
           aria-label="Servers"
           icon="back"
           variant="muted"
-          size="sm"
-          className="h-10 w-10 md:hidden"
+          size="md"
+          className="md:hidden"
           onClick={onMenuClick}
           title="Servers"
         />
 
         <button
-          className="group/mobiletext flex min-w-0 max-w-[min(45vw,180px)] items-center gap-1.5 text-left transition-opacity pointer-fine:hover:opacity-80 md:hidden"
+          type="button"
+          className={cn(
+            "relative flex min-w-0 max-w-[min(55vw,240px)] items-center gap-2 rounded-md text-left outline-none md:hidden",
+            HIT,
+          )}
           onClick={onMembersClick}
         >
           <Icon
@@ -122,8 +126,11 @@ export function ChatHeader({
               />
             </div>
             {!isDM && (
-              <span className="text-ui-2xs text-rm-text-muted font-medium flex items-center gap-1 mt-0.5 leading-none">
-                <div className="w-1.5 h-1.5 rounded-full bg-rm-text-muted/60" />
+              <span className="mt-0.5 flex items-center gap-1 text-ui-xs leading-4 text-rm-text-secondary">
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-rm-text-muted"
+                />
                 {memberCount} Members
               </span>
             )}
@@ -131,8 +138,9 @@ export function ChatHeader({
         </button>
 
         <button
+          type="button"
           className={cn(
-            "hidden items-center gap-1.5 md:flex pl-1 group/chname transition-ui cursor-pointer rounded-md px-2 py-1 -ml-2",
+            "relative hidden h-8 cursor-pointer items-center gap-2 rounded-md px-2 group/chname transition-colors duration-150 md:flex",
             showChannelDetails
               ? "bg-rm-tint-2"
               : "pointer-fine:hover:bg-rm-tint-1",
@@ -150,7 +158,7 @@ export function ChatHeader({
               <TooltipTrigger asChild>
                 <h2
                   className={cn(
-                    "text-ui-base font-semibold text-rm-text-primary leading-none",
+                    "text-ui-md font-semibold text-rm-text leading-none",
                     "pointer-fine:group-hover/chname:underline underline-offset-2",
                   )}
                 >
@@ -162,7 +170,7 @@ export function ChatHeader({
           ) : (
             <h2
               className={cn(
-                "text-ui-base font-semibold text-rm-text-primary leading-none",
+                "text-ui-md font-semibold text-rm-text leading-none",
                 "pointer-fine:group-hover/chname:underline underline-offset-2",
               )}
             >
@@ -182,8 +190,8 @@ export function ChatHeader({
         </button>
       </div>
 
-      <div className="flex items-center gap-1 text-rm-text-muted md:gap-2">
-        <div className="hidden md:flex items-center gap-0.5 border-r border-rm-border pr-2">
+      <div className="flex shrink-0 items-center gap-2 text-rm-text-muted">
+        <div className="hidden items-center gap-2 border-r border-rm-border pr-2 md:flex">
           {isDM && onCall && !hideCallButton && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -216,7 +224,7 @@ export function ChatHeader({
           >
             <Icon name="pin" state={showPins ? "active" : "idle"} size="lg" />
             {pinnedCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 badge-count bg-primary text-primary-foreground">
+              <span className="badge-count absolute -top-0.5 -right-0.5">
                 {pinnedCount}
               </span>
             )}
@@ -252,8 +260,8 @@ export function ChatHeader({
             aria-label="Search"
             icon="search"
             variant="muted"
-            size="sm"
-            className="h-10 w-10 md:hidden"
+            size="md"
+            className="md:hidden"
             onClick={onOpenSearch}
           />
         </div>

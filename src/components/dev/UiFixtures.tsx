@@ -19,6 +19,8 @@ import InviteModal from "@/components/chat/InviteModal";
 import { PinModal } from "@/components/chat/PinModal";
 import { PinnedMessagesSidebar } from "@/components/chat/PinnedMessagesSidebar";
 import MessageItem from "@/components/chat/MessageItem";
+import MemberList from "@/components/chat/MemberList";
+import { MobileMessagesTab } from "@/components/chat/mobile/MobileMessagesTab";
 import { DeleteMessageDialog } from "@/components/chat/DeleteMessageDialog";
 import { RemoveEmbedsDialog } from "@/components/chat/RemoveEmbedsDialog";
 import { DeleteSoundDialog } from "@/components/chat/DeleteSoundDialog";
@@ -424,7 +426,7 @@ function seedStore(surface: string) {
       "ch-random": at(400),
       "dm-grace": at(5),
     },
-    dmChannels,
+    dmChannels: surface === "dm-empty" ? [] : dmChannels,
     voiceChannelStates: { "ch-lounge": voiceMembers },
     voiceChannelStartedAt: { "ch-lounge": NOW - 25 * 60_000 },
     channelMentionCounts: { "ch-design": 2 },
@@ -485,10 +487,23 @@ function seedStore(surface: string) {
       },
     ],
     unreadNotificationCount: 2,
+    // 0 friend, 1 blocked, 2 incoming, 3 outgoing: every Friends tab has rows.
     relationships: [
-      { user: users.ada!, type: 1, created_at: at(100) },
-      { user: users.grace!, type: 1, created_at: at(100) },
+      { user: users.ada!, type: 0, created_at: at(100) },
+      { user: users.grace!, type: 0, created_at: at(100) },
+      { user: users.margaret!, type: 0, created_at: at(100) },
       { user: users.linus!, type: 2, created_at: at(10) },
+      { user: users.ken!, type: 3, created_at: at(8) },
+      {
+        user: {
+          id: "u-spam",
+          username: "spambot",
+          display_name: "Spam Bot",
+          status: "offline",
+        },
+        type: 1,
+        created_at: at(500),
+      },
     ],
   } as never);
 }
@@ -623,7 +638,17 @@ function FriendsShell() {
           </div>
         </div>
         <div className="chat-main-content relative flex min-w-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
-          <FriendsView onMenuClick={() => {}} onSelectDm={() => {}} />
+          <FriendsView
+            onMenuClick={() => {}}
+            onSelectDm={() => {}}
+            initialTab={
+              (fixtureParam("tab") as
+                | "online"
+                | "all"
+                | "pending"
+                | "blocked") ?? undefined
+            }
+          />
         </div>
       </div>
     </div>
@@ -1553,6 +1578,48 @@ function MobileFixture({ surface }: { surface: string }) {
   );
 }
 
+/** Empty DM list: sidebar on desktop, the Messages tab page on phones. */
+function DmEmptyFixture() {
+  return (
+    <>
+      <div className="hidden h-full md:block">
+        <FriendsShell />
+      </div>
+      <div className="h-full md:hidden">
+        <MobileMessagesTab onSelectDm={() => {}} onNavigate={() => {}} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * The channel details page (members + Media/Pins/Threads/Links/Files tabs),
+ * as the phone shows it full height, and as the desktop details column.
+ */
+function MembersPageFixture() {
+  return (
+    <div className="flex h-full w-full justify-end bg-rm-bg-primary">
+      <div className="flex h-full w-full flex-col bg-rm-bg-surface md:w-[360px] md:border-l md:border-rm-border">
+        <MemberList
+          members={members}
+          onlineUsers={new Set(["u-me", "u-ada", "u-grace", "u-linus"])}
+          currentUserId="u-me"
+          channelName="general"
+          channelId={null}
+          serverId="s-1"
+          pinnedMessages={[messages[3]!]}
+          onClose={() => {}}
+          onOpenSearch={() => {}}
+          onOpenSettings={() => {}}
+          onInviteClick={() => {}}
+          showDetails
+          onToggleDetails={() => {}}
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Phone home with the bottom tab bar: `mobile-home&tab=servers|messages|
  * notifications|you`.
@@ -2339,6 +2406,14 @@ export default function UiFixtures() {
     case "mobile":
     case "mobile-sidebar":
       content = <MobileFixture surface={surface} />;
+      break;
+    case "dm-empty":
+      // The DM list with no conversations: desktop sidebar ≥md, the phone
+      // Messages tab below.
+      content = <DmEmptyFixture />;
+      break;
+    case "members":
+      content = <MembersPageFixture />;
       break;
     default:
       content = surfaceName.startsWith("ov-") ? (

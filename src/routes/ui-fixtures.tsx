@@ -17,6 +17,7 @@
  *           shop | catalog-decorations | catalog-effects
  *           catalog-nameplates | catalog-frames
  *           shell-chat (shell without the member list)
+ *           friends (&tab=online|all|pending|blocked) | dm-empty | members
  *           ov-* overlays (design-audit units 7-9), each mounted open:
  *             ov-pin | ov-unpin | ov-reactions | ov-upload-sound
  *             ov-create-server | ov-create-channel | ov-create-category
