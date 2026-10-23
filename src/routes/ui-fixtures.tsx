@@ -11,6 +11,8 @@
  *           menus | splash | overlay | mobile | mobile-sidebar
  *           mobile-home (&tab=servers|messages|notifications|you)
  *           mobile-profile | mobile-profile-me | drawer | action-sheet
+ *           shop | catalog-decorations | catalog-effects
+ *           catalog-nameplates | catalog-frames
  */
 
 import { createFileRoute, notFound } from "@tanstack/react-router";

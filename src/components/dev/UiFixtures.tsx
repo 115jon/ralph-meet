@@ -27,6 +27,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import ServerList from "@/components/chat/ServerList";
+import { CatalogFixture, ShopFixture } from "@/components/dev/ShopFixtures";
 import SettingsModal from "@/components/chat/SettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
@@ -1121,6 +1122,15 @@ export default function UiFixtures() {
     case "mobile-profile":
     case "mobile-profile-me":
       content = <MobileProfileFixture self={surface === "mobile-profile-me"} />;
+      break;
+    case "shop":
+      content = <ShopFixture />;
+      break;
+    case "catalog-decorations":
+    case "catalog-effects":
+    case "catalog-nameplates":
+    case "catalog-frames":
+      content = <CatalogFixture surface={surfaceName} />;
       break;
     case "mobile":
     case "mobile-sidebar":
