@@ -7,6 +7,8 @@
  */
 
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
+import { SearchFixture } from "@/components/dev/search-fixtures";
+import { isSearchFixture } from "@/components/dev/search-fixture-surfaces";
 import ChatArea from "@/components/chat/ChatArea";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import ContextMenu from "@/components/chat/ContextMenu";
@@ -1127,18 +1129,22 @@ export default function UiFixtures() {
       content = <MobileFixture surface={surface} />;
       break;
     default:
-      content =
-        surfaceName === "settings" || surfaceName.startsWith("settings-") ? (
-          <SettingsFixture
-            tab={
-              surfaceName === "settings"
-                ? "appearance"
-                : surfaceName.replace("settings-", "")
-            }
-          />
-        ) : (
-          <Shell surface={surface} />
-        );
+      content = isSearchFixture(surfaceName) ? (
+        <SearchFixture
+          surface={surfaceName}
+          renderShell={(shellSurface) => <Shell surface={shellSurface} />}
+        />
+      ) : surfaceName === "settings" || surfaceName.startsWith("settings-") ? (
+        <SettingsFixture
+          tab={
+            surfaceName === "settings"
+              ? "appearance"
+              : surfaceName.replace("settings-", "")
+          }
+        />
+      ) : (
+        <Shell surface={surface} />
+      );
   }
 
   return (

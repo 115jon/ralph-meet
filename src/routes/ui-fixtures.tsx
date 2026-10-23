@@ -11,6 +11,9 @@
  *           menus | splash | overlay | mobile | mobile-sidebar
  *           mobile-home (&tab=servers|messages|notifications|you)
  *           mobile-profile | mobile-profile-me | drawer | action-sheet
+ *           search | search-idle | search-results | search-filtered
+ *           search-empty | search-loading | search-error | search-dm
+ *           command-menu (&q=)
  */
 
 import { createFileRoute, notFound } from "@tanstack/react-router";
