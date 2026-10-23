@@ -1,6 +1,9 @@
 /**
  * Dev-only fixture surfaces (see routes/ui-fixtures.tsx). Seeds the chat store
  * with static data and mounts the real components. Nothing here ships.
+ *
+ * Desktop shells drop their sidebar column below md, like the app, so
+ * shell / shell-dm / voice-live also show the phone layout at 390.
  */
 
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
@@ -11,6 +14,18 @@ import DMSidebar from "@/components/chat/DMSidebar";
 import { EmptyChatArea } from "@/components/chat/EmptyChatArea";
 import FriendsView from "@/components/chat/FriendsView";
 import InviteModal from "@/components/chat/InviteModal";
+import { MobileNavigationSheet } from "@/components/chat/MobileNavigationSheet";
+import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
+import { SettingsHost } from "@/components/chat/SettingsHost";
+import { Button } from "@/components/ui/button";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import ServerList from "@/components/chat/ServerList";
 import SettingsModal from "@/components/chat/SettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
@@ -24,6 +39,7 @@ import type { GridItem } from "@/components/voice/types";
 import type { ChatMember, VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Category, Channel, Message, Server, User } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
+import { type MobileTab, useMobileTabStore } from "@/stores/useMobileTabStore";
 import { useSearch } from "@tanstack/react-router";
 import { Icon } from "@/components/ui/icon";
 import { useTheme } from "next-themes";
@@ -353,6 +369,58 @@ function seedStore(surface: string) {
     pinsLoadedByChannelId: { [activeChannelId]: true },
     pinnedMessagesByChannelId: { [activeChannelId]: [messages[3]!] },
     pinnedMessages: [messages[3]!],
+    notifications: [
+      {
+        id: "n-1",
+        type: "mention",
+        channel_id: "ch-design",
+        server_id: "s-1",
+        message_id: "m-3",
+        from_user: {
+          id: "u-ada",
+          username: "ada",
+          display_name: "Ada Lovelace",
+        },
+        content: "@jon can you check the tab bar spacing on the 360 build?",
+        is_read: false,
+        created_at: at(4),
+        channel_name: "design-system",
+        server_name: "Ralph HQ",
+      },
+      {
+        id: "n-2",
+        type: "reply",
+        channel_id: "ch-general",
+        server_id: "s-1",
+        message_id: "m-2",
+        from_user: {
+          id: "u-grace",
+          username: "grace",
+          display_name: "Grace Hopper",
+        },
+        content: "Agreed, ship it after the screenshots match.",
+        is_read: false,
+        created_at: at(38),
+        channel_name: "general",
+        server_name: "Ralph HQ",
+      },
+      {
+        id: "n-3",
+        type: "dm",
+        channel_id: "dm-grace",
+        server_id: null,
+        message_id: "m-9",
+        from_user: {
+          id: "u-grace",
+          username: "grace",
+          display_name: "Grace Hopper",
+        },
+        content: "Lunch at noon?",
+        is_read: true,
+        created_at: at(300),
+      },
+    ],
+    unreadNotificationCount: 2,
     relationships: [
       { user: users.ada!, type: 1, created_at: at(100) },
       { user: users.grace!, type: 1, created_at: at(100) },
@@ -405,7 +473,7 @@ function Shell({ surface }: { surface: string }) {
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="flex h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary">
+        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
           <div className="flex min-h-0 flex-1">
             <Rail dm={dm} />
             <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
@@ -478,7 +546,7 @@ function FriendsShell() {
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="flex h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary">
+        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
           <div className="flex min-h-0 flex-1">
             <Rail dm />
             <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
@@ -560,7 +628,7 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="flex h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary">
+        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
           <div className="flex min-h-0 flex-1">
             <Rail />
             <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
@@ -646,7 +714,7 @@ function VoiceLandingFixture() {
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="flex h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary">
+        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
           <div className="flex min-h-0 flex-1">
             <Rail />
             <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
@@ -834,6 +902,168 @@ function MobileFixture({ surface }: { surface: string }) {
   );
 }
 
+/**
+ * Phone home with the bottom tab bar: `mobile-home&tab=servers|messages|
+ * notifications|you`.
+ */
+function MobileHomeFixture() {
+  const [open, setOpen] = useState(true);
+  useState(() => {
+    useMobileTabStore.setState({
+      tab: (fixtureParam("tab") ?? "servers") as MobileTab,
+    });
+    return true;
+  });
+  return (
+    <div className="relative h-full w-full">
+      <MobileFixture surface="mobile" />
+      <MobileNavigationSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        onSelectDm={() => {}}
+        serverList={<Rail />}
+        current={
+          <div className="h-full min-h-0 overflow-hidden bg-rm-bg-secondary">
+            <ChannelSidebar
+              channels={channels}
+              categories={categories}
+              activeChannelId="ch-general"
+              serverId="s-1"
+              serverName="Ralph HQ"
+              currentUserId="u-me"
+              onSelect={() => {}}
+              voiceChannelStates={{ "ch-lounge": voiceMembers }}
+              channelMentionCounts={{ "ch-design": 2 }}
+            />
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * A message's long-press menu as the phone action sheet (the same ContextMenu
+ * the desktop right-click uses), with the quick-reaction strip on top.
+ */
+function ActionSheetFixture() {
+  return (
+    <div className="relative h-full w-full">
+      <MobileFixture surface="mobile" />
+      <ContextMenu
+        x={0}
+        y={0}
+        topContent={
+          <div className="flex items-center gap-1 px-1">
+            {["👍", "🔥", "😂", "👀", "🎉"].map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                aria-label={`React with ${emoji}`}
+                className="flex h-11 w-11 items-center justify-center rounded-lg bg-rm-tint-1 text-xl"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        }
+        items={[
+          {
+            label: "Reply",
+            icon: <Icon name="reply" size="sm" />,
+            onClick: () => {},
+          },
+          {
+            label: "Forward",
+            icon: <Icon name="forward" size="sm" />,
+            onClick: () => {},
+          },
+          {
+            label: "Create Thread",
+            icon: <Icon name="thread" size="sm" />,
+            onClick: () => {},
+            divider: true,
+          },
+          {
+            label: "Copy Text",
+            icon: <Icon name="copy" size="sm" />,
+            onClick: () => {},
+          },
+          {
+            label: "Pin Message",
+            icon: <Icon name="pin" size="sm" />,
+            onClick: () => {},
+          },
+          {
+            label: "Mark Unread",
+            icon: <Icon name="markUnread" size="sm" />,
+            onClick: () => {},
+            divider: true,
+          },
+          {
+            label: "Delete Message",
+            icon: <Icon name="trash" size="sm" />,
+            onClick: () => {},
+            variant: "danger",
+          },
+        ]}
+        onClose={() => {}}
+      />
+    </div>
+  );
+}
+
+/** The bottom Drawer primitive over the phone chat. */
+function DrawerFixture() {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="relative h-full w-full">
+      <MobileFixture surface="mobile" />
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Invite to Ralph HQ</DrawerTitle>
+            <DrawerDescription>
+              Anyone with the link can join. It expires in 7 days.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="mx-4 flex min-h-12 items-center rounded-lg border border-rm-border bg-rm-bg-primary px-3 text-ui-base text-rm-text-secondary">
+            meet.115jon.com/invite/k3q9xz
+          </div>
+          <DrawerFooter>
+            <Button size="lg" className="min-h-11 w-full">
+              Copy link
+            </Button>
+            <Button
+              size="lg"
+              variant="secondary"
+              className="min-h-11 w-full"
+              onClick={() => setOpen(false)}
+            >
+              Done
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    </div>
+  );
+}
+
+/** Member profile drawer over the phone chat. `mobile-profile-me` is self. */
+function MobileProfileFixture({ self }: { self: boolean }) {
+  return (
+    <div className="relative h-full w-full">
+      <MobileFixture surface="mobile" />
+      <MobileProfileSheet
+        open
+        user={self ? users.me! : { ...users.ada!, bio: "First programmer." }}
+        onClose={() => {}}
+        onOpenProfileEditor={() => {}}
+      />
+    </div>
+  );
+}
+
 export default function UiFixtures() {
   const { surface, theme } = useSearch({ from: "/ui-fixtures" });
   const { setTheme } = useTheme();
@@ -879,6 +1109,19 @@ export default function UiFixtures() {
         </div>
       );
       break;
+    case "action-sheet":
+      content = <ActionSheetFixture />;
+      break;
+    case "drawer":
+      content = <DrawerFixture />;
+      break;
+    case "mobile-home":
+      content = <MobileHomeFixture />;
+      break;
+    case "mobile-profile":
+    case "mobile-profile-me":
+      content = <MobileProfileFixture self={surface === "mobile-profile-me"} />;
+      break;
     case "mobile":
     case "mobile-sidebar":
       content = <MobileFixture surface={surface} />;
@@ -901,6 +1144,7 @@ export default function UiFixtures() {
   return (
     <div className="h-dvh w-screen overflow-hidden bg-rm-bg-primary text-rm-text antialiased font-[Figtree,sans-serif]">
       {content}
+      <SettingsHost />
     </div>
   );
 }
