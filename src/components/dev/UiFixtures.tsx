@@ -119,6 +119,15 @@ import UserProfilePopover from "@/components/chat/UserProfilePopover";
 import UserAccountPopover from "@/components/chat/UserAccountPopover";
 import { AudioDeviceMenu } from "@/components/chat/AudioDeviceMenu";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
+import {
+  applyCollectibleKit,
+  isCollectibleKit,
+} from "@/components/dev/collectible-kit";
+import {
+  ada as spAda,
+  grace as spGrace,
+  me as spMe,
+} from "@/components/dev/sp-fixtures/profiles";
 
 const NOW = Date.parse("2026-10-22T14:32:00Z");
 const at = (minutesAgo: number) =>
@@ -2337,6 +2346,14 @@ export default function UiFixtures() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    const kit = fixtureParam("kit");
+    if (isCollectibleKit(kit)) {
+      applyCollectibleKit(
+        [users.me, users.ada, users.grace, spMe, spAda, spGrace],
+        kit,
+        fixtureParam("frame"),
+      );
+    }
     seedStore(surface);
     setTheme(theme);
     const id = window.setTimeout(() => setReady(true), 0);
