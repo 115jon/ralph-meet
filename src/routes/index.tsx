@@ -7,11 +7,11 @@ export const Route = createFileRoute("/")({
   component: HomePage,
   head: () => ({
     meta: [
-      { title: "Ralph Meet — Real-Time Video Conferencing" },
+      { title: "Ralph Meet: voice, chat and video rooms" },
       {
         name: "description",
         content:
-          "Real-time video, audio & screen sharing powered by Cloudflare Realtime SFU. Connect with anyone, anywhere.",
+          "Voice, chat, video and screen share for the people you talk to every day. Start a room, send the link, they're in. Runs on Cloudflare's edge.",
       },
     ],
   }),

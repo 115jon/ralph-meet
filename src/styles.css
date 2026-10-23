@@ -1831,6 +1831,132 @@
   }
 }
 
+/* ============================================================
+   Landing page (HomePageClient, src/components/home)
+   Poster-scale display steps for marketing only (design-system 4.1), the
+   SSR-safe hero entrance, and the scroll reveal states. Markup ships with
+   no reveal state, so content is visible before hydration and without JS.
+   ============================================================ */
+.rm-home-h1 {
+  font-size: clamp(3.25rem, 2rem + 8.5vw, 8.75rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+}
+
+.rm-home-h2 {
+  font-size: clamp(2.375rem, 1.5rem + 4.2vw, 4.75rem);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  font-weight: 400;
+}
+
+.rm-home-h3 {
+  font-size: clamp(1.875rem, 1.25rem + 1.8vw, 2.625rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+}
+
+.rm-home-lede {
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+@media (min-width: 768px) {
+  .rm-home-lede {
+    font-size: 1.25rem;
+  }
+}
+
+/* Copy over the hero field keeps its contrast on every ink: a soft pool of
+   the page ground behind the block, never a card. */
+.rm-home-hero-copy {
+  position: relative;
+}
+
+.rm-home-hero-copy::before {
+  content: "";
+  position: absolute;
+  inset: -12% -16%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--rm-bg-primary) 72%, transparent) 0%,
+    color-mix(in srgb, var(--rm-bg-primary) 40%, transparent) 55%,
+    transparent 100%
+  );
+}
+
+.rm-home-field canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+@keyframes rm-home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rm-home-enter {
+  animation: rm-home-enter 720ms var(--rm-ease-out) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+[data-reveal="out"] {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+[data-reveal="in"] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 700ms var(--rm-ease-out),
+    transform 700ms var(--rm-ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+[data-reveal="in"][data-reveal-instant="true"] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-home-enter {
+    animation-duration: 240ms;
+    animation-delay: 0ms;
+  }
+
+  @keyframes rm-home-enter {
+    from {
+      opacity: 0;
+      transform: none;
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  [data-reveal="out"] {
+    transform: none;
+  }
+
+  [data-reveal="in"] {
+    transition: opacity 240ms var(--rm-ease-out);
+    transition-delay: 0ms;
+  }
+}
+
 /* Kova SDK card inside the split layout: theme tokens + a compact rhythm that
    fits 1216×644. Providers become an icon row (labels stay for assistive tech). */
 .auth-split [data-ra-root] {
