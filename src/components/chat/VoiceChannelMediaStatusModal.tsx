@@ -141,7 +141,7 @@ function VoiceStatusMediaMasonry({
       ? "columns-1"
       : items.length === 2
         ? "columns-2"
-        : "columns-2 sm:columns-3";
+        : "columns-2 md:columns-3";
 
   return (
     <div className={`${columnsClassName} [column-gap:0.75rem]`}>
@@ -364,7 +364,7 @@ export default function VoiceChannelMediaStatusModal({
               </div>
 
               <div className="space-y-4 px-6 pb-6">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}

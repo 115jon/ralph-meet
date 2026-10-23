@@ -2806,8 +2806,8 @@ const XMediaGrid = memo(
     }
 
     const heightClass = compact
-      ? "h-[140px] sm:h-[180px]"
-      : "h-[220px] sm:h-[300px]";
+      ? "h-[140px] md:h-[180px]"
+      : "h-[220px] md:h-[300px]";
     const gridClass =
       count === 2
         ? cn("grid-cols-2", heightClass)

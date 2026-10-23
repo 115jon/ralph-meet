@@ -592,14 +592,14 @@ export default function VoiceChannelView({
           {focusedId && showMembers && (
             <div className="p-4 bg-rm-bg-primary/20 animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
               <div
-                className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center"
+                className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start md:justify-center"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
                 {gridItems.map((item) => (
                   <div
                     key={item.id}
                     className={cn(
-                      "w-44 sm:w-52 aspect-video shrink-0 transition-ui py-2",
+                      "w-44 md:w-52 aspect-video shrink-0 transition-ui py-2",
                       focusedId === item.id
                         ? ""
                         : "opacity-70 pointer-fine:hover:opacity-100",

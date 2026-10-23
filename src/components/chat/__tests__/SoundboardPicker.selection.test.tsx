@@ -645,7 +645,7 @@ describe("SoundboardPicker selection mode", () => {
     expect(picker).toHaveStyle({ zIndex: "1100" });
     expect(picker).not.toHaveClass("inset-0");
     expect(picker).not.toHaveClass("bottom-[calc(100%+10px)]");
-    expect(picker).toHaveClass("sm:w-[min(440px,calc(100vw-24px))]");
+    expect(picker).toHaveClass("md:w-[min(440px,calc(100vw-24px))]");
     expect(document.querySelector('div[aria-hidden="true"]')).toBeNull();
   });
 

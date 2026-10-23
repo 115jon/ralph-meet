@@ -408,7 +408,7 @@ export default function SettingsModal({
             aria-describedby={`${titleId}-count`}
             autoComplete="off"
             spellCheck={false}
-            className="h-full w-full min-w-0 rounded-md border border-rm-field-edge bg-transparent pl-8 pr-8 text-ui-md text-rm-text outline-none placeholder:text-rm-text-secondary sm:text-ui-sm [&::-webkit-search-cancel-button]:hidden"
+            className="h-full w-full min-w-0 rounded-md border border-rm-field-edge bg-transparent pl-8 pr-8 text-ui-md text-rm-text outline-none placeholder:text-rm-text-secondary md:text-ui-sm [&::-webkit-search-cancel-button]:hidden"
           />
           {query ? (
             <IconButton

@@ -186,7 +186,7 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("grid-cols-2 h-[220px] sm:h-[300px]");
+    expect(markup).toContain("grid-cols-2 h-[220px] md:h-[300px]");
     expect(markup).not.toContain("grid-rows-2");
   });
 

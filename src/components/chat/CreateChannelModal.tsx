@@ -316,7 +316,7 @@ export default function CreateChannelModal({
 
               {fields}
 
-              <div className="mt-8 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <div className="mt-8 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
                 <Button variant="secondary" onClick={onClose}>
                   Cancel
                 </Button>

@@ -459,12 +459,12 @@ const VideoAttachment = memo(function VideoAttachment({
       className={cn(
         "relative select-none group/video",
         isViewer
-          ? "inline-flex flex-col max-w-full max-h-[60vh] md:max-h-[75vh]"
+          ? "inline-flex flex-col max-w-full max-h-[60dvh] md:max-h-[75dvh]"
           : embeddedChrome
             ? "w-fit max-w-full rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg"
             : "w-fit max-w-full overflow-visible border-none bg-transparent shadow-none",
         isFullscreen &&
-          "fixed! inset-0! z-50! w-screen! h-screen! max-w-none! max-h-none! rounded-none! border-none! bg-black",
+          "fixed! inset-0! z-50! w-full! h-dvh! max-w-none! max-h-none! rounded-none! border-none! bg-black",
       )}
       style={
         isViewer || isFullscreen

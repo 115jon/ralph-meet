@@ -166,7 +166,7 @@ export default function CommandMenu() {
         role="dialog"
         aria-modal="true"
         aria-label="Quick switcher"
-        className="absolute inset-x-0 top-[max(12vh,calc(var(--safe-area-top,0px)+8px))] mx-auto w-full max-w-[560px] px-3 max-md:top-[calc(var(--safe-area-top,0px)+8px)] max-md:px-2"
+        className="absolute inset-x-0 top-[max(12dvh,calc(var(--safe-area-top,0px)+8px))] mx-auto w-full max-w-[560px] px-3 max-md:top-[calc(var(--safe-area-top,0px)+8px)] max-md:px-2"
       >
         <Command
           label="Quick switcher"

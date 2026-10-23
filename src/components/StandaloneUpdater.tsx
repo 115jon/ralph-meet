@@ -203,7 +203,7 @@ export function StandaloneUpdater() {
 
   return (
     <LoadingScreen
-      className="h-screen w-screen"
+      className="h-dvh w-full"
       style={{ WebkitAppRegion: "drag" } as any}
       progress={indeterminate ? undefined : progress}
     >

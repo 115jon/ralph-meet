@@ -100,7 +100,7 @@ export function VoiceAppsModal({
   const body = (
     <div className="min-h-0 flex-1 overflow-y-auto">
       {tab === "menu" && (
-        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <button
             onClick={() => setTab("activities")}
             className="flex flex-col items-start gap-2 rounded-xl border border-rm-border bg-rm-bg-surface p-4 text-left transition-ui pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:border-primary/50 group"
@@ -207,7 +207,7 @@ export function VoiceAppsModal({
               showCloseButton={false}
               aria-labelledby="voice-apps-title"
               className={cn(
-                "flex min-h-0 h-[85dvh] sm:h-[600px] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-2xl outline-none duration-200",
+                "flex min-h-0 h-[85dvh] md:h-[600px] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-2xl outline-none duration-200",
                 "animate-in zoom-in-95",
               )}
             >

@@ -237,7 +237,7 @@ function SuggestionList({
         floating
           ? cn(
               MENU_PANEL,
-              "absolute inset-x-3 top-full z-30 mt-1 max-h-[min(420px,60vh)] py-1.5",
+              "absolute inset-x-3 top-full z-30 mt-1 max-h-[min(420px,60dvh)] py-1.5",
             )
           : "min-h-0 flex-1 px-2 pt-2 pb-[max(16px,var(--safe-area-bottom,0px))]",
       )}

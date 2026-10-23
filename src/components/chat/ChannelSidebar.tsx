@@ -616,7 +616,7 @@ function SortableChannelItem({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-bg-hover/50 px-4 py-4 text-left text-rm-text-muted transition-colors pointer-fine:hover:border-primary/35 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text sm:min-h-[108px]"
+                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-bg-hover/50 px-4 py-4 text-left text-rm-text-muted transition-colors pointer-fine:hover:border-primary/35 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text md:min-h-[108px]"
                     onClick={(event) => {
                       event.stopPropagation();
                       setIsVoiceMediaStatusOpen(true);

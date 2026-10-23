@@ -888,8 +888,8 @@ export default function SoundboardPicker({
         height: compact
           ? MAX_HEIGHT
           : activeView === "listenTogether"
-            ? "min(820px, 82vh)"
-            : "min(760px, 75vh)",
+            ? "min(820px, 82dvh)"
+            : "min(760px, 75dvh)",
       };
 
       if (compact) {
@@ -1385,14 +1385,14 @@ export default function SoundboardPicker({
           }}
           onPointerDownOutside={(event) => event.preventDefault()}
           className={cn(
-            "picker-panel fixed m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-150 sm:rounded-3xl",
+            "picker-panel fixed m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-150 md:rounded-3xl",
             activeView === "listenTogether"
-              ? "sm:w-[min(980px,calc(100vw-24px))]"
+              ? "md:w-[min(980px,calc(100vw-24px))]"
               : compact
-                ? "sm:w-[min(440px,calc(100vw-24px))]"
+                ? "md:w-[min(440px,calc(100vw-24px))]"
                 : selectionMode
-                  ? "sm:w-[min(560px,calc(100vw-24px))]"
-                  : "sm:w-[min(440px,calc(100vw-24px))]",
+                  ? "md:w-[min(560px,calc(100vw-24px))]"
+                  : "md:w-[min(440px,calc(100vw-24px))]",
             pickerPositionClasses,
           )}
           style={{
@@ -1436,7 +1436,7 @@ export default function SoundboardPicker({
                                 size="sm"
                                 className="text-sky-300"
                               />
-                              <span className="hidden sm:inline">Listen</span>
+                              <span className="hidden md:inline">Listen</span>
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" sideOffset={8}>
@@ -1456,7 +1456,7 @@ export default function SoundboardPicker({
                                 size="sm"
                                 className="text-green-500"
                               />
-                              <span className="hidden sm:inline">Radio</span>
+                              <span className="hidden md:inline">Radio</span>
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" sideOffset={8}>
@@ -1476,7 +1476,7 @@ export default function SoundboardPicker({
                                 size="sm"
                                 className="text-primary"
                               />
-                              <span className="hidden sm:inline">Discover</span>
+                              <span className="hidden md:inline">Discover</span>
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" sideOffset={8}>
@@ -2387,7 +2387,7 @@ export default function SoundboardPicker({
                           Trending
                         </div>
                       )}
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                      <div className="grid grid-cols-4 gap-2 md:grid-cols-5">
                         {myInstantsResults.map((sound) => {
                           const isFav = myInstantsFavorites.some(
                             (f) => f.id === sound.id,
@@ -2501,7 +2501,7 @@ export default function SoundboardPicker({
                           Top Stations
                         </div>
                       )}
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                      <div className="grid grid-cols-4 gap-2 md:grid-cols-5">
                         {radioResults.map((station) => {
                           const isFav = myInstantsFavorites.some(
                             (f) => f.id === station.stationuuid,
@@ -2637,7 +2637,7 @@ export default function SoundboardPicker({
           {/* Bottom volume controls */}
           {!compact && activeView === "soundboard" && (
             <div className="shrink-0 border-t border-rm-border bg-rm-bg-floating p-3">
-              <div className="flex gap-2 sm:gap-3 items-center w-full">
+              <div className="flex gap-2 md:gap-3 items-center w-full">
                 <label className="flex w-0 flex-1 items-center gap-2 rounded-xl bg-rm-bg-surface/50 border border-rm-border px-2 py-2 text-ui-2xs font-bold text-rm-text-muted shadow-inner shadow-black/5 dark:shadow-none overflow-hidden">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2657,7 +2657,7 @@ export default function SoundboardPicker({
                       </p>
                     </TooltipContent>
                   </Tooltip>
-                  <span className="whitespace-nowrap hidden sm:inline">
+                  <span className="whitespace-nowrap hidden md:inline">
                     Send
                   </span>
                   <input
@@ -2690,7 +2690,7 @@ export default function SoundboardPicker({
                       </p>
                     </TooltipContent>
                   </Tooltip>
-                  <span className="whitespace-nowrap hidden sm:inline">
+                  <span className="whitespace-nowrap hidden md:inline">
                     Soundboard
                   </span>
                   <input

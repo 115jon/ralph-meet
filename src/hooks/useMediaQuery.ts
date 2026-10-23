@@ -135,3 +135,16 @@ export function useIsMobile(): boolean {
     () => false,
   );
 }
+
+/** The one wide breakpoint: Tailwind's `lg` (1024px) and up. */
+export const WIDE_MIN_WIDTH_PX = 1024;
+export const WIDE_QUERY = `(min-width: ${WIDE_MIN_WIDTH_PX}px)`;
+
+/** Event-time check for `lg`+ (pane drag handlers, positioning). */
+export function isWideViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof window.matchMedia === "function") {
+    return window.matchMedia(WIDE_QUERY).matches;
+  }
+  return window.innerWidth >= WIDE_MIN_WIDTH_PX;
+}

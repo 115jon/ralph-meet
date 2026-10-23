@@ -246,7 +246,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           transition={{ ...instant, delay: reduceMotion ? 0 : 0.22 }}
           className="mt-8 w-full lg:mt-0"
         >
-          <div className="max-h-[28vh] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated sm:max-h-[36vh] lg:max-h-none">
+          <div className="max-h-[28dvh] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated sm:max-h-[36dvh] lg:max-h-none">
             <img
               src="/screenshots/desktop-app.png"
               alt="Ralph Meet desktop app with a live voice room and chat sidebar"

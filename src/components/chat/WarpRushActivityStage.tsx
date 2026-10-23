@@ -1125,17 +1125,17 @@ export function WarpRushActivityStage({
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_28%),linear-gradient(180deg,rgba(2,6,23,0.12),rgba(2,6,23,0.82))]" />
 
-      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 sm:p-4 md:p-5">
+      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 md:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="pointer-events-auto flex w-full max-w-[440px] flex-col gap-3">
-            <div className="rounded-3xl border border-cyan-300/15 bg-slate-950/48 p-4 sm:p-5">
+            <div className="rounded-3xl border border-cyan-300/15 bg-slate-950/48 p-4 md:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.28em] text-cyan-200/74">
                     <Icon name="activities" size="sm" />
                     Warp Rush 3D
                   </div>
-                  <h2 className="mt-2 text-ui-2xl font-black leading-none text-white sm:text-ui-2xl">
+                  <h2 className="mt-2 text-ui-2xl font-black leading-none text-white">
                     Shared tunnel sprint
                   </h2>
                   <p className="mt-2 max-w-[34ch] text-ui-sm leading-6 text-slate-300">
@@ -1156,7 +1156,7 @@ export function WarpRushActivityStage({
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
                   <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
                     Score
@@ -1210,7 +1210,7 @@ export function WarpRushActivityStage({
             )}
           </div>
 
-          <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-lg sm:p-5">
+          <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-lg md:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/80">
                 <Icon name="trophy" size="sm" />
@@ -1223,7 +1223,7 @@ export function WarpRushActivityStage({
               </div>
             </div>
 
-            <div className="mt-3 max-h-[44vh] space-y-2 overflow-y-auto pr-1">
+            <div className="mt-3 max-h-[44dvh] space-y-2 overflow-y-auto pr-1">
               {sortedLeaderboard.length > 0 ? (
                 sortedLeaderboard.map((entry, index) => {
                   const participant = participantMap.get(entry.userId);
@@ -1286,7 +1286,7 @@ export function WarpRushActivityStage({
         </div>
 
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 sm:px-4">
+          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 md:px-4">
             <div className="flex items-center gap-2 pr-1 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
               <Icon name="spatial" size="sm" />
               Controls
@@ -1305,7 +1305,7 @@ export function WarpRushActivityStage({
             </span>
           </div>
 
-          <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-lg sm:p-4">
+          <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-lg md:p-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
                 <Icon name="zap" size="sm" />

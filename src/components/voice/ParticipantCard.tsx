@@ -116,7 +116,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     <>
       <div
         className={cn(
-          "relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
+          "@container relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
           isFocused && "ring-2 ring-rm-text/20 z-50",
           item.isSpeaking && "ring-2 ring-primary z-20",
           item.isRinging && "ring-2 ring-primary/50 animate-pulse z-20",
@@ -229,17 +229,17 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 alt="Stream Preview"
               />
             )}
-            <div className="relative z-10 flex flex-col items-center justify-center p-1 sm:p-2 w-full h-full overflow-hidden">
-              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg flex items-center justify-center transition-transform duration-200">
+            <div className="relative z-10 flex flex-col items-center justify-center p-1 @md:p-2 w-full h-full overflow-hidden">
+              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 @md:w-8 @md:h-8 text-rm-text-muted shadow-lg flex items-center justify-center transition-transform duration-200">
                 <Icon
                   name="monitor"
                   size="xs"
-                  className="sm:w-4 sm:h-4 text-rm-text-muted shrink-0"
+                  className="@md:w-4 @md:h-4 text-rm-text-muted shrink-0"
                 />
               </div>
 
-              <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 sm:mt-2">
-                <h3 className="text-ui-2xs sm:text-ui-2xs font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
+              <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 @md:mt-2">
+                <h3 className="text-ui-2xs @md:text-ui-2xs font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
                   <InlineEmojiText text={`${streamDisplayName}'s Stream`} />
                 </h3>
               </div>
@@ -250,7 +250,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   e.stopPropagation();
                   voiceActions?.onToggleWatch?.(item.userId);
                 }}
-                className="mt-1 max-w-full truncate text-ui-2xs font-semibold uppercase tracking-[0.08em] sm:mt-2 sm:h-7 sm:px-3"
+                className="mt-1 max-w-full truncate text-ui-2xs font-semibold uppercase tracking-[0.08em] @md:mt-2 @md:h-7 @md:px-3"
               >
                 Watch Stream
               </Button>
@@ -265,7 +265,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !shouldRenderThumbnailPoster && (
             <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4">
               {item.avatar ? (
-                <div className="h-20 w-20 overflow-visible rounded-full shadow-lg sm:h-28 sm:w-28">
+                <div className="h-20 w-20 overflow-visible rounded-full shadow-lg @md:h-28 @md:w-28">
                   <AvatarImage
                     src={getAuthAssetUrl(item.avatar)}
                     alt={item.name}
@@ -273,8 +273,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   />
                 </div>
               ) : (
-                <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full shadow-lg">
-                  <span className="text-ui-2xl sm:text-display-lg font-semibold text-white">
+                <div className="w-20 h-20 @md:w-28 @md:h-28 flex items-center justify-center bg-black/40 rounded-full shadow-lg">
+                  <span className="text-ui-2xl @md:text-display-lg font-semibold text-white">
                     {item.name[0]?.toUpperCase()}
                   </span>
                 </div>

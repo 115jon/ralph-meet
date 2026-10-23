@@ -419,7 +419,7 @@ function ExampleRow({
           <div
             key={`${letters}-${index}`}
             className={cn(
-              "flex h-8 w-8 items-center justify-center border-2 text-ui-xl font-black uppercase sm:h-9 sm:w-9",
+              "flex h-8 w-8 items-center justify-center border-2 text-ui-xl font-black uppercase md:h-9 md:w-9",
               theme.exampleTile,
               highlighted && "text-white",
             )}
@@ -463,7 +463,7 @@ function HowToPlayModal({
             aria-labelledby="wordle-how-to-play-title"
             aria-modal="true"
             className={cn(
-              "relative max-h-[min(640px,calc(100vh-32px))] w-full max-w-[500px] overflow-y-auto rounded-lg border p-6 shadow-2xl sm:p-8",
+              "relative max-h-[min(640px,calc(100dvh-32px))] w-full max-w-[500px] overflow-y-auto rounded-lg border p-6 shadow-2xl md:p-8",
               WORDLE_THEME.modal,
             )}
           >
@@ -485,7 +485,7 @@ function HowToPlayModal({
             <p className="mt-1 text-ui-lg leading-snug">
               Guess the Wordle in 6 tries.
             </p>
-            <ul className="mt-4 list-disc space-y-1.5 pl-5 text-ui-sm leading-snug sm:text-ui-md">
+            <ul className="mt-4 list-disc space-y-1.5 pl-5 text-ui-sm leading-snug md:text-ui-md">
               <li>Each guess must be a valid 5-letter word.</li>
               <li>
                 The color of the tiles will change to show how close your guess
@@ -529,7 +529,7 @@ function HowToPlayModal({
             </p>
 
             <div className={cn("my-5 border-t", WORDLE_THEME.border)} />
-            <p className="text-ui-sm leading-snug sm:text-ui-md">
+            <p className="text-ui-sm leading-snug md:text-ui-md">
               A new puzzle is released daily at midnight. If you haven&apos;t
               already, you can{" "}
               <a
@@ -1104,12 +1104,12 @@ function WordleActivityStageContent({
       >
         <MiniBoard guesses={activeGuesses} answer={answer} colors={colors} />
         <div className="mt-2 text-ui-sm font-semibold">Wordle</div>
-        <h2 className="mt-4 text-center text-ui-2xl font-black sm:text-display">
+        <h2 className="mt-4 text-center text-ui-2xl font-black md:text-display">
           {finishedStatus === "solved"
             ? `Solved in ${completedGuessCount}`
             : "Round complete"}
         </h2>
-        <p className="mt-3 max-w-sm text-center text-ui-md leading-relaxed sm:text-ui-lg">
+        <p className="mt-3 max-w-sm text-center text-ui-md leading-relaxed md:text-ui-lg">
           {finishedStatus === "solved"
             ? "Nice work. Your channel can see how everyone did."
             : `The answer was ${answer.toUpperCase()}. A new Wordle is on the way.`}
@@ -1193,17 +1193,17 @@ function WordleActivityStageContent({
           </div>
           <h2 className="mt-8 text-ui-md uppercase">General Statistics</h2>
           <div className="mt-3 flex justify-center divide-x divide-[#d3d6da]">
-            <div className="px-4 sm:px-6">
+            <div className="px-4 md:px-6">
               <div className="text-ui-2xl font-semibold">{winRate}%</div>
               <div className="text-ui-xs">Win Rate</div>
             </div>
-            <div className="px-4 sm:px-6">
+            <div className="px-4 md:px-6">
               <div className="text-ui-2xl font-semibold">
                 {currentStreak} Day
               </div>
               <div className="text-ui-xs">Current Streak</div>
             </div>
-            <div className="px-4 sm:px-6">
+            <div className="px-4 md:px-6">
               <div className="text-ui-2xl font-semibold">
                 {currentStreak} Days
               </div>
@@ -1241,19 +1241,19 @@ function WordleActivityStageContent({
       `}</style>
       <div
         className={cn(
-          "flex h-[52px] shrink-0 items-center justify-between border-b px-3 sm:px-5",
+          "flex h-[52px] shrink-0 items-center justify-between border-b px-3 md:px-5",
           theme.border,
         )}
       >
         <div
-          className="min-w-0 truncate text-ui-lg font-black sm:text-ui-2xl"
+          className="min-w-0 truncate text-ui-lg font-black md:text-ui-2xl"
           style={{ fontFamily: "Georgia, serif" }}
         >
           The New York Times <span className="font-sans">Games</span>
         </div>
         <div
           className={cn(
-            "flex shrink-0 items-center gap-3 sm:gap-6",
+            "flex shrink-0 items-center gap-3 md:gap-6",
             theme.icon,
           )}
         >
@@ -1409,7 +1409,7 @@ function WordleActivityStageContent({
                     onClick={submitGuess}
                     disabled={!answer || localFinished || revealingRow !== null}
                     className={cn(
-                      "h-12 rounded px-3 text-ui-xs font-semibold sm:h-[52px]",
+                      "h-12 rounded px-3 text-ui-xs font-semibold md:h-[52px]",
                       theme.key,
                     )}
                   >
@@ -1430,7 +1430,7 @@ function WordleActivityStageContent({
                         mark ? { backgroundColor: colors[mark] } : undefined
                       }
                       className={cn(
-                        "h-12 min-w-0 flex-1 rounded px-1 text-ui-sm font-bold uppercase sm:h-[52px] sm:min-w-10 sm:flex-none sm:px-2",
+                        "h-12 min-w-0 flex-1 rounded px-1 text-ui-sm font-bold uppercase md:h-[52px] md:min-w-10 md:flex-none md:px-2",
                         theme.key,
                         mark && "text-white",
                       )}
@@ -1446,7 +1446,7 @@ function WordleActivityStageContent({
                     disabled={!answer || localFinished || revealingRow !== null}
                     aria-label="Delete letter"
                     className={cn(
-                      "flex h-12 items-center rounded px-3 text-ui-xs font-semibold sm:h-[52px]",
+                      "flex h-12 items-center rounded px-3 text-ui-xs font-semibold md:h-[52px]",
                       theme.key,
                     )}
                   >

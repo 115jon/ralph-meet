@@ -115,7 +115,7 @@ export const NotificationBell = memo(function NotificationBell() {
 
           <div
             ref={panelRef}
-            className="relative w-full h-[85vh] md:h-auto max-h-[85vh] md:max-h-full flex flex-col rounded-t-2xl md:rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
+            className="relative w-full h-[85dvh] md:h-auto max-h-[85dvh] md:max-h-full flex flex-col rounded-t-2xl md:rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
           >
             {/* Mobile drag handle */}
             <div className="w-full flex justify-center pt-3 pb-1 md:hidden">

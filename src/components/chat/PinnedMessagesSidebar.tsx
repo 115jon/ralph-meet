@@ -51,7 +51,7 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   }, [onClose]);
 
   return (
-    <div className="w-full h-full sm:w-[420px] sm:max-h-[calc(100vh-120px)] sm:rounded-lg sm:border border-rm-border bg-rm-bg-surface shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-4 sm:fade-in sm:zoom-in-95 duration-200 pointer-events-auto">
+    <div className="w-full h-full md:w-[420px] md:max-h-[calc(100dvh-120px)] md:rounded-lg md:border border-rm-border bg-rm-bg-surface shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-4 md:fade-in md:zoom-in-95 duration-200 pointer-events-auto">
       <header
         className="flex min-h-16 flex-none items-center gap-3 border-b border-rm-border bg-transparent px-6 pb-2"
         style={{ paddingTop: "max(0px, var(--safe-area-top, 0px))" }}

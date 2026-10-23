@@ -166,7 +166,7 @@ export default function MessageShareModal({
                   <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted">
                     Link Expiry
                   </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                     {expiryOptions.map((option) => (
                       <Button
                         key={option.value}
@@ -224,7 +224,7 @@ export default function MessageShareModal({
               )}
             </div>
 
-            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-rm-border px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-end">
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-rm-border px-5 py-4 md:flex-row md:flex-wrap md:justify-end">
               <Button
                 variant={shareUrl ? "ghost" : "secondary"}
                 onClick={onClose}

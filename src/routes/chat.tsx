@@ -170,5 +170,5 @@ function ChatAuthCallbackGate() {
     );
   }
 
-  return <div className="min-h-screen bg-[var(--rm-bg-primary)]" />;
+  return <div className="min-h-dvh bg-[var(--rm-bg-primary)]" />;
 }

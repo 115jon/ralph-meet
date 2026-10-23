@@ -1248,7 +1248,7 @@ export default function UiFixtures() {
   }
 
   return (
-    <div className="h-dvh w-screen overflow-hidden bg-rm-bg-primary text-rm-text antialiased font-[Figtree,sans-serif]">
+    <div className="h-dvh w-full overflow-hidden bg-rm-bg-primary text-rm-text antialiased font-[Figtree,sans-serif]">
       {content}
       <SettingsHost />
     </div>

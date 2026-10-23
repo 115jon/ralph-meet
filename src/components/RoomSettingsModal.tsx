@@ -910,7 +910,7 @@ export default function RoomSettingsModal({
                       <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] ml-1 text-rm-text-muted">
                         Capture Quality
                       </p>
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 max-w-[480px]">
                         {CAMERA_QUALITY_PROFILES.map((profile) => {
                           const isSelected =
                             vSettings.cameraQuality === profile.id;
@@ -998,7 +998,7 @@ export default function RoomSettingsModal({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 max-w-[480px]">
                         {[
                           {
                             id: "none",
@@ -1242,7 +1242,7 @@ export default function RoomSettingsModal({
                       Choose your preferred theme.
                     </p>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       {[
                         { id: "dark", label: "Dark", preview: "bg-[#0f0f11]" },
                         {

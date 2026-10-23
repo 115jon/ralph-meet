@@ -1296,7 +1296,7 @@ const MessageItem = memo(
                           side="top"
                           sideOffset={8}
                           className={cn(
-                            "pointer-events-auto hidden max-w-xs text-ui-xs sm:block",
+                            "pointer-events-auto hidden max-w-xs text-ui-xs md:block",
                           )}
                         >
                           <ReactionTooltipContent

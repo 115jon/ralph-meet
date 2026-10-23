@@ -227,7 +227,7 @@ export const PinModal: React.FC<PinModalProps> = ({
 
                 {details}
 
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
                   <Button variant="secondary" onClick={onClose}>
                     Cancel
                   </Button>

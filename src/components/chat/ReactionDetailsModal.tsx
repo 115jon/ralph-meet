@@ -143,7 +143,7 @@ export default function ReactionDetailsModal({
   const body = (
     <div
       className={cn(
-        "grid min-h-0 flex-1 grid-cols-[112px_minmax(0,1fr)] sm:grid-cols-[150px_minmax(0,1fr)]",
+        "grid min-h-0 flex-1 grid-cols-[112px_minmax(0,1fr)] md:grid-cols-[150px_minmax(0,1fr)]",
         isMobile && "h-[min(420px,55dvh)] flex-none",
       )}
     >
@@ -202,7 +202,7 @@ export default function ReactionDetailsModal({
         <DialogPortal>
           <div
             data-state={open ? "open" : "closed"}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 sm:p-5"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 md:p-5"
             onClick={(event) => {
               if (event.target === event.currentTarget) onClose();
             }}
@@ -210,7 +210,7 @@ export default function ReactionDetailsModal({
           >
             <DialogSurface
               showCloseButton={false}
-              className="relative m-0 flex h-[min(640px,calc(100dvh-24px))] min-h-[340px] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-95 duration-200 sm:h-[min(640px,calc(100dvh-48px))]"
+              className="relative m-0 flex h-[min(640px,calc(100dvh-24px))] min-h-[340px] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-95 duration-200 md:h-[min(640px,calc(100dvh-48px))]"
             >
               <header className="flex shrink-0 items-center justify-between border-b border-rm-border px-5 py-4">
                 <h2

@@ -161,7 +161,7 @@ export default function ShareSnapshotPreview({
       )}
 
       {imageAttachments.length > 0 && (
-        <div className="mt-3 grid max-w-[560px] grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid max-w-[560px] grid-cols-1 gap-2 md:grid-cols-2">
           {imageAttachments.map((attachment) => {
             const url = mediaUrlForAttachment(attachment);
             return (

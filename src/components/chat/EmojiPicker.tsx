@@ -748,7 +748,7 @@ export default function EmojiPicker({
     }
   }, [isGenerating, prompt, shortcode]);
 
-  const placementClasses = "fixed h-fit max-h-[80vh] sm:max-h-[600px]";
+  const placementClasses = "fixed h-fit max-h-[80dvh] md:max-h-[600px]";
 
   return (
     <>
@@ -910,7 +910,7 @@ export default function EmojiPicker({
                                 className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-ui-sm font-semibold text-rm-text transition-transform active:scale-[0.98]"
                               >
                                 <Icon name="magic" size="sm" />
-                                <span className="hidden sm:inline">Create</span>
+                                <span className="hidden md:inline">Create</span>
                               </button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" sideOffset={8}>
@@ -1043,7 +1043,7 @@ export default function EmojiPicker({
 
                   <div className="min-h-0 flex-1 max-md:flex max-md:flex-col">
                     {activeView === "emoji" ? (
-                      <div className="flex h-[min(560px,70vh)] min-h-[420px] max-md:h-auto max-md:min-h-0 max-md:flex-1">
+                      <div className="flex h-[min(560px,70dvh)] min-h-[420px] max-md:h-auto max-md:min-h-0 max-md:flex-1">
                         <aside className="flex w-[68px] shrink-0 flex-col border-r border-rm-border bg-rm-bg-surface/30 px-2 py-3">
                           <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
                             <Tooltip>
@@ -1145,7 +1145,7 @@ export default function EmojiPicker({
                                     onToggle={() => undefined}
                                     accentClassName="bg-primary/20"
                                   />
-                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                  <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
                                     {customSearchResults.map((emoji) => (
                                       <CustomEmojiCard
                                         key={emoji.id}
@@ -1172,7 +1172,7 @@ export default function EmojiPicker({
                                     isCollapsed={false}
                                     onToggle={() => undefined}
                                   />
-                                  <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
+                                  <div className="grid grid-cols-6 gap-1.5 md:grid-cols-7">
                                     {nativeSearchResults.map((emoji) => (
                                       <NativeEmojiButton
                                         key={`${emoji.id}-${emoji.unified}`}
@@ -1217,7 +1217,7 @@ export default function EmojiPicker({
                                   false
                                 ) ? (
                                   recentRenderableItems.length > 0 ? (
-                                    <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
+                                    <div className="grid grid-cols-6 gap-1.5 md:grid-cols-7">
                                       {recentRenderableItems.map((item) =>
                                         item.type === "native" ? (
                                           <NativeEmojiButton
@@ -1286,7 +1286,7 @@ export default function EmojiPicker({
                                       {generatedEmojiError}
                                     </div>
                                   ) : generatedEmojis.length > 0 ? (
-                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
                                       {generatedEmojis.map((emoji) => (
                                         <CustomEmojiCard
                                           key={emoji.id}
@@ -1344,7 +1344,7 @@ export default function EmojiPicker({
                                   {!(
                                     collapsedCategories[category.id] ?? false
                                   ) ? (
-                                    <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
+                                    <div className="grid grid-cols-6 gap-1.5 md:grid-cols-7">
                                       {category.emojis.map((emoji) => (
                                         <NativeEmojiButton
                                           key={`${category.id}-${emoji.id}-${emoji.unified}`}
@@ -1361,7 +1361,7 @@ export default function EmojiPicker({
                         </div>
                       </div>
                     ) : (
-                      <div className="custom-scrollbar h-[min(560px,70vh)] min-h-[420px] overflow-y-auto px-4 py-4 max-md:h-auto max-md:min-h-0 max-md:flex-1 max-md:overscroll-contain">
+                      <div className="custom-scrollbar h-[min(560px,70dvh)] min-h-[420px] overflow-y-auto px-4 py-4 max-md:h-auto max-md:min-h-0 max-md:flex-1 max-md:overscroll-contain">
                         <section>
                           <SectionHeader
                             icon={
@@ -1386,7 +1386,7 @@ export default function EmojiPicker({
                               {generatedEmojiError}
                             </div>
                           ) : generatedEmojis.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
                               {generatedEmojis.map((emoji) => (
                                 <CustomEmojiCard
                                   key={emoji.id}

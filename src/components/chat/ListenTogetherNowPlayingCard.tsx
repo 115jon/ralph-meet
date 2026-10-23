@@ -448,8 +448,8 @@ export function ListenTogetherNowPlayingCard({
   return (
     <TooltipProvider delayDuration={100}>
       <div className={cn("space-y-4", className)}>
-        <div className="flex gap-4 sm:gap-5">
-          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-rm-bg-elevated/60 ring-1 ring-white/10 sm:h-24 sm:w-24 sm:rounded-3xl">
+        <div className="flex gap-4 md:gap-5">
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-rm-bg-elevated/60 ring-1 ring-white/10 md:h-24 md:w-24 md:rounded-3xl">
             {artwork}
           </div>
           <div className="min-w-0 flex-1 py-0.5">
@@ -476,7 +476,7 @@ export function ListenTogetherNowPlayingCard({
                     </p>
                   </TooltipContent>
                 </Tooltip>
-                <div className="mt-1 truncate text-ui-xs text-rm-text-muted sm:text-ui-sm">
+                <div className="mt-1 truncate text-ui-xs text-rm-text-muted md:text-ui-sm">
                   {subtitle}
                 </div>
               </div>
@@ -525,7 +525,7 @@ export function ListenTogetherNowPlayingCard({
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-2 sm:justify-start">
+        <div className="flex items-center justify-center gap-2 md:justify-start">
           <button
             type="button"
             onClick={() => {
@@ -575,7 +575,7 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive transition-transform pointer-fine:hover:bg-destructive/15 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 sm:ml-2"
+            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive transition-transform pointer-fine:hover:bg-destructive/15 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 md:ml-2"
             aria-label="Remove current track"
           >
             <Icon name="trash" size="sm" />

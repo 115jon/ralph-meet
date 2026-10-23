@@ -278,7 +278,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
           <div
             data-state={open ? "open" : "closed"}
             className={cn(
-              "fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none transition-opacity duration-200 data-[state=closed]:opacity-0",
+              "fixed inset-0 z-50 flex items-end md:items-center justify-center pointer-events-none transition-opacity duration-200 data-[state=closed]:opacity-0",
             )}
           >
             {/* Backdrop */}
@@ -297,8 +297,8 @@ export default function CreateServerModal({ open, onClose }: Props) {
             <DialogSurface
               showCloseButton={false}
               className={cn(
-                "relative z-10 w-full sm:max-w-md h-[90dvh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-xl sm:rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-300 sm:duration-200 pointer-events-auto flex flex-col",
-                "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=closed]:fade-out sm:data-[state=closed]:zoom-out-95",
+                "relative z-10 w-full md:max-w-md h-[90dvh] md:h-auto animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in md:zoom-in-95 rounded-t-xl md:rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-300 md:duration-200 pointer-events-auto flex flex-col",
+                "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full md:data-[state=closed]:slide-out-to-bottom-0 md:data-[state=closed]:fade-out md:data-[state=closed]:zoom-out-95",
               )}
             >
               {/* Close */}
@@ -319,11 +319,11 @@ export default function CreateServerModal({ open, onClose }: Props) {
 
               {fields}
 
-              <div className="mt-auto sm:mt-6 pt-4 sm:pt-0 pb-6 sm:pb-0 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end shrink-0">
+              <div className="mt-auto md:mt-6 pt-4 md:pt-0 pb-6 md:pb-0 flex flex-col-reverse gap-2 md:flex-row md:justify-end shrink-0">
                 <Button
                   variant="secondary"
                   onClick={onClose}
-                  className="w-full sm:w-auto"
+                  className="w-full md:w-auto"
                 >
                   Cancel
                 </Button>
@@ -331,7 +331,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
                   onClick={handleCreate}
                   disabled={!state.name.trim() || state.creating}
                   loading={state.creating}
-                  className="w-full sm:w-auto"
+                  className="w-full md:w-auto"
                 >
                   Create Server
                 </Button>

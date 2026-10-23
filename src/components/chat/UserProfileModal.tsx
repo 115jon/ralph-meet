@@ -472,7 +472,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   Remove Friend
                                 </Button>
                               ) : relationship?.type === 2 ? (
-                                <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="grid gap-2 md:grid-cols-2">
                                   <Button
                                     type="button"
                                     disabled={loading}
@@ -549,7 +549,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 </Button>
                               )}
 
-                              <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="grid gap-2 md:grid-cols-2">
                                 <Button
                                   type="button"
                                   onClick={() => void handleMessage()}

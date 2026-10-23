@@ -60,7 +60,7 @@ type ShopTab = "featured" | CollectibleKind;
 const FEATURED_ROWS = 6;
 const RAIL_ITEMS = 12;
 const GRID_CLASS =
-  "grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(176px,1fr))] lg:gap-4";
+  "grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fill,minmax(176px,1fr))] lg:gap-4";
 
 function relativeAge(iso: string | undefined) {
   if (!iso) return null;

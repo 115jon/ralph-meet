@@ -39,7 +39,7 @@ import {
   ListenTogetherResultActionTrigger,
 } from "./ListenTogetherResultActions";
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { isWideViewport, useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   formatListenTogetherDuration,
   useListenTogetherPlaybackState,
@@ -130,7 +130,7 @@ export const listenTogetherQueueRowRenderer = {
     return (
       <div
         className={cn(
-          "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors sm:gap-3 sm:py-3",
+          "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors md:gap-3 md:py-3",
           isCurrent
             ? "rounded-2xl bg-primary/10"
             : "pointer-fine:hover:bg-rm-bg-hover/45",
@@ -143,7 +143,7 @@ export const listenTogetherQueueRowRenderer = {
             index + 1
           )}
         </div>
-        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-rm-bg-elevated/60 ring-1 ring-white/5 sm:h-11 sm:w-11">
+        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-rm-bg-elevated/60 ring-1 ring-white/5 md:h-11 md:w-11">
           {entry.track.artworkUrl ? (
             <img
               src={entry.track.artworkUrl}
@@ -157,10 +157,10 @@ export const listenTogetherQueueRowRenderer = {
           )}
         </div>
         <div className="min-w-0">
-          <div className="truncate text-ui-sm font-semibold text-rm-text sm:text-ui-sm">
+          <div className="truncate text-ui-sm font-semibold text-rm-text">
             {entry.track.title}
           </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-ui-2xs text-rm-text-muted sm:gap-2 sm:text-ui-xs">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-ui-2xs text-rm-text-muted md:gap-2 md:text-ui-xs">
             <span className="truncate">
               {entry.track.artist || entry.track.sourceLabel}
             </span>
@@ -175,7 +175,7 @@ export const listenTogetherQueueRowRenderer = {
               </>
             )}
           </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-ui-2xs text-rm-text-muted/75 sm:text-ui-2xs">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-ui-2xs text-rm-text-muted/75">
             <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
               {entry.requester.avatarUrl ? (
                 <AvatarImage
@@ -365,7 +365,7 @@ export function ListenTogetherPanel({
 
     const handlePointerMove = (event: PointerEvent) => {
       const panel = panelRef.current;
-      if (!panel || window.innerWidth < 1024) return;
+      if (!panel || !isWideViewport()) return;
       const bounds = panel.getBoundingClientRect();
       const nextRatio = clampListenTogetherPaneRatio(
         (event.clientX - bounds.left) / bounds.width,
@@ -835,7 +835,7 @@ export function ListenTogetherPanel({
   };
 
   const handlePaneKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (window.innerWidth < 1024) return;
+    if (!isWideViewport()) return;
     let nextRatio: number | null = null;
     if (event.key === "ArrowLeft") nextRatio = workspacePaneRatio - 0.02;
     if (event.key === "ArrowRight") nextRatio = workspacePaneRatio + 0.02;
@@ -894,10 +894,10 @@ export function ListenTogetherPanel({
           "--listen-together-left-pane": `${workspacePaneRatio * 100}%`,
         } as React.CSSProperties
       }
-      className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3 sm:gap-4 sm:p-4 lg:grid lg:grid-cols-[minmax(280px,var(--listen-together-left-pane))_8px_minmax(0,1fr)] lg:overflow-hidden"
+      className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3 md:gap-4 md:p-4 lg:grid lg:grid-cols-[minmax(280px,var(--listen-together-left-pane))_8px_minmax(0,1fr)] lg:overflow-hidden"
     >
       <section className="flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface/35 lg:min-h-0">
-        <div className="border-b border-rm-border px-4 py-4 sm:px-5">
+        <div className="border-b border-rm-border px-4 py-4 md:px-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
               <Icon name="headphones" size="sm" className="text-primary" />
@@ -913,7 +913,7 @@ export function ListenTogetherPanel({
           </p>
           <div className="mt-4 flex flex-col gap-3">
             <form
-              className="flex flex-col gap-2 sm:flex-row"
+              className="flex flex-col gap-2 md:flex-row"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!trimmedInput || !voiceSessionHeaders) return;
@@ -954,7 +954,7 @@ export function ListenTogetherPanel({
                     setResolveFeedback(null);
                   }}
                   placeholder="Search or paste YouTube / Spotify links"
-                  className="h-11 w-full rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pl-10 pr-4 text-ui-md text-rm-text outline-none transition-[border-color,box-shadow] placeholder:text-rm-text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/15 sm:text-ui-sm"
+                  className="h-11 w-full rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pl-10 pr-4 text-ui-md text-rm-text outline-none transition-[border-color,box-shadow] placeholder:text-rm-text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/15 md:text-ui-sm"
                 />
               </div>
               {!isResolveMode && (
@@ -1010,7 +1010,7 @@ export function ListenTogetherPanel({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5">
           {isResolving ? (
             <div className="flex flex-col items-center justify-center gap-3 py-12 text-rm-text-muted">
               <Icon name="loader" size="lg" className="animate-spin" />
@@ -1282,7 +1282,7 @@ export function ListenTogetherPanel({
         aria-valuemax={52}
         aria-valuenow={Math.round(workspacePaneRatio * 100)}
         onPointerDown={(event) => {
-          if (window.innerWidth < 1024) return;
+          if (!isWideViewport()) return;
           event.preventDefault();
           setIsPaneDragging(true);
           event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -1302,7 +1302,7 @@ export function ListenTogetherPanel({
       </button>
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-rm-border pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-        <div className="shrink-0 rounded-3xl border border-rm-border bg-rm-bg-surface/35 p-4 sm:p-5">
+        <div className="shrink-0 rounded-3xl border border-rm-border bg-rm-bg-surface/35 p-4 md:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
               <Icon name="headphones" size="sm" className="text-primary" />
@@ -1321,7 +1321,7 @@ export function ListenTogetherPanel({
           />
         </div>
 
-        <div className="flex min-h-[260px] min-w-0 flex-1 flex-col pt-4 sm:pt-5">
+        <div className="flex min-h-[260px] min-w-0 flex-1 flex-col pt-4 md:pt-5">
           <div className="flex shrink-0 items-center justify-between gap-3 pb-3">
             <div
               role="tablist"

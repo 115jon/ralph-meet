@@ -76,7 +76,7 @@ export function ShopItemDetail({
   return (
     <ResponsiveDialog open onOpenChange={onOpenChange}>
       <ResponsiveDialogContent
-        dialogClassName="gap-0 overflow-hidden p-0 sm:max-w-[760px] md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,320px)]"
+        dialogClassName="gap-0 overflow-hidden p-0 md:max-w-[760px] md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,320px)]"
         drawerClassName="px-0 pb-[calc(var(--safe-area-bottom,0px)+1rem)]"
       >
         <div

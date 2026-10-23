@@ -5,7 +5,7 @@
  * Dialog's own subcomponent names, so a modal adopts it by swapping imports:
  *
  *   <ResponsiveDialog open={open} onOpenChange={setOpen}>
- *     <ResponsiveDialogContent className="sm:max-w-md">
+ *     <ResponsiveDialogContent className="md:max-w-md">
  *       <ResponsiveDialogHeader>
  *         <ResponsiveDialogTitle>Invite people</ResponsiveDialogTitle>
  *       </ResponsiveDialogHeader>

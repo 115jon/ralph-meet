@@ -129,7 +129,7 @@ export default function VoiceChannelTextStatusModal({
                   >
                     What are we chatting about?
                   </h2>
-                  <p className="mt-2 text-ui-sm text-rm-text-muted sm:text-ui-base">
+                  <p className="mt-2 text-ui-sm text-rm-text-muted md:text-ui-base">
                     Let others know what you&apos;re up to in the voice channel.
                   </p>
                 </div>
@@ -210,7 +210,7 @@ export default function VoiceChannelTextStatusModal({
                 ) : null}
               </div>
 
-              <div className="flex flex-col-reverse gap-2 border-t border-rm-border px-6 py-5 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-2 border-t border-rm-border px-6 py-5 md:flex-row md:justify-end">
                 <Button type="button" variant="secondary" onClick={onClose}>
                   Cancel
                 </Button>

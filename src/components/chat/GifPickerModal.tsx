@@ -1343,7 +1343,7 @@ export default function GifPickerModal({
       const style: React.CSSProperties = {
         opacity: 1,
         maxHeight: MAX_HEIGHT,
-        height: "68vh", // use default height but clamped by maxHeight
+        height: "68dvh", // use default height but clamped by maxHeight
       };
 
       let left = rect.left;
@@ -1369,10 +1369,10 @@ export default function GifPickerModal({
   }, [expanded, markerRef]);
 
   const panelLayout = expanded
-    ? "left-1/2 top-1/2 h-[min(82vh,780px)] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
+    ? "left-1/2 top-1/2 h-[min(82dvh,780px)] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
     : markerRef
-      ? "w-full sm:w-[min(440px,calc(100vw-24px))]"
-      : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))]";
+      ? "w-full md:w-[min(440px,calc(100vw-24px))]"
+      : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68dvh,620px)] w-[min(420px,calc(100vw-2rem))]";
 
   return (
     <TooltipProvider>
@@ -2180,7 +2180,7 @@ function FavoritesEmptyState({ mediaLabel = "GIFs" }: { mediaLabel?: string }) {
     : mediaLabel;
   return (
     <div
-      className="grid grid-cols-3 gap-3 max-sm:grid-cols-1"
+      className="grid grid-cols-3 gap-3 max-md:grid-cols-1"
       aria-live="polite"
     >
       <div className="relative flex min-h-40 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border px-5 py-6 text-center text-ui-base font-medium leading-7 text-rm-text shadow-sm dark:shadow-none">

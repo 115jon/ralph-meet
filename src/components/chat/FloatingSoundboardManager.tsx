@@ -228,7 +228,7 @@ export function FloatingSoundboardManager({
                 className="shrink-0 text-rm-text-muted"
               />
             </button>
-            <div className="max-h-[min(360px,calc(100vh-112px))] space-y-2 overflow-y-auto p-2.5">
+            <div className="max-h-[min(360px,calc(100dvh-112px))] space-y-2 overflow-y-auto p-2.5">
               {scopedPlaybacks.map((playback) => (
                 <SoundboardPlaybackRow
                   key={playback.playbackId}

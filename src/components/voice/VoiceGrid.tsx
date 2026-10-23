@@ -360,7 +360,7 @@ export const VoiceGrid = React.memo(
       return (
         <div
           className={cn(
-            "flex flex-row items-center justify-center gap-2 sm:gap-4 w-full h-full py-2 px-2 overflow-hidden",
+            "flex flex-row items-center justify-center gap-2 md:gap-4 w-full h-full py-2 px-2 overflow-hidden",
             className,
           )}
         >
@@ -390,39 +390,41 @@ export const VoiceGrid = React.memo(
     }
 
     return (
-      <div
-        className={cn(
-          "grid gap-4 w-full h-full place-content-center items-center pt-20 px-6 pb-6 overflow-y-auto no-scrollbar scrollbar-hide",
-          items.length === 1
-            ? "grid-cols-1 max-w-5xl mx-auto"
-            : items.length === 2
-              ? "grid-cols-1 md:grid-cols-2"
-              : items.length <= 4
-                ? "grid-cols-1 sm:grid-cols-2"
-                : items.length <= 9
-                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-                  : items.length <= 16
-                    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                    : items.length <= 25
-                      ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-                      : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
-          className,
-        )}
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        {items.map((item) => (
-          <ParticipantCard
-            key={item.id}
-            item={item}
-            isFocused={focusedId === item.id}
-            isTray={false}
-            globalDeafened={globalDeafened}
-            voiceActions={voiceActions}
-            watchedStreams={watchedStreams}
-            streamThumbnails={streamThumbnails}
-            onClick={() => onFocus(item.id === focusedId ? null : item.id)}
-          />
-        ))}
+      <div className="@container h-full min-h-0 w-full">
+        <div
+          className={cn(
+            "grid gap-4 w-full h-full place-content-center items-center pt-20 px-6 pb-6 overflow-y-auto no-scrollbar scrollbar-hide",
+            items.length === 1
+              ? "grid-cols-1 max-w-5xl mx-auto"
+              : items.length === 2
+                ? "grid-cols-1 @3xl:grid-cols-2"
+                : items.length <= 4
+                  ? "grid-cols-1 @lg:grid-cols-2"
+                  : items.length <= 9
+                    ? "grid-cols-1 @lg:grid-cols-2 @5xl:grid-cols-3"
+                    : items.length <= 16
+                      ? "grid-cols-1 @lg:grid-cols-2 @5xl:grid-cols-3 @7xl:grid-cols-4"
+                      : items.length <= 25
+                        ? "grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4 @7xl:grid-cols-5"
+                        : "grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4 @7xl:grid-cols-5 @min-[1536px]:grid-cols-6",
+            className,
+          )}
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+          {items.map((item) => (
+            <ParticipantCard
+              key={item.id}
+              item={item}
+              isFocused={focusedId === item.id}
+              isTray={false}
+              globalDeafened={globalDeafened}
+              voiceActions={voiceActions}
+              watchedStreams={watchedStreams}
+              streamThumbnails={streamThumbnails}
+              onClick={() => onFocus(item.id === focusedId ? null : item.id)}
+            />
+          ))}
+        </div>
       </div>
     );
   },

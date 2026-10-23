@@ -68,7 +68,7 @@ export function ImageViewerContent({
               src={videoPosterUrl}
               alt=""
               className={cn(
-                "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-200 select-none",
+                "max-w-full max-h-[60dvh] md:max-h-[75dvh] object-contain shadow-2xl rounded-sm transition-opacity duration-200 select-none",
                 isLoaded ? "opacity-100" : "opacity-0",
               )}
               onLoad={(e) => {
@@ -144,7 +144,7 @@ export function ImageViewerContent({
               src={getUrl(currentImage)}
               alt=""
               className={cn(
-                "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-200 select-none",
+                "max-w-full max-h-[60dvh] md:max-h-[75dvh] object-contain shadow-2xl rounded-sm transition-opacity duration-200 select-none",
                 isLoaded ? "opacity-100" : "opacity-0",
                 interactive &&
                   (isZoomed

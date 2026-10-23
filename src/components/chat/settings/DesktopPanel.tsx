@@ -100,7 +100,7 @@ function HardwareAccelerationRow() {
                     Ralph Meet restarts to apply this. If you're in a call,
                     you'll leave it and can rejoin after the restart.
                   </DialogDescription>
-                  <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
                     <Button
                       type="button"
                       variant="ghost"

@@ -269,7 +269,7 @@ export function UploadSoundModal({
               {fields}
 
               {/* Footer actions */}
-              <div className="mt-8 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <div className="mt-8 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
                 <Button type="button" variant="secondary" onClick={onClose}>
                   Never mind
                 </Button>

@@ -259,7 +259,7 @@ export const SubMenu = memo(
             ?.focus();
         }}
         className={cn(
-          "absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70vh] w-[200px] flex-col overflow-y-auto animate-in fade-in no-scrollbar",
+          "absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70dvh] w-[200px] flex-col overflow-y-auto animate-in fade-in no-scrollbar",
           MENU_PANEL,
         )}
       >

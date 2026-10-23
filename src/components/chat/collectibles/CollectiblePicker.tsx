@@ -88,7 +88,7 @@ const GRID_CLASS: Record<CollectibleKind, string> = {
     "grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-x-1.5 gap-y-2",
   profile_effect:
     "grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-x-1.5 gap-y-2",
-  nameplate: "grid grid-cols-1 gap-2 sm:grid-cols-2",
+  nameplate: "grid grid-cols-1 gap-2 md:grid-cols-2",
   profile_frame:
     "grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-4",
 };

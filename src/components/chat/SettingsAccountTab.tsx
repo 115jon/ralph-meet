@@ -1322,8 +1322,8 @@ function DisplayNameStyleDialog({
                           className={cn(
                             "flex h-full items-center justify-center overflow-hidden text-center font-bold leading-none",
                             option.id === "eight-bit"
-                              ? "text-ui-2xs tracking-[0.02em] sm:text-ui-2xs"
-                              : "text-ui-xl sm:text-ui-xl",
+                              ? "text-ui-2xs tracking-[0.02em]"
+                              : "text-ui-xl",
                           )}
                         />
                       </button>
@@ -1371,7 +1371,7 @@ function DisplayNameStyleDialog({
                         font: DEFAULT_DISPLAY_NAME_STYLE.font,
                         effect: option.id,
                       }}
-                      className="flex h-full items-center justify-center overflow-hidden px-2 text-center text-ui-sm font-semibold sm:text-ui-sm"
+                      className="flex h-full items-center justify-center overflow-hidden px-2 text-center text-ui-sm font-semibold"
                     />
                   </button>
                 ))}
@@ -1765,8 +1765,8 @@ function DisplayNameStyleDialog({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-rm-border px-4 py-3 sm:gap-4 lg:px-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-rm-border px-4 py-3 md:gap-4 lg:px-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <p className="max-w-[34ch] text-ui-xs leading-relaxed text-rm-text-muted">
                 Display name colors and effects can shift a little between light
                 and dark surfaces.
@@ -1810,7 +1810,7 @@ function DisplayNameStyleDialog({
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <Button
                 type="button"
                 variant="secondary"
@@ -4500,7 +4500,7 @@ export default function SettingsAccountTab({
                       {claimCandidates.map((candidate) => (
                         <div
                           key={candidate.id}
-                          className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-black/18 p-3 sm:flex-row sm:items-center sm:justify-between"
+                          className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-black/18 p-3 md:flex-row md:items-center md:justify-between"
                         >
                           <div className="flex min-w-0 items-center gap-3">
                             <div className="relative h-10 w-10 shrink-0 rounded-full bg-white/6">
@@ -4554,7 +4554,7 @@ export default function SettingsAccountTab({
           ) : null}
 
           {!asModal && hasChanges ? (
-            <div className="mt-6 flex flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/92 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-6 flex flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/92 p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-ui-sm font-semibold text-rm-text">
                   Don&apos;t forget to save your changes.
@@ -4587,7 +4587,7 @@ export default function SettingsAccountTab({
 
       {asModal && hasChanges ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[120] flex justify-center px-4 md:bottom-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-lg sm:flex-row sm:items-center sm:justify-between">
+          <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-lg md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
               <p className="text-ui-sm font-semibold text-rm-text">
                 Don&apos;t forget to save your changes.

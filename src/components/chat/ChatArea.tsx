@@ -328,7 +328,7 @@ export default function ChatArea({
         >
           <div
             ref={pinSidebarRef}
-            className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent flex sm:justify-end items-start pointer-events-auto"
+            className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent flex md:justify-end items-start pointer-events-auto"
           >
             <PinnedMessagesSidebar
               messages={state.pinnedMessages}
