@@ -16,6 +16,18 @@
  *           command-menu (&q=)
  *           shop | catalog-decorations | catalog-effects
  *           catalog-nameplates | catalog-frames
+ *           shell-chat (shell without the member list)
+ *           ov-* overlays (design-audit units 7-9), each mounted open:
+ *             ov-pin | ov-unpin | ov-reactions | ov-upload-sound
+ *             ov-create-server | ov-create-channel | ov-create-category
+ *             ov-share | ov-start-call | ov-voice-switch
+ *             ov-voice-text-status | ov-voice-media-status
+ *             ov-audio-interaction | ov-external-link | ov-delete-message
+ *             ov-remove-embeds | ov-sound-delete | ov-desktop-restart
+ *             ov-pins-empty | ov-pins-loading | ov-stream-menu
+ *             ov-stream-menu-self | ov-mention | ov-image-viewer
+ *             ov-voice-dashboard | ov-voice-details | ov-stream-settings
+ *             ov-noise-menu | ov-profile | ov-account | ov-audio-device
  */
 
 import { createFileRoute, notFound } from "@tanstack/react-router";

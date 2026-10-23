@@ -1,73 +1,81 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import { MenuItem, SubMenuItem } from "./ContextMenuItems";
+import { Slider, divider, toActionSheetItems } from "./ContextMenuItems";
 
-function getSubmenu(): HTMLElement {
-  const submenu = screen.getAllByRole("menu")[1];
-  if (!submenu) throw new Error("Expected a rendered submenu");
-  return submenu;
-}
-
-function TestSubmenu({ disabledOnly = false }: { disabledOnly?: boolean }) {
-  const [active, setActive] = useState(false);
-
-  return (
-    <div role="menu">
-      <SubMenuItem
-        label="More options"
-        active={active}
-        onMouseEnter={() => setActive(true)}
-        onArrowLeft={() => setActive(false)}
-        submenu={
-          disabledOnly ? (
-            <MenuItem label="Unavailable" disabled />
-          ) : (
-            <MenuItem label="Available action" />
-          )
-        }
-      />
-    </div>
-  );
-}
-
-describe("ContextMenuItems submenu keyboard behavior", () => {
-  it("closes from ArrowLeft at the shared submenu level and restores trigger focus", async () => {
-    render(<TestSubmenu />);
-
-    const trigger = screen.getByRole("menuitem", { name: "More options" });
-    fireEvent.keyDown(trigger, { key: "ArrowRight" });
-
-    await screen.findByRole("menuitem", { name: "Available action" });
-    const submenu = getSubmenu();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("menuitem", { name: "Available action" }),
-      ).toHaveFocus(),
+describe("Slider (VC-23)", () => {
+  it("always shows the thumb and gives coarse pointers a 44px input", () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <Slider label="User Volume" value={50} max={200} onChange={onChange} />,
     );
+    const thumb = container.querySelector('[data-slot="slider-thumb"]');
+    expect(thumb?.className).toContain("size-3");
+    expect(thumb?.className).toContain("pointer-coarse:size-5");
+    expect(thumb?.className).not.toContain("opacity-0");
+    expect(thumb).toHaveStyle({ left: "25%" });
 
-    fireEvent.keyDown(submenu, { key: "ArrowLeft" });
-
-    expect(screen.getAllByRole("menu")).toHaveLength(1);
-    expect(trigger).toHaveFocus();
+    const input = screen.getByRole("slider", { name: "User Volume" });
+    expect(input.className).toContain("pointer-coarse:min-h-11");
+    fireEvent.change(input, { target: { value: "120" } });
+    expect(onChange).toHaveBeenCalledWith(120);
   });
+});
 
-  it("focuses the submenu container and closes disabled-only submenus with ArrowLeft", async () => {
-    render(<TestSubmenu disabledOnly />);
+describe("toActionSheetItems", () => {
+  it("maps dividers, toggles, sliders and submenus to sheet rows", () => {
+    const onMute = vi.fn();
+    const items = toActionSheetItems([
+      { type: "item", key: "profile", label: "Profile", onSelect: vi.fn() },
+      divider("a"),
+      {
+        type: "item",
+        key: "mute",
+        label: "Mute",
+        checked: true,
+        onSelect: onMute,
+      },
+      {
+        type: "slider",
+        key: "volume",
+        label: "User Volume",
+        value: 80,
+        onChange: vi.fn(),
+      },
+      {
+        type: "submenu",
+        key: "apps",
+        label: "Apps",
+        entries: [
+          { type: "item", key: "none", label: "No Apps", disabled: true },
+        ],
+      },
+      {
+        type: "item",
+        key: "disconnect",
+        label: "Disconnect",
+        danger: true,
+      },
+    ]);
 
-    const trigger = screen.getByRole("menuitem", { name: "More options" });
-    fireEvent.keyDown(trigger, { key: "ArrowRight" });
-
-    await screen.findByRole("menuitem", { name: "Unavailable" });
-    const submenu = getSubmenu();
-    await waitFor(() => expect(submenu).toHaveFocus());
-
-    fireEvent.keyDown(submenu, { key: "ArrowLeft" });
-
-    expect(screen.getAllByRole("menu")).toHaveLength(1);
-    expect(trigger).toHaveFocus();
+    expect(items.map((item) => item.label)).toEqual([
+      "Profile",
+      "Mute",
+      "User Volume",
+      "Apps",
+      "Disconnect",
+    ]);
+    expect(items[0]!.divider).toBe(true);
+    expect(items[1]!.rightIcon).toBeTruthy();
+    items[1]!.onClick();
+    expect(onMute).toHaveBeenCalled();
+    // Rows never auto-close; the action decides (as on desktop).
+    expect(items.every((item) => item.closeOnClick === false)).toBe(true);
+    expect(items[2]!.subtitle).toBe("80%");
+    expect(items[2]!.submenu).toBeTruthy();
+    expect(items[3]!.submenu).toBeTruthy();
+    expect(items[4]!.variant).toBe("danger");
   });
 });

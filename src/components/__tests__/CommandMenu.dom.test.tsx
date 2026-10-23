@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatStore } from "@/stores/chat-store";
 import {
@@ -148,5 +155,46 @@ describe("CommandMenu", () => {
     ).toBe("token scale");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     window.removeEventListener("open-message-search", listener);
+  });
+
+  it("opens on Ctrl+K with the field focused; Escape closes and returns focus", async () => {
+    render(
+      <>
+        <button type="button">Composer</button>
+        <CommandMenu />
+      </>,
+    );
+    const opener = screen.getByRole("button", { name: "Composer" });
+    opener.focus();
+
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const dialog = screen.getByRole("dialog", { name: "Quick switcher" });
+    await waitFor(() =>
+      expect(within(dialog).getByRole("combobox")).toHaveFocus(),
+    );
+    // Keyboard-initiated: no open/close animation on the scrim (9.6).
+    expect(
+      document.querySelector('[data-slot="dialog-overlay"]')?.className,
+    ).toContain("data-[state=open]:animate-none!");
+
+    fireEvent.keyDown(within(dialog).getByRole("combobox"), {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
+  it("closes on the back button and toggles closed on a second Ctrl+K", async () => {
+    const { executeBackHandlers } = await import("@/hooks/useBackButton");
+    open();
+    act(() => {
+      executeBackHandlers();
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    expect(screen.getByRole("dialog", { name: "Quick switcher" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

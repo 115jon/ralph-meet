@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 import EmojiToken from "./EmojiToken";
+import { RemoveEmbedsDialog } from "./RemoveEmbedsDialog";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import VideoAttachment from "./VideoAttachment";
 
@@ -407,55 +408,6 @@ function shouldCollapseXText(
     text.length > collapsedCharThreshold
   );
 }
-
-const RemoveEmbedsModal = memo(
-  ({
-    onConfirm,
-    onCancel,
-  }: {
-    onConfirm: () => void;
-    onCancel: () => void;
-  }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/60"
-        onClick={onCancel}
-        aria-label="Close remove embeds confirmation"
-      />
-      <div
-        className="relative w-full max-w-[440px] rounded-xl bg-rm-bg-surface border border-rm-border shadow-2xl p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-ui-xl font-semibold text-rm-text-primary mb-2">
-          Are you sure?
-        </h2>
-        <p className="text-ui-sm text-rm-text-secondary leading-relaxed">
-          This will remove all embeds on this message for everyone.
-        </p>
-        <p className="text-ui-xs text-rm-text-muted mt-2 mb-6">
-          Hold shift when clearing embeds to skip this modal.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-rm-text-secondary pointer-fine:hover:text-rm-text-primary pointer-fine:hover:bg-rm-bg-hover transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="px-5 py-2.5 rounded-md text-ui-sm font-medium text-white bg-[#da373c] pointer-fine:hover:bg-[#a12828] transition-colors"
-          >
-            Remove All Embeds
-          </button>
-        </div>
-      </div>
-    </div>
-  ),
-);
 
 // ─── Overlay Button ───────────────────────────────────────────────────────
 
@@ -5010,6 +4962,9 @@ export const LinkEmbed = memo(
     onMediaStop?: () => void;
   }) => {
     const [showModal, setShowModal] = useState(false);
+    // Mount the confirm on first use (not per embed up front), then keep it
+    // so its close animation can run.
+    const [modalMounted, setModalMounted] = useState(false);
     const providerName = embed.provider?.name?.toLowerCase();
     const isXEmbed =
       providerName === "x" ||
@@ -5029,6 +4984,7 @@ export const LinkEmbed = memo(
         if (e.shiftKey) {
           onRemoveEmbeds();
         } else {
+          setModalMounted(true);
           setShowModal(true);
         }
       },
@@ -5138,10 +5094,13 @@ export const LinkEmbed = memo(
             </button>
           )}
         </div>
-        {showModal && (
-          <RemoveEmbedsModal
+        {onRemoveEmbeds && modalMounted && (
+          <RemoveEmbedsDialog
+            open={showModal}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) handleCancel();
+            }}
             onConfirm={handleConfirm}
-            onCancel={handleCancel}
           />
         )}
       </>

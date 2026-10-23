@@ -1,13 +1,12 @@
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveDialog,
-  ResponsiveDialogClose,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
   ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { IconButton } from "@/components/ui/IconButton";
 
 export interface PendingExternalLink {
   url: string;
@@ -34,51 +33,38 @@ export function ExternalLinkConfirmModal({
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      <ResponsiveDialogContent
-        showCloseButton={false}
-        className="text-rm-text-primary"
-        dialogClassName="w-full max-w-[510px] p-6"
-      >
-        <section>
-          <ResponsiveDialogClose asChild>
-            <IconButton
-              icon="close"
-              type="button"
-              aria-label="Close external link confirmation"
-              className="absolute right-4 top-4 max-md:hidden"
-            />
-          </ResponsiveDialogClose>
-
-          <ResponsiveDialogTitle className="pr-8 text-ui-lg font-semibold">
-            Leaving Ralph Meet
-          </ResponsiveDialogTitle>
-          <ResponsiveDialogDescription className="mt-1 text-ui-sm text-rm-text-muted">
+      <ResponsiveDialogContent className="md:max-w-sm">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Leaving Ralph Meet</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             This link is taking you to the following website
           </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-          <div className="mt-5 max-h-24 overflow-auto rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-3 text-ui-sm leading-5 text-rm-text-secondary [overflow-wrap:anywhere]">
-            {pending.url}
-          </div>
+        <div className="max-h-24 overflow-auto overscroll-contain rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-3 text-ui-sm text-rm-text-secondary [overflow-wrap:anywhere]">
+          {pending.url}
+        </div>
 
-          <label className="mt-3 flex cursor-pointer items-center gap-3 text-ui-sm text-rm-text-secondary">
-            <input
-              type="checkbox"
-              checked={trustDomain}
-              onChange={(event) => onTrustDomainChange(event.target.checked)}
-              className="h-5 w-5 rounded border-rm-border bg-rm-bg-surface accent-primary"
-            />
-            <span>Trust {pending.hostname} links from now on</span>
-          </label>
+        <label className="flex cursor-pointer items-center gap-3 text-ui-sm text-rm-text-secondary pointer-coarse:min-h-11">
+          <input
+            type="checkbox"
+            checked={trustDomain}
+            onChange={(event) => onTrustDomainChange(event.target.checked)}
+            className="size-5 shrink-0 rounded-sm border-rm-border bg-rm-bg-surface accent-primary"
+          />
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            Trust {pending.hostname} links from now on
+          </span>
+        </label>
 
-          <ResponsiveDialogFooter className="flex-col-reverse md:mt-6">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Go Back
-            </Button>
-            <Button type="button" onClick={onConfirm}>
-              Visit Site
-            </Button>
-          </ResponsiveDialogFooter>
-        </section>
+        <ResponsiveDialogFooter>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Go Back
+          </Button>
+          <Button type="button" onClick={onConfirm}>
+            Visit Site
+          </Button>
+        </ResponsiveDialogFooter>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );

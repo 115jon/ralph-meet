@@ -1,4 +1,4 @@
-import { useMounted } from "@/hooks/useMounted";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type {
   ScreenShareOptions,
@@ -12,20 +12,22 @@ import {
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { clog } from "@/lib/console-logger";
-import { LocalMenu } from "./ContextMenu/LocalMenu";
-import { RemoteMenu } from "./ContextMenu/RemoteMenu";
-import { MENU_PANEL } from "@/components/ui/menu";
-import { cn } from "@/lib/utils";
+import { ActionSheet } from "@/components/ui/action-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  pointAnchor,
+} from "@/components/ui/dropdown-menu";
+import {
+  StreamMenuEntries,
+  toActionSheetItems,
+  type StreamMenuEntry,
+} from "./ContextMenu/ContextMenuItems";
+import { buildLocalMenu } from "./ContextMenu/LocalMenu";
+import { buildRemoteMenu } from "./ContextMenu/RemoteMenu";
 
 const log = clog("Mod");
 
@@ -98,9 +100,8 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   alwaysShowStreamPreview,
   onToggleAlwaysShowStreamPreview,
 }) => {
-  const mounted = useMounted();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const isMobile = useIsMobile();
+  const anchor = useMemo(() => pointAnchor(x, y), [x, y]);
   const settings = useVoiceSettingsStore(useShallow((s) => s.getSettings()));
 
   const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
@@ -136,55 +137,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
 
   const voiceChannels = channels.filter((c: any) => c.channel_type === "voice");
 
-  const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
-  const aimingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastMousePos = useRef({ x: 0, y: 0 });
-  const currentMousePos = useRef({ x: 0, y: 0 });
-
-  useLayoutEffect(() => {
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-
-    return () => {
-      if (previousFocusRef.current?.isConnected) {
-        previousFocusRef.current.focus();
-      }
-    };
-  }, []);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    lastMousePos.current = { ...currentMousePos.current };
-    currentMousePos.current = { x: e.clientX, y: e.clientY };
-  }, []);
-
-  const handleMouseEnterRoot = useCallback(
-    (label: string | null) => {
-      if (aimingTimeoutRef.current) {
-        clearTimeout(aimingTimeoutRef.current);
-        aimingTimeoutRef.current = null;
-      }
-
-      const isAimingAtSubmenu = () => {
-        if (!activeSubmenu || !label || label === activeSubmenu) return false;
-        const dx = currentMousePos.current.x - lastMousePos.current.x;
-        return dx > 3;
-      };
-
-      if (isAimingAtSubmenu()) {
-        aimingTimeoutRef.current = setTimeout(() => {
-          setActiveSubmenu(label);
-          aimingTimeoutRef.current = null;
-        }, 100);
-        return;
-      }
-
-      setActiveSubmenu(label);
-    },
-    [activeSubmenu],
-  );
-
   const peerSetting = settings?.peerSettings?.[userId] || {
     volume: 100,
     streamVolume: 100,
@@ -194,53 +146,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     attenuationStrength: 50,
     soundboardMuted: false,
   };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        onClose();
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
-
-  useEffect(() => {
-    containerRef.current
-      ?.querySelector<HTMLElement>("[data-menu-item]:not([disabled])")
-      ?.focus();
-  }, []);
-
-  const [pos, setPos] = useState({ top: y, left: x });
-
-  useEffect(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const screenWidth = window.innerWidth;
-      const screenHeight = window.innerHeight;
-
-      let newLeft = x;
-      let newTop = y;
-
-      if (x + rect.width > screenWidth) newLeft = x - rect.width;
-      if (y + rect.height > screenHeight) newTop = y - rect.height;
-
-      const timeout = setTimeout(() => {
-        setPos({ top: Math.max(10, newTop), left: Math.max(10, newLeft) });
-      }, 0);
-      return () => clearTimeout(timeout);
-    }
-  }, [x, y]);
 
   const stopWatching = useCallback(() => {
     onToggleWatch?.(userId);
@@ -312,92 +217,119 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     onClose();
   }, [onClose, onOpenMessage, onOpenMessageUser, resolvedTargetUserId]);
 
-  const clearSubmenu = useCallback(
-    () => handleMouseEnterRoot(null),
-    [handleMouseEnterRoot],
-  );
+  const entries: StreamMenuEntry[] = isLocal
+    ? buildLocalMenu({
+        isStreaming,
+        onToggleScreenShare,
+        onClose,
+        onChangeSource,
+        availableQualities,
+        currentScreenQuality,
+        currentScreenSource,
+        isStreamingAudio,
+        onToggleStreamAudio,
+        onLeave,
+        handleProfile,
+        isMuted,
+        onToggleMute,
+        isDeafened,
+        onToggleDeafen,
+        isModerator,
+        voiceChannels,
+        handleMove,
+        handleServerMute,
+        handleServerDeafen,
+        handleCopyId,
+        showDisconnect,
+        alwaysShowStreamPreview,
+        onToggleAlwaysShowStreamPreview,
+      })
+    : buildRemoteMenu({
+        userId,
+        isStreaming,
+        watchedStreams,
+        stopWatching,
+        peerSetting,
+        toggleMutePeer,
+        toggleSoundboardMute,
+        setPeerVolume,
+        setPeerStreamVolume,
+        toggleAlwaysHear,
+        toggleAttenuation,
+        setPeerAttenuationStrength,
+        handleProfile,
+        handleMessage,
+        isModerator,
+        handleServerMute,
+        handleServerDeafen,
+        onClose,
+        voiceChannels,
+        handleMove,
+        handleCopyId,
+        showDisconnect,
+      });
 
-  if (!mounted) return null;
-
-  return createPortal(
+  return (
+    // The menu portals to <body>, but React events still bubble to the tile
+    // or preview that opened it; keep its presses and clicks inside.
     <div
-      ref={containerRef}
-      role="menu"
-      tabIndex={-1}
-      style={{ top: pos.top, left: pos.left }}
-      data-stream-preview-interactive="true"
-      onPointerDown={(event) => event.stopPropagation()}
-      onPointerUp={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.stopPropagation()}
-      onMouseLeave={clearSubmenu}
-      onMouseMove={handleMouseMove}
-      className={cn(
-        "fixed z-70 flex w-[210px] flex-col animate-in fade-in zoom-in-[0.97] duration-150",
-        MENU_PANEL,
-      )}
+      className="contents"
+      onPointerDown={stopPropagation}
+      onPointerUp={stopPropagation}
+      onClick={stopPropagation}
+      onContextMenu={stopPropagation}
     >
-      <div className="flex flex-col">
-        {isLocal ? (
-          <LocalMenu
-            isStreaming={isStreaming}
-            onToggleScreenShare={onToggleScreenShare}
-            onClose={onClose}
-            onChangeSource={onChangeSource}
-            activeSubmenu={activeSubmenu}
-            handleMouseEnterRoot={handleMouseEnterRoot}
-            clearSubmenu={clearSubmenu}
-            availableQualities={availableQualities}
-            currentScreenQuality={currentScreenQuality}
-            currentScreenSource={currentScreenSource}
-            isStreamingAudio={isStreamingAudio}
-            onToggleStreamAudio={onToggleStreamAudio}
-            onLeave={onLeave}
-            handleProfile={handleProfile}
-            isMuted={isMuted}
-            onToggleMute={onToggleMute}
-            isDeafened={isDeafened}
-            onToggleDeafen={onToggleDeafen}
-            isModerator={isModerator}
-            voiceChannels={voiceChannels}
-            handleMove={handleMove}
-            handleServerMute={handleServerMute}
-            handleServerDeafen={handleServerDeafen}
-            handleCopyId={handleCopyId}
-            showDisconnect={showDisconnect}
-            alwaysShowStreamPreview={alwaysShowStreamPreview}
-            onToggleAlwaysShowStreamPreview={onToggleAlwaysShowStreamPreview}
-          />
-        ) : (
-          <RemoteMenu
-            userId={userId}
-            isStreaming={isStreaming}
-            watchedStreams={watchedStreams}
-            stopWatching={stopWatching}
-            clearSubmenu={clearSubmenu}
-            peerSetting={peerSetting}
-            toggleMutePeer={toggleMutePeer}
-            toggleSoundboardMute={toggleSoundboardMute}
-            setPeerVolume={setPeerVolume}
-            setPeerStreamVolume={setPeerStreamVolume}
-            toggleAlwaysHear={toggleAlwaysHear}
-            toggleAttenuation={toggleAttenuation}
-            setPeerAttenuationStrength={setPeerAttenuationStrength}
-            activeSubmenu={activeSubmenu}
-            handleMouseEnterRoot={handleMouseEnterRoot}
-            handleProfile={handleProfile}
-            handleMessage={handleMessage}
-            isModerator={isModerator}
-            handleServerMute={handleServerMute}
-            handleServerDeafen={handleServerDeafen}
-            onClose={onClose}
-            voiceChannels={voiceChannels}
-            handleMove={handleMove}
-            handleCopyId={handleCopyId}
-            showDisconnect={showDisconnect}
-          />
-        )}
-      </div>
-    </div>,
-    document.body,
+      {isMobile ? (
+        <StreamActionSheet entries={entries} onClose={onClose} />
+      ) : (
+        <DropdownMenu open onOpenChange={(open) => !open && onClose()}>
+          <DropdownMenuContent
+            anchor={anchor}
+            side="bottom"
+            align="start"
+            sideOffset={2}
+            aria-label="User actions"
+            data-stream-preview-interactive="true"
+            className="w-52"
+          >
+            <StreamMenuEntries entries={entries} panelProps={PANEL_PROPS} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
   );
 };
+
+function stopPropagation(event: React.SyntheticEvent) {
+  event.stopPropagation();
+}
+
+const PANEL_PROPS = {
+  "data-stream-preview-interactive": "true",
+} as React.ComponentPropsWithoutRef<"div">;
+
+/** Phone form: the same entries as an ActionSheet (13.1 "context actions"). */
+function StreamActionSheet({
+  entries,
+  onClose,
+}: {
+  entries: StreamMenuEntry[];
+  onClose: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+  // Owners unmount the menu on close; let the sheet slide away first.
+  useEffect(() => {
+    if (open) return;
+    const timer = window.setTimeout(onClose, 280);
+    return () => window.clearTimeout(timer);
+  }, [open, onClose]);
+
+  return (
+    <ActionSheet
+      open={open}
+      onOpenChange={setOpen}
+      items={toActionSheetItems(entries)}
+      title="User actions"
+    />
+  );
+}

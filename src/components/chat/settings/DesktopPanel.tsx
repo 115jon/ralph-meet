@@ -1,18 +1,12 @@
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogPortal,
-  DialogSurface,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 import { clog } from "@/lib/console-logger";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useEffect, useState } from "react";
 import { SettingsCard, SettingsRow, ValueText } from "./primitives";
+import { RestartAppDialog } from "./RestartAppDialog";
 
 const log = clog("Settings");
 
@@ -79,48 +73,19 @@ function HardwareAccelerationRow() {
             labelledBy={ids.labelId}
             describedBy={ids.descId}
           />
-          <Dialog
+          <RestartAppDialog
             open={pendingHardwareAcceleration !== null}
             onOpenChange={(open) =>
               !open && !restarting && setPendingHardwareAcceleration(null)
             }
-          >
-            <DialogPortal>
-              <div className="fixed inset-0 z-60 flex items-center justify-center bg-rm-scrim px-4 animate-in fade-in duration-200">
-                <DialogSurface
-                  showCloseButton={false}
-                  className="relative m-0 w-full max-w-[420px] rounded-xl border border-rm-border-strong bg-rm-bg-surface p-5 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-[0.98] duration-200 dark:bg-rm-bg-elevated"
-                >
-                  <DialogTitle>
-                    {pendingHardwareAcceleration
-                      ? "Turn on hardware acceleration?"
-                      : "Turn off hardware acceleration?"}
-                  </DialogTitle>
-                  <DialogDescription className="mt-2 text-rm-text-secondary">
-                    Ralph Meet restarts to apply this. If you're in a call,
-                    you'll leave it and can rejoin after the restart.
-                  </DialogDescription>
-                  <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={restarting}
-                      onClick={() => setPendingHardwareAcceleration(null)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      loading={restarting}
-                      onClick={confirmHardwareAccelerationChange}
-                    >
-                      Restart now
-                    </Button>
-                  </div>
-                </DialogSurface>
-              </div>
-            </DialogPortal>
-          </Dialog>
+            onConfirm={confirmHardwareAccelerationChange}
+            restarting={restarting}
+            title={
+              pendingHardwareAcceleration
+                ? "Turn on hardware acceleration?"
+                : "Turn off hardware acceleration?"
+            }
+          />
         </>
       )}
     </SettingsRow>

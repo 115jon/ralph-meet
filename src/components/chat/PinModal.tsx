@@ -1,18 +1,15 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { Button } from "@/components/ui/button";
-import { DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
+  ResponsiveDialogDescription,
   ResponsiveDialogFooter,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { useIsMobile } from "@/hooks/useMediaQuery";
-import { IconButton } from "@/components/ui/IconButton";
 import type { Message } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 import { isPlayableVideo } from "@/lib/media";
 import React from "react";
@@ -40,7 +37,6 @@ export const PinModal: React.FC<PinModalProps> = ({
   mode,
   channelName,
 }) => {
-  const isMobile = useIsMobile();
   if (!message) return null;
 
   const isPin = mode === "pin";
@@ -58,194 +54,112 @@ export const PinModal: React.FC<PinModalProps> = ({
     }
   }
 
-  const details = (
-    <>
-      <div className="text-rm-text-muted text-ui-sm mb-6 leading-relaxed">
-        {isPin ? (
-          <InlineEmojiText
-            text={`Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`}
-          />
-        ) : (
-          "You sure you want to remove this pinned message?"
-        )}
-      </div>
-
-      {/* Message Preview */}
-      <div className="rounded-xl border border-rm-border bg-rm-bg-elevated/40 p-4 mb-6">
-        <div className="flex gap-3 mb-2">
-          <div className="relative h-10 w-10 shrink-0 overflow-visible rounded-full bg-primary/10 text-ui-sm font-semibold text-primary flex items-center justify-center border border-rm-border">
-            {message.author?.avatar_url ? (
-              <AvatarImage
-                src={getAuthAssetUrl(message.author.avatar_url)}
-                alt={authorDisplayName}
-                display={message.author.avatar_display}
-              />
-            ) : (
-              getDisplayInitial(message.author)
-            )}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-2">
-              <UserDisplayName
-                user={message.author}
-                className="block truncate text-ui-sm font-semibold text-rm-text"
-              />
-              <span className="text-ui-2xs text-rm-text-muted font-medium">
-                {new Date(message.created_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            </div>
-            <div className="text-ui-sm text-rm-text-secondary leading-relaxed wrap-break-word">
-              <MarkdownRenderer content={message.content} />
-              {message.updated_at && (
-                <span className="ml-1 text-ui-2xs text-rm-text-muted">
-                  (edited)
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {message.attachments && message.attachments.length > 0 && (
-          <div className="mt-3 pl-[52px] space-y-2">
-            {imageAttachments.length > 0 && (
-              <ImageGrid
-                attachments={imageAttachments}
-                username={message.author?.username}
-                displayName={message.author?.display_name}
-                avatarUrl={message.author?.avatar_url}
-                avatarDisplay={message.author?.avatar_display}
-                createdAt={message.created_at}
-              />
-            )}
-            {videoAttachments.map((att) => (
-              <VideoAttachment
-                key={att.id}
-                src={att.url || `/api/${att.file_key}`}
-                filename={att.filename}
-                maxWidth={350}
-                maxHeight={200}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {!isPin && (
-        <div className="mb-6 px-1">
-          <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-accent-ink mb-1.5">
-            Protip:
-          </p>
-          <p className="text-ui-xs text-rm-text-muted leading-relaxed">
-            You can hold down{" "}
-            <span className="text-rm-text-secondary font-bold bg-rm-bg-elevated px-1.5 py-0.5 rounded">
-              shift
-            </span>{" "}
-            when clicking{" "}
-            <span className="text-rm-text-secondary font-bold">
-              unpin message
-            </span>{" "}
-            to bypass this confirmation entirely.
-          </p>
-        </div>
-      )}
-    </>
-  );
-
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      {isMobile ? (
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>
-              {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
-            </ResponsiveDialogTitle>
-          </ResponsiveDialogHeader>
-          {details}
-          <ResponsiveDialogFooter>
-            <Button
-              variant={isPin ? "default" : "destructive"}
-              onClick={() => {
-                onConfirm();
-                onClose();
-              }}
-            >
-              {isPin ? "Oh yeah. Pin it" : "Remove it please!"}
-            </Button>
-            <Button variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      ) : (
-        <DialogPortal>
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
-            data-state={isOpen ? "open" : "closed"}
-          >
-            {/* Backdrop */}
-            <div
-              className={cn(
-                "absolute inset-0 bg-black/60 transition-opacity duration-200",
-                "opacity-100 data-[state=closed]:opacity-0",
+      <ResponsiveDialogContent className="md:max-w-sm">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
+            {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            {isPin ? (
+              <InlineEmojiText
+                text={`Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`}
+              />
+            ) : (
+              "You sure you want to remove this pinned message?"
+            )}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+
+        {/* Message preview */}
+        <div className="rounded-lg border border-rm-border p-3">
+          <div className="flex gap-3">
+            <div className="relative flex size-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-tint-2 text-ui-sm font-semibold text-rm-text-secondary">
+              {message.author?.avatar_url ? (
+                <AvatarImage
+                  src={getAuthAssetUrl(message.author.avatar_url)}
+                  alt={authorDisplayName}
+                  display={message.author.avatar_display}
+                />
+              ) : (
+                getDisplayInitial(message.author)
               )}
-              onClick={onClose}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " " || e.key === "Escape")
-                  onClose();
-              }}
-              role="presentation"
-              aria-hidden="true"
-            />
-
-            {/* Modal content */}
-            <DialogSurface
-              showCloseButton={false}
-              className={cn(
-                "relative m-0 w-full max-w-[480px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none transition-ui",
-                "opacity-100 scale-100 translate-y-0 data-[state=closed]:opacity-0 data-[state=closed]:scale-95 data-[state=closed]:translate-y-4",
-              )}
-              aria-labelledby="pin-modal-title"
-            >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <h2
-                    id="pin-modal-title"
-                    className="text-ui-lg font-semibold text-rm-text"
-                  >
-                    {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
-                  </h2>
-                  <IconButton
-                    icon="close"
-                    onClick={onClose}
-                    aria-label="Close"
-                    className="-mr-1.5 -mt-1"
-                  />
-                </div>
-
-                {details}
-
-                <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
-                  <Button variant="secondary" onClick={onClose}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant={isPin ? "default" : "destructive"}
-                    onClick={() => {
-                      onConfirm();
-                      onClose();
-                    }}
-                  >
-                    {isPin ? "Oh yeah. Pin it" : "Remove it please!"}
-                  </Button>
-                </div>
+            </div>
+            <div className="flex min-w-0 flex-col">
+              <div className="flex items-center gap-2">
+                <UserDisplayName
+                  user={message.author}
+                  className="block truncate text-ui-sm font-semibold text-rm-text"
+                />
+                <span className="text-ui-2xs font-medium text-rm-text-muted">
+                  {new Date(message.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
               </div>
-            </DialogSurface>
+              <div className="text-ui-sm leading-relaxed wrap-break-word text-rm-text-secondary">
+                <MarkdownRenderer content={message.content} />
+                {message.updated_at && (
+                  <span className="ml-1 text-ui-2xs text-rm-text-muted">
+                    (edited)
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        </DialogPortal>
-      )}
+
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="mt-3 space-y-2 pl-13">
+              {imageAttachments.length > 0 && (
+                <ImageGrid
+                  attachments={imageAttachments}
+                  username={message.author?.username}
+                  displayName={message.author?.display_name}
+                  avatarUrl={message.author?.avatar_url}
+                  avatarDisplay={message.author?.avatar_display}
+                  createdAt={message.created_at}
+                />
+              )}
+              {videoAttachments.map((att) => (
+                <VideoAttachment
+                  key={att.id}
+                  src={att.url || `/api/${att.file_key}`}
+                  filename={att.filename}
+                  maxWidth={350}
+                  maxHeight={200}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!isPin && (
+          <p className="text-ui-xs text-rm-text-secondary">
+            Protip: you can hold down{" "}
+            <span className="font-semibold text-rm-text">shift</span> when
+            clicking{" "}
+            <span className="font-semibold text-rm-text">unpin message</span> to
+            bypass this confirmation entirely.
+          </p>
+        )}
+
+        <ResponsiveDialogFooter>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant={isPin ? "default" : "destructive"}
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+          >
+            {isPin ? "Oh yeah. Pin it" : "Remove it please!"}
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
 };

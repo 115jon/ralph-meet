@@ -1,4 +1,5 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
+import { SidePanel } from "@/components/ui/side-panel";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
 import ChatArea from "@/components/chat/ChatArea";
@@ -1351,48 +1352,36 @@ export default function ChatPage() {
                   }
                 />
               </Suspense>
-              {showVoiceAsMain && voiceTextChatVisible && (
-                <>
-                  <button
-                    type="button"
-                    className={cn(
-                      "absolute inset-0 z-20 bg-rm-scrim cursor-default",
-                      showVoiceTextChat
-                        ? "animate-in fade-in duration-200"
-                        : "animate-out fade-out duration-200",
-                    )}
-                    onClick={handleToggleVoiceTextChat}
-                    aria-label="Close voice chat"
+              {showVoiceAsMain && activeChannelId ? (
+                <SidePanel
+                  open={voiceTextChatVisible}
+                  onOpenChange={(next) => {
+                    if (!next) handleToggleVoiceTextChat();
+                  }}
+                  title="Voice chat"
+                  hideHeader
+                  dockClassName="flex-none"
+                >
+                  <ChatArea
+                    channelId={activeChannelId!}
+                    channelName={channelDisplayName}
+                    onMenuClick={() =>
+                      uiDispatch({ type: "SET_SIDEBAR", open: true })
+                    }
+                    showMembers={false}
+                    isDM={isDmMode}
+                    jumpToMessageId={
+                      pendingJump?.channelId === activeChannelId
+                        ? pendingJump.messageId
+                        : null
+                    }
+                    onJumped={() =>
+                      uiDispatch({ type: "SET_PENDING_JUMP", jump: null })
+                    }
+                    onClose={handleToggleVoiceTextChat}
                   />
-                  <div
-                    className={cn(
-                      "absolute inset-y-0 right-0 z-30 flex w-full max-w-[420px] sm:w-[420px] flex-col border-l border-rm-border bg-rm-bg-primary shadow-2xl",
-                      showVoiceTextChat
-                        ? "animate-in fade-in slide-in-from-right duration-200"
-                        : "animate-out fade-out slide-out-to-right duration-200",
-                    )}
-                  >
-                    <ChatArea
-                      channelId={activeChannelId!}
-                      channelName={channelDisplayName}
-                      onMenuClick={() =>
-                        uiDispatch({ type: "SET_SIDEBAR", open: true })
-                      }
-                      showMembers={false}
-                      isDM={isDmMode}
-                      jumpToMessageId={
-                        pendingJump?.channelId === activeChannelId
-                          ? pendingJump.messageId
-                          : null
-                      }
-                      onJumped={() =>
-                        uiDispatch({ type: "SET_PENDING_JUMP", jump: null })
-                      }
-                      onClose={handleToggleVoiceTextChat}
-                    />
-                  </div>
-                </>
-              )}
+                </SidePanel>
+              ) : null}
             </div>
           )}
 

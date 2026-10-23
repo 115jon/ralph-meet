@@ -19,10 +19,15 @@ export function isDialogTopmost(id: string) {
   return !topmostSurface || topmostSurface.dataset.dialogRootId === id;
 }
 
-/** True for targets inside a Base UI drawer (ui/drawer.tsx) portal. */
+/**
+ * True for targets inside a Base UI drawer (ui/drawer.tsx) portal or a Base UI
+ * popover/menu portal (ui/popover.tsx, ui/dropdown-menu.tsx). Those portal
+ * outside Radix's layer stack, so a Radix dialog must not call them outside.
+ */
 export function isDrawerLayerTarget(target: EventTarget | null): boolean {
   return (
-    target instanceof Element && !!target.closest('[data-slot="drawer-portal"]')
+    target instanceof Element &&
+    !!target.closest('[data-slot="drawer-portal"], [data-rm-floating-layer]')
   );
 }
 

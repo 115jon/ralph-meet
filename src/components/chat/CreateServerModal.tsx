@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -8,14 +7,12 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { useIsMobile } from "@/hooks/useMediaQuery";
-import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Icon } from "@/components/ui/icon";
-import { cn } from "@/lib/utils";
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -68,15 +65,8 @@ export default function CreateServerModal({ open, onClose }: Props) {
     uploadError: null,
   });
 
-  const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  // Close on Escape
 
   // Clean up object URL on unmount
   useEffect(() => {
@@ -170,7 +160,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
   const fields = (
     <>
       {/* Icon upload */}
-      <div className="mb-5 flex justify-center">
+      <div className="flex justify-center">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -219,18 +209,16 @@ export default function CreateServerModal({ open, onClose }: Props) {
       </div>
 
       {state.uploadError && (
-        <p className="mb-3 text-center text-ui-xs font-medium text-destructive">
+        <p
+          role="alert"
+          className="text-center text-ui-xs font-medium text-rm-danger-ink"
+        >
           {state.uploadError}
         </p>
       )}
 
-      <div className="space-y-3">
-        <label
-          htmlFor="server-name"
-          className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
-        >
-          Server Name
-        </label>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="server-name">Server Name</Label>
         <Input
           id="server-name"
           ref={inputRef}
@@ -240,7 +228,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
           }
           onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           placeholder="My Awesome Server"
-          className="h-10"
+          className="max-md:min-h-11"
         />
       </div>
     </>
@@ -251,95 +239,35 @@ export default function CreateServerModal({ open, onClose }: Props) {
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      {isMobile ? (
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>Create a Server</ResponsiveDialogTitle>
-            <ResponsiveDialogDescription>
-              Your server is where you and your friends hang out.
-            </ResponsiveDialogDescription>
-          </ResponsiveDialogHeader>
-          {fields}
-          <ResponsiveDialogFooter>
-            <Button
-              onClick={handleCreate}
-              disabled={!state.name.trim() || state.creating}
-              loading={state.creating}
-            >
-              Create Server
-            </Button>
-            <Button variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      ) : (
-        <DialogPortal>
-          <div
-            data-state={open ? "open" : "closed"}
-            className={cn(
-              "fixed inset-0 z-50 flex items-end md:items-center justify-center pointer-events-none transition-opacity duration-200 data-[state=closed]:opacity-0",
-            )}
+      <ResponsiveDialogContent
+        className="md:max-w-md"
+        // Desktop only: the drawer keeps focus on its surface so the phone
+        // keyboard does not jump up on open.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          inputRef.current?.focus();
+        }}
+      >
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Create a Server</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Your server is where you and your friends hang out.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        {fields}
+        <ResponsiveDialogFooter>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreate}
+            disabled={!state.name.trim() || state.creating}
+            loading={state.creating}
           >
-            {/* Backdrop */}
-            <button
-              type="button"
-              data-base-modal-backdrop
-              className={cn(
-                "absolute inset-0 border-0 bg-black/60 p-0 pointer-events-auto",
-                !open && "pointer-events-none opacity-0",
-              )}
-              onClick={onClose}
-              aria-label="Close create server modal"
-            />
-
-            {/* Modal */}
-            <DialogSurface
-              showCloseButton={false}
-              className={cn(
-                "relative z-10 w-full md:max-w-md h-[90dvh] md:h-auto animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in md:zoom-in-95 rounded-t-xl md:rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-300 md:duration-200 pointer-events-auto flex flex-col",
-                "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full md:data-[state=closed]:slide-out-to-bottom-0 md:data-[state=closed]:fade-out md:data-[state=closed]:zoom-out-95",
-              )}
-            >
-              {/* Close */}
-              <IconButton
-                icon="close"
-                iconSize="sm"
-                onClick={onClose}
-                aria-label="Close"
-                className="absolute right-4 top-4"
-              />
-
-              <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text">
-                Create a Server
-              </h2>
-              <p className="mb-6 text-center text-ui-sm font-medium text-rm-text-muted">
-                Your server is where you and your friends hang out.
-              </p>
-
-              {fields}
-
-              <div className="mt-auto md:mt-6 pt-4 md:pt-0 pb-6 md:pb-0 flex flex-col-reverse gap-2 md:flex-row md:justify-end shrink-0">
-                <Button
-                  variant="secondary"
-                  onClick={onClose}
-                  className="w-full md:w-auto"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreate}
-                  disabled={!state.name.trim() || state.creating}
-                  loading={state.creating}
-                  className="w-full md:w-auto"
-                >
-                  Create Server
-                </Button>
-              </div>
-            </DialogSurface>
-          </div>
-        </DialogPortal>
-      )}
+            Create Server
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
 }

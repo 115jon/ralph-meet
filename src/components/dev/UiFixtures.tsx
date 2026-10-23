@@ -16,6 +16,30 @@ import DMSidebar from "@/components/chat/DMSidebar";
 import { EmptyChatArea } from "@/components/chat/EmptyChatArea";
 import FriendsView from "@/components/chat/FriendsView";
 import InviteModal from "@/components/chat/InviteModal";
+import { PinModal } from "@/components/chat/PinModal";
+import { PinnedMessagesSidebar } from "@/components/chat/PinnedMessagesSidebar";
+import MessageItem from "@/components/chat/MessageItem";
+import { DeleteMessageDialog } from "@/components/chat/DeleteMessageDialog";
+import { RemoveEmbedsDialog } from "@/components/chat/RemoveEmbedsDialog";
+import { DeleteSoundDialog } from "@/components/chat/DeleteSoundDialog";
+import { RestartAppDialog } from "@/components/chat/settings/RestartAppDialog";
+import ReactionDetailsModal from "@/components/chat/ReactionDetailsModal";
+import { UploadSoundModal } from "@/components/chat/UploadSoundModal";
+import CreateServerModal from "@/components/chat/CreateServerModal";
+import CreateChannelModal from "@/components/chat/CreateChannelModal";
+import CreateCategoryModal from "@/components/chat/CreateCategoryModal";
+import MessageShareModal from "@/components/chat/MessageShareModal";
+import { StartCallModal } from "@/components/chat/StartCallModal";
+import { VoiceSwitchModal } from "@/components/chat/VoiceSwitchModal";
+import VoiceChannelTextStatusModal from "@/components/chat/VoiceChannelTextStatusModal";
+import VoiceChannelMediaStatusModal from "@/components/chat/VoiceChannelMediaStatusModal";
+import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
+import { ExternalLinkConfirmModal } from "@/components/ui/ExternalLinkConfirmModal";
+import { StreamContextMenu } from "@/components/StreamContextMenu";
+import { MentionAutocomplete } from "@/components/chat/MentionAutocomplete";
+import { HoveredMentionTooltip } from "@/components/chat/HoveredMentionTooltip";
+import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
+import { useImageViewerStore } from "@/stores/useImageViewerStore";
 import { MobileNavigationSheet } from "@/components/chat/MobileNavigationSheet";
 import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
 import { SettingsHost } from "@/components/chat/SettingsHost";
@@ -78,7 +102,12 @@ import { type MobileTab, useMobileTabStore } from "@/stores/useMobileTabStore";
 import { useSearch } from "@tanstack/react-router";
 import { Icon } from "@/components/ui/icon";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
+import UserProfilePopover from "@/components/chat/UserProfilePopover";
+import UserAccountPopover from "@/components/chat/UserAccountPopover";
+import { AudioDeviceMenu } from "@/components/chat/AudioDeviceMenu";
+import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 
 const NOW = Date.parse("2026-10-22T14:32:00Z");
 const at = (minutesAgo: number) =>
@@ -561,7 +590,7 @@ function Shell({ surface }: { surface: string }) {
             channelName={channelName}
             onMenuClick={() => {}}
             onMembersClick={() => {}}
-            showMembers={!dm}
+            showMembers={!dm && surface !== "shell-chat"}
             isDM={dm}
             serverId={dm ? undefined : "s-1"}
             dmUsername={dm ? "ada" : undefined}
@@ -1771,6 +1800,422 @@ function MobileProfileFixture({ self }: { self: boolean }) {
   );
 }
 
+// ─── Overlay fixtures (design-audit units 7-9) ──────────────────────────────
+//
+// Each `ov-*` surface mounts one overlay open over the shell, so it can be
+// shot at 390 and 1280 in both themes. Overlays that open from a control in
+// the shell (pins, members, bell, account, audio devices, profile) are shot
+// from the `shell` surface with a click instead.
+
+const noop = () => {};
+const noopAsync = async () => {};
+
+function OverShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative h-full w-full bg-rm-bg-primary">
+      <Shell surface="shell-chat" />
+      {children}
+    </div>
+  );
+}
+
+const loungeChannel = channels.find((c) => c.id === "ch-lounge")!;
+
+function OverlaySurface({ surface }: { surface: string }) {
+  switch (surface) {
+    case "ov-pin":
+    case "ov-unpin":
+      return (
+        <OverShell>
+          <PinModal
+            isOpen
+            onClose={noop}
+            onConfirm={noop}
+            message={messages[3]!}
+            mode={surface === "ov-pin" ? "pin" : "unpin"}
+            channelName="general"
+          />
+        </OverShell>
+      );
+    case "ov-reactions":
+      return (
+        <OverShell>
+          <ReactionDetailsModal
+            open
+            message={messages[3]!}
+            initialEmoji="🔥"
+            canManageReactions
+            customEmojiMap={{}}
+            onRemoveReaction={noop}
+            onClose={noop}
+          />
+        </OverShell>
+      );
+    case "ov-upload-sound":
+      return (
+        <OverShell>
+          <UploadSoundModal
+            open
+            onClose={noop}
+            onUpload={noopAsync}
+            isUploading={false}
+          />
+        </OverShell>
+      );
+    case "ov-create-server":
+      return (
+        <OverShell>
+          <CreateServerModal open onClose={noop} />
+        </OverShell>
+      );
+    case "ov-create-channel":
+      return (
+        <OverShell>
+          <CreateChannelModal open serverId="s-1" onClose={noop} />
+        </OverShell>
+      );
+    case "ov-create-category":
+      return (
+        <OverShell>
+          <CreateCategoryModal open serverId="s-1" onClose={noop} />
+        </OverShell>
+      );
+    case "ov-share":
+      return (
+        <OverShell>
+          <MessageShareModal
+            open
+            message={messages[5]!}
+            onClose={noop}
+            onCreateShare={async () => "https://example.test/s/abc123"}
+          />
+        </OverShell>
+      );
+    case "ov-start-call":
+      return (
+        <OverShell>
+          <StartCallModal
+            open
+            targetName="Ada Lovelace"
+            onConfirm={noop}
+            onCancel={noop}
+          />
+        </OverShell>
+      );
+    case "ov-voice-switch":
+      return (
+        <OverShell>
+          <VoiceSwitchModal
+            open
+            targetName="Lounge"
+            currentType="voice"
+            onConfirm={noop}
+            onCancel={noop}
+          />
+        </OverShell>
+      );
+    case "ov-voice-text-status":
+      return (
+        <OverShell>
+          <VoiceChannelTextStatusModal
+            open
+            channel={loungeChannel}
+            onClose={noop}
+          />
+        </OverShell>
+      );
+    case "ov-voice-media-status":
+      return (
+        <OverShell>
+          <VoiceChannelMediaStatusModal
+            open
+            channel={loungeChannel}
+            onClose={noop}
+          />
+        </OverShell>
+      );
+    case "ov-audio-interaction":
+      return (
+        <OverShell>
+          <AudioInteractionModal open onInteract={noop} onClose={noop} />
+        </OverShell>
+      );
+    case "ov-external-link":
+      return (
+        <OverShell>
+          <ExternalLinkConfirmModal
+            open
+            pending={{
+              url: "https://ditherwave.dev/docs/getting-started",
+              hostname: "ditherwave.dev",
+            }}
+            trustDomain={false}
+            onTrustDomainChange={noop}
+            onClose={noop}
+            onConfirm={noop}
+          />
+        </OverShell>
+      );
+    case "ov-stream-menu":
+      return (
+        <OverShell>
+          <StreamContextMenu
+            userId="u-ada"
+            x={420}
+            y={220}
+            onClose={noop}
+            isStreaming
+            onOpenProfile={noop}
+            onOpenMessage={noop}
+          />
+        </OverShell>
+      );
+    case "ov-stream-menu-self":
+      return (
+        <OverShell>
+          <StreamContextMenu
+            userId="me"
+            x={420}
+            y={220}
+            onClose={noop}
+            isStreaming
+            isCurrentUserStreaming
+            currentScreenQuality="1080p60"
+            availableQualities={["720p30", "1080p30", "1080p60"]}
+            onToggleScreenShare={noop}
+            onToggleStreamAudio={noop}
+            onChangeSource={noop}
+            onLeave={noop}
+            onToggleMute={noop}
+            onToggleDeafen={noop}
+          />
+        </OverShell>
+      );
+    case "ov-voice-dashboard":
+    case "ov-voice-details":
+    case "ov-stream-settings":
+    case "ov-noise-menu":
+      return <VoiceDashboardFixture surface={surface} />;
+    case "ov-profile":
+    case "ov-account":
+    case "ov-audio-device":
+      return <AnchoredFixture surface={surface} />;
+    case "ov-delete-message":
+      return (
+        <OverShell>
+          <DeleteMessageDialog
+            open
+            onOpenChange={noop}
+            onConfirm={noop}
+            preview={
+              <MessageItem
+                message={messages[4]!}
+                showHeader
+                currentUserId="u-me"
+                previewOnly
+              />
+            }
+          />
+        </OverShell>
+      );
+    case "ov-remove-embeds":
+      return (
+        <OverShell>
+          <RemoveEmbedsDialog open onOpenChange={noop} onConfirm={noop} />
+        </OverShell>
+      );
+    case "ov-sound-delete":
+      return (
+        <OverShell>
+          <DeleteSoundDialog
+            open
+            onOpenChange={noop}
+            soundName="Airhorn"
+            soundEmoji="📯"
+            onConfirm={noop}
+          />
+        </OverShell>
+      );
+    case "ov-desktop-restart":
+      return (
+        <OverShell>
+          <RestartAppDialog
+            open
+            onOpenChange={noop}
+            onConfirm={noop}
+            title="Turn off hardware acceleration?"
+          />
+        </OverShell>
+      );
+    case "ov-pins-empty":
+    case "ov-pins-loading":
+      return (
+        <OverShell>
+          <PinnedMessagesSidebar
+            open
+            messages={[]}
+            isLoading={surface === "ov-pins-loading"}
+            onClose={noop}
+            onJumpToMessage={noop}
+            onUnpin={noop}
+            canUnpin
+          />
+        </OverShell>
+      );
+    case "ov-mention":
+      return <MentionFixture />;
+    case "ov-image-viewer":
+      return <ImageViewerFixture />;
+    default:
+      return <Shell surface="shell" />;
+  }
+}
+
+/**
+ * The voice dock (VoiceDashboard) in the sidebar column while live. The
+ * stream-settings, noise and details popovers open from it with a click
+ * (the shot script clicks the trigger named after the surface).
+ */
+function VoiceDashboardFixture({ surface }: { surface: string }) {
+  useFixtureDevices();
+  return (
+    <OverShell>
+      <div className="fixed bottom-0 left-0 z-20 w-[312px] max-md:w-full border-t border-rm-border bg-rm-bg-secondary">
+        <VoiceDashboard
+          serverName="Ralph HQ"
+          voiceChannelName="Lounge"
+          voiceChannelId="ch-lounge"
+          serverId="s-1"
+          localUserId="u-me"
+          voiceSettingsUserId="u-me"
+          isScreenSharing={surface !== "ov-voice-details"}
+          isStreamingAudio
+          screenQuality="1080p60"
+          availableQualities={["720p30", "1080p30", "1080p60"]}
+          isCameraActive={false}
+          hasCamera
+          hasMicrophone
+          onVoiceDisconnect={noop}
+          onVoiceNavigate={noop}
+          onShareScreen={noop}
+          onStopStreaming={noop}
+          onToggleStreamAudio={noop}
+          onChangeStreamSource={noop}
+          onStreamQualityChange={noop}
+          onToggleCamera={noop}
+          onOpenVoiceSettings={noop}
+        />
+      </div>
+    </OverShell>
+  );
+}
+
+/** Popovers anchored to a control: profile card, account menu, audio devices. */
+function AnchoredFixture({ surface }: { surface: string }) {
+  useFixtureDevices();
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+  const anchorRef = useMemo(() => ({ current: anchor }), [anchor]);
+  const bottomLeft = surface !== "ov-profile";
+  return (
+    <OverShell>
+      <button
+        type="button"
+        ref={setAnchor}
+        aria-label="Fixture anchor"
+        className={cn(
+          "fixed z-20 size-8 rounded-full bg-rm-tint-2",
+          bottomLeft
+            ? "bottom-3 left-4"
+            : "top-40 right-[260px] max-md:right-4",
+        )}
+      />
+      {anchor && surface === "ov-profile" ? (
+        <UserProfilePopover
+          userId="u-grace"
+          username="grace"
+          displayName="Grace Hopper"
+          seedUser={users.grace!}
+          anchorEl={anchor}
+          onClose={noop}
+          side="left"
+          align="start"
+        />
+      ) : null}
+      {anchor && surface === "ov-account" ? (
+        <UserAccountPopover
+          user={users.me!}
+          onClose={noop}
+          updateStatus={noop}
+          onOpenProfileEditor={noop}
+          anchorEl={anchor}
+        />
+      ) : null}
+      {anchor && surface === "ov-audio-device" ? (
+        <AudioDeviceMenu
+          mode="input"
+          anchorRef={anchorRef}
+          onClose={noop}
+          onOpenVoiceSettings={noop}
+        />
+      ) : null}
+    </OverShell>
+  );
+}
+
+/** Composer-anchored mention list and the hovered-mention tooltip. */
+function MentionFixture() {
+  const candidates = [users.ada!, users.grace!, users.linus!, users.margaret!];
+  return (
+    <OverShell>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 px-2 pb-24 md:left-[312px] md:px-4">
+        <div className="pointer-events-auto relative h-10">
+          <MentionAutocomplete
+            mentionQuery={{ query: "a", start: 0 }}
+            mentionCandidates={candidates}
+            mentionIndex={0}
+            setLocalState={noop}
+            insertMention={noop}
+          />
+        </div>
+      </div>
+      <HoveredMentionTooltip
+        hoveredMember={members.find((m) => m.user.id === "u-grace")}
+        pos={{ left: 220, top: 260 }}
+      />
+    </OverShell>
+  );
+}
+
+function ImageViewerFixture() {
+  const open = useImageViewerStore((s) => s.actions.open);
+  useEffect(() => {
+    open(
+      [
+        {
+          id: "img-1",
+          filename: "share-frame.webp",
+          file_key: "fixtures/share-frame.webp",
+          url: shareFrame,
+          content_type: "image/webp",
+          size_bytes: 182_000,
+        },
+      ],
+      0,
+      {
+        author: users.grace!,
+        createdAt: at(11),
+        messageId: "m-8",
+        channelId: "ch-general",
+      } as never,
+    );
+  }, [open]);
+  return (
+    <OverShell>
+      <ImageViewerModal />
+    </OverShell>
+  );
+}
+
 export default function UiFixtures() {
   const { surface, theme } = useSearch({ from: "/ui-fixtures" });
   const { setTheme } = useTheme();
@@ -1896,7 +2341,9 @@ export default function UiFixtures() {
       content = <MobileFixture surface={surface} />;
       break;
     default:
-      content = isSearchFixture(surfaceName) ? (
+      content = surfaceName.startsWith("ov-") ? (
+        <OverlaySurface surface={surfaceName} />
+      ) : isSearchFixture(surfaceName) ? (
         <SearchFixture
           surface={surfaceName}
           renderShell={(shellSurface) => <Shell surface={shellSurface} />}

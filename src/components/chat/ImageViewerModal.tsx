@@ -51,15 +51,12 @@ export const ImageViewerModal: React.FC = () => {
     {
       currentIndex: initialIndex,
       isLoaded: false,
-      showMore: false,
-      showDetails: false,
       thumbUpdate: 0,
       dimensions: null as { width: number; height: number } | null,
     },
   );
 
-  const { currentIndex, isLoaded, showMore, showDetails, dimensions } =
-    localState;
+  const { currentIndex, isLoaded, dimensions } = localState;
 
   // Track aspect ratios for thumbnail morphing
   const thumbAspects = useRef<Map<number, number> | null>(null);
@@ -536,10 +533,7 @@ export const ImageViewerModal: React.FC = () => {
             <ImageViewerToolbar
               context={context}
               currentImage={currentImage}
-              showMore={showMore}
-              showDetails={showDetails}
               dimensions={dimensions}
-              setLocalState={setLocalState}
               viewDispatch={viewDispatch}
               close={close}
               getUrl={getUrl}

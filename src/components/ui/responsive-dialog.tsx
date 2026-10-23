@@ -150,8 +150,14 @@ function ResponsiveDialogFooter({
 }: React.ComponentProps<"div">) {
   const drawer = useDrawerMode();
   return drawer ? (
+    // Same DOM order as the dialog footer (secondary first, primary last):
+    // the primary lands on top of the phone stack, nearest the thumb's reach
+    // from the content above it.
     <DrawerFooter
-      className={cn("px-0 [&_button]:min-h-11 [&_button]:w-full", className)}
+      className={cn(
+        "flex-col-reverse px-0 [&_button]:min-h-11 [&_button]:w-full",
+        className,
+      )}
       {...props}
     />
   ) : (

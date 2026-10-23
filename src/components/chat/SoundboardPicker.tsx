@@ -13,7 +13,7 @@ import {
   apiPatch,
 } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { DeleteSoundDialog } from "./DeleteSoundDialog";
 import { isMobileViewport, useIsMobile } from "@/hooks/useMediaQuery";
 import { PickerSurface } from "./PickerSurface";
 import { Icon } from "@/components/ui/icon";
@@ -358,6 +358,9 @@ export default function SoundboardPicker({
   const [renderedEditingSound, setRenderedEditingSound] =
     useState<CustomSound | null>(null);
   const [soundToDelete, setSoundToDelete] = useState<CustomSound | null>(null);
+  // Kept after close so the confirm can animate out with its content.
+  const [renderedSoundToDelete, setRenderedSoundToDelete] =
+    useState<CustomSound | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previousSoundToDeleteRef = useRef<CustomSound | null>(null);
 
@@ -759,13 +762,8 @@ export default function SoundboardPicker({
         event.preventDefault();
         return;
       }
-      if (soundToDelete) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        setSoundToDelete(null);
-        deleteTriggerRef.current?.focus();
-        return;
-      }
+      // The delete confirm is the top layer: it closes on its own Escape.
+      if (soundToDelete) return;
       onClose();
     };
     window.addEventListener("keydown", handleEscape, { capture: true });
@@ -2201,6 +2199,7 @@ export default function SoundboardPicker({
                                             deleteTriggerRef.current =
                                               e.currentTarget;
                                             setSoundToDelete(sound);
+                                            setRenderedSoundToDelete(sound);
                                           }}
                                         >
                                           <Icon name="trash" size="xs" />
@@ -2732,78 +2731,17 @@ export default function SoundboardPicker({
         }
       />
 
-      {soundToDelete && (
-        <Dialog
+      {renderedSoundToDelete && (
+        <DeleteSoundDialog
           open={soundToDelete !== null}
           onOpenChange={(open) => !open && setSoundToDelete(null)}
-        >
-          <DialogPortal>
-            <div
-              role="presentation"
-              className="fixed inset-0 z-70 flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 animate-in fade-in duration-150"
-              onMouseDown={(event) => {
-                if (event.target === event.currentTarget)
-                  setSoundToDelete(null);
-              }}
-            >
-              <DialogSurface
-                showCloseButton={false}
-                aria-labelledby="delete-sound-title"
-                aria-describedby="delete-sound-description"
-                onCloseAutoFocus={(event) => {
-                  event.preventDefault();
-                  deleteTriggerRef.current?.focus();
-                }}
-                className="flex w-[320px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface shadow-lg animate-in zoom-in-95 duration-150"
-                onMouseDown={(event) => event.stopPropagation()}
-              >
-                <div className="p-4">
-                  <h2
-                    id="delete-sound-title"
-                    className="text-ui-lg font-semibold text-rm-text"
-                  >
-                    Delete Sound
-                  </h2>
-                  <div
-                    id="delete-sound-description"
-                    className="mt-2 text-ui-sm text-rm-text-muted flex flex-col gap-2"
-                  >
-                    Are you sure you want to delete this sound?
-                    <div className="flex items-center justify-center p-3 mt-1 bg-rm-bg-hover rounded-lg border border-rm-border gap-2 font-bold text-rm-text">
-                      {soundToDelete.emoji && (
-                        <EmojiToken
-                          value={soundToDelete.emoji}
-                          className="h-5 w-5"
-                          fallbackClassName="text-ui-md"
-                        />
-                      )}
-                      <InlineEmojiText text={soundToDelete.name} />
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2 bg-rm-bg-floating p-4 border-t border-rm-border">
-                  <button
-                    type="button"
-                    className="flex-1 rounded-xl bg-rm-bg-hover pointer-fine:hover:bg-rm-bg-active py-2 text-ui-sm font-semibold text-rm-text transition-colors"
-                    onClick={() => setSoundToDelete(null)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="flex-1 rounded-xl bg-destructive py-2 text-ui-sm font-semibold text-white shadow-lg transition-colors pointer-fine:hover:bg-destructive/90"
-                    onClick={async (event) => {
-                      await handleDeleteSound(soundToDelete.id, event);
-                      setSoundToDelete(null);
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </DialogSurface>
-            </div>
-          </DialogPortal>
-        </Dialog>
+          soundName={renderedSoundToDelete.name}
+          soundEmoji={renderedSoundToDelete.emoji}
+          onConfirm={async (event) => {
+            await handleDeleteSound(renderedSoundToDelete.id, event);
+            setSoundToDelete(null);
+          }}
+        />
       )}
     </>,
     document.body,

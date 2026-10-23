@@ -553,13 +553,9 @@ export default function MemberList({
     <TooltipProvider delayDuration={0}>
       <div
         data-testid="members-list"
-        className={cn(
-          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full duration-240 ease-drawer",
-          // Phones: full-screen sheet. Tablets (md): a panel over the chat
-          // edge, so the conversation keeps its width. Desktop (lg): inline.
-          "md:absolute md:top-[calc(48px+var(--safe-area-top,0px))] md:bottom-0 md:h-auto md:border-l md:border-rm-border md:bg-rm-bg-sidebar lg:static lg:h-full lg:z-auto lg:border-l-0 lg:shadow-none lg:animate-none",
-          showDetails ? "md:w-[360px]" : "md:w-60",
-        )}
+        // The host's SidePanel places it: docked at lg, a sheet below, a
+        // right drawer on phones.
+        className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
       >
         <MobileHeader
           onClose={onClose}

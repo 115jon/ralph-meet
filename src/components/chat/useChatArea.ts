@@ -118,7 +118,6 @@ export function useChatArea({
     unreadSince,
   } = localState;
 
-  const pinSidebarRef = useRef<HTMLDivElement>(null);
   const pinButtonRef = useRef<HTMLButtonElement>(null);
   const virtualListRef = useRef<VirtualMessageListHandle>(null);
   const pendingScrollId = useRef<string | null>(null);
@@ -620,7 +619,8 @@ export function useChatArea({
       return;
     }
     if (!channelId) return;
-    setLocalState({ showPins: true });
+    // Pins and a thread share the right-hand panel; opening one closes the other.
+    setLocalState({ showPins: true, threadMessageId: null });
     loadPins(channelId);
   }, [showPins, channelId, loadPins]);
 
@@ -1164,25 +1164,8 @@ export function useChatArea({
   );
 
   const handleThread = useCallback((messageId: string) => {
-    setLocalState({ threadMessageId: messageId });
+    setLocalState({ threadMessageId: messageId, showPins: false });
   }, []);
-
-  useEffect(
-    function closePinsOnClickOutside() {
-      if (!showPins) return;
-
-      const handleClickOutside = (e: MouseEvent) => {
-        if (pinSidebarRef.current?.contains(e.target as Node)) return;
-        if (pinButtonRef.current?.contains(e.target as Node)) return;
-        setLocalState({ showPins: false });
-      };
-
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    },
-    [showPins],
-  );
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1244,7 +1227,6 @@ export function useChatArea({
     showChannelSettings,
     showChannelDetails,
     highlightAnchor,
-    pinSidebarRef,
     pinButtonRef,
     virtualListRef,
     handleLoadMore,

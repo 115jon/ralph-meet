@@ -1,4 +1,7 @@
-import { HIT, PRESS } from "@/components/ui/interaction";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
+import { REVEAL } from "@/components/ui/interaction";
+import { SidePanel, type SidePanelMode } from "@/components/ui/side-panel";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -23,103 +26,86 @@ function formatFileSize(bytes: number): string {
 }
 
 interface PinnedMessagesSidebarProps {
+  open: boolean;
   messages: Message[];
   isLoading: boolean;
   onClose: () => void;
   onJumpToMessage: (messageId: string) => void;
   onUnpin: (messageId: string, skipConfirm: boolean) => void;
   canUnpin: boolean;
+  /** Force one panel form (fixtures, tests). */
+  forceMode?: SidePanelMode;
 }
 
+/**
+ * Pinned messages as a side panel (design-system 12.10, 13.1): docked at
+ * `lg`, a sheet below, a right drawer on phones. The panel owns Escape, the
+ * back button, outside dismissal and focus return.
+ */
 export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
+  open,
   messages,
   isLoading,
   onClose,
   onJumpToMessage,
   onUnpin,
   canUnpin,
+  forceMode,
 }) => {
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () =>
-      window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [onClose]);
-
   return (
-    <div className="w-full h-full md:w-[420px] md:max-h-[calc(100dvh-120px)] md:rounded-lg md:border border-rm-border bg-rm-bg-surface shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-4 md:fade-in md:zoom-in-95 duration-200 pointer-events-auto">
-      <header
-        className="flex min-h-16 flex-none items-center gap-3 border-b border-rm-border bg-transparent px-6 pb-2"
-        style={{ paddingTop: "max(0px, var(--safe-area-top, 0px))" }}
+    <SidePanel
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Pinned messages"
+      forceMode={forceMode}
+    >
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 custom-scrollbar"
+        aria-busy={isLoading || undefined}
       >
-        <Icon name="pin" size="lg" className="text-rm-text-muted" />
-        <h2 className="font-semibold text-ui-lg text-rm-text">
-          Pinned Messages
-        </h2>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close pinned messages"
-          className={cn(
-            "w-8 h-8 flex items-center justify-center rounded-full bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text transition-ui outline-none",
-            PRESS,
-            HIT,
-          )}
-        >
-          <Icon name="close" size="sm" />
-        </button>
-      </header>
-
-      <div className="flex-1 overflow-y-auto bg-transparent p-4 pb-[max(16px,var(--safe-area-bottom,0px))] custom-scrollbar">
         {isLoading ? (
-          <div className="py-12 flex flex-col items-center justify-center gap-3 text-rm-text-muted">
-            <Icon
-              name="loader"
-              size="2xl"
-              className="animate-spin text-primary/50"
-            />
-            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
-              Loading Pins...
-            </span>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="py-12 flex flex-col items-center justify-center gap-4 text-center px-4">
-            <div className="w-16 h-16 rounded-3xl bg-rm-bg-elevated/40 flex items-center justify-center border border-rm-border shadow-xl rotate-12">
-              <Icon
-                name="pin"
-                size="2xl"
-                className="opacity-10 text-rm-text-muted"
-              />
-            </div>
-            <div>
-              <p className="text-rm-text-secondary font-bold mb-1">
-                No pinned messages
-              </p>
-              <p className="text-ui-2xs text-rm-text-muted leading-relaxed">
-                Pin important messages to see them here.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4 pt-2">
-            {messages.map((msg) => (
-              <PinnedMessageItem
-                key={msg.id}
-                msg={msg}
-                onJumpToMessage={onJumpToMessage}
-                onUnpin={onUnpin}
-                canUnpin={canUnpin}
+          <div className="flex flex-col gap-4">
+            <span className="sr-only">Loading</span>
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                aria-hidden="true"
+                className="h-24 animate-pulse rounded-lg bg-rm-tint-1"
               />
             ))}
           </div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+            <Icon
+              name="pin"
+              size="3xl"
+              className="text-rm-text-muted max-md:size-8"
+            />
+            <p className="text-ui-md font-semibold text-rm-text">
+              No pinned messages
+            </p>
+            <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
+              Pin important messages to see them here.
+            </p>
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-4">
+            {messages.map((msg) => (
+              <li key={msg.id}>
+                <PinnedMessageItem
+                  msg={msg}
+                  onJumpToMessage={onJumpToMessage}
+                  onUnpin={onUnpin}
+                  canUnpin={canUnpin}
+                />
+              </li>
+            ))}
+          </ul>
         )}
       </div>
-    </div>
+    </SidePanel>
   );
 };
 
@@ -152,10 +138,10 @@ const PinnedMessageItem = ({
   }
 
   return (
-    <div className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pointer-fine:hover:bg-rm-bg-elevated/80 transition-ui relative overflow-hidden flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex gap-4 min-w-0">
-          <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-ui-md font-semibold text-primary border border-rm-border transition-transform duration-200">
+    <article className="group relative flex flex-col gap-3 rounded-lg border border-rm-border bg-rm-bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-tint-2 text-ui-sm font-semibold text-rm-text">
             {authorInfo.avatarUrl ? (
               <AvatarImage
                 src={getAuthAssetUrl(authorInfo.avatarUrl)}
@@ -169,12 +155,12 @@ const PinnedMessageItem = ({
               })
             )}
           </div>
-          <div className="flex flex-col min-w-0 pt-0.5">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold text-ui-base text-rm-text truncate">
+          <div className="flex min-w-0 flex-col">
+            <div className="mb-0.5 flex items-baseline gap-2">
+              <span className="truncate text-ui-base font-medium text-rm-text">
                 {authorInfo.displayName}
               </span>
-              <span className="text-ui-2xs text-rm-text-muted font-medium shrink-0">
+              <span className="shrink-0 text-ui-xs text-rm-text-muted">
                 {formatDate(msg.created_at, {
                   year: "numeric",
                   month: "numeric",
@@ -184,11 +170,11 @@ const PinnedMessageItem = ({
             </div>
 
             {msg.content && (
-              <div className="text-ui-sm text-rm-text-secondary leading-[1.4] break-words">
+              <div className="text-ui-sm break-words text-rm-text-secondary">
                 <MarkdownRenderer content={msg.content} />
                 {msg.updated_at && (
                   <span
-                    className="ml-1.5 text-ui-2xs text-rm-text-muted font-medium"
+                    className="ml-1.5 text-ui-xs text-rm-text-muted"
                     title={`Edited ${formatDate(msg.updated_at, {
                       year: "numeric",
                       month: "numeric",
@@ -205,7 +191,7 @@ const PinnedMessageItem = ({
             )}
 
             {attachments.length > 0 && (
-              <div className="mt-3 space-y-2.5">
+              <div className="mt-2 flex flex-col gap-2">
                 {/* Images first */}
                 {imageAttachments.length > 0 && (
                   <div className="max-w-full">
@@ -242,21 +228,21 @@ const PinnedMessageItem = ({
                       key={att.id}
                       href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
                       download={att.filename}
-                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-ui pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-hover group/file max-w-[280px]"
+                      className="group/file flex max-w-[280px] items-center gap-3 rounded-md border border-rm-border p-3 transition-colors pointer-fine:hover:bg-rm-tint-1"
                     >
                       <div
                         className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30",
+                          "flex size-9 shrink-0 items-center justify-center rounded-md bg-rm-tint-1",
                           colorClass,
                         )}
                       >
                         <Icon name={typeIcon} size="md" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-ui-xs font-semibold text-primary pointer-fine:group-hover/file:underline">
+                        <p className="truncate text-ui-sm font-medium text-rm-accent-ink pointer-fine:group-hover/file:underline">
                           {att.filename}
                         </p>
-                        <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+                        <p className="text-ui-xs text-rm-text-muted">
                           {formatFileSize(att.size_bytes)}
                         </p>
                       </div>
@@ -273,27 +259,29 @@ const PinnedMessageItem = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 transition-ui">
-          <button
+        <div className={cn("flex shrink-0 items-center gap-1", REVEAL)}>
+          <Button
+            variant="secondary"
+            size="xs"
             onClick={() => onJumpToMessage(msg.id)}
-            className="px-4 py-1.5 bg-primary pointer-fine:hover:brightness-110 text-primary-foreground font-bold text-ui-2xs rounded-lg transition-ui shadow-lg shadow-primary/10"
           >
             Jump
-          </button>
+          </Button>
           {canUnpin && (
-            <button
+            <IconButton
+              icon="close"
+              size="xs"
+              variant="destructive"
+              aria-label="Unpin message"
+              tooltip="Unpin (Shift-click to skip the confirmation)"
               onClick={(e) => {
                 e.stopPropagation();
                 onUnpin(msg.id, e.shiftKey);
               }}
-              className="p-1.5 pointer-fine:hover:bg-destructive/10 text-rm-text-muted pointer-fine:hover:text-destructive transition-ui rounded-lg outline-none"
-              title="Unpin (Shift-click to bypass confirmation)"
-            >
-              <Icon name="close" size="md" />
-            </button>
+            />
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 };

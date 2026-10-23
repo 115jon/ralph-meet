@@ -1,6 +1,12 @@
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Command } from "cmdk";
+import {
+  Dialog,
+  DialogOverlay,
+  DialogPortal,
+  DialogSurface,
+} from "@/components/ui/dialog";
 import { Icon } from "@/components/ui/icon";
 import { MENU_PANEL } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
@@ -60,11 +66,6 @@ export default function CommandMenu() {
         setSearch("");
         setOpen((prev) => !prev);
       }
-      if (e.key === "Escape" && open) {
-        setOpen(false);
-        e.preventDefault();
-        e.stopPropagation();
-      }
     };
     const openHandler = () => {
       setSearch("");
@@ -76,21 +77,7 @@ export default function CommandMenu() {
       document.removeEventListener("keydown", handler, { capture: true });
       window.removeEventListener("open-command-menu", openHandler);
     };
-  }, [open]);
-
-  // Focus the field on open; give focus back to where it was on close.
-  useEffect(() => {
-    if (!open) return;
-    const previous =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => {
-      cancelAnimationFrame(frame);
-      if (previous?.isConnected) previous.focus({ preventScroll: true });
-    };
-  }, [open]);
+  }, []);
 
   // ── Navigation ─────────────────────────────────────────────────────────
 
@@ -152,145 +139,143 @@ export default function CommandMenu() {
   const canSearchMessages =
     !kind && query.length >= 2 && !!activeChannelId && !!activeServerId;
 
-  if (!open) return null;
-
+  // The Dialog owns Escape, the scrim, the back button, the focus trap and
+  // focus return. Keyboard-initiated, so neither the scrim nor the panel
+  // animates (design-system 9.6).
   return (
-    <div className="fixed inset-0 z-50">
-      <div
-        className="absolute inset-0 bg-rm-scrim"
-        onClick={() => setOpen(false)}
-        role="presentation"
-      />
-
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Quick switcher"
-        className="absolute inset-x-0 top-[max(12dvh,calc(var(--safe-area-top,0px)+8px))] mx-auto w-full max-w-[560px] px-3 max-md:top-[calc(var(--safe-area-top,0px)+8px)] max-md:px-2"
-      >
-        <Command
-          label="Quick switcher"
-          className={cn(
-            MENU_PANEL,
-            "overflow-hidden p-0 shadow-[var(--rm-shadow-3)]",
-          )}
-          filter={commandFilter}
-          loop
-          onKeyDown={(e) => {
-            if (e.key === "Tab") {
-              // Tab and Shift+Tab move through results like the arrows.
-              e.preventDefault();
-              e.target.dispatchEvent(
-                new KeyboardEvent("keydown", {
-                  key: e.shiftKey ? "ArrowUp" : "ArrowDown",
-                  code: e.shiftKey ? "ArrowUp" : "ArrowDown",
-                  bubbles: true,
-                  cancelable: true,
-                }),
-              );
-            }
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogPortal>
+        <DialogOverlay className="data-[state=closed]:animate-none! data-[state=open]:animate-none!" />
+        <DialogSurface
+          showCloseButton={false}
+          aria-label="Quick switcher"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            inputRef.current?.focus();
           }}
+          className="fixed inset-x-0 top-[max(12dvh,calc(var(--safe-area-top,0px)+8px))] z-50 mx-auto w-full max-w-[560px] px-3 outline-none max-md:top-[calc(var(--safe-area-top,0px)+8px)] max-md:px-2"
         >
-          <div className="flex items-center gap-2.5 border-b border-rm-border px-3.5">
-            <Icon
-              name="search"
-              size="md"
-              className="shrink-0 text-rm-text-muted"
-            />
-            <Command.Input
-              ref={inputRef}
-              value={search}
-              onValueChange={setSearch}
-              placeholder="Where would you like to go?"
-              className="rm-search-input h-12 w-full bg-transparent text-ui-base text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-14 max-md:text-ui-md"
-            />
-            <kbd
-              className={cn(
-                COMMAND_KBD,
-                "hidden shrink-0 pointer-fine:inline-flex",
-              )}
-            >
-              Esc
-            </kbd>
-          </div>
-
-          <Command.List className="max-h-[min(420px,calc(100dvh-160px))] overflow-y-auto overscroll-contain p-1.5 custom-scrollbar">
-            <Command.Empty className="px-4 py-10 text-center">
-              <p className="text-ui-sm font-medium text-rm-text">
-                Nothing matches “{query}”
-              </p>
-              <p className="mt-1 text-ui-xs text-rm-text-muted">
-                Start with @ for people, # for channels or * for servers.
-              </p>
-            </Command.Empty>
-
-            <CommandMenuDMsGroup
-              dmChannels={dmChannels}
-              navigateToDm={navigateToDm}
-            />
-            <CommandMenuChannelsGroup
-              heading="Text channels"
-              kind="channel"
-              channels={textChannels}
-              serverMap={serverMap}
-              navigateToChannel={navigateToChannel}
-            />
-            <CommandMenuChannelsGroup
-              heading="Voice channels"
-              kind="voice"
-              channels={voiceChannels}
-              serverMap={serverMap}
-              navigateToChannel={navigateToChannel}
-            />
-            <CommandMenuServersGroup
-              servers={servers}
-              activeServerId={activeServerId}
-              navigateToServer={navigateToServer}
-            />
-            <CommandMenuActionsGroup
-              isMuted={isMuted}
-              setIsMuted={setIsMuted}
-              isDeafened={isDeafened}
-              setIsDeafened={setIsDeafened}
-              theme={theme}
-              setTheme={setAppearanceTheme}
-              setOpen={setOpen}
-            />
-            {canSearchMessages && (
-              <CommandMenuSearchItem
-                query={query}
-                scopeLabel={searchScopeLabel}
-                onSelect={() => {
-                  setOpen(false);
-                  openMessageSearch(query);
-                }}
+          <Command
+            label="Quick switcher"
+            className={cn(MENU_PANEL, "overflow-hidden p-0 shadow-2xl")}
+            filter={commandFilter}
+            loop
+            onKeyDown={(e) => {
+              if (e.key === "Tab") {
+                // Tab and Shift+Tab move through results like the arrows.
+                e.preventDefault();
+                e.target.dispatchEvent(
+                  new KeyboardEvent("keydown", {
+                    key: e.shiftKey ? "ArrowUp" : "ArrowDown",
+                    code: e.shiftKey ? "ArrowUp" : "ArrowDown",
+                    bubbles: true,
+                    cancelable: true,
+                  }),
+                );
+              }
+            }}
+          >
+            <div className="flex items-center gap-2.5 border-b border-rm-border px-3.5">
+              <Icon
+                name="search"
+                size="md"
+                className="shrink-0 text-rm-text-muted"
               />
-            )}
-          </Command.List>
+              <Command.Input
+                ref={inputRef}
+                value={search}
+                onValueChange={setSearch}
+                placeholder="Where would you like to go?"
+                className="rm-search-input h-12 w-full bg-transparent text-ui-base text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-14 max-md:text-ui-md"
+              />
+              <kbd
+                className={cn(
+                  COMMAND_KBD,
+                  "hidden shrink-0 pointer-fine:inline-flex",
+                )}
+              >
+                Esc
+              </kbd>
+            </div>
 
-          <div className="hidden items-center justify-between gap-4 border-t border-rm-border px-3.5 py-2 text-ui-2xs text-rm-text-muted pointer-fine:flex">
-            <div className="flex items-center gap-2.5">
-              {PREFIX_HINTS.map(([prefix, label]) => (
-                <span key={prefix} className="inline-flex items-center gap-1">
-                  <kbd className={COMMAND_KBD}>{prefix}</kbd>
-                  {label}
+            <Command.List className="max-h-[min(420px,calc(100dvh-160px))] overflow-y-auto overscroll-contain p-1.5 custom-scrollbar">
+              <Command.Empty className="px-4 py-10 text-center">
+                <p className="text-ui-sm font-medium text-rm-text">
+                  Nothing matches “{query}”
+                </p>
+                <p className="mt-1 text-ui-xs text-rm-text-muted">
+                  Start with @ for people, # for channels or * for servers.
+                </p>
+              </Command.Empty>
+
+              <CommandMenuDMsGroup
+                dmChannels={dmChannels}
+                navigateToDm={navigateToDm}
+              />
+              <CommandMenuChannelsGroup
+                heading="Text channels"
+                kind="channel"
+                channels={textChannels}
+                serverMap={serverMap}
+                navigateToChannel={navigateToChannel}
+              />
+              <CommandMenuChannelsGroup
+                heading="Voice channels"
+                kind="voice"
+                channels={voiceChannels}
+                serverMap={serverMap}
+                navigateToChannel={navigateToChannel}
+              />
+              <CommandMenuServersGroup
+                servers={servers}
+                activeServerId={activeServerId}
+                navigateToServer={navigateToServer}
+              />
+              <CommandMenuActionsGroup
+                isMuted={isMuted}
+                setIsMuted={setIsMuted}
+                isDeafened={isDeafened}
+                setIsDeafened={setIsDeafened}
+                theme={theme}
+                setTheme={setAppearanceTheme}
+                setOpen={setOpen}
+              />
+              {canSearchMessages && (
+                <CommandMenuSearchItem
+                  query={query}
+                  scopeLabel={searchScopeLabel}
+                  onSelect={() => {
+                    setOpen(false);
+                    openMessageSearch(query);
+                  }}
+                />
+              )}
+            </Command.List>
+
+            <div className="hidden items-center justify-between gap-4 border-t border-rm-border px-3.5 py-2 text-ui-2xs text-rm-text-muted pointer-fine:flex">
+              <div className="flex items-center gap-2.5">
+                {PREFIX_HINTS.map(([prefix, label]) => (
+                  <span key={prefix} className="inline-flex items-center gap-1">
+                    <kbd className={COMMAND_KBD}>{prefix}</kbd>
+                    {label}
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-center gap-1">
+                  <kbd className={COMMAND_KBD}>↑</kbd>
+                  <kbd className={COMMAND_KBD}>↓</kbd>
+                  move
                 </span>
-              ))}
+                <span className="inline-flex items-center gap-1">
+                  <kbd className={COMMAND_KBD}>↵</kbd>
+                  open
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-1">
-                <kbd className={COMMAND_KBD}>↑</kbd>
-                <kbd className={COMMAND_KBD}>↓</kbd>
-                move
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <kbd className={COMMAND_KBD}>↵</kbd>
-                open
-              </span>
-            </div>
-          </div>
-        </Command>
-      </div>
-    </div>
+          </Command>
+        </DialogSurface>
+      </DialogPortal>
+    </Dialog>
   );
 }

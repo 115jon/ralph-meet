@@ -1,11 +1,25 @@
 import { getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { getWebOrigin } from "@/lib/platform";
-import { cn } from "@/lib/utils";
 import { formatRelative } from "date-fns";
 import { enUS } from "date-fns/locale";
 import { Icon } from "@/components/ui/icon";
-import { useEffect, useRef } from "react";
+import {
+  ActionSheet,
+  type ActionSheetItem,
+} from "@/components/ui/action-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+import { Fragment, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { UserDisplayName } from "./UserDisplayName";
 
@@ -40,10 +54,7 @@ export const formatBytes = (bytes: number) => {
 interface ImageViewerToolbarProps {
   context: any;
   currentImage: any;
-  showMore: boolean;
-  showDetails: boolean;
   dimensions: { width: number; height: number } | null;
-  setLocalState: (update: any) => void;
   viewDispatch: (action: any) => void;
   close: () => void;
   getUrl: (img: any) => string;
@@ -51,37 +62,32 @@ interface ImageViewerToolbarProps {
   isAnimatedMedia?: boolean;
 }
 
+type MoreItem = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  onSelect?: () => void;
+  danger?: boolean;
+  divider?: boolean;
+};
+
+const MORE_BUTTON =
+  "p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none data-popup-open:bg-rm-bg-hover data-popup-open:text-rm-text";
+
+const DETAIL_LABEL = "mb-1 text-ui-xs font-medium text-rm-text-muted";
+
 export function ImageViewerToolbar({
   context,
   currentImage,
-  showMore,
-  showDetails,
   dimensions,
-  setLocalState,
   viewDispatch,
   close,
   getUrl,
   isVideo,
   isAnimatedMedia,
 }: ImageViewerToolbarProps) {
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setLocalState({ showMore: false, showDetails: false });
-      }
-    };
-    if (showMore) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showMore, setLocalState]);
+  const isMobile = useIsMobile();
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const handleCopyLink = () => {
     if (currentImage) {
@@ -90,14 +96,12 @@ export function ImageViewerToolbar({
         ? url
         : `${getWebOrigin()}${url}`;
       navigator.clipboard.writeText(shareableUrl);
-      setLocalState({ showMore: false });
     }
   };
 
   const handleCopyId = () => {
     if (currentImage) {
       navigator.clipboard.writeText(currentImage.id);
-      setLocalState({ showMore: false });
     }
   };
 
@@ -111,7 +115,6 @@ export function ImageViewerToolbar({
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type]: blob }),
       ]);
-      setLocalState({ showMore: false });
     } catch (err) {
       console.error("Failed to copy image", err);
     }
@@ -126,6 +129,79 @@ export function ImageViewerToolbar({
       context.onJumpToMessage?.(messageId);
     }, 0);
   };
+
+  const moreItems: MoreItem[] = [
+    ...(!isVideo
+      ? [
+          {
+            key: "copy-image",
+            label: "Copy Image",
+            icon: <Icon name="copy" size="sm" />,
+            onSelect: handleCopyImage,
+          },
+        ]
+      : []),
+    {
+      key: "copy-link",
+      label: "Copy Link",
+      icon: <Icon name="link" size="sm" />,
+      onSelect: handleCopyLink,
+    },
+    {
+      key: "details",
+      label: "View Details",
+      icon: <Icon name="info" size="sm" />,
+      divider: true,
+    },
+    {
+      key: "copy-id",
+      label: "Copy Attachment ID",
+      icon: <Icon name="copyId" size="sm" />,
+      onSelect: handleCopyId,
+      danger: true,
+    },
+  ];
+
+  const detailsPanel = (
+    <section
+      aria-label="Image details panel"
+      className="flex flex-col gap-3 text-left"
+    >
+      <h3 className="text-ui-sm font-semibold text-rm-text">
+        {isAnimatedMedia
+          ? "GIF Details"
+          : isVideo
+            ? "Video Details"
+            : "Image Details"}
+      </h3>
+      <div>
+        <div className={DETAIL_LABEL}>Filename</div>
+        <div className="break-all rounded-sm border border-rm-border bg-rm-bg-surface/40 p-2 font-mono text-ui-xs text-rm-text">
+          {currentImage.filename}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className={DETAIL_LABEL}>Dimensions</div>
+          <div className="text-ui-sm font-medium text-rm-text">
+            {dimensions ? `${dimensions.width}×${dimensions.height}` : "—"}
+          </div>
+        </div>
+        <div>
+          <div className={DETAIL_LABEL}>Size</div>
+          <div className="text-ui-sm font-medium text-rm-text">
+            {formatBytes(currentImage.size_bytes)}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className={DETAIL_LABEL}>Type</div>
+        <div className="font-mono text-ui-xs text-rm-text-muted">
+          {currentImage.content_type}
+        </div>
+      </div>
+    </section>
+  );
 
   const formattedDate = context?.created_at
     ? formatFriendlyDate(context.created_at)
@@ -212,153 +288,82 @@ export function ImageViewerToolbar({
             <Icon name="download" size="md" />
           </a>
 
-          {/* More Dropdown */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setLocalState((prev: any) => ({
-                  showMore: !prev.showMore,
-                  showDetails: false,
-                }));
-              }}
-              className={cn(
-                "p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none",
-                showMore && "bg-primary text-primary-foreground",
-              )}
-              aria-expanded={showMore}
-              aria-haspopup="menu"
-              aria-label="More attachment actions"
-            >
-              <Icon name="more" size="md" />
-            </button>
-            {showMore && (
-              <div className="absolute top-full right-0 z-70 mt-2 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-visible rounded-lg border border-rm-border bg-rm-bg-elevated py-1 shadow-2xl animate-in slide-in-from-top-2 fade-in duration-200 md:w-64">
-                {!isVideo && (
+          {/* More menu: Base UI menu on desktop, action sheet on phones */}
+          {isMobile ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setSheetOpen(true)}
+                className={MORE_BUTTON}
+                aria-expanded={sheetOpen}
+                aria-haspopup="menu"
+                aria-label="More attachment actions"
+              >
+                <Icon name="more" size="md" />
+              </button>
+              <ActionSheet
+                open={sheetOpen}
+                onOpenChange={setSheetOpen}
+                title="Attachment actions"
+                items={moreItems.map(
+                  (item): ActionSheetItem => ({
+                    key: item.key,
+                    label: item.label,
+                    rightIcon: item.icon,
+                    onClick: item.onSelect ?? (() => {}),
+                    variant: item.danger ? "danger" : "default",
+                    divider: item.divider,
+                    submenu: item.key === "details" ? detailsPanel : undefined,
+                    closeOnClick: item.key === "details" ? false : undefined,
+                  }),
+                )}
+              />
+            </>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
                   <button
                     type="button"
-                    onClick={handleCopyImage}
-                    className="w-full px-3 py-2 text-left text-ui-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
-                  >
-                    Copy Image
-                    <Icon
-                      name="copy"
-                      size="sm"
-                      className="opacity-50 pointer-fine:group-hover:opacity-100"
-                    />
-                  </button>
+                    className={MORE_BUTTON}
+                    aria-label="More attachment actions"
+                  />
+                }
+              >
+                <Icon name="more" size="md" />
+              </DropdownMenuTrigger>
+              {/* The viewer is a z-50 dialog: the menu goes on the stacked layer. */}
+              <DropdownMenuContent align="end" sideOffset={8} stacked>
+                {moreItems.map((item) =>
+                  item.key === "details" ? (
+                    <DropdownMenuSub key={item.key}>
+                      <DropdownMenuSubTrigger icon={item.icon}>
+                        {item.label}
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent
+                        stacked
+                        side="inline-start"
+                        className="w-64 p-3"
+                      >
+                        {detailsPanel}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  ) : (
+                    <Fragment key={item.key}>
+                      <DropdownMenuItem
+                        icon={item.icon}
+                        variant={item.danger ? "danger" : "default"}
+                        onClick={item.onSelect}
+                      >
+                        {item.label}
+                      </DropdownMenuItem>
+                      {item.divider ? <DropdownMenuSeparator /> : null}
+                    </Fragment>
+                  ),
                 )}
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="w-full px-3 py-2 text-left text-ui-sm text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground flex items-center justify-between group outline-none"
-                >
-                  Copy Link
-                  <Icon
-                    name="link"
-                    size="sm"
-                    className="opacity-50 pointer-fine:group-hover:opacity-100"
-                  />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLocalState((prev: any) => ({
-                      showDetails: !prev.showDetails,
-                    }));
-                  }}
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-ui-sm flex items-center justify-between group transition-colors outline-none",
-                    showDetails
-                      ? "bg-primary/20 text-primary"
-                      : "text-rm-text-secondary pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
-                  )}
-                >
-                  View Details
-                  <Icon
-                    name="chevronRight"
-                    size="xs"
-                    className={cn(
-                      "transition-transform duration-200",
-                      showDetails
-                        ? "rotate-90 opacity-100"
-                        : "opacity-50 pointer-fine:group-hover:opacity-100",
-                    )}
-                  />
-                </button>
-
-                <div className="h-px bg-rm-border my-1" />
-                <button
-                  type="button"
-                  onClick={handleCopyId}
-                  className="w-full px-3 py-2 text-left text-ui-sm text-destructive pointer-fine:hover:bg-destructive pointer-fine:hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors"
-                >
-                  Copy Attachment ID
-                  <Icon
-                    name="copyId"
-                    size="sm"
-                    className="opacity-50 pointer-fine:group-hover:opacity-100"
-                  />
-                </button>
-
-                {showDetails && (
-                  <section
-                    className="absolute top-full right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-rm-border bg-rm-bg-elevated p-4 shadow-xl animate-in slide-in-from-top-2 fade-in duration-200 cursor-default outline-none md:top-0 md:right-[calc(100%+8px)] md:mt-0 md:w-64 md:max-w-64 md:slide-in-from-right-4"
-                    aria-label="Image details panel"
-                  >
-                    <h3 className="text-rm-text font-semibold mb-3 text-ui-sm flex items-center gap-2">
-                      <Icon name="info" size="sm" className="text-primary" />
-                      {isAnimatedMedia
-                        ? "GIF Details"
-                        : isVideo
-                          ? "Video Details"
-                          : "Image Details"}
-                    </h3>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                          Filename
-                        </div>
-                        <div className="text-ui-xs text-rm-text break-all bg-rm-bg-surface/40 p-2 rounded border border-rm-border font-mono">
-                          {currentImage.filename}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                            Dimensions
-                          </div>
-                          <div className="text-ui-sm text-rm-text font-medium">
-                            {dimensions
-                              ? `${dimensions.width}×${dimensions.height}`
-                              : "—"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                            Size
-                          </div>
-                          <div className="text-ui-sm text-rm-text font-medium">
-                            {formatBytes(currentImage.size_bytes)}
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                          Type
-                        </div>
-                        <div className="text-ui-xs text-rm-text-muted font-mono">
-                          {currentImage.content_type}
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )}
-              </div>
-            )}
-          </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* Close button – own pill group */}

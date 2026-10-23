@@ -1,8 +1,6 @@
 import { useId, useState, useRef, Suspense, lazy } from "react";
 import { Icon } from "@/components/ui/icon";
-import { cn as _cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -10,8 +8,6 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { useIsMobile } from "@/hooks/useMediaQuery";
-import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 
 import EmojiToken from "./EmojiToken";
@@ -46,7 +42,6 @@ export function UploadSoundModal({
   isUploading,
   editSound,
 }: UploadSoundModalProps) {
-  const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
   const [soundName, setSoundName] = useState(editSound?.name ?? "");
   const [relatedEmoji, setRelatedEmoji] = useState<string | null>(
@@ -60,7 +55,6 @@ export function UploadSoundModal({
   const soundNameInputId = useId();
   const emojiButtonId = useId();
   const soundVolumeInputId = useId();
-  const titleId = useId();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -141,7 +135,7 @@ export function UploadSoundModal({
         </div>
 
         {/* Related Emoji */}
-        <div className="w-[160px] relative">
+        <div className="relative w-40">
           <label
             htmlFor={emojiButtonId}
             className="block text-ui-sm font-semibold text-rm-text mb-2"
@@ -215,77 +209,27 @@ export function UploadSoundModal({
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      {isMobile ? (
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>
-              {isEditMode ? "Edit Sound" : "Upload a Sound"}
-            </ResponsiveDialogTitle>
-          </ResponsiveDialogHeader>
-          {fields}
-          <ResponsiveDialogFooter>
-            <Button
-              type="button"
-              onClick={handleSubmit}
-              disabled={(!file && !isEditMode) || !soundName || isUploading}
-              loading={isUploading}
-            >
-              {isEditMode ? "Save" : "Upload"}
-            </Button>
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Never mind
-            </Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      ) : (
-        <DialogPortal>
-          <div
-            data-state={open ? "open" : "closed"}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
+      <ResponsiveDialogContent className="md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
+            {isEditMode ? "Edit Sound" : "Upload a Sound"}
+          </ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
+        {fields}
+        <ResponsiveDialogFooter>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Never mind
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={(!file && !isEditMode) || !soundName || isUploading}
+            loading={isUploading}
           >
-            <DialogSurface
-              showCloseButton={false}
-              className="w-[480px] max-w-[90vw] rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated shadow-[var(--rm-shadow-3)] p-6 relative animate-in fade-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
-            >
-              <IconButton
-                icon="close"
-                type="button"
-                onClick={onClose}
-                className="absolute top-4 right-4"
-                aria-label={
-                  isEditMode
-                    ? "Close edit sound modal"
-                    : "Close upload sound modal"
-                }
-              />
-
-              <h2
-                id={titleId}
-                className="text-ui-lg font-semibold text-rm-text mb-6"
-              >
-                {isEditMode ? "Edit Sound" : "Upload a Sound"}
-              </h2>
-
-              {fields}
-
-              {/* Footer actions */}
-              <div className="mt-8 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
-                <Button type="button" variant="secondary" onClick={onClose}>
-                  Never mind
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={(!file && !isEditMode) || !soundName || isUploading}
-                  loading={isUploading}
-                >
-                  {isEditMode ? "Save" : "Upload"}
-                </Button>
-              </div>
-            </DialogSurface>
-          </div>
-        </DialogPortal>
-      )}
+            {isEditMode ? "Save" : "Upload"}
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
 }

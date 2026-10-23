@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -8,13 +7,12 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { useIsMobile } from "@/hooks/useMediaQuery";
-import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
 import { useChatActions } from "@/stores/chat-store";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 interface Props {
   open: boolean;
@@ -35,14 +33,7 @@ export default function CreateChannelModal({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  // Close on Escape
 
   const handleCreate = useCallback(async () => {
     if (creating) return;
@@ -90,12 +81,12 @@ export default function CreateChannelModal({
   ]);
 
   const fields = (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       {/* Channel Type Selection */}
-      <fieldset className="space-y-2">
+      <fieldset className="flex flex-col gap-2">
         <legend
           id="channel-type-label"
-          className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-1 text-rm-text-muted"
+          className="mb-2 text-ui-sm font-medium text-rm-text"
         >
           Channel Type
         </legend>
@@ -187,13 +178,8 @@ export default function CreateChannelModal({
       </fieldset>
 
       {/* Channel Name */}
-      <div className="space-y-1.5">
-        <label
-          htmlFor="channel-name"
-          className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted px-1"
-        >
-          Channel Name
-        </label>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="channel-name">Channel Name</Label>
         <div className="relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rm-text-muted">
             {type === "text" ? (
@@ -213,11 +199,16 @@ export default function CreateChannelModal({
             }}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             placeholder={type === "text" ? "new-channel" : "General Voice"}
-            className="h-10 pl-10"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "channel-name-error" : undefined}
+            className="pl-10 max-md:min-h-11"
           />
         </div>
         {error && (
-          <p className="mt-1 text-ui-xs font-semibold text-destructive">
+          <p
+            id="channel-name-error"
+            className="text-ui-xs font-medium text-rm-danger-ink"
+          >
             {error}
           </p>
         )}
@@ -230,108 +221,42 @@ export default function CreateChannelModal({
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      {isMobile ? (
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle className="flex items-center gap-2">
-              <Icon
-                name={type === "text" ? "textChannel" : "voiceChannel"}
-                size="xl"
-                className="text-rm-text/40"
-              />
-              Create Channel
-            </ResponsiveDialogTitle>
-            <ResponsiveDialogDescription>
-              in {type === "text" ? "Text Channels" : "Voice Channels"}
-            </ResponsiveDialogDescription>
-          </ResponsiveDialogHeader>
-          {fields}
-          <ResponsiveDialogFooter>
-            <Button
-              onClick={handleCreate}
-              disabled={!name.trim() || creating}
-              loading={creating}
-            >
-              Create Channel
-            </Button>
-            <Button variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      ) : (
-        <DialogPortal>
-          <div
-            data-state={open ? "open" : "closed"}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
-          >
-            {/* Backdrop */}
-            <button
-              type="button"
-              data-base-modal-backdrop
-              className={cn(
-                "absolute inset-0 border-0 bg-black/60 p-0 animate-in fade-in duration-300",
-                "data-[state=closed]:animate-out data-[state=closed]:fade-out",
-              )}
-              aria-label="Close create channel modal"
-              onClick={onClose}
+      <ResponsiveDialogContent
+        className="md:max-w-md"
+        // Desktop only: the drawer keeps focus on its surface so the phone
+        // keyboard does not jump up on open.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          inputRef.current?.focus();
+        }}
+      >
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className="flex items-center gap-2">
+            <Icon
+              name={type === "text" ? "textChannel" : "voiceChannel"}
+              size="xl"
+              className="text-rm-text-muted"
             />
-
-            {/* Modal */}
-            <DialogSurface
-              showCloseButton={false}
-              className={cn(
-                "relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-200",
-                "data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
-              )}
-            >
-              {/* Close */}
-              <IconButton
-                icon="close"
-                type="button"
-                onClick={onClose}
-                className="absolute right-4 top-4"
-                aria-label="Close create channel modal"
-              />
-
-              <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text flex items-center justify-center gap-2">
-                {type === "text" ? (
-                  <Icon
-                    name="textChannel"
-                    size="xl"
-                    className="text-rm-text/40"
-                  />
-                ) : (
-                  <Icon
-                    name="voiceChannel"
-                    size="xl"
-                    className="text-rm-text/40"
-                  />
-                )}
-                Create Channel
-              </h2>
-              <p className="mb-6 text-center text-ui-sm font-medium text-rm-text-muted">
-                in {type === "text" ? "Text Channels" : "Voice Channels"}
-              </p>
-
-              {fields}
-
-              <div className="mt-8 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
-                <Button variant="secondary" onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreate}
-                  disabled={!name.trim() || creating}
-                  loading={creating}
-                >
-                  Create Channel
-                </Button>
-              </div>
-            </DialogSurface>
-          </div>
-        </DialogPortal>
-      )}
+            Create Channel
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            in {type === "text" ? "Text Channels" : "Voice Channels"}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        {fields}
+        <ResponsiveDialogFooter>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreate}
+            disabled={!name.trim() || creating}
+            loading={creating}
+          >
+            Create Channel
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
 }

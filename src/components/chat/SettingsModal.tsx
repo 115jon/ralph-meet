@@ -695,72 +695,66 @@ export default function SettingsModal({
               }}
               className={cn(
                 "fixed inset-0 z-50 m-0 flex min-h-0 items-stretch overflow-hidden p-0 outline-none",
-                previewOpen
-                  ? "h-full max-w-none flex-row border-0 bg-transparent shadow-none"
-                  : "h-full w-full flex-row bg-rm-bg-primary md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1120px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-rm-border-strong md:shadow-[var(--rm-shadow-3)]",
+                "h-full w-full flex-row bg-rm-bg-primary md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1120px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-rm-border-strong md:shadow-[var(--rm-shadow-3)]",
                 "animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out",
-                !previewOpen &&
-                  "md:zoom-in-[0.98] md:data-[state=closed]:zoom-out-[0.98]",
+                "md:zoom-in-[0.98] md:data-[state=closed]:zoom-out-[0.98]",
+                // Hidden, not unmounted, while the theme preview sheet is up,
+                // so "Back to settings" lands on the same page and row.
+                previewOpen && "invisible",
               )}
             >
               <DialogTitle id={titleId} className="sr-only">
                 Settings
               </DialogTitle>
-              {previewOpen ? (
-                <div className="pointer-events-none flex h-full w-full justify-end bg-transparent">
-                  <div className="flex-1 bg-transparent" />
-                  <ThemePreviewSidebar
-                    className="max-w-[320px]"
-                    onClose={() => setPreviewOpen(false)}
-                    onBackToSettings={() => setPreviewOpen(false)}
-                  />
+              <>
+                <nav
+                  ref={navRef}
+                  tabIndex={-1}
+                  aria-label="Settings navigation"
+                  aria-hidden={!listVisible ? "true" : undefined}
+                  inert={!listVisible ? true : undefined}
+                  className={cn(
+                    "flex min-h-0 flex-col bg-rm-bg-sidebar outline-none",
+                    narrow
+                      ? "w-full"
+                      : "w-[240px] shrink-0 border-r border-rm-border",
+                    !listVisible && "hidden",
+                  )}
+                  style={
+                    narrow
+                      ? { paddingTop: "var(--safe-area-top, 0px)" }
+                      : undefined
+                  }
+                >
+                  {nav}
+                </nav>
+                <div
+                  ref={setMainNode}
+                  role="region"
+                  aria-label="Settings content"
+                  aria-hidden={!pageVisible ? "true" : undefined}
+                  inert={!pageVisible ? true : undefined}
+                  className={cn(
+                    "@container relative flex min-h-0 min-w-0 flex-1 flex-col bg-rm-bg-primary",
+                    !pageVisible && "hidden",
+                  )}
+                  style={
+                    narrow
+                      ? { paddingTop: "var(--safe-area-top, 0px)" }
+                      : undefined
+                  }
+                >
+                  {page}
                 </div>
-              ) : (
-                <>
-                  <nav
-                    ref={navRef}
-                    tabIndex={-1}
-                    aria-label="Settings navigation"
-                    aria-hidden={!listVisible ? "true" : undefined}
-                    inert={!listVisible ? true : undefined}
-                    className={cn(
-                      "flex min-h-0 flex-col bg-rm-bg-sidebar outline-none",
-                      narrow
-                        ? "w-full"
-                        : "w-[240px] shrink-0 border-r border-rm-border",
-                      !listVisible && "hidden",
-                    )}
-                    style={
-                      narrow
-                        ? { paddingTop: "var(--safe-area-top, 0px)" }
-                        : undefined
-                    }
-                  >
-                    {nav}
-                  </nav>
-                  <div
-                    ref={setMainNode}
-                    role="region"
-                    aria-label="Settings content"
-                    aria-hidden={!pageVisible ? "true" : undefined}
-                    inert={!pageVisible ? true : undefined}
-                    className={cn(
-                      "@container relative flex min-h-0 min-w-0 flex-1 flex-col bg-rm-bg-primary",
-                      !pageVisible && "hidden",
-                    )}
-                    style={
-                      narrow
-                        ? { paddingTop: "var(--safe-area-top, 0px)" }
-                        : undefined
-                    }
-                  >
-                    {page}
-                  </div>
-                </>
-              )}
+              </>
             </DialogSurface>
           </DialogPortal>
         </Dialog>
+
+        <ThemePreviewSidebar
+          open={isOpen && previewOpen}
+          onBackToSettings={() => setPreviewOpen(false)}
+        />
 
         <Dialog
           open={isOpen && profileEditorOpen && !previewOpen}

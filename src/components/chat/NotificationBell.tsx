@@ -10,22 +10,48 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { MENU_PANEL } from "@/components/ui/menu";
+import { PickerSurface } from "./PickerSurface";
 import { AvatarImage } from "./AvatarImage";
 import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
-// ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
+// ── Notification Bell — toolbar icon + inbox panel ──────────────────────────
+
+/** Gap between the bell and the panel, and the panel's viewport margin. */
+const PANEL_GAP = 8;
+
+type PanelPosition = { top: number; right: number };
+
+function measurePanelPosition(button: HTMLElement | null): PanelPosition {
+  if (!button) return { top: 56, right: PANEL_GAP };
+  const rect = button.getBoundingClientRect();
+  return {
+    top: Math.round(rect.bottom + PANEL_GAP),
+    right: Math.max(PANEL_GAP, Math.round(window.innerWidth - rect.right)),
+  };
+}
 
 export const NotificationBell = memo(function NotificationBell() {
   const unreadCount = useChatStore((s) => s.unreadNotificationCount);
   const notifications = useChatStore((s) => s.notifications);
   const { loadNotifications } = useChatActions();
   const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<PanelPosition | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const loadedRef = useRef(false);
   const baseTitleRef = useRef<string | null>(null);
+  // A click elsewhere closes the panel and leaves focus where it landed;
+  // Escape, back and the close button return focus to the bell.
+  const interactedOutsideRef = useRef(false);
 
   // Load notifications on first open
   useEffect(() => {
@@ -51,28 +77,31 @@ export const NotificationBell = memo(function NotificationBell() {
     };
   }, [notifications]);
 
-  // Close on click outside or Escape
+  // Keep the panel under the bell when the window resizes.
   useEffect(() => {
     if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (panelRef.current?.contains(e.target as Node)) return;
-      if (buttonRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey, { capture: true });
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey, { capture: true });
-    };
+    const update = () => setPosition(measurePanelPosition(buttonRef.current));
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, [open]);
 
   const toggle = useCallback(() => {
-    setOpen((v) => !v);
-  }, []);
+    if (!open) {
+      interactedOutsideRef.current = false;
+      setPosition(measurePanelPosition(buttonRef.current));
+    }
+    setOpen(!open);
+  }, [open]);
+
+  const close = useCallback(() => setOpen(false), []);
+
+  const panelStyle: CSSProperties | undefined = position
+    ? {
+        top: position.top,
+        right: position.right,
+        maxHeight: `min(560px, calc(100dvh - ${position.top + PANEL_GAP}px))`,
+      }
+    : undefined;
 
   return (
     <div className="relative">
@@ -83,6 +112,7 @@ export const NotificationBell = memo(function NotificationBell() {
         size="icon"
         ref={buttonRef}
         aria-label="Notifications"
+        aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
           open
@@ -100,32 +130,42 @@ export const NotificationBell = memo(function NotificationBell() {
         )}
       </Button>
 
-      {/* Dropdown panel */}
-      {open && (
-        <div className="fixed inset-0 z-50 md:absolute md:inset-auto md:right-0 md:top-8 md:w-80 md:max-h-112 flex flex-col items-center justify-end md:justify-start pointer-events-none">
-          {/* Mobile backdrop overlay */}
-          <div
-            className="absolute inset-0 bg-black/60 md:hidden pointer-events-auto animate-in fade-in duration-300"
-            onClick={() => setOpen(false)}
-            role="presentation"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setOpen(false);
-            }}
-          />
-
-          <div
-            ref={panelRef}
-            className="relative w-full h-[85dvh] md:h-auto max-h-[85dvh] md:max-h-full flex flex-col rounded-t-2xl md:rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
-          >
-            {/* Mobile drag handle */}
-            <div className="w-full flex justify-center pt-3 pb-1 md:hidden">
-              <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
-            </div>
-
-            <NotificationInbox onClose={() => setOpen(false)} />
-          </div>
-        </div>
-      )}
+      {/*
+       * Desktop: a non-modal panel anchored under the bell. Phones: the
+       * picker drawer (the bell is hidden in the phone header and the inbox
+       * lives in the Notifications tab, but the drawer still works).
+       */}
+      <PickerSurface
+        open={open}
+        onOpenChange={setOpen}
+        modal={false}
+        onBackButton={close}
+        ariaLabel="Notifications"
+        desktopProps={{
+          onInteractOutside: (event) => {
+            const target = event.target;
+            if (target instanceof Node && buttonRef.current?.contains(target)) {
+              // The bell toggles the panel itself; closing here first would
+              // let its click reopen it.
+              event.preventDefault();
+              return;
+            }
+            interactedOutsideRef.current = true;
+          },
+          onCloseAutoFocus: (event) => {
+            if (interactedOutsideRef.current) event.preventDefault();
+          },
+        }}
+        className={cn(
+          MENU_PANEL,
+          "fixed z-50 m-0 flex w-[min(380px,calc(100vw-16px))] origin-top-right flex-col overflow-hidden p-0 outline-none",
+          "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:duration-180",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] data-[state=closed]:duration-120",
+        )}
+        style={panelStyle}
+      >
+        <NotificationInbox onClose={close} />
+      </PickerSurface>
     </div>
   );
 });
@@ -173,23 +213,11 @@ export function NotificationInbox({
 
   return (
     <>
-      <div
-        className={cn(
-          "flex shrink-0 items-center justify-between border-b border-rm-border",
-          page ? "h-14 px-4" : "px-4 py-3 md:px-3 md:py-2.5",
-        )}
-      >
-        <h2
-          className={cn(
-            "tracking-tight",
-            page
-              ? "text-ui-xl font-semibold text-rm-text"
-              : "text-ui-base font-semibold text-rm-text-primary md:text-ui-sm",
-          )}
-        >
+      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-rm-border px-4">
+        <h2 className="min-w-0 truncate text-ui-md font-semibold text-rm-text">
           {page ? "Notifications" : "Inbox"}
         </h2>
-        <div className="flex items-center gap-3 md:gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {unreadCount > 0 && (
             <Button
               type="button"
@@ -205,8 +233,8 @@ export function NotificationInbox({
             <IconButton
               aria-label="Close notifications"
               icon="close"
-              size="xs"
-              className="md:h-5 md:w-5"
+              size="sm"
+              variant="muted"
               onClick={onClose}
             />
           ) : null}
@@ -279,14 +307,14 @@ const NotificationRow = memo(function NotificationRow({
       className={cn(
         "flex w-full items-start gap-2.5 text-left transition-colors duration-150 pointer-fine:hover:bg-rm-bg-hover active:bg-rm-bg-hover border-b border-rm-border/50",
         roomy ? "min-h-16 px-4 py-3" : "px-3 py-2.5",
-        !notification.is_read && "bg-rm-accent/5",
+        !notification.is_read && "bg-rm-accent-tint",
       )}
       onClick={() => onClick(notification)}
     >
       {/* Avatar */}
       <div className="shrink-0 mt-0.5">
         {authorInfo.avatarUrl ? (
-          <div className="h-8 w-8 overflow-visible rounded-full">
+          <div className="size-10 overflow-visible rounded-full">
             <AvatarImage
               src={getAuthAssetUrl(authorInfo.avatarUrl)}
               alt=""
@@ -294,7 +322,7 @@ const NotificationRow = memo(function NotificationRow({
             />
           </div>
         ) : (
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-accent/20 text-ui-2xs font-bold text-rm-accent">
+          <div className="flex size-10 items-center justify-center rounded-full bg-rm-accent-tint text-ui-sm font-semibold text-rm-accent-ink">
             {getDisplayInitial({
               display_name: authorInfo.displayName,
               username: authorInfo.username,
@@ -334,13 +362,13 @@ const NotificationRow = memo(function NotificationRow({
 
         {/* Message snippet */}
         {notification.content && (
-          <p className="mt-1 text-ui-2xs text-rm-text-muted/80 line-clamp-2 leading-relaxed">
+          <p className="mt-1 text-ui-2xs text-rm-text-secondary line-clamp-2 leading-relaxed">
             <InlineEmojiText text={notification.content} />
           </p>
         )}
 
         {/* Timestamp */}
-        <span className="text-ui-2xs text-rm-text-muted/50 mt-1 block">
+        <span className="text-ui-2xs text-rm-text-muted mt-1 block">
           {timeAgo}
         </span>
       </div>

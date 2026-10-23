@@ -5,6 +5,7 @@ import {
   subscribeDesktopTokenChanges,
 } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
+import { isWideViewport } from "@/hooks/useMediaQuery";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useUser } from "@kova/react";
@@ -187,7 +188,7 @@ export function useChatPageLogic() {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("contextmenu", handleContextMenu);
 
-    if (window.innerWidth < 1024) {
+    if (!isWideViewport()) {
       uiDispatch({ type: "SET_MEMBERS", show: false });
     }
 

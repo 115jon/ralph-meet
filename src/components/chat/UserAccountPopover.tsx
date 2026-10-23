@@ -1,27 +1,29 @@
-import { useMounted } from "@/hooks/useMounted";
-import { isMobileViewport } from "@/hooks/useMediaQuery";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+
 import { AvatarImage } from "@/components/chat/AvatarImage";
-import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
+import {
+  UserStatusDot,
+  type UserStatus,
+} from "@/components/chat/UserStatusDot";
+import { IconButton } from "@/components/ui/IconButton";
+import { Icon } from "@/components/ui/icon";
+import {
+  MENU_ICON,
+  MENU_ITEM,
+  MENU_ITEM_DEFAULT,
+  MENU_LABEL,
+  MENU_SEPARATOR,
+} from "@/components/ui/menu";
+import { ResponsivePopover } from "@/components/ui/popover";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-import {
-  UserStatusDot,
-  type UserStatus,
-} from "@/components/chat/UserStatusDot";
-import { Icon } from "@/components/ui/icon";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
 
 interface Props {
   user: User;
@@ -29,6 +31,8 @@ interface Props {
   updateStatus: (status: UserStatus, custom_status?: string | null) => void;
   onOpenProfileEditor: (trigger?: HTMLElement) => void;
   anchorEl: HTMLElement;
+  /** @deprecated The popover animates itself; kept for existing callers. */
+  isClosing?: boolean;
 }
 
 const STATUS_OPTIONS = [
@@ -41,44 +45,43 @@ const STATUS_OPTIONS = [
   },
 ];
 
-const PROFILE_SURFACE_RATIO = 450 / 880;
-const MOBILE_MAX_SURFACE_HEIGHT = 600;
-const DESKTOP_MAX_SURFACE_HEIGHT = 620;
-const ACTION_CARD_CLASS =
-  "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-lg";
-const ACTION_ROW_CLASS =
-  "group/item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
+const CUSTOM_STATUS_PLACEHOLDER = "Set a custom status";
+
+/** Menu rows on the profile surface keep the profile's own ink. */
+const ROW = cn(
+  MENU_ITEM,
+  MENU_ITEM_DEFAULT,
+  "text-[color:var(--rm-profile-custom-text)]",
+);
+const ROW_ICON = cn(
+  MENU_ICON,
+  "flex size-4 items-center justify-center text-[color:var(--rm-profile-custom-muted)]",
+);
 
 function ActionRow({
   icon,
   label,
   onClick,
   trailing,
-  disabled = false,
+  buttonRef,
 }: {
   icon: ReactNode;
   label: string;
-  onClick?: () => void;
+  onClick: () => void;
   trailing?: ReactNode;
-  disabled?: boolean;
+  buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        ACTION_ROW_CLASS,
-        disabled &&
-          "cursor-not-allowed opacity-60 pointer-fine:hover:bg-transparent",
-      )}
-    >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[color:var(--rm-profile-custom-muted)] pointer-fine:group-hover/item:text-[color:var(--rm-profile-custom-text)]">
+    <button ref={buttonRef} type="button" onClick={onClick} className={ROW}>
+      <span aria-hidden="true" className={ROW_ICON}>
         {icon}
       </span>
-      <span className="truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       {trailing ? (
-        <span className="ml-auto text-[color:var(--rm-profile-custom-muted)] pointer-fine:group-hover/item:text-[color:var(--rm-profile-custom-text)]">
+        <span
+          aria-hidden="true"
+          className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
+        >
           {trailing}
         </span>
       ) : null}
@@ -92,27 +95,25 @@ export default function UserAccountPopover({
   updateStatus,
   onOpenProfileEditor,
   anchorEl,
-  isClosing,
-}: Props & { isClosing?: boolean }) {
-  const mounted = useMounted();
+}: Props) {
+  const isMobile = useIsMobile();
   const currentUser = useChatStore((state) =>
     state.user?.id === user.id ? state.user : null,
   );
   const profileDisplay = currentUser?.avatar_display ?? user.avatar_display;
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [dynamicStyle, setDynamicStyle] = useState<CSSProperties>({
-    opacity: 0,
-  });
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [isEditingCustomStatus, setIsEditingCustomStatus] = useState(false);
   const [customStatusInput, setCustomStatusInput] = useState(
     user.custom_status || "",
   );
+  const statusRowRef = useRef<HTMLButtonElement>(null);
+  const statusBackRef = useRef<HTMLButtonElement>(null);
+  const viewChangedRef = useRef(false);
+  const statusLabelId = useId();
 
   const currentStatus = user.status ?? "online";
   const displayName = user.display_name?.trim() || user.username;
   const profileTheme = resolveProfileTheme(user);
-  const profileThemeStyle = profileTheme.variables;
   const currentStatusLabel =
     STATUS_OPTIONS.find((option) => option.value === currentStatus)?.label ??
     "Online";
@@ -127,103 +128,17 @@ export default function UserAccountPopover({
     }
   }, [user.custom_status, isEditingCustomStatus]);
 
+  // Keyboard users land on the view they just switched to.
   useEffect(() => {
-    const updatePosition = () => {
-      if (!popoverRef.current) return;
+    if (!viewChangedRef.current) return;
+    viewChangedRef.current = false;
+    (showStatusMenu ? statusBackRef : statusRowRef).current?.focus();
+  }, [showStatusMenu]);
 
-      const rect = anchorEl.getBoundingClientRect();
-      const isMobile = isMobileViewport();
-      const viewportPadding = isMobile ? 8 : 10;
-      const maxWidth = window.innerWidth - viewportPadding * 2;
-      const maxHeight = Math.min(
-        window.innerHeight - viewportPadding * 2,
-        isMobile ? MOBILE_MAX_SURFACE_HEIGHT : DESKTOP_MAX_SURFACE_HEIGHT,
-      );
-
-      let width = Math.min(isMobile ? maxWidth : 332, maxWidth);
-      let height = width / PROFILE_SURFACE_RATIO;
-
-      if (height > maxHeight) {
-        height = maxHeight;
-        width = height * PROFILE_SURFACE_RATIO;
-      }
-
-      const style: CSSProperties = {
-        opacity: 1,
-        width,
-        height,
-      };
-
-      if (isMobile) {
-        style.left = Math.max(viewportPadding, (window.innerWidth - width) / 2);
-        style.top = Math.max(
-          viewportPadding,
-          (window.innerHeight - height) / 2,
-        );
-        setDynamicStyle(style);
-        return;
-      }
-
-      const left = rect.left - 12;
-      let top = rect.top - height - 12;
-
-      if (top < viewportPadding) {
-        top = Math.min(
-          window.innerHeight - height - viewportPadding,
-          rect.bottom + 12,
-        );
-      }
-
-      style.left = Math.max(
-        viewportPadding,
-        Math.min(left, window.innerWidth - width - viewportPadding),
-      );
-      style.top = Math.max(
-        viewportPadding,
-        Math.min(top, window.innerHeight - height - viewportPadding),
-      );
-
-      setDynamicStyle(style);
-    };
-
-    const frameId = window.requestAnimationFrame(updatePosition);
-    window.addEventListener("resize", updatePosition);
-
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [anchorEl]);
-
-  useEffect(() => {
-    const handler = (event: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node) &&
-        !anchorEl.contains(event.target as Node)
-      ) {
-        onClose();
-      }
-    };
-
-    const timer = setTimeout(() => {
-      document.addEventListener("mousedown", handler);
-    }, 50);
-
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", handler);
-    };
-  }, [anchorEl, onClose]);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  const switchView = (status: boolean) => {
+    viewChangedRef.current = true;
+    setShowStatusMenu(status);
+  };
 
   const handleCustomStatusSave = () => {
     const value = customStatusInput.trim();
@@ -235,80 +150,94 @@ export default function UserAccountPopover({
     setIsEditingCustomStatus(false);
   };
 
-  if (!mounted) return null;
-
-  return createPortal(
-    <>
-      <div
-        className={cn(
-          "fixed inset-0 z-50 cursor-default bg-transparent",
-          isClosing && "pointer-events-none",
-        )}
-        onClick={onClose}
-        role="presentation"
-        aria-hidden="true"
-      />
+  return (
+    <ResponsivePopover
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="User Account Options"
+      anchor={anchorEl}
+      side="top"
+      align="start"
+      variant="rich"
+      // The profile surface is the panel: it carries the radius, border and
+      // shadow, and its frame art may overhang the edge.
+      className="overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
+    >
       <ProfileSurfaceShell
-        ref={popoverRef}
         variant="popover"
         display={profileDisplay}
-        className={cn(
-          "fixed z-60 animate-in fade-in zoom-in-95 duration-200 outline-none",
-          isClosing && "animate-out fade-out zoom-out-95",
-        )}
-        style={{
-          ...dynamicStyle,
-          ...profileThemeStyle,
-        }}
-        aria-label="User Account Options"
-        tabIndex={-1}
+        className="w-full"
+        surfaceClassName={cn(isMobile && "shadow-none")}
+        style={profileTheme.variables}
       >
-        <div className="relative flex h-full flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="max-h-[min(620px,var(--available-height,100dvh))] overflow-y-auto custom-scrollbar">
+          <div
+            className="relative h-28 overflow-hidden"
+            style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
+          >
+            <ProfileAssetLayer
+              url={user.banner_url}
+              contentType={user.banner_content_type}
+              alt="Profile banner"
+              className="opacity-95"
+            />
             <div
-              className="relative h-[18%] min-h-[118px] overflow-hidden"
-              style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
-            >
-              <ProfileAssetLayer
-                url={user.banner_url}
-                contentType={user.banner_content_type}
-                alt="Profile banner"
-                className="opacity-95"
-              />
-              <div
-                className="absolute inset-0"
-                style={{
-                  background: "var(--rm-profile-custom-banner-overlay)",
-                }}
-              />
-            </div>
+              className="absolute inset-0"
+              style={{
+                background: "var(--rm-profile-custom-banner-overlay)",
+              }}
+            />
+          </div>
 
-            <div className="relative z-20 px-4 pb-4">
-              <div className="-mt-10 flex items-end gap-3">
-                <div className="relative shrink-0">
-                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
-                    {user.avatar_url ? (
-                      <AvatarImage
-                        src={getAuthAssetUrl(user.avatar_url)}
-                        alt={displayName}
-                        display={profileDisplay}
-                      />
-                    ) : (
-                      displayName[0]?.toUpperCase()
-                    )}
-                  </div>
-                  <div className="absolute bottom-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated">
-                    <UserStatusDot
-                      status={currentStatus}
-                      className="h-full w-full"
+          <div className="relative z-20 px-4 pb-4">
+            <div className="-mt-10 flex items-end gap-3">
+              <div className="relative shrink-0">
+                <div className="relative z-30 flex size-20 items-center justify-center overflow-visible rounded-full border-4 border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-ui-xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
+                  {user.avatar_url ? (
+                    <AvatarImage
+                      src={getAuthAssetUrl(user.avatar_url)}
+                      alt={displayName}
+                      display={profileDisplay}
                     />
-                  </div>
+                  ) : (
+                    displayName[0]?.toUpperCase()
+                  )}
                 </div>
+                <div className="absolute right-0.5 bottom-0.5 z-30 flex size-5 items-center justify-center rounded-full border-4 border-rm-bg-elevated bg-rm-bg-elevated">
+                  <UserStatusDot status={currentStatus} className="size-full" />
+                </div>
+              </div>
 
-                <div className="relative mb-6 min-w-0 flex-1 pb-1">
+              <div className="mb-6 min-w-0 flex-1 pb-1">
+                {isEditingCustomStatus ? (
+                  <input
+                    type="text"
+                    className="h-9 w-full rounded-md border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-ui-sm text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                    aria-label="Custom status"
+                    value={customStatusInput}
+                    onChange={(event) =>
+                      setCustomStatusInput(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") handleCustomStatusSave();
+                      if (event.key === "Escape") {
+                        // Cancel the edit; the popover stays open.
+                        event.stopPropagation();
+                        setCustomStatusInput(user.custom_status || "");
+                        setIsEditingCustomStatus(false);
+                      }
+                    }}
+                    onBlur={handleCustomStatusSave}
+                    placeholder={CUSTOM_STATUS_PLACEHOLDER}
+                    maxLength={128}
+                    autoFocus
+                  />
+                ) : (
                   <button
                     type="button"
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none"
                     aria-label="Edit custom status"
                     onClick={() => setIsEditingCustomStatus(true)}
                   >
@@ -317,141 +246,136 @@ export default function UserAccountPopover({
                       size="sm"
                       className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
                     />
-                    <span className="truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
-                      {user.custom_status || "Today I learned..."}
+                    <span
+                      className={cn(
+                        "truncate text-ui-sm font-medium",
+                        user.custom_status
+                          ? "text-[color:var(--rm-profile-custom-text)]"
+                          : "text-[color:var(--rm-profile-custom-muted)]",
+                      )}
+                    >
+                      {user.custom_status || CUSTOM_STATUS_PLACEHOLDER}
                     </span>
                   </button>
-
-                  {isEditingCustomStatus ? (
-                    <div className="absolute -inset-x-2 -bottom-2 -top-2 z-50 flex items-center rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 animate-in fade-in zoom-in-95">
-                      <input
-                        type="text"
-                        className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-ui-sm text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                        aria-label="Custom status"
-                        value={customStatusInput}
-                        onChange={(event) =>
-                          setCustomStatusInput(event.target.value)
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") handleCustomStatusSave();
-                          if (event.key === "Escape") {
-                            setCustomStatusInput(user.custom_status || "");
-                            setIsEditingCustomStatus(false);
-                          }
-                        }}
-                        onBlur={handleCustomStatusSave}
-                        placeholder="Support custom status!"
-                        maxLength={128}
-                        autoFocus
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <ProfileDisplayName
-                  text={displayName}
-                  displayNameStyle={user.display_name_style}
-                  className="truncate text-ui-xl font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
-                  backgroundColor={profileTheme.backgroundColor}
-                  readableFallbackColor={profileTheme.textColor}
-                />
-                <p className="mt-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-                  @{user.username}
-                </p>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {showStatusMenu ? (
-                  <div className={ACTION_CARD_CLASS}>
-                    <div className="flex items-center px-2 py-1">
-                      <button
-                        type="button"
-                        aria-label="Back to account options"
-                        onClick={() => setShowStatusMenu(false)}
-                        className="mr-2 flex items-center justify-center rounded-lg p-1 text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
-                      >
-                        <Icon name="chevronLeft" size="xs" />
-                      </button>
-                      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-                        Status
-                      </span>
-                    </div>
-                    <div className="mx-2 my-1 h-px bg-[color:var(--rm-profile-custom-card-border)]" />
-                    {STATUS_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={cn(ACTION_ROW_CLASS, "px-3")}
-                        onClick={() => {
-                          updateStatus(option.value, user.custom_status);
-                          setShowStatusMenu(false);
-                        }}
-                      >
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                          <UserStatusDot
-                            status={option.value}
-                            className="h-3 w-3"
-                          />
-                        </span>
-                        <span className="truncate">{option.label}</span>
-                        {currentStatus === option.value ? (
-                          <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-[color:var(--rm-profile-custom-text)]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)]" />
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <>
-                    <div className={ACTION_CARD_CLASS}>
-                      <ActionRow
-                        icon={<Icon name="edit" size="sm" />}
-                        label="Edit Profile"
-                        onClick={() => {
-                          onClose();
-                          onOpenProfileEditor(anchorEl);
-                        }}
-                      />
-                      <ActionRow
-                        icon={
-                          <UserStatusDot
-                            status={currentStatus}
-                            className="h-3 w-3"
-                          />
-                        }
-                        label={currentStatusLabel}
-                        onClick={() => setShowStatusMenu(true)}
-                        trailing={<Icon name="chevronRight" size="xs" />}
-                      />
-                    </div>
-
-                    <div className={ACTION_CARD_CLASS}>
-                      <ActionRow
-                        icon={<Icon name="account" size="sm" />}
-                        label="Switch Accounts"
-                        disabled
-                        trailing={<Icon name="chevronRight" size="xs" />}
-                      />
-                      <ActionRow
-                        icon={<Icon name="copy" size="sm" />}
-                        label="Copy User ID"
-                        onClick={() => {
-                          navigator.clipboard.writeText(user.id);
-                          onClose();
-                        }}
-                      />
-                    </div>
-                  </>
                 )}
               </div>
+            </div>
+
+            <div className="mt-3">
+              <ProfileDisplayName
+                text={displayName}
+                displayNameStyle={user.display_name_style}
+                className="truncate text-ui-lg font-semibold text-[color:var(--rm-profile-custom-text)]"
+                backgroundColor={profileTheme.backgroundColor}
+                readableFallbackColor={profileTheme.textColor}
+              />
+              <p className="mt-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
+                @{user.username}
+              </p>
+            </div>
+
+            <div className="-mx-2 mt-4 flex flex-col">
+              {showStatusMenu ? (
+                <>
+                  <div className="flex items-center gap-1 px-1 pb-1">
+                    <IconButton
+                      ref={statusBackRef}
+                      icon="chevronLeft"
+                      size="xs"
+                      variant="muted"
+                      aria-label="Back to account options"
+                      onClick={() => switchView(false)}
+                      className="text-[color:var(--rm-profile-custom-muted)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
+                    />
+                    <span
+                      id={statusLabelId}
+                      className={cn(
+                        MENU_LABEL,
+                        "px-1 pt-0 pb-0 text-[color:var(--rm-profile-custom-muted)]",
+                      )}
+                    >
+                      Status
+                    </span>
+                  </div>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby={statusLabelId}
+                    className="flex flex-col"
+                  >
+                    {STATUS_OPTIONS.map((option) => {
+                      const selected = currentStatus === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          className={ROW}
+                          onClick={() => {
+                            updateStatus(option.value, user.custom_status);
+                            switchView(false);
+                          }}
+                        >
+                          <span aria-hidden="true" className={ROW_ICON}>
+                            <UserStatusDot
+                              status={option.value}
+                              className="size-3"
+                            />
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {option.label}
+                          </span>
+                          {selected ? (
+                            <Icon name="check" size="xs" className="shrink-0" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <ActionRow
+                    icon={<Icon name="edit" size="sm" />}
+                    label="Edit Profile"
+                    onClick={() => {
+                      onClose();
+                      onOpenProfileEditor(anchorEl);
+                    }}
+                  />
+                  <ActionRow
+                    buttonRef={statusRowRef}
+                    icon={
+                      <UserStatusDot
+                        status={currentStatus}
+                        className="size-3"
+                      />
+                    }
+                    label={currentStatusLabel}
+                    onClick={() => switchView(true)}
+                    trailing={<Icon name="chevronRight" size="xs" />}
+                  />
+                  <div
+                    role="separator"
+                    className={cn(
+                      MENU_SEPARATOR,
+                      "mx-2 bg-[color:var(--rm-profile-custom-card-border)]",
+                    )}
+                  />
+                  <ActionRow
+                    icon={<Icon name="copy" size="sm" />}
+                    label="Copy User ID"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(user.id);
+                      onClose();
+                    }}
+                  />
+                </>
+              )}
             </div>
           </div>
         </div>
       </ProfileSurfaceShell>
-    </>,
-    document.body,
+    </ResponsivePopover>
   );
 }
