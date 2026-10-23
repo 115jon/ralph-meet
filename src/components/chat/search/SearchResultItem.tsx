@@ -30,7 +30,7 @@ function TextWithMentions({ text }: { text: string }) {
         i % 2 === 1 ? (
           <span
             key={i}
-            className="rounded-[4px] bg-rm-accent-dim px-0.5 font-medium text-rm-accent-ink"
+            className="rounded-xs bg-rm-accent-dim px-0.5 font-medium text-rm-accent-ink"
           >
             {part}
           </span>
@@ -59,7 +59,7 @@ export function HighlightedExcerpt({
         segment.match ? (
           <mark
             key={i}
-            className="rounded-[3px] bg-[color-mix(in_oklab,var(--rm-accent)_30%,transparent)] px-px text-rm-text [box-decoration-break:clone]"
+            className="rounded-xs bg-[color-mix(in_oklab,var(--rm-accent)_30%,transparent)] px-px text-rm-text [box-decoration-break:clone]"
           >
             {segment.text}
           </mark>

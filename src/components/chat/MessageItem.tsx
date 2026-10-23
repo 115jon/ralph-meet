@@ -985,7 +985,7 @@ const MessageItem = memo(
             <ProfileDisplayName
               text={replyInfo.displayName}
               displayNameStyle={replyInfo.displayNameStyle}
-              className="block max-w-[150px] truncate text-ui-xs font-medium"
+              className="block max-w-38 truncate text-ui-xs font-medium"
             />
             <span className="min-w-0 flex-1 truncate text-ui-xs">
               <ReplyPreviewContent

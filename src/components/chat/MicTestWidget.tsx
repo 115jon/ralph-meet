@@ -364,7 +364,7 @@ export function MicTestWidget({
       </Button>
 
       <div
-        className="flex min-w-0 flex-1 items-center gap-[3px]"
+        className="flex min-w-0 flex-1 items-center gap-0.5"
         role="img"
         aria-label={
           !isActive
@@ -387,7 +387,7 @@ export function MicTestWidget({
           return (
             <div
               key={index}
-              className={`h-2 flex-1 rounded-[2px] ${
+              className={`h-2 flex-1 rounded-xs ${
                 !isActive
                   ? "bg-rm-tint-2"
                   : marksThreshold

@@ -45,7 +45,7 @@ export function NoiseReductionPanel({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
-            <Icon name="speaking" size="sm" className="text-sky-300" />
+            <Icon name="speaking" size="sm" className="text-rm-text-muted" />
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               Noise suppression
             </span>
@@ -85,15 +85,19 @@ export function NoiseReductionPanel({
       </div>
 
       {!supported && (
-        <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-ui-2xs text-amber-100/90">
-          This browser does not expose the AudioWorklet features needed for live
-          provider-based noise suppression here yet.
+        <div
+          role="status"
+          className="mt-4 flex items-start gap-2 rounded-md bg-rm-warning-tint px-3 py-2 text-ui-sm text-rm-warning-ink"
+        >
+          <Icon name="warning" size="sm" className="mt-px shrink-0" />
+          This browser can&apos;t run live noise suppression. Try the desktop
+          app or a recent Chrome, Edge or Firefox.
         </div>
       )}
 
       <div className="mt-4 flex items-center justify-between rounded-lg border border-rm-border bg-rm-bg-elevated/30 px-3 py-2">
         <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-          <Icon name="privacy" size="xs" className="text-emerald-400" />
+          <Icon name="privacy" size="xs" />
           Powered by
         </div>
         <div className="text-ui-sm font-semibold tracking-tight text-rm-text">

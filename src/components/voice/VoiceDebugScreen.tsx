@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import { Spinner } from "@/components/ui/button";
 
 const log = clog("VoiceDebug");
 
@@ -154,8 +155,8 @@ export function VoiceDebugScreen({
 
   if (!data) {
     return (
-      <div className="fixed inset-0 z-100 bg-[#111214] flex flex-col items-center justify-center gap-4">
-        <div className="w-8 h-8 border-4 border-rm-accent/30 border-t-rm-accent rounded-full animate-spin" />
+      <div className="fixed inset-0 z-100 flex flex-col items-center justify-center gap-4 bg-rm-bg-primary">
+        <Spinner className="size-8 text-rm-accent-ink" />
         <p className="text-rm-text-muted text-ui-sm font-medium animate-pulse">
           Gathering RTC metrics…
         </p>

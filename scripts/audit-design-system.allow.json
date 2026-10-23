@@ -70,6 +70,35 @@
       "file": "src/components/voice/VoiceDebugScreen.tsx",
       "rule": "off-breakpoint",
       "reason": "Dev-only debug tool, not shipped UI (decision 8)."
+    },
+    {
+      "file": "src/components/chat/collectibles/CollectiblePreviews.tsx",
+      "rule": "arbitrary-radius",
+      "match": "rounded-\\[\\d+(?:\\.\\d+)?cqw\\]",
+      "reason": "Scaled collectible mockups size every part in container units (cqw) so the preview keeps its proportions at any tile size; a fixed radius token would not scale with it."
+    },
+    {
+      "file": "src/components/chat/settings/AppearancePanel.tsx",
+      "rule": "arbitrary-radius",
+      "match": "rounded-\\[3px\\]",
+      "reason": "Theme swatch miniature: the 3px radius and hairline heights are the shrunken app chrome inside a ~120px swatch, not UI at real size (same reason as its raw-color entry)."
+    },
+    {
+      "file": "src/components/chat/settings/AppearancePanel.tsx",
+      "rule": "off-grid-spacing",
+      "match": "min-h-\\[(3|6)px\\]",
+      "reason": "Theme swatch miniature: minimum heights for the shrunken message lines and composer so they stay visible at small swatch sizes."
+    },
+    {
+      "file": "src/components/chat/ProfileAssetLayer.tsx",
+      "rule": "raw-color",
+      "match": "rgba\\(0, 0, 0, \\$\\{alpha\\}\\)",
+      "reason": "CSS mask-image alpha stops for the nameplate fade: black here is mask opacity, not a colour on screen."
+    },
+    {
+      "file": "src/components/ui/DitherField.tsx",
+      "rule": "raw-color",
+      "reason": "Dithered art surface (6.5, like AuthArtPanel): colours are inks read off the active theme at runtime and given alpha for the fallback gradient."
     }
   ]
 }

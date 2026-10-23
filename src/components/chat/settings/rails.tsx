@@ -102,7 +102,7 @@ function ProfileRail() {
                 getDisplayInitial({ name: displayName })
               )}
             </div>
-            <div className="absolute bottom-0.5 right-0.5 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-[3px]">
+            <div className="absolute bottom-0.5 right-0.5 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-0.5">
               <UserStatusDot status={status} className="size-4" />
             </div>
           </div>

@@ -142,7 +142,7 @@ function SectionHeader({
       {art ? (
         <span
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.72),rgba(0,0,0,0.25)_70%,transparent)]"
+          className="absolute inset-0 bg-linear-to-r from-black/70 via-black/25 via-70% to-transparent"
         />
       ) : null}
       <div className="relative flex w-full items-center gap-2 px-3 py-2.5">
