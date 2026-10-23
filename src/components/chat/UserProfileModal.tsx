@@ -2,6 +2,7 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
+import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import {
   UserStatusDot,
   type UserStatus,
@@ -18,6 +19,7 @@ import {
   ResponsiveDialogDescription,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
@@ -31,8 +33,20 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
+
+/**
+ * The modal keeps app colours for its text, so the card it draws the frame
+ * around keeps the dialog surface too; only the frame, effect and border
+ * come from the profile.
+ */
+const MODAL_CARD_THEME = {
+  "--rm-profile-custom-surface": "none",
+  "--rm-profile-custom-surface-overlay-strong": "none",
+  "--rm-profile-custom-card-border": "var(--rm-border)",
+} as CSSProperties;
 
 interface Props {
   open: boolean;
@@ -94,6 +108,33 @@ const ACTION_COPY: Record<RelationshipAction, (name: string) => string> = {
 const EYEBROW =
   "text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted";
 
+function ModalCard({
+  mobile,
+  display,
+  close,
+  children,
+}: {
+  mobile: boolean;
+  display: User["avatar_display"];
+  close: ReactNode;
+  children: ReactNode;
+}) {
+  // Phones get the drawer; the card treatment (frame, effect) is the
+  // profile sheet's job there.
+  if (mobile) return <>{children}</>;
+  return (
+    <ProfileSurfaceShell
+      variant="card"
+      display={display}
+      style={MODAL_CARD_THEME}
+      surfaceClassName="shadow-2xl"
+    >
+      {close}
+      {children}
+    </ProfileSurfaceShell>
+  );
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
@@ -149,6 +190,7 @@ export default function UserProfileModal({
   const resolvedUser = profileData?.user ?? seededUser;
   const isMe = currentUser?.id === resolvedUser.id;
   const displayName = getDisplayName(resolvedUser);
+  const isMobile = useIsMobile();
   const profileTheme = resolveProfileTheme(resolvedUser);
   const referenceDate = resolveProfileReferenceDate({
     joinedAt: memberRecord?.joined_at,
@@ -344,7 +386,9 @@ export default function UserProfileModal({
         style={profileTheme.variables}
         className="gap-0"
         drawerClassName="px-0"
-        dialogClassName="flex max-h-[min(720px,calc(100dvh-32px))] flex-col overflow-hidden p-0 md:max-w-lg"
+        // Desktop: the profile card is the panel (radius, border, shadow) and
+        // its frame sits in the dialog box around it, like the popover.
+        dialogClassName="flex flex-col overflow-visible border-0 bg-transparent p-0 shadow-none dark:bg-transparent md:max-w-lg"
       >
         <ResponsiveDialogTitle className="sr-only">
           {`${displayName}'s profile`}
@@ -353,193 +397,203 @@ export default function UserProfileModal({
           {`@${resolvedUser.username}, ${statusLabel}`}
         </ResponsiveDialogDescription>
 
-        <ResponsiveDialogClose asChild>
-          <IconButton
-            icon="close"
-            size="sm"
-            // The dialog close step (12.8) over a banner photo: a surface chip.
-            iconSize="sm"
-            aria-label="Close profile"
-            className="absolute top-3 right-3 z-20 bg-rm-bg-surface text-rm-text-secondary max-md:hidden dark:bg-rm-bg-elevated"
-          />
-        </ResponsiveDialogClose>
+        <ModalCard
+          mobile={isMobile}
+          display={resolvedUser.avatar_display}
+          close={
+            <ResponsiveDialogClose asChild>
+              <IconButton
+                icon="close"
+                size="sm"
+                // The dialog close step (12.8) over a banner photo: a surface chip.
+                iconSize="sm"
+                aria-label="Close profile"
+                className="absolute top-3 right-3 z-30 bg-rm-bg-surface text-rm-text-secondary max-md:hidden dark:bg-rm-bg-elevated"
+              />
+            </ResponsiveDialogClose>
+          }
+        >
+          <div className="flex flex-col md:max-h-[calc(min(720px,100dvh-32px)-var(--rm-profile-frame-reserve-y,0px))] md:overflow-y-auto md:overscroll-contain md:bg-rm-bg-surface md:dark:bg-rm-bg-elevated">
+            <div
+              className="relative h-28 shrink-0 overflow-hidden max-md:mx-4 max-md:rounded-lg"
+              style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
+            >
+              <ProfileAssetLayer
+                url={resolvedUser.banner_url}
+                contentType={resolvedUser.banner_content_type}
+                alt=""
+              />
+            </div>
 
-        <div className="flex flex-col md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain">
-          <div
-            className="relative h-28 shrink-0 overflow-hidden max-md:mx-4 max-md:rounded-lg"
-            style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
-          >
-            <ProfileAssetLayer
-              url={resolvedUser.banner_url}
-              contentType={resolvedUser.banner_content_type}
-              alt=""
-            />
-          </div>
-
-          <div className="flex flex-col gap-6 px-4 pb-2 md:px-6 md:pb-6">
-            <div className="flex flex-col gap-3">
-              <div className="relative -mt-10 size-20 shrink-0 max-md:ml-2">
-                <div className="flex size-full items-center justify-center overflow-hidden rounded-full bg-rm-tint-3 text-ui-2xl font-semibold text-rm-text ring-4 ring-rm-bg-surface dark:ring-rm-bg-elevated">
-                  {resolvedUser.avatar_url ? (
-                    <AvatarImage
-                      src={getAuthAssetUrl(resolvedUser.avatar_url)}
-                      alt=""
-                      display={resolvedUser.avatar_display}
-                    />
-                  ) : (
-                    getDisplayInitial({ name: displayName })
-                  )}
+            <div className="flex flex-col gap-6 px-4 pb-2 md:px-6 md:pb-6">
+              <div className="flex flex-col gap-3">
+                <div className="relative -mt-10 size-20 shrink-0 max-md:ml-2">
+                  <div className="flex size-full items-center justify-center rounded-full bg-rm-tint-3 text-ui-2xl font-semibold text-rm-text ring-4 ring-rm-bg-surface dark:ring-rm-bg-elevated">
+                    {resolvedUser.avatar_url ? (
+                      <AvatarImage
+                        src={getAuthAssetUrl(resolvedUser.avatar_url)}
+                        alt=""
+                        display={resolvedUser.avatar_display}
+                      />
+                    ) : (
+                      getDisplayInitial({ name: displayName })
+                    )}
+                  </div>
+                  <span className="absolute right-0 bottom-0 rounded-full bg-rm-bg-surface p-1 dark:bg-rm-bg-elevated">
+                    <UserStatusDot status={status} className="size-4" />
+                  </span>
                 </div>
-                <span className="absolute right-0 bottom-0 rounded-full bg-rm-bg-surface p-1 dark:bg-rm-bg-elevated">
-                  <UserStatusDot status={status} className="size-4" />
-                </span>
-              </div>
 
-              <div className="min-w-0">
-                <ProfileDisplayName
-                  text={displayName}
-                  displayNameStyle={resolvedUser.display_name_style}
-                  className="block truncate text-ui-lg font-semibold text-rm-text"
-                />
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-ui-sm text-rm-text-secondary">
-                  <span className="break-words">@{resolvedUser.username}</span>
-                  {pronouns ? (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span>{pronouns}</span>
-                    </>
-                  ) : null}
-                  <span aria-hidden="true">·</span>
-                  <span>{statusLabel}</span>
-                </p>
-                {customStatus ? (
-                  <p className="mt-2 text-ui-sm text-pretty text-rm-text">
-                    {customStatus}
+                <div className="min-w-0">
+                  <ProfileDisplayName
+                    text={displayName}
+                    displayNameStyle={resolvedUser.display_name_style}
+                    className="block truncate text-ui-lg font-semibold text-rm-text"
+                  />
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-ui-sm text-rm-text-secondary">
+                    <span className="break-words">
+                      @{resolvedUser.username}
+                    </span>
+                    {pronouns ? (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span>{pronouns}</span>
+                      </>
+                    ) : null}
+                    <span aria-hidden="true">·</span>
+                    <span>{statusLabel}</span>
                   </p>
+                  {customStatus ? (
+                    <p className="mt-2 text-ui-sm text-pretty text-rm-text">
+                      {customStatus}
+                    </p>
+                  ) : null}
+                </div>
+
+                {!isMe ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      loading={busy === "message"}
+                      disabled={busy !== null && busy !== "message"}
+                      onClick={() => void handleMessage()}
+                    >
+                      <Icon name="chat" size="sm" />
+                      Message
+                    </Button>
+                    {relationshipButtons}
+                    <TooltipProvider>
+                      <IconButton
+                        icon="copy"
+                        variant="muted"
+                        iconSize="sm"
+                        tooltip="Copy user ID"
+                        onClick={() => void handleCopyUserId()}
+                      />
+                    </TooltipProvider>
+                  </div>
+                ) : null}
+
+                {actionError ? (
+                  <RowError className="mt-0">{actionError}</RowError>
+                ) : null}
+                {profileError ? (
+                  <RowError className="mt-0">{profileError}</RowError>
                 ) : null}
               </div>
 
-              {!isMe ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    loading={busy === "message"}
-                    disabled={busy !== null && busy !== "message"}
-                    onClick={() => void handleMessage()}
-                  >
-                    <Icon name="chat" size="sm" />
-                    Message
-                  </Button>
-                  {relationshipButtons}
-                  <TooltipProvider>
-                    <IconButton
-                      icon="copy"
-                      variant="muted"
-                      iconSize="sm"
-                      tooltip="Copy user ID"
-                      onClick={() => void handleCopyUserId()}
+              {bio ? (
+                <Section title="About me">
+                  <p className="max-w-[62ch] text-ui-sm whitespace-pre-line text-pretty text-rm-text">
+                    {bio}
+                  </p>
+                </Section>
+              ) : null}
+
+              {hasReferenceDate ? (
+                <Section title={referenceDate.label}>
+                  <p className="text-ui-sm text-rm-text">
+                    {referenceDate.value}
+                  </p>
+                </Section>
+              ) : null}
+
+              {mutualServers && mutualServers.count > 0 ? (
+                <Section title={`Mutual servers · ${mutualServers.count}`}>
+                  <ul className="flex flex-wrap gap-2">
+                    {mutualServers.items.map((server) => (
+                      <Chip
+                        key={server.id}
+                        media={
+                          server.icon_url ? (
+                            <img
+                              src={getAuthAssetUrl(server.icon_url)}
+                              alt=""
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            server.name.charAt(0).toUpperCase()
+                          )
+                        }
+                        label={<InlineEmojiText text={server.name} />}
+                      />
+                    ))}
+                  </ul>
+                </Section>
+              ) : null}
+
+              {mutualFriends && mutualFriends.count > 0 ? (
+                <Section title={`Mutual friends · ${mutualFriends.count}`}>
+                  <ul className="flex flex-wrap gap-2">
+                    {mutualFriends.items.map((friend) => (
+                      <Chip
+                        key={friend.id}
+                        media={
+                          friend.avatar_url ? (
+                            <AvatarImage
+                              src={getAuthAssetUrl(friend.avatar_url)}
+                              alt=""
+                              display={friend.avatar_display}
+                            />
+                          ) : (
+                            getDisplayInitial(friend)
+                          )
+                        }
+                        label={getDisplayName(friend)}
+                      />
+                    ))}
+                  </ul>
+                </Section>
+              ) : null}
+
+              {!isMe && !isBlocked ? (
+                <div className="@container border-t border-rm-border pt-1">
+                  {confirmBlock ? (
+                    <ConfirmStrip
+                      consequence={`Block ${displayName}? They'll be removed from your friends and can't send you friend requests. You can unblock them later.`}
+                      confirmLabel={`Block ${displayName}`}
+                      onConfirm={() => void handleBlock()}
+                      onCancel={cancelBlock}
+                      busy={busy === "block"}
+                      error={blockError}
                     />
-                  </TooltipProvider>
+                  ) : (
+                    <Button
+                      ref={blockTriggerRef}
+                      variant="destructive"
+                      size="sm"
+                      className="mt-3"
+                      disabled={busy !== null}
+                      onClick={() => setConfirmBlock(true)}
+                    >
+                      <Icon name="ban" size="sm" />
+                      Block
+                    </Button>
+                  )}
                 </div>
               ) : null}
-
-              {actionError ? (
-                <RowError className="mt-0">{actionError}</RowError>
-              ) : null}
-              {profileError ? (
-                <RowError className="mt-0">{profileError}</RowError>
-              ) : null}
             </div>
-
-            {bio ? (
-              <Section title="About me">
-                <p className="max-w-[62ch] text-ui-sm whitespace-pre-line text-pretty text-rm-text">
-                  {bio}
-                </p>
-              </Section>
-            ) : null}
-
-            {hasReferenceDate ? (
-              <Section title={referenceDate.label}>
-                <p className="text-ui-sm text-rm-text">{referenceDate.value}</p>
-              </Section>
-            ) : null}
-
-            {mutualServers && mutualServers.count > 0 ? (
-              <Section title={`Mutual servers · ${mutualServers.count}`}>
-                <ul className="flex flex-wrap gap-2">
-                  {mutualServers.items.map((server) => (
-                    <Chip
-                      key={server.id}
-                      media={
-                        server.icon_url ? (
-                          <img
-                            src={getAuthAssetUrl(server.icon_url)}
-                            alt=""
-                            className="size-full object-cover"
-                          />
-                        ) : (
-                          server.name.charAt(0).toUpperCase()
-                        )
-                      }
-                      label={<InlineEmojiText text={server.name} />}
-                    />
-                  ))}
-                </ul>
-              </Section>
-            ) : null}
-
-            {mutualFriends && mutualFriends.count > 0 ? (
-              <Section title={`Mutual friends · ${mutualFriends.count}`}>
-                <ul className="flex flex-wrap gap-2">
-                  {mutualFriends.items.map((friend) => (
-                    <Chip
-                      key={friend.id}
-                      media={
-                        friend.avatar_url ? (
-                          <AvatarImage
-                            src={getAuthAssetUrl(friend.avatar_url)}
-                            alt=""
-                            display={friend.avatar_display}
-                          />
-                        ) : (
-                          getDisplayInitial(friend)
-                        )
-                      }
-                      label={getDisplayName(friend)}
-                    />
-                  ))}
-                </ul>
-              </Section>
-            ) : null}
-
-            {!isMe && !isBlocked ? (
-              <div className="@container border-t border-rm-border pt-1">
-                {confirmBlock ? (
-                  <ConfirmStrip
-                    consequence={`Block ${displayName}? They'll be removed from your friends and can't send you friend requests. You can unblock them later.`}
-                    confirmLabel={`Block ${displayName}`}
-                    onConfirm={() => void handleBlock()}
-                    onCancel={cancelBlock}
-                    busy={busy === "block"}
-                    error={blockError}
-                  />
-                ) : (
-                  <Button
-                    ref={blockTriggerRef}
-                    variant="destructive"
-                    size="sm"
-                    className="mt-3"
-                    disabled={busy !== null}
-                    onClick={() => setConfirmBlock(true)}
-                  >
-                    <Icon name="ban" size="sm" />
-                    Block
-                  </Button>
-                )}
-              </div>
-            ) : null}
           </div>
-        </div>
+        </ModalCard>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
