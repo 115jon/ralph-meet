@@ -23,6 +23,9 @@ import InviteModal from "@/components/chat/InviteModal";
 import { PinModal } from "@/components/chat/PinModal";
 import { PinnedMessagesSidebar } from "@/components/chat/PinnedMessagesSidebar";
 import MessageItem from "@/components/chat/MessageItem";
+import MemberList from "@/components/chat/MemberList";
+import { UnreadBanner } from "@/components/chat/UnreadBanner";
+import { MobileMessagesTab } from "@/components/chat/mobile/MobileMessagesTab";
 import { DeleteMessageDialog } from "@/components/chat/DeleteMessageDialog";
 import { RemoveEmbedsDialog } from "@/components/chat/RemoveEmbedsDialog";
 import { DeleteSoundDialog } from "@/components/chat/DeleteSoundDialog";
@@ -231,6 +234,11 @@ const channels: Channel[] = [
   },
 ];
 
+/** ch-general with no SEND_MESSAGES for the viewer (read-only composer). */
+const readOnlyChannels: Channel[] = channels.map((c) =>
+  c.id === "ch-general" ? { ...c, permissions: 0 } : c,
+);
+
 const members: ChatMember[] = [
   { user: users.me!, roles: [adminRole()] },
   { user: users.ada!, roles: [adminRole()] },
@@ -405,8 +413,10 @@ function seedStore(surface: string) {
     connected: true,
     user: users.me!,
     servers,
-    channels,
-    channelsByServerId: { "s-1": channels },
+    channels: surface === "shell-readonly" ? readOnlyChannels : channels,
+    channelsByServerId: {
+      "s-1": surface === "shell-readonly" ? readOnlyChannels : channels,
+    },
     channelsLoadedByServerId: { "s-1": true },
     categories,
     categoriesByServerId: { "s-1": categories },
@@ -428,7 +438,7 @@ function seedStore(surface: string) {
       "ch-random": at(400),
       "dm-grace": at(5),
     },
-    dmChannels,
+    dmChannels: surface === "dm-empty" ? [] : dmChannels,
     voiceChannelStates: { "ch-lounge": voiceMembers },
     voiceChannelStartedAt: { "ch-lounge": NOW - 25 * 60_000 },
     channelMentionCounts: { "ch-design": 2 },
@@ -489,10 +499,23 @@ function seedStore(surface: string) {
       },
     ],
     unreadNotificationCount: 2,
+    // 0 friend, 1 blocked, 2 incoming, 3 outgoing: every Friends tab has rows.
     relationships: [
-      { user: users.ada!, type: 1, created_at: at(100) },
-      { user: users.grace!, type: 1, created_at: at(100) },
+      { user: users.ada!, type: 0, created_at: at(100) },
+      { user: users.grace!, type: 0, created_at: at(100) },
+      { user: users.margaret!, type: 0, created_at: at(100) },
       { user: users.linus!, type: 2, created_at: at(10) },
+      { user: users.ken!, type: 3, created_at: at(8) },
+      {
+        user: {
+          id: "u-spam",
+          username: "spambot",
+          display_name: "Spam Bot",
+          status: "offline",
+        },
+        type: 1,
+        created_at: at(500),
+      },
     ],
   } as never);
 }
@@ -627,7 +650,17 @@ function FriendsShell() {
           </div>
         </div>
         <div className="chat-main-content relative flex min-w-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
-          <FriendsView onMenuClick={() => {}} onSelectDm={() => {}} />
+          <FriendsView
+            onMenuClick={() => {}}
+            onSelectDm={() => {}}
+            initialTab={
+              (fixtureParam("tab") as
+                | "online"
+                | "all"
+                | "pending"
+                | "blocked") ?? undefined
+            }
+          />
         </div>
       </div>
     </div>
@@ -1558,6 +1591,80 @@ function MobileFixture({ surface }: { surface: string }) {
 }
 
 /**
+ * Message rows in a bare chat column: the unread banner on top, then rows
+ * with a reply, pinned badge, reactions (one reacted), an embed and a file.
+ * Shoot with a hover on a row to see the 12.12 hover bar.
+ */
+function MessageRowsFixture() {
+  return (
+    <div className="flex h-full flex-col bg-rm-bg-primary">
+      <UnreadBanner count={3} since={at(12)} onMarkAsRead={() => {}} />
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
+        {messages.slice(1).map((message, index, list) => (
+          <MessageItem
+            key={message.id}
+            id={`message-${message.id}`}
+            message={message}
+            showHeader={
+              index === 0 || list[index - 1]!.author_id !== message.author_id
+            }
+            currentUserId="u-me"
+            canPin
+            onReply={() => {}}
+            onPin={() => {}}
+            onUnpin={() => {}}
+            onJump={() => {}}
+            onThread={() => {}}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Empty DM list: sidebar on desktop, the Messages tab page on phones. */
+function DmEmptyFixture() {
+  return (
+    <>
+      <div className="hidden h-full md:block">
+        <FriendsShell />
+      </div>
+      <div className="h-full md:hidden">
+        <MobileMessagesTab onSelectDm={() => {}} onNavigate={() => {}} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * The channel details page (members + Media/Pins/Threads/Links/Files tabs),
+ * as the phone shows it full height, and as the desktop details column.
+ */
+function MembersPageFixture() {
+  return (
+    <div className="flex h-full w-full justify-end bg-rm-bg-primary">
+      <div className="flex h-full w-full flex-col bg-rm-bg-surface md:w-[360px] md:border-l md:border-rm-border">
+        <MemberList
+          members={members}
+          onlineUsers={new Set(["u-me", "u-ada", "u-grace", "u-linus"])}
+          currentUserId="u-me"
+          channelName="general"
+          channelId={null}
+          serverId="s-1"
+          pinnedMessages={[messages[3]!]}
+          onClose={() => {}}
+          onOpenSearch={() => {}}
+          onOpenSettings={() => {}}
+          onInviteClick={() => {}}
+          showDetails
+          onToggleDetails={() => {}}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
  * Phone home with the bottom tab bar: `mobile-home&tab=servers|messages|
  * notifications|you`.
  */
@@ -2343,6 +2450,17 @@ export default function UiFixtures() {
     case "mobile":
     case "mobile-sidebar":
       content = <MobileFixture surface={surface} />;
+      break;
+    case "message-rows":
+      content = <MessageRowsFixture />;
+      break;
+    case "dm-empty":
+      // The DM list with no conversations: desktop sidebar ≥md, the phone
+      // Messages tab below.
+      content = <DmEmptyFixture />;
+      break;
+    case "members":
+      content = <MembersPageFixture />;
       break;
     default:
       content = surfaceName.startsWith("ov-") ? (

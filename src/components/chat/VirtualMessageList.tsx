@@ -29,11 +29,7 @@ import { clog } from "@/lib/console-logger";
 import MessageItem from "./MessageItem";
 import { NewMessageSeparator } from "./NewMessageSeparator";
 import { setMessageListScrolling } from "./message-list-scroll";
-import {
-  DEFAULT_MESSAGE_ITEM_SIZE,
-  getMessageRowMinHeight,
-  setCachedMessageRowHeight,
-} from "./message-row-height";
+import { estimateListItemSize } from "./message-row-height";
 
 const log = clog("VirtualMessageList");
 
@@ -137,22 +133,22 @@ function MessageSkeleton({ compact = false }: { compact?: boolean }) {
   return (
     <div className={cn("flex gap-4 px-4", compact ? "py-0.5" : "pt-4 pb-1")}>
       {!compact && (
-        <div className="mt-0.5 h-10 w-10 shrink-0 animate-pulse rounded-full bg-rm-bg-hover" />
+        <div className="mt-0.5 size-10 shrink-0 animate-pulse rounded-full bg-rm-tint-1 motion-reduce:animate-none" />
       )}
       {compact && <div className="w-10 shrink-0" />}
       <div className="flex flex-1 flex-col gap-2 justify-center">
         {!compact && (
           <div className="flex items-center gap-3">
-            <div className="h-3.5 w-24 animate-pulse rounded bg-rm-bg-hover" />
-            <div className="h-3 w-16 animate-pulse rounded bg-rm-bg-hover opacity-50" />
+            <div className="h-4 w-24 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none" />
+            <div className="h-3 w-16 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none" />
           </div>
         )}
         <div
-          className="h-3.5 animate-pulse rounded bg-rm-bg-hover"
+          className="h-4 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none"
           style={{ width: `${compact ? 45 : 65}%` }}
         />
         {!compact && (
-          <div className="h-3.5 w-2/5 animate-pulse rounded bg-rm-bg-hover" />
+          <div className="h-4 w-2/5 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none" />
         )}
       </div>
     </div>
@@ -232,8 +228,6 @@ const VirtualMessageRow = memo(function VirtualMessageRow({
   onMessageVisible,
   onHeightChange,
 }: VirtualMessageRowProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const minHeight = getMessageRowMinHeight(message, showHeader, showSeparator);
   const handleMediaPlay = useCallback(
     () => onMediaPlay(message.id),
     [message.id, onMediaPlay],
@@ -247,14 +241,10 @@ const VirtualMessageRow = memo(function VirtualMessageRow({
     [message.id, onMessageVisible],
   );
 
-  useLayoutEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    setCachedMessageRowHeight(message.id, el.offsetHeight);
-  }, [message.id]);
-
+  // No min-height: the estimate only seeds the virtualizer's itemSize, so a
+  // row is exactly as tall as what it renders (no gap under short embeds).
   return (
-    <div ref={rootRef} style={{ minHeight, contain: "layout" }}>
+    <div style={{ contain: "layout" }}>
       {showSeparator && <NewMessageSeparator />}
       <MessageItem
         id={`message-${message.id}`}
@@ -323,6 +313,9 @@ const VirtualMessageList = memo(
         () => buildMessageRows(safeMessages, unreadSeparatorId),
         [safeMessages, unreadSeparatorId],
       );
+      // Seed for rows virtua hasn't measured; computed once per mount so the
+      // virtualizer's estimate doesn't change under it.
+      const [itemSize] = useState(() => estimateListItemSize(messageRows));
       const [startMargin, setStartMargin] = useState(0);
       const headerRef = useRef<HTMLDivElement>(null);
       const showLeadingHeader = !hasMore && !loading;
@@ -1004,7 +997,7 @@ const VirtualMessageList = memo(
           key={mountKey}
           ref={scrollContainerRef}
           className={cn(
-            "flex-1 custom-scrollbar",
+            "flex-1 overscroll-contain custom-scrollbar",
             "[&.is-scrolling>*]:pointer-events-none",
           )}
           style={{
@@ -1034,7 +1027,7 @@ const VirtualMessageList = memo(
             onScroll={handleScroll}
             onScrollEnd={handleScrollEnd}
             bufferSize={VIRTUALIZER_BUFFER_PX}
-            itemSize={DEFAULT_MESSAGE_ITEM_SIZE}
+            itemSize={itemSize}
             keepMounted={keepMounted}
           >
             {renderVirtualItem}

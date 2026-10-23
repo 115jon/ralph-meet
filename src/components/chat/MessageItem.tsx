@@ -4,7 +4,9 @@ import { openSettings } from "@/components/chat/settings/settings-links";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { DeleteMessageDialog } from "@/components/chat/DeleteMessageDialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/IconButton";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import {
   Tooltip,
   TooltipContent,
@@ -249,7 +251,7 @@ function ReactionTooltipContent({
           <button
             type="button"
             onClick={onOpenDetails}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface transition-[background-color,transform] pointer-fine:hover:bg-rm-bg-hover active:scale-[0.96]"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-tint-1 transition-[background-color,transform] duration-150 pointer-fine:hover:bg-rm-tint-2 active:scale-[0.97]"
             aria-label={`View all reactions for ${getReactionEmojiLabel(emoji)}`}
           >
             <EmojiToken
@@ -930,7 +932,7 @@ const MessageItem = memo(
         id={id}
         className={cn(
           "group relative flex flex-col transition-colors duration-100",
-          !previewOnly && "pointer-fine:hover:bg-rm-bg-hover",
+          !previewOnly && "pointer-fine:hover:bg-rm-tint-1",
           !previewOnly && LONG_PRESS_TARGET,
           showHeader && !previewOnly && "mt-4",
           message.pending && "opacity-50",
@@ -944,7 +946,10 @@ const MessageItem = memo(
         {message.reply_to && !hideReplyConnector && (
           <button
             type="button"
-            className="ml-14 mb-1 flex border-0 bg-transparent p-0 text-left items-center gap-2 opacity-60 transition-opacity pointer-fine:hover:opacity-100 cursor-pointer group/reply outline-none"
+            className={cn(
+              "group/reply relative mb-1 ml-14 flex cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left text-rm-text-muted outline-none transition-colors duration-150 pointer-fine:hover:text-rm-text-secondary",
+              HIT,
+            )}
             onClick={() => onJump?.(message.reply_to_id!)}
             aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
           >
@@ -966,9 +971,9 @@ const MessageItem = memo(
             <ProfileDisplayName
               text={replyInfo.displayName}
               displayNameStyle={replyInfo.displayNameStyle}
-              className="block max-w-[150px] truncate text-ui-xs font-semibold text-rm-text-muted"
+              className="block max-w-[150px] truncate text-ui-xs font-medium"
             />
-            <span className="min-w-0 flex-1 truncate text-ui-xs font-medium italic text-rm-text-muted">
+            <span className="min-w-0 flex-1 truncate text-ui-xs">
               <ReplyPreviewContent
                 content={message.reply_to.content}
                 attachmentsCount={
@@ -1010,7 +1015,7 @@ const MessageItem = memo(
             </button>
           ) : (
             <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 pointer-fine:group-hover:opacity-100 transition-opacity">
-              <span className="select-none text-ui-2xs font-medium text-rm-text-muted">
+              <span className="select-none text-ui-xs text-rm-text-muted tabular-nums">
                 {formatMessageTime(message.created_at, formatClientDate)}
               </span>
             </div>
@@ -1023,16 +1028,16 @@ const MessageItem = memo(
                 <button
                   type="button"
                   ref={setAuthorNameEl}
-                  className="cursor-pointer border-0 bg-transparent p-0 text-ui-base font-semibold text-rm-text transition-colors pointer-fine:hover:underline outline-none"
+                  className="cursor-pointer border-0 bg-transparent p-0 text-ui-base font-medium text-rm-text outline-none pointer-fine:hover:underline"
                   onClick={() => setShowProfile(true)}
                 >
                   <ProfileDisplayName
                     text={authorInfo.displayName}
                     displayNameStyle={authorInfo.displayNameStyle}
-                    className="block max-w-full text-ui-base font-semibold text-rm-text"
+                    className="block max-w-full text-ui-base font-medium text-rm-text"
                   />
                 </button>
-                <span className="text-ui-xs text-rm-text-muted ml-0.5 mt-0.5">
+                <span className="text-ui-xs whitespace-nowrap text-rm-text-muted">
                   {formatMessageDate(
                     message.created_at,
                     formatClientDate,
@@ -1040,10 +1045,10 @@ const MessageItem = memo(
                   )}
                 </span>
                 {message.is_pinned && (
-                  <div className="flex items-center gap-1 rounded-sm border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-semibold tracking-[0.04em] text-primary">
+                  <Badge>
                     <Icon name="pin" state="active" size="xs" />
-                    PINNED
-                  </div>
+                    Pinned
+                  </Badge>
                 )}
               </div>
             )}
@@ -1219,7 +1224,7 @@ const MessageItem = memo(
                       key={att.id}
                       href={getDownloadUrl(getAttachmentSourceUrl(att))}
                       download={att.filename}
-                      className="flex items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2.5 transition-ui pointer-fine:hover:border-rm-text-muted/20 pointer-fine:hover:bg-rm-bg-hover group/file"
+                      className="group/file flex items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2.5 transition-colors duration-150 pointer-fine:hover:bg-rm-tint-1 dark:bg-rm-bg-elevated"
                     >
                       <div
                         className={cn(
@@ -1230,10 +1235,10 @@ const MessageItem = memo(
                         <Icon name={typeIcon} size="lg" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-ui-sm font-medium text-primary pointer-fine:group-hover/file:underline">
+                        <p className="truncate text-ui-sm font-medium text-rm-accent-ink pointer-fine:group-hover/file:underline">
                           {att.filename}
                         </p>
-                        <p className="text-ui-2xs text-rm-text-muted">
+                        <p className="text-ui-xs text-rm-text-muted tabular-nums">
                           {formatFileSize(att.size_bytes)}
                         </p>
                       </div>
@@ -1268,11 +1273,13 @@ const MessageItem = memo(
                             aria-pressed={hasReacted}
                             aria-label={`${hasReacted ? "Remove" : "Add"} ${getReactionEmojiLabel(reaction.emoji)} reaction`}
                             className={cn(
-                              "flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-ui-xs font-semibold transition-ui enabled:active:scale-[0.96]",
+                              "flex h-8 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-ui-xs font-medium",
+                              PRESS,
+                              HIT,
                               previewOnly && "cursor-default",
                               hasReacted
-                                ? "border-primary/40 bg-primary/10 text-primary"
-                                : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted pointer-fine:hover:border-rm-text-muted/20 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text-secondary",
+                                ? "border-transparent bg-rm-accent-tint text-rm-accent-ink"
+                                : "border-rm-border bg-rm-tint-1 text-rm-text-secondary pointer-fine:hover:text-rm-text",
                             )}
                             onClick={
                               previewOnly
@@ -1287,7 +1294,7 @@ const MessageItem = memo(
                               className="h-5 w-5"
                               fallbackClassName="max-w-[84px] truncate text-ui-xs"
                             />
-                            <span className="tabular-nums text-ui-xs opacity-80">
+                            <span className="text-ui-xs tabular-nums">
                               {reaction.count}
                             </span>
                           </button>
@@ -1325,10 +1332,11 @@ const MessageItem = memo(
                         aria-label="Add another reaction"
                         aria-haspopup="dialog"
                         aria-expanded={showReactionEmojiPicker}
+                        variant="muted"
                         className={cn(
-                          "h-7 w-7 border border-rm-border bg-rm-bg-elevated/60 text-rm-text-muted pointer-fine:hover:border-primary/30 pointer-fine:hover:bg-primary/10 pointer-fine:hover:text-primary",
+                          "border border-rm-border bg-rm-tint-1",
                           showReactionEmojiPicker &&
-                            "border-primary/40 bg-primary/10 text-primary",
+                            "border-transparent bg-rm-accent-tint text-rm-accent-ink",
                         )}
                         onClick={() => {
                           setShowEmojiPicker(false);
@@ -1372,7 +1380,7 @@ const MessageItem = memo(
             <TooltipProvider delayDuration={120}>
               <div
                 className={cn(
-                  "pointer-events-none absolute -top-4 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom-right scale-[0.97] items-center gap-0.5 overflow-x-auto rounded-md border border-rm-border bg-rm-bg-surface p-0.5 opacity-0 shadow-[var(--rm-shadow-1)] transition-[opacity,transform] dark:bg-rm-bg-elevated duration-100 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:scale-100 pointer-fine:group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
+                  "pointer-events-none absolute -top-4 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom-right scale-[0.97] items-center gap-0.5 overflow-x-auto rounded-md border border-rm-border bg-rm-bg-surface p-0.5 opacity-0 shadow-sm transition-[opacity,transform] duration-100 ease-(--rm-ease-out) dark:bg-rm-bg-elevated pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:scale-100 pointer-fine:group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
                   showEmojiPicker &&
                     "pointer-events-auto scale-100 opacity-100",
                 )}
@@ -1381,26 +1389,26 @@ const MessageItem = memo(
                   <>
                     <IconButton
                       icon="copy"
-                      size="sm"
+                      size="xs"
                       tooltip="Copy Message ID"
                       onClick={copyMessageId}
                     />
                     <IconButton
                       icon="link"
-                      size="sm"
+                      size="xs"
                       tooltip="Copy Message Link"
                       onClick={copyMessageLink}
                     />
                     <IconButton
                       icon="markUnread"
-                      size="sm"
+                      size="xs"
                       tooltip="Mark Unread"
                       onClick={handleMarkUnread}
                     />
                     {canPin && (
                       <IconButton
                         icon="pin"
-                        size="sm"
+                        size="xs"
                         tooltip={
                           message.is_pinned ? "Unpin Message" : "Pin Message"
                         }
@@ -1416,7 +1424,7 @@ const MessageItem = memo(
                     {onThread && (
                       <IconButton
                         icon="thread"
-                        size="sm"
+                        size="xs"
                         tooltip={
                           (message.reply_count ?? 0) > 0
                             ? "View Thread"
@@ -1427,7 +1435,7 @@ const MessageItem = memo(
                     )}
                     <IconButton
                       icon="reply"
-                      size="sm"
+                      size="xs"
                       tooltip="Reply"
                       onClick={() => onReply?.(message)}
                     />
@@ -1435,7 +1443,7 @@ const MessageItem = memo(
                       <IconButton
                         ref={emojiBtnRef}
                         icon="react"
-                        size="sm"
+                        size="xs"
                         tooltip="Add Reaction"
                         aria-haspopup="dialog"
                         aria-expanded={showEmojiPicker}
@@ -1463,14 +1471,14 @@ const MessageItem = memo(
                     {isOwnMessage && (
                       <IconButton
                         icon="edit"
-                        size="sm"
+                        size="xs"
                         tooltip="Edit Message"
                         onClick={startEditing}
                       />
                     )}
                     <IconButton
                       icon="forward"
-                      size="sm"
+                      size="xs"
                       tooltip="Forward"
                       aria-disabled="true"
                       className="opacity-50"
@@ -1479,7 +1487,7 @@ const MessageItem = memo(
                     {(isOwnMessage || canDeleteMessages) && (
                       <IconButton
                         icon="trash"
-                        size="sm"
+                        size="xs"
                         variant="destructive"
                         tooltip="Delete Message"
                         onClick={() => handleDelete(true)}
@@ -1501,7 +1509,7 @@ const MessageItem = memo(
                       <IconButton
                         ref={emojiBtnRef}
                         icon="react"
-                        size="sm"
+                        size="xs"
                         tooltip="Add Reaction"
                         aria-haspopup="dialog"
                         aria-expanded={showEmojiPicker}
@@ -1528,7 +1536,7 @@ const MessageItem = memo(
                     </div>
                     <IconButton
                       icon={isOwnMessage ? "edit" : "reply"}
-                      size="sm"
+                      size="xs"
                       tooltip={isOwnMessage ? "Edit Message" : "Reply"}
                       onClick={
                         isOwnMessage ? startEditing : () => onReply?.(message)
@@ -1536,7 +1544,7 @@ const MessageItem = memo(
                     />
                     <IconButton
                       icon="forward"
-                      size="sm"
+                      size="xs"
                       tooltip="Forward"
                       aria-disabled="true"
                       className="opacity-50"
@@ -1544,7 +1552,7 @@ const MessageItem = memo(
                     />
                     <IconButton
                       icon="more"
-                      size="sm"
+                      size="xs"
                       tooltip="More"
                       onClick={handleContextMenu}
                     />

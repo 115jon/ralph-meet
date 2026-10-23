@@ -2,6 +2,12 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { ButtonBase } from "@/components/ui/button-base";
 import { IconButton } from "@/components/ui/IconButton";
+import {
+  PHONE_GROUP,
+  PHONE_ICON_SLOT,
+  PHONE_ROW,
+} from "@/components/ui/sidebar-row";
+import { Tabs } from "@/components/ui/tabs";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 
 import {
@@ -573,7 +579,7 @@ export default function MemberList({
         )}
 
         <div
-          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-10 pt-2 custom-scrollbar md:px-2 md:pt-4"
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pt-4 custom-scrollbar md:px-2 md:pt-2"
           style={{ paddingBottom: "max(40px, var(--safe-area-bottom, 0px))" }}
         >
           <MemberListTabs
@@ -735,24 +741,22 @@ function MobileHeader({
   /** Channel settings; omitted when you can't manage the channel. */
   onOpenSettings?: () => void;
 }) {
+  // Phone page header (12.2): 48px + safe area, 40px buttons at the edges.
   return (
-    <div
-      className="flex items-center justify-between pb-2 px-2 md:hidden sticky top-0 bg-transparent z-10 shrink-0 border-b border-rm-border/30"
-      style={{ paddingTop: "calc(8px + var(--safe-area-top, 0px))" }}
-    >
+    <div className="flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center justify-between gap-2 border-b border-rm-border px-2 pt-[var(--safe-area-top,0px)] md:hidden">
       <IconButton
         aria-label="Close member list"
         icon="back"
         variant="muted"
-        size="lg"
+        size="md"
         onClick={onClose}
       />
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
         <IconButton
           aria-label="Search this channel"
           icon="search"
           variant="muted"
-          size="lg"
+          size="md"
           onClick={() => {
             onOpenSearch?.();
             onClose?.();
@@ -763,7 +767,7 @@ function MobileHeader({
             aria-label="Channel settings"
             icon="settings"
             variant="muted"
-            size="lg"
+            size="md"
             onClick={onOpenSettings}
           />
         ) : null}
@@ -782,40 +786,26 @@ function DesktopHeader({
   isDM?: boolean;
 }) {
   return (
-    <div className="hidden md:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-transparent shrink-0">
-      <div className="flex items-center gap-2 min-w-0">
-        {isDM ? (
-          <Icon
-            name="mention"
-            size="md"
-            className="text-rm-text-muted shrink-0"
-          />
-        ) : (
-          <Icon
-            name="textChannel"
-            size="md"
-            className="text-rm-text-muted shrink-0"
-          />
-        )}
-        <h2 className="text-ui-base font-semibold text-rm-text-primary truncate">
+    <div className="hidden h-12 shrink-0 items-center justify-between gap-2 border-b border-rm-border px-4 md:flex">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon
+          name={isDM ? "mention" : "textChannel"}
+          size="md"
+          className="shrink-0 text-rm-text-muted"
+        />
+        <h2 className="truncate text-ui-md font-semibold text-rm-text">
           <InlineEmojiText
             text={channelName || (isDM ? "details" : "general")}
           />
         </h2>
       </div>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <ButtonBase
-            onClick={onToggleDetails}
-            className="p-1.5 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
-          >
-            <Icon name="back" size="md" />
-          </ButtonBase>
-        </TooltipTrigger>
-        <TooltipContent side="top" sideOffset={10}>
-          Close details
-        </TooltipContent>
-      </Tooltip>
+      <IconButton
+        icon="back"
+        variant="muted"
+        size="sm"
+        tooltip="Close details"
+        onClick={onToggleDetails}
+      />
     </div>
   );
 }
@@ -835,136 +825,56 @@ function MemberListTabs({
   showDetails?: boolean;
   isDM?: boolean;
 }) {
-  const renderTabs = (className: string, variant: "mobile" | "desktop") => (
-    <div role="tablist" aria-label="Member details" className={className}>
-      {TABS.map((tab) => (
-        <MemberTabButton
-          key={tab.id}
-          tab={tab}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          idPrefix={`${idPrefix}-${variant}`}
-        />
-      ))}
-    </div>
-  );
+  const items = TABS.map((tab) => ({ value: tab.id, label: tab.label }));
 
   return (
     <>
-      <div className="md:hidden mb-6 shrink-0">
-        <div className="flex items-center gap-2 mb-1">
-          {isDM ? (
-            <Icon
-              name="mention"
-              size="xl"
-              className="text-rm-text-muted shrink-0"
-            />
-          ) : (
-            <Icon
-              name="textChannel"
-              size="xl"
-              className="text-rm-text-muted shrink-0"
-            />
-          )}
-          <h1 className="text-ui-xl font-semibold text-rm-text-primary leading-none truncate">
+      <div className="mb-4 shrink-0 md:hidden">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon
+            name={isDM ? "mention" : "textChannel"}
+            size="xl"
+            className="shrink-0 text-rm-text-muted"
+          />
+          <h1 className="truncate text-ui-xl font-semibold text-rm-text">
             <InlineEmojiText
               text={channelName || (isDM ? "details" : "general")}
             />
           </h1>
         </div>
-        <p className="text-ui-sm font-medium text-rm-text-muted mb-6 ml-8">
+        <p className="mt-1 mb-4 text-ui-sm text-rm-text-secondary">
           {isDM ? "Direct Message" : "Text Channel"}
         </p>
 
-        {renderTabs(
-          "flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-ui-base font-semibold text-rm-text-muted border-b border-rm-border pb-2.5",
-          "mobile",
-        )}
+        {/* Scrolls sideways with an edge fade, so "Files" is never clipped
+            without a cue; 44px tall on touch. */}
+        <Tabs
+          label="Member details"
+          idBase={`${idPrefix}-mobile`}
+          panelId="member-details-panel"
+          items={items}
+          value={activeTab}
+          onValueChange={onTabChange}
+          scrollable
+          className="-mx-4 gap-6 border-b border-rm-border px-4"
+        />
       </div>
 
       {showDetails && (
-        <div className="hidden md:block mb-4 shrink-0 px-2">
-          {renderTabs(
-            "flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-ui-sm font-semibold text-rm-text-muted border-b border-rm-border pb-2",
-            "desktop",
-          )}
+        <div className="mb-2 hidden shrink-0 px-2 md:block">
+          <Tabs
+            label="Member details"
+            idBase={`${idPrefix}-desktop`}
+            panelId="member-details-panel"
+            items={items}
+            value={activeTab}
+            onValueChange={onTabChange}
+            scrollable
+            className="h-10 border-b border-rm-border"
+          />
         </div>
       )}
     </>
-  );
-}
-
-function MemberTabButton({
-  tab,
-  activeTab,
-  onTabChange,
-  idPrefix,
-}: {
-  tab: { id: TabId; label: string };
-  activeTab: TabId;
-  onTabChange: (id: TabId) => void;
-  idPrefix: string;
-}) {
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onTabChange(tab.id);
-      return;
-    }
-    if (
-      ![
-        "ArrowRight",
-        "ArrowDown",
-        "ArrowLeft",
-        "ArrowUp",
-        "Home",
-        "End",
-      ].includes(event.key)
-    ) {
-      return;
-    }
-    event.preventDefault();
-    const currentIndex = TABS.findIndex((item) => item.id === tab.id);
-    const nextIndex =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? TABS.length - 1
-          : (currentIndex +
-              (event.key === "ArrowRight" || event.key === "ArrowDown"
-                ? 1
-                : -1) +
-              TABS.length) %
-            TABS.length;
-    const tablist = event.currentTarget.parentElement;
-    tablist
-      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-      .item(nextIndex)
-      ?.focus();
-  };
-
-  return (
-    <button
-      type="button"
-      role="tab"
-      id={`${idPrefix}-tab-${tab.id}`}
-      aria-controls="member-details-panel"
-      aria-selected={activeTab === tab.id}
-      tabIndex={activeTab === tab.id ? 0 : -1}
-      className={cn(
-        "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-        activeTab === tab.id
-          ? "text-rm-text-primary"
-          : "pointer-fine:hover:text-rm-text",
-      )}
-      onClick={() => onTabChange(tab.id)}
-      onKeyDown={handleKeyDown}
-    >
-      {tab.label}
-      {activeTab === tab.id && (
-        <span className="absolute -bottom-[11px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
-      )}
-    </button>
   );
 }
 
@@ -976,33 +886,45 @@ function MobileInviteButton({
   onClose?: () => void;
 }) {
   return (
-    <div className="md:hidden mb-6 shrink-0 pt-2">
-      <ButtonBase
-        className="w-full flex items-center justify-between bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover text-rm-text p-4 rounded-lg transition-ui ring-1 ring-rm-border enabled:active:scale-[0.98]"
-        onClick={() => {
-          onInviteClick?.();
-          onClose?.();
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-full text-primary-foreground border border-rm-border/50">
-            <Icon
-              name="invite"
-              state="active"
-              size="md"
-              className="opacity-90"
-            />
-          </div>
-          <span className="font-semibold text-ui-md text-rm-text-primary">
-            Invite Members
+    <div className="mb-2 shrink-0 md:hidden">
+      <div className={PHONE_GROUP}>
+        <button
+          type="button"
+          className={PHONE_ROW}
+          onClick={() => {
+            onInviteClick?.();
+            onClose?.();
+          }}
+        >
+          <span
+            className={cn(
+              PHONE_ICON_SLOT,
+              "bg-rm-accent-tint text-rm-accent-ink",
+            )}
+          >
+            <Icon name="invite" size="lg" />
           </span>
-        </div>
-        <Icon name="chevronRight" size="sm" className="text-rm-text-muted" />
-      </ButtonBase>
+          <span className="min-w-0 flex-1 truncate">Invite members</span>
+          <Icon
+            name="chevronRight"
+            size="xs"
+            className="shrink-0 text-rm-text-muted"
+          />
+        </button>
+      </div>
     </div>
   );
 }
 // ── Extracted Tab Components ──────────────────────────────────────────────
+
+/**
+ * Role groups: on phones one tinted, hairline-divided group per role (12.4);
+ * on desktop bare rows under the eyebrow (12.3).
+ */
+const MEMBER_GROUP =
+  "flex flex-col max-md:divide-y max-md:divide-rm-border max-md:overflow-hidden max-md:rounded-lg max-md:bg-rm-tint-1 md:gap-0.5";
+const MEMBER_GROUP_LABEL =
+  "flex items-center px-4 pt-6 pb-2 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted group-first/role:pt-2 md:px-2 md:pt-4 md:pb-1";
 
 interface MembersTabContentProps {
   groups: { name: string; members: { user: User; roles?: Role[] }[] }[];
@@ -1034,54 +956,58 @@ function MembersTabContent({
   return (
     <>
       {groups.map((group) => (
-        <div key={group.name}>
-          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center px-2 pb-1 pt-4 text-rm-text-muted">
+        <div key={group.name} className="group/role">
+          <h3 className={MEMBER_GROUP_LABEL}>
             <InlineEmojiText text={group.name} className="uppercase" />
-            <span className="ml-1.5 text-ui-2xs font-medium tabular-nums tracking-normal">
+            <span className="ml-1.5 font-medium tabular-nums tracking-normal">
               {group.members.length}
             </span>
+          </h3>
+          <div className={MEMBER_GROUP}>
+            {group.members.map((member) => (
+              <MemberItem
+                key={member.user.id}
+                member={member}
+                isOnline={true}
+                isTyping={typingUsers?.has(member.user.id)}
+                isMe={member.user.id === currentUserId}
+                platforms={
+                  presencePlatformsByUserId[member.user.id] ??
+                  member.user.presence_platforms
+                }
+                onClick={(e) => onMemberClick(e, member.user, member.roles)}
+                onContextMenu={(e) => onMemberContext(e, member)}
+              />
+            ))}
           </div>
-          {group.members.map((member) => (
-            <MemberItem
-              key={member.user.id}
-              member={member}
-              isOnline={true}
-              isTyping={typingUsers?.has(member.user.id)}
-              isMe={member.user.id === currentUserId}
-              platforms={
-                presencePlatformsByUserId[member.user.id] ??
-                member.user.presence_platforms
-              }
-              onClick={(e) => onMemberClick(e, member.user, member.roles)}
-              onContextMenu={(e) => onMemberContext(e, member)}
-            />
-          ))}
         </div>
       ))}
 
       {sortedOffline.length > 0 && (
-        <div>
-          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center px-2 pb-1 pt-4 text-rm-text-muted">
+        <div className="group/role">
+          <h3 className={MEMBER_GROUP_LABEL}>
             <span className="uppercase">Offline</span>
-            <span className="ml-1.5 text-ui-2xs font-medium tabular-nums tracking-normal">
+            <span className="ml-1.5 font-medium tabular-nums tracking-normal">
               {sortedOffline.length}
             </span>
+          </h3>
+          <div className={MEMBER_GROUP}>
+            {sortedOffline.map((m) => (
+              <MemberItem
+                key={m.user.id}
+                member={m}
+                isOnline={false}
+                isTyping={typingUsers?.has(m.user.id)}
+                isMe={m.user.id === currentUserId}
+                platforms={
+                  presencePlatformsByUserId[m.user.id] ??
+                  m.user.presence_platforms
+                }
+                onClick={(e) => onMemberClick(e, m.user, m.roles)}
+                onContextMenu={(e) => onMemberContext(e, m)}
+              />
+            ))}
           </div>
-          {sortedOffline.map((m) => (
-            <MemberItem
-              key={m.user.id}
-              member={m}
-              isOnline={false}
-              isTyping={typingUsers?.has(m.user.id)}
-              isMe={m.user.id === currentUserId}
-              platforms={
-                presencePlatformsByUserId[m.user.id] ??
-                m.user.presence_platforms
-              }
-              onClick={(e) => onMemberClick(e, m.user, m.roles)}
-              onContextMenu={(e) => onMemberContext(e, m)}
-            />
-          ))}
         </div>
       )}
 
@@ -1278,7 +1204,7 @@ function PinsTabContent({
           return (
             <ButtonBase
               key={msg.id}
-              className="w-full text-left bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
+              className="w-full text-left bg-rm-bg-surface pointer-fine:hover:bg-rm-tint-1 border border-rm-border rounded-lg p-3 transition-colors group"
               onClick={() => onJumpToMessage(msg.id)}
             >
               <div className="flex items-center gap-2 mb-1.5">
@@ -1293,7 +1219,7 @@ function PinsTabContent({
                     getDisplayInitial(msg.author)
                   )}
                 </div>
-                <span className="text-ui-xs font-semibold text-rm-text-primary truncate">
+                <span className="text-ui-xs font-semibold text-rm-text truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
                 <span className="text-ui-2xs text-rm-text-muted ml-auto shrink-0">
@@ -1351,7 +1277,7 @@ function ThreadsTabContent({
           return (
             <ButtonBase
               key={thread.id}
-              className="w-full text-left bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
+              className="w-full text-left bg-rm-bg-surface pointer-fine:hover:bg-rm-tint-1 border border-rm-border rounded-lg p-3 transition-colors group"
               onClick={() => onOpenThread(thread.id)}
             >
               <div className="flex items-center gap-2 mb-1.5">
@@ -1366,7 +1292,7 @@ function ThreadsTabContent({
                     getDisplayInitial(thread.author)
                   )}
                 </div>
-                <span className="text-ui-xs font-semibold text-rm-text-primary truncate">
+                <span className="text-ui-xs font-semibold text-rm-text truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
               </div>
@@ -1423,7 +1349,7 @@ function LinksTabContent({
         return (
           <div
             key={item.id}
-            className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors pointer-fine:hover:bg-rm-bg-hover"
+            className="bg-rm-bg-surface border border-rm-border rounded-lg p-3 transition-colors pointer-fine:hover:bg-rm-tint-1"
           >
             <div className="flex items-center gap-2 mb-2">
               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
@@ -1437,7 +1363,7 @@ function LinksTabContent({
                   getDisplayInitial(item.author)
                 )}
               </div>
-              <span className="text-ui-xs font-semibold text-rm-text-primary truncate">
+              <span className="text-ui-xs font-semibold text-rm-text truncate">
                 <InlineEmojiText text={displayName} />
               </span>
               {channelName && (
@@ -1520,7 +1446,7 @@ function FilesTabContent({
         return (
           <div
             key={item.id}
-            className="group relative flex cursor-pointer items-center gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-elevated p-3.5 transition-colors pointer-fine:hover:bg-rm-bg-hover outline-none focus-within:ring-2 focus-within:ring-primary/20"
+            className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-surface p-3 transition-colors pointer-fine:hover:bg-rm-tint-1 outline-none focus-within:ring-2 focus-within:ring-primary/20"
           >
             <ButtonBase
               onClick={() => {
@@ -1539,7 +1465,7 @@ function FilesTabContent({
               <Icon name={fileTypeIcon} size="xl" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-ui-sm font-semibold text-rm-text-primary truncate">
+              <div className="text-ui-sm font-semibold text-rm-text truncate">
                 {item.filename}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
@@ -1560,9 +1486,12 @@ function FilesTabContent({
                       display={item.author.avatar_display}
                     />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
-                      {getDisplayInitial(item.author)}
-                    </div>
+                    // 16px is too small for a legible initial; the name sits
+                    // beside it, so the fallback is a plain tint.
+                    <div
+                      aria-hidden
+                      className="size-full rounded-full bg-rm-accent-tint"
+                    />
                   )}
                 </div>
                 <span className="text-ui-2xs font-medium text-rm-text-muted truncate">
@@ -1780,9 +1709,7 @@ function TabErrorState({
       </div>
 
       <div className="text-center space-y-1.5">
-        <p className="text-ui-sm font-semibold text-rm-text-primary">
-          Failed to load
-        </p>
+        <p className="text-ui-sm font-semibold text-rm-text">Failed to load</p>
         <p className="text-ui-xs text-rm-text-muted max-w-[200px] leading-relaxed">
           {message}
         </p>
@@ -1790,7 +1717,7 @@ function TabErrorState({
 
       <ButtonBase
         onClick={onRetry}
-        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-semibold text-rm-text-primary transition-colors"
+        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated pointer-fine:hover:bg-rm-tint-1 border border-rm-border rounded-xl text-ui-sm font-semibold text-rm-text transition-colors"
       >
         <Icon name="refresh" size="sm" />
         Retry
@@ -1907,17 +1834,11 @@ function MemberItem({
     <ButtonBase
       ref={buttonRef}
       className={cn(
-        "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors md:gap-2.5",
-        "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-lg", // mobile
-        hasNameplate
-          ? "border border-transparent"
-          : "border border-rm-border/30",
+        // Phone (12.4): a 48px row inside the role's tinted group.
+        "group relative flex min-h-12 w-full cursor-pointer items-center gap-3 overflow-hidden px-4 py-1.5 text-left text-rm-text outline-none transition-colors duration-150 ease-(--rm-ease-out) active:bg-rm-tint-2",
+        // Desktop (12.3): the tall sidebar row.
+        "md:h-10 md:min-h-0 md:gap-2.5 md:rounded-md md:px-2 md:py-0 md:pointer-coarse:min-h-11 pointer-fine:hover:bg-rm-tint-1",
         hasNameplate && "isolate",
-        hasNameplate
-          ? "md:bg-transparent md:px-2 md:py-1.5 md:mb-0 md:rounded-md md:border-transparent md:pointer-fine:hover:bg-rm-bg-hover"
-          : "md:bg-transparent md:px-2 md:py-1.5 md:mb-0 md:rounded-md md:border-transparent md:pointer-fine:hover:bg-rm-bg-hover", // desktop
-        !isOnline &&
-          "opacity-60 grayscale pointer-fine:hover:opacity-100 pointer-fine:hover:grayscale-0",
       )}
       style={
         hasNameplate && nameplateTheme
@@ -1942,8 +1863,8 @@ function MemberItem({
           />
         </>
       )}
-      <div className="relative z-10">
-        <div className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground border border-rm-border transition-ui pointer-fine:group-hover:ring-2 pointer-fine:group-hover:ring-primary/20">
+      <div className="relative z-10 shrink-0">
+        <div className="flex size-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-accent-tint text-ui-sm font-semibold text-rm-accent-ink md:size-8 md:text-ui-xs">
           {member.user.avatar_url ? (
             <AvatarImage
               src={getAuthAssetUrl(member.user.avatar_url)}
@@ -1957,10 +1878,10 @@ function MemberItem({
         {isTyping && (member.user.status !== "offline" || isMe) ? (
           <div
             className={cn(
-              "absolute -bottom-0.5 -right-0.5 z-20 flex h-4 w-5 md:h-3.5 md:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated md:border-rm-bg-sidebar px-0.5",
+              "absolute -right-0.5 -bottom-0.5 z-20 flex h-4 w-5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-surface px-0.5 md:border-rm-bg-sidebar",
               isMe && member.user.status === "offline"
-                ? "bg-rm-text-muted/40"
-                : "bg-primary",
+                ? "bg-rm-text-muted"
+                : "bg-rm-accent-solid",
             )}
           >
             <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
@@ -1970,12 +1891,12 @@ function MemberItem({
         ) : (
           <UserStatusDot
             status={isOnline ? (member.user.status ?? "online") : "offline"}
-            className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors md:h-3 md:w-3 md:border-rm-bg-sidebar"
+            className="absolute -right-0.5 -bottom-0.5 z-20 size-3 border-2 border-rm-bg-surface md:border-rm-bg-sidebar"
           />
         )}
       </div>
       <div className="relative z-10 min-w-0 flex-1">
-        <div className={cn("relative min-w-0 px-2 -ml-1 py-1")}>
+        <div className="relative min-w-0">
           <div className="relative min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
               <div className="min-w-0 shrink">
@@ -1983,12 +1904,10 @@ function MemberItem({
                   user={member.user}
                   text={displayName}
                   className={cn(
-                    "block min-w-0 truncate text-ui-base md:text-ui-sm font-semibold md:font-medium leading-[1.2] transition-colors",
-                    hasNameplate
-                      ? "text-rm-text-primary"
-                      : !isOnline
-                        ? "text-rm-text-secondary"
-                        : "pointer-fine:group-hover:text-rm-text",
+                    "block min-w-0 truncate text-ui-base leading-5 font-medium",
+                    hasNameplate || isOnline
+                      ? "text-rm-text"
+                      : "text-rm-text-muted",
                     roleNameColor && "rm-role-name",
                   )}
                   minContrastRatio={hasNameplate ? 2.8 : undefined}
@@ -2029,14 +1948,7 @@ function MemberItem({
             </div>
 
             {member.user.custom_status && (
-              <div
-                className={cn(
-                  "mt-0.5 truncate text-ui-2xs font-medium italic",
-                  hasNameplate
-                    ? "text-rm-text-secondary"
-                    : "text-rm-text-muted",
-                )}
-              >
+              <div className={cn("truncate text-ui-xs text-rm-text-secondary")}>
                 {member.user.custom_status}
               </div>
             )}

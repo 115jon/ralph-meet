@@ -10,7 +10,7 @@ describe("ChatTypingIndicator", () => {
     render(<ChatTypingIndicator typingUsers={["Ada", "Lin"]} />);
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Ada, Lin are typing...",
+      "Ada, Lin are typing…",
     );
     expect(screen.getByRole("presentation")).toBeInTheDocument();
     expect(

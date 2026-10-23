@@ -1,11 +1,14 @@
 import { useId, useRef } from "react";
 import { getDisplayName } from "@/lib/display-name";
 import type { Message } from "@/lib/types";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
-import { MessageInputPlaceholder } from "./MessageInputPlaceholder";
+import {
+  composerPrompt,
+  MessageInputPlaceholder,
+} from "./MessageInputPlaceholder";
 import { Icon } from "@/components/ui/icon";
 
 import {
@@ -29,6 +32,8 @@ interface Props {
   onTyping: () => void;
   replyTo?: Message | null;
   onCancelReply?: () => void;
+  /** A DM: the prompt names the person ("Message @Ada"), not a channel. */
+  isDM?: boolean;
 }
 
 // --- Subcomponents ---
@@ -45,6 +50,7 @@ export default function MessageInput({
   onTyping,
   replyTo,
   onCancelReply,
+  isDM = false,
 }: Props) {
   const replyDisplayName = replyTo
     ? getDisplayName(replyTo.author, "message")
@@ -87,6 +93,7 @@ export default function MessageInput({
   const mentionListId = useId();
   const mentionListOpen = !!mentionQuery && mentionCandidates.length > 0;
 
+  const prompt = composerPrompt({ channelName, replyDisplayName, isDM });
   const showReply = !!replyTo;
   const shouldRenderReply = showReply;
 
@@ -146,18 +153,16 @@ export default function MessageInput({
             }}
           />
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon-sm"
+          <IconButton
+            icon="add"
+            size="sm"
+            variant="muted"
             aria-label="Add attachment"
             onClick={() => fileInputRef.current?.click()}
-            className="mr-3 mt-0.5 rounded-full text-rm-text-muted pointer-fine:hover:text-rm-text"
-          >
-            <Icon name="add" size="sm" />
-          </Button>
+            className="mr-2 bg-rm-tint-1"
+          />
 
-          <div className="relative flex-1 min-h-[32px] overflow-hidden">
+          <div className="relative min-h-8 flex-1 overflow-hidden">
             {value.length === 0 && (
               <div
                 aria-hidden="true"
@@ -166,6 +171,7 @@ export default function MessageInput({
                 <MessageInputPlaceholder
                   channelName={channelName}
                   replyDisplayName={replyDisplayName}
+                  isDM={isDM}
                   className="py-1 text-ui-base font-normal leading-[1.375] text-rm-text-muted max-md:text-ui-md"
                 />
               </div>
@@ -186,16 +192,8 @@ export default function MessageInput({
               ref={textareaRef}
               rows={1}
               value={value}
-              aria-label={
-                replyTo
-                  ? `Reply to ${replyDisplayName}`
-                  : `Message #${channelName}`
-              }
-              aria-placeholder={
-                replyTo
-                  ? `Reply to ${replyDisplayName}…`
-                  : `Message #${channelName}`
-              }
+              aria-label={replyTo ? `Reply to ${replyDisplayName}` : prompt}
+              aria-placeholder={prompt}
               aria-autocomplete="list"
               aria-controls={mentionListOpen ? mentionListId : undefined}
               aria-activedescendant={
@@ -213,7 +211,7 @@ export default function MessageInput({
               onClick={enforceAtomicMentions}
               placeholder=""
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-ui-base font-normal leading-[1.375] text-transparent outline-none placeholder:text-rm-text-muted selection:bg-primary/30 selection:text-transparent max-md:text-ui-md",
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-ui-base font-normal leading-[1.375] text-transparent outline-none placeholder:text-rm-text-muted selection:bg-(--rm-selection) selection:text-transparent max-md:text-ui-md",
               )}
               style={{
                 caretColor: "var(--rm-accent)",

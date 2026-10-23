@@ -1,8 +1,8 @@
 /**
  * UnreadBanner
  *
- * Top banner showing unread message count and time.
- * Uses the app's primary color. Includes a "Mark As Read" button.
+ * Top banner showing unread message count and time, in the accent tint (the
+ * view's one solid fill stays the primary action). Includes "Mark as read".
  */
 
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,8 @@ export function UnreadBanner({
   });
 
   return (
-    <div className="z-10 mx-2 mt-1 flex h-8 shrink-0 items-center justify-between rounded-md bg-primary px-3 text-ui-sm font-medium text-primary-foreground">
-      <span>
+    <div className="z-10 mx-4 mt-2 flex h-8 shrink-0 items-center justify-between gap-2 rounded-md bg-rm-accent-tint pr-1 pl-3 text-ui-sm font-medium text-rm-accent-ink">
+      <span className="min-w-0 truncate">
         {count} new message{count !== 1 ? "s" : ""} since {timeStr}
       </span>
       <Button
@@ -37,9 +37,9 @@ export function UnreadBanner({
           e.stopPropagation();
           onMarkAsRead();
         }}
-        className="text-ui-sm text-primary-foreground [--hover-o:0.15]"
+        className="shrink-0 text-rm-accent-ink"
       >
-        Mark As Read
+        Mark as read
         <Icon name="check" size="xs" />
       </Button>
     </div>

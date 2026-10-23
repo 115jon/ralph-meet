@@ -223,7 +223,6 @@ export function NotificationInbox({
               type="button"
               variant={page ? "secondary" : "link"}
               size={page ? "sm" : "xs"}
-              className={page ? undefined : "text-ui-2xs"}
               onClick={() => markNotificationsRead()}
             >
               Mark all read
@@ -243,23 +242,17 @@ export function NotificationInbox({
 
       <div className="flex-1 overflow-y-auto overscroll-contain custom-scrollbar pb-6 md:pb-0">
         {notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-            <Icon
-              name="bell"
-              size="2xl"
-              className="text-rm-text-muted opacity-40"
-            />
-            <p className="text-ui-xs font-medium text-rm-text-muted">
+          <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+            <Icon name="bell" size="2xl" className="text-rm-text-muted" />
+            <p className="text-ui-md font-semibold text-rm-text">
               No notifications yet
             </p>
-            {page ? (
-              <p className="text-ui-xs text-rm-text-muted">
-                Mentions and replies show up here.
-              </p>
-            ) : null}
+            <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
+              Mentions and replies show up here.
+            </p>
           </div>
         ) : (
-          <ul>
+          <ul className="divide-y divide-rm-border">
             {notifications.map((notif) => (
               <li key={notif.id}>
                 <NotificationRow
@@ -305,8 +298,8 @@ const NotificationRow = memo(function NotificationRow({
     <button
       type="button"
       className={cn(
-        "flex w-full items-start gap-2.5 text-left transition-colors duration-150 pointer-fine:hover:bg-rm-bg-hover active:bg-rm-bg-hover border-b border-rm-border/50",
-        roomy ? "min-h-16 px-4 py-3" : "px-3 py-2.5",
+        "flex w-full items-start gap-3 text-left transition-colors duration-150 ease-(--rm-ease-out) pointer-fine:hover:bg-rm-tint-1 active:bg-rm-tint-2",
+        roomy ? "min-h-16 px-4 py-3" : "px-4 py-3",
         !notification.is_read && "bg-rm-accent-tint",
       )}
       onClick={() => onClick(notification)}
@@ -333,11 +326,11 @@ const NotificationRow = memo(function NotificationRow({
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className="text-ui-xs leading-tight">
-          <span className="font-semibold text-rm-text-primary">
+        <p className="text-ui-sm">
+          <span className="font-semibold text-rm-text">
             <InlineEmojiText text={authorInfo.displayName} />
           </span>{" "}
-          <span className="text-rm-text-muted">{label}</span>
+          <span className="text-rm-text-secondary">{label}</span>
         </p>
 
         {/* Channel + server context (skip for DMs — sender name is already shown above) */}
@@ -346,9 +339,9 @@ const NotificationRow = memo(function NotificationRow({
             <Icon
               name="textChannel"
               size="xs"
-              className="text-rm-text-muted opacity-60"
+              className="shrink-0 text-rm-text-muted"
             />
-            <span className="text-ui-2xs text-rm-text-muted truncate">
+            <span className="truncate text-ui-xs text-rm-text-muted">
               <InlineEmojiText
                 text={`${notification.channel_name ?? "channel"}${
                   notification.server_name
@@ -362,13 +355,13 @@ const NotificationRow = memo(function NotificationRow({
 
         {/* Message snippet */}
         {notification.content && (
-          <p className="mt-1 text-ui-2xs text-rm-text-secondary line-clamp-2 leading-relaxed">
+          <p className="mt-1 line-clamp-2 text-ui-sm text-pretty text-rm-text-secondary">
             <InlineEmojiText text={notification.content} />
           </p>
         )}
 
         {/* Timestamp */}
-        <span className="text-ui-2xs text-rm-text-muted mt-1 block">
+        <span className="mt-1 block text-ui-xs text-rm-text-muted">
           {timeAgo}
         </span>
       </div>
@@ -376,7 +369,7 @@ const NotificationRow = memo(function NotificationRow({
       {/* Unread dot */}
       {!notification.is_read && (
         <div className="shrink-0 mt-2">
-          <div className="h-2 w-2 rounded-full bg-rm-accent" />
+          <div className="size-2 rounded-full bg-rm-accent-ink" />
         </div>
       )}
     </button>

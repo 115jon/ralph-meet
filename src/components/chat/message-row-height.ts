@@ -15,19 +15,6 @@ const SINGLE_IMAGE_PX = 240;
 const MULTI_IMAGE_HEIGHTS = [0, 240, 300, 350, 400, 420] as const;
 export const DEFAULT_MESSAGE_ITEM_SIZE = 64;
 
-const heightCache = new Map<string, number>();
-
-export function getCachedMessageRowHeight(
-  messageId: string,
-): number | undefined {
-  return heightCache.get(messageId);
-}
-
-export function setCachedMessageRowHeight(messageId: string, height: number) {
-  if (height <= 0) return;
-  heightCache.set(messageId, height);
-}
-
 export function estimateMessageRowHeight(
   message: Message,
   showHeader: boolean,
@@ -64,13 +51,27 @@ export function estimateMessageRowHeight(
   return height;
 }
 
-export function getMessageRowMinHeight(
-  message: Message,
-  showHeader: boolean,
-  showSeparator: boolean,
+/**
+ * The virtualizer's one size estimate for rows it hasn't measured yet: the
+ * mean of the per-row estimates. Rows never get a min-height from it, so a
+ * row that renders shorter than its estimate (an embed, a collapsed reply)
+ * leaves no gap; the virtualizer measures the real height on mount.
+ */
+export function estimateListItemSize(
+  rows: readonly {
+    message: Message;
+    showHeader: boolean;
+    showSeparator: boolean;
+  }[],
 ): number {
-  return (
-    getCachedMessageRowHeight(message.id) ??
-    estimateMessageRowHeight(message, showHeader, showSeparator)
-  );
+  if (rows.length === 0) return DEFAULT_MESSAGE_ITEM_SIZE;
+  let total = 0;
+  for (const row of rows) {
+    total += estimateMessageRowHeight(
+      row.message,
+      row.showHeader,
+      row.showSeparator,
+    );
+  }
+  return Math.round(total / rows.length);
 }

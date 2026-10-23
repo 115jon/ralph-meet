@@ -3,32 +3,74 @@ import { ButtonBase } from "@/components/ui/button-base";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
+import { HIT, REVEAL } from "@/components/ui/interaction";
+import { Label } from "@/components/ui/label";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { Tabs, tabId } from "@/components/ui/tabs";
 import { useContextMenu } from "@/hooks/useContextMenu";
+import {
+  LONG_PRESS_TARGET,
+  toContextMenuEvent,
+  useLongPress,
+} from "@/hooks/useLongPress";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { DitherField } from "@/components/ui/DitherField";
 import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useId, useReducer, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { AvatarImage } from "./AvatarImage";
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { UserDisplayName } from "./UserDisplayName";
 import UserProfilePopover from "./UserProfilePopover";
 
 type Tab = "online" | "all" | "pending" | "blocked";
 const FRIEND_TABS: readonly Tab[] = ["online", "all", "pending", "blocked"];
+const TAB_LABEL: Record<Tab, string> = {
+  online: "Online",
+  all: "All",
+  pending: "Pending",
+  blocked: "Blocked",
+};
+const LIST_LABEL: Record<Tab, string> = {
+  online: "Online",
+  all: "All friends",
+  pending: "Pending",
+  blocked: "Blocked",
+};
+const EMPTY: Record<Tab, { icon: IconName; title: string; body?: string }> = {
+  online: { icon: "members", title: "No friends online" },
+  all: {
+    icon: "members",
+    title: "No friends yet",
+    body: "Add a friend by their username to start a conversation.",
+  },
+  pending: { icon: "invite", title: "No pending requests" },
+  blocked: { icon: "ban", title: "No blocked users" },
+};
+
+type AddStatus = { kind: "success" | "error"; message: string } | null;
+
+/** A pending remove/reject/cancel, confirmed in a ResponsiveDialog. */
+type RemoveTarget = { user: any; relType: number } | null;
 
 interface FriendsViewState {
   tab: Tab;
   loading: boolean;
   addFriendMode: boolean;
   addUsername: string;
-  addStatus: string | null;
+  addStatus: AddStatus;
   popoverUser: any | null;
   popoverAnchor: HTMLElement | null;
 }
@@ -38,7 +80,7 @@ type FVAction =
   | { type: "SET_LOADING"; value: boolean }
   | { type: "SET_ADD_FRIEND_MODE"; value: boolean }
   | { type: "SET_ADD_USERNAME"; value: string }
-  | { type: "SET_ADD_STATUS"; value: string | null }
+  | { type: "SET_ADD_STATUS"; value: AddStatus }
   | { type: "SET_POPOVER"; user: any; anchor: HTMLElement | null };
 
 function fvReducer(s: FriendsViewState, a: FVAction): FriendsViewState {
@@ -60,12 +102,53 @@ function fvReducer(s: FriendsViewState, a: FVAction): FriendsViewState {
   }
 }
 
+function relationLabel(rel: { type: number; user: { status?: string } }) {
+  if (rel.type === 2) return "Incoming friend request";
+  if (rel.type === 3) return "Outgoing friend request";
+  if (rel.type === 1) return "Blocked";
+  if (rel.user.status === "online") return "Online";
+  if (rel.user.status === "idle") return "Idle";
+  if (rel.user.status === "dnd") return "Do Not Disturb";
+  return "Offline";
+}
+
+/** Remove (friend), Reject (incoming) or Cancel (outgoing). */
+function removeCopy(relType: number) {
+  if (relType === 0)
+    return {
+      action: "Remove Friend",
+      title: "Remove friend",
+      body: (name: string) =>
+        `${name} will be removed from your friends. You can send a new request later.`,
+      confirm: "Remove",
+    };
+  if (relType === 2)
+    return {
+      action: "Reject",
+      title: "Reject request",
+      body: (name: string) => `Reject the friend request from ${name}?`,
+      confirm: "Reject",
+    };
+  return {
+    action: "Cancel",
+    title: "Cancel request",
+    body: (name: string) => `Cancel your friend request to ${name}?`,
+    confirm: "Cancel request",
+  };
+}
+
 interface Props {
   onMenuClick: () => void;
   onSelectDm: (channelId: string) => void;
+  /** Tab to open on (fixtures and deep links); defaults to Online. */
+  initialTab?: Tab;
 }
 
-export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
+export default function FriendsView({
+  onMenuClick,
+  onSelectDm,
+  initialTab = "online",
+}: Props) {
   const { relationships } = useChatStore(
     useShallow((s) => ({
       relationships: s.relationships,
@@ -74,9 +157,11 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
   const { loadRelationships, openDm, setProfileUser } = useChatActions();
   const { menu, openMenu, closeMenu, shouldRender, isClosing } =
     useContextMenu();
+  const isMobile = useIsMobile();
+  const addStatusId = useId();
 
   const [state, dispatch] = useReducer(fvReducer, {
-    tab: "online",
+    tab: initialTab,
     loading: false,
     addFriendMode: false,
     addUsername: "",
@@ -84,6 +169,8 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
     popoverUser: null,
     popoverAnchor: null,
   });
+  const [removeTarget, setRemoveTarget] = useState<RemoveTarget>(null);
+  const [removing, setRemoving] = useState(false);
 
   const {
     tab,
@@ -106,21 +193,33 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
   }, [fetchFriends]);
 
   const handleAddFriend = useCallback(async () => {
-    if (!addUsername.trim()) return;
+    if (!addUsername.trim()) {
+      dispatch({
+        type: "SET_ADD_STATUS",
+        value: { kind: "error", message: "Enter a username." },
+      });
+      return;
+    }
     try {
       const data = await apiPost<{ type?: number }>("/api/friends", {
         username: addUsername.trim(),
       });
       dispatch({
         type: "SET_ADD_STATUS",
-        value: data.type === 0 ? "Friend added!" : "Friend request sent!",
+        value: {
+          kind: "success",
+          message: data.type === 0 ? "Friend added." : "Friend request sent.",
+        },
       });
       dispatch({ type: "SET_ADD_USERNAME", value: "" });
       fetchFriends();
     } catch (err: any) {
       dispatch({
         type: "SET_ADD_STATUS",
-        value: err.message || "Failed to send request",
+        value: {
+          kind: "error",
+          message: err?.message || "Couldn't send the request. Try again.",
+        },
       });
     }
   }, [addUsername, fetchFriends]);
@@ -136,15 +235,17 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
     [fetchFriends],
   );
 
-  const handleRemoveFriend = useCallback(
-    async (targetUserId: string) => {
-      if (!window.confirm("Are you sure you want to remove this friend?"))
-        return;
-      await apiDelete("/api/friends", { target_user_id: targetUserId });
+  const confirmRemove = useCallback(async () => {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await apiDelete("/api/friends", { target_user_id: removeTarget.user.id });
+      setRemoveTarget(null);
       fetchFriends();
-    },
-    [fetchFriends],
-  );
+    } finally {
+      setRemoving(false);
+    }
+  }, [removeTarget, fetchFriends]);
 
   const handleOpenDm = useCallback(
     async (targetUserId: string) => {
@@ -154,7 +255,11 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
     [openDm, onSelectDm],
   );
 
-  const handleFriendContextMenu = (e: React.MouseEvent, friend: any) => {
+  const handleFriendContextMenu = (
+    e: React.MouseEvent,
+    friend: any,
+    relType: number,
+  ) => {
     // Check if we should hide the call option (already in call or ringing this user)
     const callState = useCallStore.getState();
     const dmChannels = useChatStore.getState().dmChannels;
@@ -206,14 +311,24 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
             },
           ]
         : []),
-      {
-        label: "Remove Friend",
-        icon: <Icon name="close" size="sm" />,
-        onClick: () => handleRemoveFriend(friend.id),
-        variant: "danger",
-      },
+      ...(relType !== 1
+        ? [
+            {
+              label: removeCopy(relType).action,
+              icon: <Icon name="close" size="sm" />,
+              onClick: () => setRemoveTarget({ user: friend, relType }),
+              variant: "danger" as const,
+            },
+          ]
+        : []),
     ]);
   };
+
+  // Long-press on touch opens the same menu as right-click (9.5).
+  const bindLongPress = useLongPress<{ user: any; relType: number }>(
+    (info, rel) =>
+      handleFriendContextMenu(toContextMenuEvent(info), rel.user, rel.relType),
+  );
 
   const filteredFriends = relationships.filter((f) => {
     if (tab === "online") return f.type === 0 && f.user.status === "online";
@@ -225,291 +340,348 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
 
   const pendingCount = relationships.filter((f) => f.type === 2).length;
 
+  const toggleAddFriend = () =>
+    dispatch({ type: "SET_ADD_FRIEND_MODE", value: !addFriendMode });
+
+  // One tab list, placed inline in the header on desktop and in its own
+  // swipeable strip under the header on phones (it doesn't fit beside the
+  // title at 390).
+  const tabs = (
+    <Tabs
+      label="Friends"
+      idBase="friends"
+      panelId="friends-panel"
+      scrollable
+      className={isMobile ? "h-11 gap-6 px-4" : "h-full min-w-0 self-stretch"}
+      value={tab}
+      onValueChange={(t) => dispatch({ type: "SET_TAB", value: t })}
+      items={FRIEND_TABS.map((t) => ({
+        value: t,
+        label: TAB_LABEL[t],
+        adornment:
+          t === "pending" && pendingCount > 0 ? (
+            <span className="badge-count">{pendingCount}</span>
+          ) : undefined,
+      }))}
+    />
+  );
+
+  const empty = EMPTY[tab];
+  const removal = removeTarget ? removeCopy(removeTarget.relType) : null;
+
   return (
-    <div className="flex flex-1 flex-col bg-rm-bg-primary relative overflow-hidden">
-      {/* Header */}
-      <header className="h-12 flex shrink-0 items-center gap-3 border-b border-rm-border bg-rm-bg-primary px-4 z-10">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
+      {/* Header (12.1 / 12.2): 48px + safe area. */}
+      <header
+        data-testid="friends-header"
+        className="z-20 flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center gap-2 border-b border-rm-border bg-rm-bg-primary px-4 pt-[var(--safe-area-top,0px)] max-md:pl-2"
+      >
         <IconButton
           icon="menu"
           variant="muted"
-          size="sm"
+          size="md"
           className="md:hidden"
           aria-label="Open sidebar"
           onClick={onMenuClick}
         />
 
-        <Icon name="members" size="lg" className="text-rm-text-muted" />
-        <span className="text-ui-sm font-semibold text-rm-text">Friends</span>
-
-        <div aria-hidden className="h-5 w-px bg-rm-border mx-1" />
-
-        <Tabs
-          label="Friends"
-          idBase="friends"
-          panelId="friends-panel"
-          className="h-full self-stretch"
-          value={tab}
-          onValueChange={(t) => dispatch({ type: "SET_TAB", value: t })}
-          items={FRIEND_TABS.map((t) => ({
-            value: t,
-            label: t.charAt(0).toUpperCase() + t.slice(1),
-            adornment:
-              t === "pending" && pendingCount > 0 ? (
-                <span className="badge-count">{pendingCount}</span>
-              ) : undefined,
-          }))}
+        <Icon
+          name="members"
+          size="lg"
+          className="shrink-0 text-rm-text-muted max-md:hidden"
         />
+        <h1 className="shrink-0 text-ui-md font-semibold whitespace-nowrap text-rm-text">
+          Friends
+        </h1>
 
-        <Button
-          variant={addFriendMode ? "secondary" : "ghost"}
-          size="sm"
-          className="ml-auto"
-          aria-pressed={addFriendMode}
-          onClick={() =>
-            dispatch({ type: "SET_ADD_FRIEND_MODE", value: !addFriendMode })
-          }
-        >
-          <Icon name="invite" size="sm" />
-          Add Friend
-        </Button>
+        {!isMobile && (
+          <>
+            <div aria-hidden className="mx-2 h-5 w-px shrink-0 bg-rm-border" />
+            {tabs}
+          </>
+        )}
+
+        <div className="ml-auto flex shrink-0 items-center">
+          {isMobile ? (
+            <IconButton
+              icon="invite"
+              size="md"
+              variant="ghost"
+              aria-label="Add Friend"
+              aria-pressed={addFriendMode}
+              onClick={toggleAddFriend}
+            />
+          ) : (
+            <Button
+              variant={addFriendMode ? "secondary" : "ghost"}
+              size="sm"
+              aria-pressed={addFriendMode}
+              onClick={toggleAddFriend}
+            >
+              <Icon name="invite" size="sm" />
+              Add Friend
+            </Button>
+          )}
+        </div>
       </header>
 
-      {/* Add friend form */}
-      {addFriendMode && (
-        <div className="border-b border-rm-border px-6 py-4 bg-rm-bg-primary">
-          <p className="mb-1 text-ui-sm font-medium text-rm-text">Add Friend</p>
-          <p className="mb-3 text-ui-xs text-rm-text-muted">
-            You can add friends by their username.
-          </p>
-          <div className="flex gap-2 max-w-lg">
-            <Input
-              className="flex-1"
-              aria-label="Friend username"
-              placeholder="Enter a username"
-              value={addUsername}
-              onChange={(e) =>
-                dispatch({ type: "SET_ADD_USERNAME", value: e.target.value })
-              }
-              onKeyDown={(e) => e.key === "Enter" && handleAddFriend()}
-            />
-            <Button
-              size="lg"
-              className="h-9"
-              onClick={handleAddFriend}
-              disabled={!addUsername.trim()}
-            >
-              Send Request
-            </Button>
-          </div>
-          {addStatus && (
-            <p className="mt-2 text-ui-xs text-primary">{addStatus}</p>
-          )}
+      {isMobile && (
+        <div
+          data-testid="friends-tab-strip"
+          className="shrink-0 border-b border-rm-border"
+        >
+          {tabs}
         </div>
       )}
 
-      {/* Friend count label */}
-      <div className="px-6 py-3 border-b border-rm-border/50">
-        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-          {tab === "online"
-            ? "Online"
-            : tab === "all"
-              ? "All Friends"
-              : tab === "pending"
-                ? "Pending"
-                : "Blocked"}{" "}
-          — {filteredFriends.length}
-        </span>
-      </div>
+      {/* Add friend form */}
+      {addFriendMode && (
+        <form
+          className="flex shrink-0 flex-col gap-2 border-b border-rm-border px-4 py-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleAddFriend();
+          }}
+        >
+          <Label htmlFor="friend-username">Add Friend</Label>
+          <p className="text-ui-xs text-rm-text-secondary">
+            You can add friends by their username.
+          </p>
+          <div className="flex max-w-lg gap-2">
+            <Input
+              id="friend-username"
+              name="username"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="flex-1 max-md:min-h-11 max-md:text-ui-md"
+              placeholder="Enter a username"
+              value={addUsername}
+              aria-invalid={addStatus?.kind === "error" || undefined}
+              aria-describedby={addStatus ? addStatusId : undefined}
+              onChange={(e) => {
+                dispatch({ type: "SET_ADD_USERNAME", value: e.target.value });
+                if (addStatus?.kind === "error")
+                  dispatch({ type: "SET_ADD_STATUS", value: null });
+              }}
+            />
+            <Button type="submit" className="max-md:min-h-11">
+              Send Request
+            </Button>
+          </div>
+          <p
+            id={addStatusId}
+            role="status"
+            className={cn(
+              "min-h-4 text-ui-xs",
+              addStatus?.kind === "error"
+                ? "text-rm-danger-ink"
+                : "text-rm-success-ink",
+            )}
+          >
+            {addStatus?.message}
+          </p>
+        </form>
+      )}
 
       {/* Friends list */}
       <div
         id="friends-panel"
         role="tabpanel"
         aria-labelledby={tabId("friends", tab)}
-        className="flex-1 overflow-y-auto custom-scrollbar"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain custom-scrollbar"
       >
-        <div className="px-4 py-1">
-          {loading && (
-            <div className="flex items-center justify-center gap-2 py-12 text-primary/60">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <span className="text-ui-sm font-medium">Loading friends...</span>
-            </div>
-          )}
+        <h2 className="px-4 pt-4 pb-2 text-ui-2xs font-semibold tracking-[0.08em] text-rm-text-muted uppercase">
+          {LIST_LABEL[tab]} — {filteredFriends.length}
+        </h2>
 
-          {!loading && filteredFriends.length === 0 && (
-            <div className="mx-auto mt-16 flex w-full max-w-[360px] flex-col items-center gap-1 text-center">
-              <div className="relative mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-rm-border shadow-sm">
-                <DitherField cell={4} intensity={0.55} seed={3} />
-                {tab === "pending" ? (
-                  <Icon
-                    name="invite"
-                    size="xl"
-                    className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
-                  />
-                ) : tab === "blocked" ? (
-                  <Icon
-                    name="ban"
-                    size="xl"
-                    className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
-                  />
-                ) : (
-                  <Icon
-                    name="members"
-                    size="xl"
-                    className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
-                  />
-                )}
-              </div>
-              <span className="text-ui-lg font-semibold text-rm-text text-balance">
-                {tab === "online"
-                  ? "No friends online"
-                  : tab === "all"
-                    ? "No friends yet"
-                    : tab === "pending"
-                      ? "No pending requests"
-                      : "No blocked users"}
-              </span>
-              {tab === "all" && (
-                <span className="text-ui-sm text-rm-text-muted text-pretty">
-                  Add friends using the button above to get started
-                </span>
-              )}
-            </div>
-          )}
+        {loading && filteredFriends.length === 0 && (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-2 py-12 text-rm-text-secondary"
+          >
+            <Icon name="loader" size="md" className="animate-spin" />
+            <span className="text-ui-sm">Loading friends…</span>
+          </div>
+        )}
 
-          {!loading &&
-            filteredFriends.map((rel) =>
-              (() => {
-                const displayName = getDisplayName(rel.user);
-                return (
-                  <div
-                    key={rel.user.id}
-                    className="group relative flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 outline-none pointer-fine:hover:bg-rm-tint-1"
+        {!loading && filteredFriends.length === 0 && (
+          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+            <Icon
+              name={empty.icon}
+              size={isMobile ? "2xl" : "3xl"}
+              className="text-rm-text-muted"
+            />
+            <p className="text-ui-md font-semibold text-balance text-rm-text">
+              {empty.title}
+            </p>
+            {empty.body && (
+              <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
+                {empty.body}
+              </p>
+            )}
+            {tab === "all" && !addFriendMode && (
+              <Button variant="secondary" onClick={toggleAddFriend}>
+                Add Friend
+              </Button>
+            )}
+          </div>
+        )}
+
+        {filteredFriends.length > 0 && (
+          <ul className="flex flex-col pb-4 md:gap-0.5 md:px-2">
+            {filteredFriends.map((rel) => {
+              const displayName = getDisplayName(rel.user);
+              const remove = removeCopy(rel.type);
+              return (
+                <li
+                  key={rel.user.id}
+                  data-testid="friend-row"
+                  className={cn(
+                    "group relative flex min-h-12 items-center gap-3 px-4 py-1.5 transition-colors duration-150 ease-(--rm-ease-out) md:min-h-14 md:rounded-md md:px-2 pointer-fine:hover:bg-rm-tint-1",
+                    LONG_PRESS_TARGET,
+                  )}
+                >
+                  <ButtonBase
+                    onClick={() => handleOpenDm(rel.user.id)}
+                    onContextMenu={(e) =>
+                      handleFriendContextMenu(e, rel.user, rel.type)
+                    }
+                    {...bindLongPress({ user: rel.user, relType: rel.type })}
+                    aria-label={`Message ${displayName}`}
+                    className="absolute inset-0 z-10 outline-none md:rounded-md"
+                  />
+                  {/* Avatar */}
+                  <ButtonBase
+                    className={cn(
+                      "relative z-20 shrink-0 cursor-pointer rounded-full outline-none",
+                      HIT,
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatch({
+                        type: "SET_POPOVER",
+                        user: rel.user,
+                        anchor: e.currentTarget,
+                      });
+                    }}
+                    aria-label={`View ${displayName}'s profile`}
                   >
-                    <ButtonBase
-                      onClick={() => handleOpenDm(rel.user.id)}
-                      onContextMenu={(e) =>
-                        handleFriendContextMenu(e, rel.user)
-                      }
-                      aria-label={`Message ${displayName}`}
-                      className="absolute inset-0 z-10 rounded-lg outline-none"
+                    <span className="relative flex size-10 items-center justify-center overflow-visible rounded-full bg-rm-accent-tint text-ui-sm font-semibold text-rm-accent-ink ring-1 ring-rm-border">
+                      {rel.user.avatar_url ? (
+                        <AvatarImage
+                          src={getAuthAssetUrl(rel.user.avatar_url)}
+                          alt=""
+                          display={rel.user.avatar_display}
+                        />
+                      ) : (
+                        getDisplayInitial(rel.user)
+                      )}
+                    </span>
+                    <UserStatusDot
+                      status={rel.user.status ?? "offline"}
+                      className="absolute -right-0.5 -bottom-0.5 size-3.5 border-2 border-rm-bg-primary"
                     />
-                    {/* Avatar */}
-                    <ButtonBase
-                      className="relative z-20 shrink-0 cursor-pointer outline-none"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        dispatch({
-                          type: "SET_POPOVER",
-                          user: rel.user,
-                          anchor: e.currentTarget,
-                        });
-                      }}
-                      aria-label={`View ${displayName}'s profile`}
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-ui-sm font-semibold text-primary-foreground ring-1 ring-white/10 pointer-fine:group-hover:ring-white/20 transition-ui relative">
-                        {rel.user.avatar_url ? (
-                          <AvatarImage
-                            src={getAuthAssetUrl(rel.user.avatar_url)}
-                            alt=""
-                            display={rel.user.avatar_display}
-                          />
-                        ) : (
-                          getDisplayInitial(rel.user)
-                        )}
-                      </div>
-                      <UserStatusDot
-                        status={rel.user.status ?? "offline"}
-                        className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 border-[2.5px] border-rm-bg-primary transition-colors"
-                      />
-                    </ButtonBase>
+                  </ButtonBase>
 
-                    {/* Info */}
-                    <div className="min-w-0 flex-1">
-                      <UserDisplayName
-                        user={rel.user}
-                        className="block truncate text-ui-sm font-medium text-rm-text"
-                      />
-                      <span className="text-ui-xs text-rm-text-muted">
-                        {rel.type === 0
-                          ? rel.user.status === "online"
-                            ? "Online"
-                            : rel.user.status === "idle"
-                              ? "Idle"
-                              : rel.user.status === "dnd"
-                                ? "Do Not Disturb"
-                                : "Offline"
-                          : rel.type === 2
-                            ? "Incoming friend request"
-                            : rel.type === 3
-                              ? "Outgoing friend request"
-                              : "Blocked"}
-                      </span>
-                    </div>
+                  {/* Info */}
+                  <div className="min-w-0 flex-1">
+                    <UserDisplayName
+                      user={rel.user}
+                      className="block truncate text-ui-base font-medium text-rm-text"
+                    />
+                    <span className="block truncate text-ui-xs text-rm-text-secondary">
+                      {relationLabel(rel)}
+                    </span>
+                  </div>
 
-                    {/* Actions */}
-                    <div className="relative z-20 flex gap-1 pointer-fine:opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100">
-                      {rel.type === 0 && (
-                        <IconButton
-                          icon="chat"
-                          iconSize="sm"
-                          size="sm"
-                          shape="circle"
-                          title="Message"
-                          aria-label="Message"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenDm(rel.user.id);
-                          }}
-                        />
-                      )}
-                      {rel.type === 2 && (
-                        <IconButton
-                          icon="check"
-                          iconSize="sm"
-                          size="sm"
-                          shape="circle"
-                          className="text-rm-success-ink"
-                          title="Accept"
-                          aria-label="Accept"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAcceptFriend(rel.user.id);
-                          }}
-                        />
-                      )}
+                  {/* Actions: revealed on hover/focus for fine pointers,
+                      always visible on touch. */}
+                  <div
+                    className={cn("relative z-20 flex shrink-0 gap-2", REVEAL)}
+                  >
+                    {rel.type === 0 && (
+                      <IconButton
+                        icon="chat"
+                        size="sm"
+                        shape="circle"
+                        tooltip="Message"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenDm(rel.user.id);
+                        }}
+                      />
+                    )}
+                    {rel.type === 2 && (
+                      <IconButton
+                        icon="check"
+                        size="sm"
+                        shape="circle"
+                        className="text-rm-success-ink"
+                        tooltip="Accept"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAcceptFriend(rel.user.id);
+                        }}
+                      />
+                    )}
+                    {rel.type !== 1 && (
                       <IconButton
                         icon="close"
-                        iconSize="sm"
                         size="sm"
                         shape="circle"
                         variant="destructive"
-                        title={
-                          rel.type === 0
-                            ? "Remove Friend"
-                            : rel.type === 2
-                              ? "Reject"
-                              : "Cancel"
-                        }
-                        aria-label={
-                          rel.type === 0
-                            ? "Remove Friend"
-                            : rel.type === 2
-                              ? "Reject"
-                              : "Cancel"
-                        }
+                        tooltip={remove.action}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRemoveFriend(rel.user.id);
+                          setRemoveTarget({
+                            user: rel.user,
+                            relType: rel.type,
+                          });
                         }}
                       />
-                    </div>
+                    )}
                   </div>
-                );
-              })(),
-            )}
-        </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
+
+      <ResponsiveDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !removing) setRemoveTarget(null);
+        }}
+      >
+        <ResponsiveDialogContent className="md:max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{removal?.title}</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              {removeTarget && removal
+                ? removal.body(getDisplayName(removeTarget.user))
+                : null}
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogFooter>
+            <Button
+              variant="secondary"
+              disabled={removing}
+              onClick={() => setRemoveTarget(null)}
+            >
+              Keep
+            </Button>
+            <Button
+              variant="danger"
+              loading={removing}
+              onClick={() => void confirmRemove()}
+            >
+              {removal?.confirm}
+            </Button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {shouldRender && (
         <ContextMenu

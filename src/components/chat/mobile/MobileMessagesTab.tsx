@@ -3,8 +3,8 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useShallow } from "zustand/shallow";
 
 /**
- * The phone Messages tab: the same DM list the desktop sidebar shows in @me,
- * reachable without switching servers first.
+ * The phone Messages tab: the DM list as a phone page (48px header, 44px
+ * search, 12.4 rows), reachable without switching servers first.
  */
 export function MobileMessagesTab({
   onSelectDm,
@@ -31,8 +31,9 @@ export function MobileMessagesTab({
   };
 
   return (
-    <div className="h-full min-h-0 overflow-hidden bg-rm-sidebar">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-rm-bg-primary">
       <DMSidebar
+        variant="phone"
         activeChannelId={activeServerId === "@me" ? activeChannelId : null}
         activeView={dmHomeView}
         onSelectDm={onSelectDm}
