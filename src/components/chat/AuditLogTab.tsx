@@ -1,235 +1,162 @@
+/**
+ * Server settings → Audit log. The page heading is the workbench header, so
+ * every state (loading, empty, error, list) keeps it; this body only swaps
+ * what sits under it (design-system 14.1-14.3).
+ */
+
+import { apiGet } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { apiGet } from "@/lib/api-client";
 import type { ServerAuditLog } from "@/lib/types";
-import { useClientDateFormatter } from "@/lib/client-date-format";
-import { useEffect, useReducer } from "react";
-import { AvatarImage } from "./AvatarImage";
-import { Icon } from "@/components/ui/icon";
+import { useCallback, useEffect, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
+import { SettingsCard } from "./settings/primitives";
+import {
+  LoadError,
+  PageState,
+  RowAvatar,
+  SkeletonRows,
+} from "./server-settings/states";
 
 interface AuditLogTabProps {
   serverId: string;
 }
 
-interface State {
-  logs: ServerAuditLog[];
-  loading: boolean;
-  error: string | null;
+/** "MEMBER_BAN_ADD" → "Member ban add". */
+function formatActionType(type: string) {
+  const words = type.toLowerCase().split("_").filter(Boolean).join(" ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-type Action =
-  | { type: "FETCH_START" }
-  | { type: "FETCH_SUCCESS"; payload: ServerAuditLog[] }
-  | { type: "FETCH_ERROR"; payload: string };
+function formatValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Removed";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
 
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "FETCH_START":
-      return { ...state, loading: true, error: null };
-    case "FETCH_SUCCESS":
-      return { ...state, loading: false, logs: action.payload };
-    case "FETCH_ERROR":
-      return { ...state, loading: false, error: action.payload };
-    default:
-      return state;
-  }
+function AuditRow({ log }: { log: ServerAuditLog }) {
+  const formatDate = useClientDateFormatter();
+  const actor = getDisplayName(log.actor);
+  const changes =
+    log.changes && typeof log.changes === "object"
+      ? Object.entries(log.changes as Record<string, unknown>)
+      : [];
+  return (
+    <li className="flex gap-3 px-4 py-3.5 @min-[560px]:px-5">
+      <RowAvatar
+        src={
+          log.actor?.avatar_url ? getAuthAssetUrl(log.actor.avatar_url) : null
+        }
+        initial={getDisplayInitial(log.actor)}
+        size="sm"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-ui-base font-medium text-rm-text">
+            <InlineEmojiText text={actor} />
+          </span>
+          <span className="rounded-sm bg-rm-tint-2 px-1.5 text-ui-xs font-medium leading-5 text-rm-text-secondary">
+            {formatActionType(log.action_type)}
+          </span>
+        </p>
+        <p className="mt-0.5 text-ui-xs text-rm-text-secondary">
+          <time dateTime={log.created_at}>
+            {formatDate(log.created_at, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </time>
+          {log.target_id ? (
+            <>
+              {" · Target "}
+              <span className="break-all font-mono">{log.target_id}</span>
+            </>
+          ) : null}
+        </p>
+        {log.reason ? (
+          <p className="mt-2 border-l-2 border-rm-border-strong pl-3 text-pretty text-ui-sm text-rm-text">
+            <InlineEmojiText text={log.reason} />
+          </p>
+        ) : null}
+        {changes.length > 0 ? (
+          <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-md bg-rm-tint-1 px-3 py-2 text-ui-xs">
+            {changes.map(([key, value]) => (
+              <div key={key} className="contents">
+                <dt className="font-medium text-rm-text-secondary">{key}</dt>
+                <dd className="break-words text-rm-text">
+                  {formatValue(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+    </li>
+  );
 }
 
 export default function AuditLogTab({ serverId }: AuditLogTabProps) {
-  const [state, dispatch] = useReducer(reducer, {
-    logs: [],
-    loading: true,
-    error: null,
-  });
-  const formatDate = useClientDateFormatter();
+  const [logs, setLogs] = useState<ServerAuditLog[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function fetchLogs() {
-      dispatch({ type: "FETCH_START" });
+  const load = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      setLoading(true);
+      setError(null);
       try {
         const data = await apiGet<ServerAuditLog[]>(
           `/api/servers/${serverId}/audit-logs`,
         );
-
-        if (mounted) {
-          dispatch({ type: "FETCH_SUCCESS", payload: data });
-        }
-      } catch (err: any) {
-        if (mounted) {
-          dispatch({
-            type: "FETCH_ERROR",
-            payload: err.message || "An error occurred",
-          });
-        }
+        if (isCurrent()) setLogs(data);
+      } catch (err) {
+        if (isCurrent()) setError(describeApiError(err, "load the audit log"));
+      } finally {
+        if (isCurrent()) setLoading(false);
       }
-    }
+    },
+    [serverId],
+  );
 
-    fetchLogs();
+  useEffect(() => {
+    let current = true;
+    void load(() => current);
     return () => {
-      mounted = false;
+      current = false;
     };
-  }, [serverId]);
+  }, [load]);
 
-  const formatActionType = (type: string) => {
-    return type
-      .split("_")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
-  };
-
-  const formatChanges = (changes: any) => {
-    if (!changes) return null;
-
-    return Object.entries(changes).map(([key, value]) => {
-      let displayValue = String(value);
-      if (typeof value === "object") {
-        displayValue = JSON.stringify(value);
-      }
-      if (value === null || value === undefined || value === "") {
-        displayValue = "None / Removed";
-      }
-
-      return (
-        <div
-          key={key}
-          className="text-ui-xs text-rm-text-muted mt-1 flex gap-2"
-        >
-          <span className="font-semibold text-rm-text-secondary">{key}:</span>
-          <span className="truncate max-w-[200px]" title={displayValue}>
-            {displayValue}
-          </span>
-        </div>
-      );
-    });
-  };
-
-  if (state.loading) {
+  if (error) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted">
-        <Icon name="loader" size="2xl" className="animate-spin mb-4" />
-        <p>Loading audit logs...</p>
-      </div>
+      <LoadError
+        title="Audit log didn't load"
+        message={error}
+        retrying={loading}
+        onRetry={() => void load()}
+      />
     );
   }
-
-  if (state.error) {
+  if (!logs) return <SkeletonRows label="Loading the audit log" />;
+  if (logs.length === 0) {
     return (
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-ui-sm text-destructive">
-        {state.error}
-      </div>
+      <PageState icon="auditLog" title="No activity yet">
+        Changes to roles, channels, invites and bans show here as they happen.
+      </PageState>
     );
   }
-
-  if (state.logs.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted text-center space-y-2">
-        <div className="h-12 w-12 rounded-full bg-rm-bg-hover flex items-center justify-center mb-2">
-          <span className="text-ui-xl">📋</span>
-        </div>
-        <h3 className="text-rm-text font-semibold">No recent activity</h3>
-        <p className="text-ui-sm">
-          There are no audit logs for this server yet.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="animate-in fade-in duration-150 w-full pb-8">
-      <h2
-        id="server-settings-title"
-        className="mb-6 text-ui-xl font-semibold text-rm-text"
-      >
-        Audit Log
-      </h2>
-
-      <p className="text-ui-sm text-rm-text-muted mb-6">
-        A record of recent administrative actions taken in this server.
-      </p>
-
-      <div className="space-y-4 max-w-2xl relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-rm-border before:to-transparent">
-        {state.logs.map((log) =>
-          (() => {
-            const actorDisplayName = getDisplayName(log.actor);
-            return (
-              <div
-                key={log.id}
-                className="relative flex items-start gap-4 group"
-              >
-                {/* Icon/Timeline Dot */}
-                <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-rm-bg-primary bg-rm-bg-surface text-rm-text-muted shadow shrink-0 overflow-hidden relative z-10">
-                  {log.actor?.avatar_url ? (
-                    <AvatarImage
-                      src={getAuthAssetUrl(log.actor.avatar_url)}
-                      alt="Avatar"
-                      display={log.actor.avatar_display}
-                    />
-                  ) : (
-                    <span className="text-ui-xs font-semibold">
-                      {getDisplayInitial(log.actor)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Card Content */}
-                <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-ui pointer-fine:hover:border-primary/30">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex gap-2 items-center">
-                      <span className="font-semibold text-ui-sm text-rm-text">
-                        <InlineEmojiText text={actorDisplayName} />
-                      </span>
-                      <span className="text-ui-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
-                        {formatActionType(log.action_type)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-ui-xs text-rm-text-muted mb-3 flex items-center gap-2">
-                    <span>
-                      {formatDate(log.created_at, {
-                        year: "numeric",
-                        month: "numeric",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "numeric",
-                        second: "numeric",
-                      })}
-                    </span>
-                    {log.target_id && (
-                      <>
-                        <span>•</span>
-                        <span className="font-mono bg-rm-bg-hover px-1.5 py-0.5 rounded text-ui-2xs">
-                          Target: {log.target_id}
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  {log.reason && (
-                    <div className="mt-2 text-ui-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
-                      <InlineEmojiText text={`"${log.reason}"`} />
-                    </div>
-                  )}
-
-                  {log.changes && Object.keys(log.changes).length > 0 && (
-                    <div className="mt-3 bg-rm-bg-hover/50 rounded-lg p-3 border border-rm-border/50">
-                      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1 block">
-                        Changes
-                      </span>
-                      <div className="space-y-1">
-                        {formatChanges(log.changes)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })(),
-        )}
-      </div>
-    </div>
+    <SettingsCard
+      title="Recent activity"
+      description="Administrative actions taken in this server."
+    >
+      {logs.map((log) => (
+        <AuditRow key={log.id} log={log} />
+      ))}
+    </SettingsCard>
   );
 }
