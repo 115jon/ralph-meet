@@ -422,7 +422,7 @@ const VirtualMessageList = memo(
       // Detect prepends at render time by comparing first AND last message IDs.
       // A true prepend: first message changed, last message stayed the same
       // (items were added at the start, end is unchanged).
-      // A full replacement (e.g. Jump to Present): both first AND last change.
+      // A full replacement (e.g. Jump to present): both first AND last change.
       // We must NOT set shift=true for full replacements.
       const prevFirstMsgIdRef = useRef<string | null>(
         safeMessages.length > 0 ? safeMessages[0].id : null,

@@ -360,7 +360,7 @@ export async function getMediaDeviceSnapshot(): Promise<MediaDeviceSnapshot> {
       label:
         d.label ||
         (d.deviceId === "default"
-          ? "Default Microphone"
+          ? "Default microphone"
           : `Microphone ${i + 1}`),
       kind: d.kind,
     }));
@@ -371,7 +371,7 @@ export async function getMediaDeviceSnapshot(): Promise<MediaDeviceSnapshot> {
       groupId: d.groupId,
       label:
         d.label ||
-        (d.deviceId === "default" ? "Default Speaker" : `Speaker ${i + 1}`),
+        (d.deviceId === "default" ? "Default speaker" : `Speaker ${i + 1}`),
       kind: d.kind,
     }));
   const videoInputs = rawDevices

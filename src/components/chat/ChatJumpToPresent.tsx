@@ -10,7 +10,7 @@ export function ChatJumpToPresent({ isDetached, onJumpToPresent }: any) {
         onClick={onJumpToPresent}
         className="gap-1.5 rounded-full shadow-[var(--rm-shadow-1)]"
       >
-        <span>Jump to Present</span>
+        <span>Jump to present</span>
         <Icon name="chevronDown" size="xs" />
       </Button>
     </div>

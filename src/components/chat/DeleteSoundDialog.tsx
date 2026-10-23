@@ -44,7 +44,7 @@ export function DeleteSoundDialog({
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent className="md:max-w-sm">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Delete Sound</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Delete sound</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Are you sure you want to delete this sound?
           </ResponsiveDialogDescription>

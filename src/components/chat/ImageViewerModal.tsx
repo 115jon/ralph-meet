@@ -246,7 +246,7 @@ export const ImageViewerModal: React.FC = () => {
 
     return [
       {
-        label: "Save Image",
+        label: "Save image",
         rightIcon: <Icon name="download" size="sm" />,
         onClick: () => {
           void saveMedia({
@@ -258,14 +258,14 @@ export const ImageViewerModal: React.FC = () => {
         divider: true,
       },
       {
-        label: "Copy Media Link",
+        label: "Copy media link",
         rightIcon: <Icon name="copy" size="sm" />,
         onClick: () => {
           void copyMediaLink(getPublicMediaUrl(mediaUrl));
         },
       },
       {
-        label: "Open Media Link",
+        label: "Open media link",
         rightIcon: <Icon name="externalLink" size="sm" />,
         onClick: () => requestOpenExternalLink(getPublicMediaUrl(mediaUrl)),
       },

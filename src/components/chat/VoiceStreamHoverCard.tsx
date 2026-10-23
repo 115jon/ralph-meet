@@ -58,9 +58,9 @@ export function VoiceStreamHoverCard({
   const hasWatchAction = typeof onWatchStream === "function";
   const ctaLabel = isCurrentUser
     ? hasWatchAction
-      ? "Open Stream"
+      ? "Open stream"
       : "You're Streaming!"
-    : "Watch Stream";
+    : "Watch stream";
   const resolvedThumbnailUrl = thumbnailUrl
     ? thumbnailUrl.startsWith("data:")
       ? thumbnailUrl

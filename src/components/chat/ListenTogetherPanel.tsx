@@ -1272,7 +1272,7 @@ export function ListenTogetherPanel({
                                   void queueSourceUrl(result.sourceUrl)
                                 }
                               >
-                                Queue Collection
+                                Queue collection
                               </Button>
                               <ListenTogetherResultActionTrigger
                                 label={result.title}

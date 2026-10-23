@@ -175,7 +175,7 @@ export function DemoRoomChatPanel({
             </div>
             <div>
               <h2 className="text-ui-sm font-semibold text-rm-text">
-                Temporary Chat
+                Temporary chat
               </h2>
               <p className="text-ui-2xs font-medium text-rm-text-muted">
                 Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.

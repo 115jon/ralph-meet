@@ -50,7 +50,7 @@ describe("getAppTitleBarModel", () => {
     ).toEqual({ kind: "server", label: "The Lounge", iconUrl: null });
   });
 
-  it("uses the app logo and Direct Messages for a DM", () => {
+  it("uses the app logo and Direct messages for a DM", () => {
     expect(
       getAppTitleBarModel({
         activeServerId: "@me",
@@ -58,6 +58,6 @@ describe("getAppTitleBarModel", () => {
         activeServer: null,
         dmHomeView: "friends",
       }),
-    ).toEqual({ kind: "dm", label: "Direct Messages", iconUrl: null });
+    ).toEqual({ kind: "dm", label: "Direct messages", iconUrl: null });
   });
 });

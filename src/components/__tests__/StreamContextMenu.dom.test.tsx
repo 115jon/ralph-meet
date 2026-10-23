@@ -107,7 +107,7 @@ describe("StreamContextMenu", () => {
       />,
     );
     const parent = await screen.findByRole("menuitem", {
-      name: "More Options",
+      name: "More options",
     });
     act(() => parent.focus());
     fireEvent.keyDown(parent, { key: "ArrowRight" });
@@ -143,10 +143,10 @@ describe("StreamContextMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
     // Sliders open inline in their row.
-    const volumeRow = screen.getByRole("button", { name: /User Volume/ });
+    const volumeRow = screen.getByRole("button", { name: /User volume/ });
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
     fireEvent.click(volumeRow);
-    const slider = screen.getByRole("slider", { name: "User Volume" });
+    const slider = screen.getByRole("slider", { name: "User volume" });
     fireEvent.change(slider, { target: { value: "150" } });
     await waitFor(() =>
       expect(

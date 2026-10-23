@@ -172,7 +172,7 @@ export default function VoiceChannelTextStatusModal({
             disabled={!hasChanges || saving}
             loading={saving}
           >
-            Set Status
+            Set status
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

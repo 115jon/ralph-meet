@@ -179,7 +179,7 @@ const cases: Case[] = [
   {
     name: "UserAccountPopover",
     role: "dialog",
-    label: "User Account Options",
+    label: "User account options",
     render: (onClose) => (
       <Host onClose={onClose}>
         {(anchor, _ref, close) => (
@@ -197,7 +197,7 @@ const cases: Case[] = [
   {
     name: "AudioDeviceMenu",
     role: "menu",
-    label: "Input Settings",
+    label: "Input settings",
     render: (onClose) => (
       <Host onClose={onClose}>
         {(_anchor, anchorRef, close) => (
@@ -288,7 +288,7 @@ describe("UserAccountPopover status", () => {
       </Host>,
     );
     openFromAnchor();
-    await screen.findByRole("dialog", { name: "User Account Options" });
+    await screen.findByRole("dialog", { name: "User account options" });
     expect(screen.queryByText("Switch Accounts")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Online" }));
@@ -323,7 +323,7 @@ describe("UserAccountPopover status", () => {
       </Host>,
     );
     openFromAnchor();
-    await screen.findByRole("dialog", { name: "User Account Options" });
+    await screen.findByRole("dialog", { name: "User account options" });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit custom status" }));
     const input = screen.getByRole("textbox", { name: "Custom status" });
@@ -334,7 +334,7 @@ describe("UserAccountPopover status", () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(updateStatus).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "User Account Options" }),
+      screen.getByRole("dialog", { name: "User account options" }),
     ).toBeInTheDocument();
   });
 });
@@ -354,9 +354,9 @@ describe("AudioDeviceMenu devices", () => {
       </Host>,
     );
     openFromAnchor();
-    await screen.findByRole("menu", { name: "Input Settings" });
+    await screen.findByRole("menu", { name: "Input settings" });
 
-    fireEvent.click(screen.getByRole("menuitem", { name: /Input Device/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Input device/ }));
     const usb = await screen.findByRole("menuitemradio", { name: "USB Mic" });
     expect(
       screen.getByRole("menuitemradio", { name: "Default Mic" }),
@@ -385,7 +385,7 @@ describe("AudioDeviceMenu devices", () => {
       </Host>,
     );
     openFromAnchor();
-    await screen.findByRole("menu", { name: "Input Settings" });
+    await screen.findByRole("menu", { name: "Input settings" });
 
     fireEvent.change(screen.getByRole("slider", { name: "Input volume" }), {
       target: { value: "40" },
@@ -396,7 +396,7 @@ describe("AudioDeviceMenu devices", () => {
     ) => object;
     expect(update({})).toEqual({ inputVolume: 40 });
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Voice Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Voice settings" }));
     expect(onOpenVoiceSettings).toHaveBeenCalled();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });

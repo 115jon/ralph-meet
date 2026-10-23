@@ -59,7 +59,7 @@ describe("VoiceDetailsPanel", () => {
       </div>,
     );
 
-    const panel = await screen.findByRole("dialog", { name: "Voice Details" });
+    const panel = await screen.findByRole("dialog", { name: "Voice details" });
 
     expect(container).not.toContainElement(panel);
     expect(document.body).toContainElement(panel);
@@ -103,18 +103,18 @@ describe("VoiceDetailsPanel", () => {
 
     trigger.focus();
     fireEvent.click(trigger);
-    const panel = await screen.findByRole("dialog", { name: "Voice Details" });
+    const panel = await screen.findByRole("dialog", { name: "Voice details" });
     fireEvent.keyDown(panel, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Voice Details" }),
+        screen.queryByRole("dialog", { name: "Voice details" }),
       ).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(document.activeElement).toBe(trigger));
 
     fireEvent.click(trigger);
-    await screen.findByRole("dialog", { name: "Voice Details" });
+    await screen.findByRole("dialog", { name: "Voice details" });
     act(() => {
       executeBackHandlers();
     });

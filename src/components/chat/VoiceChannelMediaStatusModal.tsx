@@ -351,7 +351,7 @@ export default function VoiceChannelMediaStatusModal({
               />
             )}
             <span className="text-ui-lg font-semibold text-rm-text">
-              Server Uploads
+              Server uploads
             </span>
             <span className="mt-1 text-ui-xs text-rm-text-muted">
               Upload your own image or clip

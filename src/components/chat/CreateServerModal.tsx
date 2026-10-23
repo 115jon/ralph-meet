@@ -221,7 +221,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
       )}
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="server-name">Server Name</Label>
+        <Label htmlFor="server-name">Server name</Label>
         <Input
           id="server-name"
           ref={inputRef}
@@ -252,7 +252,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
         }}
       >
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Create a Server</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Create a server</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Your server is where you and your friends hang out.
           </ResponsiveDialogDescription>
@@ -267,7 +267,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
             disabled={!state.name.trim() || state.creating}
             loading={state.creating}
           >
-            Create Server
+            Create server
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

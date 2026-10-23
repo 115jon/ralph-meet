@@ -957,7 +957,7 @@ export default function EmojiPicker({
                           </Button>
                           <div className="text-right">
                             <div className="text-ui-sm font-semibold text-rm-text">
-                              AI Emoji Composer
+                              AI emoji composer
                             </div>
                             <div className="text-ui-xs text-rm-text-muted">
                               Build custom emoji for your server vibe
@@ -1152,7 +1152,7 @@ export default function EmojiPicker({
                                         className="text-rm-accent-ink"
                                       />
                                     }
-                                    title="Your Creations"
+                                    title="Your creations"
                                     count={customSearchResults.length}
                                     isCollapsed={false}
                                     onToggle={() => undefined}
@@ -1215,7 +1215,7 @@ export default function EmojiPicker({
                                       className="text-rm-text"
                                     />
                                   }
-                                  title="Recently Used"
+                                  title="Recently used"
                                   count={recents.length}
                                   isCollapsed={
                                     collapsedCategories[RECENTS_SECTION_ID] ??
@@ -1275,7 +1275,7 @@ export default function EmojiPicker({
                                       />
                                     )
                                   }
-                                  title="Your Creations"
+                                  title="Your creations"
                                   count={generatedEmojis.length}
                                   isCollapsed={
                                     collapsedCategories[CUSTOM_SECTION_ID] ??
@@ -1384,7 +1384,7 @@ export default function EmojiPicker({
                                 className="text-rm-accent-ink"
                               />
                             }
-                            title="Your Creations"
+                            title="Your creations"
                             count={generatedEmojis.length}
                             isCollapsed={false}
                             onToggle={() => undefined}

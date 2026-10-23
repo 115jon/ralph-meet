@@ -484,7 +484,7 @@ export default function MemberList({
         ...(!hideCallOption
           ? [
               {
-                label: "Start a Call",
+                label: "Start a call",
                 icon: <Icon name="call" size="sm" />,
                 onClick: async () => {
                   const channelId =
@@ -838,7 +838,7 @@ function MemberListTabs({
           </h1>
         </div>
         <p className="mt-1 mb-4 text-ui-sm text-rm-text-secondary">
-          {isDM ? "Direct Message" : "Text Channel"}
+          {isDM ? "Direct message" : "Text channel"}
         </p>
 
         {/* Scrolls sideways with an edge fade, so "Files" is never clipped

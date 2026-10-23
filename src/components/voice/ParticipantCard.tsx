@@ -227,7 +227,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Loading State */}
         {isLoadingStream && <StreamLoadingIndicator />}
 
-        {/* Watch Stream Prompt / Thumbnail Overlay */}
+        {/* Watch stream Prompt / Thumbnail Overlay */}
         {shouldShowWatchPrompt && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 overflow-hidden bg-rm-bg-surface p-2 text-center @min-[240px]:gap-2">
             {streamThumbnails[item.userId] && (

@@ -79,7 +79,7 @@ export function buildLocalMenu({
       {
         type: "item",
         key: "stop-streaming",
-        label: "Stop Streaming",
+        label: "Stop streaming",
         danger: true,
         onSelect: () => {
           onToggleScreenShare?.();
@@ -90,7 +90,7 @@ export function buildLocalMenu({
       {
         type: "item",
         key: "change-stream",
-        label: "Change Stream",
+        label: "Change stream",
         onSelect: () => {
           onChangeSource?.();
           onClose();
@@ -100,7 +100,7 @@ export function buildLocalMenu({
       {
         type: "submenu",
         key: "stream-quality",
-        label: "Stream Quality",
+        label: "Stream quality",
         entries: availableQualities.map((q) => ({
           type: "item",
           key: q,
@@ -122,7 +122,7 @@ export function buildLocalMenu({
       {
         type: "item",
         key: "share-stream-audio",
-        label: "Share Stream Audio",
+        label: "Share stream audio",
         checked: !!isStreamingAudio,
         onSelect: () => {
           onToggleStreamAudio?.();
@@ -135,7 +135,7 @@ export function buildLocalMenu({
             {
               type: "item" as const,
               key: "always-show-preview",
-              label: "Always Show Stream Preview",
+              label: "Always show stream preview",
               checked: !!alwaysShowStreamPreview,
               onSelect: () => {
                 onToggleAlwaysShowStreamPreview?.();
@@ -178,7 +178,7 @@ export function buildLocalMenu({
         {
           type: "item",
           key: "no-apps",
-          label: "No Apps Installed",
+          label: "No apps installed",
           disabled: true,
         },
       ],
@@ -215,14 +215,14 @@ export function buildLocalMenu({
           {
             type: "item" as const,
             key: "server-mute",
-            label: "Server Mute",
+            label: "Server mute",
             danger: true,
             onSelect: handleServerMute,
           },
           {
             type: "item" as const,
             key: "server-deafen",
-            label: "Server Deafen",
+            label: "Server deafen",
             danger: true,
             onSelect: handleServerDeafen,
           },
@@ -233,7 +233,7 @@ export function buildLocalMenu({
     {
       type: "item",
       key: "copy-id",
-      label: "Copy User ID",
+      label: "Copy user ID",
       onSelect: handleCopyId,
       trailing: ID_BADGE,
     },

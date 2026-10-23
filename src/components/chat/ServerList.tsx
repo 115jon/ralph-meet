@@ -140,7 +140,7 @@ export default function ServerList({
     );
     openMenu(event, [
       {
-        label: "Mark as Read",
+        label: "Mark as read",
         icon: <Icon name="check" size="sm" />,
         onClick: () => onMarkServerRead?.(server.id),
         disabled: !hasUnread,
@@ -151,7 +151,7 @@ export default function ServerList({
         onClick: () => navigator.clipboard.writeText(server.id),
       },
       {
-        label: "Leave Server",
+        label: "Leave server",
         icon: <Icon name="trash" size="sm" />,
         onClick: () => alert("Leave server not implemented yet"),
         variant: "danger",

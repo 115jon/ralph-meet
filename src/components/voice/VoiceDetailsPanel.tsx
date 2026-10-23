@@ -161,7 +161,7 @@ export function VoiceDetailsPanel({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="Voice Details"
+      title="Voice details"
       variant="rich"
       anchor={triggerRef}
       side="top"
@@ -171,7 +171,7 @@ export function VoiceDetailsPanel({
       {/* Header */}
       <div className="px-4 pt-4 pb-2">
         <h3 className="text-ui-base font-semibold text-rm-text tracking-tight">
-          Voice Details
+          Voice details
         </h3>
       </div>
 

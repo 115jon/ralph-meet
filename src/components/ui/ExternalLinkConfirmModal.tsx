@@ -59,10 +59,10 @@ export function ExternalLinkConfirmModal({
 
         <ResponsiveDialogFooter>
           <Button type="button" variant="secondary" onClick={onClose}>
-            Go Back
+            Go back
           </Button>
           <Button type="button" onClick={onConfirm}>
-            Visit Site
+            Visit site
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

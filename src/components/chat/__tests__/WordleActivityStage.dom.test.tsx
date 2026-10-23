@@ -54,7 +54,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
     );
 
     const dialog = await screen.findByRole("dialog", {
-      name: "How To Play",
+      name: "How to play",
     });
     expect(dialog).toHaveTextContent("Guess the Wordle in 6 tries.");
     fireEvent.click(screen.getByRole("button", { name: "Close how to play" }));
@@ -70,7 +70,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
     expect(
-      screen.queryByRole("dialog", { name: "How To Play" }),
+      screen.queryByRole("dialog", { name: "How to play" }),
     ).not.toBeInTheDocument();
   });
 
@@ -129,7 +129,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
     expect(
       screen.queryByRole("button", { name: /invite/i }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Channel Stats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Channel stats" }));
     expect(
       screen.queryByRole("button", { name: /share/i }),
     ).not.toBeInTheDocument();

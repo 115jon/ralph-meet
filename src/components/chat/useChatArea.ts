@@ -553,7 +553,7 @@ export function useChatArea({
     setLocalState({ hasMoreAfterAnchor: hasMoreAfter });
     if (!hasMoreAfter) {
       // User has reached the present — exit detached mode.
-      // This hides the "Jump to Present" button and enables normal behavior.
+      // This hides the "Jump to present" button and enables normal behavior.
       setLocalState({ isDetached: false });
     }
   }, [channelId, isDetached, state.messages, loadMessagesAfter]);

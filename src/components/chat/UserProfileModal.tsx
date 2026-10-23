@@ -78,7 +78,7 @@ type RelationshipAction = "add" | "remove" | "accept" | "block" | "unblock";
 const STATUS_LABELS: Record<UserStatus, string> = {
   online: "Online",
   idle: "Idle",
-  dnd: "Do Not Disturb",
+  dnd: "Do not disturb",
   offline: "Offline",
 };
 

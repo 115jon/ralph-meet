@@ -15,7 +15,7 @@ function getFocusedItemLabel(
 ) {
   if (!item?.name) return "";
   if (item.type !== "screen") return item.name;
-  if (item.isLocal) return "Your Stream";
+  if (item.isLocal) return "Your stream";
   const ownerName = item.name.replace(/'s Stream$/, "");
   return `${ownerName}'s Stream`;
 }

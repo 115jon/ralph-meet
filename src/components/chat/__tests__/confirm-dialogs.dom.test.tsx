@@ -55,7 +55,7 @@ const cases: Array<{
 }> = [
   {
     name: "DeleteMessageDialog",
-    title: "Delete Message",
+    title: "Delete message",
     confirmLabel: "Delete",
     render: (onConfirm) => (props) => (
       <DeleteMessageDialog
@@ -68,14 +68,14 @@ const cases: Array<{
   {
     name: "RemoveEmbedsDialog",
     title: "Are you sure?",
-    confirmLabel: "Remove All Embeds",
+    confirmLabel: "Remove all embeds",
     render: (onConfirm) => (props) => (
       <RemoveEmbedsDialog {...props} onConfirm={onConfirm} />
     ),
   },
   {
     name: "DeleteSoundDialog",
-    title: "Delete Sound",
+    title: "Delete sound",
     confirmLabel: "Delete",
     render: (onConfirm) => (props) => (
       <DeleteSoundDialog {...props} soundName="Airhorn" onConfirm={onConfirm} />
@@ -155,7 +155,7 @@ describe("DeleteMessageDialog preview", () => {
         preview={<button type="button">Inner action</button>}
       />,
     );
-    await screen.findByRole("dialog", { name: "Delete Message" });
+    await screen.findByRole("dialog", { name: "Delete message" });
     expect(screen.queryByRole("button", { name: "Inner action" })).toBeNull();
     const inner = screen.getByText("Inner action");
     expect(inner.closest("[inert]")).not.toBeNull();

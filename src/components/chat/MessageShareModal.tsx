@@ -94,7 +94,7 @@ export default function MessageShareModal({
     >
       <ResponsiveDialogContent dialogClassName="flex max-h-[min(760px,calc(100dvh-48px))] flex-col">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Share Message</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Share message</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Creates a public snapshot link
           </ResponsiveDialogDescription>
@@ -190,7 +190,7 @@ export default function MessageShareModal({
             <>
               {onManageShares && (
                 <Button variant="secondary" onClick={onManageShares}>
-                  Manage Shares
+                  Manage shares
                 </Button>
               )}
               <Button asChild variant="secondary">
@@ -207,7 +207,7 @@ export default function MessageShareModal({
               loading={creating}
             >
               <Icon name="share" size="sm" />
-              Create Link
+              Create link
             </Button>
           )}
         </ResponsiveDialogFooter>

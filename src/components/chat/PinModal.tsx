@@ -59,7 +59,7 @@ export const PinModal: React.FC<PinModalProps> = ({
       <ResponsiveDialogContent className="md:max-w-sm">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>
-            {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
+            {isPin ? "Pin It. Pin It Good." : "Unpin message"}
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             {isPin ? (

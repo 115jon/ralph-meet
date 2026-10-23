@@ -37,7 +37,7 @@ export function DeleteMessageDialog({
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent className="md:max-w-sm">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Delete Message</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Delete message</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Are you sure you want to delete this message?
           </ResponsiveDialogDescription>

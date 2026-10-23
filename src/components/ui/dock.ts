@@ -11,7 +11,7 @@ import type { IconState } from "@/components/ui/icon";
  *   live   accent tint, Fill glyph             camera on, sharing
  *
  * Nothing here is a solid fill: Leave (`variant="danger"` Button / the
- * `DOCK_LEAVE` class) is the one solid in a dock, and Stop Watching / Leave
+ * `DOCK_LEAVE` class) is the one solid in a dock, and Stop watching / Leave
  * Activity use `DOCK_DESTRUCTIVE`, the red tint.
  */
 export type DockState = "rest" | "open" | "muted" | "live";
@@ -48,7 +48,7 @@ export function dockIconState(state: DockState): IconState {
 /** The one solid fill in a dock: leave the call. */
 export const DOCK_LEAVE = "bg-rm-danger text-rm-on-danger [--hover-o:0.12]";
 
-/** Stop Watching / Leave Activity: red tint, not solid (13.2 destructive). */
+/** Stop watching / Leave activity: red tint, not solid (13.2 destructive). */
 export const DOCK_DESTRUCTIVE = "bg-rm-danger-tint text-rm-danger-ink";
 
 /**

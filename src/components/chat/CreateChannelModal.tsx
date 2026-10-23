@@ -82,13 +82,13 @@ export default function CreateChannelModal({
 
   const fields = (
     <div className="flex flex-col gap-4">
-      {/* Channel Type Selection */}
+      {/* Channel type Selection */}
       <fieldset className="flex flex-col gap-2">
         <legend
           id="channel-type-label"
           className="mb-2 text-ui-sm font-medium text-rm-text"
         >
-          Channel Type
+          Channel type
         </legend>
         <div className="space-y-2" aria-labelledby="channel-type-label">
           <label
@@ -177,9 +177,9 @@ export default function CreateChannelModal({
         </div>
       </fieldset>
 
-      {/* Channel Name */}
+      {/* Channel name */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="channel-name">Channel Name</Label>
+        <Label htmlFor="channel-name">Channel name</Label>
         <div className="relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rm-text-muted">
             {type === "text" ? (
@@ -237,10 +237,10 @@ export default function CreateChannelModal({
               size="xl"
               className="text-rm-text-muted"
             />
-            Create Channel
+            Create channel
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
-            in {type === "text" ? "Text Channels" : "Voice Channels"}
+            in {type === "text" ? "Text channels" : "Voice channels"}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         {fields}
@@ -253,7 +253,7 @@ export default function CreateChannelModal({
             disabled={!name.trim() || creating}
             loading={creating}
           >
-            Create Channel
+            Create channel
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

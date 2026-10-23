@@ -50,14 +50,14 @@ describe("FriendsView header", () => {
     } as never);
   });
 
-  it("at 390, moves the tabs to their own strip and keeps Add Friend in the header", () => {
+  it("at 390, moves the tabs to their own strip and keeps Add friend in the header", () => {
     setViewport(390);
     renderView();
 
     const header = screen.getByTestId("friends-header");
-    // Add Friend is a 40px icon button in the header, not a labelled button
+    // Add friend is a 40px icon button in the header, not a labelled button
     // pushed past the right edge by the tabs.
-    const add = within(header).getByRole("button", { name: "Add Friend" });
+    const add = within(header).getByRole("button", { name: "Add friend" });
     expect(add.className).toContain("size-10");
     expect(within(header).queryByRole("tablist")).toBeNull();
 
@@ -68,23 +68,23 @@ describe("FriendsView header", () => {
     expect(within(tablist).getAllByRole("tab")).toHaveLength(4);
   });
 
-  it("at 1280, keeps the tabs inline and labels Add Friend", () => {
+  it("at 1280, keeps the tabs inline and labels Add friend", () => {
     setViewport(1280);
     renderView();
 
     const header = screen.getByTestId("friends-header");
     expect(within(header).getByRole("tablist")).toBeInTheDocument();
     expect(
-      within(header).getByRole("button", { name: /Add Friend/ }),
-    ).toHaveTextContent("Add Friend");
+      within(header).getByRole("button", { name: /Add friend/ }),
+    ).toHaveTextContent("Add friend");
     expect(screen.queryByTestId("friends-tab-strip")).toBeNull();
   });
 
-  it("confirms Remove Friend in a dialog instead of window.confirm", async () => {
+  it("confirms Remove friend in a dialog instead of window.confirm", async () => {
     setViewport(1280);
     renderView();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove Friend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove friend" }));
     expect(window.confirm).not.toHaveBeenCalled();
 
     const dialog = await screen.findByRole("dialog");
@@ -105,10 +105,10 @@ describe("FriendsView header", () => {
     setViewport(1280);
     renderView();
 
-    fireEvent.click(screen.getByRole("button", { name: /Add Friend/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: /Add friend/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
-    const field = screen.getByLabelText("Add Friend");
+    const field = screen.getByLabelText("Add friend");
     await vi.waitFor(() =>
       expect(field).toHaveAttribute("aria-invalid", "true"),
     );

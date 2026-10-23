@@ -47,7 +47,7 @@ export function NoiseReductionPanel({
           <div className="flex items-center gap-2">
             <Icon name="speaking" size="sm" className="text-sky-300" />
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-              Noise Suppression
+              Noise suppression
             </span>
           </div>
           <div className="space-y-1">
@@ -94,7 +94,7 @@ export function NoiseReductionPanel({
       <div className="mt-4 flex items-center justify-between rounded-lg border border-rm-border bg-rm-bg-elevated/30 px-3 py-2">
         <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
           <Icon name="privacy" size="xs" className="text-emerald-400" />
-          Powered By
+          Powered by
         </div>
         <div className="text-ui-sm font-semibold tracking-tight text-rm-text">
           {providerLabel}

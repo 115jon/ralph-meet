@@ -75,7 +75,7 @@ export function StartCallModal({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm}>
-            Start Call
+            Start call
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

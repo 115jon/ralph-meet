@@ -1957,7 +1957,7 @@ function ProfileEditor({
           onClose={() => setBannerPickerOpen(false)}
           onUpload={handleBannerFile}
           showRecent={false}
-          title="Select a Banner"
+          title="Select a banner"
           description="Choose a new banner image or GIF for your profile."
           closeLabel="Close banner picker"
         />

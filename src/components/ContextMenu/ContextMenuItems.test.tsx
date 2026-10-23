@@ -9,7 +9,7 @@ describe("Slider (VC-23)", () => {
   it("always shows the thumb and gives coarse pointers a 44px input", () => {
     const onChange = vi.fn();
     const { container } = render(
-      <Slider label="User Volume" value={50} max={200} onChange={onChange} />,
+      <Slider label="User volume" value={50} max={200} onChange={onChange} />,
     );
     const thumb = container.querySelector('[data-slot="slider-thumb"]');
     expect(thumb?.className).toContain("size-3");
@@ -17,7 +17,7 @@ describe("Slider (VC-23)", () => {
     expect(thumb?.className).not.toContain("opacity-0");
     expect(thumb).toHaveStyle({ left: "25%" });
 
-    const input = screen.getByRole("slider", { name: "User Volume" });
+    const input = screen.getByRole("slider", { name: "User volume" });
     expect(input.className).toContain("pointer-coarse:min-h-11");
     fireEvent.change(input, { target: { value: "120" } });
     expect(onChange).toHaveBeenCalledWith(120);
@@ -40,7 +40,7 @@ describe("toActionSheetItems", () => {
       {
         type: "slider",
         key: "volume",
-        label: "User Volume",
+        label: "User volume",
         value: 80,
         onChange: vi.fn(),
       },
@@ -49,7 +49,7 @@ describe("toActionSheetItems", () => {
         key: "apps",
         label: "Apps",
         entries: [
-          { type: "item", key: "none", label: "No Apps", disabled: true },
+          { type: "item", key: "none", label: "No apps", disabled: true },
         ],
       },
       {
@@ -63,7 +63,7 @@ describe("toActionSheetItems", () => {
     expect(items.map((item) => item.label)).toEqual([
       "Profile",
       "Mute",
-      "User Volume",
+      "User volume",
       "Apps",
       "Disconnect",
     ]);

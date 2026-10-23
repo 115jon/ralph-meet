@@ -54,7 +54,7 @@ describe("useExternalLinkConfirmation", () => {
         name: "Trust gif.fxtwitter.com links from now on",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Visit Site" }));
+    fireEvent.click(screen.getByRole("button", { name: "Visit site" }));
 
     expect(window.open).toHaveBeenCalledWith(
       "https://gif.fxtwitter.com/tweet_video/test.webp",

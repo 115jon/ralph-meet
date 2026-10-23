@@ -144,7 +144,7 @@ export function ImageViewerToolbar({
       ? [
           {
             key: "copy-image",
-            label: "Copy Image",
+            label: "Copy image",
             icon: <Icon name="copy" size="sm" />,
             onSelect: handleCopyImage,
           },
@@ -152,19 +152,19 @@ export function ImageViewerToolbar({
       : []),
     {
       key: "copy-link",
-      label: "Copy Link",
+      label: "Copy link",
       icon: <Icon name="link" size="sm" />,
       onSelect: handleCopyLink,
     },
     {
       key: "details",
-      label: "View Details",
+      label: "View details",
       icon: <Icon name="info" size="sm" />,
       divider: true,
     },
     {
       key: "copy-id",
-      label: "Copy Attachment ID",
+      label: "Copy attachment ID",
       icon: <Icon name="copyId" size="sm" />,
       onSelect: handleCopyId,
       danger: true,
@@ -178,10 +178,10 @@ export function ImageViewerToolbar({
     >
       <h3 className="text-ui-sm font-semibold text-rm-text">
         {isAnimatedMedia
-          ? "GIF Details"
+          ? "GIF details"
           : isVideo
-            ? "Video Details"
-            : "Image Details"}
+            ? "Video details"
+            : "Image details"}
       </h3>
       <div>
         <div className={DETAIL_LABEL}>Filename</div>
@@ -215,7 +215,7 @@ export function ImageViewerToolbar({
   const formattedDate = context?.created_at
     ? formatFriendlyDate(context.created_at)
     : "";
-  const displayName = getDisplayName(context, "Unknown User");
+  const displayName = getDisplayName(context, "Unknown user");
 
   return (
     <div className="absolute top-0 left-0 right-0 z-50 flex items-start justify-between gap-2 bg-linear-to-b from-rm-bg-primary/80 to-transparent p-2 pointer-events-none md:items-center md:p-4">
@@ -234,7 +234,7 @@ export function ImageViewerToolbar({
         <div className="flex min-w-0 flex-col">
           <UserDisplayName
             user={context}
-            fallback="Unknown User"
+            fallback="Unknown user"
             className="block truncate text-ui-sm font-semibold leading-none text-rm-text drop-shadow-md"
           />
           {formattedDate && (

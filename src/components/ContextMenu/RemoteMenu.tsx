@@ -72,7 +72,7 @@ export function buildRemoteMenu({
   const alwaysHear: StreamMenuEntry = {
     type: "item",
     key: "always-hear",
-    label: "Always Hear Stream Audio",
+    label: "Always hear stream audio",
     checked: peerSetting.alwaysHear,
     onSelect: toggleAlwaysHear,
   };
@@ -86,7 +86,7 @@ export function buildRemoteMenu({
   const muteSoundboard: StreamMenuEntry = {
     type: "item",
     key: "mute-soundboard",
-    label: "Mute Soundboard",
+    label: "Mute soundboard",
     checked: !!peerSetting.soundboardMuted,
     onSelect: toggleSoundboardMute,
   };
@@ -110,8 +110,8 @@ export function buildRemoteMenu({
                 type: "item" as const,
                 key: "server-soundboard",
                 label: serverSoundboardMuted
-                  ? "Unmute Soundboard for Server"
-                  : "Mute Soundboard for Server",
+                  ? "Unmute soundboard for server"
+                  : "Mute soundboard for server",
                 danger: serverSoundboardMuted,
                 onSelect: toggleServerSoundboardMute,
               },
@@ -120,14 +120,14 @@ export function buildRemoteMenu({
         {
           type: "item",
           key: "server-mute",
-          label: "Server Mute",
+          label: "Server mute",
           danger: true,
           onSelect: handleServerMute,
         },
         {
           type: "item",
           key: "server-deafen",
-          label: "Server Deafen",
+          label: "Server deafen",
           danger: true,
           onSelect: handleServerDeafen,
         },
@@ -146,7 +146,7 @@ export function buildRemoteMenu({
       {
         type: "item",
         key: "watch",
-        label: "Watch Stream",
+        label: "Watch stream",
         bold: true,
         onSelect: stopWatching,
         trailing: <Icon name="stream" size="sm" />,
@@ -161,7 +161,7 @@ export function buildRemoteMenu({
       {
         type: "item",
         key: "stop-watching",
-        label: "Stop Watching",
+        label: "Stop watching",
         bold: true,
         onSelect: stopWatching,
         trailing: <Icon name="streamOff" size="sm" />,
@@ -172,7 +172,7 @@ export function buildRemoteMenu({
       {
         type: "slider",
         key: "stream-volume",
-        label: "Stream Volume",
+        label: "Stream volume",
         value: peerSetting.streamVolume,
         onChange: (val) => setPeerStreamVolume(userId, val),
       },
@@ -181,7 +181,7 @@ export function buildRemoteMenu({
       {
         type: "item",
         key: "attenuation",
-        label: "Stream Attenuation",
+        label: "Stream attenuation",
         description:
           "Automatically reduce stream volume when people are talking.",
         checked: peerSetting.attenuationEnabled,
@@ -192,7 +192,7 @@ export function buildRemoteMenu({
             {
               type: "slider" as const,
               key: "attenuation-strength",
-              label: "Stream Attenuation Strength",
+              label: "Stream attenuation strength",
               value: peerSetting.attenuationStrength,
               max: 100,
               onChange: (val: number) =>
@@ -204,7 +204,7 @@ export function buildRemoteMenu({
       {
         type: "submenu",
         key: "more-options",
-        label: "More Options",
+        label: "More options",
         entries: [
           profile,
           message,
@@ -217,7 +217,7 @@ export function buildRemoteMenu({
               {
                 type: "item",
                 key: "no-apps",
-                label: "No Apps",
+                label: "No apps",
                 disabled: true,
               },
             ],
@@ -237,7 +237,7 @@ export function buildRemoteMenu({
     {
       type: "slider",
       key: "user-volume",
-      label: "User Volume",
+      label: "User volume",
       value: peerSetting.volume,
       onChange: (val) => setPeerVolume(userId, val),
     },
@@ -250,7 +250,7 @@ export function buildRemoteMenu({
       key: "apps",
       label: "Apps",
       entries: [
-        { type: "item", key: "no-apps", label: "No Apps", disabled: true },
+        { type: "item", key: "no-apps", label: "No apps", disabled: true },
       ],
     },
     ...(isModerator
@@ -276,7 +276,7 @@ export function buildRemoteMenu({
     {
       type: "item",
       key: "copy-id",
-      label: "Copy User ID",
+      label: "Copy user ID",
       onSelect: handleCopyId,
       trailing: ID_BADGE,
     },

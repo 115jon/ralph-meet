@@ -526,7 +526,7 @@ export default function MobileProfileSheet({
     }
   };
 
-  // Same path as the member context menu's "Start a Call".
+  // Same path as the member context menu's "Start a call".
   const handleCall = async () => {
     const channelId = await openDm(user.id);
     if (!channelId) return;

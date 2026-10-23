@@ -79,7 +79,7 @@ export function ChatHeader({
     callChannelId === channelId;
   const hideCallButton = isInCallSFU || isRinging;
 
-  // Show "Join Call" when others are already in the voice channel
+  // Show "Join call" when others are already in the voice channel
   const hasExistingCall = !!(
     channelId && voiceChannelStates[channelId]?.length > 0
   );
@@ -198,17 +198,17 @@ export function ChatHeader({
               <TooltipTrigger asChild>
                 <IconButton
                   aria-label={
-                    hasExistingCall ? "Join Call" : "Start Voice Call"
+                    hasExistingCall ? "Join call" : "Start voice call"
                   }
                   icon="call"
                   variant="muted"
                   size="sm"
                   onClick={onCall}
-                  title={hasExistingCall ? "Join Call" : "Start Voice Call"}
+                  title={hasExistingCall ? "Join call" : "Start voice call"}
                 />
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={8}>
-                <p>{hasExistingCall ? "Join Call" : "Start Voice Call"}</p>
+                <p>{hasExistingCall ? "Join call" : "Start voice call"}</p>
               </TooltipContent>
             </Tooltip>
           )}
@@ -219,7 +219,7 @@ export function ChatHeader({
             aria-label="Pinned messages"
             aria-pressed={showPins}
             className="text-rm-text-muted pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text"
-            title="Pinned Messages"
+            title="Pinned messages"
             onClick={handleTogglePins}
             ref={pinButtonRef}
           >
@@ -269,13 +269,13 @@ export function ChatHeader({
         </div>
         {onClose && (
           <IconButton
-            aria-label="Close Chat"
+            aria-label="Close chat"
             icon="close"
             variant="muted"
             size="sm"
             className="ml-1"
             onClick={onClose}
-            title="Close Chat"
+            title="Close chat"
           />
         )}
       </div>

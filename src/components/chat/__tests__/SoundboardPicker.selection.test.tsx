@@ -171,7 +171,7 @@ describe("SoundboardPicker selection mode", () => {
       expect(screen.queryByRole("button", { name: "Add sound" })).toBeNull();
       expect(screen.queryByText("Discover")).toBeNull();
       expect(
-        screen.queryByRole("button", { name: "Custom Sounds" }),
+        screen.queryByRole("button", { name: "Custom sounds" }),
       ).toBeNull();
     });
   });
@@ -269,7 +269,7 @@ describe("SoundboardPicker selection mode", () => {
       ).toBeVisible();
       expect(screen.queryByPlaceholderText("Search MyInstants...")).toBeNull();
       expect(
-        screen.queryByPlaceholderText("Search Radio Stations..."),
+        screen.queryByPlaceholderText("Search radio Stations..."),
       ).toBeNull();
       expect(screen.queryByText("Discover")).toBeNull();
       expect(screen.queryByText("Radio")).toBeNull();
@@ -630,9 +630,9 @@ describe("SoundboardPicker selection mode", () => {
     expect(screen.queryByText("Discover")).toBeNull();
     expect(screen.queryByText("Favorites")).toBeNull();
     expect(screen.queryByText("Now Playing")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Custom Sounds" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Custom sounds" })).toBeNull();
     expect(
-      screen.getAllByRole("button", { name: "Ralph Sounds" })[0],
+      screen.getAllByRole("button", { name: "Ralph sounds" })[0],
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Jump to Alpha server sounds" }),
@@ -666,10 +666,10 @@ describe("SoundboardPicker selection mode", () => {
       await screen.findByRole("button", { name: /add sound/i }),
     ).toBeVisible();
     expect(
-      screen.getByRole("slider", { name: "Soundboard Volume" }),
+      screen.getByRole("slider", { name: "Soundboard volume" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Now Playing")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Server Sounds" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Server sounds" })).toBeNull();
   });
 
   it("defers favorites and server soundboard fetches from the direct listen view", async () => {
@@ -785,7 +785,7 @@ describe("SoundboardPicker selection mode", () => {
     expect(deleteButton).not.toBeNull();
     fireEvent.click(deleteButton as HTMLElement);
 
-    const dialog = screen.getByRole("dialog", { name: "Delete Sound" });
+    const dialog = screen.getByRole("dialog", { name: "Delete sound" });
     expect(dialog.querySelector("button button")).toBeNull();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
@@ -817,7 +817,7 @@ describe("SoundboardPicker selection mode", () => {
     fireEvent.keyDown(cancelButton, { key: "Escape" });
 
     expect(
-      screen.queryByRole("dialog", { name: "Delete Sound" }),
+      screen.queryByRole("dialog", { name: "Delete sound" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: "Soundboard picker" }),

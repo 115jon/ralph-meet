@@ -36,7 +36,7 @@ interface DMListPanelProps {
 function statusLabel(status?: string | null) {
   if (status === "online") return "Online";
   if (status === "idle") return "Idle";
-  if (status === "dnd") return "Do Not Disturb";
+  if (status === "dnd") return "Do not disturb";
   return "Offline";
 }
 

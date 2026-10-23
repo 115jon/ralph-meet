@@ -30,7 +30,7 @@ export function getAppTitleBarModel({
   }
 
   if (activeServerId === "@me" && activeChannelId) {
-    return { kind: "dm", label: "Direct Messages", iconUrl: null };
+    return { kind: "dm", label: "Direct messages", iconUrl: null };
   }
 
   if (activeServerId === "@me" && dmHomeView === "shop") {

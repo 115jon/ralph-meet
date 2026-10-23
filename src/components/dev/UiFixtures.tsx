@@ -168,8 +168,8 @@ const servers: Server[] = [
 
 const categories: Category[] = [
   { id: "c-info", server_id: "s-1", name: "Information", rank: 0 },
-  { id: "c-text", server_id: "s-1", name: "Text Channels", rank: 1 },
-  { id: "c-voice", server_id: "s-1", name: "Voice Channels", rank: 2 },
+  { id: "c-text", server_id: "s-1", name: "Text channels", rank: 1 },
+  { id: "c-voice", server_id: "s-1", name: "Voice channels", rank: 2 },
 ];
 
 const channels: Channel[] = [
@@ -1446,26 +1446,26 @@ function Menus() {
         y={180}
         items={[
           {
-            label: "Mark As Read",
+            label: "Mark as read",
             icon: <Icon name="check" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
-            label: "Copy Link",
+            label: "Copy link",
             icon: <Icon name="copy" size="sm" />,
             onClick: () => {},
           },
           {
-            label: "Notification Settings",
-            subtitle: "All Messages",
+            label: "Notification settings",
+            subtitle: "All messages",
             icon: <Icon name="check" size="sm" />,
             onClick: () => {},
             disabled: true,
             divider: true,
           },
           {
-            label: "Delete Channel",
+            label: "Delete channel",
             icon: <Icon name="trash" size="sm" />,
             onClick: () => {},
             variant: "danger",
@@ -1745,29 +1745,29 @@ function ActionSheetFixture() {
             onClick: () => {},
           },
           {
-            label: "Create Thread",
+            label: "Create thread",
             icon: <Icon name="thread" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
-            label: "Copy Text",
+            label: "Copy text",
             icon: <Icon name="copy" size="sm" />,
             onClick: () => {},
           },
           {
-            label: "Pin Message",
+            label: "Pin message",
             icon: <Icon name="pin" size="sm" />,
             onClick: () => {},
           },
           {
-            label: "Mark Unread",
+            label: "Mark unread",
             icon: <Icon name="markUnread" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
-            label: "Delete Message",
+            label: "Delete message",
             icon: <Icon name="trash" size="sm" />,
             onClick: () => {},
             variant: "danger",

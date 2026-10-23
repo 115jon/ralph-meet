@@ -1563,7 +1563,7 @@ export default function GifPickerModal({
                 variant="muted"
                 onClick={openFavorites}
                 className="size-9 pointer-coarse:size-11"
-                aria-label="View Favorites"
+                aria-label="View favorites"
                 tooltip="Favorites"
               />
               {mediaType === "gifs" && (

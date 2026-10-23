@@ -121,7 +121,7 @@ describe("ParticipantCard stream watchers", () => {
   it("hides the watch prompt on a focused tray stream even before the watch toggle catches up", () => {
     const markup = renderCard(makeScreenItem(), {}, {}, true, true, true);
 
-    expect(markup).not.toContain("Watch Stream");
+    expect(markup).not.toContain("Watch stream");
   });
 
   it("renders a thumbnail poster for a focused tray stream when live video is suppressed", () => {
@@ -130,7 +130,7 @@ describe("ParticipantCard stream watchers", () => {
     });
 
     expect(markup).toContain("data:image/png;base64,thumb");
-    expect(markup).not.toContain("Watch Stream");
+    expect(markup).not.toContain("Watch stream");
   });
 
   it("shows a clean stream badge and no avatar overlay when a tray stream poster is available", () => {

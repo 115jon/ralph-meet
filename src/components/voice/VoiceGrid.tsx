@@ -24,7 +24,7 @@ const StreamContextMenu = lazy(() =>
 function getFocusedItemLabel(item: GridItem | undefined) {
   if (!item) return "";
   if (item.type !== "screen") return item.name;
-  if (item.isLocal) return "Your Stream";
+  if (item.isLocal) return "Your stream";
   const ownerName = item.name.replace(/'s Stream$/, "");
   return `${ownerName}'s Stream`;
 }
@@ -344,7 +344,7 @@ export const VoiceGrid = React.memo(
                   </span>
                 </div>
                 <Slider
-                  label={isFocusedScreen ? "Stream Volume" : "User Volume"}
+                  label={isFocusedScreen ? "Stream volume" : "User volume"}
                   value={focusedPeerVolume}
                   onChange={(value) => {
                     if (!focusedUserId) return;

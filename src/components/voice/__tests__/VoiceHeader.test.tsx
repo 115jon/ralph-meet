@@ -34,7 +34,7 @@ describe("VoiceHeader stream watchers", () => {
       ),
     );
 
-    expect(markup).toContain("Your Stream");
+    expect(markup).toContain("Your stream");
     expect(markup).toContain("2 viewers");
     expect(markup).toContain("Bob, Carla");
   });

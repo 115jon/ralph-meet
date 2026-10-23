@@ -1,8 +1,8 @@
 // ============================================================================
 // AudioDeviceMenu — the menu behind the mic/headphone caret buttons
 //
-// mode="input"  → input device list + input volume + Voice Settings shortcut
-// mode="output" → output device list + output volume + Voice Settings shortcut
+// mode="input"  → input device list + input volume + Voice settings shortcut
+// mode="output" → output device list + output volume + Voice settings shortcut
 //
 // Desktop: a DropdownMenu anchored to the caret (design-system 12.7), the
 // device list in a submenu that flips when there is no room. Phones: the same
@@ -69,7 +69,7 @@ function VolumeSlider({
 }) {
   const max = mode === "output" ? 200 : 100;
   const fill = Math.min(100, (volume / max) * 100);
-  const label = mode === "input" ? "Input Volume" : "Output Volume";
+  const label = mode === "input" ? "Input volume" : "Output volume";
 
   return (
     <div className="px-2 pt-1.5 pb-2.5">
@@ -129,7 +129,7 @@ export function AudioDeviceMenu({
       ? [
           {
             deviceId: "default",
-            label: defaultInput?.label || "Default Microphone",
+            label: defaultInput?.label || "Default microphone",
             groupId: defaultInput?.groupId,
           },
           ...audioInputs.filter((d) => d.deviceId !== "default"),
@@ -137,7 +137,7 @@ export function AudioDeviceMenu({
       : [
           {
             deviceId: "default",
-            label: defaultOutput?.label || "Default Speaker",
+            label: defaultOutput?.label || "Default speaker",
             groupId: defaultOutput?.groupId,
           },
           ...audioOutputs.filter((d) => d.deviceId !== "default"),
@@ -167,8 +167,8 @@ export function AudioDeviceMenu({
   };
 
   const modeIcon = mode === "input" ? "mic" : "headphones";
-  const title = mode === "input" ? "Input Settings" : "Output Settings";
-  const deviceLabel = mode === "input" ? "Input Device" : "Output Device";
+  const title = mode === "input" ? "Input settings" : "Output settings";
+  const deviceLabel = mode === "input" ? "Input device" : "Output device";
 
   if (isMobile) {
     return (
@@ -222,7 +222,7 @@ export function AudioDeviceMenu({
           },
           {
             key: "voice-settings",
-            label: "Voice Settings",
+            label: "Voice settings",
             icon: <Icon name="settings" />,
             onClick: onOpenVoiceSettings,
           },
@@ -289,7 +289,7 @@ export function AudioDeviceMenu({
           icon={<Icon name="settings" />}
           onClick={onOpenVoiceSettings}
         >
-          Voice Settings
+          Voice settings
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

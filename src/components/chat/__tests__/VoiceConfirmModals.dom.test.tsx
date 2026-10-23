@@ -15,7 +15,7 @@ const cases = [
     name: "StartCallModal",
     key: START_CALL_CONFIRM_KEY,
     title: "Ready to start a call?",
-    confirm: "Start Call",
+    confirm: "Start call",
     render: (onConfirm: () => void, onCancel: () => void) => (
       <StartCallModal
         open

@@ -128,7 +128,7 @@ const CARET =
 const statusLabels: Record<string, string> = {
   online: "Online",
   idle: "Idle",
-  dnd: "Do Not Disturb",
+  dnd: "Do not disturb",
   offline: "Invisible",
 };
 

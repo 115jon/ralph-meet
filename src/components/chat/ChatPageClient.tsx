@@ -775,7 +775,7 @@ export default function ChatPage() {
     setPendingSwitch(null);
   }, []);
 
-  // ── Start Call confirmation modal ─────────────────────────────────────────
+  // ── Start call confirmation modal ─────────────────────────────────────────
   // Context menus fire `request-start-call` events → we show a confirmation.
   type PendingCallTarget = {
     userId: string;
@@ -1513,7 +1513,7 @@ export default function ChatPage() {
             isPreviewPaused={!!localStreamState.isPreviewHidden}
             pausedTitle="Your stream is still running!"
             pausedDescription="We've paused this preview to save your resources."
-            primaryActionTooltip="Stop Streaming"
+            primaryActionTooltip="Stop streaming"
             primaryActionAriaLabel="Stop streaming"
             onPrimaryAction={() => localStreamState.toggleScreenShare()}
             onNavigateToVoiceChannel={handleVoiceNavigate}
@@ -1546,7 +1546,7 @@ export default function ChatPage() {
               slotIndex={(localStreamState.isScreenSharing ? 1 : 0) + index}
               pausedTitle={`${item.name.replace(/'s Stream$/, "")} is still live`}
               pausedDescription="We're waiting for this stream preview to be available again."
-              primaryActionTooltip="Stop Watching"
+              primaryActionTooltip="Stop watching"
               primaryActionAriaLabel={`Stop watching ${item.name.replace(/'s Stream$/, "")}`}
               onPrimaryAction={() =>
                 localStreamState.onToggleWatch(item.userId)
@@ -1695,7 +1695,7 @@ export default function ChatPage() {
           />
         </Suspense>
 
-        {/* Start Call Confirmation */}
+        {/* Start call Confirmation */}
         <Suspense fallback={null}>
           <StartCallModal
             open={pendingCallTarget != null}

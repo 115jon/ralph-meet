@@ -218,9 +218,9 @@ export function VoiceDashboard({
     streamSourceKind === "window"
       ? "Application"
       : streamSourceKind === "device"
-        ? "Capture Device"
+        ? "Capture device"
         : hasSpecificStreamSource
-          ? "Entire Screen"
+          ? "Entire screen"
           : "Screen";
   const streamSourceSubtitle =
     streamSourceKind === "window"
@@ -258,20 +258,20 @@ export function VoiceDashboard({
   const streamActionItems: ActionSheetItem[] = [
     {
       key: "change-source",
-      label: "Change Source",
+      label: "Change source",
       icon: <Icon name="screenShare" size="sm" />,
       onClick: () => onChangeStreamSource?.(),
     },
     {
       key: "stream-audio",
-      label: "Stream Audio",
+      label: "Stream audio",
       icon: <Icon name="voiceChannel" size="sm" />,
       rightIcon: isStreamingAudio ? <Icon name="check" size="xs" /> : undefined,
       onClick: toggleStreamAudio,
     },
     {
       key: "stream-preview",
-      label: "Always Show Stream Preview",
+      label: "Always show stream preview",
       icon: <Icon name="monitor" size="sm" />,
       rightIcon: alwaysShowStreamPreview ? (
         <Icon name="check" size="xs" />
@@ -322,7 +322,7 @@ export function VoiceDashboard({
       : []),
     {
       key: "stop-streaming",
-      label: "Stop Streaming",
+      label: "Stop streaming",
       icon: <Icon name="streamOff" size="sm" />,
       variant: "danger" as const,
       onClick: () => onStopStreaming?.(),
@@ -398,7 +398,7 @@ export function VoiceDashboard({
             >
               <div className="flex flex-col min-w-0">
                 <span className="text-ui-sm font-semibold leading-tight text-rm-success-ink">
-                  Voice Connected
+                  Voice connected
                 </span>
                 <span className="text-ui-xs font-medium text-rm-text-muted truncate max-w-[140px]">
                   <InlineEmojiText
@@ -416,7 +416,7 @@ export function VoiceDashboard({
                         type="button"
                         ref={spatialBtnRef}
                         onClick={() => setIsSpatialOpen((value) => !value)}
-                        aria-label="Spatial Audio"
+                        aria-label="Spatial audio"
                         aria-expanded={isSpatialOpen}
                         className={cn(
                           HEADER_ICON_BTN,
@@ -430,7 +430,7 @@ export function VoiceDashboard({
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={12}>
-                      <p>Spatial Audio</p>
+                      <p>Spatial audio</p>
                     </TooltipContent>
                   </Tooltip>
                   <SpatialAudioPanel
@@ -479,7 +479,7 @@ export function VoiceDashboard({
                         onClick={() =>
                           setIsNoiseReductionOpen((value) => !value)
                         }
-                        aria-label="Noise Suppression"
+                        aria-label="Noise suppression"
                         className={cn(
                           HEADER_ICON_BTN,
                           settings.noiseReductionEnabled &&
@@ -499,13 +499,13 @@ export function VoiceDashboard({
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={12}>
-                      <p>Noise Suppression</p>
+                      <p>Noise suppression</p>
                     </TooltipContent>
                   </Tooltip>
                   <ResponsivePopover
                     open={isNoiseReductionOpen}
                     onOpenChange={setIsNoiseReductionOpen}
-                    title="Noise Suppression"
+                    title="Noise suppression"
                     variant="rich"
                     anchor={noiseReductionBtnRef}
                     side="top"
@@ -592,7 +592,7 @@ export function VoiceDashboard({
                   onClick={onStopStreaming}
                   className="flex-1"
                 >
-                  <Icon name="streamOff" size="sm" /> Stop Streaming
+                  <Icon name="streamOff" size="sm" /> Stop streaming
                 </Button>
                 {isMobile ? (
                   <>
@@ -612,7 +612,7 @@ export function VoiceDashboard({
                       open={isStreamMenuOpen}
                       onOpenChange={setIsStreamMenuOpen}
                       items={streamActionItems}
-                      title="Stream Settings"
+                      title="Stream settings"
                     />
                   </>
                 ) : (
@@ -636,15 +636,15 @@ export function VoiceDashboard({
                     <DropdownMenuContent
                       side="top"
                       align="end"
-                      aria-label="Stream Settings"
+                      aria-label="Stream settings"
                     >
                       <DropdownMenuGroup>
-                        <DropdownMenuLabel>Stream Settings</DropdownMenuLabel>
+                        <DropdownMenuLabel>Stream settings</DropdownMenuLabel>
                         <DropdownMenuItem
                           icon={<Icon name="screenShare" size="sm" />}
                           onClick={() => onChangeStreamSource?.()}
                         >
-                          Change Source
+                          Change source
                         </DropdownMenuItem>
                         <DropdownMenuCheckboxItem
                           icon={<Icon name="voiceChannel" size="sm" />}
@@ -652,7 +652,7 @@ export function VoiceDashboard({
                           onCheckedChange={toggleStreamAudio}
                           closeOnClick
                         >
-                          Stream Audio
+                          Stream audio
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuCheckboxItem
                           icon={<Icon name="monitor" size="sm" />}
@@ -660,7 +660,7 @@ export function VoiceDashboard({
                           onCheckedChange={toggleAlwaysShowStreamPreview}
                           closeOnClick
                         >
-                          Always Show Stream Preview
+                          Always show stream preview
                         </DropdownMenuCheckboxItem>
                       </DropdownMenuGroup>
                       {availableQualities.length > 0 && (
@@ -693,7 +693,7 @@ export function VoiceDashboard({
                         icon={<Icon name="streamOff" size="sm" />}
                         onClick={() => onStopStreaming?.()}
                       >
-                        Stop Streaming
+                        Stop streaming
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -723,8 +723,8 @@ export function VoiceDashboard({
                       !hasCamera
                         ? "No camera detected"
                         : isCameraActive
-                          ? "Turn Off Camera"
-                          : "Turn On Camera"
+                          ? "Turn off camera"
+                          : "Turn on camera"
                     }
                     aria-pressed={!!isCameraActive}
                     className={cn(
@@ -745,8 +745,8 @@ export function VoiceDashboard({
                     {!hasCamera
                       ? "No camera detected"
                       : isCameraActive
-                        ? "Turn Off Camera"
-                        : "Turn On Camera"}
+                        ? "Turn off camera"
+                        : "Turn on camera"}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -764,7 +764,7 @@ export function VoiceDashboard({
                       }
                     }}
                     aria-label={
-                      isScreenSharing ? "Stop Streaming" : "Share Your Screen"
+                      isScreenSharing ? "Stop streaming" : "Share your screen"
                     }
                     aria-pressed={!!isScreenSharing}
                     className={cn(
@@ -783,7 +783,7 @@ export function VoiceDashboard({
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12}>
                   <p>
-                    {isScreenSharing ? "Stop Streaming" : "Share Your Screen"}
+                    {isScreenSharing ? "Stop streaming" : "Share your screen"}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -796,14 +796,14 @@ export function VoiceDashboard({
                     onClick={() => {
                       onOpenActivities?.();
                     }}
-                    aria-label="Start an Activity"
+                    aria-label="Start an activity"
                     className={cn(ACTION_BTN, "flex-1", ACTION_REST)}
                   >
                     <Icon name="activities" size="md" className="" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12}>
-                  <p>Start an Activity</p>
+                  <p>Start an activity</p>
                 </TooltipContent>
               </Tooltip>
 
@@ -815,7 +815,7 @@ export function VoiceDashboard({
                       type="button"
                       ref={soundboardBtnRef}
                       onClick={toggleSoundboardPicker}
-                      aria-label="Open Soundboard"
+                      aria-label="Open soundboard"
                       aria-expanded={isSoundboardPickerOpen}
                       className={cn(
                         ACTION_BTN,
@@ -832,7 +832,7 @@ export function VoiceDashboard({
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={12}>
-                    <p>Open Soundboard</p>
+                    <p>Open soundboard</p>
                   </TooltipContent>
                 </Tooltip>
                 <Suspense fallback={null}>
@@ -862,7 +862,7 @@ export function VoiceDashboard({
                         type="button"
                         ref={stickerBtnRef}
                         onClick={() => setIsStickerPickerOpen((v) => !v)}
-                        aria-label="GIF & Sticker Reactions"
+                        aria-label="GIF & sticker reactions"
                         aria-expanded={isStickerPickerOpen}
                         className={cn(
                           ACTION_BTN,

@@ -583,7 +583,7 @@ export default function SoundboardPicker({
 
     const normalizedSound: MyInstantsSound = {
       id: sound.id,
-      title: sound.title || sound.name || "Unknown Sound",
+      title: sound.title || sound.name || "Unknown sound",
       url: sound.url || sound.mediaUrl || sound.dataUrl || "",
       color: sound.color || "#4f46e5",
       emoji: sound.emoji,
@@ -1506,7 +1506,7 @@ export default function SoundboardPicker({
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" sideOffset={8}>
-                            Search Radio
+                            Search radio
                           </TooltipContent>
                         </Tooltip>
 
@@ -1583,7 +1583,7 @@ export default function SoundboardPicker({
                       }
                       placeholder={
                         activeView === "radio"
-                          ? "Search Radio Stations..."
+                          ? "Search radio Stations..."
                           : "Search MyInstants..."
                       }
                       className="h-9 pl-9 pointer-coarse:h-11"
@@ -1686,7 +1686,7 @@ export default function SoundboardPicker({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              aria-label="Custom Sounds"
+                              aria-label="Custom sounds"
                               onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
                               aria-pressed={
                                 activeCategory === CUSTOM_SECTION_ID
@@ -1702,8 +1702,8 @@ export default function SoundboardPicker({
                           </TooltipTrigger>
                           <TooltipContent side="right" sideOffset={10}>
                             {isServerSoundboard
-                              ? "Server Sounds"
-                              : "Custom Sounds"}
+                              ? "Server sounds"
+                              : "Custom sounds"}
                           </TooltipContent>
                         </Tooltip>
                       )}
@@ -1712,7 +1712,7 @@ export default function SoundboardPicker({
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          aria-label="Ralph Sounds"
+                          aria-label="Ralph sounds"
                           onClick={() => jumpToSection(DEFAULT_SECTION_ID)}
                           aria-pressed={activeCategory === DEFAULT_SECTION_ID}
                           className={cn(
@@ -1725,7 +1725,7 @@ export default function SoundboardPicker({
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="right" sideOffset={10}>
-                        Ralph Sounds
+                        Ralph sounds
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -1969,7 +1969,7 @@ export default function SoundboardPicker({
                                             </button>
                                           </TooltipTrigger>
                                           <TooltipContent side="right">
-                                            Preview Station
+                                            Preview station
                                           </TooltipContent>
                                         </Tooltip>
                                       </div>
@@ -2120,7 +2120,7 @@ export default function SoundboardPicker({
                             />
                           )
                         }
-                        title={section.server?.name ?? "Custom Sounds"}
+                        title={section.server?.name ?? "Custom sounds"}
                         isCollapsed={collapsedCategories[section.id]}
                         onToggle={() => toggleSection(section.id)}
                       />
@@ -2348,7 +2348,7 @@ export default function SoundboardPicker({
                     >
                       <SectionHeader
                         icon={<HomeIcon className="h-4 w-4" />}
-                        title="Ralph Sounds"
+                        title="Ralph sounds"
                         isCollapsed={collapsedCategories[DEFAULT_SECTION_ID]}
                         onToggle={() => toggleSection(DEFAULT_SECTION_ID)}
                       />
@@ -2599,7 +2599,7 @@ export default function SoundboardPicker({
                     <div>
                       {!radioQuery && (
                         <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-3 text-rm-text-muted">
-                          Top Stations
+                          Top stations
                         </div>
                       )}
                       <div className="grid grid-cols-4 gap-2 md:grid-cols-5">
@@ -2723,7 +2723,7 @@ export default function SoundboardPicker({
                                     </button>
                                   </TooltipTrigger>
                                   <TooltipContent side="right">
-                                    Preview Station
+                                    Preview station
                                   </TooltipContent>
                                 </Tooltip>
                               </div>
@@ -2760,7 +2760,7 @@ export default function SoundboardPicker({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-[200px]">
-                      <p className="font-bold">Send Volume</p>
+                      <p className="font-bold">Send volume</p>
                       <p className="opacity-80 mt-1">
                         Adjusts how loud your soundboard plays for everyone else
                         in the voice channel.
@@ -2772,7 +2772,7 @@ export default function SoundboardPicker({
                   </span>
                   <input
                     type="range"
-                    aria-label="Soundboard Volume"
+                    aria-label="Soundboard volume"
                     min={0}
                     max={100}
                     value={Math.round(sendVolume * 100)}
@@ -2794,7 +2794,7 @@ export default function SoundboardPicker({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-[200px]">
-                      <p className="font-bold">Soundboard Volume</p>
+                      <p className="font-bold">Soundboard volume</p>
                       <p className="opacity-80 mt-1">
                         Adjusts how loud soundboard playback is locally for you.
                       </p>

@@ -87,22 +87,22 @@ const DEFAULT_SETTINGS: WordleSettings = {
 const SETTING_ROWS: Array<[keyof WordleSettings, string, string]> = [
   [
     "hardMode",
-    "Hard Mode",
+    "Hard mode",
     "Any revealed hints must be used in subsequent guesses",
   ],
   [
     "highContrast",
-    "High Contrast Mode",
+    "High contrast mode",
     "Contrast and colorblindness improvements",
   ],
   [
     "keyboardOnly",
-    "Onscreen Keyboard Input Only",
+    "Onscreen keyboard input only",
     "Ignore key input except from the onscreen keyboard.",
   ],
   [
     "remindersMuted",
-    "Mute Daily Reminders",
+    "Mute daily reminders",
     "Don't send a notification when new puzzles are available.",
   ],
 ];
@@ -478,7 +478,7 @@ function HowToPlayModal({
           className="pr-10 text-ui-2xl font-black leading-tight"
           style={{ fontFamily: "Georgia, serif" }}
         >
-          How To Play
+          How to play
         </ResponsiveDialogTitle>
         <p className="mt-1 text-ui-lg leading-snug">
           Guess the Wordle in 6 tries.
@@ -1153,7 +1153,7 @@ function WordleActivityStageContent({
           onClick={() => setView("stats")}
           className="mt-6 rounded-full px-8 font-sans"
         >
-          Channel Stats
+          Channel stats
         </Button>
         <div className="mt-9 text-center text-ui-md">
           <div>
@@ -1214,23 +1214,23 @@ function WordleActivityStageContent({
               />
             </div>
           </div>
-          <h2 className="mt-8 text-ui-md uppercase">General Statistics</h2>
+          <h2 className="mt-8 text-ui-md uppercase">General statistics</h2>
           <div className="mt-3 flex justify-center divide-x divide-rm-border">
             <div className="px-4 md:px-6">
               <div className="text-ui-2xl font-semibold">{winRate}%</div>
-              <div className="text-ui-xs">Win Rate</div>
+              <div className="text-ui-xs">Win rate</div>
             </div>
             <div className="px-4 md:px-6">
               <div className="text-ui-2xl font-semibold">
                 {currentStreak} Day
               </div>
-              <div className="text-ui-xs">Current Streak</div>
+              <div className="text-ui-xs">Current streak</div>
             </div>
             <div className="px-4 md:px-6">
               <div className="text-ui-2xl font-semibold">
                 {currentStreak} Days
               </div>
-              <div className="text-ui-xs">Best Streak</div>
+              <div className="text-ui-xs">Best streak</div>
             </div>
           </div>
           <p className="mt-8 text-ui-md">
