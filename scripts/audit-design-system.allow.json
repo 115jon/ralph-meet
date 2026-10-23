@@ -7,6 +7,17 @@
       "reason": "Dev-only fixtures; never shipped."
     },
     {
+      "file": "src/components/chat/LinkEmbed.tsx",
+      "rule": "raw-color",
+      "match": "#FF0000|#4c98ff|#fff",
+      "reason": "Third-party brand marks inside link embeds: the YouTube red play button and the Instagram verified badge."
+    },
+    {
+      "file": "src/components/auth/AuthArtPanel.tsx",
+      "rule": "raw-color",
+      "reason": "Art panel (the auth media surface, 6.5): gradients are built from inks read off the active theme at runtime, with alpha stops."
+    },
+    {
       "file": "src/components/ui/icon/glyphs.generated.ts",
       "rule": "*",
       "reason": "Generated Phosphor path data."

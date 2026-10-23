@@ -1627,4 +1627,32 @@ describe("LinkEmbed DOM rendering", () => {
       screen.queryByRole("button", { name: /Open media/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps the remove-embeds control reachable on touch (hover reveal is fine-pointer only)", () => {
+    const onRemoveEmbeds = vi.fn();
+    render(
+      <LinkEmbed
+        embed={{
+          id: "embed_remove",
+          url: "https://example.com/post",
+          type: "link",
+          rawTitle: "Example",
+          fields: [],
+        }}
+        onRemoveEmbeds={onRemoveEmbeds}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Remove embeds" });
+    const classes = button.className.split(/\s+/);
+    // Hidden only where a fine pointer can hover it back; never a bare
+    // opacity-0 that would strand touch users.
+    expect(classes).toContain("pointer-fine:opacity-0");
+    expect(classes).not.toContain("opacity-0");
+    expect(classes).toContain("pointer-fine:group-hover/embedwrap:opacity-100");
+    expect(classes).toContain("pointer-fine:focus-visible:opacity-100");
+
+    fireEvent.click(button, { shiftKey: true });
+    expect(onRemoveEmbeds).toHaveBeenCalledTimes(1);
+  });
 });

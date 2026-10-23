@@ -366,7 +366,7 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain("w-full max-w-full justify-start");
-    expect(markup).toContain("block w-fit max-w-full rounded-[20px]");
+    expect(markup).toContain("block w-fit max-w-full rounded-lg");
     expect(markup).not.toContain("bg-black/30");
     expect(markup).toContain("Add clip to favorites");
     expect(markup).toContain(
@@ -399,7 +399,7 @@ describe("LinkEmbed - X mixed media", () => {
       "h-auto max-h-[420px] w-auto max-w-full object-contain object-left",
     );
     expect(markup).toContain(
-      "block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
+      "block w-fit max-w-full rounded-lg border border-rm-border/45 bg-rm-bg-surface/30",
     );
   });
 
@@ -503,9 +503,8 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("object-center");
     expect(markup).toContain("mx-auto");
     expect(markup).not.toContain(
-      "max-w-[240px] rounded-[18px] border border-rm-border/45",
+      "max-w-[240px] rounded-lg border border-rm-border/45",
     );
-    expect(markup).not.toContain("rounded-[18px]");
     expect(markup).toContain("Open quoted post on X");
   });
 
@@ -548,9 +547,8 @@ describe("LinkEmbed - X mixed media", () => {
     );
     expect(markup).toContain("mx-auto");
     expect(markup).toContain("block w-fit max-w-full");
-    expect(markup).not.toContain("rounded-[20px]");
     expect(markup).not.toContain(
-      "block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
+      "block w-fit max-w-full rounded-lg border border-rm-border/45 bg-rm-bg-surface/30",
     );
   });
 
