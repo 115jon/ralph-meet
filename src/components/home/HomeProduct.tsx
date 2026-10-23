@@ -9,6 +9,9 @@ interface Feature {
   body: string;
   shot: string;
   alt: string;
+  /** Capture size; defaults to the 1440x900 desktop frame. */
+  width?: number;
+  height?: number;
 }
 
 const FEATURES: Feature[] = [
@@ -42,7 +45,9 @@ const FEATURES: Feature[] = [
     title: "One queue, everyone in sync.",
     body: "Paste a track or search for one. The room hears the same song at the same moment, with a queue anyone can add to.",
     shot: "listen",
-    alt: "Ralph Meet's Listen Together panel with a track playing, a shared queue and the floating now-playing card",
+    alt: "Ralph Meet's Listen Together panel: search results for Lumen Arc on the left, Night Drive playing on the right with the shared queue below",
+    width: 1120,
+    height: 700,
   },
   {
     id: "soundboard",
@@ -158,8 +163,8 @@ export function HomeProduct() {
                 <Shot
                   name={feature.shot}
                   alt={feature.alt}
-                  width={1440}
-                  height={900}
+                  width={feature.width ?? 1440}
+                  height={feature.height ?? 900}
                   sizes="(min-width: 1024px) 58vw, 100vw"
                 />
               </figure>
