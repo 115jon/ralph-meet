@@ -1,15 +1,20 @@
-import { useMounted } from "@/hooks/useMounted";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { Button } from "@/components/ui/button";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import {
   normalizeAvatarDisplay,
   type AvatarDisplay,
   type AvatarCropRect,
 } from "@/lib/avatar-display";
-import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type React from "react";
 
 type PickedAvatarImage = {
@@ -148,7 +153,6 @@ export function AvatarFrameEditor({
   onCancel,
   onConfirm,
 }: AvatarFrameEditorProps) {
-  const mounted = useMounted();
   const viewportRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -301,53 +305,31 @@ export function AvatarFrameEditor({
     });
   };
 
-  if (!mounted) return null;
-
-  return createPortal(
-    <div
-      className="pointer-events-auto fixed inset-0 z-70 flex items-center justify-center overflow-y-auto bg-black/70 p-4 md:p-6"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onCancel();
+  return (
+    // Always a centred dialog: dragging the image to frame it would fight a
+    // phone drawer's swipe-to-dismiss. Stacked over settings (11.1).
+    <ResponsiveDialog
+      open
+      forceMode="dialog"
+      onOpenChange={(next) => {
+        if (!next) onCancel();
       }}
-      role="presentation"
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="avatar-frame-title"
-        className="relative my-auto w-full max-w-[440px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-primary p-0 text-rm-text shadow-2xl outline-none"
-      >
-        <div className="flex items-center justify-between border-b border-rm-border px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <Icon name="photo" size="sm" />
-            </div>
-            <div className="min-w-0">
-              <h2
-                id="avatar-frame-title"
-                className="truncate text-ui-sm font-semibold text-rm-text"
-              >
-                Frame avatar
-              </h2>
-              <p className="text-ui-xs text-rm-text-muted">
-                Original image stays unchanged
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-            aria-label="Close avatar framing"
-          >
-            <Icon name="close" size="sm" />
-          </button>
-        </div>
+      <ResponsiveDialogContent className="z-60 max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Frame your avatar</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Drag to reposition and zoom to crop. The original image stays
+            unchanged.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-        <div className="bg-black p-4">
+        <div className="rounded-lg bg-rm-tint-1 p-4">
           <div
             ref={viewportRef}
-            className="relative mx-auto aspect-square w-full max-w-[340px] touch-none overflow-hidden rounded-full bg-rm-bg-elevated"
+            role="img"
+            aria-label={`${displayName}'s avatar crop`}
+            className="relative mx-auto aspect-square w-full max-w-80 cursor-grab touch-none overflow-hidden rounded-full bg-rm-tint-2 active:cursor-grabbing"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={stopDrag}
@@ -358,7 +340,7 @@ export function AvatarFrameEditor({
                 src={image.src}
                 alt=""
                 draggable={false}
-                className="absolute left-1/2 top-1/2 max-w-none select-none"
+                className="absolute top-1/2 left-1/2 max-w-none select-none"
                 style={{
                   width: previewStyle.width,
                   height: previewStyle.height,
@@ -366,84 +348,67 @@ export function AvatarFrameEditor({
                 }}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-ui-sm font-semibold text-rm-text-muted">
-                Loading
+              <div className="flex size-full items-center justify-center text-ui-sm text-rm-text-muted">
+                Loading image…
               </div>
             )}
-            <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-primary" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,transparent_58%,rgba(0,0,0,0.52)_59%)]" />
+            <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-rm-accent-ink ring-inset" />
           </div>
         </div>
 
-        <div className="space-y-4 border-t border-rm-border bg-rm-bg-surface px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Icon name="image" size="sm" className="text-rm-text-muted" />
-            <input
-              type="range"
-              min={MIN_ZOOM}
-              max={MAX_ZOOM}
-              step={0.01}
-              value={zoom}
-              onChange={(event) =>
-                updateZoom(Number(event.currentTarget.value))
-              }
-              className="h-2 flex-1 accent-primary"
-              aria-label="Avatar zoom"
-            />
-            <Icon name="image" size="lg" className="text-rm-text-secondary" />
-          </div>
+        <div className="flex items-center gap-3">
+          <Icon
+            name="image"
+            size="sm"
+            className="shrink-0 text-rm-text-muted"
+          />
+          <input
+            type="range"
+            min={MIN_ZOOM}
+            max={MAX_ZOOM}
+            step={0.01}
+            value={zoom}
+            disabled={!naturalSize}
+            onChange={(event) => updateZoom(Number(event.currentTarget.value))}
+            className="rm-settings-range min-w-0 flex-1"
+            aria-label="Zoom"
+            aria-valuetext={`${Math.round(zoom * 100)}%`}
+          />
+          <Icon
+            name="image"
+            size="lg"
+            className="shrink-0 text-rm-text-secondary"
+          />
+          {currentDisplay ? (
+            <div className="size-10 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
+              <AvatarImage
+                src={image.src}
+                alt={`${displayName} preview`}
+                display={currentDisplay}
+              />
+            </div>
+          ) : null}
+        </div>
 
-          <div className="flex items-center justify-between gap-3">
+        <ResponsiveDialogFooter className="max-md:[&_button]:min-h-11 max-md:[&_button]:w-full md:justify-between">
+          <Button type="button" variant="ghost" onClick={reset}>
+            <Icon name="reset" size="sm" />
+            Reset
+          </Button>
+          <div className="flex flex-col-reverse gap-2 md:flex-row">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
             <Button
               type="button"
-              variant="outline"
-              className="border-rm-border bg-rm-bg-elevated text-rm-text pointer-fine:hover:bg-rm-bg-hover"
-              onClick={reset}
+              disabled={!currentDisplay}
+              onClick={handleConfirm}
             >
-              <Icon name="reset" size="sm" />
-              Reset
+              Apply
             </Button>
-            {currentDisplay && (
-              <div className="flex items-center gap-2">
-                <span className="text-ui-xs font-semibold text-rm-text-muted">
-                  Preview
-                </span>
-                <div className="h-10 w-10 overflow-hidden rounded-full bg-primary text-ui-xs font-semibold text-primary-foreground">
-                  <AvatarImage
-                    src={image.src}
-                    alt={`${displayName} preview`}
-                    display={currentDisplay}
-                  />
-                </div>
-              </div>
-            )}
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 border-t border-rm-border px-4 py-4">
-          <Button
-            type="button"
-            variant="outline"
-            className="border-rm-border bg-rm-bg-elevated text-rm-text pointer-fine:hover:bg-rm-bg-hover"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            disabled={!currentDisplay}
-            className={cn(
-              "bg-primary text-primary-foreground pointer-fine:hover:brightness-110",
-              !currentDisplay && "opacity-50",
-            )}
-            onClick={handleConfirm}
-          >
-            <Icon name="check" size="sm" />
-            Apply
-          </Button>
-        </div>
-      </section>
-    </div>,
-    document.body,
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
