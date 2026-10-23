@@ -13,6 +13,8 @@ import { PublicFixture } from "@/components/dev/public-fixtures";
 import { PickerFixture } from "@/components/dev/picker-fixtures";
 import { EmbedFixture } from "@/components/dev/embed-fixtures";
 import { ActivityFixture } from "@/components/dev/activity-fixtures";
+import { StreamFixture } from "@/components/dev/stream-fixtures";
+import { isStreamFixture } from "@/components/dev/stream-fixture-surfaces";
 import {
   isSettingsProfileFixture,
   SettingsProfileFixture,
@@ -2492,6 +2494,11 @@ export default function UiFixtures() {
         <PickerFixture surface={surfaceName} />
       ) : surfaceName.startsWith("embed-") ? (
         <EmbedFixture surface={surfaceName} />
+      ) : isStreamFixture(surfaceName) ? (
+        <StreamFixture
+          surface={surfaceName}
+          shell={<Shell surface="shell-chat" />}
+        />
       ) : surfaceName.startsWith("act-") ? (
         <ActivityFixture surface={surfaceName} />
       ) : isSettingsProfileFixture(surfaceName) ? (
