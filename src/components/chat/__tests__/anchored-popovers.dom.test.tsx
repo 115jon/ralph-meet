@@ -403,7 +403,7 @@ describe("AudioDeviceMenu devices", () => {
 });
 
 describe("UserProfilePopover roles", () => {
-  it("assigns a role from the nested Manage Roles menu without closing", async () => {
+  it("assigns a role from the nested add-role menu without closing", async () => {
     const adminRole = {
       id: "r-admin",
       server_id: "s-1",
@@ -438,7 +438,7 @@ describe("UserProfilePopover roles", () => {
     openFromAnchor();
     await screen.findByRole("dialog", { name: "User profile for grace" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Manage Roles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a role" }));
     const role = await screen.findByRole("menuitemcheckbox", { name: "Mods" });
     fireEvent.click(role);
 
