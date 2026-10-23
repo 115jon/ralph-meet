@@ -780,7 +780,7 @@ function resolveThemeTokenProfile(banner: string | null): ResolvedProfileTheme {
       "--rm-profile-custom-muted": "var(--rm-text-secondary)",
       "--rm-profile-custom-ghost": "var(--rm-text-muted)",
       "--rm-profile-custom-card-bg": "var(--rm-tint-1)",
-      "--rm-profile-custom-card-bg-strong": "var(--rm-tint-1)",
+      "--rm-profile-custom-card-bg-strong": "var(--rm-tint-2)",
       "--rm-profile-custom-card-border": "var(--rm-border)",
       "--rm-profile-custom-button-bg": "var(--rm-accent-solid)",
       "--rm-profile-custom-button-text": "var(--rm-on-accent)",
