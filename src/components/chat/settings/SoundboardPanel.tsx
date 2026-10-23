@@ -24,10 +24,12 @@ import { useShallow } from "zustand/shallow";
 import EmojiToken from "../EmojiToken";
 import SoundboardPicker from "../SoundboardPicker";
 import {
+  ConfirmStrip,
   RangeControl,
   SettingsCard,
   SettingsRow,
   SettingsSelect,
+  useConfirm,
 } from "./primitives";
 
 type TriggerKey = "voiceJoinSoundboard" | "voiceLeaveSoundboard";
@@ -39,12 +41,12 @@ function ServerIcon({ server }: { server?: Server }) {
       <img
         src={getAuthAssetUrl(server.icon_url)}
         alt=""
-        className="h-5 w-5 rounded-md object-cover"
+        className="size-5 rounded-md object-cover"
       />
     );
   }
   return (
-    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-rm-tint-2 text-ui-2xs font-bold text-rm-text-secondary">
+    <span className="flex size-5 items-center justify-center rounded-md bg-rm-tint-2 text-ui-2xs font-semibold text-rm-text-secondary">
       {server.name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -86,10 +88,30 @@ function TriggerRow({
   changeButtonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const sound = config.sound;
+  const {
+    armed: clearArmed,
+    arm: armClear,
+    cancel: cancelClear,
+    done: finishClear,
+    triggerRef: clearTriggerRef,
+  } = useConfirm();
   return (
     <SettingsRow
       id={rowId}
       layout="inline"
+      footer={
+        clearArmed ? (
+          <ConfirmStrip
+            consequence={`${sound?.name ?? "This sound"} stops playing when you ${actionLabel} a voice channel. You can pick a sound again any time.`}
+            confirmLabel="Clear sound"
+            onCancel={cancelClear}
+            onConfirm={() => {
+              onClear();
+              finishClear();
+            }}
+          />
+        ) : null
+      }
       description={
         <span className="flex min-w-0 items-center gap-1.5">
           {sound?.emoji ? (
@@ -118,7 +140,6 @@ function TriggerRow({
             aria-label={`Preview ${actionLabel} sound`}
             icon="play"
             variant="ghost"
-            iconSize="sm"
             onClick={onPreview}
             disabled={!sound}
           />
@@ -128,17 +149,17 @@ function TriggerRow({
             aria-label={`Change ${actionLabel} sound`}
             icon="edit"
             variant="ghost"
-            iconSize="sm"
             onClick={onChange}
           />
           <IconButton
+            ref={clearTriggerRef}
             type="button"
             aria-label={`Clear ${actionLabel} sound`}
+            aria-expanded={clearArmed}
             icon="trash"
             variant="destructive"
-            iconSize="sm"
-            onClick={onClear}
-            disabled={!sound}
+            onClick={armClear}
+            disabled={!sound || clearArmed}
           />
           <span className="ml-1 flex">
             <SettingsSwitch
