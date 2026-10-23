@@ -1493,14 +1493,6 @@ const MessageItem = memo(
                         onClick={startEditing}
                       />
                     )}
-                    <IconButton
-                      icon="forward"
-                      size="xs"
-                      tooltip="Forward"
-                      aria-disabled="true"
-                      className="opacity-50"
-                      onClick={() => undefined}
-                    />
                     {(isOwnMessage || canDeleteMessages) && (
                       <IconButton
                         icon="trash"
@@ -1558,14 +1550,6 @@ const MessageItem = memo(
                       onClick={
                         isOwnMessage ? startEditing : () => onReply?.(message)
                       }
-                    />
-                    <IconButton
-                      icon="forward"
-                      size="xs"
-                      tooltip="Forward"
-                      aria-disabled="true"
-                      className="opacity-50"
-                      onClick={() => undefined}
                     />
                     <IconButton
                       icon="more"

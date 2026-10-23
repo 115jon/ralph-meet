@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { DitherField } from "@/components/ui/DitherField";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
@@ -68,14 +67,6 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
             </span>
             . Be kind, be bold, and let the conversation flow.
           </p>
-          <div className="mt-5 flex gap-2">
-            <Button type="button" variant="secondary">
-              View Profile
-            </Button>
-            <Button type="button" variant="destructive">
-              Block User
-            </Button>
-          </div>
         </>
       ) : (
         <>

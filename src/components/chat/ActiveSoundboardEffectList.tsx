@@ -9,66 +9,10 @@ import {
   resumeSoundboardPlayback,
   setSoundboardPlaybackVolume,
   stopSoundboardPlayback,
-  getSoundboardServerKey,
 } from "@/lib/voice/soundboard";
-import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
-import { useMemo } from "react";
-import { TooltipProvider } from "@/components/ui/tooltip";
-
-interface ActiveSoundboardEffectListProps {
-  serverId?: string | null;
-  serverKey?: string;
-  localUserId?: string | null;
-  sfu: SFUClient | null;
-  variant?: "default" | "compact" | "floating";
-  className?: string;
-}
-
-export function ActiveSoundboardEffectList({
-  serverId,
-  serverKey: explicitServerKey,
-  localUserId,
-  sfu,
-  variant = "default",
-  className,
-}: ActiveSoundboardEffectListProps) {
-  const activePlaybacks = useVoiceSoundboardStore((s) => s.activePlaybacks);
-
-  const serverKey = explicitServerKey ?? getSoundboardServerKey(serverId);
-
-  const scopedPlaybacks = useMemo(() => {
-    return Object.values(activePlaybacks)
-      .filter(
-        (playback) =>
-          playback.serverKey === serverKey && playback.ownerId === localUserId,
-      )
-      .sort((a, b) => b.startedAt - a.startedAt);
-  }, [activePlaybacks, localUserId, serverKey]);
-
-  if (scopedPlaybacks.length === 0) {
-    return null;
-  }
-
-  return (
-    <TooltipProvider delayDuration={100}>
-      <div className={cn("space-y-2", className)}>
-        {scopedPlaybacks.map((playback) => (
-          <SoundboardPlaybackRow
-            key={playback.playbackId}
-            playback={playback}
-            localUserId={localUserId}
-            serverKey={serverKey}
-            sfu={sfu}
-            variant={variant}
-          />
-        ))}
-      </div>
-    </TooltipProvider>
-  );
-}
 
 interface EffectItemProps {
   playback: {

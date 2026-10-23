@@ -738,11 +738,6 @@ export default function SettingsAccountTab({
   initialError,
 }: {
   authUserLoaded?: boolean;
-  /**
-   * Accepted for the existing callers; the editor only ever renders as the
-   * dialog body (ProfileEditorModal is its one frame).
-   */
-  asModal?: boolean;
   onClose?: () => void;
   /** Fixtures/tests: start with a dirty draft. */
   initialDraft?: ProfileEditorDraft;
