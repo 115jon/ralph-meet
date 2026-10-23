@@ -16,12 +16,18 @@ export const AUTH_CARD_APPEARANCE: Appearance = {
       overflow: "visible",
     },
     cardHeader: { padding: 0, textAlign: "left" },
-    appLogo: { width: 44, height: 44, margin: "0 0 18px", borderRadius: 11 },
-    cardTitle: { fontSize: 24, letterSpacing: "-0.02em", lineHeight: 1.2 },
-    cardSubtitle: { marginTop: 4 },
-    cardBody: { padding: "18px 0 0" },
+    // 4px grid, radius scale (`rounded-lg`), type scale (`text-ui-xl`, 22/28).
+    appLogo: { width: 44, height: 44, margin: "0 0 16px", borderRadius: 12 },
+    cardTitle: {
+      fontSize: 22,
+      lineHeight: "28px",
+      fontWeight: 600,
+      letterSpacing: "-0.01em",
+    },
+    cardSubtitle: { marginTop: 4, fontSize: 15, lineHeight: 1.375 },
+    cardBody: { padding: "16px 0 0" },
     cardFooter: {
-      padding: "18px 0 0",
+      padding: "16px 0 0",
       background: "transparent",
       borderTop: 0,
     },

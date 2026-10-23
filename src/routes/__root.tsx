@@ -1,3 +1,4 @@
+import { NotFoundPage, RouteErrorPage } from "@/components/PageState";
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -59,14 +60,8 @@ export const Route = createRootRoute({
   component: RootComponent,
   pendingComponent: SplashScreen,
   shellComponent: RootDocument,
-  notFoundComponent: () => (
-    <div className="flex min-h-dvh items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-display font-semibold mb-2">404</h1>
-        <p className="text-[var(--rm-text-secondary)]">Page not found</p>
-      </div>
-    </div>
-  ),
+  errorComponent: RouteErrorPage,
+  notFoundComponent: NotFoundPage,
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
@@ -76,7 +71,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     // permanently dropping events in WebView2. Return a simple div wrapper instead.
     return (
       <div
-        className="h-full w-full bg-[var(--rm-bg-primary)] antialiased font-[Figtree,sans-serif]"
+        className="h-full w-full bg-rm-bg-primary antialiased font-[Figtree,sans-serif]"
         data-gramm="false"
         data-gramm_editor="false"
         data-enable-grammarly="false"

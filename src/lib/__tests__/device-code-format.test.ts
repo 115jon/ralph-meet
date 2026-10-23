@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activateReturnPath,
+  deviceCodeFromReturnPath,
   formatDeviceCode,
   initials,
   isCompleteDeviceCode,
@@ -77,5 +78,30 @@ describe("Not you? destinations", () => {
       "/activate?code=ABCD-EFGH&release=failed",
     );
     expect(releaseFailedPath("")).toBe("/activate?release=failed");
+  });
+});
+
+describe("deviceCodeFromReturnPath (sign-in context)", () => {
+  it("reads the waiting code back out of an /activate return path", () => {
+    expect(deviceCodeFromReturnPath(activateReturnPath("abcdefgh"))).toBe(
+      "ABCD-EFGH",
+    );
+  });
+
+  it("returns an empty code for /activate without a complete code", () => {
+    expect(deviceCodeFromReturnPath("/activate")).toBe("");
+    expect(deviceCodeFromReturnPath("/activate?code=AB")).toBe("");
+  });
+
+  it("returns null for anything that is not a same-origin /activate", () => {
+    expect(deviceCodeFromReturnPath(undefined)).toBeNull();
+    expect(deviceCodeFromReturnPath("/chat")).toBeNull();
+    expect(deviceCodeFromReturnPath("/activated?code=ABCD-EFGH")).toBeNull();
+    expect(
+      deviceCodeFromReturnPath("https://evil.example/activate?code=ABCD-EFGH"),
+    ).toBeNull();
+    expect(
+      deviceCodeFromReturnPath("//evil.example/activate?code=ABCD-EFGH"),
+    ).toBeNull();
   });
 });

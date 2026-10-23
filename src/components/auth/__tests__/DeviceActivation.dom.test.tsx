@@ -90,13 +90,38 @@ afterEach(() => vi.clearAllMocks());
 describe("DeviceActivation", () => {
   it("sends signed-out visitors to sign-in with a path-only return", () => {
     mocks.auth.isSignedIn = false;
-    const { container } = render(<DeviceActivation initialCode="abcd-efgh" />);
-    expect(container).toBeEmptyDOMElement();
+    render(<DeviceActivation initialCode="abcd-efgh" />);
+    // The loading view holds the column while the redirect happens.
+    expect(
+      screen.getByRole("heading", { name: "Checking your code" }),
+    ).toBeInTheDocument();
     expect(mocks.navigate).toHaveBeenCalledWith({
       to: "/sign-in",
       search: { redirect_url: "/activate?code=ABCD-EFGH" },
       replace: true,
     });
+  });
+
+  it("shows the loading view, not an empty column, while auth loads", () => {
+    mocks.auth.isLoaded = false;
+    const { container } = render(<DeviceActivation initialCode="abcd-efgh" />);
+    expect(container).not.toBeEmptyDOMElement();
+    expect(
+      screen.getByRole("heading", { name: "Checking your code" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ABCD-EFGH")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading");
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.getDeviceRequest).not.toHaveBeenCalled();
+  });
+
+  it("shows the loading view without a code while auth loads", () => {
+    mocks.auth.isLoaded = false;
+    render(<DeviceActivation />);
+    expect(
+      screen.getByRole("heading", { name: "Connect a device" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Device code")).not.toBeInTheDocument();
   });
 
   it("shows the entry form without a code and formats as you type", () => {

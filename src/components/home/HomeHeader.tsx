@@ -34,7 +34,7 @@ export function HomeHeader() {
   return (
     <header
       data-scrolled={scrolled ? "true" : "false"}
-      className="fixed inset-x-0 top-0 z-20 border-b border-transparent transition-colors duration-200 ease-(--rm-ease-out) data-[scrolled=true]:border-rm-border data-[scrolled=true]:bg-rm-bg-primary"
+      className="fixed inset-x-0 top-0 z-20 border-b border-transparent pt-[var(--safe-area-top,0px)] transition-colors duration-200 ease-(--rm-ease-out) data-[scrolled=true]:border-rm-border data-[scrolled=true]:bg-rm-bg-primary"
     >
       <div
         className={`${CONTAINER} grid h-16 grid-cols-[1fr_auto] items-center gap-4 md:grid-cols-[1fr_auto_1fr]`}
@@ -69,11 +69,9 @@ export function HomeHeader() {
                 Open the app
               </a>
               <div className="flex size-9 items-center justify-center rounded-full bg-rm-tint-1">
-                <UserButton
-                  afterSignOutUrl="/"
-                  size={32}
-                  appearance={{ variables: { colorPrimary: "#5865f2" } }} // ds-allow:raw-color Kova widget theme, not a page surface
-                />
+                {/* Colours come from the provider; the SDK ignores
+                    per-instance appearance variables. */}
+                <UserButton afterSignOutUrl="/" size={32} />
               </div>
             </>
           ) : (

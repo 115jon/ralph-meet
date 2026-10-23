@@ -9,6 +9,10 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import { SearchFixture } from "@/components/dev/search-fixtures";
 import { isSearchFixture } from "@/components/dev/search-fixture-surfaces";
+import { PublicFixture } from "@/components/dev/public-fixtures";
+import { PickerFixture } from "@/components/dev/picker-fixtures";
+import { EmbedFixture } from "@/components/dev/embed-fixtures";
+import { ActivityFixture } from "@/components/dev/activity-fixtures";
 import ChatArea from "@/components/chat/ChatArea";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import ContextMenu from "@/components/chat/ContextMenu";
@@ -2343,6 +2347,14 @@ export default function UiFixtures() {
     default:
       content = surfaceName.startsWith("ov-") ? (
         <OverlaySurface surface={surfaceName} />
+      ) : surfaceName.startsWith("pub-") ? (
+        <PublicFixture surface={surfaceName} />
+      ) : surfaceName.startsWith("pk-") ? (
+        <PickerFixture surface={surfaceName} />
+      ) : surfaceName.startsWith("embed-") ? (
+        <EmbedFixture surface={surfaceName} />
+      ) : surfaceName.startsWith("act-") ? (
+        <ActivityFixture surface={surfaceName} />
       ) : isSearchFixture(surfaceName) ? (
         <SearchFixture
           surface={surfaceName}

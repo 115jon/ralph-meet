@@ -1,4 +1,5 @@
 import SharedMessagePage from "@/components/chat/SharedMessagePage";
+import { RouteErrorPage } from "@/components/PageState";
 import { getDB } from "@/lib/api-helpers";
 import { hydrateInstagramEmbedsForShare } from "@/lib/share-embed-refresh";
 import { buildShareMetadata } from "@/lib/share-metadata";
@@ -8,7 +9,10 @@ import {
   getPublicMessageShare,
   type MessageShare,
 } from "@/services/message-share.service";
-import { createFileRoute } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  type ErrorComponentProps,
+} from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 interface ShareLoaderData {
@@ -182,6 +186,7 @@ function shareHead(data?: ShareLoaderData) {
 export const Route = createFileRoute("/share/$token")({
   loader: ({ params }) => loadPublicShare({ data: { token: params.token } }),
   component: SharedMessageRoute,
+  errorComponent: ShareRouteError,
   head: ({ loaderData }) => shareHead(loaderData),
 });
 
@@ -193,6 +198,18 @@ function SharedMessageRoute() {
       token={token}
       initialShare={data.share}
       initialGone={data.gone}
+    />
+  );
+}
+
+/** Loader failures other than 404/410 (D1 down, network): retry, never the raw error. */
+function ShareRouteError({ error, reset }: ErrorComponentProps) {
+  return (
+    <RouteErrorPage
+      error={error}
+      reset={reset}
+      title="Couldn't load this message"
+      body="We couldn't load this shared message. Try again, or go back home."
     />
   );
 }

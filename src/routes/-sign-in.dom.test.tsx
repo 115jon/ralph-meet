@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   search: {} as Record<string, string | undefined>,
   getToken: vi.fn(async () => "tok_app"),
   setStoredKovaAuthSessionToken: vi.fn(),
+  isSignedIn: true,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -23,7 +24,7 @@ vi.mock("@kova/react", () => ({
   useAuth: () => ({
     getToken: mocks.getToken,
     isLoaded: true,
-    isSignedIn: true,
+    isSignedIn: mocks.isSignedIn,
   }),
 }));
 
@@ -43,7 +44,20 @@ vi.mock("@/components/SplashScreen", () => ({
   SplashScreen: () => <div data-testid="splash" />,
 }));
 vi.mock("@/components/auth/AuthSplitLayout", () => ({
-  AuthSplitLayout: ({ children }: { children: React.ReactNode }) => children,
+  AuthSplitLayout: ({
+    children,
+    subtitle,
+    caption,
+  }: {
+    children: React.ReactNode;
+    subtitle?: React.ReactNode;
+    caption?: string;
+  }) => (
+    <div data-caption={caption}>
+      {subtitle}
+      {children}
+    </div>
+  ),
 }));
 vi.mock("@/components/auth/auth-card-appearance", () => ({
   AUTH_CARD_APPEARANCE: {},
@@ -55,6 +69,7 @@ const SignInPage = (Route as unknown as { options: { component: React.FC } })
   .options.component;
 
 beforeEach(() => {
+  mocks.isSignedIn = true;
   mocks.navigate.mockClear();
   mocks.setStoredKovaAuthSessionToken.mockClear();
 });
@@ -81,5 +96,29 @@ describe("/sign-in after signing in", () => {
         replace: true,
       }),
     );
+  });
+});
+
+describe("/sign-in reached from /activate", () => {
+  it("says a device is waiting and shows its code", () => {
+    mocks.isSignedIn = false;
+    mocks.search = { redirect_url: "/activate?code=ABCD-EFGH" };
+    const { container } = render(<SignInPage />);
+    expect(
+      screen.getByText("A device is waiting to sign in"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ABCD-EFGH")).toBeInTheDocument();
+    expect(container.querySelector("[data-caption]")).toHaveAttribute(
+      "data-caption",
+      "Connecting a device",
+    );
+  });
+
+  it("stays generic for other return targets", () => {
+    mocks.isSignedIn = false;
+    mocks.search = { redirect_url: "/chat" };
+    render(<SignInPage />);
+    expect(screen.queryByText("A device is waiting to sign in")).toBeNull();
+    expect(screen.getByTestId("sign-in-form")).toBeInTheDocument();
   });
 });

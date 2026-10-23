@@ -199,7 +199,7 @@ export function AuthArtPanel({ caption = "Ralph Meet" }: { caption?: string }) {
       ref={hostRef}
       aria-hidden="true"
       data-live={live ? "true" : "false"}
-      className="auth-art relative isolate overflow-hidden border-[var(--rm-border)] max-md:h-[calc(152px+env(safe-area-inset-top))] max-md:border-b md:border-r"
+      className="auth-art relative isolate overflow-hidden border-[var(--rm-border)] max-md:h-[calc(152px+var(--safe-area-top,0px))] max-md:border-b md:border-r"
       style={{ background: inks[1] }}
     >
       <div className="absolute inset-0 z-0" style={fallbackStyle(inks)} />
@@ -213,7 +213,7 @@ export function AuthArtPanel({ caption = "Ralph Meet" }: { caption?: string }) {
         }}
       />
       <div
-        className="absolute bottom-[max(24px,env(safe-area-inset-bottom))] left-[max(28px,env(safe-area-inset-left))] z-10 max-w-[calc(100%-56px)] truncate text-ui-sm font-semibold tracking-[-0.005em] max-md:bottom-[18px] max-md:left-[max(20px,env(safe-area-inset-left))]"
+        className="absolute bottom-[max(24px,var(--safe-area-bottom,0px))] left-[max(32px,var(--safe-area-left,0px))] z-10 max-w-[calc(100%-64px)] truncate text-ui-sm font-semibold max-md:bottom-4 max-md:left-[max(16px,var(--safe-area-left,0px))]"
         style={{
           color: light ? mixHex(colors.accent, "#000000", 0.55) : "#ffffff",
           textShadow: light ? "none" : "0 1px 2px rgba(0,0,0,0.5)",

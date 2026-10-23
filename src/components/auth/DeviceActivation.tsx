@@ -18,6 +18,10 @@
  */
 
 import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { HIT } from "@/components/ui/interaction";
 import { markAuthLogoutIntent } from "@/lib/desktop-auth";
 import {
   activateReturnPath,
@@ -179,39 +183,6 @@ function uniqueParts(parts: Array<string | null | undefined>): string[] {
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
 
-const BTN =
-  "relative inline-flex h-11 w-full items-center justify-center gap-2.5 overflow-hidden rounded-[10px] px-4 text-ui-base font-medium leading-none text-[var(--rm-text-primary)] transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] [-webkit-tap-highlight-color:transparent] after:pointer-events-none after:absolute after:inset-0 after:bg-current after:opacity-0 after:transition-opacity after:duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:cursor-default active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100 pointer-fine:hover:enabled:after:opacity-[0.07]";
-const BTN_SECONDARY = `${BTN} border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] pointer-fine:hover:enabled:border-[var(--rm-text-ghost)] disabled:opacity-50`;
-const BTN_PRIMARY = `${BTN} bg-[var(--rm-accent)] font-semibold text-white disabled:opacity-50`;
-
-function Button({
-  variant = "secondary",
-  busy,
-  children,
-  ...rest
-}: {
-  variant?: "primary" | "secondary";
-  busy?: boolean;
-  children: ReactNode;
-} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      type="button"
-      {...rest}
-      aria-busy={busy || undefined}
-      className={`${variant === "primary" ? BTN_PRIMARY : BTN_SECONDARY} ${busy ? "[&>.label]:opacity-0" : ""}`}
-    >
-      <span className="label">{children}</span>
-      {busy ? (
-        <span
-          aria-hidden="true"
-          className="absolute left-1/2 top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 animate-spin rounded-full border-2 border-white/35 border-t-white motion-reduce:animate-pulse"
-        />
-      ) : null}
-    </button>
-  );
-}
-
 function Heading({
   children,
   headingRef,
@@ -223,7 +194,7 @@ function Heading({
     <h1
       ref={headingRef}
       tabIndex={-1}
-      className="text-balance text-ui-2xl font-semibold leading-tight tracking-[-0.02em] outline-none [overflow-wrap:anywhere]"
+      className="text-balance text-ui-xl font-semibold text-rm-text outline-none [overflow-wrap:anywhere]"
     >
       {children}
     </h1>
@@ -232,16 +203,30 @@ function Heading({
 
 function Sub({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-1 text-pretty text-ui-base text-[var(--rm-text-secondary)] [overflow-wrap:anywhere]">
+    <p className="mt-1 text-pretty text-ui-base text-rm-text-secondary [overflow-wrap:anywhere]">
       {children}
     </p>
+  );
+}
+
+/** 14.3 inline error strip; empty renders nothing but keeps the live region. */
+function ErrorStrip({ children }: { children: ReactNode }) {
+  return (
+    <div role="alert" className="mt-3 empty:hidden">
+      {children ? (
+        <p className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
+          <Icon name="alert" size="sm" className="mt-px shrink-0" />
+          <span className="min-w-0 text-pretty">{children}</span>
+        </p>
+      ) : null}
+    </div>
   );
 }
 
 function Logo() {
   return (
     <ThemeAwareSplashLogo
-      className="mb-[18px] block h-11 w-11 object-contain"
+      className="mb-4 block size-11 object-contain"
       data-testid="activate-logo"
     />
   );
@@ -269,7 +254,7 @@ function CheckIcon() {
       <path
         d="M15 24.5l6 6 12-13"
         fill="none"
-        stroke="var(--rm-accent)"
+        stroke="var(--rm-accent-ink)"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -334,6 +319,8 @@ export function DeviceActivation({
   const [lookupNonce, setLookupNonce] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const statusId = useId();
+  const codeInputId = useId();
+  const codeErrorId = useId();
   const [status, setStatus] = useState("");
 
   const returnPath = activateReturnPath(view.code);
@@ -355,7 +342,9 @@ export function DeviceActivation({
 
   // Look the code up (and claim it) once the session is usable.
   useEffect(() => {
-    if (view.kind !== "loading" || !isReady || !isSignedIn) return;
+    if (view.kind !== "loading" || !isReady || !isLoaded || !isSignedIn) {
+      return;
+    }
     let cancelled = false;
     void getDeviceRequest(view.code).then((result) => {
       if (cancelled) return;
@@ -386,6 +375,7 @@ export function DeviceActivation({
     view.kind,
     view.code,
     isReady,
+    isLoaded,
     isSignedIn,
     getDeviceRequest,
     goSignIn,
@@ -502,13 +492,22 @@ export function DeviceActivation({
     setLookupNonce((n) => n + 1);
   }
 
-  if (!showsSignedOut && (!isLoaded || !isSignedIn)) return null;
-
   const live = (
     <p className="sr-only" id={statusId} role="status" aria-live="polite">
       {status}
     </p>
   );
+
+  // Auth still loading, or signed out and about to be sent to sign-in: show
+  // the loading view instead of an empty column.
+  if (!showsSignedOut && (!isLoaded || !isSignedIn)) {
+    return (
+      <LoadingView
+        headingRef={headingRef}
+        code={complete ? formatted : undefined}
+      />
+    );
+  }
 
   if (view.kind === "enter") {
     const message =
@@ -525,15 +524,15 @@ export function DeviceActivation({
         <Heading headingRef={headingRef}>Connect a device</Heading>
         <Sub>Enter the code shown on your device to sign in to Ralph Meet.</Sub>
         <form
-          className="mt-[18px] flex flex-col gap-2"
+          className="mt-6 flex flex-col gap-2"
           onSubmit={submitCode}
           noValidate
         >
-          <label htmlFor="device-code" className="sr-only">
+          <label htmlFor={codeInputId} className="sr-only">
             Device code
           </label>
-          <input
-            id="device-code"
+          <Input
+            id={codeInputId}
             name="code"
             type="text"
             defaultValue={view.code}
@@ -546,22 +545,22 @@ export function DeviceActivation({
             maxLength={24}
             required
             autoFocus
-            aria-describedby="code-error"
+            aria-describedby={codeErrorId}
             aria-invalid={message ? true : undefined}
             onChange={(e) => {
               const next = formatDeviceCode(e.target.value);
               if (next !== e.target.value) e.target.value = next;
             }}
-            className="h-11 w-full rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] px-3 text-center font-mono text-ui-xl font-medium uppercase tracking-[0.12em] text-[var(--rm-text-primary)] tabular-nums outline-none transition-[border-color,box-shadow] duration-150 placeholder:tracking-[0.12em] placeholder:text-[var(--rm-text-muted)] focus:border-[var(--rm-accent)] focus:shadow-[0_0_0_3px_var(--rm-accent-dim)] aria-[invalid=true]:border-[var(--rm-status-dnd)]/70"
+            className="h-11 text-center font-mono text-ui-xl font-medium uppercase tracking-[0.12em] tabular-nums placeholder:tracking-[0.12em] md:text-ui-xl"
           />
           <p
-            id="code-error"
+            id={codeErrorId}
             role="alert"
-            className="text-ui-sm text-[var(--rm-status-dnd)] empty:hidden"
+            className="text-ui-xs text-rm-danger-ink empty:hidden"
           >
             {message}
           </p>
-          <Button variant="primary" type="submit">
+          <Button type="submit" size="lg" className="mt-2 w-full">
             Continue
           </Button>
         </form>
@@ -572,15 +571,10 @@ export function DeviceActivation({
 
   if (view.kind === "loading") {
     return (
-      <div className="auth-enter">
-        <Logo />
-        <Heading headingRef={headingRef}>Checking your code</Heading>
-        <Sub>
-          <span className="font-mono tabular-nums">{view.code}</span>
-        </Sub>
-        <div className="mt-[18px] h-11 animate-pulse rounded-[10px] bg-[var(--rm-bg-hover)]" />
+      <>
+        <LoadingView headingRef={headingRef} code={view.code} />
         {live}
-      </div>
+      </>
     );
   }
 
@@ -609,38 +603,36 @@ export function DeviceActivation({
         <Logo />
         <Heading headingRef={headingRef}>Sign in to Ralph Meet?</Heading>
         <Sub>Make sure this matches the code on your device.</Sub>
-        <p className="mt-[18px] rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-secondary)] p-3 text-center font-mono text-ui-2xl font-medium leading-tight tracking-[0.08em] tabular-nums">
+        <p className="mt-6 rounded-lg border border-rm-border bg-rm-bg-surface p-3 text-center font-mono text-ui-2xl font-medium tracking-[0.08em] text-rm-text tabular-nums">
           <span aria-hidden="true">{request.userCode}</span>
           <span className="sr-only">
             Code: {spelledDeviceCode(request.userCode)}
           </span>
         </p>
         {devicePrimary || place || ip ? (
-          <dl className="mt-3.5 text-ui-sm">
+          <dl className="mt-4 text-ui-sm">
             {devicePrimary ? (
-              <div className="grid grid-cols-1 gap-0.5 border-t border-[var(--rm-border)] py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:gap-3">
-                <dt className="text-[var(--rm-text-muted)]">Device</dt>
-                <dd className="min-w-0 text-[var(--rm-text-secondary)] [overflow-wrap:anywhere]">
+              <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 border-t border-rm-border py-2.5">
+                <dt className="text-rm-text-muted">Device</dt>
+                <dd className="min-w-0 text-rm-text-secondary [overflow-wrap:anywhere]">
                   {devicePrimary}
                   {hostname ? (
-                    <span className="block text-ui-sm text-[var(--rm-text-muted)]">
-                      {hostname}
-                    </span>
+                    <span className="block text-rm-text-muted">{hostname}</span>
                   ) : null}
-                  <span className="mt-0.5 block text-ui-xs italic text-[var(--rm-text-muted)]">
+                  <span className="mt-0.5 block text-ui-xs text-rm-text-muted">
                     Reported by the device
                   </span>
                 </dd>
               </div>
             ) : null}
             {place || ip ? (
-              <div className="grid grid-cols-1 gap-0.5 border-y border-[var(--rm-border)] py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:gap-3">
-                <dt className="text-[var(--rm-text-muted)]">Requested from</dt>
-                <dd className="min-w-0 [overflow-wrap:anywhere]">
+              <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 border-y border-rm-border py-2.5">
+                <dt className="text-rm-text-muted">Requested from</dt>
+                <dd className="min-w-0 text-rm-text [overflow-wrap:anywhere]">
                   {place || ip}
                   {place && ip ? (
                     <span
-                      className="block truncate text-ui-sm text-[var(--rm-text-muted)] tabular-nums"
+                      className="block truncate text-rm-text-muted tabular-nums"
                       title={ip}
                     >
                       {ip}
@@ -651,10 +643,10 @@ export function DeviceActivation({
             ) : null}
           </dl>
         ) : null}
-        <div className="mt-3.5 flex items-center gap-3 rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] px-3 py-2.5">
+        <div className="mt-4 flex items-center gap-3 rounded-lg bg-rm-tint-1 px-3 py-2.5">
           <span
             aria-hidden="true"
-            className="relative grid h-9 w-9 flex-none place-items-center overflow-hidden rounded-full bg-[var(--rm-bg-active)] text-ui-sm font-semibold"
+            className="relative grid size-9 flex-none place-items-center overflow-hidden rounded-full bg-rm-tint-2 text-ui-sm font-semibold text-rm-text"
           >
             {initials(name, email)}
             {user?.image ? (
@@ -665,15 +657,17 @@ export function DeviceActivation({
                 height={36}
                 decoding="async"
                 referrerPolicy="no-referrer"
-                className="absolute inset-0 h-full w-full object-cover"
+                className="absolute inset-0 size-full object-cover"
                 onError={(e) => e.currentTarget.remove()}
               />
             ) : null}
           </span>
-          <span className="flex min-w-0 flex-1 flex-col leading-snug">
-            <span className="truncate font-medium">{displayName}</span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-ui-base font-medium text-rm-text">
+              {displayName}
+            </span>
             {name ? (
-              <span className="truncate text-ui-sm text-[var(--rm-text-muted)]">
+              <span className="truncate text-ui-sm text-rm-text-muted">
                 {email}
               </span>
             ) : null}
@@ -682,37 +676,36 @@ export function DeviceActivation({
             type="button"
             onClick={switchAccount}
             disabled={busy !== null}
-            className="-mr-1 min-h-11 flex-none rounded-lg px-1 text-ui-sm text-[var(--rm-text-secondary)] underline decoration-[var(--rm-accent)]/60 underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:opacity-50 pointer-fine:hover:text-[var(--rm-text-primary)]"
+            className={`relative flex-none rounded-sm text-ui-sm font-medium text-rm-text-secondary underline decoration-rm-accent-ink/60 underline-offset-[3px] disabled:cursor-not-allowed disabled:opacity-45 pointer-fine:hover:text-rm-text ${HIT}`}
           >
             Not you?<span className="sr-only"> Use another account</span>
           </button>
         </div>
-        <div className="mt-[18px] grid grid-cols-2 gap-2">
+        <div className="mt-6 grid grid-cols-2 gap-2">
           <Button
+            variant="secondary"
+            size="lg"
+            className="w-full"
             onClick={() => decide("deny", request)}
-            disabled={busy !== null}
-            busy={busy === "deny"}
+            disabled={busy !== null && busy !== "deny"}
+            loading={busy === "deny"}
             id="deny-device"
           >
             Deny
           </Button>
           <Button
-            variant="primary"
+            size="lg"
+            className="w-full"
             onClick={() => decide("approve", request)}
-            disabled={busy !== null}
-            busy={busy === "approve"}
+            disabled={busy !== null && busy !== "approve"}
+            loading={busy === "approve"}
             id="approve-device"
           >
             Approve
           </Button>
         </div>
-        <p
-          role="alert"
-          className="mt-3 text-ui-sm text-[var(--rm-status-dnd)] empty:hidden"
-        >
-          {inlineError}
-        </p>
-        <p className="mt-3.5 text-pretty text-ui-sm text-[var(--rm-text-muted)]">
+        <ErrorStrip>{inlineError}</ErrorStrip>
+        <p className="mt-4 text-pretty text-ui-sm text-rm-text-muted">
           Only approve if you started this sign-in yourself.
         </p>
         {live}
@@ -747,37 +740,38 @@ export function DeviceActivation({
       <Heading headingRef={headingRef}>{copy.title}</Heading>
       <Sub>{body}</Sub>
       {copy.action === "enter" ? (
-        <a
-          href="/activate"
-          className={`${BTN_SECONDARY} mt-[18px] no-underline pointer-fine:hover:no-underline`}
-        >
-          Enter a different code
-        </a>
+        <Button asChild variant="secondary" size="lg" className="mt-6 w-full">
+          <a href="/activate">Enter a different code</a>
+        </Button>
       ) : copy.action === "retry" ? (
-        <div className="mt-[18px]">
-          <Button
-            onClick={() => {
-              setView({ kind: "loading", code: view.code });
-              setLookupNonce((n) => n + 1);
-            }}
-          >
-            Try again
-          </Button>
-        </div>
+        <Button
+          variant="secondary"
+          size="lg"
+          className="mt-6 w-full"
+          onClick={() => {
+            setView({ kind: "loading", code: view.code });
+            setLookupNonce((n) => n + 1);
+          }}
+        >
+          Try again
+        </Button>
       ) : copy.action === "sign-in" ? (
-        <div className="mt-[18px] flex flex-col gap-3">
+        <div className="mt-6 flex flex-col gap-3">
           <Button
+            variant="secondary"
+            size="lg"
+            className="w-full"
             onClick={switchAccount}
-            disabled={busy !== null}
-            busy={busy === "switch"}
+            disabled={busy !== null && busy !== "switch"}
+            loading={busy === "switch"}
           >
             Sign in again
           </Button>
-          <p className="text-ui-sm text-[var(--rm-text-muted)]">
+          <p className="text-ui-sm text-rm-text-muted">
             Manage two-factor in your{" "}
             <a
               href={`${getKovaAuthUrl()}/settings`}
-              className="text-[var(--rm-text-secondary)] underline underline-offset-[3px]"
+              className="text-rm-text-secondary underline underline-offset-[3px]"
             >
               account security settings
             </a>
@@ -786,6 +780,38 @@ export function DeviceActivation({
         </div>
       ) : null}
       {live}
+    </div>
+  );
+}
+
+/** Auth loading or a code lookup in flight: same frame as the enter view. */
+function LoadingView({
+  headingRef,
+  code,
+}: {
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  code?: string;
+}) {
+  return (
+    <div className="auth-enter" aria-busy="true">
+      <Logo />
+      <Heading headingRef={headingRef}>
+        {code ? "Checking your code" : "Connect a device"}
+      </Heading>
+      <Sub>
+        {code ? (
+          <span className="font-mono tabular-nums">{code}</span>
+        ) : (
+          "Getting things ready…"
+        )}
+      </Sub>
+      <div
+        aria-hidden="true"
+        className="mt-6 h-11 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none"
+      />
+      <span className="sr-only" role="status">
+        Loading
+      </span>
     </div>
   );
 }
