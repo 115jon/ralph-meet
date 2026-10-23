@@ -63,11 +63,9 @@ export function UserPlatformIndicators({
 
   const isOffline = status === "offline";
   const hasExplicitColor = Boolean(color || offlineColor);
-  const toneClassName = hasExplicitColor
-    ? undefined
-    : isOffline
-      ? "text-rm-text-muted/75"
-      : "text-primary";
+  // Platform glyphs are metadata: muted ink whatever the status (presence
+  // colour lives on the status dot, never on these icons).
+  const toneClassName = hasExplicitColor ? undefined : "text-rm-text-muted";
   const resolvedColor = isOffline ? (offlineColor ?? color) : color;
 
   return (
