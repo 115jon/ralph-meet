@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_SHARED_SPATIAL_STATE } from "@/lib/voice/spatial-audio";
 import { SpatialAudioPanel } from "../SpatialAudioPanel";
@@ -47,10 +47,37 @@ describe("SpatialAudioPanel", () => {
       </div>,
     );
 
-    const panel = await screen.findByLabelText("Spatial Audio");
+    const panel = await screen.findByRole("dialog", { name: "Spatial Audio" });
 
     expect(container).not.toContainElement(panel);
     expect(document.body).toContainElement(panel);
-    expect(panel).toHaveClass("fixed");
+    expect(panel.closest("[data-rm-floating-layer]")).not.toBeNull();
+  });
+});
+
+describe("SpatialAudioPanel dismissal", () => {
+  it("calls onClose on Escape", async () => {
+    const onClose = vi.fn();
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    render(
+      <SpatialAudioPanel
+        isOpen
+        anchorRef={{ current: trigger }}
+        gridItems={[]}
+        spatialAudioState={DEFAULT_SHARED_SPATIAL_STATE}
+        onUpdateSpatialAudioState={() => {}}
+        localSpatialEnabled
+        localHighFidelity
+        localUserId="user-1"
+        onLocalSpatialEnabledChange={() => {}}
+        onOpenVoiceSettings={() => {}}
+        onClose={onClose}
+      />,
+    );
+    const panel = await screen.findByRole("dialog", { name: "Spatial Audio" });
+    fireEvent.keyDown(panel, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    trigger.remove();
   });
 });

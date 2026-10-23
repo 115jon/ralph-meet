@@ -9,27 +9,40 @@ import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import type { GridItem } from "@/components/voice/types";
-import { useMounted } from "@/hooks/useMounted";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  ActionSheet,
+  type ActionSheetItem,
+} from "@/components/ui/action-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ResponsivePopover } from "@/components/ui/popover";
 import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
+import {
+  MENU_ITEM,
+  MENU_ITEM_DEFAULT,
+  MENU_ITEM_DEFAULT_ON,
+} from "@/components/ui/menu";
 import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  lazy,
-  Suspense,
-} from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useRef, useState, lazy, Suspense } from "react";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
 import { FloatingSoundboardManager } from "./FloatingSoundboardManager";
 import { Icon } from "@/components/ui/icon";
@@ -62,8 +75,10 @@ const SoundboardPicker = lazy(
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: GridItem[] = [];
 const EMPTY_WATCHERS_BY_STREAMER: StreamWatchersByStreamer = {};
-const NOISE_REDUCTION_PANEL_GAP = 8;
-const NOISE_REDUCTION_VIEWPORT_PADDING = 12;
+
+function formatQualityOption(quality: string) {
+  return quality.replace("p", "p ");
+}
 
 function formatScreenQualityBadge(quality?: string) {
   if (!quality) return null;
@@ -154,13 +169,11 @@ export function VoiceDashboard({
   onOpenSoundboard,
   showNoiseReductionShortcut = true,
 }: VoiceDashboardProps) {
-  const mounted = useMounted();
+  const isMobile = useIsMobile();
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
-  const shouldRenderStreamMenu = isStreamMenuOpen;
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
-  const shouldRenderSpatial = isSpatialOpen;
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
   const shouldRenderStickerPicker = isStickerPickerOpen;
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
@@ -168,17 +181,9 @@ export function VoiceDashboard({
     "soundboard" | "listenTogether"
   >("soundboard");
   const [isNoiseReductionOpen, setIsNoiseReductionOpen] = useState(false);
-  const shouldRenderNoiseReduction = isNoiseReductionOpen;
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const soundboardBtnRef = useRef<HTMLButtonElement>(null);
   const noiseReductionBtnRef = useRef<HTMLButtonElement>(null);
-  const noiseReductionPanelRef = useRef<HTMLDivElement>(null);
-  const [noiseReductionPanelPosition, setNoiseReductionPanelPosition] =
-    useState({
-      top: 0,
-      left: 0,
-      placement: "bottom" as "top" | "bottom",
-    });
 
   const stats = useVoiceStats(sfu, true);
   const signalBtnRef = useRef<HTMLButtonElement>(null);
@@ -239,87 +244,89 @@ export function VoiceDashboard({
     setIsSoundboardPickerOpen(true);
   };
 
-  useLayoutEffect(() => {
-    if (
-      !shouldRenderNoiseReduction ||
-      !noiseReductionBtnRef.current ||
-      !noiseReductionPanelRef.current
-    ) {
-      return;
-    }
-
-    const updateNoiseReductionPosition = () => {
-      const anchorRect = noiseReductionBtnRef.current?.getBoundingClientRect();
-      const panelRect = noiseReductionPanelRef.current?.getBoundingClientRect();
-
-      if (!anchorRect || !panelRect) return;
-
-      const anchorCenterX = anchorRect.left + anchorRect.width / 2;
-      let left = anchorCenterX - panelRect.width / 2;
-      left = Math.min(
-        Math.max(NOISE_REDUCTION_VIEWPORT_PADDING, left),
-        window.innerWidth - panelRect.width - NOISE_REDUCTION_VIEWPORT_PADDING,
-      );
-
-      const spaceAbove = anchorRect.top - NOISE_REDUCTION_VIEWPORT_PADDING;
-      const spaceBelow =
-        window.innerHeight -
-        anchorRect.bottom -
-        NOISE_REDUCTION_VIEWPORT_PADDING;
-      const openAbove =
-        spaceAbove >= panelRect.height + NOISE_REDUCTION_PANEL_GAP ||
-        spaceAbove >= spaceBelow;
-
-      let top = openAbove
-        ? anchorRect.top - panelRect.height - NOISE_REDUCTION_PANEL_GAP
-        : anchorRect.bottom + NOISE_REDUCTION_PANEL_GAP;
-
-      top = Math.min(
-        Math.max(NOISE_REDUCTION_VIEWPORT_PADDING, top),
-        window.innerHeight -
-          panelRect.height -
-          NOISE_REDUCTION_VIEWPORT_PADDING,
-      );
-
-      setNoiseReductionPanelPosition({
-        top,
-        left,
-        placement: openAbove ? "top" : "bottom",
-      });
-    };
-
-    updateNoiseReductionPosition();
-    window.addEventListener("resize", updateNoiseReductionPosition);
-    window.addEventListener("scroll", updateNoiseReductionPosition, true);
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => updateNoiseReductionPosition())
-        : null;
-    if (resizeObserver && noiseReductionPanelRef.current) {
-      resizeObserver.observe(noiseReductionPanelRef.current);
-    }
-
-    return () => {
-      window.removeEventListener("resize", updateNoiseReductionPosition);
-      window.removeEventListener("scroll", updateNoiseReductionPosition, true);
-      resizeObserver?.disconnect();
-    };
-  }, [shouldRenderNoiseReduction]);
-
-  useEffect(() => {
-    if (!shouldRenderNoiseReduction) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsNoiseReductionOpen(false);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [shouldRenderNoiseReduction]);
+  const toggleStreamAudio = () => onToggleStreamAudio?.();
+  const toggleAlwaysShowStreamPreview = () =>
+    updateUserSettings(
+      (current) => ({
+        ...current,
+        alwaysShowStreamPreview: !current.alwaysShowStreamPreview,
+      }),
+      voiceSettingsUserId,
+    );
+  // Phone form of the stream-settings menu (design-system 13.1).
+  const streamActionItems: ActionSheetItem[] = [
+    {
+      key: "change-source",
+      label: "Change Source",
+      icon: <Icon name="screenShare" size="sm" />,
+      onClick: () => onChangeStreamSource?.(),
+    },
+    {
+      key: "stream-audio",
+      label: "Stream Audio",
+      icon: <Icon name="voiceChannel" size="sm" />,
+      rightIcon: isStreamingAudio ? <Icon name="check" size="xs" /> : undefined,
+      onClick: toggleStreamAudio,
+    },
+    {
+      key: "stream-preview",
+      label: "Always Show Stream Preview",
+      icon: <Icon name="monitor" size="sm" />,
+      rightIcon: alwaysShowStreamPreview ? (
+        <Icon name="check" size="xs" />
+      ) : undefined,
+      onClick: toggleAlwaysShowStreamPreview,
+      divider: true,
+    },
+    ...(availableQualities.length > 0
+      ? [
+          {
+            key: "quality",
+            label: "Quality",
+            subtitle: streamQualityBadge ?? undefined,
+            icon: <Icon name="settings" size="sm" />,
+            onClick: () => {},
+            divider: true,
+            submenu: (
+              <div role="radiogroup" aria-label="Quality">
+                {availableQualities.map((quality) => (
+                  <button
+                    key={quality}
+                    type="button"
+                    role="radio"
+                    aria-checked={screenQuality === quality}
+                    onClick={() => {
+                      onStreamQualityChange?.(quality);
+                      setIsStreamMenuOpen(false);
+                    }}
+                    className={cn(
+                      MENU_ITEM,
+                      screenQuality === quality
+                        ? MENU_ITEM_DEFAULT_ON
+                        : MENU_ITEM_DEFAULT,
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {formatQualityOption(quality)}
+                    </span>
+                    {screenQuality === quality && (
+                      <Icon name="check" size="xs" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: "stop-streaming",
+      label: "Stop Streaming",
+      icon: <Icon name="streamOff" size="sm" />,
+      variant: "danger" as const,
+      onClick: () => onStopStreaming?.(),
+    },
+  ];
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -425,43 +432,40 @@ export function VoiceDashboard({
                       <p>Spatial Audio</p>
                     </TooltipContent>
                   </Tooltip>
-                  {shouldRenderSpatial && (
-                    <SpatialAudioPanel
-                      isOpen={isSpatialOpen}
-                      isClosing={!isSpatialOpen}
-                      anchorRef={spatialBtnRef}
-                      gridItems={gridItems}
-                      spatialAudioState={spatialAudioState}
-                      onUpdateSpatialAudioState={onUpdateSpatialAudioState}
-                      localSpatialEnabled={settings.spatialAudioEnabled}
-                      localHighFidelity={settings.streamHighFidelity}
-                      localUserId={localUserId}
-                      participantCapabilities={participantCapabilities}
-                      onLocalSpatialEnabledChange={(enabled) => {
-                        updateVoiceSettings(
-                          (current) => ({
-                            ...current,
-                            spatialAudioEnabled: enabled,
-                            streamHighFidelity: enabled
-                              ? true
-                              : current.streamHighFidelity,
-                            echoCancellation: enabled
-                              ? false
-                              : current.echoCancellation,
-                            noiseSuppression: enabled
-                              ? false
-                              : current.noiseSuppression,
-                          }),
-                          voiceSettingsUserId,
-                        );
-                      }}
-                      onOpenVoiceSettings={() => {
-                        setIsSpatialOpen(false);
-                        onOpenVoiceSettings?.();
-                      }}
-                      onClose={() => setIsSpatialOpen(false)}
-                    />
-                  )}
+                  <SpatialAudioPanel
+                    isOpen={isSpatialOpen}
+                    anchorRef={spatialBtnRef}
+                    gridItems={gridItems}
+                    spatialAudioState={spatialAudioState}
+                    onUpdateSpatialAudioState={onUpdateSpatialAudioState}
+                    localSpatialEnabled={settings.spatialAudioEnabled}
+                    localHighFidelity={settings.streamHighFidelity}
+                    localUserId={localUserId}
+                    participantCapabilities={participantCapabilities}
+                    onLocalSpatialEnabledChange={(enabled) => {
+                      updateVoiceSettings(
+                        (current) => ({
+                          ...current,
+                          spatialAudioEnabled: enabled,
+                          streamHighFidelity: enabled
+                            ? true
+                            : current.streamHighFidelity,
+                          echoCancellation: enabled
+                            ? false
+                            : current.echoCancellation,
+                          noiseSuppression: enabled
+                            ? false
+                            : current.noiseSuppression,
+                        }),
+                        voiceSettingsUserId,
+                      );
+                    }}
+                    onOpenVoiceSettings={() => {
+                      setIsSpatialOpen(false);
+                      onOpenVoiceSettings?.();
+                    }}
+                    onClose={() => setIsSpatialOpen(false)}
+                  />
                 </div>
               )}
               {showNoiseReductionShortcut && (
@@ -497,6 +501,19 @@ export function VoiceDashboard({
                       <p>Noise Suppression</p>
                     </TooltipContent>
                   </Tooltip>
+                  <ResponsivePopover
+                    open={isNoiseReductionOpen}
+                    onOpenChange={setIsNoiseReductionOpen}
+                    title="Noise Suppression"
+                    variant="rich"
+                    anchor={noiseReductionBtnRef}
+                    side="top"
+                  >
+                    <NoiseReductionPanel
+                      settingsUserId={voiceSettingsUserId}
+                      compact
+                    />
+                  </ResponsivePopover>
                 </div>
               )}
               <Tooltip>
@@ -519,43 +536,6 @@ export function VoiceDashboard({
               </Tooltip>
             </div>
           </div>
-
-          {shouldRenderNoiseReduction &&
-            mounted &&
-            createPortal(
-              <>
-                <button
-                  type="button"
-                  className="fixed inset-0 z-20"
-                  aria-label="Close noise suppression panel"
-                  onClick={() => setIsNoiseReductionOpen(false)}
-                />
-                <div
-                  ref={noiseReductionPanelRef}
-                  className={cn(
-                    "fixed z-30 w-[min(340px,calc(100vw-1.5rem))]",
-                    noiseReductionPanelPosition.placement === "top"
-                      ? !isNoiseReductionOpen
-                        ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-                        : "origin-bottom animate-in fade-in slide-in-from-bottom-2 duration-200"
-                      : !isNoiseReductionOpen
-                        ? "origin-top animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
-                        : "origin-top animate-in fade-in slide-in-from-top-2 duration-200",
-                  )}
-                  style={{
-                    top: noiseReductionPanelPosition.top,
-                    left: noiseReductionPanelPosition.left,
-                  }}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <NoiseReductionPanel
-                    settingsUserId={voiceSettingsUserId}
-                    compact
-                  />
-                </div>
-              </>,
-              document.body,
-            )}
 
           {/* STREAMING STATUS */}
           {isScreenSharing && (
@@ -613,159 +593,110 @@ export function VoiceDashboard({
                 >
                   <Icon name="streamOff" size="sm" /> Stop Streaming
                 </Button>
-                <div className="relative">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="icon-sm"
-                    onClick={() => setIsStreamMenuOpen(!isStreamMenuOpen)}
-                    aria-label="Stream settings"
-                    aria-expanded={isStreamMenuOpen}
-                    className={cn(isStreamMenuOpen && "bg-rm-tint-3")}
+                {isMobile ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon-sm"
+                      onClick={() => setIsStreamMenuOpen(true)}
+                      aria-label="Stream settings"
+                      aria-haspopup="dialog"
+                      aria-expanded={isStreamMenuOpen}
+                      className={cn(isStreamMenuOpen && "bg-rm-tint-3")}
+                    >
+                      <Icon name="more" size="sm" />
+                    </Button>
+                    <ActionSheet
+                      open={isStreamMenuOpen}
+                      onOpenChange={setIsStreamMenuOpen}
+                      items={streamActionItems}
+                      title="Stream Settings"
+                    />
+                  </>
+                ) : (
+                  <DropdownMenu
+                    open={isStreamMenuOpen}
+                    onOpenChange={setIsStreamMenuOpen}
                   >
-                    <Icon name="more" size="sm" />
-                  </Button>
-
-                  {shouldRenderStreamMenu && (
-                    <>
-                      <button
-                        type="button"
-                        className="fixed inset-0 z-60"
-                        aria-label="Close stream settings"
-                        onClick={() => setIsStreamMenuOpen(false)}
-                      />
-                      <div
-                        className={cn(
-                          "absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-70 origin-bottom-right",
-                          !isStreamMenuOpen
-                            ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-                            : "animate-in fade-in slide-in-from-bottom-2 duration-200",
-                        )}
-                      >
-                        <div className="px-3 py-1.5 border-b border-rm-border mb-1">
-                          <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-                            Stream Settings
-                          </p>
-                        </div>
-                        <button
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
                           type="button"
-                          onClick={() => {
-                            onChangeStreamSource?.();
-                            setIsStreamMenuOpen(false);
-                          }}
-                          className="w-full text-left px-3 py-2 text-ui-xs font-medium text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint rounded-lg transition-colors flex items-center gap-2"
+                          variant="secondary"
+                          size="icon-sm"
+                          aria-label="Stream settings"
+                          className={cn(isStreamMenuOpen && "bg-rm-tint-3")}
+                        />
+                      }
+                    >
+                      <Icon name="more" size="sm" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      side="top"
+                      align="end"
+                      aria-label="Stream Settings"
+                    >
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>Stream Settings</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          icon={<Icon name="screenShare" size="sm" />}
+                          onClick={() => onChangeStreamSource?.()}
                         >
-                          <Icon name="screenShare" size="sm" /> Change Source
-                        </button>
-                        <div className="h-[1px] bg-rm-border my-1" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onToggleStreamAudio?.();
-                            setIsStreamMenuOpen(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-3 py-2 text-ui-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
-                            isStreamingAudio
-                              ? "text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint"
-                              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover",
-                          )}
+                          Change Source
+                        </DropdownMenuItem>
+                        <DropdownMenuCheckboxItem
+                          icon={<Icon name="voiceChannel" size="sm" />}
+                          checked={!!isStreamingAudio}
+                          onCheckedChange={toggleStreamAudio}
+                          closeOnClick
                         >
-                          <span className="flex items-center gap-2">
-                            <Icon name="voiceChannel" size="sm" /> Stream Audio
-                          </span>
-                          <div
-                            className={cn(
-                              "w-2 h-2 rounded-full",
-                              isStreamingAudio
-                                ? "bg-primary"
-                                : "bg-rm-bg-active",
-                            )}
-                          />
-                        </button>
-                        <div className="h-[1px] bg-rm-border my-1" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            updateUserSettings(
-                              (current) => ({
-                                ...current,
-                                alwaysShowStreamPreview:
-                                  !current.alwaysShowStreamPreview,
-                              }),
-                              voiceSettingsUserId,
-                            );
-                            setIsStreamMenuOpen(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-3 py-2 text-ui-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
-                            alwaysShowStreamPreview
-                              ? "text-rm-accent-ink pointer-fine:hover:bg-rm-accent-tint"
-                              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover",
-                          )}
+                          Stream Audio
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                          icon={<Icon name="monitor" size="sm" />}
+                          checked={alwaysShowStreamPreview}
+                          onCheckedChange={toggleAlwaysShowStreamPreview}
+                          closeOnClick
                         >
-                          <span className="flex items-center gap-2">
-                            <Icon name="monitor" size="sm" /> Always Show Stream
-                            Preview
-                          </span>
-                          <div
-                            className={cn(
-                              "w-2 h-2 rounded-full",
-                              alwaysShowStreamPreview
-                                ? "bg-primary"
-                                : "bg-rm-bg-active",
-                            )}
-                          />
-                        </button>
-                        {availableQualities.length > 0 && (
-                          <>
-                            <div className="h-[1px] bg-rm-border my-1" />
-                            <div className="px-3 py-1.5">
-                              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-                                Quality
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-1 gap-0.5 max-h-48 overflow-y-auto custom-scrollbar">
-                              {availableQualities.map((q) => (
-                                <button
-                                  key={q}
-                                  type="button"
-                                  onClick={() => {
-                                    onStreamQualityChange?.(q);
-                                    setIsStreamMenuOpen(false);
-                                  }}
-                                  className={cn(
-                                    "w-full text-left px-3 py-1.5 text-ui-2xs font-medium rounded-md transition-ui flex items-center justify-between group/q outline-none",
-                                    screenQuality === q
-                                      ? "bg-rm-accent-tint text-rm-accent-ink"
-                                      : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
-                                  )}
+                          Always Show Stream Preview
+                        </DropdownMenuCheckboxItem>
+                      </DropdownMenuGroup>
+                      {availableQualities.length > 0 && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel>Quality</DropdownMenuLabel>
+                            <DropdownMenuRadioGroup
+                              value={screenQuality ?? null}
+                              onValueChange={(quality: string) =>
+                                onStreamQualityChange?.(quality)
+                              }
+                            >
+                              {availableQualities.map((quality) => (
+                                <DropdownMenuRadioItem
+                                  key={quality}
+                                  value={quality}
+                                  closeOnClick
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <Icon
-                                      name="monitor"
-                                      size="xs"
-                                      className={cn(
-                                        "transition-opacity",
-                                        screenQuality === q
-                                          ? "opacity-100"
-                                          : "opacity-40",
-                                      )}
-                                    />
-                                    {q.replace("p", "p ")}
-                                  </div>
-                                  {screenQuality === q && (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                                  )}
-                                </button>
+                                  {formatQualityOption(quality)}
+                                </DropdownMenuRadioItem>
                               ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
+                            </DropdownMenuRadioGroup>
+                          </DropdownMenuGroup>
+                        </>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="danger"
+                        icon={<Icon name="streamOff" size="sm" />}
+                        onClick={() => onStopStreaming?.()}
+                      >
+                        Stop Streaming
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             </div>
           )}

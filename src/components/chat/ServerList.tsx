@@ -258,37 +258,47 @@ export default function ServerList({
                   key={dm.channelId}
                   className="group relative flex w-full justify-center animate-in fade-in slide-in-from-left-2 duration-300"
                 >
-                  <button
-                    className={cn(
-                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-ui enabled:active:scale-[0.96]",
-                      isActiveDm
-                        ? "ring-2 ring-primary"
-                        : "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
-                    )}
-                    onClick={() => onSelectDm?.(dm.channelId)}
-                  >
-                    {dm.recipient.avatar_url ? (
-                      <AvatarImage
-                        src={getAuthAssetUrl(dm.recipient.avatar_url)}
-                        alt={displayName}
-                        display={dm.recipient.avatar_display}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-rail-item text-ui-sm font-semibold text-rm-text">
-                        {getDisplayInitial(dm.recipient)}
-                      </div>
-                    )}
-                    <div className="pointer-events-none fixed left-[80px] z-80 hidden whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text opacity-0 shadow-md transition-opacity pointer-fine:group-hover:opacity-100 md:block">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        className={cn(
+                          "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-ui enabled:active:scale-[0.96]",
+                          isActiveDm
+                            ? "ring-2 ring-primary"
+                            : "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
+                        )}
+                        onClick={() => onSelectDm?.(dm.channelId)}
+                        aria-label={displayName}
+                      >
+                        {dm.recipient.avatar_url ? (
+                          <AvatarImage
+                            src={getAuthAssetUrl(dm.recipient.avatar_url)}
+                            alt={displayName}
+                            display={dm.recipient.avatar_display}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-rail-item text-ui-sm font-semibold text-rm-text">
+                            {getDisplayInitial(dm.recipient)}
+                          </div>
+                        )}
+                        {(dm.unreadCount ?? 1) > 0 && (
+                          <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating">
+                            {(dm.unreadCount ?? 1) > 99
+                              ? "99+"
+                              : (dm.unreadCount ?? 1)}
+                          </div>
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      forceMount
+                      side="right"
+                      align="center"
+                      sideOffset={14}
+                    >
                       <InlineEmojiText text={displayName} />
-                    </div>
-                    {(dm.unreadCount ?? 1) > 0 && (
-                      <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating">
-                        {(dm.unreadCount ?? 1) > 99
-                          ? "99+"
-                          : (dm.unreadCount ?? 1)}
-                      </div>
-                    )}
-                  </button>
+                    </TooltipContent>
+                  </Tooltip>
                   <div
                     className={cn(
                       "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",

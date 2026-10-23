@@ -1,170 +1,71 @@
 import { cn } from "@/lib/utils";
 import {
-  MENU_ICON,
   MENU_ITEM,
   MENU_ITEM_DANGER,
-  MENU_ITEM_DANGER_ON,
   MENU_ITEM_DEFAULT,
-  MENU_ITEM_DEFAULT_ON,
-  MENU_PANEL,
+  MENU_LABEL,
   MENU_SEPARATOR,
 } from "@/components/ui/menu";
+import type { ActionSheetItem } from "@/components/ui/action-sheet";
+import {
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { Icon, type IconName } from "@/components/ui/icon";
-import React, { memo, useCallback, useEffect, useRef } from "react";
+import { Icon } from "@/components/ui/icon";
+import React, { memo, useCallback } from "react";
 
-export const Divider = memo(() => <div className={MENU_SEPARATOR} />);
-Divider.displayName = "Divider";
+/**
+ * Item model for the voice/stream context menus (LocalMenu, RemoteMenu). One
+ * list renders as a Base UI menu on desktop (flipping submenus) and as an
+ * `ActionSheet` on phones, where sliders and submenus open inline in a row.
+ *
+ * Items never close the menu on their own: each `onSelect` calls `onClose`
+ * when the action should dismiss it, as the menus always did.
+ */
+export type StreamMenuEntry =
+  | {
+      type: "item";
+      key: string;
+      label: string;
+      onSelect?: () => void;
+      danger?: boolean;
+      /** A toggle: renders a check when on. */
+      checked?: boolean;
+      bold?: boolean;
+      description?: string;
+      trailing?: React.ReactNode;
+      disabled?: boolean;
+    }
+  | {
+      type: "slider";
+      key: string;
+      label: string;
+      value: number;
+      max?: number;
+      onChange: (value: number) => void;
+    }
+  | {
+      type: "submenu";
+      key: string;
+      label: string;
+      entries: StreamMenuEntry[];
+    }
+  | { type: "divider"; key: string };
 
-export interface MenuItemProps {
-  label: string;
-
-  icon?: IconName;
-  onClick?: () => void;
-  onMouseEnter?: () => void;
-  onArrowLeft?: () => void;
-  danger?: boolean;
-  checked?: boolean;
-  checkVariant?: "default" | "danger";
-
-  checkIcon?: IconName;
-  hasSubmenu?: boolean;
-  description?: string;
-  boldLabel?: boolean;
-  rightElement?: React.ReactNode;
-  active?: boolean;
-  disabled?: boolean;
+/** A divider entry; `key` must be unique within its list. */
+export function divider(key: string): StreamMenuEntry {
+  return { type: "divider", key: `divider-${key}` };
 }
 
-function getSiblingMenuItems(element: HTMLElement): HTMLElement[] {
-  const menu = element.closest<HTMLElement>('[role="menu"]');
-  if (!menu) return [];
-  return Array.from(
-    menu.querySelectorAll<HTMLElement>("[data-menu-item]:not([disabled])"),
-  ).filter((item) => item.closest('[role="menu"]') === menu);
-}
-
-export const MenuItem = memo(
-  ({
-    label,
-    icon,
-    onClick,
-    onMouseEnter,
-    danger,
-    checked,
-    checkVariant = "default",
-    checkIcon = "check",
-    hasSubmenu,
-    description,
-    boldLabel,
-    rightElement,
-    active,
-    disabled,
-  }: MenuItemProps) => {
-    const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (disabled) return;
-      const siblings = getSiblingMenuItems(event.currentTarget);
-      const currentIndex = siblings.indexOf(event.currentTarget);
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        const direction = event.key === "ArrowDown" ? 1 : -1;
-        siblings[
-          (currentIndex + direction + siblings.length) % siblings.length
-        ]?.focus();
-      } else if (event.key === "Home" || event.key === "End") {
-        event.preventDefault();
-        siblings[event.key === "Home" ? 0 : siblings.length - 1]?.focus();
-      } else if (event.key === "ArrowRight" && hasSubmenu) {
-        event.preventDefault();
-        const parent = event.currentTarget.parentElement;
-        onMouseEnter?.();
-        window.requestAnimationFrame(() => {
-          parent
-            ?.querySelector<HTMLElement>(
-              '[role="menu"] [data-menu-item]:not([disabled])',
-            )
-            ?.focus();
-        });
-      }
-    };
-
-    return (
-      <button
-        type="button"
-        role="menuitem"
-        data-menu-item="true"
-        aria-disabled={disabled || undefined}
-        aria-haspopup={hasSubmenu ? "menu" : undefined}
-        aria-expanded={hasSubmenu ? active : undefined}
-        onMouseEnter={disabled ? undefined : onMouseEnter}
-        onKeyDown={handleKeyDown}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!disabled) onClick?.();
-        }}
-        disabled={disabled}
-        className={cn(
-          MENU_ITEM,
-          "shrink-0 justify-between",
-          danger ? MENU_ITEM_DANGER : MENU_ITEM_DEFAULT,
-          active && (danger ? MENU_ITEM_DANGER_ON : MENU_ITEM_DEFAULT_ON),
-          disabled && "pointer-events-none",
-        )}
-      >
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          {icon && (
-            <Icon
-              name={icon}
-              size="sm"
-              className={danger ? "shrink-0" : MENU_ICON}
-            />
-          )}
-          <div className="flex flex-col overflow-hidden">
-            <span
-              className={cn(
-                "truncate text-ui-sm",
-                boldLabel ? "font-bold" : "font-medium",
-              )}
-            >
-              <InlineEmojiText text={label} />
-            </span>
-            {description && (
-              <span className="truncate text-ui-2xs text-rm-text-muted">
-                <InlineEmojiText text={description} />
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {rightElement}
-          {checked !== undefined && (
-            <div
-              className={cn(
-                "flex size-4 items-center justify-center rounded-xs border",
-                checked
-                  ? checkVariant === "danger"
-                    ? "border-rm-danger bg-rm-danger text-rm-on-danger"
-                    : "border-primary bg-primary text-primary-foreground"
-                  : "border-rm-field-edge",
-              )}
-            >
-              {checked && <Icon name={checkIcon} size="xs" />}
-            </div>
-          )}
-          {hasSubmenu && (
-            <Icon
-              name="chevronRight"
-              size="xs"
-              className="text-rm-text-muted"
-            />
-          )}
-        </div>
-      </button>
-    );
-  },
-);
-MenuItem.displayName = "MenuItem";
-
+/**
+ * Volume-style slider. The thumb is always visible (VC-23) and the input
+ * grows to a 44px hit target on coarse pointers.
+ */
 export const Slider = memo(
   ({
     label,
@@ -185,20 +86,20 @@ export const Slider = memo(
       },
       [onChange],
     );
+    const percent = Math.min(100, (value / max) * 100);
 
     return (
       <div className="shrink-0 px-2 py-2" onMouseEnter={onMouseEnter}>
         <p className="mb-2 text-ui-xs font-semibold text-rm-text">{label}</p>
-        <div className="group/slider relative h-1 rounded-full bg-rm-bg-primary">
+        <div className="relative h-1 rounded-full bg-rm-bg-primary">
           <div
             className="absolute left-0 top-0 h-full rounded-full bg-primary transition-ui"
-            style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
+            style={{ width: `${percent}%` }}
           />
           <div
-            className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface opacity-0 shadow-lg transition-opacity pointer-fine:group-hover/slider:opacity-100"
-            style={{
-              left: `calc(${Math.min(100, (value / max) * 100)}% - 6px)`,
-            }}
+            data-slot="slider-thumb"
+            className="pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface shadow-lg pointer-coarse:size-5"
+            style={{ left: `${percent}%` }}
           />
           <input
             type="range"
@@ -208,7 +109,7 @@ export const Slider = memo(
             value={value}
             aria-label={label}
             onChange={handleChange}
-            className="absolute inset-0 z-10 w-full h-full cursor-pointer opacity-0"
+            className="absolute inset-x-0 top-1/2 z-10 h-full w-full -translate-y-1/2 cursor-pointer opacity-0 pointer-coarse:min-h-11"
           />
         </div>
       </div>
@@ -217,89 +118,240 @@ export const Slider = memo(
 );
 Slider.displayName = "Slider";
 
-interface SubMenuProps {
-  children: React.ReactNode;
-  active: boolean;
-  onMouseEnter: () => void;
-  onEscape?: () => void;
+/** Keys a range input handles itself; the menu must not move focus on them. */
+const SLIDER_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
+function ItemLabel({
+  label,
+  description,
+  bold,
+}: {
+  label: string;
+  description?: string;
+  bold?: boolean;
+}) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className={cn("truncate", bold && "font-semibold")}>
+        <InlineEmojiText text={label} />
+      </span>
+      {description ? (
+        <span className="truncate text-ui-2xs font-normal text-rm-text-muted">
+          <InlineEmojiText text={description} />
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
-export const SubMenu = memo(
-  ({ children, active, onMouseEnter, onEscape }: SubMenuProps) => {
-    const submenuRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      if (!active) return;
-      const frameId = window.requestAnimationFrame(() => {
-        const firstEnabledItem = submenuRef.current?.querySelector<HTMLElement>(
-          '[role="menuitem"]:not([disabled])',
-        );
-        (firstEnabledItem ?? submenuRef.current)?.focus();
-      });
-      return () => window.cancelAnimationFrame(frameId);
-    }, [active]);
-
-    if (!active) return null;
-
-    return (
-      <div
-        ref={submenuRef}
-        role="menu"
-        tabIndex={-1}
-        onMouseEnter={onMouseEnter}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape" && event.key !== "ArrowLeft") return;
-          event.preventDefault();
-          event.stopPropagation();
-          onEscape?.();
-          submenuRef.current?.parentElement
-            ?.querySelector<HTMLElement>(
-              '[data-menu-item][aria-haspopup="menu"]',
-            )
-            ?.focus();
-        }}
-        className={cn(
-          "absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70dvh] w-[200px] flex-col overflow-y-auto animate-in fade-in no-scrollbar",
-          MENU_PANEL,
-        )}
-      >
-        <div className="absolute top-0 bottom-0 -left-4 w-4" />
-        {children}
-      </div>
-    );
-  },
-);
-SubMenu.displayName = "SubMenu";
-
-interface SubMenuItemProps extends MenuItemProps {
-  submenu: React.ReactNode;
-  active: boolean;
-  onMouseEnter: () => void;
+/** Desktop: the entries as Base UI menu rows (inside a DropdownMenuContent). */
+export function StreamMenuEntries({
+  entries,
+  panelProps,
+}: {
+  entries: StreamMenuEntry[];
+  /** Spread on every submenu panel (event isolation, data attributes). */
+  panelProps?: React.ComponentPropsWithoutRef<"div">;
+}) {
+  return (
+    <>
+      {entries.map((entry) => {
+        switch (entry.type) {
+          case "divider":
+            return <DropdownMenuSeparator key={entry.key} />;
+          case "slider":
+            return (
+              <div
+                key={entry.key}
+                onKeyDown={(event) => {
+                  if (SLIDER_KEYS.has(event.key)) event.stopPropagation();
+                }}
+              >
+                <Slider
+                  label={entry.label}
+                  value={entry.value}
+                  max={entry.max}
+                  onChange={entry.onChange}
+                />
+              </div>
+            );
+          case "submenu":
+            return (
+              <DropdownMenuSub key={entry.key}>
+                <DropdownMenuSubTrigger>
+                  <InlineEmojiText text={entry.label} />
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent
+                  className="max-w-[min(240px,var(--available-width))]"
+                  {...panelProps}
+                >
+                  <StreamMenuEntries
+                    entries={entry.entries}
+                    panelProps={panelProps}
+                  />
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            );
+          case "item": {
+            const label = (
+              <ItemLabel
+                label={entry.label}
+                description={entry.description}
+                bold={entry.bold}
+              />
+            );
+            if (entry.checked !== undefined) {
+              return (
+                <DropdownMenuCheckboxItem
+                  key={entry.key}
+                  checked={entry.checked}
+                  disabled={entry.disabled}
+                  onCheckedChange={() => entry.onSelect?.()}
+                  closeOnClick={false}
+                  className={cn(entry.danger && "text-rm-danger-ink")}
+                >
+                  {label}
+                </DropdownMenuCheckboxItem>
+              );
+            }
+            return (
+              <DropdownMenuItem
+                key={entry.key}
+                variant={entry.danger ? "danger" : "default"}
+                disabled={entry.disabled}
+                closeOnClick={false}
+                onClick={() => entry.onSelect?.()}
+                hint={entry.trailing}
+              >
+                {label}
+              </DropdownMenuItem>
+            );
+          }
+        }
+      })}
+    </>
+  );
 }
 
-export const SubMenuItem = memo(
-  ({
-    submenu,
-    active,
-    onMouseEnter,
-    onArrowLeft,
-    ...props
-  }: SubMenuItemProps) => (
-    <div className="relative flex flex-col">
-      <MenuItem
-        {...props}
-        hasSubmenu
-        active={active}
-        onMouseEnter={onMouseEnter}
-      />
-      <SubMenu
-        active={active}
-        onMouseEnter={onMouseEnter}
-        onEscape={onArrowLeft}
-      >
-        {submenu}
-      </SubMenu>
+/** Phone: rows inside an expanded ActionSheet row (nested submenus flatten). */
+function SheetEntries({ entries }: { entries: StreamMenuEntry[] }) {
+  return (
+    <div className="flex flex-col">
+      {entries.map((entry) => {
+        switch (entry.type) {
+          case "divider":
+            return <div key={entry.key} className={MENU_SEPARATOR} />;
+          case "slider":
+            return (
+              <Slider
+                key={entry.key}
+                label={entry.label}
+                value={entry.value}
+                max={entry.max}
+                onChange={entry.onChange}
+              />
+            );
+          case "submenu":
+            return (
+              <div key={entry.key} role="group" aria-label={entry.label}>
+                <p className={MENU_LABEL}>{entry.label}</p>
+                <SheetEntries entries={entry.entries} />
+              </div>
+            );
+          case "item":
+            return (
+              <button
+                key={entry.key}
+                type="button"
+                disabled={entry.disabled}
+                aria-pressed={entry.checked}
+                onClick={() => entry.onSelect?.()}
+                className={cn(
+                  MENU_ITEM,
+                  "justify-between",
+                  entry.danger ? MENU_ITEM_DANGER : MENU_ITEM_DEFAULT,
+                )}
+              >
+                <ItemLabel
+                  label={entry.label}
+                  description={entry.description}
+                  bold={entry.bold}
+                />
+                {entry.checked ? (
+                  <Icon name="check" size="xs" className="shrink-0" />
+                ) : null}
+              </button>
+            );
+        }
+      })}
     </div>
-  ),
-);
-SubMenuItem.displayName = "SubMenuItem";
+  );
+}
+
+const noop = () => {};
+
+/** Phone: the same entries as ActionSheet rows. */
+export function toActionSheetItems(
+  entries: StreamMenuEntry[],
+): ActionSheetItem[] {
+  const items: ActionSheetItem[] = [];
+  for (const entry of entries) {
+    if (entry.type === "divider") {
+      const last = items[items.length - 1];
+      if (last) last.divider = true;
+      continue;
+    }
+    if (entry.type === "slider") {
+      items.push({
+        key: entry.key,
+        label: entry.label,
+        subtitle: `${entry.value}%`,
+        onClick: noop,
+        closeOnClick: false,
+        submenu: (
+          <Slider
+            label={entry.label}
+            value={entry.value}
+            max={entry.max}
+            onChange={entry.onChange}
+          />
+        ),
+      });
+      continue;
+    }
+    if (entry.type === "submenu") {
+      items.push({
+        key: entry.key,
+        label: entry.label,
+        onClick: noop,
+        closeOnClick: false,
+        submenu: <SheetEntries entries={entry.entries} />,
+      });
+      continue;
+    }
+    items.push({
+      key: entry.key,
+      label: entry.label,
+      subtitle: entry.description,
+      onClick: entry.onSelect ?? noop,
+      variant: entry.danger ? "danger" : "default",
+      disabled: entry.disabled,
+      closeOnClick: false,
+      rightIcon: entry.checked ? (
+        <Icon name="check" size="sm" />
+      ) : entry.checked === undefined ? (
+        entry.trailing
+      ) : undefined,
+    });
+  }
+  return items;
+}

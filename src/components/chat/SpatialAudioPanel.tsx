@@ -1,4 +1,3 @@
-import { useMounted } from "@/hooks/useMounted";
 import { Button } from "@/components/ui/button";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import type { GridItem } from "@/components/voice/types";
@@ -14,12 +13,12 @@ import {
 import type { SpatialPlacementMode } from "@/stores/useVoiceSettingsStore";
 import { DndContext, type DragEndEvent, useDraggable } from "@dnd-kit/core";
 import { Icon } from "@/components/ui/icon";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { ResponsivePopover } from "@/components/ui/popover";
+import { useMemo, useRef, useState } from "react";
 
 interface SpatialAudioPanelProps {
-  isClosing?: boolean;
   isOpen: boolean;
+  /** The toggle that opens the panel; the popover anchors to it. */
   anchorRef: React.RefObject<HTMLElement | null>;
   gridItems: GridItem[];
   spatialAudioState: SharedSpatialAudioState;
@@ -46,8 +45,6 @@ const EMPTY_PARTICIPANT_CAPABILITIES: Record<
   string,
   { enabled?: boolean; highFidelity?: boolean }
 > = {};
-const SPATIAL_PANEL_GAP = 8;
-const SPATIAL_PANEL_VIEWPORT_PADDING = 12;
 
 function DraggableAvatar({
   participant,
@@ -127,7 +124,6 @@ function DraggableAvatar({
 
 export function SpatialAudioPanel({
   isOpen,
-  isClosing,
   anchorRef,
   gridItems,
   spatialAudioState,
@@ -140,10 +136,8 @@ export function SpatialAudioPanel({
   onOpenVoiceSettings,
   onClose,
 }: SpatialAudioPanelProps) {
-  const mounted = useMounted();
   const mapRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const panStartRef = useRef<{
     x: number;
     y: number;
@@ -151,12 +145,6 @@ export function SpatialAudioPanel({
     panY: number;
   } | null>(null);
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
-  const [panelPosition, setPanelPosition] = useState({
-    top: 0,
-    left: 0,
-    placement: "top" as "top" | "bottom",
-    ready: false,
-  });
   const state = normalizeSpatialState(spatialAudioState);
   const participants = useMemo<SpatialParticipant[]>(
     () => [
@@ -177,68 +165,6 @@ export function SpatialAudioPanel({
   const blocked = !localHighFidelity;
   const roomVisualScale = 1.16 - ((state.roomSize - 10) / 90) * 0.34;
   const totalZoom = view.zoom * roomVisualScale;
-
-  useLayoutEffect(() => {
-    if ((!isOpen && !isClosing) || !panelRef.current) return;
-
-    const updatePosition = () => {
-      const panelRect = panelRef.current?.getBoundingClientRect();
-      const anchorRect = anchorRef.current?.getBoundingClientRect();
-      if (!panelRect || !anchorRect) return;
-
-      const anchorCenterX = anchorRect.left + anchorRect.width / 2;
-      let left = anchorCenterX - panelRect.width / 2;
-      left = Math.min(
-        Math.max(SPATIAL_PANEL_VIEWPORT_PADDING, left),
-        window.innerWidth - panelRect.width - SPATIAL_PANEL_VIEWPORT_PADDING,
-      );
-
-      const spaceAbove = anchorRect.top - SPATIAL_PANEL_VIEWPORT_PADDING;
-      const spaceBelow =
-        window.innerHeight - anchorRect.bottom - SPATIAL_PANEL_VIEWPORT_PADDING;
-      const openAbove =
-        spaceAbove >= panelRect.height + SPATIAL_PANEL_GAP ||
-        spaceAbove >= spaceBelow;
-
-      let top = openAbove
-        ? anchorRect.top - panelRect.height - SPATIAL_PANEL_GAP
-        : anchorRect.bottom + SPATIAL_PANEL_GAP;
-      top = Math.min(
-        Math.max(SPATIAL_PANEL_VIEWPORT_PADDING, top),
-        window.innerHeight - panelRect.height - SPATIAL_PANEL_VIEWPORT_PADDING,
-      );
-
-      setPanelPosition({
-        top,
-        left,
-        placement: openAbove ? "top" : "bottom",
-        ready: true,
-      });
-    };
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => updatePosition())
-        : null;
-
-    resizeObserver?.observe(panelRef.current);
-    if (anchorRef.current) {
-      resizeObserver?.observe(anchorRef.current);
-    }
-
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-      resizeObserver?.disconnect();
-    };
-  }, [anchorRef, isClosing, isOpen]);
-
-  if (!mounted) return null;
-  if (!isOpen && !isClosing) return null;
 
   const commit = (patch: Partial<SharedSpatialAudioState>) => {
     const next = normalizeSpatialState({
@@ -316,230 +242,215 @@ export function SpatialAudioPanel({
     }
   };
 
-  return createPortal(
-    <>
-      {!isClosing && (
+  // Popover anchored to the toggle on desktop, bottom drawer on phones
+  // (design-system 13.1). The primitive owns placement, Escape, the back
+  // button, outside presses and focus return.
+  return (
+    <ResponsivePopover
+      open={isOpen}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Spatial Audio"
+      variant="rich"
+      anchor={anchorRef}
+      side="top"
+      // Wider than a rich popover: the placement map needs the room.
+      className="w-[min(620px,var(--available-width))] max-w-none p-4"
+    >
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-ui-sm font-semibold text-rm-text">
+            Spatial Audio
+          </h3>
+          <p className="mt-1 text-ui-xs text-rm-text-muted">
+            Shared room placement for everyone in this voice session.
+          </p>
+        </div>
         <button
           type="button"
-          className="fixed inset-0 z-20"
-          aria-label="Close spatial audio panel"
           onClick={onClose}
-        />
-      )}
-      <div
-        ref={panelRef}
-        aria-label="Spatial Audio"
-        className={cn(
-          "fixed z-30 w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl",
-          panelPosition.placement === "top"
-            ? isClosing
-              ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-              : "origin-bottom animate-in fade-in slide-in-from-bottom-2 duration-200"
-            : isClosing
-              ? "origin-top animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
-              : "origin-top animate-in fade-in slide-in-from-top-2 duration-200",
-        )}
-        style={{
-          top: panelPosition.top,
-          left: panelPosition.left,
-          visibility: panelPosition.ready ? "visible" : "hidden",
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-ui-sm font-semibold text-rm-text">
-              Spatial Audio
-            </h3>
-            <p className="mt-1 text-ui-xs text-rm-text-muted">
-              Shared room placement for everyone in this voice session.
-            </p>
+          className="rounded-md px-2 py-1 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+        >
+          Close
+        </button>
+      </div>
+
+      {blocked && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
+          <div className="flex items-center gap-2 text-ui-xs text-amber-200">
+            <Icon name="warning" size="sm" />
+            High Fidelity Audio is required to hear spatial audio.
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-          >
-            Close
-          </button>
+          <Button size="sm" onClick={onOpenVoiceSettings}>
+            Open Voice Settings
+          </Button>
         </div>
+      )}
 
-        {blocked && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
-            <div className="flex items-center gap-2 text-ui-xs text-amber-200">
-              <Icon name="warning" size="sm" />
-              High Fidelity Audio is required to hear spatial audio.
-            </div>
-            <Button size="sm" onClick={onOpenVoiceSettings}>
-              Open Voice Settings
-            </Button>
-          </div>
-        )}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            const nextEnabled = !state.enabled;
+            onLocalSpatialEnabledChange(nextEnabled);
+            commit({ enabled: nextEnabled });
+          }}
+          className={cn(
+            "rounded-lg px-3 py-2 text-ui-xs font-semibold transition-colors",
+            state.enabled && localSpatialEnabled && localHighFidelity
+              ? "bg-primary text-primary-foreground"
+              : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
+          )}
+        >
+          {state.enabled ? "Spatial Enabled" : "Spatial Disabled"}
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })
+          }
+          className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:text-rm-text"
+        >
+          <Icon name="reset" size="sm" /> Reset
+        </button>
+      </div>
 
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 grid grid-cols-4 gap-2">
+        {MODES.map((mode) => (
           <button
+            key={mode.value}
             type="button"
-            onClick={() => {
-              const nextEnabled = !state.enabled;
-              onLocalSpatialEnabledChange(nextEnabled);
-              commit({ enabled: nextEnabled });
-            }}
+            onClick={() => commit({ placementMode: mode.value })}
             className={cn(
-              "rounded-lg px-3 py-2 text-ui-xs font-semibold transition-colors",
-              state.enabled && localSpatialEnabled && localHighFidelity
+              "rounded-md px-3 py-2 text-ui-xs font-semibold transition-colors",
+              state.placementMode === mode.value
                 ? "bg-primary text-primary-foreground"
                 : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
             )}
           >
-            {state.enabled ? "Spatial Enabled" : "Spatial Disabled"}
+            {mode.label}
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })
-            }
-            className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:text-rm-text"
-          >
-            <Icon name="reset" size="sm" /> Reset
-          </button>
-        </div>
-
-        <div className="mb-4 grid grid-cols-4 gap-2">
-          {MODES.map((mode) => (
-            <button
-              key={mode.value}
-              type="button"
-              onClick={() => commit({ placementMode: mode.value })}
-              className={cn(
-                "rounded-md px-3 py-2 text-ui-xs font-semibold transition-colors",
-                state.placementMode === mode.value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
-              )}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mb-4 grid gap-4 md:grid-cols-3">
-          {[
-            ["Room Size", "roomSize", 10, 100],
-            ["Distance", "distance", 10, 95],
-            ["Arc Angle", "arcAngle", 30, 180],
-          ].map(([label, key, min, max]) => (
-            <label
-              key={key}
-              className="space-y-2 text-ui-xs font-semibold text-rm-text-muted"
-            >
-              <span className="flex justify-between">
-                <span>{label}</span>
-                <span>{(state as any)[key]}</span>
-              </span>
-              <input
-                type="range"
-                min={min as number}
-                max={max as number}
-                value={(state as any)[key]}
-                onChange={(event) =>
-                  commit({
-                    [key]: Number(event.target.value),
-                  } as Partial<SharedSpatialAudioState>)
-                }
-                className="w-full accent-primary"
-              />
-            </label>
-          ))}
-        </div>
-
-        <DndContext onDragEnd={onDragEnd}>
-          <div
-            ref={mapRef}
-            className="relative h-[360px] touch-none overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface"
-            onWheel={onWheel}
-            onPointerDown={onMapPointerDown}
-            onPointerMove={onMapPointerMove}
-            onPointerUp={stopMapPan}
-            onPointerCancel={stopMapPan}
-          >
-            <div
-              ref={worldRef}
-              className="absolute inset-0 cursor-grab bg-[linear-gradient(rgba(0,0,0,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] active:cursor-grabbing"
-              style={{
-                backgroundSize: `${Math.max(38, 78 / totalZoom)}px ${Math.max(38, 78 / totalZoom)}px`,
-                transform: `translate(${view.panX}px, ${view.panY}px) scale(${totalZoom})`,
-                transformOrigin: "50% 58%",
-              }}
-            >
-              <div className="absolute left-4 top-4 rounded-md border border-rm-border bg-rm-bg-hover/80 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
-                {state.roomSize} m² room
-              </div>
-              {participants.map((participant) => {
-                const caps =
-                  participant.userId === (localUserId || "self")
-                    ? {
-                        enabled: localSpatialEnabled,
-                        highFidelity: localHighFidelity,
-                      }
-                    : participantCapabilities[participant.userId];
-                const inactive = !caps?.enabled || !caps?.highFidelity;
-                return (
-                  <DraggableAvatar
-                    key={participant.userId}
-                    participant={participant}
-                    position={positions[participant.userId] ?? { x: 50, y: 50 }}
-                    disabled={state.placementMode !== "manual"}
-                    inactive={inactive}
-                  />
-                );
-              })}
-            </div>
-            <div className="absolute right-3 top-3 flex overflow-hidden rounded-md border border-rm-border bg-rm-bg-hover/80">
-              <button
-                type="button"
-                title="Zoom out"
-                onClick={() =>
-                  setView((current) => ({
-                    ...current,
-                    zoom: Math.max(0.65, current.zoom - 0.12),
-                  }))
-                }
-                className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-              >
-                <Icon name="minus" size="sm" />
-              </button>
-              <button
-                type="button"
-                title="Reset view"
-                onClick={() => setView({ zoom: 1, panX: 0, panY: 0 })}
-                className="border-x border-rm-border px-2 text-ui-2xs font-bold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-              >
-                {Math.round(totalZoom * 100)}%
-              </button>
-              <button
-                type="button"
-                title="Zoom in"
-                onClick={() =>
-                  setView((current) => ({
-                    ...current,
-                    zoom: Math.min(1.8, current.zoom + 0.12),
-                  }))
-                }
-                className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-              >
-                <Icon name="add" size="sm" />
-              </button>
-            </div>
-            {state.placementMode === "manual" && (
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-rm-bg-hover/80 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
-                <Icon name="move" size="xs" /> Drag members to reposition
-                everyone
-              </div>
-            )}
-          </div>
-        </DndContext>
+        ))}
       </div>
-    </>,
-    document.body,
+
+      <div className="mb-4 grid gap-4 md:grid-cols-3">
+        {[
+          ["Room Size", "roomSize", 10, 100],
+          ["Distance", "distance", 10, 95],
+          ["Arc Angle", "arcAngle", 30, 180],
+        ].map(([label, key, min, max]) => (
+          <label
+            key={key}
+            className="space-y-2 text-ui-xs font-semibold text-rm-text-muted"
+          >
+            <span className="flex justify-between">
+              <span>{label}</span>
+              <span>{(state as any)[key]}</span>
+            </span>
+            <input
+              type="range"
+              min={min as number}
+              max={max as number}
+              value={(state as any)[key]}
+              onChange={(event) =>
+                commit({
+                  [key]: Number(event.target.value),
+                } as Partial<SharedSpatialAudioState>)
+              }
+              className="w-full accent-primary"
+            />
+          </label>
+        ))}
+      </div>
+
+      <DndContext onDragEnd={onDragEnd}>
+        <div
+          ref={mapRef}
+          // Panning and dragging avatars must not swipe the phone drawer.
+          data-base-ui-swipe-ignore=""
+          className="relative h-[360px] touch-none overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface"
+          onWheel={onWheel}
+          onPointerDown={onMapPointerDown}
+          onPointerMove={onMapPointerMove}
+          onPointerUp={stopMapPan}
+          onPointerCancel={stopMapPan}
+        >
+          <div
+            ref={worldRef}
+            className="absolute inset-0 cursor-grab bg-[linear-gradient(rgba(0,0,0,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] active:cursor-grabbing"
+            style={{
+              backgroundSize: `${Math.max(38, 78 / totalZoom)}px ${Math.max(38, 78 / totalZoom)}px`,
+              transform: `translate(${view.panX}px, ${view.panY}px) scale(${totalZoom})`,
+              transformOrigin: "50% 58%",
+            }}
+          >
+            <div className="absolute left-4 top-4 rounded-md border border-rm-border bg-rm-bg-hover/80 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
+              {state.roomSize} m² room
+            </div>
+            {participants.map((participant) => {
+              const caps =
+                participant.userId === (localUserId || "self")
+                  ? {
+                      enabled: localSpatialEnabled,
+                      highFidelity: localHighFidelity,
+                    }
+                  : participantCapabilities[participant.userId];
+              const inactive = !caps?.enabled || !caps?.highFidelity;
+              return (
+                <DraggableAvatar
+                  key={participant.userId}
+                  participant={participant}
+                  position={positions[participant.userId] ?? { x: 50, y: 50 }}
+                  disabled={state.placementMode !== "manual"}
+                  inactive={inactive}
+                />
+              );
+            })}
+          </div>
+          <div className="absolute right-3 top-3 flex overflow-hidden rounded-md border border-rm-border bg-rm-bg-hover/80">
+            <button
+              type="button"
+              title="Zoom out"
+              onClick={() =>
+                setView((current) => ({
+                  ...current,
+                  zoom: Math.max(0.65, current.zoom - 0.12),
+                }))
+              }
+              className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+            >
+              <Icon name="minus" size="sm" />
+            </button>
+            <button
+              type="button"
+              title="Reset view"
+              onClick={() => setView({ zoom: 1, panX: 0, panY: 0 })}
+              className="border-x border-rm-border px-2 text-ui-2xs font-bold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+            >
+              {Math.round(totalZoom * 100)}%
+            </button>
+            <button
+              type="button"
+              title="Zoom in"
+              onClick={() =>
+                setView((current) => ({
+                  ...current,
+                  zoom: Math.min(1.8, current.zoom + 0.12),
+                }))
+              }
+              className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+            >
+              <Icon name="add" size="sm" />
+            </button>
+          </div>
+          {state.placementMode === "manual" && (
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-rm-bg-hover/80 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
+              <Icon name="move" size="xs" /> Drag members to reposition everyone
+            </div>
+          )}
+        </div>
+      </DndContext>
+    </ResponsivePopover>
   );
 }

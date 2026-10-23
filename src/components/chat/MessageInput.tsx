@@ -1,3 +1,4 @@
+import { useId, useRef } from "react";
 import { getDisplayName } from "@/lib/display-name";
 import type { Message } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ interface Props {
 
 import { HoveredMentionTooltip } from "./HoveredMentionTooltip";
 import { InputControls } from "./InputControls";
-import { MentionAutocomplete } from "./MentionAutocomplete";
+import { MentionAutocomplete, mentionOptionId } from "./MentionAutocomplete";
 import { ReplyIndicator } from "./ReplyIndicator";
 
 export default function MessageInput({
@@ -82,6 +83,10 @@ export default function MessageInput({
     doSend,
   } = useMessageInput({ channelId, onSend, onTyping, replyTo, onCancelReply });
 
+  const composerRef = useRef<HTMLDivElement>(null);
+  const mentionListId = useId();
+  const mentionListOpen = !!mentionQuery && mentionCandidates.length > 0;
+
   const showReply = !!replyTo;
   const shouldRenderReply = showReply;
 
@@ -93,7 +98,10 @@ export default function MessageInput({
         paddingBottom: "calc(max(8px, var(--safe-area-bottom, 0px)) + 8px)",
       }}
     >
-      <div className="rm-composer group relative flex flex-col rounded-lg border border-rm-border bg-rm-bg-elevated transition-[border-color,box-shadow] focus-within:border-rm-border-strong">
+      <div
+        ref={composerRef}
+        className="rm-composer group relative flex flex-col rounded-lg border border-rm-border bg-rm-bg-elevated transition-[border-color,box-shadow] focus-within:border-rm-border-strong"
+      >
         {shouldRenderReply && replyTo && (
           <ReplyIndicator
             replyTo={replyTo}
@@ -108,6 +116,8 @@ export default function MessageInput({
           mentionIndex={mentionIndex}
           setLocalState={setLocalState}
           insertMention={insertMention}
+          anchor={composerRef}
+          listId={mentionListId}
         />
 
         <HoveredMentionTooltip
@@ -185,6 +195,13 @@ export default function MessageInput({
                 replyTo
                   ? `Reply to ${replyDisplayName}…`
                   : `Message #${channelName}`
+              }
+              aria-autocomplete="list"
+              aria-controls={mentionListOpen ? mentionListId : undefined}
+              aria-activedescendant={
+                mentionListOpen
+                  ? mentionOptionId(mentionListId, mentionIndex)
+                  : undefined
               }
               onChange={handleInput}
               onKeyDown={handleKeyDown}

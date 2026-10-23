@@ -1,7 +1,18 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
 
+/**
+ * Name tooltip for a mention hovered in the composer. The mention is drawn in
+ * an overlay under the textarea, so the host passes the mention's top-centre
+ * (`pos`, viewport coordinates) and the stock `Tooltip` anchors to a
+ * zero-size point there.
+ */
 export function HoveredMentionTooltip({
   hoveredMember,
   pos,
@@ -14,16 +25,18 @@ export function HoveredMentionTooltip({
     hoveredMember.user.display_name?.trim() || hoveredMember.user.username;
 
   return (
-    <div
-      className="fixed flex flex-col items-center animate-in fade-in zoom-in-95 duration-100 z-80 pointer-events-none"
-      style={{
-        left: pos.left,
-        top: pos.top - 4,
-        transform: "translate(-50%, -100%)",
-      }}
-    >
-      <div className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated border border-rm-border px-3 py-1.5 shadow-xl min-w-max">
-        <div className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-ui-2xs font-bold text-rm-text-muted border border-rm-border">
+    // Keyed by position so the tooltip re-anchors when another mention is hovered.
+    <Tooltip key={`${pos.left}:${pos.top}`} open>
+      <TooltipTrigger asChild>
+        <span
+          aria-hidden="true"
+          data-slot="mention-tooltip-anchor"
+          className="pointer-events-none fixed size-0"
+          style={{ left: pos.left, top: pos.top }}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="flex items-center gap-1.5">
+        <span className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full text-ui-2xs font-semibold">
           {hoveredMember.user.avatar_url ? (
             <AvatarImage
               src={getAuthAssetUrl(hoveredMember.user.avatar_url)}
@@ -33,19 +46,9 @@ export function HoveredMentionTooltip({
           ) : (
             displayName[0].toUpperCase()
           )}
-        </div>
-        <span className="text-ui-xs font-semibold text-rm-text-primary">
-          <InlineEmojiText text={displayName} />
         </span>
-      </div>
-      <div className="h-1.5 w-3 -mt-[1px]">
-        <svg
-          viewBox="0 0 12 6"
-          className="fill-rm-bg-elevated stroke-rm-border drop-shadow-sm h-full w-full"
-        >
-          <path d="M0 0l6 6 6-6H0z" />
-        </svg>
-      </div>
-    </div>
+        <InlineEmojiText text={displayName} />
+      </TooltipContent>
+    </Tooltip>
   );
 }

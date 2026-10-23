@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -60,9 +61,7 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    fireEvent.mouseEnter(
-      screen.getByRole("menuitem", { name: "More Options" }),
-    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "More Options" }));
 
     const messageButton = await screen.findByRole("menuitem", {
       name: "Message",
@@ -85,10 +84,14 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Mute" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Mute Soundboard" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Mute" }));
     fireEvent.click(
-      screen.getByRole("menuitem", { name: "Always Hear Stream Audio" }),
+      screen.getByRole("menuitemcheckbox", { name: "Mute Soundboard" }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", {
+        name: "Always Hear Stream Audio",
+      }),
     );
 
     await waitFor(() => {
@@ -115,13 +118,20 @@ describe("voice context menu wiring", () => {
     );
 
     const parent = screen.getByRole("menuitem", { name: "More Options" });
+    act(() => parent.focus());
     fireEvent.keyDown(parent, { key: "ArrowRight" });
 
     const profile = await screen.findByRole("menuitem", { name: "Profile" });
     await waitFor(() => expect(profile).toHaveFocus());
     fireEvent.keyDown(profile, { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
-    expect(parent).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("menuitem", { name: "Profile" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("menu", { name: "User actions" })).toBeVisible();
+    await waitFor(() => expect(parent).toHaveFocus());
   });
 
   it("forwards profile actions from the focused voice grid context menu", async () => {

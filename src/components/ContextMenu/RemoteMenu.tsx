@@ -1,13 +1,11 @@
 import { Icon } from "@/components/ui/icon";
-import React from "react";
-import { Divider, MenuItem, Slider, SubMenuItem } from "./ContextMenuItems";
+import { divider, type StreamMenuEntry } from "./ContextMenuItems";
 
-interface RemoteMenuProps {
+export interface RemoteMenuOptions {
   userId: string;
   isStreaming?: boolean;
   watchedStreams: Record<string, boolean>;
   stopWatching: () => void;
-  clearSubmenu: () => void;
   peerSetting: {
     volume: number;
     streamVolume: number;
@@ -24,8 +22,6 @@ interface RemoteMenuProps {
   toggleAlwaysHear: () => void;
   toggleAttenuation: () => void;
   setPeerAttenuationStrength: (userId: string, val: number) => void;
-  activeSubmenu: string | null;
-  handleMouseEnterRoot: (label: string | null) => void;
   handleProfile: () => void;
   handleMessage: () => void;
   isModerator: boolean;
@@ -40,12 +36,18 @@ interface RemoteMenuProps {
   showDisconnect?: boolean;
 }
 
-export const RemoteMenu: React.FC<RemoteMenuProps> = ({
+const ID_BADGE = (
+  <span className="rounded-sm bg-rm-bg-active px-1 text-ui-2xs font-semibold text-rm-text-muted">
+    ID
+  </span>
+);
+
+/** Entries for the menu on someone else's tile or voice row. */
+export function buildRemoteMenu({
   userId,
   isStreaming,
   watchedStreams,
   stopWatching,
-  clearSubmenu,
   peerSetting,
   toggleMutePeer,
   toggleSoundboardMute,
@@ -54,8 +56,6 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
   toggleAlwaysHear,
   toggleAttenuation,
   setPeerAttenuationStrength,
-  activeSubmenu,
-  handleMouseEnterRoot,
   handleProfile,
   handleMessage,
   isModerator,
@@ -68,267 +68,217 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
   handleMove,
   handleCopyId,
   showDisconnect = true,
-}) => {
+}: RemoteMenuOptions): StreamMenuEntry[] {
+  const alwaysHear: StreamMenuEntry = {
+    type: "item",
+    key: "always-hear",
+    label: "Always Hear Stream Audio",
+    checked: peerSetting.alwaysHear,
+    onSelect: toggleAlwaysHear,
+  };
+  const mute: StreamMenuEntry = {
+    type: "item",
+    key: "mute",
+    label: "Mute",
+    checked: peerSetting.muted,
+    onSelect: toggleMutePeer,
+  };
+  const muteSoundboard: StreamMenuEntry = {
+    type: "item",
+    key: "mute-soundboard",
+    label: "Mute Soundboard",
+    checked: !!peerSetting.soundboardMuted,
+    onSelect: toggleSoundboardMute,
+  };
+  const profile: StreamMenuEntry = {
+    type: "item",
+    key: "profile",
+    label: "Profile",
+    onSelect: handleProfile,
+  };
+  const message: StreamMenuEntry = {
+    type: "item",
+    key: "message",
+    label: "Message",
+    onSelect: handleMessage,
+  };
+  const moderatorItems: StreamMenuEntry[] = isModerator
+    ? [
+        ...(toggleServerSoundboardMute
+          ? [
+              {
+                type: "item" as const,
+                key: "server-soundboard",
+                label: serverSoundboardMuted
+                  ? "Unmute Soundboard for Server"
+                  : "Mute Soundboard for Server",
+                danger: serverSoundboardMuted,
+                onSelect: toggleServerSoundboardMute,
+              },
+            ]
+          : []),
+        {
+          type: "item",
+          key: "server-mute",
+          label: "Server Mute",
+          danger: true,
+          onSelect: handleServerMute,
+        },
+        {
+          type: "item",
+          key: "server-deafen",
+          label: "Server Deafen",
+          danger: true,
+          onSelect: handleServerDeafen,
+        },
+      ]
+    : [];
+  const disconnect: StreamMenuEntry = {
+    type: "item",
+    key: "disconnect",
+    label: "Disconnect",
+    danger: true,
+    onSelect: onClose,
+  };
+
   if (isStreaming && !watchedStreams[userId]) {
-    return (
-      <>
-        <MenuItem
-          label="Watch Stream"
-          boldLabel
-          onMouseEnter={clearSubmenu}
-          onClick={stopWatching}
-          rightElement={
-            <Icon name="stream" size="sm" className="text-rm-text-muted" />
-          }
-        />
-        <Divider />
-        <MenuItem
-          label="Always Hear Stream Audio"
-          checked={peerSetting.alwaysHear}
-          onMouseEnter={clearSubmenu}
-          onClick={toggleAlwaysHear}
-        />
-      </>
-    );
+    return [
+      {
+        type: "item",
+        key: "watch",
+        label: "Watch Stream",
+        bold: true,
+        onSelect: stopWatching,
+        trailing: <Icon name="stream" size="sm" />,
+      },
+      divider("watch"),
+      alwaysHear,
+    ];
   }
 
   if (isStreaming) {
-    return (
-      <>
-        <MenuItem
-          label="Stop Watching"
-          boldLabel
-          onMouseEnter={clearSubmenu}
-          onClick={stopWatching}
-          rightElement={
-            <Icon name="streamOff" size="sm" className="text-rm-text-muted" />
-          }
-        />
-
-        <Divider />
-
-        <MenuItem
-          label="Mute"
-          checked={peerSetting.muted}
-          onMouseEnter={clearSubmenu}
-          onClick={toggleMutePeer}
-        />
-        <MenuItem
-          label="Mute Soundboard"
-          checked={!!peerSetting.soundboardMuted}
-          onMouseEnter={clearSubmenu}
-          onClick={toggleSoundboardMute}
-        />
-
-        <Slider
-          label="Stream Volume"
-          value={peerSetting.streamVolume}
-          onMouseEnter={clearSubmenu}
-          onChange={(val) => setPeerStreamVolume(userId, val)}
-        />
-
-        <MenuItem
-          label="Always Hear Stream Audio"
-          checked={peerSetting.alwaysHear}
-          onMouseEnter={clearSubmenu}
-          onClick={toggleAlwaysHear}
-        />
-
-        <Divider />
-
-        <MenuItem
-          label="Stream Attenuation"
-          description="Automatically reduce stream volume when people are talking."
-          checked={peerSetting.attenuationEnabled}
-          onMouseEnter={clearSubmenu}
-          onClick={toggleAttenuation}
-        />
-
-        {peerSetting.attenuationEnabled && (
-          <Slider
-            label="Stream Attenuation Strength"
-            value={peerSetting.attenuationStrength}
-            max={100}
-            onMouseEnter={clearSubmenu}
-            onChange={(val) => setPeerAttenuationStrength(userId, val)}
-          />
-        )}
-
-        <Divider />
-
-        <SubMenuItem
-          label="More Options"
-          active={
-            activeSubmenu === "More Options" ||
-            activeSubmenu === "StreamingApps"
-          }
-          onMouseEnter={() => handleMouseEnterRoot("More Options")}
-          onArrowLeft={clearSubmenu}
-          submenu={
-            <>
-              <MenuItem label="Profile" onClick={handleProfile} />
-              <MenuItem label="Message" onClick={handleMessage} />
-              <Divider />
-              <SubMenuItem
-                label="Apps"
-                active={activeSubmenu === "StreamingApps"}
-                onMouseEnter={() => handleMouseEnterRoot("StreamingApps")}
-                onArrowLeft={() => handleMouseEnterRoot("More Options")}
-                submenu={<MenuItem label="No Apps" disabled />}
-              />
-              <Divider />
-              {isModerator && (
-                <>
-                  {toggleServerSoundboardMute && (
-                    <MenuItem
-                      label={
-                        serverSoundboardMuted
-                          ? "Unmute Soundboard for Server"
-                          : "Mute Soundboard for Server"
-                      }
-                      danger={serverSoundboardMuted}
-                      onClick={toggleServerSoundboardMute}
-                    />
-                  )}
-                  <MenuItem
-                    label="Server Mute"
-                    danger
-                    onClick={handleServerMute}
-                  />
-                  <MenuItem
-                    label="Server Deafen"
-                    danger
-                    onClick={handleServerDeafen}
-                  />
-                </>
-              )}
-              {showDisconnect && (
-                <MenuItem label="Disconnect" danger onClick={onClose} />
-              )}
-            </>
-          }
-        />
-      </>
-    );
+    return [
+      {
+        type: "item",
+        key: "stop-watching",
+        label: "Stop Watching",
+        bold: true,
+        onSelect: stopWatching,
+        trailing: <Icon name="streamOff" size="sm" />,
+      },
+      divider("watch"),
+      mute,
+      muteSoundboard,
+      {
+        type: "slider",
+        key: "stream-volume",
+        label: "Stream Volume",
+        value: peerSetting.streamVolume,
+        onChange: (val) => setPeerStreamVolume(userId, val),
+      },
+      alwaysHear,
+      divider("audio"),
+      {
+        type: "item",
+        key: "attenuation",
+        label: "Stream Attenuation",
+        description:
+          "Automatically reduce stream volume when people are talking.",
+        checked: peerSetting.attenuationEnabled,
+        onSelect: toggleAttenuation,
+      },
+      ...(peerSetting.attenuationEnabled
+        ? [
+            {
+              type: "slider" as const,
+              key: "attenuation-strength",
+              label: "Stream Attenuation Strength",
+              value: peerSetting.attenuationStrength,
+              max: 100,
+              onChange: (val: number) =>
+                setPeerAttenuationStrength(userId, val),
+            },
+          ]
+        : []),
+      divider("attenuation"),
+      {
+        type: "submenu",
+        key: "more-options",
+        label: "More Options",
+        entries: [
+          profile,
+          message,
+          divider("message"),
+          {
+            type: "submenu",
+            key: "streaming-apps",
+            label: "Apps",
+            entries: [
+              {
+                type: "item",
+                key: "no-apps",
+                label: "No Apps",
+                disabled: true,
+              },
+            ],
+          },
+          divider("apps"),
+          ...moderatorItems,
+          ...(showDisconnect ? [disconnect] : []),
+        ],
+      },
+    ];
   }
 
-  return (
-    <>
-      <MenuItem
-        label="Profile"
-        onMouseEnter={clearSubmenu}
-        onClick={handleProfile}
-      />
-      <MenuItem
-        label="Message"
-        onMouseEnter={clearSubmenu}
-        onClick={handleMessage}
-      />
-
-      <Divider />
-
-      <Slider
-        label="User Volume"
-        value={peerSetting.volume}
-        onMouseEnter={clearSubmenu}
-        onChange={(val) => setPeerVolume(userId, val)}
-      />
-
-      <Divider />
-
-      <MenuItem
-        label="Mute"
-        checked={peerSetting.muted}
-        onMouseEnter={clearSubmenu}
-        onClick={toggleMutePeer}
-      />
-      <MenuItem
-        label="Mute Soundboard"
-        checked={!!peerSetting.soundboardMuted}
-        onMouseEnter={clearSubmenu}
-        onClick={toggleSoundboardMute}
-      />
-
-      <Divider />
-
-      <SubMenuItem
-        label="Apps"
-        active={activeSubmenu === "Apps"}
-        onMouseEnter={() => handleMouseEnterRoot("Apps")}
-        onArrowLeft={clearSubmenu}
-        submenu={<MenuItem label="No Apps" disabled />}
-      />
-
-      {isModerator && (
-        <SubMenuItem
-          label="Move to"
-          active={activeSubmenu === "Move to"}
-          onMouseEnter={() => handleMouseEnterRoot("Move to")}
-          onArrowLeft={clearSubmenu}
-          submenu={voiceChannels.map((ch) => (
-            <MenuItem
-              key={ch.id}
-              label={ch.name}
-              onClick={() => handleMove(ch.id)}
-            />
-          ))}
-        />
-      )}
-
-      <Divider />
-
-      {isModerator && (
-        <>
-          {toggleServerSoundboardMute && (
-            <MenuItem
-              label={
-                serverSoundboardMuted
-                  ? "Unmute Soundboard for Server"
-                  : "Mute Soundboard for Server"
-              }
-              danger={serverSoundboardMuted}
-              onMouseEnter={clearSubmenu}
-              onClick={toggleServerSoundboardMute}
-            />
-          )}
-          <MenuItem
-            label="Server Mute"
-            danger
-            onMouseEnter={clearSubmenu}
-            onClick={handleServerMute}
-          />
-          <MenuItem
-            label="Server Deafen"
-            danger
-            onMouseEnter={clearSubmenu}
-            onClick={handleServerDeafen}
-          />
-          <Divider />
-        </>
-      )}
-
-      {showDisconnect && (
-        <>
-          <MenuItem
-            label="Disconnect"
-            danger
-            onMouseEnter={clearSubmenu}
-            onClick={onClose}
-          />
-          <Divider />
-        </>
-      )}
-
-      <MenuItem
-        label="Copy User ID"
-        onMouseEnter={clearSubmenu}
-        onClick={handleCopyId}
-        rightElement={
-          <span className="text-ui-2xs bg-rm-bg-active px-1 rounded text-rm-text-muted font-bold">
-            ID
-          </span>
-        }
-      />
-    </>
-  );
-};
+  return [
+    profile,
+    message,
+    divider("message"),
+    {
+      type: "slider",
+      key: "user-volume",
+      label: "User Volume",
+      value: peerSetting.volume,
+      onChange: (val) => setPeerVolume(userId, val),
+    },
+    divider("volume"),
+    mute,
+    muteSoundboard,
+    divider("mute"),
+    {
+      type: "submenu",
+      key: "apps",
+      label: "Apps",
+      entries: [
+        { type: "item", key: "no-apps", label: "No Apps", disabled: true },
+      ],
+    },
+    ...(isModerator
+      ? [
+          {
+            type: "submenu" as const,
+            key: "move-to",
+            label: "Move to",
+            entries: voiceChannels.map(
+              (ch): StreamMenuEntry => ({
+                type: "item",
+                key: ch.id,
+                label: ch.name,
+                onSelect: () => handleMove(ch.id),
+              }),
+            ),
+          },
+        ]
+      : []),
+    divider("apps"),
+    ...(isModerator ? [...moderatorItems, divider("moderator")] : []),
+    ...(showDisconnect ? [disconnect, divider("disconnect")] : []),
+    {
+      type: "item",
+      key: "copy-id",
+      label: "Copy User ID",
+      onSelect: handleCopyId,
+      trailing: ID_BADGE,
+    },
+  ];
+}

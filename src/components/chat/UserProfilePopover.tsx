@@ -1,5 +1,4 @@
-import { useMounted } from "@/hooks/useMounted";
-import { isMobileViewport, useIsMobile } from "@/hooks/useMediaQuery";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { getProfileEffectStageHeight } from "@/components/chat/ProfileCollectiblesLayer";
@@ -7,7 +6,16 @@ import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { Button } from "@/components/ui/button";
 import { ButtonBase } from "@/components/ui/button-base";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent } from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -29,15 +37,11 @@ import { Icon } from "@/components/ui/icon";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useReducer,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
-  type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";
 
 interface Props {
@@ -53,15 +57,14 @@ interface Props {
   align?: "start" | "center" | "end";
 }
 
-const MOBILE_MAX_SURFACE_HEIGHT = 680;
-const DESKTOP_MAX_SURFACE_HEIGHT = 640;
+/** PopoverContent variant="rich" width. */
+const SURFACE_WIDTH = 360;
 const POPOVER_ACTION_BUTTON_CLASS =
   "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]";
 const SECTION_TITLE_CLASS =
   "text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-[color:var(--rm-profile-custom-muted)]";
 
 const INITIAL_STATE = {
-  isAssigningRoles: false,
   serverRoles: [] as Role[],
   loadingRoles: false,
   profileUser: null as User | null,
@@ -228,7 +231,7 @@ function PopoverMutuals({
                           display={friend.avatar_display}
                         />
                       ) : (
-                        <span className="text-ui-2xs font-bold text-[color:var(--rm-profile-custom-muted)]">
+                        <span className="text-ui-2xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
                           {getDisplayInitial(friend)}
                         </span>
                       )}
@@ -262,7 +265,7 @@ function PopoverMutuals({
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <span className="text-ui-2xs font-bold text-[color:var(--rm-profile-custom-muted)]">
+                      <span className="text-ui-2xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
                         {server.name[0]?.toUpperCase()}
                       </span>
                     )}
@@ -284,85 +287,84 @@ function PopoverMutuals({
   );
 }
 
-function RoleAssignmentDropdown({
-  isAssigningRoles,
+function RoleAssignmentMenu({
   loadingRoles,
   serverRoles,
   optimisticRoles,
   assignRole,
-  dropdownRef,
+  onOpen,
 }: {
-  isAssigningRoles: boolean;
   loadingRoles: boolean;
   serverRoles: Role[];
   optimisticRoles?: Role[];
   assignRole: (roleId: string, currentRoleIds: string[]) => void;
-  dropdownRef: RefObject<HTMLDivElement | null>;
+  onOpen: () => void;
 }) {
-  if (!isAssigningRoles) return null;
-
   const assignableRoles = serverRoles.filter((role) => !role.is_default);
 
   return (
-    <div
-      ref={dropdownRef}
-      className="absolute right-0 top-7 z-70 w-48 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-xl animate-in fade-in zoom-in-95"
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) onOpen();
+      }}
     >
-      {loadingRoles ? (
-        <div className="p-3 text-center text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
-          Loading...
-        </div>
-      ) : (
-        <div className="max-h-48 overflow-y-auto custom-scrollbar">
-          {assignableRoles.length === 0 ? (
-            <div className="p-2 text-center text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
-              No custom roles available
-            </div>
-          ) : (
-            assignableRoles.map((role) => {
-              const hasRole = optimisticRoles?.some(
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger
+            render={
+              <ButtonBase
+                aria-label="Manage Roles"
+                className="flex size-6 items-center justify-center rounded-sm text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
+              />
+            }
+          >
+            <Icon name="add" size="sm" />
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={8}>
+          Manage Roles
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" aria-label="Manage Roles">
+        {loadingRoles ? (
+          <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
+        ) : assignableRoles.length === 0 ? (
+          <DropdownMenuItem disabled>
+            No custom roles available
+          </DropdownMenuItem>
+        ) : (
+          assignableRoles.map((role) => {
+            const hasRole = Boolean(
+              optimisticRoles?.some(
                 (currentRole) => currentRole.id === role.id,
-              );
+              ),
+            );
 
-              return (
-                <ButtonBase
-                  key={role.id}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    const currentRoles =
-                      optimisticRoles?.map((currentRole) => currentRole.id) ||
-                      [];
-                    assignRole(role.id, currentRoles);
-                  }}
-                  className={cn(
-                    "group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-ui-xs transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]",
-                    hasRole
-                      ? "font-medium text-[color:var(--rm-profile-custom-text)]"
-                      : "text-[color:var(--rm-profile-custom-muted)]",
-                  )}
-                >
-                  <div
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: role.color || "#94a3b8" }}
+            return (
+              <DropdownMenuCheckboxItem
+                key={role.id}
+                checked={hasRole}
+                onCheckedChange={() => {
+                  const currentRoles =
+                    optimisticRoles?.map((currentRole) => currentRole.id) || [];
+                  assignRole(role.id, currentRoles);
+                }}
+                icon={
+                  <span
+                    className="size-3 rounded-full"
+                    style={{
+                      backgroundColor: role.color || "var(--rm-text-muted)",
+                    }}
                   />
-                  <InlineEmojiText
-                    text={role.name}
-                    className="flex-1 truncate"
-                  />
-                  {hasRole ? (
-                    <Icon
-                      name="check"
-                      size="sm"
-                      className="text-[color:var(--rm-profile-custom-accent)]"
-                    />
-                  ) : null}
-                </ButtonBase>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
+                }
+              >
+                <InlineEmojiText text={role.name} />
+              </DropdownMenuCheckboxItem>
+            );
+          })
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -370,21 +372,12 @@ function PopoverRoles({
   optimisticRoles,
   canManageRoles,
   assignRole,
-  handleToggleAssignRoles,
-  dropdownProps,
+  menuProps,
 }: {
   optimisticRoles?: Role[];
   canManageRoles: boolean;
   assignRole: (roleId: string, currentRoleIds: string[]) => void;
-  handleToggleAssignRoles: (event: React.MouseEvent) => void;
-  dropdownProps: {
-    isAssigningRoles: boolean;
-    loadingRoles: boolean;
-    serverRoles: Role[];
-    optimisticRoles?: Role[];
-    assignRole: (roleId: string, currentRoleIds: string[]) => void;
-    dropdownRef: RefObject<HTMLDivElement | null>;
-  };
+  menuProps: React.ComponentProps<typeof RoleAssignmentMenu>;
 }) {
   const customRoles = optimisticRoles?.filter((role) => !role.is_default) ?? [];
 
@@ -397,24 +390,25 @@ function PopoverRoles({
         {customRoles.map((role) => (
           <div
             key={role.id}
-            className="group flex items-center gap-1.5 rounded border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] py-0.5 pl-2 pr-1 text-ui-2xs font-medium"
+            className="group flex items-center gap-1.5 rounded-sm border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] py-0.5 pl-2 pr-1 text-ui-2xs font-medium"
           >
             <div
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: role.color || "#94a3b8" }}
+              className="size-3 shrink-0 rounded-full"
+              style={{ backgroundColor: role.color || "var(--rm-text-muted)" }}
             />
             <span className="max-w-[120px] truncate py-0.5 pr-1 text-[color:var(--rm-profile-custom-muted)]">
               <InlineEmojiText text={role.name} />
             </span>
             {canManageRoles ? (
               <ButtonBase
+                aria-label={`Remove role ${role.name}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   const currentRoles =
                     optimisticRoles?.map((currentRole) => currentRole.id) || [];
                   assignRole(role.id, currentRoles);
                 }}
-                className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] pointer-fine:opacity-0 transition-ui pointer-fine:hover:bg-black/8 pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] pointer-fine:group-hover:opacity-100"
+                className="rounded-xs p-0.5 text-[color:var(--rm-profile-custom-muted)] pointer-fine:opacity-0 transition-ui pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"
               >
                 <Icon name="close" size="xs" />
               </ButtonBase>
@@ -422,24 +416,8 @@ function PopoverRoles({
           </div>
         ))}
 
-        {canManageRoles ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <ButtonBase
-                onClick={handleToggleAssignRoles}
-                className="flex h-6 w-6 items-center justify-center rounded text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
-              >
-                <Icon name="add" size="sm" />
-              </ButtonBase>
-            </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={8}>
-              Manage Roles
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
+        {canManageRoles ? <RoleAssignmentMenu {...menuProps} /> : null}
       </div>
-
-      <RoleAssignmentDropdown {...dropdownProps} />
     </div>
   );
 }
@@ -505,9 +483,8 @@ function DesktopUserProfilePopover({
   anchorEl,
   onClose,
   side = "bottom",
-  align: _align = "start",
+  align = "start",
 }: Props) {
-  const mounted = useMounted();
   const state = useChatStore(
     useShallow((store) => ({
       members: store.members,
@@ -519,17 +496,7 @@ function DesktopUserProfilePopover({
     })),
   );
 
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  const [surfaceStyle, setSurfaceStyle] = useState<CSSProperties>({
-    opacity: 0,
-    width: 340,
-    height: 460,
-  });
+  const popupRef = useRef<HTMLDivElement>(null);
   const [localState, setLocalState] = useReducer(
     (previous: LocalState, next: LocalAction) => ({
       ...previous,
@@ -586,9 +553,7 @@ function DesktopUserProfilePopover({
   const profileThemeStyle = profileTheme.variables;
   const isOnline =
     state.onlineUsers.has(userId) && resolvedStatus !== "offline";
-  const surfaceWidth =
-    typeof surfaceStyle.width === "number" ? surfaceStyle.width : 340;
-  const profileEffectStageHeight = getProfileEffectStageHeight(surfaceWidth);
+  const profileEffectStageHeight = getProfileEffectStageHeight(SURFACE_WIDTH);
 
   useEffect(() => {
     setOptimisticRoles(member?.roles);
@@ -622,161 +587,6 @@ function DesktopUserProfilePopover({
     fetchUserProfile();
   }, [fetchUserProfile]);
 
-  useLayoutEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      !popoverRef.current ||
-      !contentRef.current
-    )
-      return undefined;
-
-    let frameId = 0;
-
-    const updateSurface = () => {
-      if (!popoverRef.current || !contentRef.current) return;
-
-      const rect = anchorEl.getBoundingClientRect();
-      const isMobile = isMobileViewport();
-      const viewportPadding = isMobile ? 8 : 10;
-      const maxWidth = window.innerWidth - viewportPadding * 2;
-      const maxHeight = Math.min(
-        window.innerHeight - viewportPadding * 2,
-        isMobile ? MOBILE_MAX_SURFACE_HEIGHT : DESKTOP_MAX_SURFACE_HEIGHT,
-      );
-      const width = Math.min(isMobile ? maxWidth : 344, maxWidth);
-
-      popoverRef.current.style.width = `${width}px`;
-      popoverRef.current.style.height = "auto";
-
-      const naturalHeight = Math.ceil(
-        contentRef.current.getBoundingClientRect().height,
-      );
-      const height = Math.min(naturalHeight, maxHeight);
-
-      let left = viewportPadding;
-      let top = viewportPadding;
-
-      if (isMobile) {
-        left = Math.max(viewportPadding, (window.innerWidth - width) / 2);
-        top = Math.max(viewportPadding, (window.innerHeight - height) / 2);
-      } else if (side === "left") {
-        left = rect.left - width - 10;
-        top = rect.top + rect.height / 2 - height / 2;
-      } else if (side === "right") {
-        left = rect.right + 10;
-        top = rect.top + rect.height / 2 - height / 2;
-      } else if (side === "top") {
-        left = Math.min(rect.left, window.innerWidth - width - viewportPadding);
-        top = rect.top - height - 10;
-      } else {
-        left = Math.min(rect.left, window.innerWidth - width - viewportPadding);
-        top = rect.bottom + 10;
-      }
-
-      if (!isMobile) {
-        if (top < viewportPadding) {
-          top = Math.min(
-            window.innerHeight - height - viewportPadding,
-            rect.bottom + 10,
-          );
-        }
-        if (left < viewportPadding && side === "left") {
-          left = Math.min(
-            window.innerWidth - width - viewportPadding,
-            rect.right + 10,
-          );
-        }
-        left = Math.max(
-          viewportPadding,
-          Math.min(left, window.innerWidth - width - viewportPadding),
-        );
-        top = Math.max(
-          viewportPadding,
-          Math.min(top, window.innerHeight - height - viewportPadding),
-        );
-      }
-
-      setSurfaceStyle((previous) => {
-        if (
-          previous.opacity === 1 &&
-          previous.width === width &&
-          previous.height === height &&
-          previous.left === left &&
-          previous.top === top
-        ) {
-          return previous;
-        }
-
-        return {
-          opacity: 1,
-          width,
-          height,
-          left,
-          top,
-        };
-      });
-    };
-
-    const scheduleUpdate = () => {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(updateSurface);
-    };
-
-    scheduleUpdate();
-
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => scheduleUpdate())
-        : null;
-    resizeObserver?.observe(contentRef.current);
-
-    window.addEventListener("resize", scheduleUpdate);
-    window.addEventListener("scroll", scheduleUpdate, true);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", scheduleUpdate);
-      window.removeEventListener("scroll", scheduleUpdate, true);
-    };
-  }, [anchorEl, side]);
-
-  useEffect(() => {
-    const handler = (event: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node) &&
-        !(
-          dropdownRef.current &&
-          dropdownRef.current.contains(event.target as Node)
-        ) &&
-        !anchorEl.contains(event.target as Node)
-      ) {
-        onCloseRef.current();
-      }
-    };
-
-    const timer = window.setTimeout(() => {
-      document.addEventListener("mousedown", handler);
-    }, 50);
-
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener("mousedown", handler);
-    };
-  }, [anchorEl]);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onCloseRef.current();
-      }
-    };
-
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
-
   const myMember = state.members.find(
     (currentMember) => currentMember.user.id === state.user?.id,
   );
@@ -800,16 +610,6 @@ function DesktopUserProfilePopover({
     } finally {
       setLocalState({ loadingRoles: false });
     }
-  };
-
-  const handleToggleAssignRoles = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (!localState.isAssigningRoles) {
-      void fetchRoles();
-    }
-    setLocalState((previous) => ({
-      isAssigningRoles: !previous.isAssigningRoles,
-    }));
   };
 
   const assignRole = (roleId: string, currentRoleIds: string[]) => {
@@ -860,202 +660,195 @@ function DesktopUserProfilePopover({
     onClose();
   };
 
-  const dropdownProps = {
-    isAssigningRoles: localState.isAssigningRoles,
+  const roleMenuProps = {
     loadingRoles: localState.loadingRoles,
     serverRoles: localState.serverRoles,
     optimisticRoles,
     assignRole,
-    dropdownRef,
+    onOpen: () => void fetchRoles(),
   };
 
-  if (!mounted) return null;
-
-  return createPortal(
+  return (
     <TooltipProvider delayDuration={0}>
-      <div className="contents">
-        <div
-          className="fixed inset-0 z-50 cursor-default bg-black/50 md:bg-transparent md:pointer-events-none animate-in fade-in duration-200"
-          onClick={onClose}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" ||
-              event.key === " " ||
-              event.key === "Escape"
-            ) {
-              onClose();
-            }
-          }}
-          role="presentation"
-          aria-hidden="true"
-        />
-
-        <ProfileSurfaceShell
-          ref={popoverRef}
-          variant="popover"
-          display={resolvedAvatarDisplay}
-          className="fixed z-60 animate-in fade-in zoom-in-95 duration-200 outline-none"
-          style={{
-            ...surfaceStyle,
-            ...profileThemeStyle,
-          }}
-          effectStageClassName="left-0 top-0 w-full"
-          effectStageStyle={{ height: profileEffectStageHeight }}
+      <Popover
+        open
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+      >
+        <PopoverContent
+          ref={popupRef}
+          anchor={anchorEl}
+          side={side}
+          align={align}
+          sideOffset={10}
+          variant="rich"
+          // Focus the panel itself so a banner tooltip doesn't pop on open.
+          initialFocus={popupRef}
           aria-label={`User profile for ${resolvedUsername}`}
-          tabIndex={-1}
+          // The profile surface is the panel: it carries the radius, border
+          // and shadow, and its frame art may overhang the edge.
+          className="overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
         >
-          <div className="relative h-full overflow-y-auto custom-scrollbar">
-            <div ref={contentRef} className="relative">
-              <PopoverBanner
-                bannerUrl={resolvedUser.banner_url}
-                bannerContentType={resolvedUser.banner_content_type}
-                canManageRoles={canManageRoles}
-                isMe={isMe}
-              />
+          <ProfileSurfaceShell
+            variant="popover"
+            display={resolvedAvatarDisplay}
+            className="w-full"
+            style={profileThemeStyle}
+            effectStageClassName="left-0 top-0 w-full"
+            effectStageStyle={{ height: profileEffectStageHeight }}
+          >
+            <div className="max-h-[min(640px,var(--available-height,100dvh))] overflow-y-auto custom-scrollbar">
+              <div className="relative">
+                <PopoverBanner
+                  bannerUrl={resolvedUser.banner_url}
+                  bannerContentType={resolvedUser.banner_content_type}
+                  canManageRoles={canManageRoles}
+                  isMe={isMe}
+                />
 
-              <PopoverAvatar
-                avatarUrl={resolvedAvatarUrl}
-                avatarDisplay={resolvedAvatarDisplay}
-                displayName={resolvedDisplayName}
-                isOnline={isOnline}
-                status={resolvedStatus}
-              />
+                <PopoverAvatar
+                  avatarUrl={resolvedAvatarUrl}
+                  avatarDisplay={resolvedAvatarDisplay}
+                  displayName={resolvedDisplayName}
+                  isOnline={isOnline}
+                  status={resolvedStatus}
+                />
 
-              <div className="relative z-20 px-4 pb-4 pt-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      {isMe ? (
-                        <button
-                          type="button"
-                          onClick={handleOpenProfileEditor}
-                          className="rounded-md text-left transition pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/65 pointer-fine:hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                        >
+                <div className="relative z-20 px-4 pb-4 pt-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {isMe ? (
+                          <button
+                            type="button"
+                            onClick={handleOpenProfileEditor}
+                            className="rounded-md text-left pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/65 pointer-fine:hover:underline-offset-4"
+                          >
+                            <ProfileDisplayName
+                              text={resolvedDisplayName}
+                              displayNameStyle={resolvedUser.display_name_style}
+                              className="text-ui-lg font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
+                              backgroundColor={profileTheme.backgroundColor}
+                              readableFallbackColor={profileTheme.textColor}
+                            />
+                          </button>
+                        ) : (
                           <ProfileDisplayName
                             text={resolvedDisplayName}
                             displayNameStyle={resolvedUser.display_name_style}
-                            className="text-ui-xl font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
+                            className="text-ui-lg font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
                             backgroundColor={profileTheme.backgroundColor}
                             readableFallbackColor={profileTheme.textColor}
                           />
-                        </button>
-                      ) : (
-                        <ProfileDisplayName
-                          text={resolvedDisplayName}
-                          displayNameStyle={resolvedUser.display_name_style}
-                          className="text-ui-xl font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
-                          backgroundColor={profileTheme.backgroundColor}
-                          readableFallbackColor={profileTheme.textColor}
+                        )}
+
+                        <UserPlatformIndicators
+                          userId={userId}
+                          platforms={resolvedPlatforms}
+                          status={resolvedStatus}
+                          className="shrink-0"
+                          iconSize="sm"
+                          color="var(--rm-profile-custom-muted)"
+                          offlineColor="var(--rm-profile-custom-ghost)"
                         />
-                      )}
 
-                      <UserPlatformIndicators
-                        userId={userId}
-                        platforms={resolvedPlatforms}
-                        status={resolvedStatus}
-                        className="shrink-0"
-                        iconSize="sm"
-                        color="var(--rm-profile-custom-muted)"
-                        offlineColor="var(--rm-profile-custom-ghost)"
-                      />
+                        {!isMe ? (
+                          <ButtonBase className="text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]">
+                            <Icon name="fileAdd" size="sm" />
+                          </ButtonBase>
+                        ) : null}
+                      </div>
 
-                      {!isMe ? (
-                        <ButtonBase className="text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]">
-                          <Icon name="fileAdd" size="sm" />
-                        </ButtonBase>
-                      ) : null}
-                    </div>
-
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
-                      {isMe ? (
-                        <button
-                          type="button"
-                          onClick={handleOpenProfileEditor}
-                          className="rounded-md text-left transition pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/55 pointer-fine:hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                        >
-                          @{resolvedUsername}
-                        </button>
-                      ) : (
-                        <span>@{resolvedUsername}</span>
-                      )}
-
-                      {resolvedUser.pronouns?.trim() ? (
-                        <>
-                          <span
-                            aria-hidden="true"
-                            className="text-[color:var(--rm-profile-custom-muted)]/65"
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
+                        {isMe ? (
+                          <button
+                            type="button"
+                            onClick={handleOpenProfileEditor}
+                            className="rounded-md text-left pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/55 pointer-fine:hover:underline-offset-4"
                           >
-                            •
-                          </span>
-                          <span>{resolvedUser.pronouns.trim()}</span>
-                        </>
+                            @{resolvedUsername}
+                          </button>
+                        ) : (
+                          <span>@{resolvedUsername}</span>
+                        )}
+
+                        {resolvedUser.pronouns?.trim() ? (
+                          <>
+                            <span
+                              aria-hidden="true"
+                              className="text-[color:var(--rm-profile-custom-muted)]/65"
+                            >
+                              •
+                            </span>
+                            <span>{resolvedUser.pronouns.trim()}</span>
+                          </>
+                        ) : null}
+                      </div>
+
+                      {resolvedUser.custom_status?.trim() ? (
+                        <p className="mt-3 text-ui-sm italic text-[color:var(--rm-profile-custom-muted)]">
+                          {resolvedUser.custom_status.trim()}
+                        </p>
                       ) : null}
                     </div>
-
-                    {resolvedUser.custom_status?.trim() ? (
-                      <p className="mt-3 text-ui-sm italic text-[color:var(--rm-profile-custom-muted)]">
-                        {resolvedUser.custom_status.trim()}
-                      </p>
-                    ) : null}
                   </div>
+
+                  {resolvedUser.bio?.trim() ? (
+                    <div className="mt-4 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
+                      {resolvedUser.bio.trim()}
+                    </div>
+                  ) : null}
+
+                  {!isMe ? (
+                    <PopoverMutuals
+                      loadingProfile={localState.loadingProfile}
+                      mutualFriends={localState.mutualFriends}
+                      mutualServers={localState.mutualServers}
+                    />
+                  ) : null}
                 </div>
 
-                {resolvedUser.bio?.trim() ? (
-                  <div className="mt-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 px-4 py-3 text-ui-sm leading-6 text-[color:var(--rm-profile-custom-text)]">
-                    {resolvedUser.bio.trim()}
-                  </div>
-                ) : null}
+                <PopoverRoles
+                  optimisticRoles={optimisticRoles}
+                  canManageRoles={canManageRoles}
+                  assignRole={assignRole}
+                  menuProps={roleMenuProps}
+                />
 
                 {!isMe ? (
-                  <PopoverMutuals
-                    loadingProfile={localState.loadingProfile}
-                    mutualFriends={localState.mutualFriends}
-                    mutualServers={localState.mutualServers}
-                  />
-                ) : null}
-              </div>
-
-              <PopoverRoles
-                optimisticRoles={optimisticRoles}
-                canManageRoles={canManageRoles}
-                assignRole={assignRole}
-                handleToggleAssignRoles={handleToggleAssignRoles}
-                dropdownProps={dropdownProps}
-              />
-
-              {!isMe ? (
-                <div className="relative z-20 mt-1 px-4 pb-4">
-                  <div className="group flex items-center justify-between rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors pointer-fine:hover:border-white/25 focus-within:border-white/30">
-                    <input
-                      type="text"
-                      aria-label={`Message ${resolvedUsername}`}
-                      className="w-full bg-transparent text-ui-xs font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                      placeholder={`Message @${resolvedUsername}`}
-                    />
-                    <Icon
-                      name="emoji"
-                      size="sm"
-                      className="ml-2 shrink-0 cursor-pointer text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
-                    />
+                  <div className="relative z-20 mt-1 px-4 pb-4">
+                    <div className="group flex items-center justify-between rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors pointer-fine:hover:border-[color:var(--rm-profile-custom-ghost)] focus-within:border-[color:var(--rm-profile-custom-muted)]">
+                      <input
+                        type="text"
+                        aria-label={`Message ${resolvedUsername}`}
+                        className="w-full bg-transparent text-ui-xs font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                        placeholder={`Message @${resolvedUsername}`}
+                      />
+                      <Icon
+                        name="emoji"
+                        size="sm"
+                        className="ml-2 shrink-0 cursor-pointer text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
+                      />
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="relative z-20 px-4 pb-4">
-                  <button
-                    type="button"
-                    onClick={handleOpenProfileEditor}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-text)] transition pointer-fine:hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                  >
-                    <Icon name="edit" size="sm" />
-                    Edit Profile
-                  </button>
-                </div>
-              )}
+                ) : (
+                  <div className="relative z-20 px-4 pb-4">
+                    <Button
+                      variant="secondary"
+                      onClick={handleOpenProfileEditor}
+                      className="w-full"
+                    >
+                      <Icon name="edit" size="sm" />
+                      Edit Profile
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </ProfileSurfaceShell>
-      </div>
-    </TooltipProvider>,
-    document.body,
+          </ProfileSurfaceShell>
+        </PopoverContent>
+      </Popover>
+    </TooltipProvider>
   );
 }

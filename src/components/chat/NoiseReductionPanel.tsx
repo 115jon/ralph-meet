@@ -10,6 +10,7 @@ import { useShallow } from "zustand/shallow";
 
 interface NoiseReductionPanelProps {
   settingsUserId?: string | null;
+  /** Bare body for a popover/drawer host (no card border or surface). */
   compact?: boolean;
   className?: string;
 }
@@ -35,8 +36,9 @@ export function NoiseReductionPanel({
   return (
     <div
       className={cn(
-        "rounded-xl border border-rm-border bg-rm-bg-surface p-4",
-        compact ? "w-[340px] max-w-[calc(100vw-2rem)]" : "w-full",
+        compact
+          ? "p-3"
+          : "w-full rounded-xl border border-rm-border bg-rm-bg-surface p-4",
         className,
       )}
     >

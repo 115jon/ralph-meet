@@ -66,7 +66,7 @@ describe("FloatingStreamPreview context menu", () => {
       screen.getByRole("button", { name: "Open stream settings" }),
     );
     fireEvent.click(
-      await screen.findByRole("menuitem", {
+      await screen.findByRole("menuitemcheckbox", {
         name: "Always Show Stream Preview",
       }),
     );
@@ -121,7 +121,7 @@ describe("FloatingStreamPreview context menu", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Open stream settings" }),
     );
-    const menuItem = await screen.findByRole("menuitem", {
+    const menuItem = await screen.findByRole("menuitemcheckbox", {
       name: "Always Show Stream Preview",
     });
     fireEvent.pointerDown(menuItem, {
@@ -169,7 +169,7 @@ describe("FloatingStreamPreview context menu", () => {
     fireEvent.contextMenu(previewRoot!);
 
     expect(
-      await screen.findByRole("menuitem", {
+      await screen.findByRole("menuitemcheckbox", {
         name: "Always Show Stream Preview",
       }),
     ).toBeTruthy();

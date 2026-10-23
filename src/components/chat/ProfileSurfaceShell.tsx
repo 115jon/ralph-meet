@@ -27,7 +27,8 @@ interface ProfileSurfaceShellProps extends React.HTMLAttributes<HTMLDivElement> 
 const SURFACE_CLASSES: Record<ProfileSurfaceVariant, string> = {
   card: "relative h-full w-full overflow-hidden rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)]",
   popover:
-    "relative h-full w-full overflow-hidden rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-lg",
+    // MENU_PANEL geometry (12.7): radius 12 and the one floating shadow.
+    "relative h-full w-full overflow-hidden rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-lg",
   sheet:
     "relative w-full overflow-hidden bg-rm-bg-primary bg-[var(--rm-profile-custom-background)]",
 };

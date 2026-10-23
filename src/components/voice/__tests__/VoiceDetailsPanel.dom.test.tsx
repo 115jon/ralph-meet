@@ -1,7 +1,16 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { executeBackHandlers } from "@/hooks/useBackButton";
 
 import { VoiceDetailsPanel } from "../VoiceDetailsPanel";
 
@@ -32,7 +41,7 @@ describe("VoiceDetailsPanel", () => {
     document.querySelector("[data-testid='voice-details-trigger']")?.remove();
   });
 
-  it("renders in a body portal so it escapes clipped dashboard containers", async () => {
+  it("renders in a body portal popover so it escapes clipped dashboard containers", async () => {
     const trigger = document.createElement("button");
     trigger.dataset.testid = "voice-details-trigger";
     trigger.getBoundingClientRect = () => TRIGGER_RECT;
@@ -50,15 +59,66 @@ describe("VoiceDetailsPanel", () => {
       </div>,
     );
 
-    const panel = await screen.findByLabelText("Voice Details");
-
-    await waitFor(() => {
-      expect(panel).toHaveStyle({ left: "180px" });
-    });
+    const panel = await screen.findByRole("dialog", { name: "Voice Details" });
 
     expect(container).not.toContainElement(panel);
     expect(document.body).toContainElement(panel);
-    expect(panel).toHaveClass("fixed");
+    expect(panel.closest("[data-rm-floating-layer]")).not.toBeNull();
+    expect(panel.closest("[data-rm-floating-layer] > *")?.className).toContain(
+      "z-50",
+    );
+  });
+
+  it("closes on Escape and back, and returns focus to the trigger", async () => {
+    const onClose = vi.fn();
+    function Host() {
+      const [open, setOpen] = useState(false);
+      const triggerRef = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button
+            type="button"
+            ref={triggerRef}
+            onClick={() => setOpen((value) => !value)}
+          >
+            Voice connection details
+          </button>
+          <VoiceDetailsPanel
+            sfu={null}
+            isOpen={open}
+            onClose={() => {
+              onClose();
+              setOpen(false);
+            }}
+            triggerRef={triggerRef}
+            channelName="General"
+          />
+        </>
+      );
+    }
+    render(<Host />);
+    const trigger = screen.getByRole("button", {
+      name: "Voice connection details",
+    });
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    const panel = await screen.findByRole("dialog", { name: "Voice Details" });
+    fireEvent.keyDown(panel, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Voice Details" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "Voice Details" });
+    act(() => {
+      executeBackHandlers();
+    });
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it("shows a connected status while live metrics are still warming up", async () => {

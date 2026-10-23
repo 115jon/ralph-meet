@@ -36,7 +36,11 @@ import { FLOATING_LAYER_ATTR } from "@/components/ui/popover";
 import { useDialogBackButton } from "@/hooks/useBackButton";
 import { cn } from "@/lib/utils";
 
-type DropdownMenuContextValue = { id: string };
+type DropdownMenuContextValue = {
+  id: string;
+  /** DropdownMenuContent reports its `anchor` element (null on unmount). */
+  setAnchor: (element: Element | null) => void;
+};
 const DropdownMenuContext =
   React.createContext<DropdownMenuContextValue | null>(null);
 
@@ -62,6 +66,10 @@ function DropdownMenu({
   const isControlled = open !== undefined;
   const isOpen = isControlled ? open : uncontrolledOpen;
   const id = React.useId();
+  const anchorRef = React.useRef<Element | null>(null);
+  const setAnchor = React.useCallback((element: Element | null) => {
+    anchorRef.current = element;
+  }, []);
 
   const setOpen = React.useCallback(
     (nextOpen: boolean) => {
@@ -77,7 +85,10 @@ function DropdownMenu({
     () => isDialogTopmost(id),
   );
 
-  const contextValue = React.useMemo(() => ({ id }), [id]);
+  const contextValue = React.useMemo(
+    () => ({ id, setAnchor }),
+    [id, setAnchor],
+  );
 
   return (
     <DropdownMenuContext.Provider value={contextValue}>
@@ -90,6 +101,17 @@ function DropdownMenu({
             details.reason === "escape-key" &&
             !isDialogTopmost(id)
           ) {
+            details.cancel();
+            return;
+          }
+          if (
+            !nextOpen &&
+            details.reason === "outside-press" &&
+            details.event.target instanceof Node &&
+            anchorRef.current?.contains(details.event.target)
+          ) {
+            // The anchor (not a Base UI trigger) toggles the menu itself;
+            // closing here first would let its click reopen it.
             details.cancel();
             return;
           }
@@ -108,6 +130,19 @@ const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup;
 const DropdownMenuSub = MenuPrimitive.SubmenuRoot;
 
 type Anchor = MenuPrimitive.Positioner.Props["anchor"];
+
+function anchorElement(anchor: Anchor | undefined): Element | null {
+  if (!anchor) return null;
+  if (anchor instanceof Element) return anchor;
+  if (typeof anchor === "function") {
+    const resolved = anchor();
+    return resolved instanceof Element ? resolved : null;
+  }
+  if ("current" in anchor) {
+    return anchor.current instanceof Element ? anchor.current : null;
+  }
+  return null;
+}
 
 /** A point anchor (context menus opened at the pointer). */
 export function pointAnchor(x: number, y: number): NonNullable<Anchor> {
@@ -161,6 +196,12 @@ function MenuPanel({
   ...props
 }: PanelProps & { isSubmenu?: boolean }) {
   const context = React.useContext(DropdownMenuContext);
+  const setAnchor = isSubmenu ? undefined : context?.setAnchor;
+  React.useLayoutEffect(() => {
+    if (!setAnchor) return;
+    setAnchor(anchorElement(anchor));
+    return () => setAnchor(null);
+  });
   return (
     <MenuPrimitive.Portal
       {...{ [FLOATING_LAYER_ATTR]: "" }}
