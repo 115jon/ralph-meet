@@ -20,5 +20,14 @@ export const PRESS =
 export const HIT =
   "before:absolute before:left-1/2 before:top-1/2 before:h-full before:min-h-11 before:w-full before:min-w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] pointer-fine:before:hidden";
 
+/**
+ * Controls revealed on hover (a message's action bar, a row's trailing
+ * buttons). Hidden only where a fine pointer can bring them back; on touch
+ * they stay visible (or live in the long-press action sheet). Keyboard focus
+ * inside the group also reveals them.
+ */
+export const REVEAL =
+  "pointer-fine:opacity-0 pointer-fine:transition-opacity pointer-fine:duration-150 pointer-fine:ease-(--rm-ease-out) pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:focus-visible:opacity-100";
+
 export const DISABLED =
   "disabled:cursor-not-allowed disabled:opacity-45 aria-disabled:cursor-not-allowed";

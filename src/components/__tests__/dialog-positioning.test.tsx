@@ -96,7 +96,7 @@ describe("dialog positioning regression guard", () => {
       document.querySelector('[data-slot="dialog-surface"][data-state="open"]'),
     ).not.toBeNull();
     const listbox = screen.getByRole("listbox");
-    expect(listbox).toHaveClass("z-[110]");
+    expect(listbox).toHaveClass("z-60");
     expect(screen.getByRole("option", { name: /1080p/i })).toBeVisible();
 
     const overlay = document.querySelector('[role="presentation"]');

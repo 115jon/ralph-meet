@@ -47,7 +47,7 @@ const ACTION_BTN = cn(
 );
 const ACTION_REST = "bg-rm-tint-1 text-rm-text";
 const ACTION_OPEN = "bg-rm-tint-3 text-rm-text";
-const ACTION_LIVE = "bg-primary text-primary-foreground [--hover-o:0.12]";
+const ACTION_LIVE = "bg-rm-accent-tint text-rm-accent-ink [--hover-o:0.12]";
 const HEADER_ICON_BTN = cn(
   PRESS,
   HIT,

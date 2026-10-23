@@ -162,18 +162,18 @@ font size. Tailwind's `text-xs/sm/base/lg/xl/...` (12/14/16/18/20) and
 `text-[Npx]` are not used: they land between the steps (14 vs 13/15) and break
 the vertical rhythm.
 
-| utility           | size / line | role                                                                                                     |
-| ----------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
-| `text-ui-2xs`     | 11 / 14     | eyebrow category labels (uppercase, `tracking-[0.08em]`, 600), count badges, tab-bar labels, kbd         |
-| `text-ui-xs`      | 12 / 16     | timestamps, meta, captions, tooltip, menu group labels, helper text under a field                        |
-| `text-ui-sm`      | 13 / 18     | controls (buttons, inputs on desktop, menu rows, tabs), secondary rows, descriptions, dialog description |
-| `text-ui-base`    | 15 / 1.375  | message body, composer, primary row text (channel/DM/member rows), action-sheet rows                     |
-| `text-ui-md`      | 16 / 22     | card titles, phone inputs (iOS zoom floor), sheet titles, phone row text                                 |
-| `text-ui-lg`      | 18 / 24     | dialog and drawer titles                                                                                 |
-| `text-ui-xl`      | 22 / 28     | page titles (Friends, settings panel heading, voice channel name on landing)                             |
-| `text-ui-2xl`     | 28 / 32     | display numbers (device code, stats), empty-state title on wide screens                                  |
-| `text-display`    | 36 / 1.05   | auth hero, marketing (Instrument Serif)                                                                  |
-| `text-display-lg` | 44 / 1.02   | marketing only                                                                                           |
+| utility           | size / line | role                                                                                                                                               |
+| ----------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text-ui-2xs`     | 11 / 14     | eyebrow category labels (uppercase, `tracking-[0.08em]`, 600), count badges, tab-bar labels, kbd                                                   |
+| `text-ui-xs`      | 12 / 16     | timestamps, meta, captions, tooltip, menu group labels, helper text under a field                                                                  |
+| `text-ui-sm`      | 13 / 18     | controls (buttons, inputs on desktop, menu rows, tabs), secondary rows, descriptions, dialog description                                           |
+| `text-ui-base`    | 15 / 1.375  | message body, composer, primary row text (channel/DM/member rows), action-sheet rows                                                               |
+| `text-ui-md`      | 16 / 22     | card titles, phone inputs (iOS zoom floor), sheet titles, phone row text                                                                           |
+| `text-ui-lg`      | 18 / 24     | dialog and drawer titles                                                                                                                           |
+| `text-ui-xl`      | 22 / 28     | page titles (Friends, settings panel heading, voice channel name on landing); the phone settings header is the one page header at this size (12.2) |
+| `text-ui-2xl`     | 28 / 32     | display numbers (device code, stats), empty-state title on wide screens                                                                            |
+| `text-display`    | 36 / 1.05   | auth hero, marketing (Instrument Serif)                                                                                                            |
+| `text-display-lg` | 44 / 1.02   | marketing only                                                                                                                                     |
 
 4.2 **Weights.** 400 body and descriptions; 500 every control, row label and
 menu item (`font-medium`); 600 titles, selected tab, card headings
@@ -224,9 +224,9 @@ is not used.
 a `p-6` dialog (`rounded-xl` 16) holds `rounded-md`/`rounded-lg` blocks. Past
 24px of padding, pick each radius by its own role.
 
-5.3 **The menu panel is `rounded-lg`** (12). `MENU_PANEL` in `ui/menu.ts` says
-`rounded-[10px]`; 10 is off the scale and the lab spec was 8/12/16. Pick 12 so
-the menu matches cards and popovers; its `p-1` rows stay `rounded-md`.
+5.3 **The menu panel is `rounded-lg`** (12). `MENU_PANEL` in `ui/menu.ts` (and
+the `SelectContent` panel) are `rounded-lg`; 10 was off the scale and the lab
+spec was 8/12/16. 12 matches cards and popovers; its `p-1` rows stay `rounded-md`.
 
 ---
 
@@ -389,9 +389,9 @@ press), `--rm-ease-in-out: cubic-bezier(0.77,0,0.175,1)` (on-screen movement),
 `--rm-ease-drawer: cubic-bezier(0.32,0.72,0,1)` (drawers). Durations
 `--rm-dur-1` 120 (press/hover), `--rm-dur-2` 180 (menus, popovers, tooltip
 125), `--rm-dur-3` 240 (dialogs), drawers 280. Hard cap 300ms. `--rm-dur-4` is
-declared as 320 and should be reset to 280 (the vaul override already uses
-280); nothing may use `duration-500`/`700`/`1000` except loaders and the
-reduced-motion spinner. `ease-in` is never used.
+280 (drawer duration; the vaul override uses the same); nothing may use `duration-500`/`700`/`1000` except loaders and the
+reduced-motion spinner, and the 1.2s `rm-loading-exit` (a loader dissolving
+into the app; allowlisted). `ease-in` is never used.
 
 10.2 **Only transform and opacity animate.** Never `transition-all`; use
 `transition-ui` (named properties, house curve, 180ms), `transition-colors`,
@@ -454,7 +454,9 @@ border-rm-border`, title `text-ui-md font-semibold`, icon buttons `size-8` with
 12.2 **Phone page.** Header 48 + safe-area top; `px-4`; back/menu button `size-10`
 (`md` IconButton) at the leading edge; title `text-ui-md font-semibold
 truncate`. Body `px-4` for forms and cards, `px-0` for edge-to-edge lists.
-Bottom chrome adds safe-area bottom.
+Bottom chrome adds safe-area bottom. **Settings exception:** the phone
+settings page header is `h-14` with an `IconButton sm` back button and a
+`text-ui-xl font-semibold` title (it is the page heading, not a nav bar).
 
 12.3 **Sidebar list (channels, DMs, members).** List inset `px-2 py-2`; row
 `h-8 rounded-md px-2 gap-2.5 text-ui-base font-medium` on desktop; phone rows
@@ -481,8 +483,9 @@ cards); `p-6` is reserved for dialogs, `p-3` for dense media/attachment cards.
 12.6 **Settings card and row** (`settings/primitives.tsx`, the Studio
 reference). Card header `px-4 pt-4 pb-1` (`px-5` above 560 container width),
 title `text-ui-md font-semibold`, description `text-ui-sm text-rm-text-secondary`.
-Rows `px-4 py-3.5` with `divide-y`; label `text-ui-sm font-medium`,
-description `mt-0.5 text-ui-sm text-rm-text-secondary max-w-[56ch]`; control
+Rows `px-4 py-3.5` with `divide-y`; label `text-ui-base font-medium` (15: the
+row label is primary row text, 4.1) over a 13px description
+(`mt-0.5 text-ui-sm text-rm-text-secondary max-w-[56ch]`); control
 trailing (`gap-x-6`), stacks under the text below 560; selects `h-9 w-[260px]`.
 Every other "settings-like" surface (server settings, channel settings, room
 settings, profile editor) adopts this recipe.
@@ -535,14 +538,19 @@ Attachments and embeds `mt-2 rounded-xl max-w-[520px]`.
 `rounded-xl bg-rm-bg-surface` (speaking ring 2px `--rm-success`), name chip
 bottom-left `badge`-like `rounded-sm px-1.5 text-ui-xs` over a `bg-black/60`
 media overlay. Dock: 48px icon buttons `gap-2`, muted = `bg-rm-danger-tint
-text-rm-danger-ink` with `state="off"` glyph, Leave = `variant="danger"`.
+text-rm-danger-ink` with `state="off"` glyph, live camera/share =
+`bg-rm-accent-tint text-rm-accent-ink` with the Fill glyph (`state="active"`),
+Leave = `variant="danger"` and the only solid fill in the dock.
 
 12.14 **Tab bar (phone).** `h-14` + safe-area, 4 equal cells, icon `xl` +
 `text-ui-2xs` label, active `text-rm-text` + Fill glyph + `font-semibold`,
 inactive `text-rm-text-muted`.
 
-12.15 **Auth pages.** Split layout at `md`; card `rounded-xl border p-6 max-w-[420px]`
-on `bg-rm-bg-primary`; display face only in the art panel.
+12.15 **Auth pages.** Split layout at `md`: an art panel (the only place the
+display face appears) beside a flat form column, `max-w-[380px]`, no card, no
+border, on `bg-rm-bg-primary`. Titles use `font-ui` (Figtree) at
+`text-ui-xl font-semibold` everywhere: web sign-in, `/activate` and the desktop
+sign-in. Instrument Serif stays in the art panel.
 
 ---
 
@@ -622,21 +630,27 @@ colour-only change.
 
 ## 15. Picks made where the code disagreed
 
-| topic            | found                                                                         | pick                                                                   | why                                                                                 |
-| ---------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| card inset       | `p-3`, `p-3.5`, `p-4`, `p-5`, `p-6` on `rounded-xl` cards                     | `p-4` (`rounded-lg`); `p-6` only for dialogs; `p-3` dense media        | matches the drawer/page inset and the settings card; 16+12 keeps concentric corners |
-| card radius      | `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-[10px]`, `rounded-[24px]` | `rounded-lg` cards, `rounded-xl` dialogs/embeds, `rounded-2xl` drawers | one radius per elevation tier (styles.css comment)                                  |
-| menu radius      | `rounded-[10px]` (`menu.ts`), 10x elsewhere                                   | `rounded-lg` 12                                                        | off-scale value; lab spec 8/12/16                                                   |
-| text sizes       | 631 Tailwind `text-*`, 115 `text-[Npx]`, `text-ui-*` elsewhere                | `text-ui-*` only                                                       | 14px (`text-sm`) is not on the scale; 13/15 are                                     |
-| hover gating     | 593 `pointer-fine:hover`, 353 bare `hover:`/`group-hover:`                    | `pointer-fine:` everywhere                                             | tap latches hover on touch                                                          |
-| row height       | 32 / 36 / 40 / 44 / 48 mixed                                                  | 32 desktop nav, 44 phone nav, 48 phone list, 56 tab bar                | 4px grid; HIT covers coarse targets on 32                                           |
-| side panel width | 320 / 360 / 384 (`max-w-sm`)                                                  | 360                                                                    | fits 390 phones as a drawer with 30px of scrim; divides into the 1280 layout        |
-| `--rm-dur-4`     | 320ms                                                                         | 280ms                                                                  | cap is 300; drawers already run 280                                                 |
-| breakpoints      | `sm:` in dialogs, `lg:` member list, `md` elsewhere                           | `md` + `lg` only                                                       | one phone breakpoint; `sm` (640) splits phones                                      |
-| z-index          | 0/5/10/15/20/30/40/50/60/70/80/90/100/150 + `z-[1..1200]`                     | ladder in 11.1                                                         | arbitrary values fight each other across portals                                    |
-| shadows          | 165 hand-rolled `shadow-[...]`                                                | 3 tokens                                                               | elevation reads as one system; themes set alpha                                     |
-| blur             | 158 `backdrop-blur-*` (neutralised)                                           | remove                                                                 | dead classes mislead the next reader                                                |
-| phone inputs     | `text-sm` (14) and `text-base` (16)                                           | `text-ui-md` below `md`                                                | iOS zoom floor                                                                      |
+| topic                       | found                                                                         | pick                                                                                                                  | why                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| card inset                  | `p-3`, `p-3.5`, `p-4`, `p-5`, `p-6` on `rounded-xl` cards                     | `p-4` (`rounded-lg`); `p-6` only for dialogs; `p-3` dense media                                                       | matches the drawer/page inset and the settings card; 16+12 keeps concentric corners |
+| card radius                 | `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-[10px]`, `rounded-[24px]` | `rounded-lg` cards, `rounded-xl` dialogs/embeds, `rounded-2xl` drawers                                                | one radius per elevation tier (styles.css comment)                                  |
+| menu radius                 | `rounded-[10px]` (`menu.ts`), 10x elsewhere                                   | `rounded-lg` 12                                                                                                       | off-scale value; lab spec 8/12/16                                                   |
+| settings row label          | 13 (rule 12.6) vs 15 (code)                                                   | 15 label over 13 description                                                                                          | reads well in the settings screenshots                                              |
+| phone settings header       | `h-14` + `text-ui-xl` (code) vs 48 + `text-ui-md` (12.2)                      | keep `h-14` + `text-ui-xl`, recorded as the settings exception                                                        | it is a page heading                                                                |
+| auth card                   | bordered card vs flat 380 column (code)                                       | flat column, Figtree titles                                                                                           | matches shipped sign-in; display face stays in the art panel                        |
+| theme default               | `"dark"` for everyone                                                         | `"system"` for signed-out; stored/synced theme wins                                                                   | light/miku/spiderman users see auth pages in their scheme                           |
+| miku-light `--rm-on-accent` | white on `#00a399` (3.1:1)                                                    | dark ink `#0c1a2e` on `#00a399` (5.57:1)                                                                              | one solid fill without darkening the brand teal                                     |
+| `sm:` breakpoint            | 268 sites                                                                     | replaced by `md:` / container queries; `HomePageClient` (marketing) and `VoiceDebugScreen` (dev tool) are allowlisted | one phone breakpoint                                                                |
+| text sizes                  | 631 Tailwind `text-*`, 115 `text-[Npx]`, `text-ui-*` elsewhere                | `text-ui-*` only                                                                                                      | 14px (`text-sm`) is not on the scale; 13/15 are                                     |
+| hover gating                | 593 `pointer-fine:hover`, 353 bare `hover:`/`group-hover:`                    | `pointer-fine:` everywhere                                                                                            | tap latches hover on touch                                                          |
+| row height                  | 32 / 36 / 40 / 44 / 48 mixed                                                  | 32 desktop nav, 44 phone nav, 48 phone list, 56 tab bar                                                               | 4px grid; HIT covers coarse targets on 32                                           |
+| side panel width            | 320 / 360 / 384 (`max-w-sm`)                                                  | 360                                                                                                                   | fits 390 phones as a drawer with 30px of scrim; divides into the 1280 layout        |
+| `--rm-dur-4`                | 320ms                                                                         | 280ms                                                                                                                 | cap is 300; drawers already run 280                                                 |
+| breakpoints                 | `sm:` in dialogs, `lg:` member list, `md` elsewhere                           | `md` + `lg` only                                                                                                      | one phone breakpoint; `sm` (640) splits phones                                      |
+| z-index                     | 0/5/10/15/20/30/40/50/60/70/80/90/100/150 + `z-[1..1200]`                     | ladder in 11.1                                                                                                        | arbitrary values fight each other across portals                                    |
+| shadows                     | 165 hand-rolled `shadow-[...]`                                                | 3 tokens                                                                                                              | elevation reads as one system; themes set alpha                                     |
+| blur                        | 158 `backdrop-blur-*` (neutralised)                                           | remove                                                                                                                | dead classes mislead the next reader                                                |
+| phone inputs                | `text-sm` (14) and `text-base` (16)                                           | `text-ui-md` below `md`                                                                                               | iOS zoom floor                                                                      |
 
 ---
 

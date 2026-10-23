@@ -27,7 +27,7 @@ const DOCK_BTN = cn(
 const DOCK_REST = "bg-rm-tint-1 text-rm-text";
 const DOCK_OPEN = "bg-rm-tint-3 text-rm-text";
 const DOCK_MUTED = "bg-rm-danger-tint text-rm-danger-ink";
-const DOCK_LIVE = "bg-primary text-primary-foreground [--hover-o:0.12]";
+const DOCK_LIVE = "bg-rm-accent-tint text-rm-accent-ink [--hover-o:0.12]";
 const DOCK_LEAVE = "bg-rm-danger text-rm-on-danger [--hover-o:0.12]";
 
 interface VoiceControlsProps {

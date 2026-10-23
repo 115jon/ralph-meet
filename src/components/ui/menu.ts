@@ -7,9 +7,9 @@
  * Highlight changes are instant: menus are high-frequency surfaces.
  */
 
-/** Floating panel: radius 10, surface, the one place a shadow appears. */
+/** Floating panel: radius 12, surface, the one place a shadow appears. */
 export const MENU_PANEL =
-  "rounded-[10px] border border-rm-border bg-rm-bg-surface p-1 shadow-[var(--rm-shadow-2)] dark:bg-rm-bg-elevated overscroll-contain";
+  "rounded-lg border border-rm-border bg-rm-bg-surface p-1 shadow-lg dark:bg-rm-bg-elevated overscroll-contain";
 
 /** Row geometry and ink. Pair with one highlight below. */
 export const MENU_ITEM =
@@ -29,7 +29,8 @@ export const MENU_ITEM_WARNING_ON =
   "bg-[color-mix(in_oklab,var(--rm-warning-ink)_14%,transparent)] text-rm-warning-ink";
 
 /** Leading icon: subdued in the neutral row, inherits ink in danger rows. */
-export const MENU_ICON = "shrink-0 text-rm-text-muted group-hover:text-current";
+export const MENU_ICON =
+  "shrink-0 text-rm-text-muted pointer-fine:group-hover:text-current";
 
 export const MENU_SEPARATOR = "-mx-1 my-1 h-px shrink-0 bg-rm-border";
 

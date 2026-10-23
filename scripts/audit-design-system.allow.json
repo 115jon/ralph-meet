@@ -33,6 +33,32 @@
       "rule": "slow-motion",
       "match": "spin_1\\.6s|spin_700ms",
       "reason": "Spinner loop, not UI motion."
+    },
+    {
+      "file": "src/components/chat/settings/AppearancePanel.tsx",
+      "rule": "raw-color",
+      "reason": "Theme swatches render the theme's own palette, not the active theme (7.1)."
+    },
+    {
+      "file": "src/components/chat/ThemePreviewSidebar.tsx",
+      "rule": "raw-color",
+      "reason": "Theme preview renders the previewed theme's own palette, not the active theme (7.1)."
+    },
+    {
+      "file": "src/components/chat/ConnectionOverlay.tsx",
+      "rule": "slow-motion",
+      "match": "rm-loading-exit",
+      "reason": "rm-loading-exit runs 1.2s: a loader dissolving into the app, not UI motion (10.1)."
+    },
+    {
+      "file": "src/components/HomePageClient.tsx",
+      "rule": "off-breakpoint",
+      "reason": "Marketing page has its own responsive ladder (decision 8); not the app shell."
+    },
+    {
+      "file": "src/components/voice/VoiceDebugScreen.tsx",
+      "rule": "off-breakpoint",
+      "reason": "Dev-only debug tool, not shipped UI (decision 8)."
     }
   ]
 }

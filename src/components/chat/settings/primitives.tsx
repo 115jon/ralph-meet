@@ -150,7 +150,7 @@ export function SettingsCard({
       aria-labelledby={titleId}
       data-section={id}
       className={cn(
-        "rounded-lg border border-rm-border bg-rm-bg-surface shadow-[var(--rm-shadow-1)] dark:shadow-none",
+        "rounded-lg border border-rm-border bg-rm-bg-surface",
         className,
       )}
     >
@@ -532,9 +532,10 @@ export function RowError({ children }: { children: ReactNode }) {
   return (
     <p
       role="alert"
-      className="mt-3 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink"
+      className="mt-3 flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink"
     >
-      {children}
+      <Icon name="warning" size="sm" className="mt-px shrink-0" />
+      <span className="min-w-0">{children}</span>
     </p>
   );
 }

@@ -42,7 +42,7 @@ describe("shadcn Select", () => {
 
     const trigger = screen.getByRole("combobox", { name: "Test select" });
     await user.click(trigger);
-    expect(screen.getByRole("listbox")).toHaveClass("z-[110]");
+    expect(screen.getByRole("listbox")).toHaveClass("z-60");
     expect(screen.getAllByRole("option")).toHaveLength(3);
 
     await user.keyboard("{ArrowDown}");

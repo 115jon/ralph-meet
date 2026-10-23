@@ -276,6 +276,26 @@
   --rm-success-ink: oklch(0.78 0.15 155);
   --rm-warning-ink: oklch(0.82 0.14 75);
 
+  /* A favourited item (star, pinned GIF): the accent, never a new hue. */
+  --rm-favourite: var(--rm-accent-ink);
+
+  /* Activity stages (Wordle, WarpRush) draw their own palette, the same in
+     every theme. Components use these instead of Tailwind palette hues. */
+  --rm-activity-wordle-correct: #3f8f4f;
+  --rm-activity-wordle-present: #b08a2e;
+  --rm-activity-wordle-absent: #5b6270;
+  --rm-activity-wordle-tile: #d3d6da;
+  --rm-activity-wordle-key: #818384;
+  --rm-activity-wordle-ink: #ffffff;
+  --rm-activity-warp-bg: #020617;
+  --rm-activity-warp-ink: #e2e8f0;
+  --rm-activity-warp-ink-muted: #94a3b8;
+  --rm-activity-warp-ink-dim: #64748b;
+  --rm-activity-warp-cyan: #67e8f9;
+  --rm-activity-warp-magenta: #f0abfc;
+  --rm-activity-warp-amber: #fcd34d;
+  --rm-activity-warp-green: #6ee7b7;
+
   /* Elevation: an offset shadow plus a soft long shadow, alpha per theme */
   --rm-shadow-rgb: 0 0 0;
   --rm-shadow-1:
@@ -295,7 +315,7 @@
   --rm-dur-1: 120ms;
   --rm-dur-2: 180ms;
   --rm-dur-3: 240ms;
-  --rm-dur-4: 320ms;
+  --rm-dur-4: 280ms;
 
   /* Chrome sizes */
   --rm-size-header: 48px;
@@ -537,10 +557,11 @@
   --rm-accent-dim: rgba(0, 163, 153, 0.08);
   --rm-glow: rgba(57, 197, 187, 0.2);
 
-  /* Contrast tokens (Miku Light). White on #00a399 is 3.13:1, so the solid
-     fill deepens to #00706a (white 5.96:1, and 4.84:1 as text). */
-  --rm-accent-solid: #00706a;
-  --rm-on-accent: #ffffff;
+  /* Contrast tokens (Miku Light). White on #00a399 is only 3.13:1, so the
+     ink on the solid fill is dark navy instead (#0c1a2e on #00a399 is
+     5.57:1). The accent as text still deepens to #00706a (4.84:1). */
+  --rm-accent-solid: var(--rm-accent);
+  --rm-on-accent: #0c1a2e;
   --rm-accent-ink: #00706a;
   --rm-danger: oklch(0.52 0.18 25);
   --rm-danger-ink: oklch(0.5 0.18 25);
@@ -940,6 +961,7 @@
   --color-rm-bg-active: var(--rm-bg-active);
 
   --color-rm-text: var(--rm-text-primary);
+  --color-rm-text-primary: var(--rm-text-primary);
   --color-rm-text-secondary: var(--rm-text-secondary);
   --color-rm-text-muted: var(--rm-text-muted);
   --color-rm-text-ghost: var(--rm-text-ghost);
@@ -950,6 +972,25 @@
   --color-rm-badge: var(--rm-badge);
   --color-rm-rail-item: var(--rm-rail-item);
   --color-rm-success: var(--rm-success);
+  --color-rm-status-online: var(--rm-status-online);
+  --color-rm-status-idle: var(--rm-status-idle);
+  --color-rm-status-dnd: var(--rm-status-dnd);
+  --color-rm-status-offline: var(--rm-status-offline);
+  --color-rm-favourite: var(--rm-favourite);
+  --color-rm-activity-wordle-correct: var(--rm-activity-wordle-correct);
+  --color-rm-activity-wordle-present: var(--rm-activity-wordle-present);
+  --color-rm-activity-wordle-absent: var(--rm-activity-wordle-absent);
+  --color-rm-activity-wordle-tile: var(--rm-activity-wordle-tile);
+  --color-rm-activity-wordle-key: var(--rm-activity-wordle-key);
+  --color-rm-activity-wordle-ink: var(--rm-activity-wordle-ink);
+  --color-rm-activity-warp-bg: var(--rm-activity-warp-bg);
+  --color-rm-activity-warp-ink: var(--rm-activity-warp-ink);
+  --color-rm-activity-warp-ink-muted: var(--rm-activity-warp-ink-muted);
+  --color-rm-activity-warp-ink-dim: var(--rm-activity-warp-ink-dim);
+  --color-rm-activity-warp-cyan: var(--rm-activity-warp-cyan);
+  --color-rm-activity-warp-magenta: var(--rm-activity-warp-magenta);
+  --color-rm-activity-warp-amber: var(--rm-activity-warp-amber);
+  --color-rm-activity-warp-green: var(--rm-activity-warp-green);
 
   /* Quiet Pro contrast tokens */
   --color-rm-accent-solid: var(--rm-accent-solid);
@@ -1136,6 +1177,12 @@
   outline-offset: 0;
 }
 
+/* Programmatic focus targets (a settings row a search result landed on) are
+   not keyboard stops; they take focus for screen readers only. */
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
 .rm-composer textarea:focus-visible,
 .rm-search-input:focus-visible {
   outline: none;
@@ -1236,6 +1283,11 @@
   height: 20px;
   accent-color: var(--primary);
   cursor: pointer;
+}
+@media (pointer: coarse) {
+  .rm-settings-range {
+    height: 44px;
+  }
 }
 .rm-settings-range:disabled {
   cursor: not-allowed;
