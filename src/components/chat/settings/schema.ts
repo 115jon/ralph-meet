@@ -24,6 +24,8 @@ export type SettingsPanelId =
 /** What the current device can show. Rows outside it are not rendered. */
 export type SettingsEnvironment = {
   desktop: boolean;
+  /** Touch-only device (no hover, coarse pointer): no keyboard pages. */
+  touch?: boolean;
 };
 
 export type SettingsRowDef = {
@@ -51,6 +53,8 @@ export type SettingsPanelDef = {
   /** One line under the page title: what the page is for. */
   blurb: string;
   desktopOnly?: boolean;
+  /** Hidden on touch-only devices (keyboard shortcuts). */
+  keyboardOnly?: boolean;
   /** Rows that render in the preview rail, not in a card. */
   railRows?: SettingsRowDef[];
   sections: SettingsSectionDef[];
@@ -416,6 +420,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "keybinds",
     title: "Keybinds",
     icon: "keyboard",
+    keyboardOnly: true,
     blurb: "Keyboard shortcuts you can use today, and call keys on the way.",
     sections: [
       {
@@ -727,6 +732,7 @@ export function isPanelAvailable(
   panel: SettingsPanelDef,
   env: SettingsEnvironment,
 ): boolean {
+  if (panel.keyboardOnly && env.touch) return false;
   return !panel.desktopOnly || env.desktop;
 }
 

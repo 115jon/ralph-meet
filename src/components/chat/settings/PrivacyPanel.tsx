@@ -266,6 +266,7 @@ function ShareItem({
         <ConfirmStrip
           consequence="Anyone with this link will see that it's gone. You can't undo this."
           confirmLabel="Revoke link"
+          irreversible
           busy={revoking}
           onCancel={cancelConfirm}
           onConfirm={() => {

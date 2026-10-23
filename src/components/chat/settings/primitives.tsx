@@ -110,7 +110,7 @@ export function Highlight({ text, query }: { text: string; query: string }) {
         index % 2 === 1 ? (
           <mark
             key={index}
-            className="rounded-[3px] bg-rm-accent-tint px-px text-inherit underline decoration-rm-accent-ink decoration-2 underline-offset-2"
+            className="rounded-xs bg-rm-accent-tint px-px text-inherit underline decoration-rm-accent-ink decoration-2 underline-offset-2"
           >
             {part}
           </mark>
@@ -128,23 +128,35 @@ export function Highlight({ text, query }: { text: string; query: string }) {
 
 export function SettingsCard({
   id,
+  title,
   description,
+  actions,
   children,
   className,
 }: {
-  /** Section id from schema.ts. */
-  id: string;
+  /** Section id from schema.ts. Optional when `title` is given. */
+  id?: string;
+  /**
+   * Card title for surfaces outside the user-settings schema (server,
+   * channel and room settings). Skips the schema lookup and search filter.
+   */
+  title?: ReactNode;
   /** Overrides the schema description (for dynamic copy). */
   description?: ReactNode;
+  /** Trailing header control (an "Add" button). */
+  actions?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   const { env, query } = useSettings();
   const titleId = useId();
-  const entry = getSectionDef(id);
-  if (!entry) return null;
-  if (visibleSectionRows(id, env, query).length === 0) return null;
-  const desc = description ?? entry.section.desc;
+  const entry = id && title === undefined ? getSectionDef(id) : null;
+  if (title === undefined) {
+    if (!id || !entry) return null;
+    if (visibleSectionRows(id, env, query).length === 0) return null;
+  }
+  const heading = title ?? entry?.section.title;
+  const desc = description ?? entry?.section.desc;
   return (
     <section
       aria-labelledby={titleId}
@@ -154,14 +166,19 @@ export function SettingsCard({
         className,
       )}
     >
-      <div className="px-4 pb-1 pt-4 @min-[560px]:px-5">
-        <h4 id={titleId} className="text-ui-md font-semibold text-rm-text">
-          {entry.section.title}
-        </h4>
-        {desc ? (
-          <p className="mt-1 max-w-[62ch] text-pretty text-ui-sm text-rm-text-secondary">
-            {desc}
-          </p>
+      <div className="flex items-start gap-3 px-4 pb-1 pt-4 @min-[560px]:px-5">
+        <div className="min-w-0 flex-1">
+          <h4 id={titleId} className="text-ui-md font-semibold text-rm-text">
+            {heading}
+          </h4>
+          {desc ? (
+            <p className="mt-1 max-w-[62ch] text-pretty text-ui-sm text-rm-text-secondary">
+              {desc}
+            </p>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 items-center gap-2">{actions}</div>
         ) : null}
       </div>
       <ul className="divide-y divide-rm-border">{children}</ul>
@@ -177,6 +194,7 @@ export type RowIds = { labelId: string; descId?: string };
 
 export function SettingsRow({
   id,
+  label,
   layout = "stack",
   disabled = false,
   hideLabel = false,
@@ -185,8 +203,13 @@ export function SettingsRow({
   leading,
   children,
 }: {
-  /** Row id from schema.ts. */
+  /** Row id from schema.ts (or any stable id when `label` is given). */
   id: string;
+  /**
+   * Row label for surfaces outside the user-settings schema. Skips the
+   * schema lookup, availability and search filter.
+   */
+  label?: ReactNode;
   /**
    * inline: control always on the trailing side (switches, badges, buttons).
    * stack: control moves under the text when the page is narrow.
@@ -207,12 +230,15 @@ export function SettingsRow({
   const { env, query, target } = useSettings();
   const labelId = useId();
   const descId = useId();
-  const location = getRowLocation(id);
-  if (!location || !isRowAvailable(id, env) || !rowMatches(id, query)) {
+  const location = label === undefined ? getRowLocation(id) : null;
+  if (
+    label === undefined &&
+    (!location || !isRowAvailable(id, env) || !rowMatches(id, query))
+  ) {
     return null;
   }
-  const { row } = location;
-  const desc = description ?? row.desc;
+  const row = location?.row;
+  const desc = description ?? row?.desc;
   const ids: RowIds = { labelId, descId: desc ? descId : undefined };
   const isTarget = target === id;
 
@@ -252,7 +278,7 @@ export function SettingsRow({
                 disabled ? "text-rm-text-secondary" : "text-rm-text",
               )}
             >
-              <Highlight text={row.label} query={query} />
+              {label ?? <Highlight text={row?.label ?? ""} query={query} />}
             </p>
             {desc ? (
               <div
@@ -528,11 +554,20 @@ export function ValueText({ children }: { children: ReactNode }) {
 }
 
 /** Inline error under a row or list. */
-export function RowError({ children }: { children: ReactNode }) {
+export function RowError({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <p
       role="alert"
-      className="mt-3 flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink"
+      className={cn(
+        "mt-3 flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink",
+        className,
+      )}
     >
       <Icon name="warning" size="sm" className="mt-px shrink-0" />
       <span className="min-w-0">{children}</span>
@@ -568,14 +603,23 @@ export function ConfirmStrip({
   onConfirm,
   onCancel,
   busy = false,
+  irreversible = false,
+  error,
 }: {
   /** Names what will happen, in the person's terms. */
-  consequence: string;
+  consequence: ReactNode;
   /** Verb + object, matching the trigger. */
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
   busy?: boolean;
+  /**
+   * Solid danger fill for actions that can't be undone (delete, revoke).
+   * Reversible ones (sign out, unban) use the red tint (1.1, 13.2).
+   */
+  irreversible?: boolean;
+  /** Failure copy; the strip stays open so the person can retry. */
+  error?: ReactNode;
 }) {
   const messageId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -586,7 +630,7 @@ export function ConfirmStrip({
     <div
       role="group"
       aria-labelledby={messageId}
-      className="rm-settings-confirm-in mt-3 flex flex-col gap-3 rounded-md border border-rm-border-strong bg-rm-tint-1 p-3 @min-[560px]:flex-row @min-[560px]:items-center @min-[560px]:justify-between"
+      className="rm-settings-confirm-in mt-3 flex flex-col gap-3 rounded-md border border-rm-border-strong bg-rm-tint-1 p-3 @min-[560px]:flex-row @min-[560px]:flex-wrap @min-[560px]:items-center @min-[560px]:justify-between"
     >
       <p id={messageId} className="text-pretty text-ui-sm text-rm-text">
         {consequence}
@@ -603,13 +647,18 @@ export function ConfirmStrip({
         </Button>
         <Button
           type="button"
-          variant="danger"
+          variant={irreversible ? "danger" : "destructive"}
           onClick={onConfirm}
           loading={busy}
         >
           {confirmLabel}
         </Button>
       </div>
+      {error ? (
+        <div className="w-full">
+          <RowError className="mt-0">{error}</RowError>
+        </div>
+      ) : null}
     </div>
   );
 }
