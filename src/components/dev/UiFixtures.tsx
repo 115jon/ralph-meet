@@ -14,7 +14,11 @@ import { PickerFixture } from "@/components/dev/picker-fixtures";
 import { EmbedFixture } from "@/components/dev/embed-fixtures";
 import { ActivityFixture } from "@/components/dev/activity-fixtures";
 import { StreamFixture } from "@/components/dev/stream-fixtures";
-import { isStreamFixture } from "@/components/dev/stream-fixture-surfaces";
+import {
+  isFloatingFixture,
+  isStreamFixture,
+} from "@/components/dev/stream-fixture-surfaces";
+import { FloatingFixture } from "@/components/dev/floating-fixtures";
 import {
   isSettingsProfileFixture,
   SettingsProfileFixture,
@@ -2496,6 +2500,11 @@ export default function UiFixtures() {
         <EmbedFixture surface={surfaceName} />
       ) : isStreamFixture(surfaceName) ? (
         <StreamFixture
+          surface={surfaceName}
+          shell={<Shell surface="shell-chat" />}
+        />
+      ) : isFloatingFixture(surfaceName) ? (
+        <FloatingFixture
           surface={surfaceName}
           shell={<Shell surface="shell-chat" />}
         />
