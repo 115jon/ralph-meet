@@ -45,6 +45,14 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { HIT } from "@/components/ui/interaction";
+import {
+  SIDEBAR_CATEGORY,
+  SIDEBAR_ICON_SLOT,
+  SIDEBAR_UNREAD_PILL,
+  sidebarRowClass,
+} from "@/components/ui/sidebar-row";
 import { getChannelIcon } from "@/lib/channel-icon";
 
 import {
@@ -449,13 +457,11 @@ function SortableChannelItem({
   return (
     <div ref={setNodeRef} style={style}>
       <div
-        className={cn(
-          "group relative mb-0.5 mx-2 flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors outline-none pointer-coarse:min-h-11",
-          isActive
-            ? "bg-rm-bg-active text-rm-text"
-            : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text-secondary",
-          unread && !isActive && "text-rm-text font-semibold",
-        )}
+        className={sidebarRowClass({
+          selected: isActive,
+          unread,
+          className: "cursor-pointer",
+        })}
       >
         <button
           type="button"
@@ -463,35 +469,35 @@ function SortableChannelItem({
           onContextMenu={(e) => onContextMenu(e, channel)}
           {...channelLongPress}
           aria-label={`Open ${isVoice ? "voice" : "text"} channel ${channel.name}`}
+          aria-current={isActive ? "page" : undefined}
           className={cn(
             "absolute inset-0 z-10 rounded-md outline-none",
             LONG_PRESS_TARGET,
           )}
         />
-        {/* Drag handle */}
+        {/* Drag handle: sits in the list's 8px gutter so it takes no width
+            from the row; revealed on fine-pointer hover only. */}
         {isDraggable && (
-          <Icon
-            name="dragHandle"
-            size="xs"
-            className="relative z-20 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing pointer-fine:group-hover:opacity-40 pointer-fine:hover:!opacity-80"
+          <span
+            className="absolute top-1/2 -left-2 z-20 flex h-5 w-3 -translate-y-1/2 cursor-grab items-center justify-center text-rm-text-muted opacity-0 transition-opacity duration-150 active:cursor-grabbing pointer-fine:group-hover:opacity-100"
             {...attributes}
             {...listeners}
-          />
+          >
+            <Icon name="dragHandle" size="xs" />
+          </span>
         )}
 
-        <Icon
-          name={getChannelIcon(channel)}
-          size="md"
-          className="shrink-0 opacity-60"
-        />
+        <span className={SIDEBAR_ICON_SLOT}>
+          <Icon name={getChannelIcon(channel)} size="md" />
+        </span>
 
         <InlineEmojiText
           text={channel.name}
-          className="flex-1 truncate text-ui-base font-medium"
+          className="min-w-0 flex-1 truncate"
         />
 
         {/* Icons column */}
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {/* Mention count badge */}
           {mentionCount > 0 && (
             <div className="badge-count">
@@ -500,7 +506,7 @@ function SortableChannelItem({
           )}
           {/* Voice channel uptime — visible by default, hidden on hover */}
           {uptime && (
-            <span className="text-ui-2xs font-medium tabular-nums text-rm-success block pointer-fine:group-hover:hidden translate-y-px">
+            <span className="block text-ui-xs font-medium tabular-nums text-rm-success-ink pointer-fine:group-hover:hidden">
               {uptime}
             </span>
           )}
@@ -518,7 +524,7 @@ function SortableChannelItem({
                   <button
                     type="button"
                     aria-label="Channel settings"
-                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity pointer-fine:group-hover:opacity-60 pointer-fine:hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
+                    className="flex size-6 items-center justify-center rounded-sm text-rm-text-muted opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text focus-visible:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditChannel(channel);
@@ -537,7 +543,7 @@ function SortableChannelItem({
                 <button
                   type="button"
                   aria-label="Invite to channel"
-                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity pointer-fine:group-hover:opacity-60 pointer-fine:hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
+                  className="flex size-6 items-center justify-center rounded-sm text-rm-text-muted opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text focus-visible:opacity-100"
                   onClick={(e) => {
                     e.stopPropagation();
                     onInviteToChannel(channel);
@@ -553,10 +559,7 @@ function SortableChannelItem({
           </div>
         </div>
 
-        {/* Unread dot */}
-        {unread && (
-          <div className="absolute -left-2 h-2 w-1 rounded-r-full bg-rm-text" />
-        )}
+        {unread && <span aria-hidden className={SIDEBAR_UNREAD_PILL} />}
       </div>
 
       {isVoice && localVoiceChannelId === channel.id && (
@@ -565,12 +568,12 @@ function SortableChannelItem({
 
       {shouldRenderVoiceStatus && (
         <>
-          <div className="mb-1 ml-7 mr-2">
+          <div className="mb-1 ml-8">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover"
+                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors pointer-fine:hover:bg-rm-tint-1"
                   onClick={(event) => {
                     event.stopPropagation();
                     setIsVoiceTextStatusOpen(true);
@@ -601,7 +604,7 @@ function SortableChannelItem({
             </Tooltip>
           </div>
 
-          <div className="mb-2 ml-7 mr-2">
+          <div className="mb-2 ml-8">
             {mediaStatus ? (
               <VoiceChannelMediaDisplay
                 media={mediaStatus}
@@ -616,13 +619,13 @@ function SortableChannelItem({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-bg-hover/50 px-4 py-4 text-left text-rm-text-muted transition-colors pointer-fine:hover:border-primary/35 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text md:min-h-[108px]"
+                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-tint-1 px-4 py-4 text-left text-rm-text-muted transition-colors pointer-fine:hover:border-rm-accent-ink pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text md:min-h-[108px]"
                     onClick={(event) => {
                       event.stopPropagation();
                       setIsVoiceMediaStatusOpen(true);
                     }}
                   >
-                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-rm-bg-hover text-rm-text-muted transition-colors pointer-fine:group-hover/vibe:bg-rm-bg-active pointer-fine:group-hover/vibe:text-rm-text">
+                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-rm-tint-2 text-rm-text-muted transition-colors pointer-fine:group-hover/vibe:bg-rm-tint-3 pointer-fine:group-hover/vibe:text-rm-text">
                       <Icon name="sparkle" size="sm" />
                     </div>
                     <span className="text-ui-sm font-semibold text-rm-text">
@@ -646,7 +649,7 @@ function SortableChannelItem({
       {shouldRenderVoiceStatusReadOnly && (
         <>
           {textStatus && (
-            <div className="mb-1 ml-7 mr-2">
+            <div className="mb-1 ml-8">
               <span className="inline-block max-w-full truncate px-1 py-0.5 text-ui-xs font-medium leading-4 text-rm-text-secondary">
                 <InlineEmojiText text={textStatus} />
               </span>
@@ -654,7 +657,7 @@ function SortableChannelItem({
           )}
 
           {mediaStatus && (
-            <div className="mb-2 ml-7 mr-2">
+            <div className="mb-2 ml-8">
               <VoiceChannelMediaDisplay
                 media={mediaStatus}
                 isRemoving={false}
@@ -673,7 +676,7 @@ function SortableChannelItem({
 
       {/* Voice Members List */}
       {isVoice && vcMembers.length > 0 && (
-        <div className="mb-2 ml-7 flex flex-col gap-0.5">
+        <div className="mb-1 flex flex-col gap-0.5">
           {vcMembers.map((m) => (
             <VoiceChannelMemberRow
               key={m.clerk_user_id}
@@ -1051,7 +1054,7 @@ export default function ChannelSidebar({
         ) : (
           <button
             type="button"
-            className="flex cursor-pointer items-center justify-between border-b border-rm-border px-4 font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
+            className="flex cursor-pointer items-center justify-between border-b border-rm-border px-4 font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-tint-1 active:bg-rm-tint-2 outline-none"
             style={{
               height: "calc(48px + var(--safe-area-top, 0px))",
               paddingTop: "var(--safe-area-top, 0px)",
@@ -1074,7 +1077,7 @@ export default function ChannelSidebar({
         )}
 
         {/* Channels List */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-2 px-2">
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 py-2 scrollbar-thin">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -1719,7 +1722,8 @@ function VoiceChannelMemberRow({
           isReconnecting ? "reconnecting" : "connected"
         }
         className={cn(
-          "group/vc-user flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover outline-none pointer-coarse:min-h-11",
+          sidebarRowClass(),
+          "group/vc-user",
           isReconnecting && "opacity-50 grayscale",
         )}
         aria-label={`Open profile for ${resolvedIdentity.name}`}
@@ -1733,43 +1737,42 @@ function VoiceChannelMemberRow({
           if (e.button === 0) onPopoverUser(userInfo, e.currentTarget);
         }}
       >
-        <div
+        {/* Empty icon slot: the avatar starts on the channel name's edge. */}
+        <span aria-hidden className="size-5 shrink-0" />
+        <span
           className={cn(
-            "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-[0.96]",
-            isSpeaking
-              ? "ring-[3px] ring-primary ring-offset-2 ring-offset-rm-bg-secondary z-10"
-              : "z-0",
+            "relative size-6 shrink-0 overflow-hidden rounded-full",
+            isSpeaking &&
+              "ring-2 ring-rm-success ring-offset-2 ring-offset-rm-bg-secondary",
           )}
         >
-          <div className="absolute inset-0 overflow-visible rounded-full">
-            {resolvedIdentity.avatarUrl ? (
-              <AvatarImage
-                src={getAuthAssetUrl(resolvedIdentity.avatarUrl)}
-                alt=""
-                display={resolvedAvatarDisplay}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-primary/10 text-ui-2xs font-bold text-primary">
-                {resolvedIdentity.name[0]?.toUpperCase()}
-              </div>
-            )}
-          </div>
-        </div>
+          {resolvedIdentity.avatarUrl ? (
+            <AvatarImage
+              src={getAuthAssetUrl(resolvedIdentity.avatarUrl)}
+              alt=""
+              display={resolvedAvatarDisplay}
+            />
+          ) : (
+            <span className="flex size-full items-center justify-center bg-rm-accent-tint text-ui-2xs font-semibold text-rm-accent-ink">
+              {resolvedIdentity.name[0]?.toUpperCase()}
+            </span>
+          )}
+        </span>
         <UserDisplayName
           text={resolvedIdentity.name}
           displayNameStyle={resolvedDisplayNameStyle}
-          className="flex-1 truncate text-ui-sm font-medium text-rm-text-muted pointer-fine:group-hover/vc-user:text-rm-text"
+          className="min-w-0 flex-1 truncate"
         />
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {shouldShowStreamState && (
-            <div className="flex items-center justify-center rounded-xs bg-[#ed4245] px-[4px] py-[2px] text-ui-2xs font-bold leading-none tracking-wider text-white">
+            <span className="rounded-xs bg-rm-danger px-1 text-ui-2xs font-semibold leading-4 text-rm-on-danger">
               LIVE
-            </div>
+            </span>
           )}
           {activity && (
-            <Icon name="activities" size="sm" className="text-primary" />
+            <Icon name="activities" size="sm" className="text-rm-accent-ink" />
           )}
-          <div className="flex items-center gap-1 opacity-60">
+          <div className="flex items-center gap-1 text-rm-text-muted">
             {member.self_video && (
               <Icon name="camera" state="active" size="sm" />
             )}
@@ -1930,11 +1933,12 @@ function ChannelCategoryGroup({
   );
 
   return (
-    <div className="mb-3">
-      {/* Category Header */}
+    <div className="group/category flex flex-col gap-0.5">
+      {/* Category Header: first group pt-2, the rest pt-4 (12.3). */}
       <div
         className={cn(
-          "group flex cursor-pointer items-center py-1.5 pr-2 transition-colors pointer-fine:hover:text-rm-text text-rm-text-muted pointer-coarse:min-h-11",
+          SIDEBAR_CATEGORY,
+          "pr-0 group-first/category:pt-2",
           LONG_PRESS_TARGET,
         )}
         onContextMenu={(e) => handleCategoryContextMenu(e, group)}
@@ -1942,7 +1946,10 @@ function ChannelCategoryGroup({
       >
         <button
           type="button"
-          className="flex flex-1 items-center gap-0.5 overflow-hidden outline-none"
+          className={cn(
+            "relative flex min-w-0 flex-1 items-center gap-1 self-stretch rounded-sm text-left uppercase outline-none transition-colors duration-150 pointer-fine:hover:text-rm-text pointer-coarse:min-h-11",
+            HIT,
+          )}
           aria-expanded={!isCollapsed}
           aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${group.name}`}
           onClick={() => group.id && toggleCategory(group.id)}
@@ -1951,18 +1958,19 @@ function ChannelCategoryGroup({
             name="chevronDown"
             size="xs"
             className={cn(
-              "shrink-0 transition-transform duration-200",
+              "shrink-0 transition-transform duration-150 ease-(--rm-ease-out) motion-reduce:transition-none",
               isCollapsed && "-rotate-90",
             )}
           />
-          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] truncate leading-none pt-0.5">
+          <span className="truncate">
             <InlineEmojiText text={group.name} />
           </span>
         </button>
         {canManageChannels && (
-          <button
-            type="button"
-            className="rounded-sm p-0.5 transition-colors pointer-fine:hover:text-rm-text"
+          <IconButton
+            icon="add"
+            size="xs"
+            variant="muted"
             aria-label={`Create channel in ${group.name}`}
             onClick={() =>
               uiDispatch({
@@ -1972,9 +1980,7 @@ function ChannelCategoryGroup({
                 },
               })
             }
-          >
-            <Icon name="add" size="sm" />
-          </button>
+          />
         )}
       </div>
 

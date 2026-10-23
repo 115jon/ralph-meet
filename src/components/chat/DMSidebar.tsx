@@ -1,10 +1,19 @@
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
+import {
+  PHONE_GROUP,
+  PHONE_ICON_SLOT,
+  PHONE_ROW,
+  SIDEBAR_CATEGORY,
+  SIDEBAR_ICON_SLOT,
+  SIDEBAR_LIST,
+  sidebarRowClass,
+} from "@/components/ui/sidebar-row";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
@@ -17,6 +26,12 @@ interface Props {
   onSelectDm: (channelId: string) => void;
   onShowFriends?: () => void;
   onShowShop?: () => void;
+  /**
+   * `phone` is the Messages tab: a 48px page header, a 44px search field and
+   * 12.4 list rows (48px, 40px avatars). `sidebar` is the 240px desktop
+   * column.
+   */
+  variant?: "sidebar" | "phone";
 }
 
 interface UIState {
@@ -36,13 +51,67 @@ function isUnread(
   return lastMsg > lastRead;
 }
 
+function openCommandMenu() {
+  window.dispatchEvent(new CustomEvent("open-command-menu"));
+}
+
+/** Friends / Shop: a nav row in the sidebar, a 12.4 row on the phone. */
+function NavRow({
+  icon,
+  label,
+  selected,
+  badge,
+  phone,
+  onClick,
+}: {
+  icon: IconName;
+  label: string;
+  selected: boolean;
+  badge?: number;
+  phone: boolean;
+  onClick?: () => void;
+}) {
+  if (phone) {
+    return (
+      <button type="button" className={PHONE_ROW} onClick={onClick}>
+        <span className={PHONE_ICON_SLOT}>
+          <Icon name={icon} size="lg" />
+        </span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {badge ? <span className="badge-count">{badge}</span> : null}
+        <Icon
+          name="chevronRight"
+          size="xs"
+          className="shrink-0 text-rm-text-muted"
+        />
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-current={selected ? "page" : undefined}
+      className={sidebarRowClass({ selected, className: PRESS })}
+      onClick={onClick}
+    >
+      <span className={SIDEBAR_ICON_SLOT}>
+        <Icon name={icon} size="md" state={selected ? "active" : undefined} />
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge ? <span className="badge-count">{badge}</span> : null}
+    </button>
+  );
+}
+
 export default function DMSidebar({
   activeChannelId,
   activeView = "friends",
   onSelectDm,
   onShowFriends,
   onShowShop,
+  variant = "sidebar",
 }: Props) {
+  const phone = variant === "phone";
   const { relationships, dmChannels, readStates, lastMessageAt } = useChatStore(
     useShallow((s) => ({
       relationships: s.relationships,
@@ -88,6 +157,8 @@ export default function DMSidebar({
       callState.hasJoinedSFU;
     const hideCallOption = isRingingThisUser || isInCallOnChannel;
 
+    // No "Close DM": the API has no way to hide a DM channel yet, so the
+    // item only showed an alert.
     openMenu(e, [
       {
         label: "Profile",
@@ -120,87 +191,108 @@ export default function DMSidebar({
         icon: <Icon name="copy" size="sm" />,
         onClick: () => navigator.clipboard.writeText(dm.id),
       },
-      {
-        label: "Close DM",
-        icon: <Icon name="trash" size="sm" />,
-        onClick: () => alert("Close DM not implemented yet"),
-        variant: "danger",
-      },
     ]);
   };
 
-  return (
-    <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-rm-sidebar font-sans">
-      {/* Header */}
-      <div
-        className="shrink-0 border-b border-rm-border px-3"
-        style={{ paddingTop: "calc(8px + var(--safe-area-top, 0px))" }}
-      >
-        {/* Search placeholder */}
-        <button
-          className={cn(
-            "mb-2 mt-1 flex h-8 w-full items-center gap-2 rounded-md bg-rm-tint-1 px-3 text-ui-sm text-rm-text-muted cursor-pointer outline-none pointer-fine:hover:text-rm-text",
-            PRESS,
-          )}
-          onClick={() =>
-            window.dispatchEvent(new CustomEvent("open-command-menu"))
-          }
-        >
-          Find or start a conversation
-        </button>
-      </div>
-
-      {/* Friends nav button */}
-      <div className="px-2 pt-2">
-        <button
-          className={cn(
-            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-1.5 text-left transition-ui outline-none enabled:active:scale-[0.98]",
-            isFriendsActive
-              ? "bg-rm-bg-active text-rm-text"
-              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-elevated/50 pointer-fine:hover:text-rm-text-secondary",
-          )}
-          onClick={onShowFriends}
-        >
-          <Icon name="members" size="lg" className="shrink-0" />
-          <span className="text-ui-sm font-medium">Friends</span>
-          {pendingCount > 0 && (
-            <span className="badge-count ml-auto">{pendingCount}</span>
-          )}
-        </button>
-      </div>
-
-      <div className="px-2 pt-2">
-        <button
-          className={cn(
-            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-1.5 text-left transition-ui outline-none enabled:active:scale-[0.98]",
-            isShopActive
-              ? "bg-rm-bg-active text-rm-text"
-              : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-elevated/50 pointer-fine:hover:text-rm-text-secondary",
-          )}
-          onClick={onShowShop}
-        >
-          <Icon name="shop" size="lg" className="shrink-0" />
-          <span className="text-ui-sm font-medium">Shop</span>
-        </button>
-      </div>
-
-      {/* DM section header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-1">
-        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-          Direct Messages
-        </span>
-      </div>
-
-      {/* DM list */}
-      <DMListPanel
-        dmChannels={dmChannels}
-        activeChannelId={activeChannelId}
-        onSelectDm={onSelectDm}
-        isUnread={isUnread}
-        state={{ readStates, lastMessageAt }}
-        handleDmContextMenu={handleDmContextMenu}
-        dispatch={dispatch}
+  const navRows = (
+    <>
+      <NavRow
+        icon="members"
+        label="Friends"
+        selected={isFriendsActive}
+        badge={pendingCount}
+        phone={phone}
+        onClick={onShowFriends}
       />
+      <NavRow
+        icon="shop"
+        label="Shop"
+        selected={isShopActive}
+        phone={phone}
+        onClick={onShowShop}
+      />
+    </>
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex w-full min-h-0 flex-1 flex-col overflow-hidden font-sans",
+        phone
+          ? "bg-rm-bg-primary"
+          : "shrink-0 border-r border-rm-border bg-rm-sidebar",
+      )}
+    >
+      {phone ? (
+        <>
+          {/* Phone page header (12.2): 48px + safe area. */}
+          <header className="flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center px-4 pt-[var(--safe-area-top,0px)]">
+            <h1 className="truncate text-ui-md font-semibold text-rm-text">
+              Messages
+            </h1>
+          </header>
+          <div className="shrink-0 px-4 pb-2">
+            <button
+              type="button"
+              className={cn(
+                "flex min-h-11 w-full items-center gap-2 rounded-md border border-rm-field-edge bg-rm-bg-surface px-3 text-left text-ui-md text-rm-text-muted outline-none",
+                PRESS,
+              )}
+              onClick={openCommandMenu}
+            >
+              <Icon name="search" size="md" className="shrink-0" />
+              <span className="truncate">Find or start a conversation</span>
+            </button>
+          </div>
+        </>
+      ) : (
+        /* 48px header on the main header's line, plus the safe area. */
+        <div className="flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center border-b border-rm-border px-2 pt-[var(--safe-area-top,0px)]">
+          <button
+            type="button"
+            className={cn(
+              "flex h-8 w-full items-center gap-2 rounded-md bg-rm-tint-1 px-2 text-left text-ui-sm text-rm-text-muted outline-none pointer-fine:hover:text-rm-text",
+              PRESS,
+              HIT,
+            )}
+            onClick={openCommandMenu}
+          >
+            <Icon name="search" size="sm" className="shrink-0" />
+            <span className="truncate">Find or start a conversation</span>
+          </button>
+        </div>
+      )}
+
+      {/* One scroller: nav rows, the DM eyebrow and the DM rows. */}
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overscroll-contain custom-scrollbar",
+          phone && "pb-[var(--safe-area-bottom,0px)]",
+        )}
+      >
+        {phone ? (
+          <div className="px-4 pt-2">
+            <div className={PHONE_GROUP}>{navRows}</div>
+          </div>
+        ) : (
+          <div className={cn(SIDEBAR_LIST, "pb-0")}>{navRows}</div>
+        )}
+
+        <h2 className={cn(SIDEBAR_CATEGORY, phone ? "px-4 pt-6 pb-2" : "px-4")}>
+          Direct Messages
+        </h2>
+
+        <DMListPanel
+          dmChannels={dmChannels}
+          activeChannelId={activeChannelId}
+          onSelectDm={onSelectDm}
+          isUnread={isUnread}
+          state={{ readStates, lastMessageAt }}
+          handleDmContextMenu={handleDmContextMenu}
+          dispatch={dispatch}
+          variant={variant}
+        />
+      </div>
 
       {menu.isOpen && (
         <ContextMenu

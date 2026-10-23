@@ -1,3 +1,11 @@
+import { HIT } from "@/components/ui/interaction";
+import {
+  PHONE_GROUP,
+  PHONE_ROW,
+  SIDEBAR_LIST,
+  SIDEBAR_UNREAD_PILL,
+  sidebarRowClass,
+} from "@/components/ui/sidebar-row";
 import { toContextMenuEvent, useLongPress } from "@/hooks/useLongPress";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -5,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
 import { useChatStore } from "@/stores/chat-store";
 import { useMemo } from "react";
-import { DitherField } from "@/components/ui/DitherField";
 import { AvatarImage } from "./AvatarImage";
 import { Icon } from "@/components/ui/icon";
 import { UserDisplayName } from "./UserDisplayName";
@@ -22,6 +29,15 @@ interface DMListPanelProps {
   state: any;
   handleDmContextMenu: (e: React.MouseEvent, dm: any) => void;
   dispatch: React.Dispatch<any>;
+  /** `phone`: 12.4 rows (48px, 40px avatar) in a tinted group. */
+  variant?: "sidebar" | "phone";
+}
+
+function statusLabel(status?: string | null) {
+  if (status === "online") return "Online";
+  if (status === "idle") return "Idle";
+  if (status === "dnd") return "Do Not Disturb";
+  return "Offline";
 }
 
 export function DMListPanel({
@@ -32,7 +48,9 @@ export function DMListPanel({
   state,
   handleDmContextMenu,
   dispatch,
+  variant = "sidebar",
 }: DMListPanelProps) {
+  const phone = variant === "phone";
   const bindDmLongPress = useLongPress<any>((info, dm) =>
     handleDmContextMenu(toContextMenuEvent(info), dm),
   );
@@ -52,122 +70,113 @@ export function DMListPanel({
     return counts;
   }, [notifications]);
 
-  return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar">
-      <div className="space-y-0.5 p-2">
-        {dmChannels.length === 0 && (
-          <div className="relative mx-1 mt-1 flex flex-col items-center gap-1 overflow-hidden rounded-lg border border-rm-border px-4 pb-5 pt-[80px] text-center">
-            <DitherField
-              className="inset-x-0 top-0 bottom-auto h-[72px]"
-              cell={4}
-              intensity={0.5}
-              opacity={0.9}
-              fade="bottom"
-              tone="quiet"
-              seed={7}
-            />
-            <Icon name="chat" size="lg" className="text-rm-text-muted" />
-            <span className="text-ui-sm font-medium text-rm-text">
-              No DMs yet
-            </span>
-            <span className="text-ui-xs text-rm-text-muted">
-              Open a DM from the friends list
-            </span>
-          </div>
-        )}
-        {dmChannels.map((dm) => {
-          const dmIsUnread =
-            activeChannelId !== dm.id &&
-            isUnread(dm.id, state.readStates, state.lastMessageAt);
-          const dmNotifCount = dmUnreadCounts[dm.id] ?? 0;
-          const displayName = getDisplayName(
-            dm.recipient,
-            dm.name ?? "Unknown",
-          );
-          return (
-            <div
-              key={dm.id}
-              className={cn(
-                "group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-ui",
-                activeChannelId === dm.id
-                  ? "bg-rm-bg-elevated text-rm-text shadow-sm"
-                  : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-elevated/50 pointer-fine:hover:text-rm-text-secondary",
-              )}
-            >
-              <button
-                type="button"
-                className="absolute inset-0 rounded-md outline-none"
-                onClick={() => onSelectDm(dm.id)}
-                onContextMenu={(e) => handleDmContextMenu(e, dm)}
-                {...bindDmLongPress(dm)}
-                aria-label={`Open DM with ${displayName}`}
-              />
-              {/* Pill indicator — small dot only when unread */}
-              {dmIsUnread && (
-                <div className="absolute left-[-4px] top-1/2 w-1 h-2 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui" />
-              )}
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-ui-xs font-semibold text-primary-foreground ring-1 ring-rm-border outline-none pointer-fine:hover:ring-rm-border-strong"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    dispatch({
-                      type: "SET_POPOVER",
-                      user: dm.recipient,
-                      anchor: e.currentTarget,
-                    });
-                  }}
-                  aria-label={`View ${displayName}'s profile`}
-                >
-                  {dm.recipient?.avatar_url ? (
-                    <AvatarImage
-                      src={getAuthAssetUrl(dm.recipient.avatar_url)}
-                      alt=""
-                      display={dm.recipient.avatar_display}
-                    />
-                  ) : (
-                    getDisplayInitial(dm.recipient, "?")
-                  )}
-                </button>
-                {/* Status dot */}
-                <UserStatusDot
-                  status={dm.recipient?.status ?? "offline"}
-                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 border-2 border-rm-sidebar"
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <UserDisplayName
-                  user={dm.recipient}
-                  fallback={dm.name ?? "Unknown"}
-                  className={cn(
-                    "block truncate text-ui-sm font-medium leading-tight transition-colors",
-                    activeChannelId === dm.id
-                      ? "text-rm-text"
-                      : "text-rm-text-secondary",
-                    dmIsUnread && "font-semibold text-rm-text",
-                  )}
-                />
-                <span className="block truncate text-ui-2xs text-rm-text-muted leading-tight">
-                  {dm.recipient?.status === "online"
-                    ? "Online"
-                    : dm.recipient?.status === "idle"
-                      ? "Idle"
-                      : dm.recipient?.status === "dnd"
-                        ? "Do Not Disturb"
-                        : "Offline"}
-                </span>
-              </div>
-              {/* DM unread count badge */}
-              {dmNotifCount > 0 && activeChannelId !== dm.id && (
-                <div className="badge-count shrink-0">
-                  {dmNotifCount > 99 ? "99+" : dmNotifCount}
-                </div>
-              )}
-            </div>
-          );
-        })}
+  if (dmChannels.length === 0) {
+    // Empty state (14.1): centred, unboxed, one line of guidance.
+    return (
+      <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+        <Icon
+          name="chat"
+          size={phone ? "2xl" : "xl"}
+          className="text-rm-text-muted"
+        />
+        <p className="text-ui-md font-semibold text-rm-text">No messages yet</p>
+        <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
+          Open a conversation from your friends list or a member's profile.
+        </p>
       </div>
+    );
+  }
+
+  const rows = dmChannels.map((dm) => {
+    const selected = activeChannelId === dm.id;
+    const dmIsUnread =
+      !selected && isUnread(dm.id, state.readStates, state.lastMessageAt);
+    const dmNotifCount = dmUnreadCounts[dm.id] ?? 0;
+    const displayName = getDisplayName(dm.recipient, dm.name ?? "Unknown");
+    return (
+      <div
+        key={dm.id}
+        className={
+          phone
+            ? cn(PHONE_ROW, selected && "bg-rm-tint-2")
+            : sidebarRowClass({ selected, unread: dmIsUnread, tall: true })
+        }
+      >
+        <button
+          type="button"
+          className="absolute inset-0 rounded-md outline-none"
+          onClick={() => onSelectDm(dm.id)}
+          onContextMenu={(e) => handleDmContextMenu(e, dm)}
+          {...bindDmLongPress(dm)}
+          aria-label={`Open DM with ${displayName}`}
+          aria-current={selected ? "page" : undefined}
+        />
+        {dmIsUnread && !phone && (
+          <span aria-hidden className={SIDEBAR_UNREAD_PILL} />
+        )}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            className={cn(
+              "relative z-20 flex cursor-pointer items-center justify-center overflow-visible rounded-full bg-rm-accent-tint p-0 font-semibold text-rm-accent-ink outline-none",
+              phone ? "size-10 text-ui-sm" : "size-8 text-ui-xs",
+              HIT,
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              dispatch({
+                type: "SET_POPOVER",
+                user: dm.recipient,
+                anchor: e.currentTarget,
+              });
+            }}
+            aria-label={`View ${displayName}'s profile`}
+          >
+            {dm.recipient?.avatar_url ? (
+              <AvatarImage
+                src={getAuthAssetUrl(dm.recipient.avatar_url)}
+                alt=""
+                display={dm.recipient.avatar_display}
+              />
+            ) : (
+              getDisplayInitial(dm.recipient, "?")
+            )}
+          </button>
+          <UserStatusDot
+            status={dm.recipient?.status ?? "offline"}
+            className={cn(
+              "pointer-events-none absolute -right-0.5 -bottom-0.5 z-20 size-3 border-2",
+              phone ? "border-rm-bg-primary" : "border-rm-sidebar",
+            )}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <UserDisplayName
+            user={dm.recipient}
+            fallback={dm.name ?? "Unknown"}
+            className={cn(
+              "block truncate text-ui-base leading-5",
+              dmIsUnread ? "font-semibold text-rm-text" : "font-medium",
+            )}
+          />
+          <span className="block truncate text-ui-xs font-normal text-rm-text-secondary">
+            {statusLabel(dm.recipient?.status)}
+          </span>
+        </div>
+        {dmNotifCount > 0 && !selected && (
+          <span className="badge-count shrink-0">
+            {dmNotifCount > 99 ? "99+" : dmNotifCount}
+          </span>
+        )}
+      </div>
+    );
+  });
+
+  return phone ? (
+    <div className="px-4 pb-4">
+      <div className={PHONE_GROUP}>{rows}</div>
     </div>
+  ) : (
+    <div className={cn(SIDEBAR_LIST, "pt-0")}>{rows}</div>
   );
 }
