@@ -1,10 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
-import { searchMessages } from "@/services/server.service";
+import { parseSearchParams } from "@/lib/message-search";
+import { getVisibleChannels } from "@/lib/require-permission";
+import { searchMessages } from "@/services/message-search.service";
 
-// GET /api/servers/:id/search?q=query&limit=25&offset=0
-const GET = async ({ request, params }: any) => {
+// GET /api/servers/:id/search?q=&from=&mentions=&in=&has=&before=&after=&pinned=&sort=&limit=&offset=
+// Searches only the channels the caller can view. See lib/message-search.ts
+// for the parameter grammar.
+export const GET = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -12,26 +16,33 @@ const GET = async ({ request, params }: any) => {
 
   const db = getDB();
 
-  // Verify membership
   const member = await db
     .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
     .bind(serverId, userId)
     .first();
-
   if (!member) {
     return apiError("Not a member", 403);
   }
 
-  const url = new URL(request.url);
-  const query = url.searchParams.get("q")?.trim();
-  if (!query || query.length < 2) {
-    return apiError("Query must be at least 2 characters", 400);
+  const parsed = parseSearchParams(new URL(request.url).searchParams);
+  if (!parsed.ok) {
+    return apiError(parsed.error, 400);
   }
 
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "25"), 50);
-  const offset = parseInt(url.searchParams.get("offset") ?? "0");
+  const { results } = await db
+    .prepare(`SELECT id FROM channels WHERE server_id = ?`)
+    .bind(serverId)
+    .all();
+  const channels = ((results ?? []) as Array<{ id: unknown }>).map((row) => ({
+    id: String(row.id),
+  }));
+  const visible = await getVisibleChannels(serverId, userId, channels);
 
-  const result = await searchMessages(db, serverId, query, limit, offset);
+  const result = await searchMessages(
+    db,
+    { serverId, channelIds: visible.map((channel) => channel.id) },
+    parsed.query,
+  );
 
   return apiSuccess(result);
 };
