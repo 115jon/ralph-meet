@@ -4,7 +4,6 @@ import type {
   ScreenShareSourceState,
 } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
-import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { isActivityType, useActivityStore } from "@/stores/useActivityStore";
 
@@ -17,11 +16,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { ParticipantCard } from "../voice/ParticipantCard";
+import { Spinner } from "@/components/ui/button";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 import { VoiceHeader } from "../voice/VoiceHeader";
 import { VoiceLanding } from "../voice/VoiceLanding";
+import { MembersTray, VoiceStage } from "../voice/VoiceStage";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({
@@ -532,135 +532,97 @@ export default function VoiceChannelView({
 
   // ── Connected state ──
   return (
-    <div
+    <VoiceStage
       ref={containerRef}
-      className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden group/cinema"
-    >
-      {/* Absolute Header Overlay */}
-      <VoiceHeader
-        channelName={channelName}
-        connectionState={connectionState}
-        joined={joined}
-        focusedItem={focusedItem}
-        focusedWatchers={focusedWatchers}
-        currentScreenQuality={currentScreenQuality}
-        sfu={sfu}
-        showTextChat={showTextChat}
-        onToggleTextChat={onToggleTextChat}
-        onMenuClick={onMenuClick}
-      />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-0 relative">
-        <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
-          {activityStage ? (
-            <div className="h-full w-full pt-16">
-              <Suspense
-                fallback={
-                  <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),rgba(2,6,23,0.98)_55%)] px-6 text-center text-rm-text">
-                    <div>
-                      <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-cyan-200/80">
-                        Loading Activity
-                      </div>
-                      <div className="mt-3 text-ui-2xl font-semibold">
-                        Preparing the stage...
-                      </div>
-                    </div>
-                  </div>
-                }
-              >
-                {activityStage}
-              </Suspense>
-            </div>
-          ) : (
-            <VoiceGrid
-              items={gridItems}
-              focusedId={focusedId}
-              onFocus={setFocusedId}
-              globalDeafened={isDeafened}
-              currentSettings={currentSettings}
-              watchedStreams={watchedStreams}
-              streamThumbnails={streamThumbnails}
-              voiceActions={voiceActions}
-            />
-          )}
-        </div>
-
-        {/* Bottom Panel */}
-        <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
-          {/* Members Tray */}
-          {focusedId && showMembers && (
-            <div className="p-4 bg-rm-bg-primary/20 animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
-              <div
-                className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start md:justify-center"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                {gridItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className={cn(
-                      "w-44 md:w-52 aspect-video shrink-0 transition-ui py-2",
-                      focusedId === item.id
-                        ? ""
-                        : "opacity-70 pointer-fine:hover:opacity-100",
-                    )}
-                  >
-                    <ParticipantCard
-                      item={item}
-                      isFocused={focusedId === item.id}
-                      isTray={true}
-                      globalDeafened={isDeafened}
-                      watchedStreams={watchedStreams}
-                      streamThumbnails={streamThumbnails}
-                      voiceActions={voiceActions}
-                      suppressVideo={focusedId === item.id}
-                      onClick={() =>
-                        setFocusedId(focusedId === item.id ? null : item.id)
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Controls Bar */}
-          <VoiceControls
-            hasMicrophone={hasMicrophone}
-            isMicOn={isMicOn}
-            toggleMic={toggleMic}
-            isDeafened={isDeafened}
-            toggleDeafen={toggleDeafen}
-            hasCamera={hasCamera}
-            isCameraOn={isCameraOn}
-            toggleCamera={toggleCamera}
-            isScreenSharing={isScreenSharing}
-            toggleScreenShare={toggleScreenShare}
-            setIsScreenModalOpen={setIsScreenModalOpen}
-            focusedItem={focusedItem}
-            setFocusedId={setFocusedId}
-            handleLeave={handleLeave}
-            activeActivity={activeActivity?.activity}
-            leaveActivity={() => {
-              if (localUserId) {
-                clearUserActivity(localUserId);
-                sfu?.voiceGW.sendAppEvent({
-                  type: "activity.leave",
-                  userId: localUserId,
-                  channelId,
-                });
-              }
-            }}
-            isFullscreen={isFullscreen}
-            toggleFs={toggleFs}
-            showMembers={showMembers}
-            setShowMembers={setShowMembers}
-            onOpenActivities={onOpenActivities}
-            settingsUserId={settingsUserId}
-            sfu={sfu}
+      header={
+        <VoiceHeader
+          channelName={channelName}
+          connectionState={connectionState}
+          joined={joined}
+          focusedItem={focusedItem}
+          focusedWatchers={focusedWatchers}
+          currentScreenQuality={currentScreenQuality}
+          sfu={sfu}
+          showTextChat={showTextChat}
+          onToggleTextChat={onToggleTextChat}
+          onMenuClick={onMenuClick}
+        />
+      }
+      tray={
+        focusedId && showMembers ? (
+          <MembersTray
+            items={gridItems}
+            focusedId={focusedId}
+            onFocus={setFocusedId}
+            globalDeafened={isDeafened}
+            watchedStreams={watchedStreams}
+            streamThumbnails={streamThumbnails}
+            voiceActions={voiceActions}
           />
-        </div>
-      </div>
+        ) : null
+      }
+      dock={
+        <VoiceControls
+          hasMicrophone={hasMicrophone}
+          isMicOn={isMicOn}
+          toggleMic={toggleMic}
+          isDeafened={isDeafened}
+          toggleDeafen={toggleDeafen}
+          hasCamera={hasCamera}
+          isCameraOn={isCameraOn}
+          toggleCamera={toggleCamera}
+          isScreenSharing={isScreenSharing}
+          toggleScreenShare={toggleScreenShare}
+          setIsScreenModalOpen={setIsScreenModalOpen}
+          focusedItem={focusedItem}
+          setFocusedId={setFocusedId}
+          handleLeave={handleLeave}
+          activeActivity={activeActivity?.activity}
+          leaveActivity={() => {
+            if (localUserId) {
+              clearUserActivity(localUserId);
+              sfu?.voiceGW.sendAppEvent({
+                type: "activity.leave",
+                userId: localUserId,
+                channelId,
+              });
+            }
+          }}
+          isFullscreen={isFullscreen}
+          toggleFs={toggleFs}
+          showMembers={showMembers}
+          setShowMembers={setShowMembers}
+          onOpenActivities={onOpenActivities}
+          settingsUserId={settingsUserId}
+          sfu={sfu}
+        />
+      }
+    >
+      {activityStage ? (
+        <Suspense
+          fallback={
+            <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <Spinner className="size-6 text-rm-text-muted" />
+              <span className="text-ui-sm text-rm-text-secondary">
+                Loading activity…
+              </span>
+            </div>
+          }
+        >
+          {activityStage}
+        </Suspense>
+      ) : (
+        <VoiceGrid
+          items={gridItems}
+          focusedId={focusedId}
+          onFocus={setFocusedId}
+          globalDeafened={isDeafened}
+          currentSettings={currentSettings}
+          watchedStreams={watchedStreams}
+          streamThumbnails={streamThumbnails}
+          voiceActions={voiceActions}
+        />
+      )}
 
       {/* Screen share modal: desktop gets the custom picker, web gets quality-only */}
       <Suspense fallback={null}>
@@ -677,6 +639,6 @@ export default function VoiceChannelView({
           availableQualities={voiceActions.availableQualities}
         />
       </Suspense>
-    </div>
+    </VoiceStage>
   );
 }

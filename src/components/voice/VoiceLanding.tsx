@@ -35,52 +35,65 @@ export function VoiceLanding({
         seed={2}
       />
 
-      <div className="relative z-10 flex h-12 shrink-0 items-center justify-between px-4 md:px-5">
-        <div className="flex items-center gap-2 text-rm-text-muted">
-          {onMenuClick && (
-            <IconButton
-              aria-label="Open sidebar"
-              icon="menu"
-              variant="muted"
-              size="sm"
-              className="md:hidden"
-              onClick={onMenuClick}
-            />
-          )}
-          <Icon name="voiceChannel" size="md" />
-          <InlineEmojiText
-            text={channelName}
-            className="text-ui-sm font-semibold text-rm-text"
+      <header className="relative z-20 box-content flex h-12 shrink-0 items-center gap-2 border-b border-rm-border px-4 pt-[var(--safe-area-top,0px)]">
+        {onMenuClick && (
+          <IconButton
+            aria-label="Open sidebar"
+            icon="menu"
+            variant="muted"
+            size="sm"
+            className="md:hidden"
+            onClick={onMenuClick}
           />
-        </div>
+        )}
+        <Icon
+          name="voiceChannel"
+          size="lg"
+          className="shrink-0 text-rm-text-muted"
+        />
+        <span className="min-w-0 truncate text-ui-md font-semibold text-rm-text">
+          <InlineEmojiText text={channelName} />
+        </span>
         {!showTextChat && (
           <IconButton
             aria-label="Show chat"
             icon="chat"
             variant="muted"
             size="sm"
+            className="ml-auto"
             onClick={onToggleTextChat}
           />
         )}
-      </div>
+      </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-3 px-6 pb-12 text-center">
-        <h2 className="font-display text-display-lg text-rm-text text-balance">
+      {/* Empty-state anatomy (14.1): glyph, title, body, one action. */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-y-auto px-6 py-12 pb-[max(3rem,var(--safe-area-bottom,0px))] text-center">
+        <Icon
+          name="voiceChannel"
+          size="3xl"
+          className="hidden text-rm-text-muted md:block"
+        />
+        <Icon
+          name="voiceChannel"
+          size="2xl"
+          className="text-rm-text-muted md:hidden"
+        />
+        <h2 className="max-w-full text-ui-xl font-semibold text-balance break-words text-rm-text">
           <InlineEmojiText text={channelName} />
         </h2>
-        <p className="text-ui-base text-rm-text-secondary">
+        <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
           {vcMembers.length === 0
-            ? "No one is currently in voice"
-            : `${vcMembers.length} ${vcMembers.length === 1 ? "person" : "people"} in voice`}
+            ? "No one is here yet. Join and others will see you in the channel."
+            : `${vcMembers.length} ${vcMembers.length === 1 ? "person is" : "people are"} in voice.`}
         </p>
 
         {vcMembers.length > 0 && (
-          <div className="mt-1 flex items-center">
+          <div className="flex items-center">
             {vcMembers.slice(0, 5).map((m, index) => (
               <div
                 key={m.clerk_user_id}
                 className={
-                  "h-9 w-9 overflow-visible rounded-full bg-rm-bg-elevated ring-2 ring-rm-bg-primary" +
+                  "size-9 overflow-visible rounded-full bg-rm-tint-2 ring-2 ring-rm-bg-primary" +
                   (index > 0 ? " -ml-2" : "")
                 }
               >
@@ -91,27 +104,22 @@ export function VoiceLanding({
                     display={m.avatar_display}
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center rounded-full text-ui-xs font-semibold text-rm-text-muted">
+                  <div className="flex h-full w-full items-center justify-center rounded-full text-ui-xs font-semibold text-rm-text">
                     {m.name?.[0]?.toUpperCase() || "?"}
                   </div>
                 )}
               </div>
             ))}
             {vcMembers.length > 5 && (
-              <div className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full bg-rm-bg-elevated text-ui-xs font-semibold text-rm-text-muted ring-2 ring-rm-bg-primary">
+              <div className="-ml-2 flex size-9 items-center justify-center rounded-full bg-rm-tint-2 text-ui-xs font-semibold text-rm-text ring-2 ring-rm-bg-primary">
                 +{vcMembers.length - 5}
               </div>
             )}
           </div>
         )}
 
-        <Button
-          type="button"
-          size="lg"
-          onClick={handleJoin}
-          className="mt-3 px-6"
-        >
-          Join Voice
+        <Button type="button" size="lg" onClick={handleJoin} className="mt-1">
+          Join voice
         </Button>
       </div>
     </div>

@@ -65,6 +65,7 @@ export function computeFps(
 // unit-testable without React (task 11.3).
 
 import type { NativeShareStatsSnapshot } from "@/types/native-share-stats";
+import { connectionStatus } from "@/lib/voice/connection-status-label";
 
 /** Visual tone for the capture-mode badge. */
 export type CaptureModeTone = "hook" | "wgc" | "unavailable";
@@ -144,23 +145,16 @@ export function formatNegotiatedFps(fps: number | null): string | null {
 }
 
 /**
- * The connection-state label that the static "Stable" markup produced, kept
- * here so both the panel's no-native-data path and the headers stay in sync
- * (Req 8.9, 8.11, 13.3).
- *
- * Unifies the two prior inline ternaries: a `connected` connection or a
- * `joined` session reads as "Stable"; `connecting`/`new` read as connecting;
- * `failed` reads as "Failed"; anything else falls through to the raw state.
+ * The connection-state label for the panel's no-native-data path and the
+ * headers (Req 8.9, 8.11, 13.3). Delegates to `connectionStatus`, which maps
+ * from the state first so a joined session that drops reads "Reconnecting…"
+ * or "Failed", never a false "Stable" (design audit VC-24).
  */
 export function connectionStateLabel(
   connectionState: string,
   joined: boolean,
 ): string {
-  if (connectionState === "connected" || joined) return "Stable";
-  if (connectionState === "connecting") return "Connecting";
-  if (connectionState === "new") return "Connecting…";
-  if (connectionState === "failed") return "Failed";
-  return connectionState;
+  return connectionStatus(connectionState, joined).label;
 }
 
 /**

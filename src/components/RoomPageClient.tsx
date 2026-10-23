@@ -4,17 +4,24 @@ import {
   DemoUploadBlockerModal,
 } from "@/components/DemoRoomChatPanel";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
-import { ParticipantCard } from "@/components/voice/ParticipantCard";
-import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
+import { VoiceControls } from "@/components/voice/VoiceControls";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
+import { VoiceHeader } from "@/components/voice/VoiceHeader";
+import { MembersTray, VoiceStage } from "@/components/voice/VoiceStage";
+import { Button, Spinner } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { IconButton } from "@/components/ui/IconButton";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { copyRoomLink } from "@/lib/room-links";
 import { getRoomPreflightWarnings } from "@/lib/room-preflight";
 import { resumeSoundContext } from "@/lib/sounds";
-import { getLocalScreenStreamWatchers } from "@/lib/stream-watchers";
+import {
+  getLocalScreenStreamWatchers,
+  type StreamWatcherIdentity,
+} from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
-import { getConnectionStatusBadge } from "@/lib/voice/connection-status-label";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Icon } from "@/components/ui/icon";
@@ -96,58 +103,14 @@ export default function RoomPageClient() {
 
   if (!guestState.submitted) {
     return (
-      <div className="flex h-full items-center justify-center bg-rm-bg-primary px-6">
-        <div className="z-10 w-full max-w-sm">
-          <div className="mb-6 flex flex-col items-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border">
-              <Icon name="soundboard" size="2xl" className="text-rm-accent" />
-            </div>
-            <h1 className="text-ui-2xl font-semibold text-rm-text">
-              Join Meeting
-            </h1>
-            <p className="text-center text-ui-sm text-rm-text-muted">
-              Room: <span className="font-semibold text-rm-text">{slug}</span>
-            </p>
-          </div>
-
-          <form onSubmit={handleNameSubmit} className="flex flex-col gap-4">
-            {preflightWarnings.length > 0 && (
-              <div className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-ui-xs font-medium text-warning">
-                {preflightWarnings[0]}. You can still join, then check input
-                settings from the call controls.
-              </div>
-            )}
-            <div className="space-y-2">
-              <label
-                htmlFor="name"
-                className="text-ui-xs font-semibold text-rm-text-muted"
-              >
-                Your Name
-              </label>
-              <input
-                ref={inputRef}
-                id="name"
-                type="text"
-                value={guestState.name}
-                onChange={(e) =>
-                  setGuestState({ ...guestState, name: e.target.value })
-                }
-                placeholder="Enter your name"
-                className="w-full rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/40 focus:border-rm-accent/30 focus:ring-2 focus:ring-rm-accent/20"
-                autoComplete="off"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!guestState.name.trim()}
-              className="w-full rounded-xl bg-rm-accent py-3 text-ui-md font-semibold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-uishadow-xl disabled:opacity-40 cursor-pointer"
-            >
-              Join Room
-            </button>
-          </form>
-        </div>
-      </div>
+      <RoomJoinForm
+        slug={slug}
+        name={guestState.name}
+        onNameChange={(name) => setGuestState({ ...guestState, name })}
+        onSubmit={handleNameSubmit}
+        warnings={preflightWarnings}
+        inputRef={inputRef}
+      />
     );
   }
 
@@ -163,194 +126,108 @@ export default function RoomPageClient() {
   );
 }
 
-// ── Room voice view (uses modern voice components) ───────────────────────
-
-function ControlsBar({
-  hasMicrophone,
-  isMicOn,
-  toggleMic,
-  isDeafened,
-  toggleDeafen,
-  hasCamera,
-  isCameraOn,
-  toggleCamera,
-  isScreenSharing,
-  toggleScreenShare,
-  setIsScreenModalOpen,
-  handleLeave,
-  toggleFs,
-  isFullscreen,
-  setIsSettingsOpen,
-  focusedId,
-  showMembers,
-  setShowMembers,
-}: any) {
+/** Guest name entry before joining a room (exported for the UI fixtures). */
+export function RoomJoinForm({
+  slug,
+  name,
+  onNameChange,
+  onSubmit,
+  warnings,
+  inputRef,
+}: {
+  slug: string;
+  name: string;
+  onNameChange: (name: string) => void;
+  onSubmit: (e: React.SubmitEvent) => void;
+  warnings: string[];
+  inputRef?: React.Ref<HTMLInputElement>;
+}) {
   return (
-    <div className="h-[72px] flex items-center justify-between px-6 bg-rm-bg-elevated/40">
-      <div className="flex-1 flex items-center" />
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl">
-          <button
-            type="button"
-            title={
-              !hasMicrophone
-                ? "No microphone detected"
-                : isMicOn
-                  ? "Mute"
-                  : "Unmute"
-            }
-            disabled={!hasMicrophone}
-            onClick={toggleMic}
-            className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
-              !isMicOn || !hasMicrophone
-                ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20"
-                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
-              !hasMicrophone && "cursor-not-allowed",
-            )}
-          >
-            <Icon
-              name="mic"
-              state={!isMicOn || !hasMicrophone ? "off" : "idle"}
-              size="lg"
-            />
-          </button>
-
-          <button
-            type="button"
-            title={isDeafened ? "Undeafen" : "Deafen"}
-            onClick={toggleDeafen}
-            className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
-              isDeafened
-                ? "bg-destructive text-destructive-foreground"
-                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
-            )}
-          >
-            <Icon name="deafen" state={isDeafened ? "off" : "idle"} size="lg" />
-          </button>
-
-          <button
-            type="button"
-            title={
-              !hasCamera
-                ? "No camera detected"
-                : isCameraOn
-                  ? "Stop Camera"
-                  : "Start Camera"
-            }
-            disabled={!hasCamera}
-            onClick={toggleCamera}
-            className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
-              isCameraOn
-                ? "bg-rm-text text-rm-bg-surface shadow-lg"
-                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
-              !hasCamera && "opacity-50 cursor-not-allowed grayscale",
-            )}
-          >
-            {isCameraOn ? (
-              <Icon name="camera" state="active" size="lg" />
-            ) : (
-              <Icon name="cameraOff" size="lg" />
-            )}
-          </button>
-
-          <div className="w-px h-6 bg-rm-border mx-1" />
-
-          <button
-            type="button"
-            title={isScreenSharing ? "Stop Stream" : "Share Screen"}
-            onClick={() => {
-              if (isScreenSharing) toggleScreenShare();
-              else setIsScreenModalOpen(true);
-            }}
-            className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
-              isScreenSharing
-                ? "bg-primary text-primary-foreground"
-                : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
-            )}
-          >
-            <Icon
-              name="screenShare"
-              state={isScreenSharing ? "active" : "idle"}
-              size="lg"
-            />
-          </button>
-
-          <div className="w-px h-6 bg-rm-border mx-1" />
-
-          <button
-            type="button"
-            title="Leave"
-            onClick={handleLeave}
-            className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg pointer-fine:hover:brightness-110 active:scale-[0.96] transition-ui shrink-0"
-          >
-            <Icon name="disconnect" size="lg" />
-          </button>
+    <div className="flex h-full items-center justify-center overflow-y-auto bg-rm-bg-primary px-4 pt-[max(1.5rem,var(--safe-area-top,0px))] pb-[max(1.5rem,var(--safe-area-bottom,0px))]">
+      <div className="w-full max-w-[380px]">
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <Icon name="soundboard" size="2xl" className="text-rm-text-muted" />
+          <h1 className="text-ui-xl font-semibold text-balance text-rm-text">
+            Join meeting
+          </h1>
+          <p className="text-ui-sm text-rm-text-secondary">
+            Room:{" "}
+            <span className="font-semibold break-words text-rm-text">
+              {slug}
+            </span>
+          </p>
         </div>
-      </div>
-      <div className="flex-1 flex items-center justify-end gap-3">
-        <button
-          type="button"
-          onClick={toggleFs}
-          className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
-          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-        >
-          {isFullscreen ? (
-            <Icon name="minimize" size="lg" />
-          ) : (
-            <Icon name="maximize" size="lg" />
+
+        <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          {warnings.length > 0 && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-md bg-[color-mix(in_oklab,var(--rm-warning-ink)_14%,transparent)] px-3 py-2 text-ui-sm text-rm-warning-ink"
+            >
+              <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
+              <span className="text-pretty">
+                {warnings[0]}. You can still join, then check input settings
+                from the call controls.
+              </span>
+            </div>
           )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setIsSettingsOpen(true)}
-          className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
-          title="Settings"
-        >
-          <Icon name="settings" size="lg" />
-        </button>
-        {focusedId && (
-          <button
-            type="button"
-            onClick={() => setShowMembers(!showMembers)}
-            className={cn(
-              "p-2 rounded-xl transition-ui outline-none",
-              showMembers
-                ? "text-rm-text bg-rm-bg-active"
-                : "text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover",
-            )}
-            title={showMembers ? "Hide Members" : "Show Members"}
-          >
-            <Icon
-              name="chevronUp"
-              size="lg"
-              className={cn(
-                "transition-transform",
-                !showMembers && "rotate-180",
-              )}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="name">Your name</Label>
+            <Input
+              ref={inputRef}
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => onNameChange(e.target.value)}
+              placeholder="Enter your name"
+              className="pointer-coarse:min-h-11"
+              autoComplete="name"
+              required
             />
-          </button>
-        )}
+          </div>
+          <Button
+            type="submit"
+            size="lg"
+            disabled={!name.trim()}
+            className="w-full"
+          >
+            Join room
+          </Button>
+        </form>
       </div>
     </div>
   );
 }
 
-function RoomHeader({
+/** The wait between submitting a name and joining (exported for fixtures). */
+export function RoomConnecting({ slug }: { slug: string }) {
+  return (
+    <div className="flex min-h-full flex-col items-center justify-center gap-3 bg-rm-bg-primary px-6 py-12 text-center">
+      <Spinner className="size-6 text-rm-text-muted" />
+      <span role="status" className="text-ui-sm text-rm-text-secondary">
+        Connecting to {slug}…
+      </span>
+    </div>
+  );
+}
+
+// ── Room voice view (the shared voice stage, header and dock) ─────────────
+
+/** Header extras for the room: copy the invite link, the watchers, the count. */
+export function RoomMeta({
   slug,
-  connectionState,
-  joined,
-  focusedId,
+  focused,
   gridItemsCount,
   localScreenWatchers,
-}: any) {
+}: {
+  slug: string;
+  focused: boolean;
+  gridItemsCount: number;
+  localScreenWatchers: StreamWatcherIdentity[];
+}) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
-  const connectionBadge = getConnectionStatusBadge({ joined, connectionState });
 
   const handleCopyRoomLink = async () => {
     try {
@@ -362,98 +239,55 @@ function RoomHeader({
     window.setTimeout(() => setCopyState("idle"), 1600);
   };
 
+  const divider = cn(
+    "hidden h-4 w-px shrink-0 md:block",
+    focused ? "bg-white/20" : "bg-rm-border",
+  );
+
   return (
-    <div
-      className={cn(
-        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-10 pointer-events-none",
-        focusedId
-          ? "bg-linear-to-b from-rm-bg-primary/80 to-transparent"
-          : "bg-rm-bg-primary/20",
-      )}
-      style={{
-        paddingTop: "var(--safe-area-top, 0px)",
-        height: "calc(3.5rem + var(--safe-area-top, 0px))",
-      }}
-    >
-      <div className="flex items-center gap-3 pointer-events-auto">
-        <Icon name="soundboard" size="sm" className="text-rm-accent" />
-        <span className="text-ui-sm font-semibold text-rm-text tracking-tight">
-          {slug}
-        </span>
-        <button
-          type="button"
-          onClick={handleCopyRoomLink}
-          className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface/70 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
-            copyState === "copied" && "border-emerald-400/40 text-emerald-300",
-            copyState === "failed" && "border-destructive/40 text-destructive",
-          )}
-          aria-label={
-            copyState === "copied" ? "Room link copied" : "Copy room link"
-          }
-          title={
-            copyState === "copied"
-              ? "Copied"
+    <>
+      <IconButton
+        icon={copyState === "copied" ? "check" : "link"}
+        size="sm"
+        variant="plain"
+        tooltip={
+          copyState === "copied"
+            ? "Link copied"
+            : copyState === "failed"
+              ? "Copy failed"
+              : "Copy room link"
+        }
+        className={cn(
+          focused
+            ? "text-white/80 pointer-fine:hover:text-white"
+            : copyState === "copied"
+              ? "text-rm-success-ink"
               : copyState === "failed"
-                ? "Copy failed"
-                : "Copy room link"
-          }
-        >
-          {copyState === "copied" ? (
-            <Icon name="check" size="sm" />
-          ) : (
-            <Icon name="copy" size="sm" />
-          )}
-        </button>
-        <div className="h-4 w-px bg-rm-border" />
-        <StreamingStatsPanel
-          connectionState={connectionState}
-          joined={joined}
-          emphasized={!!focusedId}
-        />
-        <div className="h-4 w-px bg-rm-border" />
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-ui-2xs font-bold",
-            connectionBadge.tone === "good" &&
-              "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
-            connectionBadge.tone === "pending" &&
-              "border-warning/20 bg-warning/10 text-warning",
-            connectionBadge.tone === "bad" &&
-              "border-destructive/20 bg-destructive/10 text-destructive",
-          )}
-          title={`Voice status: ${connectionBadge.label}`}
-        >
-          <span
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              connectionBadge.tone === "good" && "bg-emerald-300",
-              connectionBadge.tone === "pending" && "bg-warning",
-              connectionBadge.tone === "bad" && "bg-destructive",
-            )}
-          />
-          {connectionBadge.label}
-        </span>
-        {localScreenWatchers.length > 0 && (
-          <>
-            <div className="h-4 w-px bg-rm-border" />
-            <StreamWatcherList
-              watchers={localScreenWatchers}
-              variant="inline"
-              className={cn(
-                "max-w-[min(38vw,18rem)] rounded-full border border-rm-border bg-rm-bg-surface/70 px-2 py-1",
-                focusedId && "border-white/10 bg-black/30",
-              )}
-            />
-          </>
+                ? "text-rm-danger-ink"
+                : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
         )}
-        <div className="h-4 w-px bg-rm-border" />
-        <span className="text-ui-xs text-rm-text-muted">
-          {gridItemsCount} in room
-        </span>
-      </div>
-      <div className="pointer-events-auto" />
-    </div>
+        onClick={handleCopyRoomLink}
+      />
+      {localScreenWatchers.length > 0 && (
+        <>
+          <div aria-hidden className={divider} />
+          <StreamWatcherList
+            watchers={localScreenWatchers}
+            variant="inline"
+            className="hidden max-w-[min(38vw,18rem)] md:flex"
+          />
+        </>
+      )}
+      <div aria-hidden className={divider} />
+      <span
+        className={cn(
+          "hidden whitespace-nowrap text-ui-xs tabular-nums md:inline",
+          focused ? "text-white/70" : "text-rm-text-muted",
+        )}
+      >
+        {gridItemsCount} in room
+      </span>
+    </>
   );
 }
 
@@ -536,12 +370,16 @@ function RoomVoiceView({
   }, []);
 
   const toggleFs = () => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen();
-      setIsFullscreen(true);
+      if (!document.fullscreenEnabled || !container.requestFullscreen) return;
+      container
+        .requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => setIsFullscreen(false));
     } else {
-      document.exitFullscreen();
+      void document.exitFullscreen?.().catch(() => {});
       setIsFullscreen(false);
     }
   };
@@ -597,68 +435,112 @@ function RoomVoiceView({
     sfu,
   };
 
-  if (!joined) {
-    return (
-      <div className="flex min-h-full flex-col items-center justify-center bg-rm-bg-primary gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border animate-pulse">
-          <Icon name="soundboard" size="2xl" className="text-rm-accent" />
-        </div>
-        <span className="text-ui-sm font-semibold text-rm-text-muted">
-          Connecting to {slug}…
-        </span>
-      </div>
-    );
-  }
+  if (!joined) return <RoomConnecting slug={slug} />;
+
+  const focusedItem = gridItems.find((item) => item.id === focusedId);
 
   return (
-    <div
+    <VoiceStage
       ref={containerRef}
-      className="flex h-full flex-col bg-rm-bg-primary relative overflow-hidden"
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      className="h-full"
+      header={
+        <VoiceHeader
+          channelName={slug}
+          titleIcon="soundboard"
+          connectionState={connectionState}
+          joined={joined}
+          focusedItem={focusedItem ?? null}
+          currentScreenQuality={currentScreenQuality}
+          sfu={sfu}
+          meta={
+            <RoomMeta
+              slug={slug}
+              focused={!!focusedItem}
+              gridItemsCount={gridItems.length}
+              localScreenWatchers={localScreenWatchers}
+            />
+          }
+        />
+      }
+      tray={
+        focusedId && showMembers ? (
+          <MembersTray
+            items={gridItems}
+            focusedId={focusedId}
+            onFocus={setFocusedId}
+            globalDeafened={isDeafened}
+            watchedStreams={watchedStreams}
+            streamThumbnails={streamThumbnails}
+            voiceActions={voiceActions}
+          />
+        ) : null
+      }
+      dock={
+        <VoiceControls
+          hasMicrophone={hasMicrophone}
+          isMicOn={isMicOn}
+          toggleMic={toggleMic}
+          isDeafened={isDeafened}
+          toggleDeafen={toggleDeafen}
+          hasCamera={hasCamera}
+          isCameraOn={isCameraOn}
+          toggleCamera={toggleCamera}
+          isScreenSharing={isScreenSharing}
+          toggleScreenShare={toggleScreenShare}
+          setIsScreenModalOpen={setIsScreenModalOpen}
+          focusedItem={focusedItem}
+          setFocusedId={setFocusedId}
+          handleLeave={handleLeave}
+          isFullscreen={isFullscreen}
+          toggleFs={toggleFs}
+          showMembers={showMembers}
+          setShowMembers={setShowMembers}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          settingsUserId={settingsUserId}
+          sfu={sfu}
+        />
+      }
     >
-      {isFileDragging && (
-        <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70">
-          <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
-            <p className="text-ui-sm font-semibold text-rm-text">
-              Uploads unlock in the full app
-            </p>
-            <p className="mt-1 text-ui-xs font-medium text-rm-text-muted">
-              Drop to see how to sign in. GIFs still work here.
-            </p>
-          </div>
-        </div>
-      )}
-      <RoomHeader
-        slug={slug}
-        connectionState={connectionState}
-        joined={joined}
-        focusedId={focusedId}
-        gridItemsCount={gridItems.length}
-        localScreenWatchers={localScreenWatchers}
-      />
-
-      <div className="flex-1 flex flex-col min-h-0 relative">
-        {audioStalled && isMicOn && (
-          <div className="z-50 bg-destructive text-destructive-foreground px-4 py-3 flex items-center justify-between text-ui-sm font-medium shadow-md shrink-0">
-            <div className="flex items-center gap-2">
-              <Icon name="mic" state="off" size="sm" className="shrink-0" />
-              <span>
-                We can't hear you! Your microphone isn't detecting any sound.
-              </span>
+      <div
+        className="relative flex min-h-0 flex-1 flex-col"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isFileDragging && (
+          <div className="pointer-events-none absolute inset-4 z-30 flex items-center justify-center rounded-xl border border-dashed border-rm-accent-ink bg-rm-scrim">
+            <div className="rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-3 text-center shadow-lg dark:bg-rm-bg-elevated">
+              <p className="text-ui-sm font-semibold text-rm-text">
+                Uploads unlock in the full app
+              </p>
+              <p className="mt-1 text-ui-xs text-rm-text-secondary">
+                Drop to see how to sign in. GIFs still work here.
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-ui-xs font-semibold pointer-fine:hover:brightness-110 active:scale-[0.96] transition-ui outline-none"
-            >
-              Check Settings
-            </button>
           </div>
         )}
-        <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex flex-col md:flex-row">
-          <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        {audioStalled && isMicOn && (
+          <div
+            role="alert"
+            className="flex shrink-0 items-center justify-between gap-3 bg-rm-danger-tint px-4 py-2 text-ui-sm text-rm-danger-ink"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <Icon name="mic" state="off" size="sm" className="shrink-0" />
+              <span className="text-pretty">
+                We can't hear you. Your microphone isn't picking up any sound.
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              Check settings
+            </Button>
+          </div>
+        )}
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+          <div className="relative flex min-h-0 flex-1 overflow-hidden">
             <VoiceGrid
               items={gridItems}
               focusedId={focusedId}
@@ -675,63 +557,6 @@ function RoomVoiceView({
             guestName={guestName}
             onUploadBlocked={openUploadBlocker}
             className="h-[42%] shrink-0 md:h-auto"
-          />
-        </div>
-
-        <div className="shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
-          {focusedId && showMembers && (
-            <div className="p-4 bg-rm-bg-primary/20 animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
-              <div
-                className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start md:justify-center"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                {gridItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className={cn(
-                      "w-44 md:w-52 aspect-video shrink-0 transition-ui py-2",
-                      focusedId === item.id
-                        ? ""
-                        : "opacity-70 pointer-fine:hover:opacity-100",
-                    )}
-                  >
-                    <ParticipantCard
-                      item={item}
-                      isFocused={focusedId === item.id}
-                      isTray={true}
-                      globalDeafened={isDeafened}
-                      watchedStreams={watchedStreams}
-                      streamThumbnails={streamThumbnails}
-                      voiceActions={voiceActions}
-                      onClick={() =>
-                        setFocusedId(focusedId === item.id ? null : item.id)
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <ControlsBar
-            hasMicrophone={hasMicrophone}
-            isMicOn={isMicOn}
-            toggleMic={toggleMic}
-            isDeafened={isDeafened}
-            toggleDeafen={toggleDeafen}
-            hasCamera={hasCamera}
-            isCameraOn={isCameraOn}
-            toggleCamera={toggleCamera}
-            isScreenSharing={isScreenSharing}
-            toggleScreenShare={toggleScreenShare}
-            setIsScreenModalOpen={setIsScreenModalOpen}
-            handleLeave={handleLeave}
-            toggleFs={toggleFs}
-            isFullscreen={isFullscreen}
-            setIsSettingsOpen={setIsSettingsOpen}
-            focusedId={focusedId}
-            showMembers={showMembers}
-            setShowMembers={setShowMembers}
           />
         </div>
       </div>
@@ -771,6 +596,6 @@ function RoomVoiceView({
         onClose={() => setShowUploadBlocker(false)}
         onSignIn={onSignIn}
       />
-    </div>
+    </VoiceStage>
   );
 }

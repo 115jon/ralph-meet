@@ -13,7 +13,7 @@ import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
 import { cn } from "@/lib/utils";
 import React from "react";
 
-type IconButtonVariant = "ghost" | "muted" | "active" | "destructive";
+type IconButtonVariant = "ghost" | "muted" | "active" | "destructive" | "plain";
 type IconButtonSize = "xs" | "sm" | "md" | "lg";
 
 const SIZE_CLASSES: Record<IconButtonSize, string> = {
@@ -44,6 +44,8 @@ const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
   active: "bg-rm-tint-2 text-rm-text",
   destructive:
     "text-rm-text-muted pointer-fine:hover:text-rm-danger-ink focus-visible:text-rm-danger-ink",
+  /** No colour of its own: the caller paints it (the dock recipe). */
+  plain: "",
 };
 
 const SHAPE_CLASSES = {

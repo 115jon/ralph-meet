@@ -1,16 +1,13 @@
 "use client";
 
 import { getDisplayName } from "@/lib/display-name";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { CALL_ACCEPT, DOCK_LEAVE } from "@/components/ui/dock";
+import { DockButton } from "@/components/ui/dock-button";
+import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { playCallEnd, playRingStop, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
 import {
@@ -34,8 +31,8 @@ import {
 } from "react";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
-import { VoiceControls } from "../voice/VoiceControls";
-import { VoiceGrid } from "../voice/VoiceGrid";
+import { VoiceControls } from "@/components/voice/VoiceControls";
+import { VoiceGrid } from "@/components/voice/VoiceGrid";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({
@@ -43,10 +40,9 @@ const UnifiedScreenShareModal = lazy(() =>
   })),
 );
 
-/* Quiet Pro lobby/ringing actions: 44px tall, radius 8. Accept stays the
- * conventional green (no accent), decline/cancel is the solid danger fill. */
-const LOBBY_BTN = "h-11 w-14 rounded-lg";
-const LOBBY_ACCEPT = "bg-green-600 text-white [--hover-o:0.12]";
+/* Lobby / ringing actions use the dock geometry (48px IconButton). Join
+ * voice is the conventional green on the shared success token (one solid),
+ * Join with video is a resting tint, Decline / Cancel the solid danger. */
 
 function getEventEpochMs(event: MouseEvent<HTMLElement>) {
   return Math.round(performance.timeOrigin + event.timeStamp);
@@ -423,323 +419,252 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         i.type === "screen",
     );
   const isFullscreenView = hasVideoFeed || isExpanded || isChatHidden;
+  const showVideoStage = isFullscreenView && hasJoinedSFU;
+  const isLobby = !hasJoinedSFU || !isActive;
+  const lobbyItems =
+    isActive && hasJoinedSFU ? displayItems : lobbyParticipants;
 
   return (
-    <div
+    <section
+      aria-label={`Call with ${remoteDisplayName}`}
+      data-call-region={
+        isExpanded ? "expanded" : isChatHidden ? "chat-hidden" : "inline"
+      }
       className={cn(
-        "shrink-0 w-full flex flex-col relative overflow-hidden group transition-colors duration-200",
-        // Force hardware acceleration to prevent Chromium's diagonal tearing bug
-        "bg-black transform-gpu will-change-transform",
+        "flex w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary",
         isExpanded
-          ? "fixed inset-0 z-50 border-none"
+          ? // Expanded call: a full-screen surface, padded for the notch and
+            // the home indicator (3.6). The dock panel pads the bottom.
+            "fixed inset-0 z-50 pt-[var(--safe-area-top,0px)] pr-[var(--safe-area-right,0px)] pl-[var(--safe-area-left,0px)]"
           : isChatHidden
-            ? "flex-1 absolute inset-0 z-40 border-none"
-            : "h-[300px] sm:h-[340px] border-b border-rm-border",
+            ? "absolute inset-0 z-30"
+            : "relative min-h-72 border-b border-rm-border",
       )}
-      style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}
     >
-      {/* Secondary detached background to ensure solid rendering across browsers */}
-      <div className="absolute inset-0 bg-black pointer-events-none -z-10" />
-
-      {/* Video Grid (only when joined SFU and has video) */}
-      {isFullscreenView && hasJoinedSFU ? (
-        <div className="flex-1 p-0 md:p-4 w-full h-full flex flex-col justify-center">
-          <div className="w-full h-full relative overflow-y-auto no-scrollbar scrollbar-hide">
-            <VoiceGrid
-              layoutMode={isExpanded || isChatHidden ? "grid" : "row"}
-              className="pt-4 px-4 pb-4 md:pt-6 md:px-6 md:pb-6"
-              items={displayItems}
-              focusedId={focusedId}
-              onFocus={setFocusedId}
-              globalDeafened={isDeafened}
-              currentSettings={{ peerSettings: {} }}
-              watchedStreams={callVoice.watchedStreams}
-              streamThumbnails={callVoice.streamThumbnails}
-              voiceActions={{
-                onToggleScreenShare: callVoice.toggleScreenShare || (() => {}),
-                isCurrentUserStreaming: callVoice.isScreenSharing,
-                currentScreenQuality: callVoice.screenQuality,
-                isStreamingAudio: callVoice.isStreamingAudio,
-                onToggleStreamAudio:
-                  callVoice.onToggleStreamAudio || (() => {}),
-                onToggleWatch: callVoice.onToggleWatch || (() => {}),
-                watchedStreams: callVoice.watchedStreams,
-                watchersByStreamer,
-                availableQualities: getAvailableStreamQualities(),
-                onLeave: handleLeave,
-                isMuted: !callVoice.isMicOn,
-                onToggleMute: callVoice.toggleMic || (() => {}),
-                isDeafened: isDeafened,
-                onToggleDeafen: callVoice.toggleDeafen || (() => {}),
-                onChangeSource: () => setIsScreenModalOpen(true),
-                togglePreviewHidden: callVoice.togglePreviewHidden || undefined,
-                isPreviewHidden: callVoice.isPreviewHidden,
-                sfu: null,
-              }}
-            />
-          </div>
+      {showVideoStage ? (
+        /* Black only behind video. `transform-gpu` keeps Chromium from
+         * tearing the video layer diagonally while the region resizes. */
+        <div
+          className={cn(
+            "relative min-h-0 transform-gpu bg-black",
+            isExpanded || isChatHidden ? "flex-1" : "h-64 md:h-80",
+          )}
+        >
+          <VoiceGrid
+            layoutMode={isExpanded || isChatHidden ? "grid" : "row"}
+            items={displayItems}
+            focusedId={focusedId}
+            onFocus={setFocusedId}
+            globalDeafened={isDeafened}
+            currentSettings={{ peerSettings: {} }}
+            watchedStreams={callVoice.watchedStreams}
+            streamThumbnails={callVoice.streamThumbnails}
+            voiceActions={{
+              onToggleScreenShare: callVoice.toggleScreenShare || (() => {}),
+              isCurrentUserStreaming: callVoice.isScreenSharing,
+              currentScreenQuality: callVoice.screenQuality,
+              isStreamingAudio: callVoice.isStreamingAudio,
+              onToggleStreamAudio: callVoice.onToggleStreamAudio || (() => {}),
+              onToggleWatch: callVoice.onToggleWatch || (() => {}),
+              watchedStreams: callVoice.watchedStreams,
+              watchersByStreamer,
+              availableQualities: getAvailableStreamQualities(),
+              onLeave: handleLeave,
+              isMuted: !callVoice.isMicOn,
+              onToggleMute: callVoice.toggleMic || (() => {}),
+              isDeafened: isDeafened,
+              onToggleDeafen: callVoice.toggleDeafen || (() => {}),
+              onChangeSource: () => setIsScreenModalOpen(true),
+              togglePreviewHidden: callVoice.togglePreviewHidden || undefined,
+              isPreviewHidden: callVoice.isPreviewHidden,
+              sfu: null,
+            }}
+          />
         </div>
       ) : (
-        /* Avatar circles view (lobby / ringing / audio-only states) */
-        <div className="flex-1 flex flex-col relative">
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="flex items-start justify-center gap-8 sm:gap-16">
-              {(isActive && hasJoinedSFU
-                ? displayItems
-                : lobbyParticipants
-              ).map((p: any) => {
-                const isLobby = !hasJoinedSFU || !isActive;
-                const item = isLobby
-                  ? {
-                      id: p.id,
-                      userId: p.id,
-                      name: p.name || p.username,
-                      avatar: p.avatarUrl || p.avatar,
-                      avatarDisplay: p.avatarDisplay || p.avatar_display,
-                      isLocal: p.isLocal ?? p.id === currentUser?.id,
-                      isMuted: p.isMuted ?? false,
-                      isDeafened: p.isDeafened ?? false,
-                      isSpeaking: false,
-                      isRinging: isRingingOutgoing && p.id !== currentUser?.id,
-                      isRingingWhite:
-                        isRingingIncoming && p.id === currentUser?.id,
-                      isInVoice: p.isInVoice ?? true,
-                      isReconnecting: p.isReconnecting ?? false,
-                    }
-                  : p;
-                const src = item.avatar
-                  ? getAuthAssetUrl(item.avatar)
-                  : undefined;
-                return (
-                  <div
-                    key={item.id}
-                    className="relative flex flex-col items-center"
-                  >
-                    <div className="relative h-24 w-24 md:h-32 md:w-32">
-                      {/* Outer pulsing ring for ringing states */}
-                      {(item.isRinging ||
-                        (isRingingIncoming && !item.isLocal)) && (
-                        <div className="absolute inset-0 rounded-full border-[3px] border-white/70 animate-ring-ping pointer-events-none z-0" />
-                      )}
-
+        /* Lobby / ringing / audio-only: people as avatars on the page colour. */
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-6">
+          <ul className="flex flex-wrap items-start justify-center gap-8 md:gap-16">
+            {lobbyItems.map((p: any) => {
+              const item = isLobby
+                ? {
+                    id: p.id,
+                    userId: p.id,
+                    name: p.name || p.username,
+                    avatar: p.avatarUrl || p.avatar,
+                    avatarDisplay: p.avatarDisplay || p.avatar_display,
+                    isLocal: p.isLocal ?? p.id === currentUser?.id,
+                    isMuted: p.isMuted ?? false,
+                    isDeafened: p.isDeafened ?? false,
+                    isSpeaking: false,
+                    isRinging: isRingingOutgoing && p.id !== currentUser?.id,
+                    isInVoice: p.isInVoice ?? true,
+                    isReconnecting: p.isReconnecting ?? false,
+                  }
+                : p;
+              const src = item.avatar
+                ? getAuthAssetUrl(item.avatar)
+                : undefined;
+              const isCalling =
+                item.isRinging || (isRingingIncoming && !item.isLocal);
+              const status = item.isLocal
+                ? "You"
+                : isLobby && isRingingOutgoing
+                  ? "Calling…"
+                  : isLobby && isRingingIncoming
+                    ? "is calling…"
+                    : isLobby && isActive
+                      ? item.isReconnecting
+                        ? "Reconnecting"
+                        : item.isInVoice
+                          ? "In voice"
+                          : "Not in voice"
+                      : null;
+              return (
+                <li
+                  key={item.id}
+                  className="flex w-24 flex-col items-center md:w-32"
+                >
+                  <div className="relative size-24 md:size-32">
+                    {isCalling && (
                       <div
-                        className={cn(
-                          "relative h-full w-full rounded-full overflow-visible border-2 transition-ui transform-gpu will-change-transform z-10 bg-zinc-900",
-                          item.isSpeaking
-                            ? "border-primary shadow-[0_6px_18px_-6px_var(--rm-glow)]"
-                            : "border-transparent",
-                          isLobby &&
-                            item.isReconnecting &&
-                            "opacity-45 grayscale",
-                          isLobby &&
-                            !item.isLocal &&
-                            !item.isInVoice &&
-                            !item.isRinging &&
-                            !isRingingIncoming &&
-                            "opacity-40",
-                          (item.isRinging ||
-                            (isRingingIncoming && !item.isLocal)) &&
-                            "opacity-60",
-                        )}
-                        style={{
-                          transform: "translateZ(0)",
-                          backfaceVisibility: "hidden",
-                        }}
-                      >
-                        {src ? (
-                          <AvatarImage
-                            src={src}
-                            alt={item.name}
-                            display={
-                              item.avatarDisplay ?? item.avatar_display ?? null
-                            }
-                          />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center bg-zinc-800 text-4xl font-bold text-zinc-400">
-                            {item.name?.[0]?.toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Mute/Deafen badge */}
-                      {(item.isMuted || item.isDeafened) && (
-                        <div className="absolute -bottom-1 -right-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border-2 border-black">
-                          {item.isDeafened ? (
-                            <Icon
-                              name="deafen"
-                              state="off"
-                              size="sm"
-                              className="text-destructive"
-                            />
-                          ) : (
-                            <Icon
-                              name="mic"
-                              state="off"
-                              size="sm"
-                              className="text-destructive"
-                            />
-                          )}
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 rounded-full border-2 border-rm-status-online/60 animate-ring-ping motion-reduce:hidden"
+                      />
+                    )}
+                    <div
+                      className={cn(
+                        "relative h-full w-full overflow-visible rounded-full bg-rm-tint-2",
+                        item.isSpeaking && "ring-2 ring-rm-status-online",
+                        isLobby &&
+                          item.isReconnecting &&
+                          "opacity-45 grayscale",
+                        isLobby &&
+                          !item.isLocal &&
+                          !item.isInVoice &&
+                          !item.isRinging &&
+                          !isRingingIncoming &&
+                          "opacity-45",
+                        isCalling && "opacity-60",
+                      )}
+                    >
+                      {src ? (
+                        <AvatarImage
+                          src={src}
+                          alt={item.name}
+                          display={
+                            item.avatarDisplay ?? item.avatar_display ?? null
+                          }
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center rounded-full text-ui-2xl font-semibold text-rm-text">
+                          {item.name?.[0]?.toUpperCase()}
                         </div>
                       )}
                     </div>
 
-                    <div className="mt-4 text-center">
-                      <p className="text-sm font-bold text-white">
-                        <InlineEmojiText text={item.name} />
-                      </p>
-                      {item.isLocal && (
-                        <p className="text-ui-2xs font-medium text-white/50">
-                          You
-                        </p>
-                      )}
-                      {isLobby && !item.isLocal && isRingingOutgoing && (
-                        <p className="text-ui-2xs font-medium text-white/50 animate-pulse">
-                          Calling...
-                        </p>
-                      )}
-                      {isLobby && !item.isLocal && isRingingIncoming && (
-                        <p className="text-ui-2xs font-medium text-white/50 animate-pulse">
-                          is calling...
-                        </p>
-                      )}
-                      {isLobby &&
-                        !item.isLocal &&
-                        isActive &&
-                        !isRingingOutgoing &&
-                        !isRingingIncoming && (
-                          <p className="text-ui-2xs font-medium text-white/50">
-                            {item.isReconnecting
-                              ? "Reconnecting"
-                              : item.isInVoice
-                                ? "In voice"
-                                : "Not in voice"}
-                          </p>
-                        )}
-                    </div>
+                    {(item.isMuted || item.isDeafened) && (
+                      <div className="absolute -right-1 -bottom-1 flex size-8 items-center justify-center rounded-full bg-rm-bg-surface text-rm-danger-ink ring-2 ring-rm-bg-primary">
+                        <Icon
+                          name={item.isDeafened ? "deafen" : "mic"}
+                          state="off"
+                          size="sm"
+                          label={item.isDeafened ? "Deafened" : "Muted"}
+                        />
+                      </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          </div>
+
+                  <p className="mt-3 w-full truncate text-center text-ui-sm font-semibold text-rm-text">
+                    <InlineEmojiText text={item.name} />
+                  </p>
+                  {status && (
+                    <p className="text-center text-ui-xs text-rm-text-secondary">
+                      {status}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
-      {/* Controls Container */}
+      {/* Dock: the shared voice dock in the call, lobby actions before. */}
       <div
         className={cn(
-          "pt-4 pb-4 px-6 flex items-center justify-center transition-ui",
-          isFullscreenView
-            ? "pointer-events-none bg-linear-to-t from-black/80 to-transparent pt-12 absolute bottom-0 left-0 right-0 z-50 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"
-            : "relative pb-6",
+          "shrink-0",
+          showVideoStage && "border-t border-rm-border bg-rm-bg-surface",
+          isExpanded && "pb-[var(--safe-area-bottom,0px)]",
         )}
       >
-        {/* SFU controls (when actively in the call) */}
         {isActive && hasJoinedSFU && (
-          <div className="pointer-events-auto w-full mt-auto flex justify-center">
-            <VoiceControls
-              hasMicrophone={callVoice.hasMicrophone ?? true}
-              isMicOn={callVoice.isMicOn}
-              toggleMic={() => callVoice.toggleMic?.()}
-              isDeafened={isDeafened}
-              toggleDeafen={() => callVoice.toggleDeafen?.()}
-              hasCamera={callVoice.hasCamera ?? true}
-              isCameraOn={callVoice.isCameraActive}
-              toggleCamera={() => callVoice.toggleCamera?.()}
-              isScreenSharing={callVoice.isScreenSharing}
-              toggleScreenShare={callVoice.toggleScreenShare || (() => {})}
-              setIsScreenModalOpen={setIsScreenModalOpen}
-              focusedItem={displayItems.find((i: any) => i.id === focusedId)}
-              setFocusedId={setFocusedId}
-              handleLeave={handleLeave}
-              isFullscreen={isExpanded}
-              toggleFs={() => setIsExpanded(!isExpanded)}
-              showMembers={showMembers}
-              setShowMembers={setShowMembers}
-              variant="call"
-              hideExtraControls={!hasVideoFeed}
-              isChatHidden={isChatHidden}
-              toggleChatHidden={() => setIsChatHidden(!isChatHidden)}
-              settingsUserId={currentUser?.id}
-            />
-          </div>
+          <VoiceControls
+            hasMicrophone={callVoice.hasMicrophone ?? true}
+            isMicOn={callVoice.isMicOn}
+            toggleMic={() => callVoice.toggleMic?.()}
+            isDeafened={isDeafened}
+            toggleDeafen={() => callVoice.toggleDeafen?.()}
+            hasCamera={callVoice.hasCamera ?? true}
+            isCameraOn={callVoice.isCameraActive}
+            toggleCamera={() => callVoice.toggleCamera?.()}
+            isScreenSharing={callVoice.isScreenSharing}
+            toggleScreenShare={callVoice.toggleScreenShare || (() => {})}
+            setIsScreenModalOpen={setIsScreenModalOpen}
+            focusedItem={displayItems.find((i: any) => i.id === focusedId)}
+            setFocusedId={setFocusedId}
+            handleLeave={handleLeave}
+            isFullscreen={isExpanded}
+            toggleFs={() => setIsExpanded(!isExpanded)}
+            fullscreenSupported
+            showMembers={showMembers}
+            setShowMembers={setShowMembers}
+            variant="call"
+            hideExtraControls={!hasVideoFeed}
+            isChatHidden={isChatHidden}
+            toggleChatHidden={() => setIsChatHidden(!isChatHidden)}
+            settingsUserId={currentUser?.id}
+          />
         )}
 
-        {/* Call Action Buttons (Lobby / Ringing) */}
         {!hasJoinedSFU &&
           (isActive || isRingingIncoming || isRingingOutgoing) && (
-            <div className="flex items-center justify-center gap-4 pointer-events-auto w-full">
-              {/* If ringing outgoing, we only show cancel */}
+            <div className="flex items-center justify-center gap-2 px-4 pt-1 pb-4">
               {isRingingOutgoing ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={handleCancelCall}
-                      aria-label="Cancel Call"
-                      className={LOBBY_BTN}
-                    >
-                      <Icon name="close" size="lg" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={8}>
-                    <p>Cancel Call</p>
-                  </TooltipContent>
-                </Tooltip>
+                <IconButton
+                  variant="plain"
+                  size="lg"
+                  icon="close"
+                  tooltip="Cancel call"
+                  className={DOCK_LEAVE}
+                  onClick={handleCancelCall}
+                />
               ) : (
-                // For Incoming Ring OR Active Lobby
                 <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        onClick={handleAcceptWithVideo}
-                        aria-label="Join with Video"
-                        className={cn(LOBBY_BTN, LOBBY_ACCEPT)}
-                      >
-                        <Icon name="camera" size="lg" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8}>
-                      <p>Join with Video</p>
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        onClick={(event) =>
-                          handleAccept(getEventEpochMs(event))
-                        }
-                        aria-label="Join Voice"
-                        className={cn(LOBBY_BTN, LOBBY_ACCEPT)}
-                      >
-                        <Icon name="call" state="active" size="lg" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8}>
-                      <p>Join Voice</p>
-                    </TooltipContent>
-                  </Tooltip>
-
+                  <DockButton
+                    state="rest"
+                    icon="camera"
+                    tooltip="Join with video"
+                    onClick={handleAcceptWithVideo}
+                  />
+                  <IconButton
+                    variant="plain"
+                    size="lg"
+                    icon="call"
+                    iconState="active"
+                    tooltip="Join voice"
+                    className={CALL_ACCEPT}
+                    onClick={(event) => handleAccept(getEventEpochMs(event))}
+                  />
                   {isRingingIncoming && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="danger"
-                          onClick={handleDecline}
-                          aria-label="Decline"
-                          className={LOBBY_BTN}
-                        >
-                          <Icon name="close" size="lg" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" sideOffset={8}>
-                        <p>Decline</p>
-                      </TooltipContent>
-                    </Tooltip>
+                    <IconButton
+                      variant="plain"
+                      size="lg"
+                      icon="close"
+                      tooltip="Decline"
+                      className={DOCK_LEAVE}
+                      onClick={handleDecline}
+                    />
                   )}
                 </>
               )}
@@ -762,6 +687,6 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
           availableQualities={getAvailableStreamQualities()}
         />
       </Suspense>
-    </div>
+    </section>
   );
 }

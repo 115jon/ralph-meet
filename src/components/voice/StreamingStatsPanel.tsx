@@ -25,10 +25,14 @@ import { useNativeShareStats } from "@/hooks/useNativeShareStats";
 import { cn } from "@/lib/utils";
 import type { NativeShareStatsSnapshot } from "@/types/native-share-stats";
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "@/components/ui/icon";
+import {
+  connectionStatus,
+  type ConnectionTone,
+} from "@/lib/voice/connection-status-label";
 import {
   captureModeDisplay,
   computeFps,
-  connectionStateLabel,
   formatNegotiatedFps,
   formatResolution,
   graphicsBackendLabel,
@@ -54,11 +58,49 @@ interface StreamingStatsPanelProps {
   className?: string;
 }
 
-/** Shared text styling for the connection-state / mode label. */
-function labelClass(emphasized: boolean): string {
-  return cn(
-    "text-ui-2xs font-semibold uppercase tracking-[0.08em]",
-    emphasized ? "text-white/70" : "text-rm-text-muted",
+/**
+ * Connection label ink per tone. Over focused media (`emphasized`) the
+ * label sits on a black gradient, so it stays white and the icon carries the
+ * warning/danger meaning; on theme surfaces the tone inks the text too.
+ */
+const TONE_INK: Record<ConnectionTone, string> = {
+  good: "text-rm-text-muted",
+  pending: "text-rm-text-muted",
+  warning: "text-rm-warning-ink",
+  danger: "text-rm-danger-ink",
+};
+
+function ConnectionLabel({
+  connectionState,
+  joined,
+  emphasized,
+  className,
+}: {
+  connectionState: string;
+  joined: boolean;
+  emphasized: boolean;
+  className?: string;
+}) {
+  const { label, tone } = connectionStatus(connectionState, joined);
+  const flagged = tone === "warning" || tone === "danger";
+  return (
+    <span
+      role="status"
+      className={cn(
+        "inline-flex items-center gap-1 whitespace-nowrap text-ui-xs font-medium",
+        emphasized ? "text-white/80" : TONE_INK[tone],
+        className,
+      )}
+    >
+      {flagged && (
+        <Icon
+          name={tone === "danger" ? "error" : "warning"}
+          size="xs"
+          className="shrink-0"
+        />
+      )}
+      {label}
+    </span>
   );
 }
 
@@ -102,9 +144,12 @@ export function StreamingStatsPanel({
   // exactly what the old "Stable" label did (Req 8.9, 8.11, 13.3).
   if (!data || !active) {
     return (
-      <span className={cn(labelClass(emphasized), className)}>
-        {connectionStateLabel(connectionState, joined)}
-      </span>
+      <ConnectionLabel
+        connectionState={connectionState}
+        joined={joined}
+        emphasized={emphasized}
+        className={className}
+      />
     );
   }
 
@@ -146,10 +191,10 @@ function StreamingStatsContent({
 
   const toneClass =
     mode.tone === "hook"
-      ? "text-emerald-400"
+      ? "text-rm-success-ink"
       : mode.tone === "unavailable"
-        ? "text-destructive"
-        : "text-amber-600 dark:text-amber-400";
+        ? "text-rm-danger-ink"
+        : "text-rm-warning-ink";
 
   const mutedClass = emphasized ? "text-white/60" : "text-rm-text-muted/70";
   const valueClass = emphasized ? "text-white/90" : "text-rm-text/90";
@@ -219,9 +264,7 @@ function StreamingStatsContent({
       {showFallback && (
         <>
           <Divider className={dividerClass} />
-          <span className="text-amber-600 dark:text-amber-400">
-            {data.fallback_reason}
-          </span>
+          <span className="text-rm-warning-ink">{data.fallback_reason}</span>
         </>
       )}
 
@@ -230,7 +273,7 @@ function StreamingStatsContent({
         <>
           <Divider className={dividerClass} />
           <span
-            className="text-amber-600 dark:text-amber-400/80"
+            className="text-rm-warning-ink"
             title="Stats refresh failed — showing last known values"
           >
             stale
