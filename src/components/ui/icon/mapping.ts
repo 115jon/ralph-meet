@@ -61,6 +61,7 @@ export const ICONS = {
   copy: { glyph: "copy" },
   copyId: { glyph: "identification-badge" },
   link: { glyph: "link-simple" },
+  linkBroken: { glyph: "link-simple-break" },
   share: { glyph: "share-network" },
   edit: { glyph: "pencil-simple" },
   trash: { glyph: "trash" },
@@ -102,6 +103,10 @@ export const ICONS = {
   chat: { glyph: "chat-circle", fill: true },
   markUnread: { glyph: "envelope-simple" },
   markRead: { glyph: "checks" },
+  /* Social post metrics (link embeds) */
+  like: { glyph: "heart", fill: true },
+  repost: { glyph: "repeat" },
+  bookmark: { glyph: "bookmark-simple" },
 
   /* Composer */
   paperclip: { glyph: "paperclip" },
@@ -140,8 +145,8 @@ export const ICONS = {
   music: { glyph: "music-notes" },
   playlist: { glyph: "playlist" },
   queueAdd: { glyph: "list-plus" },
-  play: { glyph: "play" },
-  pause: { glyph: "pause" },
+  play: { glyph: "play", fill: true },
+  pause: { glyph: "pause", fill: true },
   stop: { glyph: "stop" },
   skip: { glyph: "skip-forward" },
 
@@ -163,6 +168,7 @@ export const ICONS = {
   key: { glyph: "key" },
   privacy: { glyph: "shield-check" },
   shield: { glyph: "shield" },
+  shieldX: { glyph: "shield-slash" },
   lock: { glyph: "lock-simple" },
   appearance: { glyph: "palette" },
   paintBrush: { glyph: "paint-brush" },
@@ -176,6 +182,8 @@ export const ICONS = {
   event: { glyph: "calendar-plus" },
   calendar: { glyph: "calendar-blank" },
   clock: { glyph: "clock" },
+  timer: { glyph: "timer" },
+  timerOff: { glyph: "timer", slash: true },
   folderAdd: { glyph: "folder-plus" },
 
   /* Shop and activities */
@@ -191,6 +199,7 @@ export const ICONS = {
   sword: { glyph: "sword" },
   grid: { glyph: "squares-four" },
   zap: { glyph: "lightning" },
+  gamepad: { glyph: "game-controller" },
 
   /* Files (attachments) */
   file: { glyph: "file" },

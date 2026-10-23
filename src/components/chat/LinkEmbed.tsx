@@ -16,6 +16,8 @@ import {
 } from "@/lib/gif-favorite-item";
 import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
 import { cn } from "@/lib/utils";
+import { Icon, type IconSize } from "@/components/ui/icon";
+import { HIT } from "@/components/ui/interaction";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
@@ -29,6 +31,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { EmbedFrame } from "./EmbedFrame";
 import EmojiToken from "./EmojiToken";
 import { RemoveEmbedsDialog } from "./RemoveEmbedsDialog";
 import { GifFavoriteButton } from "./GifFavoriteButton";
@@ -254,15 +257,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
   const timestampText = formatEmbedTimestamp(embed.timestamp);
 
   return (
-    <div
-      className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-elevated/40 text-rm-text-primary"
-      style={{
-        borderLeftColor: embed.color || "#202225",
-        borderLeftWidth: 4,
-        width: width ? `${width}px` : "100%",
-        maxWidth: "100%",
-      }}
-    >
+    <EmbedFrame width={width} accentColor={embed.color}>
       <div className="p-3 flex flex-col gap-1.5">
         {!bare && embed.provider && (
           <div className="text-ui-xs font-semibold text-rm-text-muted/80">
@@ -278,7 +273,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
             href={embed.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-ui-base font-semibold text-[#00A8FC] pointer-fine:hover:underline leading-snug break-words"
+            className="text-ui-base font-semibold text-rm-accent-ink pointer-fine:hover:underline leading-snug break-words"
           >
             <EmbedInlineText
               text={embed.rawTitle}
@@ -322,7 +317,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
           </div>
         )}
       </div>
-    </div>
+    </EmbedFrame>
   );
 });
 
@@ -411,32 +406,27 @@ function shouldCollapseXText(
 
 // ─── Overlay Button ───────────────────────────────────────────────────────
 
-const PlayIcon = ({ className = "w-7 h-7 ml-0.5" }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="white" className={className}>
-    <path d="M8 5v14l11-7z" />
-  </svg>
+const PlayIcon = ({
+  size = "xl",
+  className = size === "xl" ? "ml-0.5" : undefined,
+}: {
+  size?: IconSize;
+  className?: string;
+}) => (
+  <Icon
+    name="play"
+    state="active"
+    size={size}
+    className={cn("text-white", className)}
+  />
 );
 
 const ExternalIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="w-5 h-5"
-  >
-    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-    <polyline points="15 3 21 3 21 9" />
-    <line x1="10" y1="14" x2="21" y2="3" />
-  </svg>
+  <Icon name="externalLink" size="lg" className="text-white" />
 );
 
-const PauseIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="white" className={className}>
-    <path d="M7 5h3v14H7zm7 0h3v14h-3z" />
-  </svg>
+const PauseIcon = ({ size = "sm" }: { size?: IconSize }) => (
+  <Icon name="pause" state="active" size={size} className="text-white" />
 );
 
 function getAspectRatio(
@@ -1390,7 +1380,7 @@ const TikTokEmbed = memo(
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate text-ui-sm font-semibold leading-tight text-rm-text-primary">
+              <div className="truncate text-ui-sm font-semibold leading-tight text-rm-text">
                 {displayEmbed.author?.url ? (
                   <a
                     href={displayEmbed.author.url}
@@ -1419,7 +1409,7 @@ const TikTokEmbed = memo(
               href={displayEmbed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors pointer-fine:hover:bg-black/85"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white transition-colors pointer-fine:hover:bg-black/85"
               title="Open in TikTok"
               aria-label="Open in TikTok"
             >
@@ -1429,7 +1419,7 @@ const TikTokEmbed = memo(
 
           {hasRenderableMedia ? (
             <>
-              <div className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95">
+              <div className="relative overflow-hidden rounded-lg border border-rm-border/55 bg-black/95">
                 <div
                   ref={trackRef}
                   className="relative w-full overflow-hidden"
@@ -1561,7 +1551,10 @@ const TikTokEmbed = memo(
                           type="button"
                           onClick={handlePrevButtonClick}
                           onPointerDown={stopChromePointerPropagation}
-                          className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
+                          className={cn(
+                            "absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72",
+                            HIT,
+                          )}
                           aria-label="Previous media"
                         >
                           <InstagramChevronIcon direction="left" />
@@ -1572,7 +1565,10 @@ const TikTokEmbed = memo(
                           type="button"
                           onClick={handleNextButtonClick}
                           onPointerDown={stopChromePointerPropagation}
-                          className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
+                          className={cn(
+                            "absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72",
+                            HIT,
+                          )}
                           aria-label="Next media"
                         >
                           <InstagramChevronIcon direction="right" />
@@ -1588,9 +1584,14 @@ const TikTokEmbed = memo(
                             aria-label={`Go to media ${index + 1}`}
                             aria-current={index === resolvedActiveIndex}
                             className={cn(
-                              "h-1.5 w-1.5 rounded-full transition-all",
+                              // Tall coarse target that tiles with its
+                              // neighbours (6px dot + 6px gap) instead of
+                              // overlapping them.
+                              "relative h-1.5 w-1.5 rounded-full transition-colors",
+                              HIT,
+                              "before:min-w-3",
                               index === resolvedActiveIndex
-                                ? "bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.18)]"
+                                ? "bg-white ring-3 ring-white/18"
                                 : "bg-white/45",
                             )}
                           />
@@ -1601,7 +1602,7 @@ const TikTokEmbed = memo(
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 text-rm-text-primary">
+              <div className="flex items-center justify-between gap-3 text-rm-text">
                 <div className="flex items-center gap-3">
                   <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium [font-variant-numeric:tabular-nums]">
                     <InstagramHeartIcon />
@@ -1625,7 +1626,7 @@ const TikTokEmbed = memo(
               </div>
 
               {captionText && (
-                <p className="text-ui-sm leading-relaxed text-rm-text-primary">
+                <p className="text-ui-sm leading-relaxed text-rm-text">
                   <EmbedInlineText
                     text={captionText}
                     keyPrefix={`${embed.id}-tiktok-caption`}
@@ -1636,12 +1637,12 @@ const TikTokEmbed = memo(
 
               {displayEmbed.audio &&
                 (displayEmbed.audio.title || displayEmbed.audio.artist) && (
-                  <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-ui-xs text-rm-text-secondary">
+                  <div className="flex items-center gap-2 rounded-lg border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-ui-xs text-rm-text-secondary">
                     {audioPlaybackUrl ? (
                       <button
                         type="button"
                         onClick={handleAudioToggle}
-                        className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transforms-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
+                        className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/75 ring-1 ring-rm-border/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
                         aria-label={
                           isAudioPlaying
                             ? "Pause audio preview"
@@ -1657,15 +1658,15 @@ const TikTokEmbed = memo(
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text-primary">
+                          <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text">
                             <InstagramMusicIcon />
                           </span>
                         )}
                         <span className="absolute inset-0 flex items-center justify-center bg-black/28">
                           {isAudioPlaying ? (
-                            <PauseIcon className="h-4 w-4" />
+                            <PauseIcon />
                           ) : (
-                            <PlayIcon className="h-4 w-4" />
+                            <PlayIcon size="sm" />
                           )}
                         </span>
                       </button>
@@ -1675,12 +1676,12 @@ const TikTokEmbed = memo(
                           <img
                             src={audioArtworkSrc}
                             alt=""
-                            className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                            className="h-10 w-10 shrink-0 rounded-md object-cover"
                             loading="lazy"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text-primary">
+                          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-rm-bg-surface text-rm-text">
                             <InstagramMusicIcon />
                           </span>
                         )}
@@ -1688,7 +1689,7 @@ const TikTokEmbed = memo(
                     )}
                     <div className="min-w-0 flex-1 leading-tight">
                       {displayEmbed.audio.title && (
-                        <div className="truncate font-semibold text-rm-text-primary">
+                        <div className="truncate font-semibold text-rm-text">
                           <EmbedInlineText
                             text={displayEmbed.audio.title}
                             keyPrefix={`${embed.id}-tiktok-audio-title`}
@@ -1749,7 +1750,7 @@ const TikTokEmbed = memo(
             </>
           ) : (
             <div
-              className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95"
+              className="relative overflow-hidden rounded-lg border border-rm-border/55 bg-black/95"
               style={{ aspectRatio: "9/16" }}
             >
               {(player.mode === "iframe" || player.mode === "ready") &&
@@ -1842,72 +1843,13 @@ const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
-const XReplyIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M8 10.5H5.5a2.5 2.5 0 010-5h9A4.5 4.5 0 0119 10v2a4.5 4.5 0 01-4.5 4.5H12" />
-    <path d="M8 10.5l-4 4 4 4" />
-  </svg>
-);
+const XReplyIcon = () => <Icon name="reply" size="sm" />;
 
-const XRetweetIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M17 3l4 4-4 4" />
-    <path d="M3 7h18" />
-    <path d="M7 21l-4-4 4-4" />
-    <path d="M21 17H3" />
-  </svg>
-);
+const XRetweetIcon = () => <Icon name="repost" size="sm" />;
 
-const XHeartIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M12 20.5l-1.2-1.08C5.4 14.53 2 11.45 2 7.67 2 4.79 4.27 2.5 7.1 2.5c1.62 0 3.18.76 4.2 1.96A5.56 5.56 0 0115.5 2.5C18.33 2.5 20.6 4.79 20.6 7.67c0 3.78-3.4 6.86-8.8 11.75L12 20.5z" />
-  </svg>
-);
+const XHeartIcon = () => <Icon name="like" size="sm" />;
 
-const XImpressionsIcon = ({
-  className = "h-4 w-4",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M4 19V9" />
-    <path d="M10 19V5" />
-    <path d="M16 19v-7" />
-    <path d="M22 19v-4" />
-  </svg>
-);
+const XImpressionsIcon = () => <Icon name="stats" size="sm" />;
 
 const XBrandIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
   <svg
@@ -1920,20 +1862,8 @@ const XBrandIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
   </svg>
 );
 
-const XOpenInNewIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M14 5h5v5" />
-    <path d="M10 14L19 5" />
-    <path d="M19 14v4a1 1 0 01-1 1h-12a1 1 0 01-1-1V6a1 1 0 011-1h4" />
-  </svg>
+const XOpenInNewIcon = ({ size = "sm" }: { size?: IconSize }) => (
+  <Icon name="externalLink" size={size} />
 );
 
 function getXHandleFromUrl(url?: string): string | undefined {
@@ -2231,7 +2161,7 @@ const XEmbed = memo(
                     href={embed.author.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-w-0 truncate font-semibold text-rm-text-primary pointer-fine:hover:underline"
+                    className="min-w-0 truncate font-semibold text-rm-text pointer-fine:hover:underline"
                   >
                     <EmbedInlineText
                       text={authorParts.displayName || embed.author.name}
@@ -2257,7 +2187,7 @@ const XEmbed = memo(
                 href={embed.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text-primary"
+                className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text"
                 aria-label="Open post on X"
                 title="Open on X"
               >
@@ -2294,7 +2224,7 @@ const XEmbed = memo(
               href={embed.externalCard.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-ui-xs leading-none text-rm-text-muted/82 transition-colors pointer-fine:hover:text-rm-text-primary"
+              className="text-ui-xs leading-none text-rm-text-muted/82 transition-colors pointer-fine:hover:text-rm-text"
             >
               <span className="text-rm-text-muted/72">From </span>
               <span className="font-medium">{externalCardDomain}</span>
@@ -2357,7 +2287,7 @@ const XReferencedTweetCard = memo(
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5 text-ui-sm leading-tight">
-                  <span className="min-w-0 truncate font-semibold text-rm-text-primary">
+                  <span className="min-w-0 truncate font-semibold text-rm-text">
                     <EmbedInlineText
                       text={authorParts.displayName || tweet.author.name}
                       keyPrefix={`${tweet.url || "tweet"}-author-name`}
@@ -2383,11 +2313,11 @@ const XReferencedTweetCard = memo(
                   href={tweet.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text-primary"
+                  className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text"
                   aria-label="Open quoted post on X"
                   title="Open on X"
                 >
-                  <XOpenInNewIcon className="h-3.5 w-3.5" />
+                  <XOpenInNewIcon size="xs" />
                 </a>
               )}
             </div>
@@ -2549,7 +2479,7 @@ const XStandaloneTweetText = memo(
       collapsedLinesClassName="line-clamp-5"
       estimatedCollapsedLines={X_STANDALONE_TWEET_COLLAPSED_LINES}
       estimatedCollapsedChars={X_STANDALONE_TWEET_COLLAPSED_CHAR_THRESHOLD}
-      textClassName="text-ui-sm leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95"
+      textClassName="text-ui-sm leading-relaxed whitespace-pre-wrap break-words text-rm-text/95"
       collapsedLabel="Show more"
       expandedLabel="Show less"
       expandAriaLabel="Expand post text"
@@ -2567,12 +2497,12 @@ const XReferencedTweetText = memo(
       collapsedLinesClassName="line-clamp-4"
       estimatedCollapsedLines={X_REFERENCED_TWEET_COLLAPSED_LINES}
       estimatedCollapsedChars={X_REFERENCED_TWEET_COLLAPSED_CHAR_THRESHOLD}
-      textClassName="text-ui-sm leading-5 whitespace-pre-wrap break-words text-rm-text-primary/90"
+      textClassName="text-ui-sm leading-5 whitespace-pre-wrap break-words text-rm-text/90"
       collapsedLabel="..."
       expandedLabel="Show less"
       expandAriaLabel="Expand quoted post text"
       collapseAriaLabel="Collapse quoted post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-ui-xs font-medium text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text-primary data-[expanded=false]:tracking-[0.24em]"
+      buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-ui-xs font-medium text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text data-[expanded=false]:tracking-[0.24em]"
     />
   ),
 );
@@ -2768,7 +2698,7 @@ const XMediaGrid = memo(
     return (
       <div
         className={cn(
-          "grid max-w-full gap-1 overflow-hidden rounded-[18px] border border-rm-border/45 bg-rm-bg-surface/30",
+          "grid max-w-full gap-1 overflow-hidden rounded-lg border border-rm-border/45 bg-rm-bg-surface/30",
           gridClass,
         )}
       >
@@ -2964,9 +2894,9 @@ const XMediaTile = memo(
         className={
           single
             ? compact
-              ? `h-[180px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 pointer-fine:hover:brightness-105`
-              : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 pointer-fine:hover:brightness-105`
-            : "h-full w-full object-cover transition-all duration-300 pointer-fine:hover:brightness-105"
+              ? `h-[180px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-[filter] duration-150 ease-(--rm-ease-out) pointer-fine:hover:brightness-105`
+              : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-[filter] duration-150 ease-(--rm-ease-out) pointer-fine:hover:brightness-105`
+            : "h-full w-full object-cover transition-[filter] duration-150 ease-(--rm-ease-out) pointer-fine:hover:brightness-105"
         }
         loading="lazy"
         referrerPolicy="no-referrer"
@@ -2982,14 +2912,14 @@ const XMediaTile = memo(
           ? cn(
               "block h-[180px] max-w-[240px]",
               usesFramedSingleChrome &&
-                "rounded-[18px] border border-rm-border/45 bg-rm-bg-surface/30",
+                "rounded-lg border border-rm-border/45 bg-rm-bg-surface/30",
             )
           : cn(
               "block w-fit max-w-full",
               !isVideo &&
                 usesFramedSingleChrome &&
-                "rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
-              isVideo && usesFramedSingleChrome && "rounded-[20px]",
+                "rounded-lg border border-rm-border/45 bg-rm-bg-surface/30",
+              isVideo && usesFramedSingleChrome && "rounded-lg",
             )
         : "block",
       !isVideo || isGif ? "cursor-zoom-in" : "",
@@ -3422,9 +3352,9 @@ const XGifTile = memo(
                 }
               >
                 {playbackPaused ? (
-                  <PlayIcon className="h-3.5 w-3.5" />
+                  <PlayIcon size="xs" />
                 ) : (
-                  <PauseIcon className="h-3.5 w-3.5" />
+                  <PauseIcon size="xs" />
                 )}
                 <span className="sr-only" id={titleId}>
                   {playbackPaused ? "Play GIF" : "Pause GIF"}
@@ -3596,7 +3526,7 @@ const RichEmbed = memo(
                 href={embed.author.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-ui-sm text-rm-text-primary pointer-fine:hover:underline"
+                className="font-semibold text-ui-sm text-rm-text pointer-fine:hover:underline"
               >
                 <EmbedInlineText
                   text={embed.author.name}
@@ -3696,125 +3626,24 @@ type InstagramHydrationPayload = {
 
 const InstagramChevronIcon = ({
   direction,
-  className = "h-4 w-4",
 }: {
   direction: "left" | "right";
-  className?: string;
 }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.25"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    {direction === "left" ? (
-      <path d="m15 5-7 7 7 7" />
-    ) : (
-      <path d="m9 5 7 7-7 7" />
-    )}
-  </svg>
+  <Icon
+    name={direction === "left" ? "chevronLeft" : "chevronRight"}
+    size="sm"
+  />
 );
 
-const InstagramHeartIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M12 20.8 10.8 19.7C5.4 14.9 2 11.8 2 7.9 2 4.9 4.3 2.6 7.2 2.6c1.8 0 3.5.8 4.8 2.2 1.3-1.4 3-2.2 4.8-2.2 2.9 0 5.2 2.3 5.2 5.3 0 3.9-3.4 7-8.8 11.8L12 20.8Z" />
-  </svg>
-);
+const InstagramHeartIcon = () => <Icon name="like" size="lg" />;
 
-const InstagramCommentIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M20 14.5a4.5 4.5 0 0 1-4.5 4.5H8l-4 3V7.5A4.5 4.5 0 0 1 8.5 3h7A4.5 4.5 0 0 1 20 7.5Z" />
-  </svg>
-);
+const InstagramCommentIcon = () => <Icon name="chat" size="lg" />;
 
-const InstagramSendIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M22 2 11 13" />
-    <path d="M22 2 15 22l-4-9-9-4Z" />
-  </svg>
-);
+const InstagramSendIcon = () => <Icon name="send" size="lg" />;
 
-const InstagramBookmarkIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M6 3.5h12a1 1 0 0 1 1 1v16l-7-4.2-7 4.2v-16a1 1 0 0 1 1-1Z" />
-  </svg>
-);
+const InstagramBookmarkIcon = () => <Icon name="bookmark" size="lg" />;
 
-const InstagramViewsIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
+const InstagramViewsIcon = () => <Icon name="eye" size="lg" />;
 
 const InstagramVerifiedIcon = ({
   className = "h-4 w-4",
@@ -3833,27 +3662,7 @@ const InstagramVerifiedIcon = ({
   </svg>
 );
 
-const InstagramMusicIcon = ({
-  className = "h-4 w-4",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M9 18V6l10-2v12" />
-    <path d="M9 10 19 8" />
-    <circle cx="6" cy="18" r="3" />
-    <circle cx="16" cy="16" r="3" />
-  </svg>
-);
+const InstagramMusicIcon = () => <Icon name="music" size="sm" />;
 
 function formatInstagramMetricCount(value?: number): string | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
@@ -4493,7 +4302,7 @@ const InstagramEmbed = memo(
                     href={displayEmbed.author.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="truncate font-semibold text-rm-text-primary pointer-fine:hover:underline"
+                    className="truncate font-semibold text-rm-text pointer-fine:hover:underline"
                   >
                     <EmbedInlineText
                       text={displayEmbed.author.name}
@@ -4501,7 +4310,7 @@ const InstagramEmbed = memo(
                     />
                   </a>
                 ) : (
-                  <span className="truncate font-semibold text-rm-text-primary">
+                  <span className="truncate font-semibold text-rm-text">
                     <EmbedInlineText
                       text={displayEmbed.author?.name || "Instagram"}
                       keyPrefix={`${embed.id}-instagram-author`}
@@ -4523,7 +4332,7 @@ const InstagramEmbed = memo(
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors pointer-fine:hover:bg-black/85"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white transition-colors pointer-fine:hover:bg-black/85"
               title="Open in Instagram"
               aria-label="Open in Instagram"
             >
@@ -4531,7 +4340,7 @@ const InstagramEmbed = memo(
             </a>
           </header>
 
-          <div className="relative overflow-hidden rounded-[22px] border border-rm-border/55 bg-black/95">
+          <div className="relative overflow-hidden rounded-lg border border-rm-border/55 bg-black/95">
             <div
               ref={trackRef}
               className="relative w-full overflow-hidden"
@@ -4656,7 +4465,10 @@ const InstagramEmbed = memo(
                       type="button"
                       onClick={handlePrevButtonClick}
                       onPointerDown={stopChromePointerPropagation}
-                      className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
+                      className={cn(
+                        "absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72",
+                        HIT,
+                      )}
                       aria-label="Previous media"
                     >
                       <InstagramChevronIcon direction="left" />
@@ -4667,7 +4479,10 @@ const InstagramEmbed = memo(
                       type="button"
                       onClick={handleNextButtonClick}
                       onPointerDown={stopChromePointerPropagation}
-                      className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72"
+                      className={cn(
+                        "absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors pointer-fine:hover:bg-black/72",
+                        HIT,
+                      )}
                       aria-label="Next media"
                     >
                       <InstagramChevronIcon direction="right" />
@@ -4683,9 +4498,14 @@ const InstagramEmbed = memo(
                         aria-label={`Go to media ${index + 1}`}
                         aria-current={index === resolvedActiveIndex}
                         className={cn(
-                          "h-1.5 w-1.5 rounded-full transition-all",
+                          // Tall coarse target that tiles with its
+                          // neighbours (6px dot + 6px gap) instead of
+                          // overlapping them.
+                          "relative h-1.5 w-1.5 rounded-full transition-colors",
+                          HIT,
+                          "before:min-w-3",
                           index === resolvedActiveIndex
-                            ? "bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.18)]"
+                            ? "bg-white ring-3 ring-white/18"
                             : "bg-white/45",
                         )}
                       />
@@ -4696,7 +4516,7 @@ const InstagramEmbed = memo(
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 text-rm-text-primary">
+          <div className="flex items-center justify-between gap-3 text-rm-text">
             <div className="flex items-center gap-3">
               <div className="inline-flex items-center gap-1.5 text-ui-sm font-medium [font-variant-numeric:tabular-nums]">
                 <InstagramHeartIcon />
@@ -4725,7 +4545,7 @@ const InstagramEmbed = memo(
           </div>
 
           {captionText && (
-            <p className="text-ui-sm leading-relaxed text-rm-text-primary">
+            <p className="text-ui-sm leading-relaxed text-rm-text">
               {displayEmbed.author?.name && (
                 <span className="mr-1 font-semibold">
                   {displayEmbed.author.name}
@@ -4744,7 +4564,7 @@ const InstagramEmbed = memo(
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-ui-xs text-rm-text-muted/86 transition-colors pointer-fine:hover:text-rm-text-primary"
+              className="text-ui-xs text-rm-text-muted/86 transition-colors pointer-fine:hover:text-rm-text"
             >
               View all {commentCount.toLocaleString()} comments
             </a>
@@ -4752,12 +4572,12 @@ const InstagramEmbed = memo(
 
           {displayEmbed.audio &&
             (displayEmbed.audio.title || displayEmbed.audio.artist) && (
-              <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-ui-xs text-rm-text-secondary">
+              <div className="flex items-center gap-2 rounded-lg border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-ui-xs text-rm-text-secondary">
                 {audioPlaybackUrl ? (
                   <button
                     type="button"
                     onClick={handleAudioToggle}
-                    className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transforms-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
+                    className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/75 ring-1 ring-rm-border/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
                     aria-label={
                       isAudioPlaying
                         ? "Pause audio preview"
@@ -4773,16 +4593,12 @@ const InstagramEmbed = memo(
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text-primary">
+                      <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text">
                         <InstagramMusicIcon />
                       </span>
                     )}
                     <span className="absolute inset-0 flex items-center justify-center bg-black/28">
-                      {isAudioPlaying ? (
-                        <PauseIcon className="h-4 w-4" />
-                      ) : (
-                        <PlayIcon className="h-4 w-4" />
-                      )}
+                      {isAudioPlaying ? <PauseIcon /> : <PlayIcon size="sm" />}
                     </span>
                   </button>
                 ) : (
@@ -4791,12 +4607,12 @@ const InstagramEmbed = memo(
                       <img
                         src={audioArtworkSrc}
                         alt=""
-                        className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                        className="h-10 w-10 shrink-0 rounded-md object-cover"
                         loading="lazy"
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text-primary">
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-rm-bg-surface text-rm-text">
                         <InstagramMusicIcon />
                       </span>
                     )}
@@ -4804,7 +4620,7 @@ const InstagramEmbed = memo(
                 )}
                 <div className="min-w-0 flex-1 leading-tight">
                   {displayEmbed.audio.title && (
-                    <div className="truncate font-semibold text-rm-text-primary">
+                    <div className="truncate font-semibold text-rm-text">
                       {displayEmbed.audio.title}
                     </div>
                   )}
@@ -4920,7 +4736,7 @@ const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
     <BaseEmbed embed={embed} width={420}>
       <div className="flex flex-col gap-2 py-1">
         {embed.author?.name ? (
-          <div className="text-ui-sm font-semibold text-rm-text-primary">
+          <div className="text-ui-sm font-semibold text-rm-text">
             <EmbedInlineText
               text={embed.author.name}
               keyPrefix={`${embed.id}-unavailable-author`}
@@ -4934,7 +4750,7 @@ const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           href={embed.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-fit text-ui-sm font-semibold text-[#00A8FC] pointer-fine:hover:underline"
+          className="w-fit text-ui-sm font-semibold text-rm-accent-ink pointer-fine:hover:underline"
         >
           View original
         </a>
@@ -5074,23 +4890,18 @@ export const LinkEmbed = memo(
             <button
               type="button"
               onClick={handleXClick}
-              className="absolute -top-2 -right-6 z-20 w-5 h-5 flex items-center justify-center rounded text-rm-text-muted pointer-fine:hover:text-rm-text-primary pointer-fine:hover:bg-rm-bg-hover pointer-fine:opacity-0 pointer-fine:group-hover/embedwrap:opacity-100 transition-all"
+              className={cn(
+                "absolute -top-2 -right-6 z-20 flex size-5 items-center justify-center rounded-sm text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text",
+                HIT,
+                // REVEAL, scoped to this embed (the message row is also a
+                // `group`): hidden until hover/focus on fine pointers, always
+                // visible on touch.
+                "pointer-fine:opacity-0 pointer-fine:transition-[color,background-color,opacity] pointer-fine:duration-150 pointer-fine:ease-(--rm-ease-out) pointer-fine:group-hover/embedwrap:opacity-100 pointer-fine:group-focus-within/embedwrap:opacity-100 pointer-fine:focus-visible:opacity-100",
+              )}
               aria-label="Remove embeds"
               title="Remove all embeds (Shift+click to skip confirmation)"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <Icon name="close" size="sm" />
             </button>
           )}
         </div>

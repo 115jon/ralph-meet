@@ -290,6 +290,9 @@
   --rm-activity-wordle-tile: #d3d6da;
   --rm-activity-wordle-key: #818384;
   --rm-activity-wordle-ink: #ffffff;
+  /* Wordle's high-contrast setting (colour-blind safe orange / blue). */
+  --rm-activity-wordle-hc-correct: #b45309;
+  --rm-activity-wordle-hc-present: #1d4ed8;
   --rm-activity-warp-bg: #020617;
   --rm-activity-warp-ink: #e2e8f0;
   --rm-activity-warp-ink-muted: #94a3b8;
@@ -387,6 +390,17 @@
   );
   --rm-danger-tint: color-mix(in oklab, var(--rm-danger) 16%, transparent);
   --rm-accent-tint: color-mix(in oklab, var(--rm-accent) 16%, transparent);
+  /* Status tints mix from the ink, so text on them keeps its contrast. */
+  --rm-success-tint: color-mix(
+    in oklab,
+    var(--rm-success-ink) 14%,
+    transparent
+  );
+  --rm-warning-tint: color-mix(
+    in oklab,
+    var(--rm-warning-ink) 14%,
+    transparent
+  );
 }
 
 .light {
@@ -1007,6 +1021,8 @@
   --color-rm-danger-tint: var(--rm-danger-tint);
   --color-rm-success-ink: var(--rm-success-ink);
   --color-rm-warning-ink: var(--rm-warning-ink);
+  --color-rm-success-tint: var(--rm-success-tint);
+  --color-rm-warning-tint: var(--rm-warning-tint);
   --color-rm-field-edge: var(--rm-field-edge);
   --color-rm-tint-1: var(--rm-tint-1);
   --color-rm-tint-2: var(--rm-tint-2);
@@ -1677,45 +1693,6 @@
   content: none !important;
 }
 
-/* Custom styles for Emoji/Gif/Soundboard Pickers and Modals */
-.picker-panel {
-  background-color: var(--rm-bg-floating) !important;
-  border-color: var(--rm-border) !important;
-}
-
-.picker-header {
-  border-bottom-color: var(--rm-border) !important;
-  background-color: var(--rm-bg-surface) !important;
-  background-image:
-    radial-gradient(circle at top left, var(--rm-accent-dim), transparent 35%),
-    radial-gradient(
-      circle at top right,
-      rgba(229, 9, 20, 0.08),
-      transparent 30%
-    ) !important;
-}
-
-.picker-search-input {
-  background-color: var(--rm-bg-hover) !important;
-  border-color: var(--rm-border) !important;
-  color: var(--rm-text-primary) !important;
-}
-
-.picker-search-input:focus {
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 3px var(--rm-glow) !important;
-}
-
-.picker-pill {
-  background-color: var(--rm-bg-hover) !important;
-  border-color: var(--rm-border) !important;
-  color: var(--rm-text-primary) !important;
-}
-
-.picker-pill:hover {
-  background-color: var(--rm-bg-active) !important;
-}
-
 /* Custom themed scrollbars for Spider-Man */
 .spiderman-dark ::-webkit-scrollbar-thumb {
   background-color: rgba(229, 9, 20, 0.5) !important;
@@ -1961,22 +1938,67 @@
   }
 }
 
-/* Kova SDK card inside the split layout: theme tokens + a compact rhythm that
-   fits 1216×644. Providers become an icon row (labels stay for assistive tech). */
+/*
+ * Kova SDK bridge (@kova/react inside AuthSplitLayout). The SDK styles itself
+ * from --ra-* variables plus a few hard-coded values; this one block maps
+ * every variable onto the rm theme tokens and overrides the hard-coded rest,
+ * so the card follows all six themes. Rhythm stays on the 4px grid and fits
+ * 1216x644. Providers become an icon row (labels stay for assistive tech).
+ */
 .auth-split [data-ra-root] {
-  --ra-color-primary: var(--rm-accent);
+  --ra-color-primary: var(--rm-accent-solid);
   --ra-color-primary-hover: var(--rm-accent-hover);
-  --ra-color-background: var(--rm-bg-primary);
+  --ra-color-bg: var(--rm-bg-primary);
   --ra-color-surface: var(--rm-bg-primary);
   --ra-color-surface-raised: var(--rm-bg-hover);
   --ra-color-text: var(--rm-text-primary);
   --ra-color-text-secondary: var(--rm-text-secondary);
   --ra-color-text-tertiary: var(--rm-text-muted);
   --ra-color-border: var(--rm-border);
-  --ra-color-border-strong: var(--rm-text-ghost);
+  --ra-font-size: 15px;
+}
+
+/* Phones: 16px text so iOS does not zoom into the fields (4.6). */
+@media (max-width: 767px) {
+  .auth-split [data-ra-root] {
+    --ra-font-size: 16px;
+  }
+}
+
+/* Fields draw a 3:1 edge (7.4); the SDK uses the 6-8% hairline. */
+.auth-split [data-ra-element="formFieldInput"] {
+  border-color: var(--rm-field-edge);
+}
+
+.auth-split [data-ra-element="formFieldInput"][aria-invalid="true"] {
+  border-color: var(--rm-danger-ink);
+}
+
+/* The SDK hard-codes #fff on the primary fill; miku accents need dark ink. */
+.auth-split [data-ra-element="formSubmitButton"] {
+  color: var(--rm-on-accent);
+}
+
+/* 44px targets on touch for the SDK's links, tabs and footer buttons (9.1). */
+@media (pointer: coarse) {
+  .auth-split [data-ra-root] a,
+  .auth-split [data-ra-element="tab"],
+  .auth-split [data-ra-element="cardFooter"] button {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .auth-split [data-ra-element="tab"] {
+    justify-content: center;
+  }
+  --ra-color-border-strong: var(--rm-border-strong);
+  --ra-color-error: var(--rm-danger-ink);
+  --ra-color-success: var(--rm-success-ink);
+  --ra-color-warning: var(--rm-warning-ink);
   --ra-shadow: none;
-  --ra-radius: 10px;
-  --ra-radius-sm: 10px;
+  --ra-radius: 8px;
+  --ra-radius-sm: 8px;
   --ra-font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
@@ -1985,7 +2007,7 @@
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .auth-split [data-ra-element="socialButton"] {
@@ -2002,11 +2024,11 @@
 }
 
 .auth-split [data-ra-element="dividerRow"] {
-  margin: 14px 0;
+  margin: 16px 0;
 }
 
 .auth-split [data-ra-element="tabsRoot"] {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .auth-split [data-ra-element="formField"] {

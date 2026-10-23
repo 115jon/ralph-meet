@@ -15,7 +15,9 @@ import {
   getWarpRushRingRenderState,
 } from "@/lib/warp-rush";
 import { cn } from "@/lib/utils";
+import { Button, Spinner } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { HIT } from "@/components/ui/interaction";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -278,7 +280,7 @@ export function WarpRushActivityStage({
   const [accelerationLabel, setAccelerationLabel] = useState(
     "Checking acceleration",
   );
-  const [failureReason, setFailureReason] = useState<string | null>(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
   const [pilotStates, setPilotStates] = useState<
     Record<string, PilotPresenceState>
   >({});
@@ -495,13 +497,9 @@ export function WarpRushActivityStage({
         powerPreference: "high-performance",
       });
     } catch (error) {
+      console.warn("Warp Rush: WebGL renderer failed to initialize", error);
       queueMicrotask(() => {
         if (disposed) return;
-        setFailureReason(
-          error instanceof Error
-            ? error.message
-            : "WebGL renderer failed to initialize.",
-        );
         setStatus("unsupported");
       });
       return;
@@ -528,7 +526,6 @@ export function WarpRushActivityStage({
           ? "Fallback renderer likely"
           : "Hardware acceleration likely",
       );
-      setFailureReason(null);
       setStatus("running");
     });
 
@@ -1094,14 +1091,20 @@ export function WarpRushActivityStage({
       renderer.setAnimationLoop(null);
       for (const cleanup of cleanupFns.reverse()) cleanup();
     };
-  }, [channelId, course, preset, renderScale]);
+  }, [bootAttempt, channelId, course, preset, renderScale]);
 
+  // Stale pilots drop off the board; a slow clock keeps render pure.
+  const [leaderboardNow, setLeaderboardNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setLeaderboardNow(Date.now()), 2000);
+    return () => window.clearInterval(id);
+  }, []);
   const sortedLeaderboard = useMemo(
     () =>
       Object.values(pilotStates)
         .filter(
           (entry) =>
-            Date.now() - entry.updatedAt < 12000 ||
+            leaderboardNow - entry.updatedAt < 12000 ||
             entry.userId === localUserId,
         )
         .sort(
@@ -1111,7 +1114,7 @@ export function WarpRushActivityStage({
             right.updatedAt - left.updatedAt,
         )
         .slice(0, 8),
-    [localUserId, pilotStates],
+    [leaderboardNow, localUserId, pilotStates],
   );
   const softwareRendererLikely = isLikelySoftwareRenderer(rendererLabel);
   const remotePilotCount = sortedLeaderboard.reduce(
@@ -1119,320 +1122,414 @@ export function WarpRushActivityStage({
     0,
   );
 
+  const panel =
+    "rounded-xl border border-rm-activity-warp-cyan/15 bg-rm-activity-warp-bg/60";
+  const eyebrow =
+    "flex items-center gap-2 text-ui-2xs font-semibold uppercase tracking-[0.08em]";
+  const tile =
+    "rounded-lg border border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 px-3 py-3";
+  const chip =
+    "rounded-full border border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 px-3 py-1";
+
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#020617] text-white">
+    <div className="relative h-full w-full overflow-hidden bg-rm-activity-warp-bg text-rm-activity-warp-ink">
       <div ref={stageRef} className="absolute inset-0" />
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_28%),linear-gradient(180deg,rgba(2,6,23,0.12),rgba(2,6,23,0.82))]" />
+      <div className="pointer-events-none absolute inset-0 bg-radial-[circle_at_top] from-rm-activity-warp-cyan/15 to-transparent to-30%" />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-rm-activity-warp-bg/10 to-rm-activity-warp-bg/80" />
 
-      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 md:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="pointer-events-auto flex w-full max-w-[440px] flex-col gap-3">
-            <div className="rounded-3xl border border-cyan-300/15 bg-slate-950/48 p-4 md:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.28em] text-cyan-200/74">
-                    <Icon name="activities" size="sm" />
-                    Warp Rush 3D
-                  </div>
-                  <h2 className="mt-2 text-ui-2xl font-black leading-none text-white">
-                    Shared tunnel sprint
-                  </h2>
-                  <p className="mt-2 max-w-[34ch] text-ui-sm leading-6 text-slate-300">
-                    Same seed, same hazards, live ghost ships. Draft the pilot
-                    ahead and compare acceleration modes without changing the
-                    sim.
-                  </p>
-                </div>
-                <div
-                  className={cn(
-                    "shrink-0 rounded-full border px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em]",
-                    softwareRendererLikely
-                      ? "border-amber-300/35 bg-amber-400/10 text-amber-100"
-                      : "border-emerald-300/30 bg-emerald-400/10 text-emerald-100",
-                  )}
-                >
-                  {accelerationLabel}
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    Score
-                  </div>
-                  <div className="mt-2 text-ui-2xl font-black text-cyan-200">
-                    {formatStat(score)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    Best
-                  </div>
-                  <div className="mt-2 text-ui-2xl font-black text-fuchsia-200">
-                    {formatStat(bestScore)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    <Icon name="noiseSuppression" size="xs" />
-                    Draft
+      {status === "running" || status === "crashed" ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 md:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="pointer-events-auto flex w-full max-w-[440px] flex-col gap-3">
+              <div className={cn(panel, "p-4 md:p-5")}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className={cn(eyebrow, "text-rm-activity-warp-cyan")}>
+                      <Icon name="activities" size="sm" />
+                      Warp Rush 3D
+                    </div>
+                    <h2 className="mt-2 text-balance text-ui-xl font-bold md:text-ui-2xl">
+                      Shared tunnel sprint
+                    </h2>
+                    <p className="mt-2 max-w-[36ch] text-pretty text-ui-sm text-rm-activity-warp-ink-muted max-md:hidden">
+                      Same seed, same hazards, live ghost ships. Draft the pilot
+                      ahead and compare acceleration modes without changing the
+                      sim.
+                    </p>
                   </div>
                   <div
                     className={cn(
-                      "mt-2 text-ui-sm font-semibold",
-                      slipstreamActive ? "text-emerald-200" : "text-slate-200",
+                      "shrink-0 rounded-full border px-3 py-1 text-ui-2xs font-semibold",
+                      softwareRendererLikely
+                        ? "border-rm-activity-warp-amber/40 text-rm-activity-warp-amber"
+                        : "border-rm-activity-warp-green/40 text-rm-activity-warp-green",
                     )}
                   >
-                    {slipstreamActive
-                      ? `+${Math.round(WARP_RUSH_SLIPSTREAM_BONUS * 100)}% speed`
-                      : "No draft"}
+                    {accelerationLabel}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    <Icon name="members" size="xs" />
-                    Rival
-                  </div>
-                  <div className="mt-2 text-ui-sm font-semibold text-slate-100">
-                    {nearestRivalGap === null
-                      ? "Open tunnel"
-                      : `${nearestRivalGap.toFixed(1)}m ahead`}
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {failureReason && (
-              <div className="rounded-full border border-amber-300/28 bg-slate-950/72 px-4 py-2 text-ui-xs text-amber-50">
-                {failureReason}
-              </div>
-            )}
-          </div>
-
-          <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-lg md:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/80">
-                <Icon name="trophy" size="sm" />
-                Session board
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-2xs uppercase tracking-[0.18em] text-slate-300">
-                {remotePilotCount > 0
-                  ? `${remotePilotCount + 1} live`
-                  : "Solo warm-up"}
-              </div>
-            </div>
-
-            <div className="mt-3 max-h-[44dvh] space-y-2 overflow-y-auto pr-1">
-              {sortedLeaderboard.length > 0 ? (
-                sortedLeaderboard.map((entry, index) => {
-                  const participant = participantMap.get(entry.userId);
-                  const displayName =
-                    participant?.name ?? entry.name ?? "Pilot";
-                  const avatar = participant?.avatar ?? entry.avatar ?? null;
-                  return (
+                <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <div className={tile}>
                     <div
-                      key={entry.userId}
-                      className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5"
+                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
                     >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/15 text-ui-xs font-black text-cyan-100">
-                        {index + 1}
-                      </div>
-                      {avatar ? (
-                        <img
-                          src={getAuthAssetUrl(avatar)}
-                          alt=""
-                          className="h-10 w-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-400/15 text-ui-sm font-black text-fuchsia-100">
-                          {displayName.slice(0, 1).toUpperCase()}
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-ui-sm font-semibold text-white">
-                          {displayName}
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
-                          <span>{PRESETS[entry.preset].label}</span>
-                          <span>
-                            {entry.crashed
-                              ? "Crashed"
-                              : entry.slipstream
-                                ? "Drafting"
-                                : "Running"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-ui-lg font-black text-cyan-100">
-                          {formatStat(entry.best)}
-                        </div>
-                        <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
-                          Peak
-                        </div>
-                      </div>
+                      Score
                     </div>
-                  );
-                })
-              ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-center text-ui-sm text-slate-300">
-                  Launch the activity in the same voice session and live rivals
-                  will start ghosting into the tunnel.
+                    <div className="mt-2 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-cyan">
+                      {formatStat(score)}
+                    </div>
+                  </div>
+                  <div className={tile}>
+                    <div
+                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
+                    >
+                      Best
+                    </div>
+                    <div className="mt-2 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-magenta">
+                      {formatStat(bestScore)}
+                    </div>
+                  </div>
+                  <div className={tile}>
+                    <div
+                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
+                    >
+                      <Icon name="noiseSuppression" size="xs" />
+                      Draft
+                    </div>
+                    <div
+                      className={cn(
+                        "mt-2 text-ui-sm font-semibold",
+                        slipstreamActive
+                          ? "text-rm-activity-warp-green"
+                          : "text-rm-activity-warp-ink",
+                      )}
+                    >
+                      {slipstreamActive
+                        ? `+${Math.round(WARP_RUSH_SLIPSTREAM_BONUS * 100)}% speed`
+                        : "No draft"}
+                    </div>
+                  </div>
+                  <div className={tile}>
+                    <div
+                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
+                    >
+                      <Icon name="members" size="xs" />
+                      Rival
+                    </div>
+                    <div className="mt-2 text-ui-sm font-semibold tabular-nums">
+                      {nearestRivalGap === null
+                        ? "Open tunnel"
+                        : `${nearestRivalGap.toFixed(1)}m ahead`}
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                panel,
+                "pointer-events-auto w-full max-w-[340px] p-4 md:p-5",
               )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 md:px-4">
-            <div className="flex items-center gap-2 pr-1 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
-              <Icon name="spatial" size="sm" />
-              Controls
-            </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
-              Mouse / touch steer
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
-              WASD trim
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
-              Draft a ghost
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-sm text-slate-200">
-              Space restart
-            </span>
-          </div>
-
-          <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-lg md:p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
-                <Icon name="zap" size="sm" />
-                Load
-              </div>
-              {PRESET_ORDER.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setPreset(option)}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className={cn(eyebrow, "text-rm-activity-warp-cyan")}>
+                  <Icon name="trophy" size="sm" />
+                  Session board
+                </div>
+                <div
                   className={cn(
-                    "rounded-full border px-4 py-2 text-ui-sm font-semibold transition-colors",
-                    preset === option
-                      ? "border-cyan-200 bg-cyan-300/20 text-white"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 pointer-fine:hover:border-cyan-300/35 pointer-fine:hover:text-white",
+                    chip,
+                    "text-ui-2xs text-rm-activity-warp-ink-muted",
                   )}
                 >
-                  {PRESETS[option].label}
-                </button>
+                  {remotePilotCount > 0
+                    ? `${remotePilotCount + 1} live`
+                    : "Solo warm-up"}
+                </div>
+              </div>
+
+              <div className="mt-3 max-h-[44dvh] space-y-2 overflow-y-auto pr-1">
+                {sortedLeaderboard.length > 0 ? (
+                  sortedLeaderboard.map((entry, index) => {
+                    const participant = participantMap.get(entry.userId);
+                    const displayName =
+                      participant?.name ?? entry.name ?? "Pilot";
+                    const avatar = participant?.avatar ?? entry.avatar ?? null;
+                    return (
+                      <div
+                        key={entry.userId}
+                        className="flex items-center gap-3 rounded-lg border border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 px-3 py-2.5"
+                      >
+                        <div className="flex size-9 items-center justify-center rounded-full bg-rm-activity-warp-cyan/15 text-ui-xs font-bold tabular-nums text-rm-activity-warp-cyan">
+                          {index + 1}
+                        </div>
+                        {avatar ? (
+                          <img
+                            src={getAuthAssetUrl(avatar)}
+                            alt=""
+                            className="size-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex size-10 items-center justify-center rounded-full bg-rm-activity-warp-magenta/15 text-ui-sm font-bold text-rm-activity-warp-magenta">
+                            {displayName.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-ui-sm font-semibold">
+                            {displayName}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-ui-xs text-rm-activity-warp-ink-muted">
+                            <span>{PRESETS[entry.preset].label}</span>
+                            <span>
+                              {entry.crashed
+                                ? "Crashed"
+                                : entry.slipstream
+                                  ? "Drafting"
+                                  : "Running"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-ui-lg font-bold tabular-nums text-rm-activity-warp-cyan">
+                            {formatStat(entry.best)}
+                          </div>
+                          <div className="text-ui-xs text-rm-activity-warp-ink-muted">
+                            Peak
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="px-1 py-4 text-pretty text-ui-sm text-rm-activity-warp-ink-muted">
+                    Launch the activity in the same voice session and live
+                    rivals will start ghosting into the tunnel.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div
+              className={cn(
+                panel,
+                "pointer-events-auto flex max-w-full flex-wrap items-center gap-2 px-3 py-3 max-md:hidden md:px-4",
+              )}
+            >
+              <div className={cn(eyebrow, "pr-1 text-rm-activity-warp-cyan")}>
+                <Icon name="spatial" size="sm" />
+                Controls
+              </div>
+              {[
+                "Mouse / touch steer",
+                "WASD trim",
+                "Draft a ghost",
+                "Space restart",
+              ].map((label) => (
+                <span key={label} className={cn(chip, "text-ui-sm")}>
+                  {label}
+                </span>
               ))}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-fuchsia-200/78">
-                <Icon name="gauge" size="sm" />
-                Scale
+            <div
+              className={cn(
+                panel,
+                "pointer-events-auto w-full max-w-[640px] p-3 md:p-4",
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <div className={cn(eyebrow, "mr-1 text-rm-activity-warp-cyan")}>
+                  <Icon name="zap" size="sm" />
+                  Load
+                </div>
+                {PRESET_ORDER.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={preset === option}
+                    onClick={() => setPreset(option)}
+                    className={cn(
+                      "relative min-h-8 rounded-full border px-4 text-ui-sm font-medium transition-colors duration-150",
+                      HIT,
+                      preset === option
+                        ? "border-rm-activity-warp-cyan bg-rm-activity-warp-cyan/20 font-semibold"
+                        : "border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 text-rm-activity-warp-ink-muted pointer-fine:hover:text-rm-activity-warp-ink",
+                    )}
+                  >
+                    {PRESETS[option].label}
+                  </button>
+                ))}
               </div>
-              {RENDER_SCALES.map((option) => (
-                <button
-                  key={option.label}
-                  type="button"
-                  onClick={() => setRenderScale(option.value)}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-ui-sm font-semibold transition-colors",
-                    renderScale === option.value
-                      ? "border-fuchsia-200 bg-fuchsia-300/18 text-white"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 pointer-fine:hover:border-fuchsia-300/35 pointer-fine:hover:text-white",
-                  )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div
+                  className={cn(eyebrow, "mr-1 text-rm-activity-warp-magenta")}
                 >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+                  <Icon name="gauge" size="sm" />
+                  Scale
+                </div>
+                {RENDER_SCALES.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    aria-pressed={renderScale === option.value}
+                    onClick={() => setRenderScale(option.value)}
+                    className={cn(
+                      "relative min-h-8 rounded-full border px-4 text-ui-sm font-medium transition-colors duration-150",
+                      HIT,
+                      renderScale === option.value
+                        ? "border-rm-activity-warp-magenta bg-rm-activity-warp-magenta/20 font-semibold"
+                        : "border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 text-rm-activity-warp-ink-muted pointer-fine:hover:text-rm-activity-warp-ink",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-ui-xs">
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-200">
-                {perfStats.fps} FPS
+              <div className="mt-3 flex flex-wrap gap-2 text-ui-xs tabular-nums">
+                <div className={chip}>{perfStats.fps} FPS</div>
+                <div className={chip}>{perfStats.frameMs}ms frame</div>
+                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
+                  {formatStat(perfStats.triangles)} tris
+                </div>
+                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
+                  {formatStat(perfStats.drawCalls)} draws
+                </div>
+                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
+                  {formatStat(perfStats.points)} points
+                </div>
+                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
+                  DPR {perfStats.dpr}
+                </div>
               </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-200">
-                {perfStats.frameMs}ms frame
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                {formatStat(perfStats.triangles)} tris
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                {formatStat(perfStats.drawCalls)} draws
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                {formatStat(perfStats.points)} points
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                DPR {perfStats.dpr}
-              </div>
-            </div>
 
-            <div className="mt-3 min-w-0 rounded-full border border-white/8 bg-black/25 px-3 py-2 text-ui-2xs text-slate-300">
-              <span className="uppercase tracking-[0.18em] text-slate-500">
-                Renderer
-              </span>
-              <span className="ml-2 inline-block max-w-full break-all align-middle text-slate-100">
-                {rendererLabel}
-              </span>
+              <div className="mt-3 min-w-0 rounded-md border border-rm-activity-warp-ink/10 bg-rm-activity-warp-bg/40 px-3 py-2 text-ui-xs text-rm-activity-warp-ink-muted">
+                <span className="font-semibold">Renderer</span>
+                <span className="ml-2 inline-block max-w-full break-all align-middle text-rm-activity-warp-ink">
+                  {rendererLabel}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {status === "crashed" && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4">
-          <div className="max-w-md rounded-3xl border border-amber-300/30 bg-slate-950/86 p-6 text-center shadow-lg">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10 text-amber-200">
-              <Icon name="warning" size="xl" />
-            </div>
-            <h3 className="mt-4 text-ui-2xl font-black text-white">
-              Hull breach
-            </h3>
-            <p className="mt-3 text-ui-sm leading-6 text-slate-300">
-              Breach confirmed. The race sim stays fixed-step across refresh
-              rates now, so acceleration changes should affect render cost, not
-              the course itself.
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-rm-activity-warp-bg/70 px-6">
+          <div className="flex max-w-md flex-col items-center gap-3 py-12 text-center">
+            <Icon
+              name="warning"
+              size="3xl"
+              className="text-rm-activity-warp-amber max-md:size-8"
+            />
+            <h3 className="text-ui-lg font-semibold">Hull breach</h3>
+            <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-activity-warp-ink-muted">
+              You hit debris. The course stays the same each run, so try a
+              different line through the tunnel.
             </p>
-            <div className="mt-5 flex items-center justify-center gap-6">
+            <dl className="flex items-center justify-center gap-6 py-1">
               <div>
-                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
+                <dt className="text-ui-xs text-rm-activity-warp-ink-muted">
                   Run
-                </div>
-                <div className="mt-1 text-ui-2xl font-black text-cyan-200">
+                </dt>
+                <dd className="mt-1 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-cyan">
                   {formatStat(score)}
-                </div>
+                </dd>
               </div>
               <div>
-                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
+                <dt className="text-ui-xs text-rm-activity-warp-ink-muted">
                   Best
-                </div>
-                <div className="mt-1 text-ui-2xl font-black text-fuchsia-200">
+                </dt>
+                <dd className="mt-1 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-magenta">
                   {formatStat(bestScore)}
-                </div>
+                </dd>
               </div>
               <div>
-                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
+                <dt className="text-ui-xs text-rm-activity-warp-ink-muted">
                   Live FPS
-                </div>
-                <div className="mt-1 text-ui-2xl font-black text-emerald-200">
+                </dt>
+                <dd className="mt-1 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-green">
                   {perfStats.fps}
-                </div>
+                </dd>
               </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => restartRef.current()}
-              className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/20 px-5 py-3 text-ui-sm font-semibold text-white transition-colors pointer-fine:hover:bg-cyan-300/28"
-            >
+            </dl>
+            <Button size="lg" onClick={() => restartRef.current()}>
               <Icon name="reset" size="sm" />
               Restart run
-            </button>
+            </Button>
           </div>
         </div>
+      )}
+
+      {status === "booting" || status === "unsupported" ? (
+        <div className="absolute inset-0 z-20">
+          <WarpRushStatusScreen
+            kind={status}
+            onRetry={() => {
+              setStatus("booting");
+              setBootAttempt((attempt) => attempt + 1);
+            }}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The stage before a frame renders (booting) or when WebGL is missing
+ * (unsupported), on the theme's page colours. Empty-state anatomy (14.1,
+ * 14.3): icon or spinner, title, one line, one action; the failure title is
+ * danger ink and never the renderer's raw error.
+ */
+export function WarpRushStatusScreen({
+  kind,
+  onRetry,
+}: {
+  kind: "booting" | "unsupported";
+  onRetry?: () => void;
+}) {
+  return (
+    <div
+      role={kind === "unsupported" ? "alert" : "status"}
+      className="flex h-full w-full flex-col items-center justify-center gap-3 bg-rm-bg-primary px-6 py-12 text-center"
+    >
+      {kind === "booting" ? (
+        <>
+          <Spinner className="size-6 text-rm-text-secondary" />
+          <h2 className="text-ui-md font-semibold text-rm-text">
+            Starting Warp Rush
+          </h2>
+          <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
+            Setting up the 3D renderer for this device.
+          </p>
+        </>
+      ) : (
+        <>
+          <Icon
+            name="warning"
+            size="3xl"
+            className="text-rm-text-muted max-md:size-8"
+          />
+          <h2 className="text-ui-md font-semibold text-rm-danger-ink">
+            Warp Rush can&apos;t start
+          </h2>
+          <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
+            This browser couldn&apos;t open a WebGL canvas. Turn on hardware
+            acceleration in your browser settings, then try again.
+          </p>
+          {onRetry ? (
+            <Button variant="secondary" onClick={onRetry}>
+              Try again
+            </Button>
+          ) : null}
+        </>
       )}
     </div>
   );

@@ -55,3 +55,44 @@ describe("SharedMessagePage", () => {
     expect(markup).toContain(`Expires ${expected}`);
   });
 });
+
+describe("SharedMessagePage states", () => {
+  it("offers a retry for server errors instead of calling the share gone", async () => {
+    const { render, screen, fireEvent, waitFor } =
+      await import("@testing-library/react");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("{}", { status: 500 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ share: makeShare() }), { status: 200 }),
+      );
+    render(<SharedMessagePage token="share-token" />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Couldn't load this message",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/gone/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() =>
+      expect(screen.getByText("A shared message")).toBeInTheDocument(),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the gone state with one way forward on 410", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { status: 410 }),
+    );
+    render(<SharedMessagePage token="share-token" />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "This shared message is gone",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open Ralph Meet" }),
+    ).toHaveAttribute("href", "/");
+  });
+});

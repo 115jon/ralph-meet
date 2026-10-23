@@ -559,7 +559,7 @@ describe("ListenTogetherNowPlayingCard", () => {
       />,
     );
 
-    expect(screen.getByText("Issue")).toHaveClass("text-destructive");
+    expect(screen.getByText("Issue")).toHaveClass("text-rm-danger-ink");
   });
 
   it("stays hidden in mini mode when nothing is currently playing", () => {

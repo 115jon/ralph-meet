@@ -100,6 +100,13 @@ describe("FloatingSoundboardManager", () => {
     );
     expect(screen.getByText("Airhorn")).toBeInTheDocument();
     expect(screen.queryByText("2 active")).not.toBeInTheDocument();
+    // Only the drag handle blocks touch panning; the list must scroll.
+    expect(screen.getByTestId("floating-soundboard-manager")).not.toHaveClass(
+      "touch-none",
+    );
+    expect(
+      screen.getByRole("button", { name: "Collapse soundboard manager" }),
+    ).toHaveClass("touch-none");
   });
 
   it("collapses the manager while keeping its floating trigger available", async () => {

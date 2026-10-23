@@ -39,6 +39,7 @@ interface ShareSnapshotPreviewProps {
   avatarUrl?: string | null;
   mediaUrlForAttachment: (attachment: Attachment) => string;
   className?: string;
+  /** Kept for callers; the card is flat at every size now. */
   compact?: boolean;
   previewMedia?: boolean;
 }
@@ -61,7 +62,6 @@ export default function ShareSnapshotPreview({
   avatarUrl,
   mediaUrlForAttachment,
   className,
-  compact = false,
   previewMedia = false,
 }: ShareSnapshotPreviewProps) {
   const displayName = author.display_name || author.username || "Unknown";
@@ -90,18 +90,18 @@ export default function ShareSnapshotPreview({
     <article
       className={cn(
         "rounded-lg border border-rm-border bg-rm-bg-surface p-4",
-        !compact && "shadow-xl shadow-black/20",
         className,
       )}
     >
       {originalEdited && (
-        <div className="mb-4 rounded-lg border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-ui-sm text-amber-800 dark:text-amber-200">
-          Original message has since been edited.
-        </div>
+        <p className="mb-4 flex items-start gap-2 rounded-md bg-rm-warning-tint px-3 py-2 text-ui-sm text-rm-warning-ink">
+          <Icon name="edit" size="sm" className="mt-px shrink-0" />
+          <span>The original message was edited after this was shared.</span>
+        </p>
       )}
 
       <div className="mb-3 flex items-start gap-3">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-ui-sm font-semibold text-primary">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-accent-tint text-ui-sm font-semibold text-rm-accent-ink">
           {avatarUrl ? (
             <AvatarImage
               src={avatarUrl}
@@ -186,7 +186,7 @@ export default function ShareSnapshotPreview({
                         src={url}
                         alt={attachment.filename}
                         className={cn(
-                          "h-full w-full object-contain transition pointer-fine:group-hover/image:brightness-105",
+                          "h-full w-full object-contain transition-[filter] duration-150 ease-(--rm-ease-out) pointer-fine:group-hover/image:brightness-105",
                           previewMedia ? "max-h-[220px]" : "max-h-[360px]",
                         )}
                         loading="lazy"
@@ -236,9 +236,9 @@ export default function ShareSnapshotPreview({
             <Icon name="image" size="sm" className="shrink-0" />
           )}
           <span>
-            {omittedAttachmentCount} attachment
-            {omittedAttachmentCount === 1 ? "" : "s"} not included in public
-            share.
+            {omittedAttachmentCount === 1
+              ? "1 attachment isn't included in this public share."
+              : `${omittedAttachmentCount} attachments aren't included in this public share.`}
           </span>
         </div>
       )}

@@ -350,7 +350,7 @@ export function AvatarPickerModal({
           open={showGifPicker}
           initialExpanded
           lockExpanded
-          overlayZIndexClassName="z-70"
+          stacked
           onClose={() => setShowGifPicker(false)}
           onSelect={handleGifSelect}
         />

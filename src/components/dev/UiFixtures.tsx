@@ -9,6 +9,10 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import { SearchFixture } from "@/components/dev/search-fixtures";
 import { isSearchFixture } from "@/components/dev/search-fixture-surfaces";
+import { PublicFixture } from "@/components/dev/public-fixtures";
+import { PickerFixture } from "@/components/dev/picker-fixtures";
+import { EmbedFixture } from "@/components/dev/embed-fixtures";
+import { ActivityFixture } from "@/components/dev/activity-fixtures";
 import ChatArea from "@/components/chat/ChatArea";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import ContextMenu from "@/components/chat/ContextMenu";
@@ -694,9 +698,9 @@ const linusScreen: GridItem = {
   isSpeaking: false,
 };
 
-const LISTEN_ROOM = "lounge";
+export const LISTEN_ROOM = "lounge";
 
-function listenEntry(
+export function listenEntry(
   id: string,
   title: string,
   artist: string,
@@ -726,7 +730,7 @@ function listenEntry(
   };
 }
 
-function listenSnapshot(now: number): ListenTogetherStateSnapshot {
+export function listenSnapshot(now: number): ListenTogetherStateSnapshot {
   const queue = [
     listenEntry(
       "fx-nightdrive",
@@ -863,7 +867,7 @@ const LISTEN_SEARCH: ListenTogetherSearchResponse = {
  * send anything without a session token, so a placeholder is stored for the
  * fixture's lifetime when the browser has none (a real one is left alone).
  */
-function installListenSearchStub() {
+export function installListenSearchStub() {
   const placeholderSession = getStoredKovaAuthSessionToken()
     ? null
     : "ui-fixture-session";
@@ -2343,6 +2347,14 @@ export default function UiFixtures() {
     default:
       content = surfaceName.startsWith("ov-") ? (
         <OverlaySurface surface={surfaceName} />
+      ) : surfaceName.startsWith("pub-") ? (
+        <PublicFixture surface={surfaceName} />
+      ) : surfaceName.startsWith("pk-") ? (
+        <PickerFixture surface={surfaceName} />
+      ) : surfaceName.startsWith("embed-") ? (
+        <EmbedFixture surface={surfaceName} />
+      ) : surfaceName.startsWith("act-") ? (
+        <ActivityFixture surface={surfaceName} />
       ) : isSearchFixture(surfaceName) ? (
         <SearchFixture
           surface={surfaceName}

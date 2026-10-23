@@ -12,7 +12,15 @@ import {
   screen,
 } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import {
   ListenTogetherPanel,
   ListenTogetherQueueRow,
@@ -820,7 +828,9 @@ describe("ListenTogetherPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: /Recently played/ }));
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("Track One");
+    expect(
+      screen.getByRole("tabpanel", { name: /Recently played/ }),
+    ).toHaveTextContent("Track One");
     fireEvent.click(screen.getByRole("button", { name: "Requeue" }));
 
     expect(sendAppEvent).toHaveBeenCalledWith(
@@ -837,6 +847,17 @@ describe("ListenTogetherPanel", () => {
   });
 
   it("dismisses the mobile result action sheet with Escape", async () => {
+    const desktopWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    onTestFinished(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: desktopWidth,
+      });
+    });
     vi.useFakeTimers();
     vi.mocked(apiGet).mockResolvedValue({
       filter: "track",
@@ -880,8 +901,64 @@ describe("ListenTogetherPanel", () => {
       }),
     );
 
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: "Escape" });
+    const sheet = screen.getByRole("dialog");
+    expect(sheet).toHaveTextContent("Play now");
+    fireEvent.keyDown(document.activeElement ?? sheet, { key: "Escape" });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("offers a play-now button on track results, so touch does not need a double-click", async () => {
+    vi.useFakeTimers();
+    vi.mocked(apiGet).mockResolvedValue({
+      filter: "track",
+      results: [
+        {
+          kind: "track",
+          id: "track-tap-1",
+          provider: "youtube",
+          videoId: "video-tap-1",
+          title: "Tap Track",
+          artist: "Artist",
+          durationMs: 180_000,
+          artworkUrl: null,
+          canonicalUrl: "https://www.youtube.com/watch?v=video-tap-1",
+          sourceUrl: null,
+          sourceLabel: "YouTube",
+        },
+      ],
+      cursor: null,
+    });
+    const sendAppEvent = vi.fn();
+    render(
+      <ListenTogetherPanel
+        sfu={
+          { resumeAudioContext: vi.fn(), voiceGW: { sendAppEvent } } as never
+        }
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+        localUserId="user-1"
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search or paste YouTube / Spotify links"),
+      { target: { value: "tap" } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Play Tap Track now" }));
+
+    expect(sendAppEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "listen_together.enqueue",
+        mode: "play-now",
+      }),
+    );
   });
 });

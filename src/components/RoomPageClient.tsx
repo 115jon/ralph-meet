@@ -29,6 +29,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -142,6 +143,7 @@ export function RoomJoinForm({
   warnings: string[];
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
+  const nameId = useId();
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto bg-rm-bg-primary px-4 pt-[max(1.5rem,var(--safe-area-top,0px))] pb-[max(1.5rem,var(--safe-area-bottom,0px))]">
       <div className="w-full max-w-[380px]">
@@ -162,7 +164,7 @@ export function RoomJoinForm({
           {warnings.length > 0 && (
             <div
               role="status"
-              className="flex items-start gap-2 rounded-md bg-[color-mix(in_oklab,var(--rm-warning-ink)_14%,transparent)] px-3 py-2 text-ui-sm text-rm-warning-ink"
+              className="flex items-start gap-2 rounded-md bg-rm-warning-tint px-3 py-2 text-ui-sm text-rm-warning-ink"
             >
               <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
               <span className="text-pretty">
@@ -172,14 +174,14 @@ export function RoomJoinForm({
             </div>
           )}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="name">Your name</Label>
+            <Label htmlFor={nameId}>Your name</Label>
             <Input
               ref={inputRef}
-              id="name"
+              id={nameId}
               type="text"
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
-              placeholder="Enter your name"
+              placeholder="Ada Lovelace"
               className="pointer-coarse:min-h-11"
               autoComplete="name"
               required
