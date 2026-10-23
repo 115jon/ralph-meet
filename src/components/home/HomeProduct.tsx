@@ -21,12 +21,28 @@ const FEATURES: Feature[] = [
     alt: "A Ralph Meet voice channel with four people on tiles and the call controls below",
   },
   {
+    id: "share",
+    label: "Screen share",
+    title: "Share the screen, keep the room.",
+    body: "Put a window or the whole screen on the stage. Everyone watches in HD while the voice channel carries on around it.",
+    shot: "share",
+    alt: "A Ralph Meet voice channel with a shared screen filling the stage and a live badge on the sharer",
+  },
+  {
     id: "chat",
     label: "Chat",
     title: "Chat that keeps the thread.",
     body: "Channels for topics, DMs for two, with GIFs, files, reactions and pins. The conversation carries on after you unmute.",
     shot: "chat",
     alt: "A Ralph Meet text channel with messages, a link preview, an attached file and the composer",
+  },
+  {
+    id: "listen",
+    label: "Listen Together",
+    title: "One queue, everyone in sync.",
+    body: "Paste a track or search for one. The room hears the same song at the same moment, with a queue anyone can add to.",
+    shot: "listen",
+    alt: "Ralph Meet's Listen Together panel with a track playing, a shared queue and the floating now-playing card",
   },
   {
     id: "soundboard",

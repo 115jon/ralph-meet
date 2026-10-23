@@ -9,19 +9,9 @@ interface Item {
 
 const ITEMS: Item[] = [
   {
-    icon: "screenShare",
-    title: "Screen share",
-    body: "Share a window or the whole screen while the room talks over it.",
-  },
-  {
     icon: "camera",
     title: "Video",
     body: "Camera on when you want it, in a grid that keeps faces big.",
-  },
-  {
-    icon: "music",
-    title: "Listen Together",
-    body: "Queue tracks and hear them in sync with everyone in the room.",
   },
   {
     icon: "activities",
@@ -58,12 +48,12 @@ export function HomeKit() {
         >
           And the rest of the kit.
         </h2>
-        <ul className="mt-12 grid gap-x-12 md:grid-cols-2 lg:mt-16 lg:grid-cols-3">
+        <ul className="mt-12 grid gap-x-12 md:grid-cols-2 lg:mt-16 lg:grid-cols-4">
           {ITEMS.map((item, index) => (
             <li
               key={item.title}
               data-reveal
-              data-reveal-delay={String((index % 3) * 60)}
+              data-reveal-delay={String((index % 4) * 60)}
               className="flex gap-4 border-t border-rm-border py-6"
             >
               <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-rm-text">
