@@ -197,7 +197,7 @@ export type SyncCollectiblesOptions = {
  * version is treated as stale and refetched without If-None-Match, so a 304
  * can never pin the old shape after a deploy.
  */
-export const CATALOG_NORMALIZER_VERSION = 2;
+export const CATALOG_NORMALIZER_VERSION = 3;
 /** Dedicated hourly cron for the catalog (wrangler.toml [triggers]). */
 export const COLLECTIBLES_SYNC_CRON = "17 * * * *";
 /** Stale once several hourly runs in a row have been missed or failed. */
@@ -376,8 +376,9 @@ function nameplateAnimatedUrl(asset: string) {
   return `${DISCORD_CDN}/assets/collectibles/${asset}asset.webm`;
 }
 
-function frameLayerUrl(productSkuId: string, layerId: string) {
-  return `${DISCORD_CDN}/media/v1/collectibles-shop/${productSkuId}/${layerId}/static`;
+/** Layer art is keyed by the frame item's sku, not the bundle's (404). */
+function frameLayerUrl(frameSkuId: string, layerId: string) {
+  return `${DISCORD_CDN}/media/v1/collectibles-shop/${frameSkuId}/${layerId}/static`;
 }
 
 function firstPrice(
@@ -425,7 +426,6 @@ function normalizeYapperProduct(
   const skuId = asString(item.sku_id) ?? asString(product.sku_id);
   if (!kind || !skuId) return null;
 
-  const productSkuId = asString(product.sku_id) ?? skuId;
   const categoryName = asString(category.name) ?? "Uncategorized";
   const name = asString(item.title) ?? asString(product.name) ?? skuId;
   const label =
@@ -565,7 +565,7 @@ function normalizeYapperProduct(
         if (!id) return null;
         return {
           id,
-          src: frameLayerUrl(productSkuId, id),
+          src: frameLayerUrl(skuId, id),
           type: asString(row.type) ?? "staple",
           order: row.order === "back" ? ("back" as const) : ("front" as const),
           anchor: asString(row.anchor) ?? "top",
