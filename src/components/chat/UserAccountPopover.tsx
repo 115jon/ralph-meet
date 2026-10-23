@@ -1,4 +1,5 @@
 import { useMounted } from "@/hooks/useMounted";
+import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
@@ -46,7 +47,7 @@ const DESKTOP_MAX_SURFACE_HEIGHT = 620;
 const ACTION_CARD_CLASS =
   "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
 const ACTION_ROW_CLASS =
-  "group/item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium text-[color:var(--rm-profile-custom-text)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
+  "group/item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium text-[color:var(--rm-profile-custom-text)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
 
 function ActionRow({
   icon,
@@ -68,7 +69,8 @@ function ActionRow({
       disabled={disabled}
       className={cn(
         ACTION_ROW_CLASS,
-        disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
+        disabled &&
+          "cursor-not-allowed opacity-60 pointer-fine:hover:bg-transparent",
       )}
     >
       <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">
@@ -130,7 +132,7 @@ export default function UserAccountPopover({
       if (!popoverRef.current) return;
 
       const rect = anchorEl.getBoundingClientRect();
-      const isMobile = window.innerWidth < 768;
+      const isMobile = isMobileViewport();
       const viewportPadding = isMobile ? 8 : 10;
       const maxWidth = window.innerWidth - viewportPadding * 2;
       const maxHeight = Math.min(
@@ -306,7 +308,7 @@ export default function UserAccountPopover({
                 <div className="relative mb-6 min-w-0 flex-1 pb-1">
                   <button
                     type="button"
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] outline-none focus-visible:ring-2 focus-visible:ring-white/30"
                     aria-label="Edit custom status"
                     onClick={() => setIsEditingCustomStatus(true)}
                   >
@@ -368,7 +370,7 @@ export default function UserAccountPopover({
                         type="button"
                         aria-label="Back to account options"
                         onClick={() => setShowStatusMenu(false)}
-                        className="mr-2 flex items-center justify-center rounded-lg p-1 text-[color:var(--rm-profile-custom-muted)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
+                        className="mr-2 flex items-center justify-center rounded-lg p-1 text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
                       >
                         <Icon name="chevronLeft" size="xs" />
                       </button>

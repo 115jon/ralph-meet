@@ -1,4 +1,6 @@
 import { useMounted } from "@/hooks/useMounted";
+import { isMobileViewport, useIsMobile } from "@/hooks/useMediaQuery";
+import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { getProfileEffectStageHeight } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
@@ -54,7 +56,7 @@ interface Props {
 const MOBILE_MAX_SURFACE_HEIGHT = 680;
 const DESKTOP_MAX_SURFACE_HEIGHT = 640;
 const POPOVER_ACTION_BUTTON_CLASS =
-  "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]";
+  "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]";
 const SECTION_TITLE_CLASS =
   "text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-[color:var(--rm-profile-custom-muted)]";
 
@@ -333,7 +335,7 @@ function RoleAssignmentDropdown({
                     assignRole(role.id, currentRoles);
                   }}
                   className={cn(
-                    "group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]",
+                    "group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)]",
                     hasRole
                       ? "font-medium text-[color:var(--rm-profile-custom-text)]"
                       : "text-[color:var(--rm-profile-custom-muted)]",
@@ -412,7 +414,7 @@ function PopoverRoles({
                     optimisticRoles?.map((currentRole) => currentRole.id) || [];
                   assignRole(role.id, currentRoles);
                 }}
-                className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] opacity-0 transition-ui hover:bg-black/8 hover:text-[color:var(--rm-profile-custom-text)] group-hover:opacity-100"
+                className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] opacity-0 transition-ui pointer-fine:hover:bg-black/8 pointer-fine:hover:text-[color:var(--rm-profile-custom-text)] group-hover:opacity-100"
               >
                 <Icon name="close" size="xs" />
               </ButtonBase>
@@ -425,7 +427,7 @@ function PopoverRoles({
             <TooltipTrigger asChild>
               <ButtonBase
                 onClick={handleToggleAssignRoles}
-                className="flex h-6 w-6 items-center justify-center rounded text-[color:var(--rm-profile-custom-muted)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
+                className="flex h-6 w-6 items-center justify-center rounded text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:bg-[var(--rm-profile-custom-card-bg)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
               >
                 <Icon name="add" size="sm" />
               </ButtonBase>
@@ -442,7 +444,58 @@ function PopoverRoles({
   );
 }
 
-export default function UserProfilePopover({
+/**
+ * One profile surface per form factor: the anchored popover on desktop, the
+ * draggable profile drawer (MobileProfileSheet) on phones.
+ */
+export default function UserProfilePopover(props: Props) {
+  const isMobile = useIsMobile();
+  return isMobile ? (
+    <MobileUserProfile {...props} />
+  ) : (
+    <DesktopUserProfilePopover {...props} />
+  );
+}
+
+function MobileUserProfile({
+  userId,
+  username,
+  displayName,
+  avatarUrl,
+  avatarDisplay,
+  seedUser,
+  onClose,
+}: Props) {
+  const [open, setOpen] = useState(true);
+  // Let the drawer animate out before the owner unmounts it.
+  useEffect(() => {
+    if (open) return;
+    const timer = window.setTimeout(onClose, 300);
+    return () => window.clearTimeout(timer);
+  }, [open, onClose]);
+
+  const user: User = seedUser ?? {
+    id: userId,
+    username,
+    display_name: displayName ?? null,
+    avatar_url: avatarUrl ?? null,
+    avatar_display: avatarDisplay,
+  };
+
+  return (
+    <MobileProfileSheet
+      open={open}
+      user={user}
+      onClose={() => setOpen(false)}
+      onOpenProfileEditor={() => {
+        setOpen(false);
+        dispatchOpenProfileEditorEvent();
+      }}
+    />
+  );
+}
+
+function DesktopUserProfilePopover({
   userId,
   username,
   displayName,
@@ -583,7 +636,7 @@ export default function UserProfilePopover({
       if (!popoverRef.current || !contentRef.current) return;
 
       const rect = anchorEl.getBoundingClientRect();
-      const isMobile = window.innerWidth < 768;
+      const isMobile = isMobileViewport();
       const viewportPadding = isMobile ? 8 : 10;
       const maxWidth = window.innerWidth - viewportPadding * 2;
       const maxHeight = Math.min(
@@ -876,7 +929,7 @@ export default function UserProfilePopover({
                         <button
                           type="button"
                           onClick={handleOpenProfileEditor}
-                          className="rounded-md text-left transition hover:underline hover:decoration-[color:var(--rm-profile-custom-text)]/65 hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                          className="rounded-md text-left transition pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/65 pointer-fine:hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                         >
                           <ProfileDisplayName
                             text={resolvedDisplayName}
@@ -907,7 +960,7 @@ export default function UserProfilePopover({
                       />
 
                       {!isMe ? (
-                        <ButtonBase className="text-[color:var(--rm-profile-custom-muted)] transition-colors hover:text-[color:var(--rm-profile-custom-text)]">
+                        <ButtonBase className="text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]">
                           <Icon name="fileAdd" size="sm" />
                         </ButtonBase>
                       ) : null}
@@ -918,7 +971,7 @@ export default function UserProfilePopover({
                         <button
                           type="button"
                           onClick={handleOpenProfileEditor}
-                          className="rounded-md text-left transition hover:underline hover:decoration-[color:var(--rm-profile-custom-text)]/55 hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                          className="rounded-md text-left transition pointer-fine:hover:underline pointer-fine:hover:decoration-[color:var(--rm-profile-custom-text)]/55 pointer-fine:hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                         >
                           @{resolvedUsername}
                         </button>
@@ -972,7 +1025,7 @@ export default function UserProfilePopover({
 
               {!isMe ? (
                 <div className="relative z-20 mt-1 px-4 pb-4">
-                  <div className="group flex items-center justify-between rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors hover:border-white/25 focus-within:border-white/30">
+                  <div className="group flex items-center justify-between rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors pointer-fine:hover:border-white/25 focus-within:border-white/30">
                     <input
                       type="text"
                       aria-label={`Message ${resolvedUsername}`}
@@ -982,7 +1035,7 @@ export default function UserProfilePopover({
                     <Icon
                       name="emoji"
                       size="sm"
-                      className="ml-2 shrink-0 cursor-pointer text-[color:var(--rm-profile-custom-muted)] transition-colors hover:text-[color:var(--rm-profile-custom-text)]"
+                      className="ml-2 shrink-0 cursor-pointer text-[color:var(--rm-profile-custom-muted)] transition-colors pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
                     />
                   </div>
                 </div>
@@ -991,7 +1044,7 @@ export default function UserProfilePopover({
                   <button
                     type="button"
                     onClick={handleOpenProfileEditor}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition pointer-fine:hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
                     <Icon name="edit" size="sm" />
                     Edit Profile
