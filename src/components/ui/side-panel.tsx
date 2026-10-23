@@ -218,6 +218,14 @@ export function SidePanel({
           data-mode="sheet"
           aria-label={label}
           className={cn("bg-rm-bg-primary dark:bg-rm-bg-primary", className)}
+          // Focus the panel itself, like the drawer does: landing on the close
+          // button shows its ring on every pointer open.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            (event.currentTarget as HTMLElement | null)?.focus?.({
+              preventScroll: true,
+            });
+          }}
         >
           {hideHeader ? (
             <SheetTitle className="sr-only">{label}</SheetTitle>

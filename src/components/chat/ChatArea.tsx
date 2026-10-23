@@ -1,5 +1,6 @@
+import { SidePanel, useSidePanelLayout } from "@/components/ui/side-panel";
 import { useBackButton } from "@/hooks/useBackButton";
-import { isMobileViewport } from "@/hooks/useMediaQuery";
+import { cn } from "@/lib/utils";
 import type { Channel } from "@/lib/types";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
@@ -78,7 +79,6 @@ export default function ChatArea({
     showChannelDetails,
     highlightAnchor,
     restoreInProgress,
-    pinSidebarRef,
     pinButtonRef,
     virtualListRef,
     handleLoadMore,
@@ -137,55 +137,14 @@ export default function ChatArea({
   }, [channelData]);
   const channelSettingsPayload = channelData ?? renderedChannelSettings;
 
+  // Search is a docked column / phone page of its own; the other panels
+  // (thread, pins, members) are SidePanels that answer the back button.
   useBackButton(
     useCallback(() => {
-      // 1. Priority: Context menus and popovers (handled by their own hooks theoretically or modals)
-      // 2. Search Panel
-      if (showSearch) {
-        setLocalState({ showSearch: false });
-        // NOTE: search panel has its own focus, but this ensures clicking back closes it
-        return true;
-      }
-      // 3. Pinned messages
-      if (showPins) {
-        setLocalState({ showPins: false });
-        return true;
-      }
-      // 4. Thread sidebar
-      if (threadMessageId) {
-        setLocalState({ threadMessageId: null });
-        return true;
-      }
-      // 5. Channel details (on mobile)
-      if (showChannelDetails) {
-        setLocalState({ showChannelDetails: false });
-        return true;
-      }
-      // 6. Member list (on mobile)
-      if (showMembers && onMembersClick) {
-        // Technically onMembersClick toggles it in the parent (ChatPageClient)
-        // But let's verify if we are on a smaller screen since this UI is usually pervasive on desktop
-        if (isMobileViewport()) {
-          onMembersClick();
-          return true;
-        }
-      }
-
-      return false; // allow to cascade to next (parent, e.g. ChatPageClient)
-    }, [
-      showSearch,
-      showPins,
-      threadMessageId,
-      showChannelDetails,
-      showMembers,
-      onMembersClick,
-      setLocalState,
-    ]),
-    showSearch ||
-      showPins ||
-      !!threadMessageId ||
-      showChannelDetails ||
-      !!(showMembers && onMembersClick),
+      setLocalState({ showSearch: false });
+      return true;
+    }, [setLocalState]),
+    showSearch,
   );
 
   const [searchRequest, setSearchRequest] = useState({ text: "", n: 0 });
@@ -261,6 +220,31 @@ export default function ChatArea({
     [channelId, channelName, isDM],
   );
 
+  const searchOpen = showSearch && !!searchScope;
+  const threadOpen = !searchOpen && !!threadMessageId && !!channelId;
+  const pinsOpen = !searchOpen && !threadOpen && showPins;
+  const membersOpen =
+    !searchOpen &&
+    !threadOpen &&
+    !pinsOpen &&
+    (showMembers || showChannelDetails);
+  const membersMode = useSidePanelLayout(true);
+  // Keep the thread mounted while its sheet/drawer animates out.
+  const [lastThread, setLastThread] = useState<{
+    channelId: string;
+    id: string;
+  } | null>(null);
+  if (
+    threadMessageId &&
+    channelId &&
+    (lastThread?.id !== threadMessageId || lastThread?.channelId !== channelId)
+  ) {
+    setLastThread({ channelId, id: threadMessageId });
+  }
+  const threadPanelId =
+    threadMessageId ??
+    (lastThread?.channelId === channelId ? lastThread.id : null);
+
   if (!channelId) {
     return <EmptyChatArea onMenuClick={onMenuClick} />;
   }
@@ -312,34 +296,6 @@ export default function ChatArea({
           mode={pinModal.mode}
           channelName={channelName}
         />
-      )}
-
-      {showPins && (
-        <div
-          className="absolute inset-0 z-50 md:inset-auto md:right-4 md:top-14"
-          onClick={(e) => {
-            if (e.target === e.currentTarget)
-              setLocalState({ showPins: false });
-          }}
-          role="presentation"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setLocalState({ showPins: false });
-          }}
-        >
-          <div
-            ref={pinSidebarRef}
-            className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent flex md:justify-end items-start pointer-events-auto"
-          >
-            <PinnedMessagesSidebar
-              messages={state.pinnedMessages}
-              isLoading={state.loadingPins}
-              onClose={() => setLocalState({ showPins: false })}
-              onJumpToMessage={handleJumpToMessage}
-              onUnpin={handleUnpin}
-              canUnpin={canPin}
-            />
-          </div>
-        </div>
       )}
 
       <div className="flex flex-1 min-h-0 min-w-0 flex-row">
@@ -416,83 +372,106 @@ export default function ChatArea({
           </div>
         </div>
 
-        {showSearch && searchScope ? (
+        {searchOpen ? (
           <SearchPanel
             key={`${searchScopeKey}:${searchRequest.n}`}
-            scope={searchScope}
+            scope={searchScope!}
             scopeLabel={searchScopeLabel}
             initialText={searchRequest.text}
             onClose={closeSearch}
             onJump={handleSearchJump}
           />
-        ) : (
-          <>
-            {(showMembers || showChannelDetails) && !threadMessageId && (
-              <>
-                {onMembersClick && (
-                  <div
-                    className="lg:hidden fixed inset-0 z-20 bg-rm-scrim animate-in fade-in duration-200"
-                    onClick={onMembersClick}
-                    aria-hidden="true"
-                  />
-                )}
-                <MemberList
-                  members={computedMembers}
-                  onlineUsers={state.onlineUsers}
-                  typingUsers={
-                    state.activeChannelId
-                      ? state.typingUsers[state.activeChannelId]
-                      : undefined
-                  }
-                  currentUserId={state.user?.id}
-                  onBan={canBan ? handleBan : undefined}
-                  onClose={onMembersClick}
-                  channelName={channelName}
-                  channelId={channelId}
-                  serverId={serverId ?? state.activeServerId}
-                  onOpenSearch={() => {
-                    setLocalState({ showSearch: true });
-                  }}
-                  onOpenSettings={
-                    !isDM && canManageChannel && channelSettingsPayload
-                      ? () => setLocalState({ showChannelSettings: true })
-                      : undefined
-                  }
-                  onInviteClick={onInviteClick}
-                  pinnedMessages={state.pinnedMessages}
-                  loadingPins={state.loadingPins}
-                  canUnpin={canPin}
-                  onUnpin={handleUnpin}
-                  onJumpToMessage={handleJumpToMessage}
-                  onOpenThread={(messageId) => {
-                    setLocalState({ threadMessageId: messageId });
-                  }}
-                  showDetails={showChannelDetails}
-                  onToggleDetails={() =>
-                    setLocalState({ showChannelDetails: false })
-                  }
-                  isDM={isDM}
-                />
-              </>
-            )}
+        ) : null}
 
-            {threadMessageId && channelId && (
-              <ThreadSidebar
-                channelId={channelId}
-                rootMessageId={threadMessageId}
-                currentUserId={state.user?.id}
-                canPin={canPin}
-                canDeleteMessages={canDeleteMessages}
-                onReply={handleReply}
-                onPin={handlePin}
-                onUnpin={handleUnpin}
-                onJump={handleJumpToMessage}
-                onBan={canBan ? handleBan : undefined}
-                onClose={() => setLocalState({ threadMessageId: null })}
-              />
-            )}
-          </>
-        )}
+        {/*
+         * One right-hand panel at a time (search > thread > pins > members).
+         * Each is a SidePanel: docked at lg, a sheet below, a drawer on
+         * phones; it owns its scrim, Escape, back button and focus return.
+         */}
+        {threadPanelId && channelId ? (
+          <ThreadSidebar
+            open={threadOpen}
+            channelId={channelId}
+            rootMessageId={threadPanelId}
+            currentUserId={state.user?.id}
+            canPin={canPin}
+            canDeleteMessages={canDeleteMessages}
+            onReply={handleReply}
+            onPin={handlePin}
+            onUnpin={handleUnpin}
+            onJump={handleJumpToMessage}
+            onBan={canBan ? handleBan : undefined}
+            onClose={() => setLocalState({ threadMessageId: null })}
+          />
+        ) : null}
+
+        <PinnedMessagesSidebar
+          open={pinsOpen}
+          messages={state.pinnedMessages}
+          isLoading={state.loadingPins}
+          onClose={() => setLocalState({ showPins: false })}
+          onJumpToMessage={handleJumpToMessage}
+          onUnpin={handleUnpin}
+          canUnpin={canPin}
+        />
+
+        <SidePanel
+          open={membersOpen}
+          onOpenChange={(next) => {
+            if (next) return;
+            if (showChannelDetails) {
+              setLocalState({ showChannelDetails: false });
+            }
+            if (showMembers) onMembersClick?.();
+          }}
+          title={showChannelDetails ? channelName || "Details" : "Members"}
+          hideHeader={membersMode !== "sheet" || showChannelDetails}
+          dockClassName={cn(
+            "border-l-0 bg-rm-bg-sidebar",
+            showChannelDetails ? "w-[360px]" : "w-60",
+          )}
+        >
+          <MemberList
+            members={computedMembers}
+            onlineUsers={state.onlineUsers}
+            typingUsers={
+              state.activeChannelId
+                ? state.typingUsers[state.activeChannelId]
+                : undefined
+            }
+            currentUserId={state.user?.id}
+            onBan={canBan ? handleBan : undefined}
+            onClose={() => {
+              if (showChannelDetails) {
+                setLocalState({ showChannelDetails: false });
+              }
+              if (showMembers) onMembersClick?.();
+            }}
+            channelName={channelName}
+            channelId={channelId}
+            serverId={serverId ?? state.activeServerId}
+            onOpenSearch={() => {
+              setLocalState({ showSearch: true });
+            }}
+            onOpenSettings={
+              !isDM && canManageChannel && channelSettingsPayload
+                ? () => setLocalState({ showChannelSettings: true })
+                : undefined
+            }
+            onInviteClick={onInviteClick}
+            pinnedMessages={state.pinnedMessages}
+            loadingPins={state.loadingPins}
+            canUnpin={canPin}
+            onUnpin={handleUnpin}
+            onJumpToMessage={handleJumpToMessage}
+            onOpenThread={(messageId) => {
+              setLocalState({ threadMessageId: messageId });
+            }}
+            showDetails={showChannelDetails}
+            onToggleDetails={() => setLocalState({ showChannelDetails: false })}
+            isDM={isDM}
+          />
+        </SidePanel>
       </div>
 
       {channelSettingsPayload && (serverId ?? state.activeServerId) && (

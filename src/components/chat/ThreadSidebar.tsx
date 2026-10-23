@@ -1,9 +1,8 @@
-import { HIT, PRESS } from "@/components/ui/interaction";
-import { cn } from "@/lib/utils";
+import { Button, Spinner } from "@/components/ui/button";
+import { SidePanel, type SidePanelMode } from "@/components/ui/side-panel";
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { Message } from "@/lib/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Icon } from "@/components/ui/icon";
 import MessageItem from "./MessageItem";
 
 interface Props {
@@ -18,6 +17,10 @@ interface Props {
   onJump: (messageId: string) => void;
   onBan?: (userId: string, username: string) => void;
   onClose: () => void;
+  /** False while the panel animates out (the host keeps it mounted). */
+  open?: boolean;
+  /** Force one panel form (fixtures, tests). */
+  forceMode?: SidePanelMode;
 }
 
 function _formatDate(iso: string): string {
@@ -49,6 +52,8 @@ export default function ThreadSidebar({
   onJump,
   onBan,
   onClose,
+  open = true,
+  forceMode,
 }: Props) {
   const [root, setRoot] = useState<Message | null>(null);
   const [replies, setReplies] = useState<Message[]>([]);
@@ -166,54 +171,38 @@ export default function ThreadSidebar({
   );
 
   return (
-    <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:border-l-0 max-md:shadow-2xl">
-      {/* Header */}
-      <div
-        className="flex min-h-12 items-center justify-between border-b border-rm-border px-4"
-        style={{
-          paddingTop: "var(--safe-area-top, 0px)",
-          minHeight: "calc(48px + var(--safe-area-top, 0px))",
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="text-ui-sm font-semibold text-rm-text">Thread</h2>
-          <span className="text-ui-xs text-rm-text-muted">
-            {replies.length} {replies.length === 1 ? "reply" : "replies"}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close thread"
-          className={cn(
-            "rounded-lg p-1.5 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text outline-none",
-            PRESS,
-            HIT,
-          )}
-        >
-          <Icon name="close" size="sm" />
-        </button>
-      </div>
-
+    <SidePanel
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Thread"
+      titleAdornment={
+        <span className="shrink-0 text-ui-xs text-rm-text-muted">
+          {replies.length} {replies.length === 1 ? "reply" : "replies"}
+        </span>
+      }
+      forceMode={forceMode}
+    >
       {/* Thread body */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 custom-scrollbar">
         {loading ? (
-          <div className="flex h-full items-center justify-center">
-            <Icon
-              name="loader"
-              size="lg"
-              className="animate-spin text-rm-text-muted"
-            />
+          <div className="flex h-full items-center justify-center text-rm-text-muted">
+            <Spinner className="size-6" />
+            <span className="sr-only">Loading</span>
           </div>
         ) : error ? (
-          <div className="flex h-full items-center justify-center text-ui-sm text-destructive">
+          <div
+            role="alert"
+            className="mx-4 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink"
+          >
             {error}
           </div>
         ) : (
           <div className="flex flex-col gap-1 pb-4">
             {/* Root message */}
             {root && (
-              <div className="rounded-xl border border-rm-border bg-rm-bg-surface py-2 mb-2">
+              <div className="mx-4 mb-2 rounded-lg border border-rm-border bg-rm-bg-surface py-2">
                 <MessageItem
                   id={`thread-root-${root.id}`}
                   message={root}
@@ -233,9 +222,9 @@ export default function ThreadSidebar({
 
             {/* Divider */}
             {replies.length > 0 && (
-              <div className="my-2 flex items-center gap-2 px-2">
+              <div className="my-2 flex items-center gap-2 px-4">
                 <div className="h-px flex-1 bg-rm-border" />
-                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+                <span className="text-ui-xs font-medium text-rm-text-muted">
                   {replies.length} {replies.length === 1 ? "Reply" : "Replies"}
                 </span>
                 <div className="h-px flex-1 bg-rm-border" />
@@ -282,7 +271,7 @@ export default function ThreadSidebar({
 
       {/* Reply input */}
       <ThreadReplyInput onSend={handleSendReply} />
-    </div>
+    </SidePanel>
   );
 }
 
@@ -304,11 +293,8 @@ function ThreadReplyInput({
   };
 
   return (
-    <div
-      className="border-t border-rm-border px-3 pt-2.5"
-      style={{ paddingBottom: "max(10px, var(--safe-area-bottom, 0px))" }}
-    >
-      <div className="flex items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/20 transition-ui">
+    <div className="shrink-0 border-t border-rm-border px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] max-md:px-2">
+      <div className="flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 focus-within:border-rm-border-strong">
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -320,15 +306,16 @@ function ThreadReplyInput({
             }
           }}
           placeholder="Reply to thread…"
-          className="flex-1 bg-transparent text-ui-sm text-rm-text outline-none placeholder:text-rm-text-muted/30"
+          className="min-w-0 flex-1 bg-transparent text-ui-base text-rm-text outline-none placeholder:text-rm-text-muted max-md:text-ui-md"
         />
-        <button
+        <Button
+          size="sm"
           onClick={handleSubmit}
-          disabled={!value.trim() || sending}
-          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-ui-xs font-semibold text-primary-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-30"
+          disabled={!value.trim()}
+          loading={sending}
         >
-          {sending ? "…" : "Send"}
-        </button>
+          Send
+        </Button>
       </div>
     </div>
   );
