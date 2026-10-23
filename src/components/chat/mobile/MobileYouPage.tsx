@@ -4,12 +4,13 @@ import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { openSettings } from "@/components/chat/settings/settings-links";
 import type { SettingsPanelId } from "@/components/chat/settings/schema";
 import {
+  normalizeUserStatus,
   UserStatusDot,
   type UserStatus,
 } from "@/components/chat/UserStatusDot";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
-import { PRESS } from "@/components/ui/interaction";
+import { DISABLED, PRESS } from "@/components/ui/interaction";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
@@ -54,7 +55,14 @@ const SHORTCUTS: ReadonlyArray<{
 ];
 
 const ROW =
-  "flex min-h-12 w-full items-center gap-3 px-4 text-left text-ui-base text-rm-text outline-offset-[-2px]";
+  "flex min-h-12 w-full items-center gap-3 px-4 text-start text-ui-base text-rm-text outline-offset-[-2px]";
+/** Tinted list group; rows are split by hairlines, not borders per row. */
+const GROUP =
+  "mx-4 overflow-hidden rounded-lg bg-rm-tint-1 divide-y divide-rm-border";
+/** Fixed leading slot, so status dots and icons share one label edge. */
+const LEADING = "flex size-5 shrink-0 items-center justify-center";
+const TILE =
+  "flex min-h-14 items-center gap-3 rounded-lg px-4 text-start text-ui-base font-medium";
 
 /** Mic and deafen for yourself, routed through the call when one is live. */
 function useSelfVoiceToggles(userId: string | undefined) {
@@ -101,7 +109,7 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
 
   const displayName = getDisplayName(user);
   const theme = resolveProfileTheme(user);
-  const status = (user.status ?? "online") as UserStatus;
+  const status = normalizeUserStatus(user.status ?? "online");
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain bg-rm-bg-primary pb-6">
@@ -134,7 +142,11 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
               )}
             </div>
             <span className="absolute right-0 bottom-0 rounded-full bg-rm-bg-primary p-1">
-              <UserStatusDot status={status} className="size-4" />
+              <UserStatusDot
+                status={status}
+                cutoutClassName="bg-rm-bg-primary"
+                className="size-4"
+              />
             </span>
           </div>
           <h1 id={titleId} className="mt-2 text-ui-xl font-semibold">
@@ -185,12 +197,8 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
         >
           Status
         </h2>
-        <div
-          role="radiogroup"
-          aria-labelledby={statusId}
-          className="mx-4 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface"
-        >
-          {STATUS_OPTIONS.map((option, index) => {
+        <div role="radiogroup" aria-labelledby={statusId} className={GROUP}>
+          {STATUS_OPTIONS.map((option) => {
             const checked = option.value === status;
             return (
               <button
@@ -202,14 +210,23 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
                 className={cn(
                   ROW,
                   "py-2.5",
-                  index > 0 && "border-t border-rm-border",
                   PRESS,
-                  "[--hover-o:0.04] enabled:active:scale-100",
+                  // Full-width rows in a group don't shrink on press.
+                  "enabled:active:scale-100",
+                  checked && "bg-rm-tint-2",
                 )}
               >
-                <UserStatusDot status={option.value} className="size-3" />
+                <span className={LEADING}>
+                  <UserStatusDot
+                    status={option.value}
+                    cutoutClassName="bg-rm-bg-primary"
+                    className="size-3"
+                  />
+                </span>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-medium">{option.label}</span>
+                  <span className={checked ? "font-semibold" : "font-medium"}>
+                    {option.label}
+                  </span>
                   {option.hint ? (
                     <span className="text-ui-xs text-rm-text-secondary">
                       {option.hint}
@@ -243,17 +260,18 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
             disabled={!voice.hasMicrophone}
             onClick={voice.toggleMute}
             className={cn(
-              "flex min-h-14 items-center gap-3 rounded-xl border px-4 text-left text-ui-base font-medium disabled:opacity-60",
+              TILE,
               PRESS,
+              DISABLED,
               voice.muted
-                ? "border-transparent bg-rm-danger-tint text-rm-danger-ink"
-                : "border-rm-border bg-rm-bg-surface text-rm-text",
+                ? "bg-rm-danger-tint text-rm-danger-ink"
+                : "bg-rm-tint-1 text-rm-text",
             )}
           >
             <Icon
               name="mic"
               state={voice.muted ? "off" : "idle"}
-              size="lg"
+              size="xl"
               className="shrink-0"
             />
             <span className="min-w-0 truncate">
@@ -269,17 +287,17 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
             aria-pressed={voice.deafened}
             onClick={voice.toggleDeafen}
             className={cn(
-              "flex min-h-14 items-center gap-3 rounded-xl border px-4 text-left text-ui-base font-medium",
+              TILE,
               PRESS,
               voice.deafened
-                ? "border-transparent bg-rm-danger-tint text-rm-danger-ink"
-                : "border-rm-border bg-rm-bg-surface text-rm-text",
+                ? "bg-rm-danger-tint text-rm-danger-ink"
+                : "bg-rm-tint-1 text-rm-text",
             )}
           >
             <Icon
               name="deafen"
               state={voice.deafened ? "off" : "idle"}
-              size="lg"
+              size="xl"
               className="shrink-0"
             />
             <span className="min-w-0 truncate">
@@ -296,11 +314,11 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
         >
           Shortcuts
         </h2>
-        <ul className="mx-4 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
+        <ul className={GROUP}>
           <li>
             <button
               type="button"
-              className={cn(ROW, PRESS, "[--hover-o:0.04]")}
+              className={cn(ROW, PRESS)}
               onClick={() => {
                 dispatch({ type: "SET_DM_HOME_VIEW", view: "friends" });
                 dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
@@ -308,11 +326,13 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
                 onNavigate();
               }}
             >
-              <Icon
-                name="members"
-                size="md"
-                className="shrink-0 text-rm-text-secondary"
-              />
+              <span className={LEADING}>
+                <Icon
+                  name="members"
+                  size="md"
+                  className="text-rm-text-secondary"
+                />
+              </span>
               <span className="flex-1">Friends</span>
               <Icon
                 name="chevronRight"
@@ -322,17 +342,19 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
             </button>
           </li>
           {SHORTCUTS.map((item) => (
-            <li key={item.panel} className="border-t border-rm-border">
+            <li key={item.panel}>
               <button
                 type="button"
-                className={cn(ROW, PRESS, "[--hover-o:0.04]")}
+                className={cn(ROW, PRESS)}
                 onClick={() => openSettings({ panel: item.panel })}
               >
-                <Icon
-                  name={item.icon}
-                  size="md"
-                  className="shrink-0 text-rm-text-secondary"
-                />
+                <span className={LEADING}>
+                  <Icon
+                    name={item.icon}
+                    size="md"
+                    className="text-rm-text-secondary"
+                  />
+                </span>
                 <span className="flex-1">{item.label}</span>
                 <Icon
                   name="chevronRight"
