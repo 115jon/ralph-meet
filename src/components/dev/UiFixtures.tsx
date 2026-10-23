@@ -9,6 +9,10 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import { SearchFixture } from "@/components/dev/search-fixtures";
 import { isSearchFixture } from "@/components/dev/search-fixture-surfaces";
+import {
+  isSettingsProfileFixture,
+  SettingsProfileFixture,
+} from "@/components/dev/sp-fixtures";
 import ChatArea from "@/components/chat/ChatArea";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import ContextMenu from "@/components/chat/ContextMenu";
@@ -2343,6 +2347,17 @@ export default function UiFixtures() {
     default:
       content = surfaceName.startsWith("ov-") ? (
         <OverlaySurface surface={surfaceName} />
+      ) : isSettingsProfileFixture(surfaceName) ? (
+        <SettingsProfileFixture
+          surface={surfaceName}
+          shell={
+            surfaceName.startsWith("sp-sheet") ? (
+              <MobileFixture surface="mobile" />
+            ) : (
+              <Shell surface="shell" />
+            )
+          }
+        />
       ) : isSearchFixture(surfaceName) ? (
         <SearchFixture
           surface={surfaceName}
