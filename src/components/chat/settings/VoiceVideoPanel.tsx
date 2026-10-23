@@ -1,5 +1,6 @@
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import type { VoiceInputProfile } from "@/lib/voice/input-profiles";
@@ -18,20 +19,25 @@ import CameraCard from "./CameraCard";
 import {
   RadioList,
   RangeControl,
+  RowError,
   SettingsCard,
   SettingsRow,
   SettingsSelect,
+  useSettings,
   type RowIds,
   type SelectOption,
 } from "./primitives";
+import { useDeviceAccess } from "./useDeviceAccess";
 
 /**
- * Voice settings for the signed-in user, with the processing chain the mic
- * test and meters should use. Shared by the panel and its preview rail.
+ * Voice settings for the signed-in user (or the room-scoped id a room passes),
+ * with the processing chain the mic test and meters should use. Shared by the
+ * panel and its preview rail.
  */
-export function useVoiceSettingsForSettings() {
+export function useVoiceSettingsForSettings(override?: string | null) {
   const { user } = useUser();
-  const settingsUserId = user?.id ?? null;
+  const hasOverride = override !== undefined;
+  const settingsUserId = hasOverride ? override : (user?.id ?? null);
   const vSettings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(settingsUserId)),
   );
@@ -61,12 +67,13 @@ export function useVoiceSettingsForSettings() {
   );
 
   useEffect(() => {
-    if (!settingsUserId) return;
+    // A room owns its own settings user; don't move the store off it.
+    if (!settingsUserId || hasOverride) return;
     const storeUser = useVoiceSettingsStore.getState().currentUser;
     if (!storeUser || !storeUser.startsWith("room-")) {
       setCurrentUser(settingsUserId);
     }
-  }, [settingsUserId, setCurrentUser]);
+  }, [hasOverride, settingsUserId, setCurrentUser]);
 
   return {
     settingsUserId,
@@ -160,13 +167,107 @@ function Hinted({ text, hint }: { text: ReactNode; hint: string }) {
   );
 }
 
-export default function VoiceVideoPanel() {
+/** The microphone picker, or what stands in for it before it can work. */
+function MicrophoneRows({
+  value,
+  options,
+  onSelect,
+  renderLabel,
+}: {
+  value: string;
+  options: SelectOption[];
+  onSelect: (value: string) => void;
+  renderLabel: (option: SelectOption) => ReactNode;
+}) {
+  const { query } = useSettings();
+  const mic = useDeviceAccess("audioinput");
+
+  if (mic.status === "none") {
+    return (
+      <SettingsRow
+        id="microphone"
+        layout="inline"
+        description="No microphone found. Plug one in, then retry."
+      >
+        {() => (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void mic.rescan()}
+          >
+            Retry
+          </Button>
+        )}
+      </SettingsRow>
+    );
+  }
+
+  return (
+    <>
+      {mic.status === "locked" && !query ? (
+        <SettingsRow
+          id="microphone-access"
+          label="Allow microphone access"
+          layout="stack"
+          description="Allow access so you can pick your microphone by name."
+          footer={mic.error ? <RowError>{mic.error}</RowError> : null}
+        >
+          {() => (
+            <Button
+              type="button"
+              size="sm"
+              loading={mic.requesting}
+              onClick={() => void mic.request()}
+            >
+              <Icon name="mic" size="sm" />
+              Allow access
+            </Button>
+          )}
+        </SettingsRow>
+      ) : null}
+      <SettingsRow id="microphone">
+        {(ids) =>
+          mic.status === "loading" ? (
+            <span
+              role="status"
+              className="block h-9 w-full animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none @min-[560px]:w-[260px]"
+            >
+              <span className="sr-only">Loading microphones</span>
+            </span>
+          ) : (
+            <SettingsSelect
+              ids={ids}
+              value={value}
+              options={options}
+              onValueChange={onSelect}
+              placeholder="Choose a microphone"
+              renderLabel={renderLabel}
+            />
+          )
+        }
+      </SettingsRow>
+    </>
+  );
+}
+
+export type VoiceVideoPanelProps = {
+  /** Whose settings to edit; defaults to the signed-in user. */
+  settingsUserId?: string | null;
+  /** Show the camera card (rooms give the camera its own page). */
+  includeCamera?: boolean;
+};
+
+export default function VoiceVideoPanel({
+  settingsUserId: settingsUserIdProp,
+  includeCamera = true,
+}: VoiceVideoPanelProps = {}) {
   const {
     settingsUserId,
     vSettings,
     audioProcessing,
     noiseReductionSupported,
-  } = useVoiceSettingsForSettings();
+  } = useVoiceSettingsForSettings(settingsUserIdProp);
   const devices = useDeviceOptions();
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateVoiceSettings = useVoiceSettingsStore(
@@ -248,18 +349,12 @@ export default function VoiceVideoPanel() {
   return (
     <>
       <SettingsCard id="input">
-        <SettingsRow id="microphone">
-          {(ids) => (
-            <SettingsSelect
-              ids={ids}
-              value={vSettings.inputDeviceId}
-              options={devices.input}
-              onValueChange={(value) => selectDevice("input", value)}
-              placeholder="Choose a microphone"
-              renderLabel={renderDeviceLabel}
-            />
-          )}
-        </SettingsRow>
+        <MicrophoneRows
+          value={vSettings.inputDeviceId}
+          options={devices.input}
+          onSelect={(value) => selectDevice("input", value)}
+          renderLabel={renderDeviceLabel}
+        />
         <SettingsRow id="input-volume">
           {(ids) => (
             <RangeControl
@@ -480,7 +575,9 @@ export default function VoiceVideoPanel() {
         </SettingsRow>
       </SettingsCard>
 
-      <CameraCard />
+      {includeCamera ? (
+        <CameraCard settingsUserId={settingsUserIdProp} />
+      ) : null}
 
       <SettingsCard id="screen-share">
         <SettingsRow id="stream-preview" layout="inline">
