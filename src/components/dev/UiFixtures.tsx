@@ -1548,13 +1548,21 @@ function SettingsFixture({ tab }: { tab?: string }) {
   );
 }
 
-function OverlayFixture() {
-  useEffect(() => {
-    useChatStore.setState({ connected: false, reconnectAttempt: 2 } as never);
-  }, []);
+/**
+ * `overlay`: a dropped connection after the app had connected, so the
+ * reconnect copy and attempt count show. `overlay-connecting`: first load.
+ */
+function OverlayFixture({ reconnecting = true }: { reconnecting?: boolean }) {
+  useState(() => {
+    // Before the first render, so the overlay mounts already disconnected.
+    useChatStore.setState({
+      connected: false,
+      reconnectAttempt: reconnecting ? 2 : 0,
+    } as never);
+  });
   return (
     <div className="relative h-full w-full">
-      <ConnectionOverlay />
+      <ConnectionOverlay initialHasConnected={reconnecting} />
     </div>
   );
 }
@@ -2418,6 +2426,9 @@ export default function UiFixtures() {
       break;
     case "overlay":
       content = <OverlayFixture />;
+      break;
+    case "overlay-connecting":
+      content = <OverlayFixture reconnecting={false} />;
       break;
     case "no-channel":
       content = (

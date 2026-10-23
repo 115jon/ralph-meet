@@ -30,11 +30,23 @@ describe("ConnectionOverlay", () => {
   it("shows first-load loading tips before reconnect copy", () => {
     render(<ConnectionOverlay />);
 
-    expect(screen.getByText("Connecting...")).toBeInTheDocument();
+    expect(screen.getByText("Connecting…")).toBeInTheDocument();
     expect(screen.getByText("Warming up the servers...")).toBeInTheDocument();
     expect(
       screen.queryByText("Reconnecting you to the conversation..."),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows reconnect copy and the attempt after an earlier connection", () => {
+    chatState.reconnectAttempt = 3;
+    render(<ConnectionOverlay initialHasConnected />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Reconnecting — attempt 3",
+    );
+    expect(
+      screen.getByText("Reconnecting you to the conversation..."),
+    ).toBeInTheDocument();
   });
 
   it("uses the theme-aware logo variant", () => {
