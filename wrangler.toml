@@ -20,6 +20,8 @@ TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
 KOVA_AUTH_URL = "https://auth.115jon.site"
 VITE_KOVA_AUTH_URL = "https://auth.115jon.site"
 VITE_KOVA_AUTH_PUBLISHABLE_KEY = "pk_live_yl2Z9ssEwlWuOYHVRWozk9WThozu4nFP3QAhCWAsPhE"
+# Kova user ids allowed to force a collectibles catalog refresh (comma separated).
+COLLECTIBLES_ADMIN_USER_IDS = "DADtHxPYMksiibowh0LmZFu8TWT5DI9b"
 REALTIME_ALLOWED_ORIGINS = "https://meet.115jon.site,http://localhost:5173,http://localhost:1420,http://tauri.localhost,https://tauri.localhost"
 
 # ── Durable Objects ──────────────────────────────────────────────────────
