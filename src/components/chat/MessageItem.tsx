@@ -1,4 +1,6 @@
+import { LONG_PRESS_TARGET, useLongPressMenu } from "@/hooks/useLongPress";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { openSettings } from "@/components/chat/settings/settings-links";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -247,7 +249,7 @@ function ReactionTooltipContent({
           <button
             type="button"
             onClick={onOpenDetails}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface transition-[background-color,transform] hover:bg-rm-bg-hover active:scale-[0.96]"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface transition-[background-color,transform] pointer-fine:hover:bg-rm-bg-hover active:scale-[0.96]"
             aria-label={`View all reactions for ${getReactionEmojiLabel(emoji)}`}
           >
             <EmojiToken
@@ -901,6 +903,12 @@ const MessageItem = memo(
     const isOwnMessage = message.author_id === currentUserId;
     const canPin = propCanPin;
 
+    // Touch has no hover toolbar and iOS never fires contextmenu: a long
+    // press opens the same menu, as an action sheet on phones.
+    const messageLongPress = useLongPressMenu(
+      previewOnly ? undefined : handleContextMenu,
+    );
+
     // Split attachments into image / video / file buckets
     // Only Chromium-playable video formats get the inline player; the rest are files.
     const imageAttachments =
@@ -922,11 +930,13 @@ const MessageItem = memo(
         id={id}
         className={cn(
           "group relative flex flex-col transition-colors duration-100",
-          !previewOnly && "hover:bg-rm-bg-hover",
+          !previewOnly && "pointer-fine:hover:bg-rm-bg-hover",
+          !previewOnly && LONG_PRESS_TARGET,
           showHeader && !previewOnly && "mt-4",
           message.pending && "opacity-50",
         )}
         onContextMenu={previewOnly ? undefined : handleContextMenu}
+        {...messageLongPress}
         onMouseEnter={previewOnly ? undefined : () => setInteractive(true)}
         onFocusCapture={previewOnly ? undefined : () => setInteractive(true)}
       >
@@ -1013,7 +1023,7 @@ const MessageItem = memo(
                 <button
                   type="button"
                   ref={setAuthorNameEl}
-                  className="cursor-pointer border-0 bg-transparent p-0 text-ui-base font-semibold text-rm-text transition-colors hover:underline outline-none"
+                  className="cursor-pointer border-0 bg-transparent p-0 text-ui-base font-semibold text-rm-text transition-colors pointer-fine:hover:underline outline-none"
                   onClick={() => setShowProfile(true)}
                 >
                   <ProfileDisplayName
@@ -1209,7 +1219,7 @@ const MessageItem = memo(
                       key={att.id}
                       href={getDownloadUrl(getAttachmentSourceUrl(att))}
                       download={att.filename}
-                      className="flex items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2.5 transition-ui hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
+                      className="flex items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2.5 transition-ui pointer-fine:hover:border-rm-text-muted/20 pointer-fine:hover:bg-rm-bg-hover group/file"
                     >
                       <div
                         className={cn(
@@ -1262,7 +1272,7 @@ const MessageItem = memo(
                               previewOnly && "cursor-default",
                               hasReacted
                                 ? "border-primary/40 bg-primary/10 text-primary shadow-[0_4px_12px_-4px_var(--rm-glow)]"
-                                : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:bg-rm-bg-hover hover:text-rm-text-secondary",
+                                : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted pointer-fine:hover:border-rm-text-muted/20 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text-secondary",
                             )}
                             onClick={
                               previewOnly
@@ -1316,7 +1326,7 @@ const MessageItem = memo(
                         aria-haspopup="dialog"
                         aria-expanded={showReactionEmojiPicker}
                         className={cn(
-                          "h-7 w-7 border border-rm-border bg-rm-bg-elevated/60 text-rm-text-muted hover:border-primary/30 hover:bg-primary/10 hover:text-primary",
+                          "h-7 w-7 border border-rm-border bg-rm-bg-elevated/60 text-rm-text-muted pointer-fine:hover:border-primary/30 pointer-fine:hover:bg-primary/10 pointer-fine:hover:text-primary",
                           showReactionEmojiPicker &&
                             "border-primary/40 bg-primary/10 text-primary",
                         )}
@@ -1362,7 +1372,7 @@ const MessageItem = memo(
             <TooltipProvider delayDuration={120}>
               <div
                 className={cn(
-                  "pointer-events-none absolute -top-4 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom-right scale-[0.97] items-center gap-0.5 overflow-x-auto rounded-md border border-rm-border bg-rm-bg-surface p-0.5 opacity-0 shadow-[var(--rm-shadow-1)] transition-[opacity,transform] dark:bg-rm-bg-elevated duration-100 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
+                  "pointer-events-none absolute -top-4 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom-right scale-[0.97] items-center gap-0.5 overflow-x-auto rounded-md border border-rm-border bg-rm-bg-surface p-0.5 opacity-0 shadow-[var(--rm-shadow-1)] transition-[opacity,transform] dark:bg-rm-bg-elevated duration-100 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:scale-100 pointer-fine:group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
                   showEmojiPicker &&
                     "pointer-events-auto scale-100 opacity-100",
                 )}
@@ -1614,9 +1624,7 @@ const MessageItem = memo(
             onManageShares={
               onManageShares ??
               (() => {
-                window.dispatchEvent(
-                  new CustomEvent("open-shared-messages-settings"),
-                );
+                openSettings({ panel: "shares" });
                 setShowShareModal(false);
               })
             }
@@ -1741,14 +1749,14 @@ function DeleteMessageModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
+                className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={onConfirm}
-                className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
+                className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition pointer-fine:hover:brightness-110"
               >
                 Delete
               </button>

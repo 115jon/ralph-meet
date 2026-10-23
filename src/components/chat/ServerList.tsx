@@ -1,3 +1,4 @@
+import { toContextMenuEvent, useLongPress } from "@/hooks/useLongPress";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -157,6 +158,10 @@ export default function ServerList({
     ]);
   };
 
+  const bindServerLongPress = useLongPress<Server>((info, server) =>
+    handleServerContextMenu(toContextMenuEvent(info), server),
+  );
+
   const { visibleDms, overflowCount } = useMemo(() => {
     if (dmExpanded || unreadDms.length <= MAX_VISIBLE_DMS) {
       return { visibleDms: unreadDms, overflowCount: 0 };
@@ -215,7 +220,7 @@ export default function ServerList({
         <div className="group relative flex w-full justify-center">
           <button
             className={cn(
-              "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
+              "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
               activeServerId === "@me" &&
                 "rounded-xl bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]",
             )}
@@ -256,7 +261,7 @@ export default function ServerList({
                       "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-ui enabled:active:scale-[0.96]",
                       isActiveDm
                         ? "ring-2 ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)]"
-                        : "ring-1 ring-rm-border hover:ring-rm-border-strong",
+                        : "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
                     )}
                     onClick={() => onSelectDm?.(dm.channelId)}
                   >
@@ -294,7 +299,7 @@ export default function ServerList({
 
             {overflowCount > 0 && (
               <button
-                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text"
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text-muted transition-ui pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                 onClick={() => setDmExpanded(true)}
               >
                 +{overflowCount}
@@ -303,7 +308,7 @@ export default function ServerList({
 
             {dmExpanded && unreadDms.length > MAX_VISIBLE_DMS && (
               <button
-                className="flex h-6 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-medium text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text"
+                className="flex h-6 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-medium text-rm-text-muted transition-ui pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
                 onClick={() => setDmExpanded(false)}
               >
                 Less
@@ -347,15 +352,16 @@ export default function ServerList({
                 <TooltipTrigger asChild>
                   <button
                     className={cn(
-                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full font-bold transition-ui enabled:active:scale-[0.96] hover:rounded-xl",
+                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full font-bold transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl",
                       isActive
                         ? "bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]"
-                        : "bg-rm-rail-item text-rm-text hover:bg-primary hover:text-primary-foreground",
+                        : "bg-rm-rail-item text-rm-text pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
                     )}
                     onClick={() => onSelect(server.id)}
                     onContextMenu={(event) =>
                       handleServerContextMenu(event, server)
                     }
+                    {...bindServerLongPress(server)}
                     aria-label={buttonLabel}
                     data-server-tooltip={voiceSummary ? "voice" : "label"}
                   >
@@ -522,7 +528,7 @@ export default function ServerList({
         })}
 
         <button
-          className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] hover:rounded-xl hover:bg-primary hover:text-primary-foreground"
+          className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground"
           onClick={() => setShowCreate(true)}
           aria-label="Create server"
         >

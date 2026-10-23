@@ -1,3 +1,4 @@
+import { toContextMenuEvent, useLongPress } from "@/hooks/useLongPress";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,9 @@ export function DMListPanel({
   handleDmContextMenu,
   dispatch,
 }: DMListPanelProps) {
+  const bindDmLongPress = useLongPress<any>((info, dm) =>
+    handleDmContextMenu(toContextMenuEvent(info), dm),
+  );
   // Compute per-DM unread notification counts
   const notifications = useChatStore((s) => s.notifications);
   const dmUnreadCounts = useMemo(() => {
@@ -87,7 +91,7 @@ export function DMListPanel({
                 "group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-ui",
                 activeChannelId === dm.id
                   ? "bg-rm-bg-elevated text-rm-text shadow-sm"
-                  : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
+                  : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-elevated/50 pointer-fine:hover:text-rm-text-secondary",
               )}
             >
               <button
@@ -95,6 +99,7 @@ export function DMListPanel({
                 className="absolute inset-0 rounded-md outline-none"
                 onClick={() => onSelectDm(dm.id)}
                 onContextMenu={(e) => handleDmContextMenu(e, dm)}
+                {...bindDmLongPress(dm)}
                 aria-label={`Open DM with ${displayName}`}
               />
               {/* Pill indicator — small dot only when unread */}
@@ -104,7 +109,7 @@ export function DMListPanel({
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-rm-border outline-none hover:ring-rm-border-strong"
+                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-rm-border outline-none pointer-fine:hover:ring-rm-border-strong"
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({

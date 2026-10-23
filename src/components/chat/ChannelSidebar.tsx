@@ -1,3 +1,4 @@
+import { LONG_PRESS_TARGET, useLongPressMenu } from "@/hooks/useLongPress";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useUptime } from "@/hooks/useUptime";
 import { apiPatch } from "@/lib/api-client";
@@ -30,7 +31,8 @@ import {
   DndContext,
   type DragEndEvent,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -292,7 +294,7 @@ function VoiceChannelMediaDisplay({
               <button
                 type="button"
                 aria-label="Change media"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui hover:border-white/30 hover:bg-black/75 hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-white/30 pointer-fine:hover:bg-black/75 pointer-fine:hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onChange();
@@ -312,7 +314,7 @@ function VoiceChannelMediaDisplay({
                 type="button"
                 aria-label="Remove media"
                 disabled={isRemoving}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui hover:border-destructive/50 hover:bg-destructive/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui pointer-fine:hover:border-destructive/50 pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove();
@@ -364,6 +366,7 @@ function SortableChannelItem({
   onWatchStream,
 }: SortableChannelItemProps) {
   const { dispatch } = useChatActions();
+  const channelLongPress = useLongPressMenu((e) => onContextMenu(e, channel));
   // Combine server-wide permission with per-channel override
   const canManage =
     canManageChannels ||
@@ -447,10 +450,10 @@ function SortableChannelItem({
     <div ref={setNodeRef} style={style}>
       <div
         className={cn(
-          "group relative mb-0.5 mx-2 flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors outline-none",
+          "group relative mb-0.5 mx-2 flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors outline-none pointer-coarse:min-h-11",
           isActive
             ? "bg-rm-bg-active text-rm-text"
-            : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
+            : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text-secondary",
           unread && !isActive && "text-rm-text font-semibold",
         )}
       >
@@ -458,8 +461,12 @@ function SortableChannelItem({
           type="button"
           onClick={() => onSelect(channel.id)}
           onContextMenu={(e) => onContextMenu(e, channel)}
+          {...channelLongPress}
           aria-label={`Open ${isVoice ? "voice" : "text"} channel ${channel.name}`}
-          className="absolute inset-0 z-10 rounded-md outline-none"
+          className={cn(
+            "absolute inset-0 z-10 rounded-md outline-none",
+            LONG_PRESS_TARGET,
+          )}
         />
         {/* Drag handle */}
         {isDraggable && (
@@ -497,10 +504,11 @@ function SortableChannelItem({
               {uptime}
             </span>
           )}
-          {/* Action buttons (mutually exclusive with uptime) */}
+          {/* Action buttons (mutually exclusive with uptime). Hover-revealed,
+              so hidden on touch, where the long-press sheet has both. */}
           <div
             className={cn(
-              "relative z-20 items-center gap-1",
+              "relative z-20 items-center gap-1 pointer-coarse:hidden!",
               uptime ? "hidden group-hover:flex" : "flex",
             )}
           >
@@ -510,7 +518,7 @@ function SortableChannelItem({
                   <button
                     type="button"
                     aria-label="Channel settings"
-                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-rm-bg-hover"
+                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditChannel(channel);
@@ -529,7 +537,7 @@ function SortableChannelItem({
                 <button
                   type="button"
                   aria-label="Invite to channel"
-                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-rm-bg-hover"
+                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 pointer-fine:hover:bg-rm-bg-hover"
                   onClick={(e) => {
                     e.stopPropagation();
                     onInviteToChannel(channel);
@@ -562,7 +570,7 @@ function SortableChannelItem({
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-rm-bg-hover"
+                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover"
                   onClick={(event) => {
                     event.stopPropagation();
                     setIsVoiceTextStatusOpen(true);
@@ -608,7 +616,7 @@ function SortableChannelItem({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-bg-hover/50 px-4 py-4 text-left text-rm-text-muted transition-colors hover:border-primary/35 hover:bg-rm-bg-hover hover:text-rm-text sm:min-h-[108px]"
+                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-bg-hover/50 px-4 py-4 text-left text-rm-text-muted transition-colors pointer-fine:hover:border-primary/35 pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text sm:min-h-[108px]"
                     onClick={(event) => {
                       event.stopPropagation();
                       setIsVoiceMediaStatusOpen(true);
@@ -799,9 +807,13 @@ export default function ChannelSidebar({
     createChannel,
   } = useChatActions();
 
-  // DnD sensors
+  // DnD sensors. Mouse drags after 5px; touch needs a 250ms hold first, so a
+  // finger scrolling the list never picks up a channel.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 8 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -1039,7 +1051,7 @@ export default function ChannelSidebar({
         ) : (
           <button
             type="button"
-            className="flex cursor-pointer items-center justify-between border-b border-rm-border px-4 font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
+            className="flex cursor-pointer items-center justify-between border-b border-rm-border px-4 font-semibold text-rm-text transition-colors pointer-fine:hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
             style={{
               height: "calc(48px + var(--safe-area-top, 0px))",
               paddingTop: "var(--safe-area-top, 0px)",
@@ -1707,7 +1719,7 @@ function VoiceChannelMemberRow({
           isReconnecting ? "reconnecting" : "connected"
         }
         className={cn(
-          "group/vc-user flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-rm-bg-hover outline-none",
+          "group/vc-user flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover outline-none pointer-coarse:min-h-11",
           isReconnecting && "opacity-50 grayscale",
         )}
         aria-label={`Open profile for ${resolvedIdentity.name}`}
@@ -1913,13 +1925,20 @@ function ChannelCategoryGroup({
   onWatchStream,
 }: ChannelCategoryGroupProps) {
   const channelIds = group.channels.map((c) => c.id);
+  const categoryLongPress = useLongPressMenu((e) =>
+    handleCategoryContextMenu(e, group),
+  );
 
   return (
     <div className="mb-3">
       {/* Category Header */}
       <div
-        className="group flex cursor-pointer items-center py-1.5 pr-2 transition-colors hover:text-rm-text text-rm-text-muted"
+        className={cn(
+          "group flex cursor-pointer items-center py-1.5 pr-2 transition-colors pointer-fine:hover:text-rm-text text-rm-text-muted pointer-coarse:min-h-11",
+          LONG_PRESS_TARGET,
+        )}
         onContextMenu={(e) => handleCategoryContextMenu(e, group)}
+        {...categoryLongPress}
       >
         <button
           type="button"
@@ -1943,7 +1962,7 @@ function ChannelCategoryGroup({
         {canManageChannels && (
           <button
             type="button"
-            className="rounded-sm p-0.5 transition-colors hover:text-rm-text"
+            className="rounded-sm p-0.5 transition-colors pointer-fine:hover:text-rm-text"
             aria-label={`Create channel in ${group.name}`}
             onClick={() =>
               uiDispatch({

@@ -1,4 +1,6 @@
 import { useMounted } from "@/hooks/useMounted";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+import { ActionSheet } from "@/components/ui/action-sheet";
 import { cn } from "@/lib/utils";
 import {
   MENU_ICON,
@@ -45,7 +47,40 @@ function getDirectMenuItems(menu: HTMLElement | null): HTMLElement[] {
   ).filter((item) => item.closest('[role="menu"]') === menu);
 }
 
-export default function ContextMenu({
+/**
+ * Right-click menu on desktop; on phones (below md) the same items as a bottom
+ * action sheet with 48px rows, opened by long press (useLongPressMenu) or
+ * Android's native long-press contextmenu.
+ */
+export default function ContextMenu(props: ContextMenuProps) {
+  const isMobile = useIsMobile();
+  return isMobile ? (
+    <ContextActionSheet {...props} />
+  ) : (
+    <PopoverContextMenu {...props} />
+  );
+}
+
+function ContextActionSheet({ items, topContent, onClose }: ContextMenuProps) {
+  const [open, setOpen] = useState(true);
+  // Owners unmount the menu on close; let the sheet slide away first.
+  useEffect(() => {
+    if (open) return;
+    const timer = window.setTimeout(onClose, 280);
+    return () => window.clearTimeout(timer);
+  }, [open, onClose]);
+
+  return (
+    <ActionSheet
+      open={open}
+      onOpenChange={setOpen}
+      items={items}
+      header={topContent}
+    />
+  );
+}
+
+function PopoverContextMenu({
   x,
   y,
   items,
