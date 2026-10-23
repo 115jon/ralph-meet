@@ -1,13 +1,13 @@
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveDialog,
-  ResponsiveDialogClose,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -18,7 +18,7 @@ import {
 import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 interface InviteModalProps {
@@ -53,7 +53,7 @@ export default function InviteModal({
     }));
   }, [open, serverId]);
 
-  // Close on Escape
+  const firstSelectRef = useRef<HTMLButtonElement>(null);
 
   const createInvite = async () => {
     setState((prev) => ({ ...prev, loading: true }));
@@ -80,7 +80,7 @@ export default function InviteModal({
     setTimeout(() => setState((prev) => ({ ...prev, copied: false })), 2000);
   };
 
-  const selectStyle = "w-full";
+  const selectStyle = "w-full max-md:min-h-11";
 
   return (
     <ResponsiveDialog
@@ -88,37 +88,30 @@ export default function InviteModal({
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
       <ResponsiveDialogContent
-        showCloseButton={false}
-        dialogClassName="w-full max-w-[440px]"
+        className="md:max-w-md"
+        // Desktop only (the drawer drops this): start on the first field. On a
+        // phone focus stays on the sheet so nothing pops open under the thumb.
+        onOpenAutoFocus={(event) => {
+          if (!firstSelectRef.current) return;
+          event.preventDefault();
+          firstSelectRef.current.focus();
+        }}
       >
-        <div>
-          <ResponsiveDialogClose asChild>
-            <IconButton
-              icon="close"
-              iconSize="sm"
-              type="button"
-              className="absolute right-4 top-4 max-md:hidden"
-              aria-label="Close invite modal"
-            />
-          </ResponsiveDialogClose>
-
-          <ResponsiveDialogTitle className="mb-6 text-ui-lg font-semibold text-rm-text">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
             Invite people to{" "}
             <InlineEmojiText text={serverName} className="text-rm-accent-ink" />
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription className="sr-only">
             Generate an invite link for this server.
           </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
+        <div>
           {!state.inviteCode ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label
-                  htmlFor="expire-after"
-                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
-                >
-                  Expire after
-                </label>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="expire-after">Expire after</Label>
                 <Select
                   value={String(state.expiresHours)}
                   onValueChange={(value) =>
@@ -129,8 +122,8 @@ export default function InviteModal({
                   }
                 >
                   <SelectTrigger
+                    ref={firstSelectRef}
                     id="expire-after"
-                    aria-label="Expire after"
                     className={selectStyle}
                   >
                     <SelectValue placeholder="Expire after" />
@@ -144,13 +137,8 @@ export default function InviteModal({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <label
-                  htmlFor="max-uses"
-                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
-                >
-                  Max uses
-                </label>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="max-uses">Max uses</Label>
                 <Select
                   value={String(state.maxUses)}
                   onValueChange={(value) =>
@@ -160,11 +148,7 @@ export default function InviteModal({
                     }))
                   }
                 >
-                  <SelectTrigger
-                    id="max-uses"
-                    aria-label="Maximum uses"
-                    className={selectStyle}
-                  >
+                  <SelectTrigger id="max-uses" className={selectStyle}>
                     <SelectValue placeholder="Maximum uses" />
                   </SelectTrigger>
                   <SelectContent position="popper" align="start">
@@ -178,7 +162,7 @@ export default function InviteModal({
                 </Select>
               </div>
               <Button
-                className="w-full"
+                className="w-full max-md:min-h-11"
                 size="lg"
                 onClick={createInvite}
                 disabled={state.loading}
@@ -195,12 +179,15 @@ export default function InviteModal({
                   readOnly
                   aria-label="Invite link"
                   onClick={(e) => (e.target as HTMLInputElement).select()}
-                  className="h-9 flex-1"
+                  className="flex-1 max-md:min-h-11"
                 />
                 <Button
                   variant="secondary"
                   onClick={copyLink}
-                  className={cn("h-9", state.copied && "text-rm-accent-ink")}
+                  className={cn(
+                    "h-9 max-md:min-h-11",
+                    state.copied && "text-rm-accent-ink",
+                  )}
                 >
                   {state.copied ? (
                     <>

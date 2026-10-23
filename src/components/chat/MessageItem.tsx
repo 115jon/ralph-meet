@@ -2,7 +2,7 @@ import { LONG_PRESS_TARGET, useLongPressMenu } from "@/hooks/useLongPress";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { openSettings } from "@/components/chat/settings/settings-links";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { DeleteMessageDialog } from "@/components/chat/DeleteMessageDialog";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -1632,140 +1632,29 @@ const MessageItem = memo(
         )}
 
         {!previewOnly && showDeleteModal && (
-          <DeleteMessageModal
+          <DeleteMessageDialog
             open={showDeleteModal}
-            message={message}
-            currentUserId={currentUserId}
-            onClose={() => setShowDeleteModal(false)}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) setShowDeleteModal(false);
+            }}
             onConfirm={() => {
               performDelete();
               setShowDeleteModal(false);
             }}
+            preview={
+              <MessageItem
+                message={message}
+                showHeader
+                currentUserId={currentUserId}
+                hideReplyConnector={false}
+                previewOnly
+              />
+            }
           />
         )}
       </div>
     );
   },
 );
-
-function DeleteMessageModal({
-  open,
-  message,
-  currentUserId,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  message: Message;
-  currentUserId?: string;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const previewRef = useCallback((node: HTMLDivElement | null) => {
-    if (node) {
-      node.setAttribute("inert", "");
-    }
-  }, []);
-
-  return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <div
-          data-state={open ? "open" : "closed"}
-          className={cn(
-            "fixed inset-0 z-50 flex items-end justify-center bg-rm-scrim p-0 transition-opacity duration-200 md:items-center md:p-6",
-            "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
-          )}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              onClose();
-            }
-          }}
-          role="presentation"
-        >
-          <DialogSurface
-            showCloseButton={false}
-            className={cn(
-              "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[480px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
-              "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
-            )}
-            aria-labelledby="delete-message-title"
-            aria-describedby="delete-message-description"
-          >
-            <div className="flex shrink-0 items-start justify-between px-6 pb-3 pt-6">
-              <div>
-                <h2
-                  id="delete-message-title"
-                  className="text-ui-lg font-semibold text-rm-text"
-                >
-                  Delete Message
-                </h2>
-                <p
-                  id="delete-message-description"
-                  className="mt-1 text-ui-sm text-rm-text-muted"
-                >
-                  Are you sure you want to delete this message?
-                </p>
-              </div>
-              <IconButton
-                icon="close"
-                size="sm"
-                shape="circle"
-                tooltip="Close"
-                onClick={onClose}
-                className="-mr-1 -mt-1"
-              />
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
-              <div className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-secondary py-3">
-                <div
-                  ref={previewRef}
-                  aria-hidden="true"
-                  className="pointer-events-none select-none"
-                >
-                  <MessageItem
-                    message={message}
-                    showHeader
-                    currentUserId={currentUserId}
-                    hideReplyConnector={false}
-                    previewOnly
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-ui-sm leading-tight">
-              <p className="text-ui-xs font-bold uppercase text-emerald-400">
-                Protip:
-              </p>
-              <p className="mt-1 text-rm-text-secondary">
-                You can hold down Shift when clicking delete message to bypass
-                this confirmation entirely.
-              </p>
-            </div>
-
-            <div className="grid shrink-0 grid-cols-2 gap-2 px-6 pb-6 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-ui-sm font-semibold text-rm-text-secondary transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={onConfirm}
-                className="rounded-lg bg-destructive px-4 py-2.5 text-ui-sm font-semibold text-white transition pointer-fine:hover:brightness-110"
-              >
-                Delete
-              </button>
-            </div>
-          </DialogSurface>
-        </div>
-      </DialogPortal>
-    </Dialog>
-  );
-}
 
 export default MessageItem;

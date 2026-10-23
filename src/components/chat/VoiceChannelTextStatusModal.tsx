@@ -1,7 +1,16 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { RowError } from "@/components/chat/settings/primitives";
 import { apiPatch } from "@/lib/api-client";
 import type { Channel } from "@/lib/types";
 import {
@@ -9,7 +18,6 @@ import {
   normalizeVoiceChannelStatusText,
 } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
-import { Icon } from "@/components/ui/icon";
 import { useEffect, useMemo, useState, useRef } from "react";
 
 import EmojiPicker from "./EmojiPicker";
@@ -81,152 +89,94 @@ export default function VoiceChannelTextStatusModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <>
-          <div
-            data-state={open ? "open" : "closed"}
-            className={cn(
-              "fixed inset-0 z-50 bg-black/50 duration-200",
-              "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
-            )}
-            onClick={onClose}
-            aria-hidden="true"
-          />
-          <div
-            data-state={open ? "open" : "closed"}
-            className="fixed inset-0 z-60 flex items-center justify-center p-4 data-[state=open]:pointer-events-auto data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
-          >
-            <DialogSurface
-              showCloseButton={false}
-              className={cn(
-                "picker-panel relative m-0 w-full max-w-[540px] rounded-xl border p-0 shadow-[var(--rm-shadow-3)] outline-none duration-200",
-                "animate-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
-              )}
-              aria-labelledby="voice-channel-text-status-title"
-            >
-              <div className="relative rounded-t-xl border-b border-rm-border bg-gradient-to-b from-primary/10 to-transparent px-6 pb-7 pt-6">
-                <IconButton
-                  icon="close"
-                  size="md"
-                  shape="circle"
-                  type="button"
-                  onClick={onClose}
-                  className="absolute right-4 top-4"
-                  aria-label="Close status editor"
-                />
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent className="md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
+            What are we chatting about?
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Let others know what you&apos;re up to in the voice channel.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-                <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-rm-border bg-rm-bg-surface">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-rm-bg-hover text-rm-accent-ink">
-                    <Icon name="chat" size="2xl" />
-                  </div>
-                </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="voice-channel-status-text">Status</Label>
 
-                <div className="text-center">
-                  <h2
-                    id="voice-channel-text-status-title"
-                    className="text-ui-xl font-semibold text-rm-text"
-                  >
-                    What are we chatting about?
-                  </h2>
-                  <p className="mt-2 text-ui-sm text-rm-text-muted md:text-ui-base">
-                    Let others know what you&apos;re up to in the voice channel.
-                  </p>
-                </div>
-              </div>
+          <div className="relative">
+            <Input
+              id="voice-channel-status-text"
+              value={text}
+              onChange={(event) =>
+                setText(
+                  event.target.value.slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT),
+                )
+              }
+              placeholder={`Status for ${channel.name}`}
+              className="h-11 pr-12"
+              maxLength={MAX_VOICE_CHANNEL_STATUS_TEXT}
+            />
+            <IconButton
+              ref={emojiBtnRef}
+              icon="emoji"
+              iconSize="sm"
+              variant="muted"
+              shape="circle"
+              type="button"
+              aria-label="Insert emoji"
+              onClick={() => setShowEmojiPicker((current) => !current)}
+              className="absolute right-2 top-1/2 -translate-y-1/2"
+            />
 
-              <div className="px-6 pb-6 pt-5">
-                <label
-                  htmlFor="voice-channel-status-text"
-                  className="mb-2 block text-ui-sm font-semibold text-rm-text"
-                >
-                  Status
-                </label>
-
-                <div className="relative">
-                  <input
-                    id="voice-channel-status-text"
-                    value={text}
-                    onChange={(event) =>
-                      setText(
-                        event.target.value.slice(
-                          0,
-                          MAX_VOICE_CHANNEL_STATUS_TEXT,
-                        ),
-                      )
-                    }
-                    placeholder={`Status for ${channel.name}`}
-                    className="picker-search-input h-11 w-full rounded-lg border px-4 pr-12 text-ui-base outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
-                    maxLength={MAX_VOICE_CHANNEL_STATUS_TEXT}
-                  />
-                  <IconButton
-                    ref={emojiBtnRef}
-                    icon="emoji"
-                    iconSize="sm"
-                    variant="muted"
-                    shape="circle"
-                    type="button"
-                    aria-label="Insert emoji"
-                    onClick={() => setShowEmojiPicker((current) => !current)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
-                  />
-
-                  <EmojiPicker
-                    open={showEmojiPicker}
-                    placement="top-end"
-                    onSelect={(emoji) => {
-                      setText((current) =>
-                        (current + emoji).slice(
-                          0,
-                          MAX_VOICE_CHANNEL_STATUS_TEXT,
-                        ),
-                      );
-                      setShowEmojiPicker(false);
-                    }}
-                    onClose={() => setShowEmojiPicker(false)}
-                    markerRef={emojiBtnRef}
-                  />
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setText("")}
-                    className="-ml-2.5 text-rm-text-secondary"
-                  >
-                    Clear
-                  </Button>
-                  <span className="text-ui-2xs font-bold text-rm-text-muted">
-                    {normalizedText.length} / {MAX_VOICE_CHANNEL_STATUS_TEXT}
-                  </span>
-                </div>
-
-                {error ? (
-                  <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
-                    {error}
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="flex flex-col-reverse gap-2 border-t border-rm-border px-6 py-5 md:flex-row md:justify-end">
-                <Button type="button" variant="secondary" onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={!hasChanges || saving}
-                  loading={saving}
-                >
-                  Set Status
-                </Button>
-              </div>
-            </DialogSurface>
+            <EmojiPicker
+              open={showEmojiPicker}
+              placement="top-end"
+              onSelect={(emoji) => {
+                setText((current) =>
+                  (current + emoji).slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT),
+                );
+                setShowEmojiPicker(false);
+              }}
+              onClose={() => setShowEmojiPicker(false)}
+              markerRef={emojiBtnRef}
+            />
           </div>
-        </>
-      </DialogPortal>
-    </Dialog>
+
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setText("")}
+              className="-ml-2 text-rm-text-secondary"
+            >
+              Clear
+            </Button>
+            <span className="text-ui-2xs font-semibold tabular-nums text-rm-text-muted">
+              {normalizedText.length} / {MAX_VOICE_CHANNEL_STATUS_TEXT}
+            </span>
+          </div>
+
+          {error ? <RowError>{error}</RowError> : null}
+        </div>
+
+        <ResponsiveDialogFooter>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            loading={saving}
+          >
+            Set Status
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

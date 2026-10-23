@@ -61,7 +61,7 @@ describe("modal portal positioning", () => {
     );
   });
 
-  it("keeps upload sound content inside its fixed layer", () => {
+  it("renders upload sound as a form-width dialog over the shared scrim", () => {
     render(
       <UploadSoundModal
         open
@@ -70,11 +70,11 @@ describe("modal portal positioning", () => {
         isUploading={false}
       />,
     );
-    const markup = document.body.innerHTML;
-
-    assertContentIsInsideWrapper(
-      markup,
-      "fixed inset-0 z-50 flex items-center justify-center bg-black/50",
-    );
+    const surface = document.body.querySelector('[data-slot="dialog-content"]');
+    expect(surface).not.toBeNull();
+    expect(surface?.className).toContain("md:max-w-md");
+    expect(
+      document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
+    ).toContain("bg-rm-scrim");
   });
 });

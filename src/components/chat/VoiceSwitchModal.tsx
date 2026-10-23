@@ -1,7 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -10,10 +9,8 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { useIsMobile } from "@/hooks/useMediaQuery";
-import { IconButton } from "@/components/ui/IconButton";
+import { DontAskAgainCheckbox } from "@/components/chat/DontAskAgainCheckbox";
 import { VOICE_SWITCH_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
-import { cn } from "@/lib/utils";
 import { useCallback, useState } from "react";
 
 // ── LocalStorage key for "Don't ask again" ─────────────────────────────────
@@ -49,7 +46,6 @@ export function VoiceSwitchModal({
 }: VoiceSwitchModalProps) {
   const [dontAskAgain, setDontAskAgain] = useState(false);
 
-  const isMobile = useIsMobile();
   const handleConfirm = useCallback(() => {
     if (dontAskAgain) {
       try {
@@ -66,120 +62,32 @@ export function VoiceSwitchModal({
       ? `Looks like you're in a call. Are you sure you want to switch to `
       : `Looks like you're in another voice channel. Are you sure you want to switch to `;
 
-  const dontAskCheckbox = (
-    <label className="flex items-center gap-2 select-none cursor-pointer group max-md:min-h-11">
-      <span
-        className={`flex h-[18px] w-[18px] items-center justify-center rounded-xs border transition-colors ${
-          dontAskAgain
-            ? "border-primary bg-primary"
-            : "border-rm-text-muted/40 bg-transparent pointer-fine:group-hover:border-rm-text-muted/60"
-        }`}
-      >
-        {dontAskAgain && (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-3 w-3 text-primary-foreground"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-        )}
-      </span>
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={dontAskAgain}
-        onChange={(e) => setDontAskAgain(e.target.checked)}
-      />
-      <span className="text-ui-xs text-rm-text-muted pointer-fine:group-hover:text-rm-text-secondary transition-colors">
-        Don&apos;t ask again
-      </span>
-    </label>
-  );
-
   return (
     <ResponsiveDialog
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onCancel()}
     >
-      {isMobile ? (
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>You sure?</ResponsiveDialogTitle>
-            <ResponsiveDialogDescription>
-              {bodyText}
-              <span className="font-semibold text-rm-text">{targetName}</span>?
-            </ResponsiveDialogDescription>
-          </ResponsiveDialogHeader>
-          {dontAskCheckbox}
-          <ResponsiveDialogFooter>
-            <Button onClick={handleConfirm}>Confirm</Button>
-            <Button variant="secondary" onClick={onCancel}>
-              Cancel
-            </Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      ) : (
-        <DialogPortal>
-          <div
-            data-state={open ? "open" : "closed"}
-            className={cn(
-              "fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0",
-            )}
-          >
-            <DialogSurface
-              showCloseButton={false}
-              className={cn(
-                "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-95 duration-200",
-                "data-[state=closed]:animate-out data-[state=closed]:zoom-out-95",
-              )}
-              aria-labelledby="voice-switch-title"
-            >
-              {/* ── Header ─────────────────────────────────────────── */}
-              <div className="flex items-center justify-between px-4 pt-4">
-                <h2
-                  id="voice-switch-title"
-                  className="text-ui-lg font-semibold text-rm-text"
-                >
-                  You sure?
-                </h2>
-                <IconButton
-                  icon="close"
-                  size="xs"
-                  iconSize="sm"
-                  onClick={onCancel}
-                  aria-label="Close"
-                />
-              </div>
-
-              {/* ── Body ───────────────────────────────────────────── */}
-              <div className="px-4 pt-3 pb-5 text-ui-sm text-rm-text-secondary leading-relaxed">
-                {bodyText}
-                <span className="font-semibold text-rm-text">{targetName}</span>
-                ?
-              </div>
-
-              {/* ── Footer ─────────────────────────────────────────── */}
-              <div className="flex items-center justify-between px-4 pb-4">
-                {dontAskCheckbox}
-
-                {/* Buttons */}
-                <div className="flex items-center gap-2">
-                  <Button variant="secondary" onClick={onCancel}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleConfirm}>Confirm</Button>
-                </div>
-              </div>
-            </DialogSurface>
-          </div>
-        </DialogPortal>
-      )}
+      <ResponsiveDialogContent className="md:max-w-sm">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>You sure?</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            {bodyText}
+            <span className="font-semibold text-rm-text">{targetName}</span>?
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <DontAskAgainCheckbox
+          checked={dontAskAgain}
+          onCheckedChange={setDontAskAgain}
+        />
+        <ResponsiveDialogFooter>
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleConfirm}>
+            Confirm
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
 }

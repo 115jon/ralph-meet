@@ -1,4 +1,11 @@
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { RowError } from "@/components/chat/settings/primitives";
 import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import type {
@@ -10,7 +17,6 @@ import { voiceChannelStatusMediaFromGifItem } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
 import { Icon } from "@/components/ui/icon";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 
@@ -96,10 +102,10 @@ function VoiceStatusMediaTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 transition-uisabled:cursor-not-allowed disabled:opacity-60"
+      className="block w-full overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface p-1 transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div
-        className="w-full overflow-hidden rounded-lg bg-rm-bg-hover"
+        className="w-full overflow-hidden rounded-md bg-rm-bg-hover"
         style={{
           aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}`,
         }}
@@ -107,7 +113,7 @@ function VoiceStatusMediaTile({
         {media.preview_content_type.startsWith("video/") ? (
           <video
             src={getMediaUrl(media.preview_url)}
-            className="h-full w-full object-contain transition-transform duration-200"
+            className="h-full w-full object-contain"
             autoPlay
             loop
             muted
@@ -118,7 +124,7 @@ function VoiceStatusMediaTile({
           <img
             src={getAuthAssetUrl(media.preview_url)}
             alt={media.alt_text ?? "Recent voice channel status media"}
-            className="h-full w-full object-contain transition-transform duration-200"
+            className="h-full w-full object-contain"
             loading="lazy"
           />
         )}
@@ -317,165 +323,121 @@ export default function VoiceChannelMediaStatusModal({
   const isBusy = uploading || applying;
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <>
-          <div
-            data-state={open ? "open" : "closed"}
-            className={cn(
-              "fixed inset-0 z-50 bg-black/50",
-              "animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
-            )}
-            onClick={onClose}
-            aria-hidden="true"
-          />
-          <div
-            data-state={open ? "open" : "closed"}
-            className="fixed inset-0 z-60 flex items-center justify-center p-4 data-[state=open]:pointer-events-auto data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent dialogClassName="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Set the vibe</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Pick something and it will be set right away.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isBusy}
+            className="group flex min-h-36 flex-col items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <DialogSurface
-              showCloseButton={false}
-              className={cn(
-                "picker-panel relative m-0 w-full max-w-[520px] rounded-2xl border p-0 shadow-2xl outline-none",
-                "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
-              )}
-              aria-labelledby="voice-channel-media-status-title"
-            >
-              <div className="flex items-start justify-between gap-4 px-6 py-5">
-                <div>
-                  <h2
-                    id="voice-channel-media-status-title"
-                    className="text-ui-2xl font-semibold tracking-tight text-rm-text"
-                  >
-                    Set the vibe
-                  </h2>
-                  <p className="mt-2 text-ui-sm text-rm-text-muted">
-                    Pick something and it will be set right away.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-                  aria-label="Close media status editor"
-                >
-                  <Icon name="close" size="lg" />
-                </button>
+            {uploading ? (
+              <Icon
+                name="loader"
+                size="2xl"
+                className="mb-4 animate-spin text-rm-text"
+              />
+            ) : (
+              <Icon
+                name="upload"
+                size="2xl"
+                className="mb-4 text-rm-text-muted pointer-fine:group-hover:text-rm-text"
+              />
+            )}
+            <span className="text-ui-lg font-semibold text-rm-text">
+              Server Uploads
+            </span>
+            <span className="mt-1 text-ui-xs text-rm-text-muted">
+              Upload your own image or clip
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowGifPicker(true)}
+            disabled={isBusy}
+            className="relative min-h-36 overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <div className="absolute right-3 top-3 size-12 rounded-lg bg-rm-bg-hover" />
+            <div className="absolute bottom-3 right-10 size-8 rounded-md bg-rm-bg-hover" />
+            <div className="relative z-10 flex h-full flex-col justify-end">
+              <div className="mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-rm-bg-hover text-rm-text">
+                <Icon name="sparkle" size="lg" />
               </div>
+              <span className="text-ui-lg font-semibold text-rm-text">
+                Choose GIF
+              </span>
+              <span className="mt-1 text-ui-xs text-rm-text-muted">
+                Open the GIF picker
+              </span>
+            </div>
+          </button>
+        </div>
 
-              <div className="space-y-4 px-6 pb-6">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isBusy}
-                    className="group flex min-h-[138px] flex-col items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {uploading ? (
-                      <Icon
-                        name="loader"
-                        size="2xl"
-                        className="mb-4 animate-spin text-rm-text"
-                      />
-                    ) : (
-                      <Icon
-                        name="upload"
-                        size="2xl"
-                        className="mb-4 text-rm-text-muted pointer-fine:group-hover:text-rm-text"
-                      />
-                    )}
-                    <span className="text-ui-lg font-semibold text-rm-text">
-                      Server Uploads
-                    </span>
-                    <span className="mt-1 text-ui-xs text-rm-text-muted">
-                      Upload your own image or clip
-                    </span>
-                  </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          accept="image/gif,image/png,image/jpeg,image/webp,video/mp4,video/webm"
+          aria-label="Upload media status"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              void handleUpload(file);
+            }
+          }}
+        />
 
-                  <button
-                    type="button"
-                    onClick={() => setShowGifPicker(true)}
-                    disabled={isBusy}
-                    className="group relative min-h-[138px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <div className="absolute right-3 top-3 h-12 w-12 rounded-2xl bg-rm-bg-hover" />
-                    <div className="absolute bottom-3 right-10 h-8 w-8 rounded-xl bg-rm-bg-hover" />
-                    <div className="relative z-10 flex h-full flex-col justify-end">
-                      <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-rm-bg-hover text-rm-text">
-                        <Icon name="sparkle" size="lg" />
-                      </div>
-                      <span className="text-ui-lg font-semibold text-rm-text">
-                        Choose GIF
-                      </span>
-                      <span className="mt-1 text-ui-xs text-rm-text-muted">
-                        Open the GIF picker
-                      </span>
-                    </div>
-                  </button>
-                </div>
+        {loadingRecents || hasRecents ? (
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-ui-sm font-semibold text-rm-text">Recents</h3>
+              {loadingRecents ? (
+                <span className="text-ui-xs text-rm-text-muted">
+                  Loading...
+                </span>
+              ) : null}
+            </div>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/gif,image/png,image/jpeg,image/webp,video/mp4,video/webm"
-                  aria-label="Upload media status"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleUpload(file);
-                    }
-                  }}
-                />
-
-                {loadingRecents || hasRecents ? (
-                  <div>
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-ui-sm font-semibold text-rm-text">
-                        Recents
-                      </h3>
-                      {loadingRecents ? (
-                        <span className="text-ui-xs text-rm-text-muted">
-                          Loading...
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {hasRecents ? (
-                      <VoiceStatusMediaMasonry
-                        items={recentItems}
-                        disabled={isBusy}
-                        onSelect={(media) => {
-                          void applyMedia(media);
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {error ? (
-                  <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-ui-sm text-destructive">
-                    {error}
-                  </div>
-                ) : null}
-              </div>
-            </DialogSurface>
+            {hasRecents ? (
+              <VoiceStatusMediaMasonry
+                items={recentItems}
+                disabled={isBusy}
+                onSelect={(media) => {
+                  void applyMedia(media);
+                }}
+              />
+            ) : null}
           </div>
+        ) : null}
 
-          <Suspense fallback={null}>
-            <GifPickerModal
-              open={shouldRenderGifPicker}
-              initialExpanded
-              lockExpanded
-              overlayZIndexClassName="z-70"
-              onClose={() => setShowGifPicker(false)}
-              onSelect={async (gif) => {
-                await handleGifSelect(voiceChannelStatusMediaFromGifItem(gif));
-              }}
-            />
-          </Suspense>
-        </>
-      </DialogPortal>
-    </Dialog>
+        {error ? <RowError>{error}</RowError> : null}
+
+        {/* Opened from this dialog: GifPickerModal's default overlay layer is
+            z-60, the stacked layer (11.1), above this dialog's z-50. */}
+        <Suspense fallback={null}>
+          <GifPickerModal
+            open={shouldRenderGifPicker}
+            initialExpanded
+            lockExpanded
+            onClose={() => setShowGifPicker(false)}
+            onSelect={async (gif) => {
+              await handleGifSelect(voiceChannelStatusMediaFromGifItem(gif));
+            }}
+          />
+        </Suspense>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
