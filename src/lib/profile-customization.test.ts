@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyProfileThemeDefaults,
+  hasCustomProfileColors,
   DEFAULT_PROFILE_THEME,
   sanitizeProfileCustomizationInput,
   normalizeDisplayColor,
@@ -120,14 +121,64 @@ describe("resolveProfileTheme", () => {
     expect(theme.isLightSurface).toBe(true);
   });
 
-  it("resolves a real surface for default profile themes instead of a transparent fallback", () => {
-    const theme = resolveProfileTheme({});
-    const cssVariables = theme.variables as Record<string, string | undefined>;
+  it("resolves a profile without custom colours to theme tokens", () => {
+    for (const input of [
+      {},
+      { profile_accent_color: null, profile_background_color: null },
+      // The server stores its default pair; the client treats it as unset.
+      {
+        profile_accent_color: DEFAULT_PROFILE_THEME.accent,
+        profile_background_color: DEFAULT_PROFILE_THEME.background,
+      },
+    ]) {
+      expect(hasCustomProfileColors(input)).toBe(false);
+      const theme = resolveProfileTheme(input);
+      const vars = theme.variables as Record<string, string | undefined>;
 
-    expect(theme.accentColor).toBe(DEFAULT_PROFILE_THEME.accent);
-    expect(theme.backgroundColor).toBeTruthy();
-    expect(cssVariables["--rm-profile-custom-surface"]).not.toBe(
-      "linear-gradient(180deg, transparent, transparent)",
-    );
+      expect(vars["--rm-profile-custom-surface"]).toBe("var(--rm-bg-surface)");
+      expect(vars["--rm-profile-custom-text"]).toBe("var(--rm-text-primary)");
+      expect(vars["--rm-profile-custom-muted"]).toBe(
+        "var(--rm-text-secondary)",
+      );
+      expect(vars["--rm-profile-custom-button-bg"]).toBe(
+        "var(--rm-accent-solid)",
+      );
+      expect(vars["--rm-profile-custom-card-border"]).toBe("var(--rm-border)");
+      for (const value of Object.values(vars)) {
+        expect(value).not.toMatch(/#|rgba?\(/);
+      }
+      // No hex surface to measure: ProfileDisplayName reads the DOM instead.
+      expect(theme.backgroundColor).toBeNull();
+      expect(theme.textColor).toBeNull();
+    }
+  });
+
+  it("keeps a chosen banner colour with theme-token surfaces", () => {
+    const vars = resolveProfileTheme({ profile_banner_color: "#dbeafe" })
+      .variables as Record<string, string | undefined>;
+    expect(vars["--rm-profile-custom-banner-fallback"]).toBe("#DBEAFE");
+    expect(vars["--rm-profile-custom-surface"]).toBe("var(--rm-bg-surface)");
+  });
+
+  it("keeps custom colours as hex values", () => {
+    const input = {
+      profile_accent_color: "#F472B6",
+      profile_background_color: "#101820",
+    };
+    expect(hasCustomProfileColors(input)).toBe(true);
+    const theme = resolveProfileTheme(input);
+    const vars = theme.variables as Record<string, string | undefined>;
+
+    expect(theme.accentColor).toBe("#F472B6");
+    expect(vars["--rm-profile-custom-background"]).toBe("#101820");
+    expect(vars["--rm-profile-custom-accent"]).toBe("#F472B6");
+    expect(vars["--rm-profile-custom-surface"]).not.toContain("var(");
+    expect(theme.backgroundColor).toMatch(/^#[0-9A-F]{6}$/);
+  });
+
+  it("server defaults stay plain hex so nothing writes CSS variables", () => {
+    const defaults = applyProfileThemeDefaults({});
+    expect(defaults.profile_accent_color).toMatch(/^#[0-9A-F]{6}$/);
+    expect(defaults.profile_background_color).toMatch(/^#[0-9A-F]{6}$/);
   });
 });
