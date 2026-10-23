@@ -885,12 +885,21 @@ export type MessagePostprocessingBroadcast = (
   data: Record<string, unknown>,
 ) => Promise<void>;
 
+export interface MessagePostprocessingOutcome {
+  /**
+   * At least one URL failed transiently. Whatever did resolve is already
+   * stored and broadcast; the caller should re-run the embed step later
+   * (without notifications) instead of clearing the job.
+   */
+  retryEmbeds: boolean;
+}
+
 export async function processMessagePostprocessingTask(
   db: D1Database,
   task: MessagePostprocessingTask,
   broadcast: MessagePostprocessingBroadcast,
   genId: () => string = () => crypto.randomUUID(),
-): Promise<void> {
+): Promise<MessagePostprocessingOutcome> {
   const message = (await db
     .prepare(
       `SELECT m.id, m.channel_id, m.author_id, m.content, m.reply_to_id,
@@ -905,20 +914,28 @@ export async function processMessagePostprocessingTask(
     .bind(task.messageId, task.channelId)
     .first()) as Record<string, unknown> | null;
 
-  if (!message || Number(message.content_revision) !== task.revision) return;
+  if (!message || Number(message.content_revision) !== task.revision) {
+    return { retryEmbeds: false };
+  }
 
+  const storedEmbeds = parseStoredEmbeds(message.embeds);
+  // A URL that fails transiently keeps its stored embed (matched by URL);
+  // every URL that resolved is written now rather than waiting for the
+  // slowest provider. Before, one failing link dropped every embed in the
+  // message and the job was then cleared, so the retry never ran.
   const extraction = await extractAndProcessEmbedsWithStatus(
     String(message.content ?? "").trim(),
+    { previous: storedEmbeds },
   );
-  const storedEmbeds = parseStoredEmbeds(message.embeds);
-  const embeds = extraction.hadFailures ? storedEmbeds : extraction.embeds;
+  const embeds = extraction.embeds;
   const nextEmbeds = JSON.stringify(embeds);
   const currentEmbeds = JSON.stringify(storedEmbeds);
+  const embedsChanged = currentEmbeds !== nextEmbeds;
   const serverId =
     typeof message.server_id === "string" ? message.server_id : null;
 
   let embedWriteWon = true;
-  if (!extraction.hadFailures && currentEmbeds !== nextEmbeds) {
+  if (embedsChanged) {
     const updateResult = await db
       .prepare(
         `UPDATE messages SET embeds = ?
@@ -960,11 +977,10 @@ export async function processMessagePostprocessingTask(
   };
 
   const shouldEmitEmbedUpdate =
-    !extraction.hadFailures &&
     embedWriteWon &&
-    (task.notify === false ||
-      currentEmbeds !== nextEmbeds ||
-      embeds.length > 0);
+    (embedsChanged ||
+      (!extraction.hadFailures &&
+        (task.notify === false || embeds.length > 0)));
   if (shouldEmitEmbedUpdate) {
     if (serverId) {
       await emitEmbedUpdate({ kind: "server", id: serverId });
@@ -1006,7 +1022,7 @@ export async function processMessagePostprocessingTask(
     });
 
     for (const notification of notifBroadcasts) {
-      if (!(await isCurrentRevision())) return;
+      if (!(await isCurrentRevision())) return { retryEmbeds: false };
       await broadcast(
         { kind: "user", id: notification.userId },
         notification.event,
@@ -1014,6 +1030,8 @@ export async function processMessagePostprocessingTask(
       );
     }
   }
+
+  return { retryEmbeds: extraction.hadFailures };
 }
 
 // ─── createMessage ───────────────────────────────────────────────────────────

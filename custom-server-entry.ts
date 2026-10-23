@@ -501,6 +501,14 @@ export default {
             name: "R2 cleanup retry",
             run: () => retryR2Cleanup(env.DB, env.BUCKET),
           },
+        ],
+      },
+      // Embed retries back off from one minute, so a six-hourly sweep made
+      // them pointless. Delayed queue deliveries do the fast retries; this
+      // hourly sweep is the safety net.
+      postprocessing: {
+        crons: [MAINTENANCE_CRON, COLLECTIBLES_SYNC_CRON],
+        jobs: [
           {
             name: "Message postprocessing retry",
             run: () => retryMessagePostprocessing(env),
@@ -547,6 +555,7 @@ export default {
       BUCKET: env.BUCKET,
       CACHE: env.CACHE,
       MEETING_ROOM: env.MEETING_ROOM,
+      BACKGROUND_TASKS: env.BACKGROUND_TASKS,
     });
   },
 };
