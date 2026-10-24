@@ -21,6 +21,7 @@ import {
   peekEmbedHydration,
 } from "@/lib/embed-hydration-cache";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 import { Icon, type IconSize } from "@/components/ui/icon";
 import { HIT } from "@/components/ui/interaction";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
@@ -1472,7 +1473,10 @@ const TikTokEmbed = memo(
                     href={displayEmbed.author.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="pointer-fine:hover:underline"
+                    className={cn(
+                      "relative text-rm-accent-ink pointer-fine:hover:underline",
+                      HIT,
+                    )}
                   >
                     <EmbedInlineText
                       text={displayEmbed.author.name}
@@ -1495,11 +1499,14 @@ const TikTokEmbed = memo(
               href={displayEmbed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white transition-colors pointer-fine:hover:bg-black/85"
+              className={cn(
+                "relative inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-rm-tint-2 text-rm-text transition-colors pointer-fine:hover:bg-rm-tint-3",
+                HIT,
+              )}
               title="Open in TikTok"
               aria-label="Open in TikTok"
             >
-              <ExternalIcon />
+              <Icon name="externalLink" size="sm" />
             </a>
           </header>
 
@@ -1716,7 +1723,7 @@ const TikTokEmbed = memo(
                   <EmbedInlineText
                     text={captionText}
                     keyPrefix={`${embed.id}-tiktok-caption`}
-                    linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] pointer-fine:hover:underline"
+                    linkClassName="text-rm-accent-ink pointer-fine:hover:underline"
                   />
                 </p>
               )}
@@ -1923,12 +1930,17 @@ const TikTokEmbed = memo(
 const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   const spotifyEmbedUrl = getSpotifyEmbedUrl(embed.url);
   const playerHeight = getSpotifyPlayerHeight(embed.url);
+  // Spotify's dark player (theme=0) only on dark themes; light themes get its
+  // default light card so it does not sit as a black slab on a white message.
+  const { resolvedTheme } = useTheme();
+  const isLightTheme =
+    resolvedTheme === "light" || Boolean(resolvedTheme?.endsWith("-light"));
 
   // Spotify iframe handles ALL rendering — we use a bare BaseEmbed (no title/desc/thumbnail)
   return (
     <BaseEmbed embed={embed} width={400} bare>
       <iframe
-        src={`${spotifyEmbedUrl}?utm_source=generator&theme=0`}
+        src={`${spotifyEmbedUrl}?utm_source=generator${isLightTheme ? "" : "&theme=0"}`}
         title="Spotify player"
         frameBorder="0"
         sandbox={EMBED_WIDGET_SANDBOX}
@@ -2290,7 +2302,10 @@ const XEmbed = memo(
                 href={embed.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text"
+                className={cn(
+                  "relative mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text",
+                  HIT,
+                )}
                 aria-label="Open post on X"
                 title="Open on X"
               >
@@ -2416,7 +2431,10 @@ const XReferencedTweetCard = memo(
                   href={tweet.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text"
+                  className={cn(
+                    "relative mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors pointer-fine:hover:text-rm-text",
+                    HIT,
+                  )}
                   aria-label="Open quoted post on X"
                   title="Open on X"
                 >
@@ -2553,7 +2571,7 @@ const XExpandableText = memo(
           <EmbedInlineText
             text={text}
             keyPrefix={keyPrefix}
-            linkClassName="text-primary transition-colors pointer-fine:hover:underline"
+            linkClassName="text-rm-accent-ink transition-colors pointer-fine:hover:underline"
             compactUrls
           />
         </div>
@@ -2587,7 +2605,7 @@ const XStandaloneTweetText = memo(
       expandedLabel="Show less"
       expandAriaLabel="Expand post text"
       collapseAriaLabel="Collapse post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-ui-sm font-medium text-primary transition-colors pointer-fine:hover:text-primary pointer-fine:hover:underline"
+      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-ui-sm font-medium text-rm-accent-ink transition-colors pointer-fine:hover:underline"
     />
   ),
 );
@@ -4429,7 +4447,10 @@ const InstagramEmbed = memo(
                     href={displayEmbed.author.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="truncate font-semibold text-rm-text pointer-fine:hover:underline"
+                    className={cn(
+                      "relative truncate font-semibold text-rm-text pointer-fine:hover:underline",
+                      HIT,
+                    )}
                   >
                     <EmbedInlineText
                       text={displayEmbed.author.name}
@@ -4459,11 +4480,14 @@ const InstagramEmbed = memo(
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white transition-colors pointer-fine:hover:bg-black/85"
+              className={cn(
+                "relative inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-rm-tint-2 text-rm-text transition-colors pointer-fine:hover:bg-rm-tint-3",
+                HIT,
+              )}
               title="Open in Instagram"
               aria-label="Open in Instagram"
             >
-              <ExternalIcon />
+              <Icon name="externalLink" size="sm" />
             </a>
           </header>
 
@@ -4681,7 +4705,7 @@ const InstagramEmbed = memo(
               <EmbedInlineText
                 text={captionText}
                 keyPrefix={`${embed.id}-instagram-caption`}
-                linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] pointer-fine:hover:underline"
+                linkClassName="text-rm-accent-ink pointer-fine:hover:underline"
               />
             </p>
           )}
@@ -4873,7 +4897,12 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
   return (
     <BaseEmbed embed={displayEmbed} width={432}>
       {showImage && (
-        <a href={embed.url} target="_blank" rel="noopener noreferrer">
+        <a
+          href={embed.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${displayEmbed.rawTitle || displayEmbed.provider?.name || "link"}`}
+        >
           <img
             src={thumbnailSrc}
             alt=""
