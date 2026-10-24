@@ -174,14 +174,6 @@ export function buildLocalMenu({
       ],
     },
     divider("apps"),
-    {
-      type: "item",
-      key: "show-non-video",
-      label: "Show Non-Video Participants",
-      checked: true,
-      onSelect: onClose,
-    },
-    divider("non-video"),
     ...(showDisconnect ? [disconnect, divider("disconnect")] : []),
     {
       type: "item",

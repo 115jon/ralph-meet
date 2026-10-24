@@ -57,9 +57,7 @@ export function buildRemoteMenu({
   isModerator,
   serverSoundboardMuted,
   toggleServerSoundboardMute,
-  onClose,
   handleCopyId,
-  showDisconnect = true,
 }: RemoteMenuOptions): StreamMenuEntry[] {
   const alwaysHear: StreamMenuEntry = {
     type: "item",
@@ -111,13 +109,6 @@ export function buildRemoteMenu({
           : []),
       ]
     : [];
-  const disconnect: StreamMenuEntry = {
-    type: "item",
-    key: "disconnect",
-    label: "Disconnect",
-    danger: true,
-    onSelect: onClose,
-  };
 
   if (isStreaming && !watchedStreams[userId]) {
     return [
@@ -202,7 +193,6 @@ export function buildRemoteMenu({
           },
           divider("apps"),
           ...moderatorItems,
-          ...(showDisconnect ? [disconnect] : []),
         ],
       },
     ];
@@ -235,7 +225,6 @@ export function buildRemoteMenu({
     ...(moderatorItems.length > 0
       ? [...moderatorItems, divider("moderator")]
       : []),
-    ...(showDisconnect ? [disconnect, divider("disconnect")] : []),
     {
       type: "item",
       key: "copy-id",
