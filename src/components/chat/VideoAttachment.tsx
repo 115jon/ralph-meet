@@ -284,7 +284,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
 
       {mediaError && !showPosterFallback ? (
         <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
-          <Icon name="alert" size="2xl" className="text-amber-300" />
+          <Icon name="alert" size="2xl" className="text-white" />
           <div>
             <p className="text-ui-sm font-semibold">
               This video cannot be played here
