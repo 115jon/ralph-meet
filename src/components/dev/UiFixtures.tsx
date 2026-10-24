@@ -2216,16 +2216,16 @@ function OverlaySurface({ surface }: { surface: string }) {
  */
 function VoiceDashboardFixture({ surface }: { surface: string }) {
   useFixtureDevices();
-  // The two menu surfaces mount with their menu open: press the dock control
-  // that owns it once the dashboard has rendered.
+  // Every surface mounts with its popover open: press the dock control that
+  // owns it once the dashboard has rendered. The dashboard's own popover is
+  // the connection details panel (signal button).
   useEffect(() => {
     const label =
       surface === "ov-noise-menu"
         ? "Noise suppression"
         : surface === "ov-stream-settings"
           ? "Stream settings"
-          : null;
-    if (!label) return;
+          : "Voice connection details";
     const id = window.setTimeout(() => {
       document
         .querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
