@@ -1,7 +1,11 @@
 "use client";
 
 import { getDisplayName } from "@/lib/display-name";
-import { CALL_ACCEPT, DOCK_LEAVE } from "@/components/ui/dock";
+import {
+  CALL_ACCEPT,
+  DOCK_DESTRUCTIVE,
+  DOCK_LEAVE,
+} from "@/components/ui/dock";
 import { DockButton } from "@/components/ui/dock-button";
 import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -657,12 +661,14 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                     onClick={(event) => handleAccept(getEventEpochMs(event))}
                   />
                   {isRingingIncoming && (
+                    // One solid fill per surface (1.1): Join voice keeps the
+                    // success fill, Decline is the destructive tint (13.2).
                     <IconButton
                       variant="plain"
                       size="lg"
                       icon="close"
                       tooltip="Decline"
-                      className={DOCK_LEAVE}
+                      className={DOCK_DESTRUCTIVE}
                       onClick={handleDecline}
                     />
                   )}

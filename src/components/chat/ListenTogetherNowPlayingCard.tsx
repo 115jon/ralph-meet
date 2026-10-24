@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { describeListenTogetherError } from "@/lib/listen-together";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,11 @@ import { formatListenTogetherDuration } from "./listen-together-playback";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { HIT, PRESS } from "@/components/ui/interaction";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
 import { useEffect, useRef } from "react";
@@ -411,7 +417,10 @@ export function ListenTogetherNowPlayingCard({
                 <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
                   {requesterAvatar}
                 </div>
-                <InlineEmojiText text={requesterLine} className="truncate" />
+                <InlineEmojiText
+                  text={requesterLine}
+                  className="block min-w-0 truncate"
+                />
               </div>
             </div>
           </div>
@@ -509,14 +518,16 @@ export function ListenTogetherNowPlayingCard({
 
   return (
     <TooltipProvider delayDuration={100}>
-      <div className={cn("space-y-4", className)}>
-        <div className="flex gap-4 md:gap-5">
+      <div className={cn("min-w-0 space-y-4", className)}>
+        <div className="flex min-w-0 gap-4 md:gap-5">
           <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-rm-tint-1 md:h-24 md:w-24">
             {artwork}
           </div>
           <div className="min-w-0 flex-1 py-0.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+            {/* The queue badge wraps under the title at 360 instead of
+                pushing the row past the card edge (N9). */}
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <div className="min-w-0 max-w-full">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
@@ -552,7 +563,10 @@ export function ListenTogetherNowPlayingCard({
               <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
                 {requesterAvatar}
               </div>
-              <InlineEmojiText text={requesterLine} className="truncate" />
+              <InlineEmojiText
+                text={requesterLine}
+                className="block min-w-0 truncate"
+              />
             </div>
           </div>
         </div>
@@ -584,7 +598,7 @@ export function ListenTogetherNowPlayingCard({
         {error && (
           <div className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
             <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
-            {error.message}
+            {describeListenTogetherError(error, "control playback")}
           </div>
         )}
 
@@ -667,18 +681,30 @@ export function ListenTogetherNowPlayingCard({
           <span className="min-w-9 text-right text-ui-xs tabular-nums text-rm-text-muted">
             {Math.round(localVolume * 100)}%
           </span>
-          <details className="relative shrink-0">
-            <summary
-              className={cn(
-                "flex size-10 cursor-pointer list-none items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text [&::-webkit-details-marker]:hidden",
-                PRESS,
-                HIT,
-              )}
+          <Popover>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className={cn(
+                    "relative flex size-10 shrink-0 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text data-popup-open:text-rm-text",
+                    PRESS,
+                    HIT,
+                  )}
+                />
+              }
             >
               <Icon name="privacy" size="sm" />
               <span className="sr-only">Audio options</span>
-            </summary>
-            <div className="absolute bottom-12 right-0 z-20 w-56 rounded-lg border border-rm-border bg-rm-bg-floating p-3 shadow-lg">
+            </PopoverTrigger>
+            {/* Stacked: the panel variant also lives in the phone sheet. */}
+            <PopoverContent
+              side="top"
+              align="end"
+              stacked
+              aria-label="Audio options"
+              className="w-56 p-3"
+            >
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-ui-xs font-semibold text-rm-text">
@@ -736,8 +762,8 @@ export function ListenTogetherNowPlayingCard({
                   ),
                 )}
               </div>
-            </div>
-          </details>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="flex items-center justify-between gap-3 text-ui-2xs text-rm-text-muted">

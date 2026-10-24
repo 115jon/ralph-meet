@@ -11,6 +11,7 @@ import {
   type ListenTogetherSearchResponse,
   type ListenTogetherSearchResult,
   type ListenTogetherTrack,
+  describeListenTogetherError,
 } from "@/lib/listen-together";
 import type { SFUClient } from "@/lib/sfu-client";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -286,6 +287,7 @@ export function ListenTogetherPanel({
   const paneRatioRef = useRef(0.38);
   const { menu, openMenu, closeMenu, shouldRender, isClosing } =
     useContextMenu();
+  const [menuLabel, setMenuLabel] = useState<string | undefined>();
   const workspacePaneRatio = useListenTogetherStore(
     (state) => state.workspacePaneRatio,
   );
@@ -851,6 +853,7 @@ export function ListenTogetherPanel({
       setMobileActionsOpen(true);
       return;
     }
+    setMenuLabel(`Actions for ${result.title}`);
     openMenu(
       event,
       getListenTogetherContextMenuItems(actions, (action) => {
@@ -997,7 +1000,7 @@ export function ListenTogetherPanel({
             {error && (
               <div className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
                 <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
-                {error.message}
+                {describeListenTogetherError(error, "update the queue")}
               </div>
             )}
           </div>
@@ -1479,6 +1482,7 @@ export function ListenTogetherPanel({
           topContent={menu.topContent}
           onClose={closeMenu}
           isClosing={isClosing}
+          label={menuLabel}
         />
       )}
       {mobileActionResult && (

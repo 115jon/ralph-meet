@@ -428,7 +428,10 @@ export default function UserProfileModal({
             <div className="flex flex-col gap-6 px-4 pb-2 md:px-6 md:pb-6">
               <div className="flex flex-col gap-3">
                 <div className="relative -mt-10 size-20 shrink-0 max-md:ml-2">
-                  <div className="flex size-full items-center justify-center rounded-full bg-rm-tint-3 text-ui-2xl font-semibold text-rm-text ring-4 ring-rm-bg-surface dark:ring-rm-bg-elevated">
+                  {/* The avatar overlaps the banner: the fallback is an accent
+                      tint laid over the card surface so the banner never shows
+                      through, and the ring is the same surface. */}
+                  <div className="flex size-full items-center justify-center rounded-full bg-rm-bg-surface bg-[linear-gradient(var(--rm-accent-tint),var(--rm-accent-tint))] text-ui-2xl font-semibold text-rm-accent-ink ring-4 ring-rm-bg-surface dark:bg-rm-bg-elevated dark:ring-rm-bg-elevated">
                     {resolvedUser.avatar_url ? (
                       <AvatarImage
                         src={getAuthAssetUrl(resolvedUser.avatar_url)}

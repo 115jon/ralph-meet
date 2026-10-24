@@ -33,7 +33,10 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
-import { resolveProfileTheme } from "@/lib/profile-customization";
+import {
+  PROFILE_BANNER_CHIP_STYLE,
+  resolveProfileTheme,
+} from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { UserStatusDot, type UserStatus } from "./UserStatusDot";
@@ -139,7 +142,12 @@ function PopoverAvatar({
             getDisplayInitial({ name: displayName })
           )}
         </div>
-        <div className="absolute bottom-1 right-1 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
+        {/* Opaque copy of the avatar ring's tint: the dot sits over the
+            avatar, so a translucent wrapper let the photo show through. */}
+        <div
+          className="absolute bottom-1 right-1 z-20 rounded-full p-1"
+          style={PROFILE_BANNER_CHIP_STYLE}
+        >
           <UserStatusDot
             status={isOnline ? status : "offline"}
             className="size-4"

@@ -642,7 +642,8 @@ export default function FriendsView({
                     </span>
                     <UserStatusDot
                       status={rel.user.status ?? "offline"}
-                      className="absolute -right-0.5 -bottom-0.5 size-3.5 border-2 border-rm-bg-primary"
+                      ring="bg-rm-bg-primary"
+                      className="absolute -right-0.5 -bottom-0.5 size-3.5"
                     />
                   </ButtonBase>
 

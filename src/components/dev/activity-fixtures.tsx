@@ -317,7 +317,7 @@ function ListenFixture({ surface }: { surface: string }) {
 function NowPlayingCards() {
   const playback = useListenTogetherPlaybackState(LISTEN_ROOM);
   return (
-    <div className="grid h-full content-start gap-6 overflow-y-auto p-4 md:grid-cols-2 md:p-6">
+    <div className="grid h-full grid-cols-1 content-start gap-6 overflow-y-auto p-4 md:grid-cols-2 md:p-6">
       <div className="space-y-2">
         <p className="text-ui-xs text-rm-text-muted">variant="mini"</p>
         <ListenTogetherNowPlayingCard

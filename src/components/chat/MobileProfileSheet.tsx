@@ -195,7 +195,6 @@ function ProfileHeader({
             <UserStatusDot
               status={status}
               label={USER_STATUS_LABELS[status]}
-              cutoutClassName="bg-[var(--rm-profile-custom-background)]"
               className="size-5"
             />
           </div>

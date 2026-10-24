@@ -201,7 +201,8 @@ export function CommandMenuDMsGroup({
               />
               <UserStatusDot
                 status={status}
-                className="absolute -right-0.5 -bottom-0.5 size-2.5 ring-2 ring-rm-bg-surface dark:ring-rm-bg-elevated"
+                ring="bg-rm-bg-surface dark:bg-rm-bg-elevated"
+                className="absolute -right-1 -bottom-1 size-3.5"
               />
             </span>
             <span className="min-w-0 truncate font-medium">

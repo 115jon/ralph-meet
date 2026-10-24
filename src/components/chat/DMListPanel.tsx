@@ -140,10 +140,8 @@ export function DMListPanel({
           </button>
           <UserStatusDot
             status={dm.recipient?.status ?? "offline"}
-            className={cn(
-              "pointer-events-none absolute -right-0.5 -bottom-0.5 z-20 size-3 border-2",
-              phone ? "border-rm-bg-primary" : "border-rm-sidebar",
-            )}
+            ring={phone ? "bg-rm-bg-primary" : "bg-rm-sidebar"}
+            className="pointer-events-none absolute -right-0.5 -bottom-0.5 z-20 size-3"
           />
         </div>
         <div className="min-w-0 flex-1">

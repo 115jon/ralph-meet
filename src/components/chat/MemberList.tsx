@@ -1901,7 +1901,8 @@ function MemberItem({
         ) : (
           <UserStatusDot
             status={isOnline ? (member.user.status ?? "online") : "offline"}
-            className="absolute -right-0.5 -bottom-0.5 z-20 size-3 border-2 border-rm-bg-surface md:border-rm-bg-sidebar"
+            ring="bg-rm-bg-surface md:bg-rm-bg-sidebar"
+            className="absolute -right-0.5 -bottom-0.5 z-20 size-3"
           />
         )}
       </div>

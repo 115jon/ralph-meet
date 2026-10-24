@@ -142,11 +142,7 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
               )}
             </div>
             <span className="absolute right-0 bottom-0 rounded-full bg-rm-bg-primary p-1">
-              <UserStatusDot
-                status={status}
-                cutoutClassName="bg-rm-bg-primary"
-                className="size-4"
-              />
+              <UserStatusDot status={status} className="size-4" />
             </span>
           </div>
           <h1 id={titleId} className="mt-2 text-ui-xl font-semibold">
@@ -217,11 +213,7 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
                 )}
               >
                 <span className={LEADING}>
-                  <UserStatusDot
-                    status={option.value}
-                    cutoutClassName="bg-rm-bg-primary"
-                    className="size-3"
-                  />
+                  <UserStatusDot status={option.value} className="size-3" />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className={checked ? "font-semibold" : "font-medium"}>

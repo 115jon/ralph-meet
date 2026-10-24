@@ -34,6 +34,7 @@ import {
   setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
 import type { DeviceSignInHookState } from "@/lib/device-sign-in";
+import { useFixtureSetup } from "@/components/dev/sp-fixtures/api-stub";
 import { SignIn } from "@kova/react";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -285,10 +286,10 @@ const INVITE: InvitePreview = {
 function InviteFixture({ surface }: { surface: string }) {
   const step = surface.replace("pub-invite-", "");
   const signedOut = step === "signed-out" || step === "signin";
-  useState(() => {
+  // The token write notifies the root's auth state: not during render.
+  const ready = useFixtureSetup(() => {
     if (signedOut) clearStoredKovaAuthSessionToken();
     else setStoredKovaAuthSessionToken("tok_fixture_invite");
-    return true;
   });
   useFetchStub((url) => {
     if (!url.includes("/api/invites/")) return null;
@@ -315,6 +316,7 @@ function InviteFixture({ surface }: { surface: string }) {
       : null,
     800,
   );
+  if (!ready) return null;
   return <InviteClient code="quiet-pro" redirectMs={10 * 60_000} />;
 }
 

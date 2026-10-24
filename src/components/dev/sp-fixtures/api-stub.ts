@@ -11,7 +11,7 @@ import {
   getStoredKovaAuthSessionToken,
   setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export type StubReply =
   | { status?: number; body?: unknown; delayMs?: number; pending?: boolean }
@@ -43,11 +43,39 @@ export const fail = (status: number, error = "Fixture failure"): StubReply => ({
 /** Never resolves: a loading state that stays put for the screenshot. */
 export const pending = (): StubReply => ({ pending: true });
 
+/**
+ * Runs `setup` (store seeds, session-token writes) in a layout effect and
+ * reports when it has run, so a fixture can hold its children until then.
+ * Doing those writes during render re-renders their subscribers (the root's
+ * auth state, chat-store readers) mid-render, which React reports as "Cannot
+ * update a component while rendering a different component". Layout effects
+ * still run before any child's mount-time (passive) fetch, and before paint.
+ */
+export function useFixtureSetup(setup: () => (() => void) | void): boolean {
+  const [ready, setReady] = useState(false);
+  const setupRef = useRef(setup);
+  useLayoutEffect(() => {
+    const cleanup = setupRef.current();
+    // The point of the hook: flip once the external writes are done.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReady(true);
+    return () => cleanup?.();
+  }, []);
+  return ready;
+}
+
+/**
+ * The API client refuses to send without a session token: store a
+ * placeholder for the fixture's lifetime when the browser has none (a real
+ * one is left alone). Returns the cleanup. Call from `useFixtureSetup`.
+ */
+export function installPlaceholderSession(): () => void {
+  if (getStoredKovaAuthSessionToken()) return () => {};
+  setStoredKovaAuthSessionToken("ui-fixture-session");
+  return () => clearStoredKovaAuthSessionToken();
+}
+
 function installStub(routes: StubRoute[]) {
-  const placeholder = getStoredKovaAuthSessionToken()
-    ? null
-    : "ui-fixture-session";
-  if (placeholder) setStoredKovaAuthSessionToken(placeholder);
   const original = window.fetch;
   window.fetch = async (input, init) => {
     const href =
@@ -84,7 +112,6 @@ function installStub(routes: StubRoute[]) {
   };
   return () => {
     window.fetch = original;
-    if (placeholder) clearStoredKovaAuthSessionToken();
   };
 }
 
@@ -93,10 +120,13 @@ function installStub(routes: StubRoute[]) {
  * mount-time fetches hit the stub) and remove them on unmount.
  */
 export function useApiStub(routes: StubRoute[]) {
+  // Swapping window.fetch notifies nobody, so it can happen during render;
+  // the token write does notify, so it waits for the layout effect.
   const [uninstall] = useState(() =>
     typeof window === "undefined" ? () => {} : installStub(routes),
   );
   useEffect(() => uninstall, [uninstall]);
+  useLayoutEffect(() => installPlaceholderSession(), []);
 }
 
 /** Extra fixture query params the route doesn't validate. */
