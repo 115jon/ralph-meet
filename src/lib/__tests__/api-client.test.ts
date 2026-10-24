@@ -18,15 +18,18 @@ vi.mock("@/lib/kova-auth-config", () => ({
   KOVA_AUTH_PUBLISHABLE_KEY: null,
 }));
 
-vi.mock("@/lib/console-logger", () => ({
-  clog: () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+const logger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
 }));
 
-import { apiPost, apiUpload } from "@/lib/api-client";
+vi.mock("@/lib/console-logger", () => ({
+  clog: () => logger,
+}));
+
+import { apiGet, apiPost, apiUpload } from "@/lib/api-client";
 
 describe("api-client HTTP failure handling", () => {
   beforeEach(() => {
@@ -72,5 +75,38 @@ describe("api-client HTTP failure handling", () => {
       message: "Upload exploded",
       status: 500,
     });
+  });
+
+  it.each([401, 404])(
+    "logs an expected %i at debug, not as a console error",
+    async (status) => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "nope" }), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      await expect(apiGet(`/api/expected-${status}`)).rejects.toMatchObject({
+        status,
+      });
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(`status ${status}`),
+        expect.anything(),
+      );
+    },
+  );
+
+  it("still logs an unexpected 500 as a console error", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "boom" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(apiGet("/api/boom")).rejects.toMatchObject({ status: 500 });
+    expect(logger.error).toHaveBeenCalled();
   });
 });

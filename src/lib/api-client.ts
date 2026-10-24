@@ -12,6 +12,18 @@ import { clog } from "@/lib/console-logger";
 
 const log = clog("api-client");
 
+/**
+ * Statuses callers treat as answers, not faults: 401 (signed out, session
+ * probe) and 404 (bad invite, missing share). The caller decides what to
+ * show; logging them as console errors only adds noise to every page.
+ */
+const EXPECTED_FAILURE_STATUSES = new Set([401, 404]);
+
+function logHttpFailure(status: number, message: string, ...args: unknown[]) {
+  if (EXPECTED_FAILURE_STATUSES.has(status)) log.debug(message, ...args);
+  else log.error(message, ...args);
+}
+
 function getClientBearerToken(): string | null {
   return getDesktopToken() ?? getStoredKovaAuthSessionToken();
 }
@@ -213,7 +225,10 @@ export async function apiFetch<T>(
     json = await res.json();
   } catch (err) {
     if (!res.ok) {
-      log.error(`HTTP Error ${res.status}: ${res.statusText} on ${resolved}`);
+      logHttpFailure(
+        res.status,
+        `HTTP Error ${res.status}: ${res.statusText} on ${resolved}`,
+      );
       throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
     }
     log.error(`Parse error on ${resolved}`, err);
@@ -221,7 +236,11 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    log.error(`Failed ${resolved} with status ${res.status}:`, json);
+    logHttpFailure(
+      res.status,
+      `Failed ${resolved} with status ${res.status}:`,
+      json,
+    );
     throw createHttpResponseError(
       res,
       json,
