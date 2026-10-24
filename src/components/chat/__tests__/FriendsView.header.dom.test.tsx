@@ -80,6 +80,35 @@ describe("FriendsView header", () => {
     expect(screen.queryByTestId("friends-tab-strip")).toBeNull();
   });
 
+  it("at 768 in a narrow column, moves the tabs to the strip but keeps the labelled Add friend (N3)", () => {
+    setViewport(800);
+    const Original = globalThis.ResizeObserver;
+    // The md column beside the channel list and member panel is ~456px.
+    globalThis.ResizeObserver = class {
+      constructor(private cb: ResizeObserverCallback) {}
+      observe() {
+        this.cb(
+          [{ contentRect: { width: 456 } } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    try {
+      renderView();
+      const header = screen.getByTestId("friends-header");
+      expect(within(header).queryByRole("tablist")).toBeNull();
+      expect(
+        within(header).getByRole("button", { name: /Add friend/ }),
+      ).toHaveTextContent("Add friend");
+      const strip = screen.getByTestId("friends-tab-strip");
+      expect(within(strip).getAllByRole("tab")).toHaveLength(4);
+    } finally {
+      globalThis.ResizeObserver = Original;
+    }
+  });
+
   it("confirms Remove friend in a dialog instead of window.confirm", async () => {
     setViewport(1280);
     renderView();

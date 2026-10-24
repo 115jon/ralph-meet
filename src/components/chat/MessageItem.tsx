@@ -1,4 +1,5 @@
 import { LONG_PRESS_TARGET, useLongPressMenu } from "@/hooks/useLongPress";
+import { copyToClipboard } from "@/components/ui/toast";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { openSettings } from "@/components/chat/settings/settings-links";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
@@ -143,6 +144,18 @@ export function formatMessageDate(
   }
 
   return `${messageDay} ${formatMessageTime(iso, formatClientDate)}`;
+}
+
+/** Taps on these keep their own meaning and don't toggle the row's time. */
+const TAP_INTERACTIVE =
+  "a, button, input, textarea, select, video, audio, [role='button'], [contenteditable='true']";
+
+function isCoarsePointer() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
 }
 
 function formatFileSize(bytes: number): string {
@@ -336,6 +349,9 @@ const MessageItem = memo(
     const [editing, setEditing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    // Touch has no hover: a tap on a grouped row (one without its own header)
+    // reveals its time in the gutter until the next tap.
+    const [timeRevealed, setTimeRevealed] = useState(false);
     const [editInput, setEditInput] = useState("");
     const [toolbarQuickReactions, setToolbarQuickReactions] = useState<
       EmojiRecentItem[]
@@ -697,7 +713,7 @@ const MessageItem = memo(
         {
           label: "Copy text",
           rightIcon: <Icon name="copy" size="sm" />,
-          onClick: () => navigator.clipboard.writeText(message.content),
+          onClick: () => void copyToClipboard(message.content, "Text copied"),
         },
         // The hover bar keeps this behind Shift; touch reaches it here.
         ...(message.channel_id && !message.pending
@@ -714,7 +730,7 @@ const MessageItem = memo(
               {
                 label: "Copy link",
                 rightIcon: <Icon name="link" size="sm" />,
-                onClick: () => navigator.clipboard.writeText(hoveredUrl),
+                onClick: () => void copyToClipboard(hoveredUrl, "Link copied"),
               },
               {
                 label: "Open link",
@@ -747,7 +763,7 @@ const MessageItem = memo(
               ID
             </span>
           ),
-          onClick: () => navigator.clipboard.writeText(message.id),
+          onClick: () => void copyToClipboard(message.id, "Message ID copied"),
           divider: isOwnMessage || canDeleteMessages || Boolean(onBan),
         },
       ];
@@ -880,13 +896,14 @@ const MessageItem = memo(
     );
 
     const copyMessageId = useCallback(() => {
-      void navigator.clipboard.writeText(message.id);
+      void copyToClipboard(message.id, "Message ID copied");
     }, [message.id]);
 
     const copyMessageLink = useCallback(() => {
       if (!message.channel_id) return;
-      void navigator.clipboard.writeText(
+      void copyToClipboard(
         buildMessageLink(activeServerId, message.channel_id, message.id),
+        "Message link copied",
       );
     }, [activeServerId, message.channel_id, message.id]);
 
@@ -953,6 +970,17 @@ const MessageItem = memo(
         )}
         onContextMenu={previewOnly ? undefined : handleContextMenu}
         {...messageLongPress}
+        data-time-revealed={timeRevealed || undefined}
+        onClick={
+          previewOnly || showHeader
+            ? undefined
+            : (e) => {
+                if (!isCoarsePointer()) return;
+                const target = e.target as HTMLElement;
+                if (target.closest(TAP_INTERACTIVE)) return;
+                setTimeRevealed((v) => !v);
+              }
+        }
         onMouseEnter={previewOnly ? undefined : () => setInteractive(true)}
         onFocusCapture={previewOnly ? undefined : () => setInteractive(true)}
       >
@@ -1031,7 +1059,7 @@ const MessageItem = memo(
               )}
             </button>
           ) : (
-            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 group-focus-within:opacity-100">
+            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 group-focus-within:opacity-100 group-data-time-revealed:opacity-100">
               <span className="select-none text-ui-xs text-rm-text-muted tabular-nums">
                 {formatMessageTime(message.created_at, formatClientDate)}
               </span>

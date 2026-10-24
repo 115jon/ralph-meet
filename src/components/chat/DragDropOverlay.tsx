@@ -12,9 +12,7 @@ export function DragDropOverlay({ isDragging }: { isDragging: boolean }) {
             className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]"
           />
         </div>
-        <p className="text-ui-xl font-semibold text-rm-text-primary">
-          Drop to upload
-        </p>
+        <p className="text-ui-xl font-semibold text-rm-text">Drop to upload</p>
         <p className="text-ui-sm text-rm-text-muted">
           You can upload files up to 25MB
         </p>

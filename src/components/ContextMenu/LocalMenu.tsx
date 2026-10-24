@@ -19,11 +19,6 @@ export interface LocalMenuOptions {
   onToggleMute?: () => void;
   isDeafened?: boolean;
   onToggleDeafen?: () => void;
-  isModerator: boolean;
-  voiceChannels: any[];
-  handleMove: (channelId: string) => void;
-  handleServerMute: () => void;
-  handleServerDeafen: () => void;
   handleCopyId: () => void;
   showDisconnect?: boolean;
   alwaysShowStreamPreview?: boolean;
@@ -53,11 +48,6 @@ export function buildLocalMenu({
   onToggleMute,
   isDeafened,
   onToggleDeafen,
-  isModerator,
-  voiceChannels,
-  handleMove,
-  handleServerMute,
-  handleServerDeafen,
   handleCopyId,
   showDisconnect = true,
   alwaysShowStreamPreview,
@@ -184,24 +174,6 @@ export function buildLocalMenu({
       ],
     },
     divider("apps"),
-    ...(isModerator
-      ? [
-          {
-            type: "submenu" as const,
-            key: "move-to",
-            label: "Move to",
-            entries: voiceChannels.map(
-              (ch): StreamMenuEntry => ({
-                type: "item",
-                key: ch.id,
-                label: ch.name,
-                onSelect: () => handleMove(ch.id),
-              }),
-            ),
-          },
-          divider("move"),
-        ]
-      : []),
     {
       type: "item",
       key: "show-non-video",
@@ -210,25 +182,6 @@ export function buildLocalMenu({
       onSelect: onClose,
     },
     divider("non-video"),
-    ...(isModerator
-      ? [
-          {
-            type: "item" as const,
-            key: "server-mute",
-            label: "Server mute",
-            danger: true,
-            onSelect: handleServerMute,
-          },
-          {
-            type: "item" as const,
-            key: "server-deafen",
-            label: "Server deafen",
-            danger: true,
-            onSelect: handleServerDeafen,
-          },
-          divider("server"),
-        ]
-      : []),
     ...(showDisconnect ? [disconnect, divider("disconnect")] : []),
     {
       type: "item",

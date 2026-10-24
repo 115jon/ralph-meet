@@ -9,7 +9,6 @@ import {
   composerPrompt,
   MessageInputPlaceholder,
 } from "./MessageInputPlaceholder";
-import { Icon } from "@/components/ui/icon";
 
 import {
   useMessageInput,
@@ -163,7 +162,7 @@ export default function MessageInput({
             className="mr-2 bg-rm-tint-1"
           />
 
-          <div className="relative min-h-8 flex-1 overflow-hidden">
+          <div className="relative min-h-8 flex-1 overflow-hidden max-md:min-h-10">
             {value.length === 0 && (
               <div
                 aria-hidden="true"
@@ -173,7 +172,7 @@ export default function MessageInput({
                   channelName={channelName}
                   replyDisplayName={replyDisplayName}
                   isDM={isDM}
-                  className="py-1 text-ui-base font-normal leading-[1.375] text-rm-text-muted max-md:text-ui-md"
+                  className="py-1 text-ui-base font-normal leading-[1.375] text-rm-text-muted max-md:py-2 max-md:text-ui-md"
                 />
               </div>
             )}
@@ -181,7 +180,7 @@ export default function MessageInput({
             <div
               ref={twinRef}
               aria-hidden="true"
-              className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-ui-base font-normal leading-[1.375] text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar max-md:text-ui-md"
+              className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-ui-base font-normal leading-[1.375] text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar max-md:py-2 max-md:text-ui-md"
             >
               <InputMentionOverlay
                 text={value}
@@ -212,7 +211,7 @@ export default function MessageInput({
               onClick={enforceAtomicMentions}
               placeholder=""
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-ui-base font-normal leading-[1.375] text-transparent outline-none placeholder:text-rm-text-muted selection:bg-(--rm-selection) selection:text-transparent max-md:text-ui-md",
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-ui-base max-md:min-h-10 max-md:py-2 font-normal leading-[1.375] text-transparent outline-none placeholder:text-rm-text-muted selection:bg-(--rm-selection) selection:text-transparent max-md:text-ui-md",
               )}
               style={{
                 caretColor: "var(--rm-accent)",

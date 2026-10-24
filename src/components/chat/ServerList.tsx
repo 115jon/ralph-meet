@@ -6,6 +6,7 @@ import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Channel, Server, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { HIT, PRESS } from "@/components/ui/interaction";
+import { copyToClipboard } from "@/components/ui/toast";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -148,14 +149,9 @@ export default function ServerList({
       {
         label: "Copy ID",
         icon: <Icon name="copy" size="sm" />,
-        onClick: () => navigator.clipboard.writeText(server.id),
+        onClick: () => void copyToClipboard(server.id, "Server ID copied"),
       },
-      {
-        label: "Leave server",
-        icon: <Icon name="trash" size="sm" />,
-        onClick: () => alert("Leave server not implemented yet"),
-        variant: "danger",
-      },
+      // "Leave server" returns once the API exists (FINAL-FIX-ROUND blocker 3).
     ]);
   };
 
@@ -221,7 +217,7 @@ export default function ServerList({
         <div className="group relative flex w-full justify-center">
           <button
             className={cn(
-              "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
+              "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground",
               activeServerId === "@me" &&
                 "rounded-xl bg-primary text-primary-foreground",
             )}
@@ -552,7 +548,7 @@ export default function ServerList({
         })}
 
         <button
-          className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground"
+          className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text transition-ui enabled:active:scale-[0.96] pointer-fine:hover:rounded-xl pointer-fine:hover:bg-primary pointer-fine:hover:text-primary-foreground"
           onClick={() => setShowCreate(true)}
           aria-label="Create server"
         >

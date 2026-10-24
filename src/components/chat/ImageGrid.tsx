@@ -9,7 +9,9 @@ import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStor
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
+import { HIT } from "@/components/ui/interaction";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { GifProviderBranding } from "./GifProviderBranding";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
@@ -18,32 +20,44 @@ import React from "react";
 
 interface DeleteButtonProps {
   id: string;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<unknown>;
 }
 
 const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
+  const [confirming, setConfirming] = React.useState(false);
   return (
-    <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/att:opacity-100 transition-opacity z-20">
+    <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/att:opacity-100 pointer-fine:group-focus-within/att:opacity-100 transition-opacity z-20">
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          if (window.confirm("Delete this attachment?")) {
-            onDelete(id);
-          }
+          setConfirming(true);
         }}
-        className="p-1.5 bg-black/50 pointer-fine:hover:bg-rm-badge text-white/80 pointer-fine:hover:text-white rounded-lg transition-[background-color,color] shadow-sm"
-        aria-label="Delete image"
+        className={cn(
+          "relative rounded-md bg-black/50 p-1.5 text-white/80 transition-[background-color,color] pointer-fine:hover:bg-rm-danger pointer-fine:hover:text-rm-on-danger",
+          HIT,
+        )}
+        aria-label="Delete attachment"
       >
         <Icon name="trash" size="sm" />
       </button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Delete attachment"
+        description="This image will be removed from the message. This can't be undone."
+        confirmLabel="Delete attachment"
+        irreversible
+        errorAction="delete this attachment"
+        onConfirm={() => onDelete(id)}
+      />
     </div>
   );
 };
 
 interface ImageGridProps {
   attachments: Attachment[];
-  onDelete?: (attachmentId: string) => void;
+  onDelete?: (attachmentId: string) => void | Promise<unknown>;
   username?: string;
   displayName?: string | null;
   avatarUrl?: string | null;
@@ -191,9 +205,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     const att = attachments[0];
     return renderTile(att, 0, {
       frameClassName:
-        "w-fit min-h-[200px] rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl pointer-fine:hover:shadow-primary/5 transition-shadow",
+        "w-fit min-h-50 rounded-xl overflow-hidden border border-rm-border group/att relative",
       imageClassName:
-        "max-w-full max-h-[450px] min-h-[200px] w-auto object-contain transition-[filter]",
+        "max-w-full max-h-112 min-h-50 w-auto object-contain transition-[filter]",
       width: 800,
       height: 450,
     });
@@ -201,16 +215,19 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
 
   // Multi-image container settings
   const containerClasses =
-    "grid gap-1 rounded-xl overflow-hidden max-w-[550px] border border-rm-border shadow-xl bg-rm-bg-elevated";
+    "grid gap-1 rounded-xl overflow-hidden max-w-136 border border-rm-border bg-rm-bg-elevated";
+  // Multi-image tiles fill their grid cell.
+  const fill = "h-full w-full";
 
   // 2 Images: Two vertical columns
   if (count === 2) {
     return (
-      <div className={cn(containerClasses, "grid-cols-2 h-[300px]")}>
+      <div className={cn(containerClasses, "grid-cols-2 aspect-video")}>
         {attachments.map((att, idx) =>
           renderTile(att, idx, {
             frameClassName:
               "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
+            interactiveClassName: fill,
             imageClassName:
               "w-full h-full object-cover transition-[filter] duration-200",
             width: 300,
@@ -225,15 +242,16 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 3) {
     return (
       <div
-        className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[350px]")}
+        className={cn(containerClasses, "grid-cols-2 grid-rows-2 aspect-3/2")}
       >
         {[0, 1, 2].map((idx) => {
           const att = attachments[idx];
           return renderTile(att, idx, {
             frameClassName: cn(
-              "overflow-hidden group/att relative bg-[#0a0a0c]",
+              "overflow-hidden group/att relative bg-rm-bg-elevated",
               idx === 0 && "row-span-2",
             ),
+            interactiveClassName: fill,
             imageClassName:
               "w-full h-full object-cover transition-[filter] duration-200",
             width: idx === 0 ? 350 : 250,
@@ -248,12 +266,13 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 4) {
     return (
       <div
-        className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[400px]")}
+        className={cn(containerClasses, "grid-cols-2 grid-rows-2 aspect-4/3")}
       >
         {attachments.map((att, idx) =>
           renderTile(att, idx, {
             frameClassName:
               "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
+            interactiveClassName: fill,
             imageClassName:
               "w-full h-full object-cover transition-[filter] duration-200",
             width: 250,
@@ -271,9 +290,10 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
         {attachments.map((att, idx) =>
           renderTile(att, idx, {
             frameClassName: cn(
-              "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
+              "h-full w-full overflow-hidden group/att relative bg-rm-bg-elevated",
               idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square",
             ),
+            interactiveClassName: fill,
             imageClassName:
               "w-full h-full object-cover transition-[filter] duration-200",
             width: idx < 2 ? 300 : 200,
@@ -300,8 +320,8 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
             attachmentId={att.id}
             blur={shouldBlurSensitiveAttachment(att, contentFilter)}
             className={cn(
-              "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
-              isFirst ? "col-span-3 h-[250px]" : "col-span-1 aspect-square",
+              "h-full w-full overflow-hidden group/att relative bg-rm-bg-elevated",
+              isFirst ? "col-span-3 aspect-2/1" : "col-span-1 aspect-square",
             )}
           >
             {({ revealed }) => {

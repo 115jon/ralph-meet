@@ -22,12 +22,20 @@ import {
 } from "@/hooks/useLongPress";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
-import { useCallback, useEffect, useId, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { AvatarImage } from "./AvatarImage";
@@ -61,6 +69,33 @@ const EMPTY: Record<Tab, { icon: IconName; title: string; body?: string }> = {
 };
 
 type AddStatus = { kind: "success" | "error"; message: string } | null;
+
+/**
+ * Below this column width the tabs don't fit beside the title and Add friend
+ * (the md column beside the channel list and member panel is ~456px), so
+ * they move to their own scrollable strip, as on phones (N3).
+ */
+const INLINE_TABS_MIN_WIDTH = 560;
+
+/** True while the element is narrower than `min` (a JS container query). */
+function useNarrowerThan(
+  ref: React.RefObject<HTMLElement | null>,
+  min: number,
+) {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? el.clientWidth;
+      // 0 means not laid out yet (hidden tab, jsdom); keep the last answer.
+      if (width > 0) setNarrow(width < min);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, min]);
+  return narrow;
+}
 
 /** A pending remove/reject/cancel, confirmed in a ResponsiveDialog. */
 type RemoveTarget = { user: any; relType: number } | null;
@@ -112,6 +147,21 @@ function relationLabel(rel: { type: number; user: { status?: string } }) {
   return "Offline";
 }
 
+/**
+ * Add-friend failures in the person's terms. The server's own strings are
+ * log copy, so map the statuses /api/friends returns: 404 unknown username,
+ * 400 yourself, 409 already friends / blocked / request pending.
+ */
+function addFriendError(err: unknown) {
+  const status = (err as { status?: unknown } | null)?.status;
+  if (status === 404)
+    return "No one has that username. Check the spelling and try again.";
+  if (status === 400) return "You can't add yourself.";
+  if (status === 409)
+    return "You're already friends, have a request pending, or blocked this person.";
+  return describeApiError(err, "send that friend request");
+}
+
 /** Remove (friend), Reject (incoming) or Cancel (outgoing). */
 function removeCopy(relType: number) {
   if (relType === 0)
@@ -158,6 +208,10 @@ export default function FriendsView({
   const { menu, openMenu, closeMenu, shouldRender, isClosing } =
     useContextMenu();
   const isMobile = useIsMobile();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const narrow = useNarrowerThan(rootRef, INLINE_TABS_MIN_WIDTH);
+  // Tabs leave the header on phones and in narrow columns (768 with panels).
+  const tabsInStrip = isMobile || narrow;
   const addStatusId = useId();
 
   const [state, dispatch] = useReducer(fvReducer, {
@@ -213,12 +267,12 @@ export default function FriendsView({
       });
       dispatch({ type: "SET_ADD_USERNAME", value: "" });
       fetchFriends();
-    } catch (err: any) {
+    } catch (err) {
       dispatch({
         type: "SET_ADD_STATUS",
         value: {
           kind: "error",
-          message: err?.message || "Couldn't send the request. Try again.",
+          message: addFriendError(err),
         },
       });
     }
@@ -344,15 +398,17 @@ export default function FriendsView({
     dispatch({ type: "SET_ADD_FRIEND_MODE", value: !addFriendMode });
 
   // One tab list, placed inline in the header on desktop and in its own
-  // swipeable strip under the header on phones (it doesn't fit beside the
-  // title at 390).
+  // swipeable strip under the header on phones and narrow columns (it doesn't
+  // fit beside the title at 390, or in the 456px column at 768).
   const tabs = (
     <Tabs
       label="Friends"
       idBase="friends"
       panelId="friends-panel"
       scrollable
-      className={isMobile ? "h-11 gap-6 px-4" : "h-full min-w-0 self-stretch"}
+      className={
+        tabsInStrip ? "h-11 gap-6 px-4" : "h-full min-w-0 self-stretch"
+      }
       value={tab}
       onValueChange={(t) => dispatch({ type: "SET_TAB", value: t })}
       items={FRIEND_TABS.map((t) => ({
@@ -370,7 +426,10 @@ export default function FriendsView({
   const removal = removeTarget ? removeCopy(removeTarget.relType) : null;
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
+    <div
+      ref={rootRef}
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary"
+    >
       {/* Header (12.1 / 12.2): 48px + safe area. */}
       <header
         data-testid="friends-header"
@@ -394,7 +453,7 @@ export default function FriendsView({
           Friends
         </h1>
 
-        {!isMobile && (
+        {!tabsInStrip && (
           <>
             <div aria-hidden className="mx-2 h-5 w-px shrink-0 bg-rm-border" />
             {tabs}
@@ -425,7 +484,7 @@ export default function FriendsView({
         </div>
       </header>
 
-      {isMobile && (
+      {tabsInStrip && (
         <div
           data-testid="friends-tab-strip"
           className="shrink-0 border-b border-rm-border"

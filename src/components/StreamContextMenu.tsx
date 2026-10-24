@@ -14,7 +14,7 @@ import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
-import { clog } from "@/lib/console-logger";
+import { copyToClipboard } from "@/components/ui/toast";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import {
   DropdownMenu,
@@ -28,8 +28,6 @@ import {
 } from "./ContextMenu/ContextMenuItems";
 import { buildLocalMenu } from "./ContextMenu/LocalMenu";
 import { buildRemoteMenu } from "./ContextMenu/RemoteMenu";
-
-const log = clog("Mod");
 
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_WATCHED: Record<string, boolean> = {};
@@ -120,7 +118,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
 
   const { user: clerkUser } = useUser();
   const members = useChatStore((s) => s.members);
-  const channels = useChatStore((s) => s.channels);
 
   const myClerkId = clerkUser?.id;
   const isLocal = userId === "me" || userId === myClerkId;
@@ -134,8 +131,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER) ||
     hasPermission(myTotalPerms, PERMISSIONS.ADMINISTRATOR);
   const soundboardServerKey = getSoundboardServerKey(serverId);
-
-  const voiceChannels = channels.filter((c: any) => c.channel_type === "voice");
 
   const peerSetting = settings?.peerSettings?.[userId] || {
     volume: 100,
@@ -176,28 +171,12 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   }, [setPeerAlwaysHear, userId, peerSetting.alwaysHear]);
 
   const handleCopyId = useCallback(() => {
-    navigator.clipboard.writeText(userId === "me" ? myClerkId || "" : userId);
+    void copyToClipboard(
+      userId === "me" ? myClerkId || "" : userId,
+      "User ID copied",
+    );
     onClose();
   }, [userId, myClerkId, onClose]);
-
-  const handleServerMute = useCallback(() => {
-    log.info("Server mute toggled for", userId);
-    alert("Server mute: coming soon");
-  }, [userId]);
-
-  const handleServerDeafen = useCallback(() => {
-    log.info("Server deafen toggled for", userId);
-    alert("Server deafen: coming soon");
-  }, [userId]);
-
-  const handleMove = useCallback(
-    (targetChannelId: string) => {
-      log.info("Move user", userId, "to channel", targetChannelId);
-      alert("Move To: coming soon");
-      onClose();
-    },
-    [userId, onClose],
-  );
 
   const handleProfile = useCallback(() => {
     if (resolvedTargetUserId && onOpenProfileUser) {
@@ -234,11 +213,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
         onToggleMute,
         isDeafened,
         onToggleDeafen,
-        isModerator,
-        voiceChannels,
-        handleMove,
-        handleServerMute,
-        handleServerDeafen,
         handleCopyId,
         showDisconnect,
         alwaysShowStreamPreview,
@@ -260,11 +234,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
         handleProfile,
         handleMessage,
         isModerator,
-        handleServerMute,
-        handleServerDeafen,
         onClose,
-        voiceChannels,
-        handleMove,
         handleCopyId,
         showDisconnect,
       });

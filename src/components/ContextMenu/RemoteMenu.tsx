@@ -25,13 +25,9 @@ export interface RemoteMenuOptions {
   handleProfile: () => void;
   handleMessage: () => void;
   isModerator: boolean;
-  handleServerMute: () => void;
-  handleServerDeafen: () => void;
   serverSoundboardMuted?: boolean;
   toggleServerSoundboardMute?: () => void;
   onClose: () => void;
-  voiceChannels: any[];
-  handleMove: (channelId: string) => void;
   handleCopyId: () => void;
   showDisconnect?: boolean;
 }
@@ -59,13 +55,9 @@ export function buildRemoteMenu({
   handleProfile,
   handleMessage,
   isModerator,
-  handleServerMute,
-  handleServerDeafen,
   serverSoundboardMuted,
   toggleServerSoundboardMute,
   onClose,
-  voiceChannels,
-  handleMove,
   handleCopyId,
   showDisconnect = true,
 }: RemoteMenuOptions): StreamMenuEntry[] {
@@ -117,20 +109,6 @@ export function buildRemoteMenu({
               },
             ]
           : []),
-        {
-          type: "item",
-          key: "server-mute",
-          label: "Server mute",
-          danger: true,
-          onSelect: handleServerMute,
-        },
-        {
-          type: "item",
-          key: "server-deafen",
-          label: "Server deafen",
-          danger: true,
-          onSelect: handleServerDeafen,
-        },
       ]
     : [];
   const disconnect: StreamMenuEntry = {
@@ -253,25 +231,10 @@ export function buildRemoteMenu({
         { type: "item", key: "no-apps", label: "No apps", disabled: true },
       ],
     },
-    ...(isModerator
-      ? [
-          {
-            type: "submenu" as const,
-            key: "move-to",
-            label: "Move to",
-            entries: voiceChannels.map(
-              (ch): StreamMenuEntry => ({
-                type: "item",
-                key: ch.id,
-                label: ch.name,
-                onSelect: () => handleMove(ch.id),
-              }),
-            ),
-          },
-        ]
-      : []),
     divider("apps"),
-    ...(isModerator ? [...moderatorItems, divider("moderator")] : []),
+    ...(moderatorItems.length > 0
+      ? [...moderatorItems, divider("moderator")]
+      : []),
     ...(showDisconnect ? [disconnect, divider("disconnect")] : []),
     {
       type: "item",

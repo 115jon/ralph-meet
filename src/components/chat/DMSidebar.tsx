@@ -1,4 +1,5 @@
 import { HIT, PRESS } from "@/components/ui/interaction";
+import { copyToClipboard } from "@/components/ui/toast";
 import {
   PHONE_GROUP,
   PHONE_ICON_SLOT,
@@ -189,7 +190,7 @@ export default function DMSidebar({
       {
         label: "Copy ID",
         icon: <Icon name="copy" size="sm" />,
-        onClick: () => navigator.clipboard.writeText(dm.id),
+        onClick: () => void copyToClipboard(dm.id, "Channel ID copied"),
       },
     ]);
   };
