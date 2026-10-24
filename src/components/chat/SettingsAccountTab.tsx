@@ -474,10 +474,12 @@ function DisplayNameStyleDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogPortal>
-        <DialogOverlay className="z-70" />
+        {/* Opened from the settings dialog: the modal-stacked layer (11.1),
+            not the menu layer. */}
+        <DialogOverlay className="z-60" />
         <DialogSurface
           showCloseButton={false}
-          className="fixed inset-0 z-70 flex flex-col overflow-hidden bg-rm-bg-primary pt-[var(--safe-area-top,0px)] outline-none animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:duration-150 md:inset-auto md:left-1/2 md:top-1/2 md:max-h-[min(720px,calc(100dvh-32px))] md:w-[min(880px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-rm-border md:bg-rm-bg-surface md:pt-0 md:shadow-2xl md:dark:bg-rm-bg-elevated"
+          className="fixed inset-0 z-60 flex flex-col overflow-hidden bg-rm-bg-primary pt-[var(--safe-area-top,0px)] outline-none animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:duration-150 md:inset-auto md:left-1/2 md:top-1/2 md:max-h-[min(720px,calc(100dvh-32px))] md:w-[min(880px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-rm-border md:bg-rm-bg-surface md:pt-0 md:shadow-2xl md:dark:bg-rm-bg-elevated"
         >
           <header className="flex h-14 shrink-0 items-center gap-2 border-b border-rm-border px-4 md:px-6">
             <DialogTitle className="min-w-0 flex-1 truncate">
