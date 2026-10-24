@@ -9,6 +9,7 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { RadioList, RowError } from "@/components/chat/settings/primitives";
+import { describeApiError } from "@/lib/api-errors";
 import type { Message } from "@/lib/types";
 import { isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
@@ -74,8 +75,8 @@ export default function MessageShareModal({
         () => setCopyState("copied"),
         () => setCopyState("idle"),
       );
-    } catch (err: any) {
-      setError(err?.message || "This message cannot be shared publicly.");
+    } catch (err) {
+      setError(describeApiError(err, "share this message"));
     } finally {
       setCreating(false);
     }

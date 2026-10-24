@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -132,7 +133,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
         } catch (err) {
           dispatch({
             type: "SET_UPLOAD_ERROR",
-            payload: (err as Error).message || "Failed to upload icon",
+            payload: describeApiError(err, "upload that icon"),
           });
           dispatch({ type: "SET_CREATING", payload: false });
           return;
@@ -143,9 +144,17 @@ export default function CreateServerModal({ open, onClose }: Props) {
       if (server) {
         chatDispatch({ type: "SET_ACTIVE_SERVER", serverId: server.id });
         onClose();
+      } else {
+        dispatch({
+          type: "SET_UPLOAD_ERROR",
+          payload: describeApiError(null, "create the server"),
+        });
       }
-    } catch {
-      dispatch({ type: "SET_UPLOAD_ERROR", payload: "Something went wrong" });
+    } catch (err) {
+      dispatch({
+        type: "SET_UPLOAD_ERROR",
+        payload: describeApiError(err, "create the server"),
+      });
     }
     dispatch({ type: "SET_CREATING", payload: false });
   }, [
