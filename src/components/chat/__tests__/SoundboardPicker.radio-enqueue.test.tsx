@@ -113,8 +113,9 @@ describe("SoundboardPicker - Radio Enqueue", () => {
         message: "The radio station is unavailable.",
       });
     });
+    // Room errors arrive in log wording; the alert shows readable copy.
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "The radio station is unavailable.",
+      "Unable to start the radio.",
     );
 
     await user.click(screen.getByLabelText("Play Test Radio Station"));
