@@ -12,6 +12,10 @@ import { isSearchFixture } from "@/components/dev/search-fixture-surfaces";
 import { PublicFixture } from "@/components/dev/public-fixtures";
 import { PickerFixture } from "@/components/dev/picker-fixtures";
 import { EmbedFixture } from "@/components/dev/embed-fixtures";
+import {
+  FeedbackFixture,
+  isFeedbackFixture,
+} from "@/components/dev/feedback-fixtures";
 import { ActivityFixture } from "@/components/dev/activity-fixtures";
 import { StreamFixture } from "@/components/dev/stream-fixtures";
 import {
@@ -2526,6 +2530,11 @@ export default function UiFixtures() {
         <PickerFixture surface={surfaceName} />
       ) : surfaceName.startsWith("embed-") ? (
         <EmbedFixture surface={surfaceName} />
+      ) : isFeedbackFixture(surfaceName) ? (
+        <FeedbackFixture
+          surface={surfaceName}
+          shell={<Shell surface="shell-chat" />}
+        />
       ) : isStreamFixture(surfaceName) ? (
         <StreamFixture
           surface={surfaceName}

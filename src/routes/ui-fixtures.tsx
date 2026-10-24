@@ -32,6 +32,9 @@
  *             ov-stream-menu-self | ov-mention | ov-image-viewer
  *             ov-voice-dashboard | ov-voice-details | ov-stream-settings
  *             ov-noise-menu | ov-profile | ov-account | ov-audio-device
+ *           fx-* feedback + media (feedback-fixtures.tsx): fx-toast
+ *             fx-toast-copied | fx-confirm-{channel,category,kick,ban,
+ *             attachment,error} | fx-buttons | fx-image-grid | fx-video
  */
 
 import { createFileRoute, notFound } from "@tanstack/react-router";
