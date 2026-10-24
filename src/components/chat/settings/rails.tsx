@@ -12,7 +12,10 @@ import { UserStatusDot } from "@/components/chat/UserStatusDot";
 import { Icon } from "@/components/ui/icon";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { resolveProfileTheme } from "@/lib/profile-customization";
+import {
+  PROFILE_BANNER_CHIP_STYLE,
+  resolveProfileTheme,
+} from "@/lib/profile-customization";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
@@ -102,7 +105,10 @@ function ProfileRail() {
                 getDisplayInitial({ name: displayName })
               )}
             </div>
-            <div className="absolute bottom-0.5 right-0.5 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-0.5">
+            <div
+              className="absolute bottom-0.5 right-0.5 z-20 rounded-full p-0.5"
+              style={PROFILE_BANNER_CHIP_STYLE}
+            >
               <UserStatusDot status={status} className="size-4" />
             </div>
           </div>

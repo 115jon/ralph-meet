@@ -595,7 +595,8 @@ export default function UserPanel({
                 </div>
                 <UserStatusDot
                   status={currentStatus}
-                  className="absolute -right-0.5 -bottom-0.5 z-20 size-3.5 border-2 border-rm-bg-elevated"
+                  ring="bg-rm-bg-elevated"
+                  className="absolute -right-0.5 -bottom-0.5 z-20 size-3.5"
                 />
               </div>
               {showIdentity && (
