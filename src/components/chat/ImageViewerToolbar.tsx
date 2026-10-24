@@ -218,7 +218,7 @@ export function ImageViewerToolbar({
   const displayName = getDisplayName(context, "Unknown user");
 
   return (
-    <div className="absolute top-0 left-0 right-0 z-50 flex items-start justify-between gap-2 bg-linear-to-b from-rm-bg-primary/80 to-transparent p-2 pointer-events-none md:items-center md:p-4">
+    <div className="absolute top-0 left-0 right-0 z-50 flex items-start justify-between gap-2 bg-linear-to-b from-rm-bg-primary/80 to-transparent p-2 pt-[calc(8px+var(--safe-area-top,0px))] pointer-events-none md:items-center md:p-4 md:pt-[calc(16px+var(--safe-area-top,0px))]">
       {/* Left: User Info */}
       <div className="flex min-w-0 items-center gap-3 pointer-events-auto">
         {context?.avatar_url && (

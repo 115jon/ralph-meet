@@ -1,4 +1,9 @@
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogPortal,
+  DialogSurface,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
 import {
@@ -529,6 +534,11 @@ export const ImageViewerModal: React.FC = () => {
             "animate-in fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
         >
+          {/* Names the dialog after the attachment (else Radix's "Dialog"). */}
+          <DialogTitle className="sr-only">
+            {currentImage.filename || "Media viewer"}
+          </DialogTitle>
+
           {/* Top Toolbar */}
           {!hideUi && (
             <ImageViewerToolbar
@@ -545,7 +555,7 @@ export const ImageViewerModal: React.FC = () => {
 
           {/* Floating X button when clean mode active */}
           {hideUi && (
-            <div className="absolute top-4 right-4 z-60 bg-rm-bg-elevated/80 border border-rm-border rounded-xl p-1 shadow-lg">
+            <div className="absolute top-[calc(16px+var(--safe-area-top,0px))] right-4 z-60 bg-rm-bg-elevated/80 border border-rm-border rounded-xl p-1 shadow-lg">
               <button
                 type="button"
                 onClick={close}
@@ -563,7 +573,9 @@ export const ImageViewerModal: React.FC = () => {
             data-testid="image-viewer-stage"
             className={cn(
               "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
-              hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
+              hideUi
+                ? "p-0"
+                : "pt-[calc(56px+var(--safe-area-top,0px))] pb-24 px-4 md:pt-[calc(64px+var(--safe-area-top,0px))] md:pb-32 md:px-8",
               isItemVideo
                 ? "cursor-default"
                 : isZoomed
