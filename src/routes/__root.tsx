@@ -1,6 +1,7 @@
 import { NotFoundPage, RouteErrorPage } from "@/components/PageState";
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import {
@@ -120,6 +121,7 @@ function RootComponent() {
     <ThemeProvider>
       <TooltipProvider delayDuration={200}>
         <Outlet />
+        <Toaster />
       </TooltipProvider>
     </ThemeProvider>
   );
