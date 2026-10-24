@@ -1,4 +1,5 @@
 import { LONG_PRESS_TARGET, useLongPressMenu } from "@/hooks/useLongPress";
+import { copyToClipboard } from "@/components/ui/toast";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { openSettings } from "@/components/chat/settings/settings-links";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
@@ -697,7 +698,7 @@ const MessageItem = memo(
         {
           label: "Copy text",
           rightIcon: <Icon name="copy" size="sm" />,
-          onClick: () => navigator.clipboard.writeText(message.content),
+          onClick: () => void copyToClipboard(message.content, "Text copied"),
         },
         // The hover bar keeps this behind Shift; touch reaches it here.
         ...(message.channel_id && !message.pending
@@ -714,7 +715,7 @@ const MessageItem = memo(
               {
                 label: "Copy link",
                 rightIcon: <Icon name="link" size="sm" />,
-                onClick: () => navigator.clipboard.writeText(hoveredUrl),
+                onClick: () => void copyToClipboard(hoveredUrl, "Link copied"),
               },
               {
                 label: "Open link",
@@ -747,7 +748,7 @@ const MessageItem = memo(
               ID
             </span>
           ),
-          onClick: () => navigator.clipboard.writeText(message.id),
+          onClick: () => void copyToClipboard(message.id, "Message ID copied"),
           divider: isOwnMessage || canDeleteMessages || Boolean(onBan),
         },
       ];
@@ -880,13 +881,14 @@ const MessageItem = memo(
     );
 
     const copyMessageId = useCallback(() => {
-      void navigator.clipboard.writeText(message.id);
+      void copyToClipboard(message.id, "Message ID copied");
     }, [message.id]);
 
     const copyMessageLink = useCallback(() => {
       if (!message.channel_id) return;
-      void navigator.clipboard.writeText(
+      void copyToClipboard(
         buildMessageLink(activeServerId, message.channel_id, message.id),
+        "Message link copied",
       );
     }, [activeServerId, message.channel_id, message.id]);
 
