@@ -146,6 +146,18 @@ export function formatMessageDate(
   return `${messageDay} ${formatMessageTime(iso, formatClientDate)}`;
 }
 
+/** Taps on these keep their own meaning and don't toggle the row's time. */
+const TAP_INTERACTIVE =
+  "a, button, input, textarea, select, video, audio, [role='button'], [contenteditable='true']";
+
+function isCoarsePointer() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -337,6 +349,9 @@ const MessageItem = memo(
     const [editing, setEditing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    // Touch has no hover: a tap on a grouped row (one without its own header)
+    // reveals its time in the gutter until the next tap.
+    const [timeRevealed, setTimeRevealed] = useState(false);
     const [editInput, setEditInput] = useState("");
     const [toolbarQuickReactions, setToolbarQuickReactions] = useState<
       EmojiRecentItem[]
@@ -955,6 +970,17 @@ const MessageItem = memo(
         )}
         onContextMenu={previewOnly ? undefined : handleContextMenu}
         {...messageLongPress}
+        data-time-revealed={timeRevealed || undefined}
+        onClick={
+          previewOnly || showHeader
+            ? undefined
+            : (e) => {
+                if (!isCoarsePointer()) return;
+                const target = e.target as HTMLElement;
+                if (target.closest(TAP_INTERACTIVE)) return;
+                setTimeRevealed((v) => !v);
+              }
+        }
         onMouseEnter={previewOnly ? undefined : () => setInteractive(true)}
         onFocusCapture={previewOnly ? undefined : () => setInteractive(true)}
       >
@@ -1033,7 +1059,7 @@ const MessageItem = memo(
               )}
             </button>
           ) : (
-            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 group-focus-within:opacity-100">
+            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 group-focus-within:opacity-100 group-data-time-revealed:opacity-100">
               <span className="select-none text-ui-xs text-rm-text-muted tabular-nums">
                 {formatMessageTime(message.created_at, formatClientDate)}
               </span>
