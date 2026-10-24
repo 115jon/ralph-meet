@@ -668,9 +668,27 @@ export function ConfirmStrip({
 /* ------------------------------------------------------------------ */
 
 /**
+ * Roving tabindex: makes `target` the list's one tab stop (tabindex 0, the
+ * rest -1) and focuses it. Moving the stop before focusing matters: the
+ * global `[tabindex="-1"]:focus-visible` rule hides the ring on
+ * programmatic focus targets, so an item still at -1 would get no ring.
+ */
+export function focusRovingItem(
+  container: HTMLElement,
+  target: HTMLElement | null | undefined,
+) {
+  if (!target) return;
+  for (const item of container.querySelectorAll<HTMLElement>("[data-roving]")) {
+    item.tabIndex = item === target ? 0 : -1;
+  }
+  target.focus();
+}
+
+/**
  * Arrow-key focus for a list of `[data-roving]` items inside the handler's
  * element. Up/Down (or Left/Right in a grid), Home and End. With `select`,
- * moving also activates the item, as radios do.
+ * moving also activates the item, as radios do. Focus moves as a roving
+ * tabindex (see `focusRovingItem`) so the target shows the focus ring.
  */
 export function rovingKeyDown(
   event: React.KeyboardEvent<HTMLElement>,
@@ -692,6 +710,6 @@ export function rovingKeyDown(
   if (key === "End") next = items.length - 1;
   event.preventDefault();
   const target = items[next];
-  target?.focus();
+  focusRovingItem(event.currentTarget, target);
   if (options.select) target?.click();
 }

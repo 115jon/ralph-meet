@@ -262,7 +262,6 @@ export function SettingsWorkbench({
   children,
 }: SettingsWorkbenchProps) {
   const narrow = useIsMobile();
-  const titleId = useId();
   const pageTitleId = useId();
   const navRef = useRef<HTMLElement>(null);
   const pageTitleRef = useRef<HTMLHeadingElement>(null);
@@ -348,7 +347,6 @@ export function SettingsWorkbench({
           ) : null}
           <DialogSurface
             showCloseButton={false}
-            aria-labelledby={titleId}
             data-settings-workbench=""
             onOpenAutoFocus={(event) => {
               // Phones land on the list or the page heading; coarse tablets
@@ -375,9 +373,9 @@ export function SettingsWorkbench({
               hidden && "invisible",
             )}
           >
-            <DialogTitle id={titleId} className="sr-only">
-              {title}
-            </DialogTitle>
+            {/* Radix owns the title id and labels the dialog with it; an
+                id override hides the title from its DialogTitle check. */}
+            <DialogTitle className="sr-only">{title}</DialogTitle>
             <nav
               ref={navRef}
               tabIndex={-1}

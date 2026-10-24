@@ -175,7 +175,9 @@ export default function CommandMenu() {
               }
             }}
           >
-            <div className="flex items-center gap-2.5 border-b border-rm-border px-3.5">
+            {/* The input is borderless (rm-search-input drops the outline),
+                so the row's edge carries the field focus: 2px accent line. */}
+            <div className="flex items-center gap-2.5 border-b border-rm-border px-3.5 has-[input:focus-visible]:border-b-2 has-[input:focus-visible]:border-rm-focus">
               <Icon
                 name="search"
                 size="md"

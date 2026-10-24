@@ -454,7 +454,7 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain('href="https://www.twitch.tv/rikohgg"');
     expect(markup).toContain(">twitch.tv/rikohgg<");
     expect(markup).toContain(
-      "text-primary transition-colors pointer-fine:hover:underline",
+      "text-rm-accent-ink transition-colors pointer-fine:hover:underline",
     );
   });
 

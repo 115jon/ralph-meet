@@ -55,6 +55,7 @@ import SoundboardPanel from "./settings/SoundboardPanel";
 import VoiceVideoPanel from "./settings/VoiceVideoPanel";
 import {
   Highlight,
+  focusRovingItem,
   rovingKeyDown,
   SettingsContext,
   type SettingsContextValue,
@@ -369,9 +370,15 @@ export default function SettingsModal({
             }
             if (event.key === "ArrowDown") {
               event.preventDefault();
-              navRef.current
-                ?.querySelector<HTMLElement>("[data-roving]:not([disabled])")
-                ?.focus();
+              const list = navRef.current;
+              if (list) {
+                focusRovingItem(
+                  list,
+                  list.querySelector<HTMLElement>(
+                    "[data-roving]:not([disabled])",
+                  ),
+                );
+              }
             }
           }}
           placeholder="Search settings"

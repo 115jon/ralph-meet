@@ -48,13 +48,13 @@ function shareHead(data?: ShareLoaderData) {
   if (!data?.share) {
     return {
       meta: [
-        { title: "Shared Message - Ralph Meet" },
+        { title: "Shared message — Ralph Meet" },
         { name: "robots", content: "noindex, nofollow" },
         {
           name: "description",
           content: "This Ralph Meet message share is unavailable.",
         },
-        { property: "og:title", content: "Shared Message - Ralph Meet" },
+        { property: "og:title", content: "Shared message — Ralph Meet" },
         {
           property: "og:description",
           content: "This Ralph Meet message share is unavailable.",

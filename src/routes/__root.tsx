@@ -41,11 +41,11 @@ export const Route = createRootRoute({
         content:
           "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
       },
-      { title: "Ralph Meet — Real-Time Video Conferencing" },
+      { title: "Ralph Meet: voice, chat and video rooms" },
       {
         name: "description",
         content:
-          "Real-time video, audio & screen sharing powered by Cloudflare Realtime SFU",
+          "Voice, chat, video and screen share for the people you talk to every day. Start a room, send the link, they're in.",
       },
     ],
     links: [
