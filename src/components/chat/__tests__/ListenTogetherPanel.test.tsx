@@ -665,7 +665,7 @@ describe("ListenTogetherPanel", () => {
       await Promise.resolve();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Queue Collection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Queue collection" }));
     await act(async () => {
       await Promise.resolve();
     });

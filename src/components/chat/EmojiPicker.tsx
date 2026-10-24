@@ -4,6 +4,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { describeApiError } from "@/lib/api-errors";
 import { apiGet, apiPost } from "@/lib/api-client";
 import {
   MAX_AI_EMOJI_PROMPT_LENGTH,
@@ -30,9 +31,9 @@ import { PickerSurface } from "./PickerSurface";
 import { primeCustomEmojiCache } from "@/hooks/useCustomEmojiLookup";
 import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icon";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import {
   MENU_ITEM,
   MENU_ITEM_DEFAULT,
@@ -152,9 +153,15 @@ function matchesGeneratedEmojiSearch(
     .includes(normalizedQuery);
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim()
-    ? error.message
+/** Status-based copy (never the server's log message), or the fallback. */
+function getErrorMessage(
+  error: unknown,
+  action: string,
+  fallback: string,
+): string {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number"
+    ? describeApiError(error, action)
     : fallback;
 }
 
@@ -197,6 +204,7 @@ function NativeEmojiButton({
       className={cn(
         "flex size-10 items-center justify-center rounded-md",
         PRESS,
+        HIT,
       )}
     >
       <ReadyEmojiPreview
@@ -251,7 +259,7 @@ function CustomEmojiCard({
           />
         ) : isPending ? (
           <div className="flex flex-col items-center gap-1 text-rm-text-muted">
-            <Icon name="loader" size="sm" className="animate-spin" />
+            <Spinner />
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
               Generating
             </span>
@@ -499,7 +507,8 @@ export default function EmojiPicker({
         setGeneratedEmojiError(
           getErrorMessage(
             error,
-            "Could not load your emoji creations right now.",
+            "load your emoji creations",
+            "Unable to load your emoji creations. Check your connection and try again.",
           ),
         );
       } finally {
@@ -747,7 +756,11 @@ export default function EmojiPicker({
       );
     } catch (error) {
       setGenerateError(
-        getErrorMessage(error, "Could not start emoji generation right now."),
+        getErrorMessage(
+          error,
+          "start emoji generation",
+          "Unable to start emoji generation. Check your connection and try again.",
+        ),
       );
     } finally {
       setIsGenerating(false);
@@ -944,7 +957,7 @@ export default function EmojiPicker({
                           </Button>
                           <div className="text-right">
                             <div className="text-ui-sm font-semibold text-rm-text">
-                              AI Emoji Composer
+                              AI emoji composer
                             </div>
                             <div className="text-ui-xs text-rm-text-muted">
                               Build custom emoji for your server vibe
@@ -1050,6 +1063,7 @@ export default function EmojiPicker({
                                   className={cn(
                                     "flex size-10 items-center justify-center self-center rounded-md",
                                     PRESS,
+                                    HIT,
                                     activeCategory === CUSTOM_SECTION_ID &&
                                       "bg-rm-tint-2",
                                   )}
@@ -1089,6 +1103,7 @@ export default function EmojiPicker({
                                     className={cn(
                                       "flex size-10 items-center justify-center self-center rounded-md",
                                       PRESS,
+                                      HIT,
                                       activeCategory === category.id &&
                                         "bg-rm-tint-2",
                                     )}
@@ -1137,7 +1152,7 @@ export default function EmojiPicker({
                                         className="text-rm-accent-ink"
                                       />
                                     }
-                                    title="Your Creations"
+                                    title="Your creations"
                                     count={customSearchResults.length}
                                     isCollapsed={false}
                                     onToggle={() => undefined}
@@ -1200,7 +1215,7 @@ export default function EmojiPicker({
                                       className="text-rm-text"
                                     />
                                   }
-                                  title="Recently Used"
+                                  title="Recently used"
                                   count={recents.length}
                                   isCollapsed={
                                     collapsedCategories[RECENTS_SECTION_ID] ??
@@ -1260,7 +1275,7 @@ export default function EmojiPicker({
                                       />
                                     )
                                   }
-                                  title="Your Creations"
+                                  title="Your creations"
                                   count={generatedEmojis.length}
                                   isCollapsed={
                                     collapsedCategories[CUSTOM_SECTION_ID] ??
@@ -1369,7 +1384,7 @@ export default function EmojiPicker({
                                 className="text-rm-accent-ink"
                               />
                             }
-                            title="Your Creations"
+                            title="Your creations"
                             count={generatedEmojis.length}
                             isCollapsed={false}
                             onToggle={() => undefined}

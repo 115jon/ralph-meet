@@ -158,9 +158,9 @@ describe("VoiceControls states", () => {
     expect(leave.className).toContain("bg-rm-danger ");
   });
 
-  it("uses the destructive tint, not solid, for Stop Watching and Leave Activity", () => {
+  it("uses the destructive tint, not solid, for Stop watching and Leave activity", () => {
     const watch = renderDock({ focusedItem: { id: "s", isStreaming: true } });
-    const stop = screen.getByRole("button", { name: "Stop Watching" });
+    const stop = screen.getByRole("button", { name: "Stop watching" });
     expect(stop.className).toContain("bg-rm-danger-tint");
     expect(stop.className).not.toContain("bg-rm-danger ");
     fireEvent.click(stop);

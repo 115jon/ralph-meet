@@ -36,7 +36,7 @@ interface DMListPanelProps {
 function statusLabel(status?: string | null) {
   if (status === "online") return "Online";
   if (status === "idle") return "Idle";
-  if (status === "dnd") return "Do Not Disturb";
+  if (status === "dnd") return "Do not disturb";
   return "Offline";
 }
 
@@ -74,11 +74,7 @@ export function DMListPanel({
     // Empty state (14.1): centred, unboxed, one line of guidance.
     return (
       <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-        <Icon
-          name="chat"
-          size={phone ? "2xl" : "xl"}
-          className="text-rm-text-muted"
-        />
+        <Icon name="chat" size="2xl" className="text-rm-text-muted" />
         <p className="text-ui-md font-semibold text-rm-text">No messages yet</p>
         <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
           Open a conversation from your friends list or a member's profile.

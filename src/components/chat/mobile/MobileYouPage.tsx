@@ -33,7 +33,7 @@ const STATUS_OPTIONS: ReadonlyArray<{
   { value: "idle", label: "Idle" },
   {
     value: "dnd",
-    label: "Do Not Disturb",
+    label: "Do not disturb",
     hint: "You won't get notification alerts",
   },
   {

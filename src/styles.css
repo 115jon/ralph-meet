@@ -1065,6 +1065,15 @@
     @apply border-border outline-ring/50;
   }
 
+  /* Native sliders take the accent ink, not the solid accent. Chrome paints
+     the unfilled track dark whenever the accent is light (miku-light's teal,
+     a foreground accent), which reads as a black bar on light themes; the ink
+     is the contrast-checked accent for each theme, so the track stays light
+     on light themes and the fill keeps 3:1. */
+  input[type="range"] {
+    accent-color: var(--rm-accent-ink);
+  }
+
   html,
   body {
     height: 100%;
@@ -1301,7 +1310,7 @@
 
 .rm-settings-range {
   height: 20px;
-  accent-color: var(--primary);
+  accent-color: var(--rm-accent-ink);
   cursor: pointer;
 }
 @media (pointer: coarse) {

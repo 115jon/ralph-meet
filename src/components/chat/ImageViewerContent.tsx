@@ -1,4 +1,5 @@
 import type { Attachment } from "@/lib/types";
+import { Spinner } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import React from "react";
 import { useVideoPlaybackAvailability } from "@/lib/video-playback-availability";
@@ -83,8 +84,12 @@ export function ImageViewerContent({
               draggable={false}
             />
             {(playbackAvailability === "checking" || !isLoaded) && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <div
+                role="status"
+                className="absolute inset-0 flex items-center justify-center text-rm-text-muted"
+              >
+                <Spinner className="size-6" />
+                <span className="sr-only">Loading</span>
               </div>
             )}
             <GifProviderBranding
@@ -163,8 +168,12 @@ export function ImageViewerContent({
               draggable={false}
             />
             {!isLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <div
+                role="status"
+                className="absolute inset-0 flex items-center justify-center text-rm-text-muted"
+              >
+                <Spinner className="size-6" />
+                <span className="sr-only">Loading</span>
               </div>
             )}
             <GifProviderBranding

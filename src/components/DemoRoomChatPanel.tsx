@@ -13,7 +13,16 @@ import {
   type ClientDateFormatter,
 } from "@/lib/client-date-format";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
 import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -166,7 +175,7 @@ export function DemoRoomChatPanel({
             </div>
             <div>
               <h2 className="text-ui-sm font-semibold text-rm-text">
-                Temporary Chat
+                Temporary chat
               </h2>
               <p className="text-ui-2xs font-medium text-rm-text-muted">
                 Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
@@ -227,20 +236,24 @@ export function DemoRoomChatPanel({
         onSubmit={handleSubmit}
         className="relative border-t border-rm-border p-3"
       >
-        <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-ui-2xs font-semibold text-amber-800 dark:text-amber-100/90">
+        <div className="mb-2 flex items-center gap-2 rounded-md bg-rm-warning-tint px-3 py-2 text-ui-xs font-medium text-rm-warning-ink">
           <Icon name="lock" size="sm" className="shrink-0" />
           Messages and GIFs here are demo-only and expire after{" "}
           {DEMO_CHAT_TTL_MINUTES} minutes.
         </div>
-        <div className="flex items-end gap-2 rounded-2xl bg-rm-bg-primary p-2 ring-1 ring-white/5">
+        <div className="flex items-end gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated p-2">
           <button
             type="button"
             onClick={onUploadBlocked}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text",
+              PRESS,
+              HIT,
+            )}
             title="Uploads are in the full app"
             aria-label="Uploads are in the full app"
           >
-            <Icon name="image" size="sm" />
+            <Icon name="image" size="lg" />
           </button>
           <textarea
             value={value}
@@ -257,25 +270,36 @@ export function DemoRoomChatPanel({
             maxLength={DEMO_CHAT_MAX_CONTENT_LENGTH}
             aria-label="Message this demo room"
             placeholder="Message this room"
-            className="custom-scrollbar max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-ui-sm font-medium text-rm-text outline-none placeholder:text-rm-text-muted/55"
+            className="custom-scrollbar max-h-28 min-h-8 flex-1 resize-none bg-transparent px-1 py-1.5 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted md:text-ui-base"
           />
           <button
             type="button"
             onClick={() => setShowGifPicker((current) => !current)}
-            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-ui-xs font-semibold tracking-wide text-rm-text-muted transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-primary"
+            aria-pressed={showGifPicker}
+            aria-label="Open GIF picker"
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text",
+              PRESS,
+              HIT,
+            )}
           >
-            GIF
+            <Icon name="gif" size="lg" />
           </button>
           <button
             type="submit"
             disabled={!value.trim()}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition pointer-fine:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground",
+              PRESS,
+              HIT,
+              DISABLED,
+            )}
             aria-label="Send message"
           >
-            <Icon name="send" size="sm" />
+            <Icon name="send" size="lg" />
           </button>
         </div>
-        <div className="mt-1 flex justify-end px-2 text-ui-2xs font-semibold text-rm-text-muted/70">
+        <div className="mt-1 flex justify-end px-2 text-ui-xs text-rm-text-muted tabular-nums">
           {characterCounter.label}
         </div>
         <GifPickerModal
@@ -298,54 +322,28 @@ export function DemoUploadBlockerModal({
   onSignIn,
 }: DemoUploadBlockerModalProps) {
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <DialogSurface
-          showCloseButton={false}
-          className="fixed inset-0 z-50 m-0 flex items-center justify-center border-0 bg-black/65 p-4"
-          aria-labelledby="demo-upload-blocker-title"
-        >
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
-            <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
-                <Icon name="lock" size="lg" />
-              </div>
-              <h2
-                id="demo-upload-blocker-title"
-                className="text-ui-xl font-semibold text-rm-text"
-              >
-                Uploads are in the full app
-              </h2>
-              <p className="mt-2 text-ui-sm leading-relaxed text-rm-text-muted">
-                Sign in to Ralph Meet to upload images and files with persistent
-                chat, attachment storage, and the full server experience.
-              </p>
-            </div>
-            <div className="space-y-3 px-6 py-5">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-ui-sm text-emerald-100/90">
-                You can try out our GIF implementation for a limited time.
-              </div>
-              <div className="flex flex-col gap-2 md:flex-row">
-                <button
-                  type="button"
-                  onClick={onSignIn}
-                  className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-ui-sm font-semibold text-primary-foreground transition pointer-fine:hover:brightness-110"
-                >
-                  Sign in for uploads
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-sm font-semibold text-rm-text-muted transition pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-                >
-                  Stay in demo
-                </button>
-              </div>
-            </div>
-          </div>
-        </DialogSurface>
-      </DialogPortal>
-    </Dialog>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent dialogClassName="md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
+            Uploads are in the full app
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Sign in to Ralph Meet to upload images and files, with persistent
+            chat and attachment storage. GIFs work here in the demo.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogFooter>
+          <Button variant="secondary" onClick={onClose}>
+            Stay in demo
+          </Button>
+          <Button onClick={onSignIn}>Sign in to upload</Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 

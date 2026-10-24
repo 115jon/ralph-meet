@@ -10,7 +10,7 @@
  */
 
 import { MiniAvatar } from "@/components/chat/MiniAvatar";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { HIT, PRESS } from "@/components/ui/interaction";
@@ -883,8 +883,9 @@ function SearchPanelBody({
             aria-pressed={sort === key}
             onClick={() => changeSort(key)}
             className={cn(
-              "h-6 rounded-[5px] px-2 text-ui-xs font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text aria-pressed:bg-rm-bg-primary aria-pressed:text-rm-text aria-pressed:shadow-[var(--rm-shadow-1)] max-md:h-8 max-md:px-2.5",
+              "h-6 rounded-sm px-2 text-ui-xs font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text aria-pressed:bg-rm-bg-primary aria-pressed:font-semibold aria-pressed:text-rm-text max-md:h-8 max-md:px-2.5",
               PRESS,
+              HIT,
             )}
           >
             {SORT_LABELS[key]}
@@ -994,8 +995,11 @@ function SearchPanelBody({
         <div ref={sentinelRef} aria-hidden="true" className="h-px" />
         <div className="flex justify-center pt-3">
           {state.loadingMore ? (
-            <span className="inline-flex items-center gap-2 text-ui-xs text-rm-text-muted">
-              <Icon name="loader" size="sm" className="animate-spin" />
+            <span
+              role="status"
+              className="inline-flex items-center gap-2 text-ui-xs text-rm-text-muted"
+            >
+              <Spinner />
               Loading more
             </span>
           ) : state.loadMoreFailed ? (

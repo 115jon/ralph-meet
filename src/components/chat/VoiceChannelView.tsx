@@ -93,7 +93,7 @@ interface VoiceChannelViewProps {
   onOpenMessageUser?: (userId: string) => void;
   /**
    * Optional guard called when the user attempts to join this voice channel.
-   * If provided, the landing page's "Join Voice" button will call this instead
+   * If provided, the landing page's "Join voice" button will call this instead
    * of joining directly. The callback receives the actual join function to invoke
    * when ready (e.g. after a confirmation modal).
    */

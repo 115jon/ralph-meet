@@ -524,7 +524,7 @@ describe("ChannelSidebar voice member identities", () => {
     expect(markup).toContain('data-voice-connection-state="reconnecting"');
     expect(markup).not.toContain(">LIVE<");
     expect(markup).not.toContain("Streaming now");
-    expect(markup).not.toContain("Open Stream");
+    expect(markup).not.toContain("Open stream");
   });
 
   it("renders the split voice channel status controls only for members currently in that voice channel", () => {

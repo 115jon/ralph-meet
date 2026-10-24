@@ -136,7 +136,7 @@ describe("UserProfilePopover", () => {
     );
 
     await screen.findByRole("dialog", { name: "User profile for grace" });
-    for (const name of ["Mod View", "Friends", "More Options"]) {
+    for (const name of ["Mod View", "Friends", "More options"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
     expect(screen.queryByRole("textbox")).toBeNull();

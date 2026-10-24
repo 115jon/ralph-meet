@@ -99,7 +99,7 @@ describe("VoiceDashboard stream settings menu", () => {
 
     fireEvent.click(trigger);
     const audio = await screen.findByRole("menuitemcheckbox", {
-      name: "Stream Audio",
+      name: "Stream audio",
     });
     expect(audio).toHaveAttribute("aria-checked", "true");
     fireEvent.click(audio);
@@ -107,7 +107,7 @@ describe("VoiceDashboard stream settings menu", () => {
 
     fireEvent.click(trigger);
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Stop Streaming" }),
+      await screen.findByRole("menuitem", { name: "Stop streaming" }),
     );
     expect(props.onStopStreaming).toHaveBeenCalledTimes(1);
   });
@@ -133,7 +133,7 @@ describe("VoiceDashboard stream settings menu", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Stream settings" }));
     const sheet = await screen.findByRole("dialog", {
-      name: "Stream Settings",
+      name: "Stream settings",
     });
     expect(sheet).toHaveAttribute("data-slot", "action-sheet");
 
@@ -146,12 +146,12 @@ describe("VoiceDashboard stream settings menu", () => {
 describe("VoiceDashboard noise suppression popover", () => {
   it("opens from its trigger and closes on Escape and back", async () => {
     renderDashboard({ isScreenSharing: false });
-    const trigger = screen.getByRole("button", { name: "Noise Suppression" });
+    const trigger = screen.getByRole("button", { name: "Noise suppression" });
 
     trigger.focus();
     fireEvent.click(trigger);
     const panel = await screen.findByRole("dialog", {
-      name: "Noise Suppression",
+      name: "Noise suppression",
     });
     expect(panel.closest("[data-rm-floating-layer]")).not.toBeNull();
     expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -163,7 +163,7 @@ describe("VoiceDashboard noise suppression popover", () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
 
     fireEvent.click(trigger);
-    await screen.findByRole("dialog", { name: "Noise Suppression" });
+    await screen.findByRole("dialog", { name: "Noise suppression" });
     act(() => {
       executeBackHandlers();
     });

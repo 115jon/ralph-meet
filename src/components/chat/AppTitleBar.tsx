@@ -1,6 +1,7 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
 import { useChatStore } from "@/stores/chat-store";
 import { getAppTitleBarModel } from "./AppTitleBarModel";
 import { HomeIcon } from "./HomeIcon";
@@ -64,22 +65,20 @@ export function WebAppTitleBar() {
       aria-label="Application title bar"
     >
       <div className="ml-1 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="flex h-6 w-6 items-center justify-center rounded-sm border-0 bg-transparent text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+        <IconButton
+          icon="chevronLeft"
+          size="xs"
+          variant="muted"
           aria-label="Go back"
-        >
-          <span aria-hidden="true">&#8249;</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => window.history.forward()}
-          className="flex h-6 w-6 items-center justify-center rounded-sm border-0 bg-transparent text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+          onClick={() => window.history.back()}
+        />
+        <IconButton
+          icon="chevronRight"
+          size="xs"
+          variant="muted"
           aria-label="Go forward"
-        >
-          <span aria-hidden="true">&#8250;</span>
-        </button>
+          onClick={() => window.history.forward()}
+        />
       </div>
       <AppTitleBarContent className="flex-1" />
       <div className="w-12" aria-hidden="true" />

@@ -140,12 +140,12 @@ describe("ImageViewerModal drag navigation", () => {
       clientY: 80,
     });
 
-    expect(screen.getByRole("menuitem", { name: "Save Image" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Save image" })).toBeVisible();
     expect(
-      screen.getByRole("menuitem", { name: "Copy Media Link" }),
+      screen.getByRole("menuitem", { name: "Copy media link" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("menuitem", { name: "Open Media Link" }),
+      screen.getByRole("menuitem", { name: "Open media link" }),
     ).toBeVisible();
   });
 
@@ -178,7 +178,7 @@ describe("ImageViewerModal drag navigation", () => {
     });
     act(() => {
       fireEvent.click(
-        screen.getByRole("menuitem", { name: "Copy Media Link" }),
+        screen.getByRole("menuitem", { name: "Copy media link" }),
       );
     });
 

@@ -68,8 +68,8 @@ describe("ImageViewerToolbar more menu", () => {
 
     const menu = await screen.findByRole("menu");
     expect(menu.closest('[data-slot="dropdown-menu-content"]')).not.toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Copy Image" })).toBeVisible();
-    const danger = screen.getByRole("menuitem", { name: "Copy Attachment ID" });
+    expect(screen.getByRole("menuitem", { name: "Copy image" })).toBeVisible();
+    const danger = screen.getByRole("menuitem", { name: "Copy attachment ID" });
     expect(danger.className).toContain("text-rm-danger-ink");
 
     fireEvent.click(danger);
@@ -106,8 +106,8 @@ describe("ImageViewerToolbar more menu", () => {
     const sheet = await screen.findByRole("dialog", {
       name: "Attachment actions",
     });
-    expect(sheet).toHaveTextContent("Copy Link");
-    const details = screen.getByRole("button", { name: /View Details/ });
+    expect(sheet).toHaveTextContent("Copy link");
+    const details = screen.getByRole("button", { name: /View details/ });
     act(() => {
       fireEvent.click(details);
     });
@@ -115,7 +115,7 @@ describe("ImageViewerToolbar more menu", () => {
       screen.getByRole("region", { name: "Image details panel" }),
     ).toHaveTextContent("640×480");
 
-    fireEvent.click(screen.getByRole("button", { name: /Copy Attachment ID/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Copy attachment ID/ }));
     expect(writeText).toHaveBeenCalledWith("att-1");
   });
 });

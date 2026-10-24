@@ -3,6 +3,8 @@ import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { Icon } from "@/components/ui/icon";
+import { Spinner } from "@/components/ui/button";
+import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { UploadedFileInfo } from "./MessageInput";
 
 interface PendingUpload {
@@ -43,10 +45,8 @@ export default function AttachmentList({
         <div
           key={att.id}
           className={cn(
-            "relative w-28 h-28 rounded-xl overflow-hidden border group/item bg-rm-bg-floating shadow-md animate-in slide-in-from-bottom-2 duration-300",
-            att.is_nsfw
-              ? "border-amber-500/40 ring-1 ring-amber-500/20"
-              : "border-rm-border",
+            "group relative size-28 overflow-hidden rounded-lg border bg-rm-bg-surface animate-in fade-in slide-in-from-bottom-2 duration-200",
+            att.is_nsfw ? "border-rm-warning-ink" : "border-rm-border",
           )}
         >
           {att.content_type.startsWith("image/") || att.previewUrl ? (
@@ -111,30 +111,42 @@ export default function AttachmentList({
             type="button"
             onClick={() => onToggleSensitive(att.id)}
             className={cn(
-              "absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-ui-2xs font-bold uppercase tracking-[0.14em] transition",
-              att.is_nsfw
-                ? "bg-amber-500/85 text-black pointer-fine:hover:bg-amber-400"
-                : "bg-black/50 text-white/80 pointer-fine:hover:bg-black/65 pointer-fine:hover:text-white",
+              // Media overlay chip over the preview (6.5).
+              "absolute bottom-1 left-1 inline-flex h-6 items-center gap-1 rounded-sm bg-black/60 px-1.5 text-ui-2xs font-semibold text-white",
+              PRESS,
+              HIT,
+              "absolute",
             )}
+            aria-pressed={att.is_nsfw}
+            aria-label={
+              att.is_nsfw
+                ? `${att.filename} is marked sensitive. Unmark it`
+                : `Mark ${att.filename} as sensitive`
+            }
           >
             <Icon name="warning" size="xs" />
-            {att.is_nsfw ? "Sensitive" : "Normal"}
+            {att.is_nsfw ? "Sensitive" : "Not sensitive"}
           </button>
-          <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/item:opacity-100 transition-opacity z-10">
-            <button
-              type="button"
-              onClick={() => onRemove(att.id)}
-              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text rounded-lg transition-ui shadow-sm"
-            >
-              <Icon name="trash" size="sm" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onRemove(att.id)}
+            aria-label={`Remove ${att.filename}`}
+            className={cn(
+              "absolute top-1 right-1 z-10 flex size-7 items-center justify-center rounded-md bg-black/60 text-white",
+              PRESS,
+              HIT,
+              "absolute",
+              REVEAL,
+            )}
+          >
+            <Icon name="trash" size="sm" />
+          </button>
         </div>
       ))}
       {pendingUploads.map((p) => (
         <div
           key={p.tempId}
-          className="w-28 h-28 rounded-xl border border-rm-border bg-rm-bg-surface/50 flex flex-col items-center justify-center relative overflow-hidden group/pending shadow-lg"
+          className="group relative flex size-28 flex-col items-center justify-center overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface"
         >
           {p.previewUrl ? (
             <img
@@ -159,26 +171,30 @@ export default function AttachmentList({
               })()}
             </div>
           )}
-          <div className="z-10 flex flex-col items-center p-3 w-full bg-rm-bg-floating/40 h-full justify-center">
-            <Icon
-              name="loader"
-              size="xl"
-              className="text-primary animate-spin mb-2 drop-shadow-[0_0_8px_var(--rm-glow)]"
-            />
-            <span className="text-ui-2xs text-rm-text-secondary font-medium truncate w-full text-center px-1 mb-1">
+          <div
+            role="status"
+            className="z-10 flex h-full w-full flex-col items-center justify-center gap-2 p-3"
+          >
+            <Spinner className="size-6 text-rm-accent-ink" />
+            <span className="sr-only">Uploading</span>
+            <span className="w-full truncate px-1 text-center text-ui-2xs font-medium text-rm-text-secondary">
               {p.file.name}
             </span>
           </div>
-          <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/pending:opacity-100 transition-opacity z-20">
-            <button
-              type="button"
-              onClick={() => onCancel(p.tempId)}
-              className="p-1.5 bg-black/50 pointer-fine:hover:bg-destructive text-rm-text/80 pointer-fine:hover:text-rm-text rounded-lg transition-ui shadow-sm"
-            >
-              <Icon name="close" size="sm" />
-            </button>
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-tr from-rm-bg-active/20 to-transparent pointer-events-none" />
+          <button
+            type="button"
+            onClick={() => onCancel(p.tempId)}
+            aria-label={`Cancel uploading ${p.file.name}`}
+            className={cn(
+              "absolute top-1 right-1 z-20 flex size-7 items-center justify-center rounded-md bg-black/60 text-white",
+              PRESS,
+              HIT,
+              "absolute",
+              REVEAL,
+            )}
+          >
+            <Icon name="close" size="sm" />
+          </button>
         </div>
       ))}
     </div>

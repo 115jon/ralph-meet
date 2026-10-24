@@ -41,7 +41,7 @@ export default function CreateCategoryModal({
 
   const fields = (
     <div className="flex flex-col gap-2">
-      <Label htmlFor="category-name">Category Name</Label>
+      <Label htmlFor="category-name">Category name</Label>
       <Input
         id="category-name"
         ref={inputRef}
@@ -71,7 +71,7 @@ export default function CreateCategoryModal({
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle className="flex items-center gap-2">
             <Icon name="tag" size="xl" className="text-rm-text-muted" />
-            Create Category
+            Create category
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Categories help you organize your channels and keep things tidy.
@@ -87,7 +87,7 @@ export default function CreateCategoryModal({
             disabled={!name.trim() || creating}
             loading={creating}
           >
-            Create Category
+            Create category
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

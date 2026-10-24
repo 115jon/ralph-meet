@@ -49,7 +49,7 @@ export function SettingsSwitch({
       <span
         aria-hidden="true"
         className={cn(
-          "absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform duration-150 ease-(--rm-ease-out) motion-reduce:transition-none",
+          "absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-(--rm-ease-out) motion-reduce:transition-none",
           checked ? "translate-x-4" : "translate-x-0",
         )}
       />

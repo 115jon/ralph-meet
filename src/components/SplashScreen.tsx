@@ -43,13 +43,17 @@ export function SplashScreen() {
   );
 
   useEffect(() => {
+    let fadeIn: ReturnType<typeof setTimeout> | null = null;
     const interval = setInterval(() => {
       dispatch("FADE_OUT");
-      setTimeout(() => {
+      fadeIn = setTimeout(() => {
         dispatch("FADE_IN_NEXT");
       }, 400);
     }, 3500);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (fadeIn) clearTimeout(fadeIn);
+    };
   }, []);
 
   return (

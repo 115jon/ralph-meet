@@ -37,7 +37,7 @@ describe("media-device-snapshot", () => {
       const browserDevices: MediaDeviceInfo_Custom[] = [
         {
           deviceId: "default",
-          label: "Default Microphone",
+          label: "Default microphone",
           kind: "audioinput",
         },
         { deviceId: "device1", label: "", kind: "audioinput" },

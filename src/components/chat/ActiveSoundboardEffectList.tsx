@@ -9,70 +9,10 @@ import {
   resumeSoundboardPlayback,
   setSoundboardPlaybackVolume,
   stopSoundboardPlayback,
-  getSoundboardServerKey,
 } from "@/lib/voice/soundboard";
-import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { Icon } from "@/components/ui/icon";
-import { useMemo } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
-interface ActiveSoundboardEffectListProps {
-  serverId?: string | null;
-  serverKey?: string;
-  localUserId?: string | null;
-  sfu: SFUClient | null;
-  variant?: "default" | "compact" | "floating";
-  className?: string;
-}
-
-export function ActiveSoundboardEffectList({
-  serverId,
-  serverKey: explicitServerKey,
-  localUserId,
-  sfu,
-  variant = "default",
-  className,
-}: ActiveSoundboardEffectListProps) {
-  const activePlaybacks = useVoiceSoundboardStore((s) => s.activePlaybacks);
-
-  const serverKey = explicitServerKey ?? getSoundboardServerKey(serverId);
-
-  const scopedPlaybacks = useMemo(() => {
-    return Object.values(activePlaybacks)
-      .filter(
-        (playback) =>
-          playback.serverKey === serverKey && playback.ownerId === localUserId,
-      )
-      .sort((a, b) => b.startedAt - a.startedAt);
-  }, [activePlaybacks, localUserId, serverKey]);
-
-  if (scopedPlaybacks.length === 0) {
-    return null;
-  }
-
-  return (
-    <TooltipProvider delayDuration={100}>
-      <div className={cn("space-y-2", className)}>
-        {scopedPlaybacks.map((playback) => (
-          <SoundboardPlaybackRow
-            key={playback.playbackId}
-            playback={playback}
-            localUserId={localUserId}
-            serverKey={serverKey}
-            sfu={sfu}
-            variant={variant}
-          />
-        ))}
-      </div>
-    </TooltipProvider>
-  );
-}
+import { IconButton } from "@/components/ui/IconButton";
 
 interface EffectItemProps {
   playback: {
@@ -187,39 +127,21 @@ export function SoundboardPlaybackRow({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {isOwner && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={handleTogglePause}
-                  aria-label={playback.paused ? "Resume" : "Pause"}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted pointer-fine:hover:bg-rm-bg-active pointer-fine:hover:text-rm-text"
-                >
-                  {playback.paused ? (
-                    <Icon name="play" size="xs" />
-                  ) : (
-                    <Icon name="pause" size="xs" />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {playback.paused ? "Resume" : "Pause"}
-              </TooltipContent>
-            </Tooltip>
+            <IconButton
+              icon={playback.paused ? "play" : "pause"}
+              size="xs"
+              variant="muted"
+              tooltip={playback.paused ? "Resume" : "Pause"}
+              onClick={handleTogglePause}
+            />
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={handleStop}
-                aria-label="Stop"
-                className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-destructive"
-              >
-                <Icon name="stop" size="xs" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Stop</TooltipContent>
-          </Tooltip>
+          <IconButton
+            icon="stop"
+            size="xs"
+            variant="destructive"
+            tooltip="Stop"
+            onClick={handleStop}
+          />
         </div>
       </div>
       {variant === "floating" && (
@@ -242,7 +164,7 @@ export function SoundboardPlaybackRow({
             onChange={(event) =>
               handleVolumeChange(Number(event.currentTarget.value) / 100)
             }
-            className="h-4 min-w-0 flex-1 cursor-pointer accent-primary"
+            className="h-4 min-w-0 flex-1 cursor-pointer"
           />
           <span className="w-8 text-right text-ui-2xs tabular-nums text-rm-text-muted">
             {Math.round(playback.volume * 100)}%

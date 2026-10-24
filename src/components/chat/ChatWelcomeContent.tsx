@@ -1,5 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { DitherField } from "@/components/ui/DitherField";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { memo, useMemo } from "react";
@@ -29,7 +27,7 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
     <div className="flex flex-col items-start px-4 pt-2 text-left">
       {isDM ? (
         <>
-          <div className="mb-5 flex overflow-hidden rounded-full ring-1 ring-rm-border shadow-md">
+          <div className="mb-4 flex overflow-hidden rounded-full">
             {dmRecipient?.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(dmRecipient.avatar_url)}
@@ -38,12 +36,12 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
                 className="h-20 w-20"
               />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center bg-rm-accent text-ui-2xl font-semibold text-primary-foreground">
+              <div className="flex size-20 items-center justify-center bg-rm-accent-solid text-ui-2xl font-semibold text-rm-on-accent">
                 {channelName?.[0]?.toUpperCase() ?? "?"}
               </div>
             )}
           </div>
-          <h1 className="mb-0 font-display text-display text-rm-text-primary text-balance">
+          <h1 className="text-ui-xl font-semibold text-balance text-rm-text">
             <InlineEmojiText
               text={
                 dmRecipient?.display_name ??
@@ -52,12 +50,12 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
               }
             />
           </h1>
-          <h2 className="mb-3 text-ui-md font-medium text-rm-text-muted">
+          <h2 className="mb-3 text-ui-md font-medium text-rm-text-secondary">
             @{dmRecipient?.username ?? channelName.toLowerCase()}
           </h2>
-          <p className="max-w-[60ch] text-ui-base text-rm-text-muted text-pretty">
+          <p className="max-w-[62ch] text-ui-base text-pretty text-rm-text-secondary">
             This is the absolute beginning of your direct message history with{" "}
-            <span className="font-semibold text-rm-text-secondary">
+            <span className="font-semibold text-rm-text">
               <InlineEmojiText
                 text={
                   dmRecipient?.display_name ??
@@ -68,29 +66,16 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
             </span>
             . Be kind, be bold, and let the conversation flow.
           </p>
-          <div className="mt-5 flex gap-2">
-            <Button type="button" variant="secondary">
-              View Profile
-            </Button>
-            <Button type="button" variant="destructive">
-              Block User
-            </Button>
-          </div>
         </>
       ) : (
         <>
-          <div className="relative mb-5 flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-rm-border shadow-sm">
-            <DitherField cell={4} intensity={0.6} seed={11} />
-            <Icon
-              name="textChannel"
-              size="2xl"
-              className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
-            />
+          <div className="mb-4 flex size-18 items-center justify-center rounded-lg bg-rm-accent-tint text-rm-accent-ink">
+            <Icon name="textChannel" size="2xl" />
           </div>
-          <h3 className="mb-2 font-display text-display text-rm-text-primary text-balance">
+          <h3 className="mb-3 text-ui-xl font-semibold text-balance text-rm-text">
             <InlineEmojiText text={`Welcome to #${channelName}`} />
           </h3>
-          <p className="max-w-[60ch] text-ui-base text-rm-text-muted text-pretty">
+          <p className="max-w-[62ch] text-ui-base text-pretty text-rm-text-secondary">
             <InlineEmojiText
               text={`This is the absolute beginning of the #${channelName} channel. Start a conversation, forge new paths, and let your frequencies align.`}
             />

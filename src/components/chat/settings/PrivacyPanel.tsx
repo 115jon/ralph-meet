@@ -95,11 +95,7 @@ function MediaFilterRow() {
         settingsUserId,
       );
       await loadCurrentUser();
-      setSaveError(
-        error instanceof Error
-          ? error.message
-          : "Couldn't save your media filter. Try again.",
-      );
+      setSaveError(describeApiError(error, "save your media filter"));
     } finally {
       setSavingFilter(null);
     }
@@ -375,13 +371,9 @@ function SharedMessagesRow() {
                 setError(null);
                 loadShares();
               }}
-              disabled={loading}
+              loading={loading}
             >
-              <Icon
-                name="refresh"
-                size="sm"
-                className={cn(loading && "animate-spin")}
-              />
+              <Icon name="refresh" size="sm" />
               Refresh
             </Button>
           </div>

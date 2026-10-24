@@ -43,7 +43,7 @@ describe("FloatingStreamPreview context menu", () => {
         channelName="General"
         displayName="You"
         previewStream={null}
-        primaryActionTooltip="Stop Streaming"
+        primaryActionTooltip="Stop streaming"
         primaryActionAriaLabel="Stop streaming"
         onPrimaryAction={() => {}}
         onNavigateToVoiceChannel={() => {}}
@@ -67,14 +67,14 @@ describe("FloatingStreamPreview context menu", () => {
     );
     fireEvent.click(
       await screen.findByRole("menuitemcheckbox", {
-        name: "Always Show Stream Preview",
+        name: "Always show stream preview",
       }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Open stream settings" }),
     );
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Stop Streaming" }),
+      await screen.findByRole("menuitem", { name: "Stop streaming" }),
     );
 
     expect(onToggleAlwaysShowStreamPreview).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ describe("FloatingStreamPreview context menu", () => {
         channelName="General"
         displayName="You"
         previewStream={null}
-        primaryActionTooltip="Stop Streaming"
+        primaryActionTooltip="Stop streaming"
         primaryActionAriaLabel="Stop streaming"
         onPrimaryAction={() => {}}
         onNavigateToVoiceChannel={() => {}}
@@ -122,7 +122,7 @@ describe("FloatingStreamPreview context menu", () => {
       screen.getByRole("button", { name: "Open stream settings" }),
     );
     const menuItem = await screen.findByRole("menuitemcheckbox", {
-      name: "Always Show Stream Preview",
+      name: "Always show stream preview",
     });
     fireEvent.pointerDown(menuItem, {
       button: 0,
@@ -145,7 +145,7 @@ describe("FloatingStreamPreview context menu", () => {
         channelName="General"
         displayName="You"
         previewStream={null}
-        primaryActionTooltip="Stop Streaming"
+        primaryActionTooltip="Stop streaming"
         primaryActionAriaLabel="Stop streaming"
         onPrimaryAction={() => {}}
         onNavigateToVoiceChannel={() => {}}
@@ -170,7 +170,7 @@ describe("FloatingStreamPreview context menu", () => {
 
     expect(
       await screen.findByRole("menuitemcheckbox", {
-        name: "Always Show Stream Preview",
+        name: "Always show stream preview",
       }),
     ).toBeTruthy();
   });

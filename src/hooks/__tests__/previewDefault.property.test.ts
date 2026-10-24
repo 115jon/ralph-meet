@@ -22,7 +22,7 @@ const previewKindArb: fc.Arbitrary<ScreenSharePreviewKind> = fc.constantFrom(
 );
 
 describe("resolvePreviewStartState — Property 9 (preview-default decision)", () => {
-  it("pauses preview on native shares iff Always Show Stream Preview is disabled", () => {
+  it("pauses preview on native shares iff Always show stream preview is disabled", () => {
     fc.assert(
       fc.property(previewKindArb, fc.boolean(), (kind, alwaysShowPreview) => {
         const decision = resolvePreviewStartState(kind, alwaysShowPreview);

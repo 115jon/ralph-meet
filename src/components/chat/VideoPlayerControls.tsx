@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { getDownloadUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { useEffect, useRef, useState } from "react";
 import {
   BigPlayIcon,
@@ -39,10 +40,7 @@ function TipButton({
       <TooltipTrigger asChild>
         <ButtonBase
           onClick={onClick}
-          className={cn(
-            "p-1.5 rounded-md pointer-fine:hover:bg-white/10 transition-colors",
-            className,
-          )}
+          className={cn("rounded-md p-1.5", PRESS, HIT, className)}
           aria-label={label}
         >
           {children}
@@ -280,7 +278,7 @@ export function VideoControlBar({
         {/* Play / Pause / Replay — no tooltip */}
         <ButtonBase
           onClick={togglePlay}
-          className="p-1.5 rounded-md pointer-fine:hover:bg-white/10 transition-colors"
+          className={cn("rounded-md p-1.5", PRESS, HIT)}
           aria-label={ended ? "Replay" : playing ? "Pause" : "Play"}
         >
           {ended ? <PlayAgainIcon /> : playing ? <PauseIcon /> : <PlayIcon />}
@@ -302,7 +300,7 @@ export function VideoControlBar({
         >
           <ButtonBase
             onClick={toggleMute}
-            className="p-1.5 rounded-md pointer-fine:hover:bg-white/10 transition-colors"
+            className={cn("rounded-md p-1.5", PRESS, HIT)}
             aria-label={muted ? "Unmute" : "Mute"}
             aria-expanded={volumePopoverOpen}
           >

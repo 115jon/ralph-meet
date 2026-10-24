@@ -42,7 +42,7 @@ export function RemoveEmbedsDialog({
             Cancel
           </Button>
           <Button variant="danger" onClick={onConfirm}>
-            Remove All Embeds
+            Remove all embeds
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

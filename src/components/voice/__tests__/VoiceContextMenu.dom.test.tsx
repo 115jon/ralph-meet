@@ -61,7 +61,7 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "More Options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "More options" }));
 
     const messageButton = await screen.findByRole("menuitem", {
       name: "Message",
@@ -86,11 +86,11 @@ describe("voice context menu wiring", () => {
 
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Mute" }));
     fireEvent.click(
-      screen.getByRole("menuitemcheckbox", { name: "Mute Soundboard" }),
+      screen.getByRole("menuitemcheckbox", { name: "Mute soundboard" }),
     );
     fireEvent.click(
       screen.getByRole("menuitemcheckbox", {
-        name: "Always Hear Stream Audio",
+        name: "Always hear stream audio",
       }),
     );
 
@@ -117,7 +117,7 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    const parent = screen.getByRole("menuitem", { name: "More Options" });
+    const parent = screen.getByRole("menuitem", { name: "More options" });
     act(() => parent.focus());
     fireEvent.keyDown(parent, { key: "ArrowRight" });
 

@@ -5,6 +5,8 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
+import { Spinner } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import { RowError } from "@/components/chat/settings/primitives";
 import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
@@ -208,9 +210,7 @@ export default function VoiceChannelMediaStatusModal({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load recent media",
-          );
+          setError(describeApiError(err, "load recent media"));
           setRecentItems([]);
         }
       })
@@ -244,9 +244,7 @@ export default function VoiceChannelMediaStatusModal({
       dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update channel media",
-      );
+      setError(describeApiError(err, "update the channel media"));
     } finally {
       setApplying(false);
     }
@@ -272,7 +270,7 @@ export default function VoiceChannelMediaStatusModal({
       setRecentItems((current) => dedupeAssets([response.item, ...current]));
       await applyMedia(response.item.media);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload media");
+      setError(describeApiError(err, "upload that media"));
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -310,9 +308,7 @@ export default function VoiceChannelMediaStatusModal({
       dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update channel media",
-      );
+      setError(describeApiError(err, "update the channel media"));
       setShowGifPicker(false);
     } finally {
       setApplying(false);
@@ -343,11 +339,10 @@ export default function VoiceChannelMediaStatusModal({
             className="group flex min-h-36 flex-col items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {uploading ? (
-              <Icon
-                name="loader"
-                size="2xl"
-                className="mb-4 animate-spin text-rm-text"
-              />
+              <span role="status" className="mb-4 text-rm-text">
+                <Spinner className="size-8" />
+                <span className="sr-only">Uploading</span>
+              </span>
             ) : (
               <Icon
                 name="upload"
@@ -356,7 +351,7 @@ export default function VoiceChannelMediaStatusModal({
               />
             )}
             <span className="text-ui-lg font-semibold text-rm-text">
-              Server Uploads
+              Server uploads
             </span>
             <span className="mt-1 text-ui-xs text-rm-text-muted">
               Upload your own image or clip

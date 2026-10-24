@@ -4,6 +4,15 @@ import { getWebOrigin } from "@/lib/platform";
 import { formatRelative } from "date-fns";
 import { enUS } from "date-fns/locale";
 import { Icon } from "@/components/ui/icon";
+import { HIT, PRESS } from "@/components/ui/interaction";
+import { cn } from "@/lib/utils";
+
+/** Icon control in the viewer's floating pills: 36px, 44 on touch. */
+export const VIEWER_BUTTON = cn(
+  "flex size-9 items-center justify-center rounded-lg text-rm-text-muted pointer-fine:hover:text-rm-text",
+  PRESS,
+  HIT,
+);
 import {
   ActionSheet,
   type ActionSheetItem,
@@ -135,7 +144,7 @@ export function ImageViewerToolbar({
       ? [
           {
             key: "copy-image",
-            label: "Copy Image",
+            label: "Copy image",
             icon: <Icon name="copy" size="sm" />,
             onSelect: handleCopyImage,
           },
@@ -143,19 +152,19 @@ export function ImageViewerToolbar({
       : []),
     {
       key: "copy-link",
-      label: "Copy Link",
+      label: "Copy link",
       icon: <Icon name="link" size="sm" />,
       onSelect: handleCopyLink,
     },
     {
       key: "details",
-      label: "View Details",
+      label: "View details",
       icon: <Icon name="info" size="sm" />,
       divider: true,
     },
     {
       key: "copy-id",
-      label: "Copy Attachment ID",
+      label: "Copy attachment ID",
       icon: <Icon name="copyId" size="sm" />,
       onSelect: handleCopyId,
       danger: true,
@@ -169,10 +178,10 @@ export function ImageViewerToolbar({
     >
       <h3 className="text-ui-sm font-semibold text-rm-text">
         {isAnimatedMedia
-          ? "GIF Details"
+          ? "GIF details"
           : isVideo
-            ? "Video Details"
-            : "Image Details"}
+            ? "Video details"
+            : "Image details"}
       </h3>
       <div>
         <div className={DETAIL_LABEL}>Filename</div>
@@ -206,7 +215,7 @@ export function ImageViewerToolbar({
   const formattedDate = context?.created_at
     ? formatFriendlyDate(context.created_at)
     : "";
-  const displayName = getDisplayName(context, "Unknown User");
+  const displayName = getDisplayName(context, "Unknown user");
 
   return (
     <div className="absolute top-0 left-0 right-0 z-50 flex items-start justify-between gap-2 bg-linear-to-b from-rm-bg-primary/80 to-transparent p-2 pointer-events-none md:items-center md:p-4">
@@ -225,7 +234,7 @@ export function ImageViewerToolbar({
         <div className="flex min-w-0 flex-col">
           <UserDisplayName
             user={context}
-            fallback="Unknown User"
+            fallback="Unknown user"
             className="block truncate text-ui-sm font-semibold leading-none text-rm-text drop-shadow-md"
           />
           {formattedDate && (
@@ -245,18 +254,18 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_OUT" })}
-                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className={VIEWER_BUTTON}
                 aria-label="Zoom out"
-                title="Zoom Out"
+                title="Zoom out"
               >
                 <Icon name="zoomOut" size="md" />
               </button>
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_IN" })}
-                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className={VIEWER_BUTTON}
                 aria-label="Zoom in"
-                title="Zoom In"
+                title="Zoom in"
               >
                 <Icon name="zoomIn" size="md" />
               </button>
@@ -268,9 +277,9 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={handleForward}
-                className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+                className={VIEWER_BUTTON}
                 aria-label="Jump to message"
-                title="Jump to Message"
+                title="Jump to message"
               >
                 <Icon name="chat" size="md" />
               </button>
@@ -281,7 +290,7 @@ export function ImageViewerToolbar({
             download={currentImage.filename}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+            className={VIEWER_BUTTON}
             aria-label="Download attachment"
             title="Download"
           >
@@ -371,7 +380,7 @@ export function ImageViewerToolbar({
           <button
             type="button"
             onClick={close}
-            className="p-2 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
+            className={VIEWER_BUTTON}
             aria-label="Close media viewer"
           >
             <Icon name="close" size="md" />

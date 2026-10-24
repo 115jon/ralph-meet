@@ -7,6 +7,7 @@
  */
 
 import { ShopItemCard } from "@/components/chat/collectibles/ShopItemCard";
+import { describeApiError } from "@/lib/api-errors";
 import { ShopItemDetail } from "@/components/chat/collectibles/ShopItemDetail";
 import type { PreviewIdentity } from "@/components/chat/collectibles/CollectiblePreviews";
 import { useCollectiblesCatalog } from "@/components/chat/collectibles/hooks";
@@ -136,7 +137,7 @@ function CollectionHero({
       ) : null}
       <div
         aria-hidden="true"
-        className="absolute inset-0 -z-10 bg-[linear-gradient(0deg,rgba(0,0,0,0.78),rgba(0,0,0,0.2)_55%,transparent)] md:bg-[linear-gradient(90deg,rgba(0,0,0,0.78),rgba(0,0,0,0.25)_55%,transparent)]"
+        className="absolute inset-0 -z-10 bg-linear-to-t from-black/80 via-black/20 via-55% to-transparent md:bg-linear-to-r md:via-black/25"
       />
       <div className="flex min-h-64 flex-col justify-end gap-3 p-5 md:min-h-[300px] md:max-w-[52%] md:justify-center md:p-8">
         <div className="flex flex-wrap items-center gap-2">
@@ -399,9 +400,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
         updated_at: user.updated_at ?? undefined,
       });
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Couldn't equip that. Try again.",
-      );
+      setActionError(describeApiError(err, "equip that"));
     } finally {
       setBusy(false);
     }

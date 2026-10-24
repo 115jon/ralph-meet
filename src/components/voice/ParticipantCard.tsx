@@ -1,7 +1,7 @@
 import { useLongPressMenu } from "@/hooks/useLongPress";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -216,9 +216,9 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Preview Paused Placeholder (local screen share hidden for performance) */}
         {isPreviewHidden && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70">
-            <Icon name="eyeOff" size="xl" className="text-white/50" />
-            <span className="text-ui-xs font-medium text-white/70">
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-rm-bg-elevated">
+            <Icon name="eyeOff" size="xl" className="text-rm-text-muted" />
+            <span className="text-ui-xs font-medium text-rm-text-secondary">
               Preview paused
             </span>
           </div>
@@ -227,7 +227,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Loading State */}
         {isLoadingStream && <StreamLoadingIndicator />}
 
-        {/* Watch Stream Prompt / Thumbnail Overlay */}
+        {/* Watch stream Prompt / Thumbnail Overlay */}
         {shouldShowWatchPrompt && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 overflow-hidden bg-rm-bg-surface p-2 text-center @min-[240px]:gap-2">
             {streamThumbnails[item.userId] && (
@@ -294,28 +294,15 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
               {/* Type Overlay Icon */}
               {isTray && isFocused && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/70 animate-in fade-in duration-300">
+                // On stage: the tray tile has no media here, so the marker
+                // sits on theme surface, not a black media overlay.
+                <div className="absolute inset-0 flex items-center justify-center bg-rm-bg-elevated text-rm-accent-ink animate-in fade-in duration-300">
                   {isScreen ? (
-                    <Icon
-                      name="screenShare"
-                      state="active"
-                      size="2xl"
-                      className="text-white"
-                    />
+                    <Icon name="screenShare" state="active" size="2xl" />
                   ) : isCamera ? (
-                    <Icon
-                      name="camera"
-                      state="active"
-                      size="2xl"
-                      className="text-white"
-                    />
+                    <Icon name="camera" state="active" size="2xl" />
                   ) : (
-                    <Icon
-                      name="call"
-                      state="active"
-                      size="2xl"
-                      className="text-white"
-                    />
+                    <Icon name="call" state="active" size="2xl" />
                   )}
                 </div>
               )}
@@ -398,7 +385,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               aria-label={isPreviewHidden ? "Resume preview" : "Pause preview"}
               className={cn(
                 PRESS,
-                "flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-ui-2xs font-medium text-white outline-none",
+                HIT,
+                "flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-ui-2xs font-medium text-white outline-none",
               )}
             >
               {isPreviewHidden ? (

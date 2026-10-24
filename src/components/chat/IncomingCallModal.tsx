@@ -174,13 +174,13 @@ export function IncomingCallModal() {
                     <Button
                       size="lg"
                       onClick={handleAccept}
-                      aria-label="Join Call"
+                      aria-label="Join call"
                       className={cn("w-16", CALL_ACCEPT)}
                     >
                       <Icon name="call" size="lg" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Join Call</TooltipContent>
+                  <TooltipContent side="bottom">Join call</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>

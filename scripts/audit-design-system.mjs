@@ -177,8 +177,15 @@ const RULES = [
         line,
         /(?<![\w-])((?:group|peer)-hover|hover)(?:\/[\w-]+)?:(?=[\w[!-])/g,
         (m) => {
-          const before = line.slice(Math.max(0, m.index - 13), m.index);
-          return before.endsWith("pointer-fine:") ? null : m[0];
+          const before = line.slice(Math.max(0, m.index - 40), m.index);
+          // Gated forms: the pointer-fine: variant, or the raw media variant
+          // `[@media(hover:hover)_and_(pointer:fine)]:hover:` (whose inner
+          // `(hover:` is part of the query, not a variant).
+          if (before.endsWith("pointer-fine:")) return null;
+          if (before.endsWith("(pointer:fine)]:")) return null;
+          if (before.endsWith("[@media(") || before.endsWith("_and_("))
+            return null;
+          return m[0];
         },
       ),
   },

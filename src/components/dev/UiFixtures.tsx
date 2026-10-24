@@ -183,8 +183,8 @@ const servers: Server[] = [
 
 const categories: Category[] = [
   { id: "c-info", server_id: "s-1", name: "Information", rank: 0 },
-  { id: "c-text", server_id: "s-1", name: "Text Channels", rank: 1 },
-  { id: "c-voice", server_id: "s-1", name: "Voice Channels", rank: 2 },
+  { id: "c-text", server_id: "s-1", name: "Text channels", rank: 1 },
+  { id: "c-voice", server_id: "s-1", name: "Voice channels", rank: 2 },
 ];
 
 const channels: Channel[] = [
@@ -1461,26 +1461,26 @@ function Menus() {
         y={180}
         items={[
           {
-            label: "Mark As Read",
+            label: "Mark as read",
             icon: <Icon name="check" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
-            label: "Copy Link",
+            label: "Copy link",
             icon: <Icon name="copy" size="sm" />,
             onClick: () => {},
           },
           {
-            label: "Notification Settings",
-            subtitle: "All Messages",
+            label: "Notification settings",
+            subtitle: "All messages",
             icon: <Icon name="check" size="sm" />,
             onClick: () => {},
             disabled: true,
             divider: true,
           },
           {
-            label: "Delete Channel",
+            label: "Delete channel",
             icon: <Icon name="trash" size="sm" />,
             onClick: () => {},
             variant: "danger",
@@ -1563,13 +1563,21 @@ function SettingsFixture({ tab }: { tab?: string }) {
   );
 }
 
-function OverlayFixture() {
-  useEffect(() => {
-    useChatStore.setState({ connected: false, reconnectAttempt: 2 } as never);
-  }, []);
+/**
+ * `overlay`: a dropped connection after the app had connected, so the
+ * reconnect copy and attempt count show. `overlay-connecting`: first load.
+ */
+function OverlayFixture({ reconnecting = true }: { reconnecting?: boolean }) {
+  useState(() => {
+    // Before the first render, so the overlay mounts already disconnected.
+    useChatStore.setState({
+      connected: false,
+      reconnectAttempt: reconnecting ? 2 : 0,
+    } as never);
+  });
   return (
     <div className="relative h-full w-full">
-      <ConnectionOverlay />
+      <ConnectionOverlay initialHasConnected={reconnecting} />
     </div>
   );
 }
@@ -1760,29 +1768,29 @@ function ActionSheetFixture() {
             onClick: () => {},
           },
           {
-            label: "Create Thread",
+            label: "Create thread",
             icon: <Icon name="thread" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
-            label: "Copy Text",
+            label: "Copy text",
             icon: <Icon name="copy" size="sm" />,
             onClick: () => {},
           },
           {
-            label: "Pin Message",
+            label: "Pin message",
             icon: <Icon name="pin" size="sm" />,
             onClick: () => {},
           },
           {
-            label: "Mark Unread",
+            label: "Mark unread",
             icon: <Icon name="markUnread" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
-            label: "Delete Message",
+            label: "Delete message",
             icon: <Icon name="trash" size="sm" />,
             onClick: () => {},
             variant: "danger",
@@ -2208,6 +2216,23 @@ function OverlaySurface({ surface }: { surface: string }) {
  */
 function VoiceDashboardFixture({ surface }: { surface: string }) {
   useFixtureDevices();
+  // The two menu surfaces mount with their menu open: press the dock control
+  // that owns it once the dashboard has rendered.
+  useEffect(() => {
+    const label =
+      surface === "ov-noise-menu"
+        ? "Noise suppression"
+        : surface === "ov-stream-settings"
+          ? "Stream settings"
+          : null;
+    if (!label) return;
+    const id = window.setTimeout(() => {
+      document
+        .querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+        ?.click();
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [surface]);
   return (
     <OverShell>
       <div className="fixed bottom-0 left-0 z-20 w-[312px] max-md:w-full border-t border-rm-border bg-rm-bg-secondary">
@@ -2441,6 +2466,9 @@ export default function UiFixtures() {
       break;
     case "overlay":
       content = <OverlayFixture />;
+      break;
+    case "overlay-connecting":
+      content = <OverlayFixture reconnecting={false} />;
       break;
     case "no-channel":
       content = (

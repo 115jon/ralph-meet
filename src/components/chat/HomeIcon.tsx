@@ -62,7 +62,7 @@ export function HomeIcon({
         <img
           src="/themes/miku/miku-wig.svg"
           alt=""
-          className="absolute -top-[8px] left-1/2 -translate-x-[47%] w-[43px] h-[43px] max-w-none pointer-events-none select-none z-10"
+          className="absolute -top-[8px] left-1/2 -translate-x-[47%] size-11 max-w-none pointer-events-none select-none z-10"
         />
       )}
       {isSpiderman && (

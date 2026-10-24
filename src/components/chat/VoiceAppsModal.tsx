@@ -110,7 +110,7 @@ export function VoiceAppsModal({
     handleClose();
   };
 
-  const title = tab === "menu" ? "Voice Apps" : "Activities";
+  const title = tab === "menu" ? "Voice apps" : "Activities";
 
   return (
     <ResponsiveDialog
@@ -126,7 +126,7 @@ export function VoiceAppsModal({
             <IconButton
               icon="chevronLeft"
               variant="muted"
-              aria-label="Back to Voice Apps"
+              aria-label="Back to voice apps"
               onClick={() => setTab("menu")}
               className="-ml-1"
             />

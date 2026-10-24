@@ -13,7 +13,7 @@ export const USER_STATUS_COLOR_CLASSES: Record<UserStatus, string> = {
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   online: "Online",
   idle: "Idle",
-  dnd: "Do Not Disturb",
+  dnd: "Do not disturb",
   offline: "Offline",
 };
 

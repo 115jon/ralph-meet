@@ -26,7 +26,7 @@ export function AudioInteractionModal({
     >
       <ResponsiveDialogContent className="md:max-w-sm">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Interaction Required</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Interaction required</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Browsers require user interaction before they will play audio. Just
             click okay to continue.

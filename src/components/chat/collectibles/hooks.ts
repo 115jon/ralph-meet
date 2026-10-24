@@ -3,6 +3,7 @@ import {
   loadCollectiblesCatalog,
   subscribeCollectiblesCatalog,
 } from "@/lib/collectibles-catalog-client";
+import { describeApiError } from "@/lib/api-errors";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 /**
@@ -26,9 +27,7 @@ export function useCollectiblesCatalog() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Couldn't load collectibles.",
-          );
+          setError(describeApiError(err, "load collectibles"));
         }
       })
       .finally(() => {

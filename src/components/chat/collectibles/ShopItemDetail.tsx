@@ -31,6 +31,7 @@ import type {
   CollectibleCatalogItem,
 } from "@/lib/collectibles-catalog";
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { useMemo, useState } from "react";
 
 import { CollectibleStage, type PreviewIdentity } from "./CollectiblePreviews";
@@ -142,8 +143,9 @@ export function ShopItemDetail({
                       title={label}
                       onClick={() => setVariantId(variant.id)}
                       className={cn(
-                        "relative size-9 rounded-full p-1 outline-none transition-transform duration-150 ease-(--rm-ease-out) active:scale-[0.94] motion-reduce:active:scale-100",
-                        "focus-visible:ring-2 focus-visible:ring-rm-focus",
+                        "size-9 rounded-full p-1",
+                        PRESS,
+                        HIT,
                         selected
                           ? "ring-2 ring-rm-text"
                           : "ring-1 ring-rm-border pointer-fine:hover:ring-rm-border-strong",
@@ -207,13 +209,9 @@ export function ShopItemDetail({
                 <Button
                   type="button"
                   onClick={() => onEquip(item)}
-                  disabled={busy}
-                  aria-busy={busy || undefined}
+                  loading={busy}
                   className="h-11 flex-1 md:h-9"
                 >
-                  {busy ? (
-                    <Icon name="loader" size="sm" className="animate-spin" />
-                  ) : null}
                   Equip {copy.one.toLowerCase()}
                 </Button>
               )}

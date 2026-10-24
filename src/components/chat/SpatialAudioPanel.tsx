@@ -13,6 +13,8 @@ import {
 import type { SpatialPlacementMode } from "@/stores/useVoiceSettingsStore";
 import { DndContext, type DragEndEvent, useDraggable } from "@dnd-kit/core";
 import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { ResponsivePopover } from "@/components/ui/popover";
 import { useMemo, useRef, useState } from "react";
 
@@ -74,15 +76,14 @@ function DraggableAvatar({
           : participant.name
       }
       className={cn(
-        "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-lg transition-shadow outline-none",
-        isSelf
-          ? "h-9 w-9 border-primary bg-primary shadow-primary/30"
-          : "h-9 w-9 bg-rm-bg-elevated",
-        participant.isSpeaking && !isSelf
-          ? "border-primary shadow-primary/30"
-          : "border-rm-border",
-        inactive && "grayscale opacity-55 border-amber-400/70",
-        isDragging && "z-20 shadow-2xl",
+        "absolute size-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-sm outline-none",
+        HIT,
+        isSelf ? "bg-rm-accent-solid" : "bg-rm-bg-elevated",
+        participant.isSpeaking || isSelf
+          ? "border-rm-accent-ink"
+          : "border-rm-border-strong",
+        inactive && "border-rm-warning-ink opacity-55 grayscale",
+        isDragging && "z-20 shadow-lg",
         disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing",
       )}
       style={{
@@ -94,7 +95,7 @@ function DraggableAvatar({
       {...attributes}
     >
       {isSelf && (
-        <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-ui-2xs font-bold text-rm-text">
+        <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-ui-2xs font-semibold text-rm-text">
           You
         </span>
       )}
@@ -114,8 +115,8 @@ function DraggableAvatar({
         </span>
       )}
       {inactive && (
-        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-ui-2xs font-bold text-black">
-          !
+        <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full border border-rm-warning-ink bg-rm-bg-surface text-rm-warning-ink">
+          <Icon name="warning" size="xs" />
         </span>
       )}
     </button>
@@ -251,7 +252,7 @@ export function SpatialAudioPanel({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="Spatial Audio"
+      title="Spatial audio"
       variant="rich"
       anchor={anchorRef}
       side="top"
@@ -260,30 +261,30 @@ export function SpatialAudioPanel({
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-ui-sm font-semibold text-rm-text">
-            Spatial Audio
+          <h3 className="text-ui-md font-semibold text-rm-text">
+            Spatial audio
           </h3>
-          <p className="mt-1 text-ui-xs text-rm-text-muted">
+          <p className="mt-1 text-ui-sm text-rm-text-secondary">
             Shared room placement for everyone in this voice session.
           </p>
         </div>
-        <button
-          type="button"
+        <IconButton
+          icon="close"
+          size="sm"
+          variant="muted"
+          aria-label="Close spatial audio"
           onClick={onClose}
-          className="rounded-md px-2 py-1 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-        >
-          Close
-        </button>
+        />
       </div>
 
       {blocked && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
-          <div className="flex items-center gap-2 text-ui-xs text-amber-200">
-            <Icon name="warning" size="sm" />
-            High Fidelity Audio is required to hear spatial audio.
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-md bg-rm-warning-tint px-3 py-2">
+          <div className="flex items-center gap-2 text-ui-sm text-rm-warning-ink">
+            <Icon name="warning" size="sm" className="shrink-0" />
+            Turn on high-fidelity audio to hear spatial audio.
           </div>
-          <Button size="sm" onClick={onOpenVoiceSettings}>
-            Open Voice Settings
+          <Button size="sm" variant="secondary" onClick={onOpenVoiceSettings}>
+            Open voice settings
           </Button>
         </div>
       )}
@@ -296,21 +297,29 @@ export function SpatialAudioPanel({
             onLocalSpatialEnabledChange(nextEnabled);
             commit({ enabled: nextEnabled });
           }}
+          aria-pressed={state.enabled}
           className={cn(
-            "rounded-lg px-3 py-2 text-ui-xs font-semibold transition-colors",
+            "inline-flex h-8 items-center gap-2 rounded-md px-3 text-ui-sm font-medium",
+            PRESS,
+            HIT,
             state.enabled && localSpatialEnabled && localHighFidelity
-              ? "bg-primary text-primary-foreground"
-              : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
+              ? "bg-rm-accent-tint font-semibold text-rm-accent-ink"
+              : "bg-rm-tint-1 text-rm-text-secondary pointer-fine:hover:text-rm-text",
           )}
         >
-          {state.enabled ? "Spatial Enabled" : "Spatial Disabled"}
+          <Icon name="spatial" size="sm" />
+          {state.enabled ? "Spatial audio on" : "Spatial audio off"}
         </button>
         <button
           type="button"
           onClick={() =>
             commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })
           }
-          className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-ui-xs font-semibold text-rm-text-muted pointer-fine:hover:text-rm-text"
+          className={cn(
+            "inline-flex h-8 items-center gap-2 rounded-md bg-rm-tint-1 px-3 text-ui-sm font-medium text-rm-text-secondary pointer-fine:hover:text-rm-text",
+            PRESS,
+            HIT,
+          )}
         >
           <Icon name="reset" size="sm" /> Reset
         </button>
@@ -322,11 +331,14 @@ export function SpatialAudioPanel({
             key={mode.value}
             type="button"
             onClick={() => commit({ placementMode: mode.value })}
+            aria-pressed={state.placementMode === mode.value}
             className={cn(
-              "rounded-md px-3 py-2 text-ui-xs font-semibold transition-colors",
+              "h-8 rounded-md px-3 text-ui-sm font-medium",
+              PRESS,
+              HIT,
               state.placementMode === mode.value
-                ? "bg-primary text-primary-foreground"
-                : "bg-rm-bg-elevated text-rm-text-muted pointer-fine:hover:text-rm-text",
+                ? "bg-rm-tint-2 font-semibold text-rm-text"
+                : "bg-rm-tint-1 text-rm-text-secondary pointer-fine:hover:text-rm-text",
             )}
           >
             {mode.label}
@@ -336,17 +348,17 @@ export function SpatialAudioPanel({
 
       <div className="mb-4 grid gap-4 md:grid-cols-3">
         {[
-          ["Room Size", "roomSize", 10, 100],
+          ["Room size", "roomSize", 10, 100],
           ["Distance", "distance", 10, 95],
-          ["Arc Angle", "arcAngle", 30, 180],
+          ["Arc angle", "arcAngle", 30, 180],
         ].map(([label, key, min, max]) => (
           <label
             key={key}
-            className="space-y-2 text-ui-xs font-semibold text-rm-text-muted"
+            className="space-y-2 text-ui-sm font-medium text-rm-text-secondary"
           >
             <span className="flex justify-between">
               <span>{label}</span>
-              <span>{(state as any)[key]}</span>
+              <span className="tabular-nums">{(state as any)[key]}</span>
             </span>
             <input
               type="range"
@@ -378,14 +390,14 @@ export function SpatialAudioPanel({
         >
           <div
             ref={worldRef}
-            className="absolute inset-0 cursor-grab bg-[linear-gradient(rgba(0,0,0,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] active:cursor-grabbing"
+            className="absolute inset-0 cursor-grab bg-[linear-gradient(var(--rm-border)_1px,transparent_1px),linear-gradient(90deg,var(--rm-border)_1px,transparent_1px)] active:cursor-grabbing"
             style={{
               backgroundSize: `${Math.max(38, 78 / totalZoom)}px ${Math.max(38, 78 / totalZoom)}px`,
               transform: `translate(${view.panX}px, ${view.panY}px) scale(${totalZoom})`,
               transformOrigin: "50% 58%",
             }}
           >
-            <div className="absolute left-4 top-4 rounded-md border border-rm-border bg-rm-bg-hover/80 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
+            <div className="absolute left-4 top-4 rounded-sm border border-rm-border bg-rm-bg-surface px-1.5 py-0.5 text-ui-xs font-medium text-rm-text-secondary tabular-nums">
               {state.roomSize} m² room
             </div>
             {participants.map((participant) => {
@@ -408,44 +420,56 @@ export function SpatialAudioPanel({
               );
             })}
           </div>
-          <div className="absolute right-3 top-3 flex overflow-hidden rounded-md border border-rm-border bg-rm-bg-hover/80">
+          <div className="absolute right-3 top-3 flex rounded-md border border-rm-border bg-rm-bg-surface">
             <button
               type="button"
-              title="Zoom out"
+              aria-label="Zoom out"
               onClick={() =>
                 setView((current) => ({
                   ...current,
                   zoom: Math.max(0.65, current.zoom - 0.12),
                 }))
               }
-              className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+              className={cn(
+                "flex size-8 items-center justify-center text-rm-text-muted pointer-fine:hover:text-rm-text",
+                PRESS,
+                HIT,
+              )}
             >
               <Icon name="minus" size="sm" />
             </button>
             <button
               type="button"
-              title="Reset view"
+              aria-label={`Reset zoom, now ${Math.round(totalZoom * 100)}%`}
               onClick={() => setView({ zoom: 1, panX: 0, panY: 0 })}
-              className="border-x border-rm-border px-2 text-ui-2xs font-bold text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+              className={cn(
+                "border-x border-rm-border px-2 text-ui-xs font-medium text-rm-text-secondary tabular-nums pointer-fine:hover:text-rm-text",
+                PRESS,
+                HIT,
+              )}
             >
               {Math.round(totalZoom * 100)}%
             </button>
             <button
               type="button"
-              title="Zoom in"
+              aria-label="Zoom in"
               onClick={() =>
                 setView((current) => ({
                   ...current,
                   zoom: Math.min(1.8, current.zoom + 0.12),
                 }))
               }
-              className="flex h-8 w-8 items-center justify-center text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+              className={cn(
+                "flex size-8 items-center justify-center text-rm-text-muted pointer-fine:hover:text-rm-text",
+                PRESS,
+                HIT,
+              )}
             >
               <Icon name="add" size="sm" />
             </button>
           </div>
           {state.placementMode === "manual" && (
-            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-rm-bg-hover/80 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-sm border border-rm-border bg-rm-bg-surface px-1.5 py-0.5 text-ui-xs text-rm-text-secondary">
               <Icon name="move" size="xs" /> Drag members to reposition everyone
             </div>
           )}

@@ -116,31 +116,31 @@ export function UploadSoundModal({
       )}
 
       <div className="flex gap-4">
-        {/* Sound Name */}
+        {/* Sound name */}
         <div className="flex-1">
           <label
             htmlFor={soundNameInputId}
             className="block text-ui-sm font-semibold text-rm-text mb-2"
           >
-            Sound Name <span className="text-destructive">*</span>
+            Sound name <span className="text-destructive">*</span>
           </label>
           <Input
             id={soundNameInputId}
             type="text"
             value={soundName}
             onChange={(e) => setSoundName(e.target.value)}
-            placeholder="Sound Name"
+            placeholder="Sound name"
             className="h-11"
           />
         </div>
 
-        {/* Related Emoji */}
+        {/* Related emoji */}
         <div className="relative w-40">
           <label
             htmlFor={emojiButtonId}
             className="block text-ui-sm font-semibold text-rm-text mb-2"
           >
-            Related Emoji
+            Related emoji
           </label>
           <button
             ref={emojiBtnRef}
@@ -180,13 +180,13 @@ export function UploadSoundModal({
         </div>
       </div>
 
-      {/* Sound Volume */}
+      {/* Sound volume */}
       <div>
         <label
           htmlFor={soundVolumeInputId}
           className="block text-ui-sm font-semibold text-rm-text mb-2"
         >
-          Sound Volume
+          Sound volume
         </label>
         <div className="flex items-center h-10">
           <input
@@ -196,7 +196,7 @@ export function UploadSoundModal({
             max="100"
             value={Math.round(soundVolume * 100)}
             onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
-            className="w-full accent-primary h-1.5 bg-rm-border rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+            className="rm-settings-range w-full"
             aria-valuetext={`${Math.round(soundVolume * 100)}%`}
           />
         </div>
@@ -212,7 +212,7 @@ export function UploadSoundModal({
       <ResponsiveDialogContent className="md:max-w-md">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>
-            {isEditMode ? "Edit Sound" : "Upload a Sound"}
+            {isEditMode ? "Edit sound" : "Upload a sound"}
           </ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
         {fields}

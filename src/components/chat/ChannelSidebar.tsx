@@ -46,7 +46,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
-import { HIT } from "@/components/ui/interaction";
+import { DISABLED, HIT, PRESS, REVEAL } from "@/components/ui/interaction";
+import { Spinner } from "@/components/ui/button";
 import {
   SIDEBAR_CATEGORY,
   SIDEBAR_ICON_SLOT,
@@ -302,7 +303,13 @@ function VoiceChannelMediaDisplay({
               <button
                 type="button"
                 aria-label="Change media"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg transition-ui pointer-fine:hover:border-white/30 pointer-fine:hover:bg-black/75 pointer-fine:hover:text-white md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
+                className={cn(
+                  // Media overlay chip over the channel media (6.5).
+                  "flex size-8 items-center justify-center rounded-full bg-black/60 text-white",
+                  PRESS,
+                  HIT,
+                  "md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100 md:pointer-fine:group-focus-within/media:opacity-100",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   onChange();
@@ -322,17 +329,20 @@ function VoiceChannelMediaDisplay({
                 type="button"
                 aria-label="Remove media"
                 disabled={isRemoving}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg transition-ui pointer-fine:hover:border-destructive/50 pointer-fine:hover:bg-destructive/20 pointer-fine:hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100"
+                aria-busy={isRemoving || undefined}
+                className={cn(
+                  "flex size-8 items-center justify-center rounded-full bg-black/60 text-white",
+                  PRESS,
+                  HIT,
+                  DISABLED,
+                  "md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100 md:pointer-fine:group-focus-within/media:opacity-100",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove();
                 }}
               >
-                {isRemoving ? (
-                  <Icon name="loader" size="sm" className="animate-spin" />
-                ) : (
-                  <Icon name="trash" size="sm" />
-                )}
+                {isRemoving ? <Spinner /> : <Icon name="trash" size="sm" />}
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8}>
@@ -506,7 +516,7 @@ function SortableChannelItem({
           )}
           {/* Voice channel uptime — visible by default, hidden on hover */}
           {uptime && (
-            <span className="block text-ui-xs font-medium tabular-nums text-rm-success-ink pointer-fine:group-hover:hidden">
+            <span className="block text-ui-xs font-medium tabular-nums text-rm-success-ink pointer-fine:group-hover:hidden pointer-fine:group-focus-within:hidden">
               {uptime}
             </span>
           )}
@@ -515,7 +525,9 @@ function SortableChannelItem({
           <div
             className={cn(
               "relative z-20 items-center gap-1 pointer-coarse:hidden!",
-              uptime ? "hidden pointer-fine:group-hover:flex" : "flex",
+              uptime
+                ? "hidden pointer-fine:group-hover:flex pointer-fine:group-focus-within:flex"
+                : "flex",
             )}
           >
             {canManage && (
@@ -524,7 +536,10 @@ function SortableChannelItem({
                   <button
                     type="button"
                     aria-label="Channel settings"
-                    className="flex size-6 items-center justify-center rounded-sm text-rm-text-muted opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text focus-visible:opacity-100"
+                    className={cn(
+                      "flex size-6 items-center justify-center rounded-sm text-rm-text-muted pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text",
+                      REVEAL,
+                    )}
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditChannel(channel);
@@ -543,7 +558,10 @@ function SortableChannelItem({
                 <button
                   type="button"
                   aria-label="Invite to channel"
-                  className="flex size-6 items-center justify-center rounded-sm text-rm-text-muted opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text focus-visible:opacity-100"
+                  className={cn(
+                    "flex size-6 items-center justify-center rounded-sm text-rm-text-muted pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text",
+                    REVEAL,
+                  )}
                   onClick={(e) => {
                     e.stopPropagation();
                     onInviteToChannel(channel);
@@ -1252,22 +1270,22 @@ function useSidebarContextMenus({
         (channel.permissions != null &&
           hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
       const items = [
-        // ── Mark As Read ───────────────────────────────────────────────
+        // ── Mark as read ───────────────────────────────────────────────
         {
-          label: "Mark As Read",
+          label: "Mark as read",
           icon: <Icon name="markRead" size="sm" />,
           onClick: () => markChannelRead(channel.id),
           divider: true,
         },
         // ── Invite / Link ──────────────────────────────────────────────
         {
-          label: "Invite to Channel",
+          label: "Invite to channel",
           icon: <Icon name="invite" size="sm" />,
           onClick: () =>
             uiDispatch({ type: "SET_INVITE_CHANNEL", value: channel.id }),
         },
         {
-          label: "Copy Link",
+          label: "Copy link",
           icon: <Icon name="link" size="sm" />,
           onClick: () => {
             const path = `/channels/${serverId ?? ""}/${channel.id}`;
@@ -1277,7 +1295,7 @@ function useSidebarContextMenus({
         },
         // ── Notifications (placeholders — need backend) ────────────────
         {
-          label: "Mute Channel",
+          label: "Mute channel",
           icon: <Icon name="speakerOff" size="sm" />,
           rightIcon: <Icon name="chevronRight" size="xs" />,
           onClick: () => {
@@ -1286,8 +1304,8 @@ function useSidebarContextMenus({
           disabled: true,
         },
         {
-          label: "Notification Settings",
-          subtitle: "All Messages",
+          label: "Notification settings",
+          subtitle: "All messages",
           icon: <Icon name="bell" size="sm" />,
           rightIcon: <Icon name="chevronRight" size="xs" />,
           onClick: () => {
@@ -1300,7 +1318,7 @@ function useSidebarContextMenus({
         ...(channelCanManage
           ? [
               {
-                label: "Edit Channel",
+                label: "Edit channel",
                 icon: <Icon name="settings" size="sm" />,
                 onClick: () =>
                   uiDispatch({
@@ -1309,7 +1327,7 @@ function useSidebarContextMenus({
                   }),
               },
               {
-                label: "Duplicate Channel",
+                label: "Duplicate channel",
                 icon: <Icon name="copy" size="sm" />,
                 onClick: () => {
                   if (serverId) {
@@ -1327,7 +1345,7 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Create Text Channel",
+                label: "Create text channel",
                 icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
@@ -1340,7 +1358,7 @@ function useSidebarContextMenus({
         ...(channelCanManage
           ? [
               {
-                label: "Delete Channel",
+                label: "Delete channel",
                 icon: <Icon name="trash" size="sm" />,
                 onClick: () => {
                   if (confirm(`Delete channel "${channel.name}"?`)) {
@@ -1352,9 +1370,9 @@ function useSidebarContextMenus({
               },
             ]
           : [{ label: "", onClick: () => {}, divider: true, disabled: true }]),
-        // ── Copy Channel ID ────────────────────────────────────────────
+        // ── Copy channel ID ────────────────────────────────────────────
         {
-          label: "Copy Channel ID",
+          label: "Copy channel ID",
           icon: <Icon name="copy" size="sm" />,
           rightIcon: (
             <span className="text-ui-2xs font-bold bg-rm-bg-surface border border-rm-border rounded px-1 py-0.5 leading-none">
@@ -1384,7 +1402,7 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Create Channel",
+                label: "Create channel",
                 icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
@@ -1402,7 +1420,7 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Delete Category",
+                label: "Delete category",
                 icon: <Icon name="trash" size="sm" />,
                 onClick: () => {
                   if (serverId && group.id) {
@@ -1426,7 +1444,7 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Create Channel",
+                label: "Create channel",
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1434,14 +1452,14 @@ function useSidebarContextMenus({
                   }),
               },
               {
-                label: "Create Category",
+                label: "Create category",
                 onClick: () =>
                   uiDispatch({ type: "SET_CREATE_CATEGORY", value: true }),
               },
             ]
           : []),
         {
-          label: "Invite to Server",
+          label: "Invite to server",
           divider: true,
           onClick: () => onInviteClick?.(),
         },
@@ -1459,12 +1477,12 @@ function useSidebarContextMenus({
     (e: React.MouseEvent | React.KeyboardEvent) => {
       openMenu(e as unknown as React.MouseEvent, [
         {
-          label: "Server Boost",
+          label: "Server boost",
           icon: <Icon name="gem" size="sm" />,
           onClick: () => {},
         },
         {
-          label: "Invite to Server",
+          label: "Invite to server",
           icon: <Icon name="invite" size="sm" />,
           divider: canManageChannels,
           variant: "default",
@@ -1473,12 +1491,12 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Server Settings",
+                label: "Server settings",
                 icon: <Icon name="settings" size="sm" />,
                 onClick: () => onSettingsClick?.(),
               },
               {
-                label: "Create Channel",
+                label: "Create channel",
                 icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
@@ -1487,18 +1505,18 @@ function useSidebarContextMenus({
                   }),
               },
               {
-                label: "Create Category",
+                label: "Create category",
                 icon: <Icon name="folderAdd" size="sm" />,
                 onClick: () =>
                   uiDispatch({ type: "SET_CREATE_CATEGORY", value: true }),
               },
               {
-                label: "Create Event",
+                label: "Create event",
                 icon: <Icon name="event" size="sm" />,
                 onClick: () => {},
               },
               {
-                label: "App Directory",
+                label: "App directory",
                 icon: <Icon name="grid" size="sm" />,
                 divider: true,
                 onClick: () => {},
@@ -1506,12 +1524,12 @@ function useSidebarContextMenus({
             ]
           : []),
         {
-          label: "Notification Settings",
+          label: "Notification settings",
           icon: <Icon name="bell" size="sm" />,
           onClick: () => {},
         },
         {
-          label: "Privacy Settings",
+          label: "Privacy settings",
           icon: <Icon name="shield" size="sm" />,
           divider: true,
           onClick: () => {},
@@ -1522,7 +1540,7 @@ function useSidebarContextMenus({
           onClick: () => {},
         },
         {
-          label: "Hide Muted Channels",
+          label: "Hide muted channels",
           icon: <Icon name="eyeOff" size="sm" />,
           onClick: () => {},
         },

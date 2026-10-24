@@ -43,7 +43,7 @@ interface Props {
 const STATUS_OPTIONS = [
   { value: "online" as const, label: "Online" },
   { value: "idle" as const, label: "Idle" },
-  { value: "dnd" as const, label: "Do Not Disturb" },
+  { value: "dnd" as const, label: "Do not disturb" },
   {
     value: "offline" as const,
     label: "Invisible",
@@ -165,7 +165,7 @@ export default function UserAccountPopover({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="User Account Options"
+      title="User account options"
       anchor={anchorEl}
       side="top"
       align="start"

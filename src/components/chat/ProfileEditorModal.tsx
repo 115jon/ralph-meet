@@ -61,7 +61,6 @@ export default function ProfileEditorModal({
         >
           <SettingsAccountTab
             authUserLoaded={authUserLoaded ?? isLoaded}
-            asModal
             onClose={onClose}
             initialDraft={initialDraft}
             initialError={initialError}

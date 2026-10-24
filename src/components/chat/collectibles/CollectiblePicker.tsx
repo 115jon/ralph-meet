@@ -13,6 +13,7 @@
  */
 
 import { Button } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api-errors";
 import {
   Dialog,
   DialogDescription,
@@ -44,6 +45,7 @@ import type {
   CollectibleKind,
 } from "@/lib/collectibles-catalog";
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import {
   useCallback,
   useDeferredValue,
@@ -307,9 +309,7 @@ export function CollectiblePicker({
       await onApplied(result.user, result.appliedKinds);
       onClose();
     } catch (err) {
-      setApplyError(
-        err instanceof Error ? err.message : "Couldn't apply that. Try again.",
-      );
+      setApplyError(describeApiError(err, "apply that"));
     } finally {
       setApplying(false);
     }
@@ -444,7 +444,11 @@ export function CollectiblePicker({
                       key={section.category.id}
                       type="button"
                       onClick={() => jumpTo(section.category.id)}
-                      className="h-8 shrink-0 snap-start rounded-full bg-rm-tint-1 px-3 text-ui-xs font-medium whitespace-nowrap text-rm-text-secondary transition-colors duration-150 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text focus-visible:ring-2 focus-visible:ring-rm-focus focus-visible:outline-none max-md:h-9"
+                      className={cn(
+                        "h-8 shrink-0 snap-start rounded-full bg-rm-tint-1 px-3 text-ui-xs font-medium whitespace-nowrap text-rm-text-secondary pointer-fine:hover:text-rm-text max-md:h-9",
+                        PRESS,
+                        HIT,
+                      )}
                     >
                       {section.category.name}
                     </button>
@@ -520,13 +524,10 @@ export function CollectiblePicker({
             <Button
               type="button"
               onClick={handleApply}
-              disabled={!changed || applying}
-              aria-busy={applying || undefined}
+              disabled={!changed}
+              loading={applying}
               className="h-11 flex-1 px-5 md:h-9"
             >
-              {applying ? (
-                <Icon name="loader" size="sm" className="animate-spin" />
-              ) : null}
               {selectedId === NONE_OPTION_ID && changed ? "Remove" : "Apply"}
             </Button>
           </footer>

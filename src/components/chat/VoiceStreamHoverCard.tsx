@@ -18,7 +18,7 @@ function PlaceholderStreamPreview({
   isCurrentUser: boolean;
 }) {
   return (
-    <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-rm-border bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))] px-5 py-4">
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-rm-border bg-[radial-gradient(circle_at_top,color-mix(in_oklab,var(--rm-accent)_12%,transparent),transparent_42%)] px-5 py-4">
       <div className="absolute inset-4 rounded-xl border border-rm-border bg-rm-bg-primary/70 shadow-inner shadow-black/10" />
       <div className="absolute inset-x-8 top-7 h-10 rounded-full border border-rm-border bg-rm-bg-elevated/70" />
       <div className="absolute inset-x-12 top-11 bottom-11 rounded-2xl border border-primary/15 bg-rm-bg-surface/85" />
@@ -58,9 +58,9 @@ export function VoiceStreamHoverCard({
   const hasWatchAction = typeof onWatchStream === "function";
   const ctaLabel = isCurrentUser
     ? hasWatchAction
-      ? "Open Stream"
+      ? "Open stream"
       : "You're Streaming!"
-    : "Watch Stream";
+    : "Watch stream";
   const resolvedThumbnailUrl = thumbnailUrl
     ? thumbnailUrl.startsWith("data:")
       ? thumbnailUrl

@@ -477,7 +477,7 @@ export default function SettingsModal({
                                 }
                                 onClick={() => go(id, hit.row.id)}
                                 className={cn(
-                                  "flex w-full flex-col items-start rounded-md py-1.5 pl-10 pr-2 text-left transition-colors duration-150 pointer-fine:hover:bg-rm-tint-1",
+                                  "flex w-full flex-col items-start justify-center rounded-md py-1.5 pl-10 pr-2 text-left pointer-coarse:min-h-11",
                                   PRESS,
                                 )}
                               >

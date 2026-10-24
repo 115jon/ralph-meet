@@ -38,7 +38,15 @@ const RECONNECT_TIPS = [
  * Same composition as the splash: dithered field, logo, accent progress
  * line, status and a rotating tip. Fades out when connection is established.
  */
-export function ConnectionOverlay() {
+export function ConnectionOverlay({
+  initialHasConnected = false,
+}: {
+  /**
+   * Start as if a connection had already been made, so a disconnect reads as
+   * "Reconnecting". Fixtures and tests use it; the app learns it at runtime.
+   */
+  initialHasConnected?: boolean;
+} = {}) {
   const connected = useChatStore((s) => s.connected);
   const reconnectAttempt = useChatStore((s) => s.reconnectAttempt);
 
@@ -51,7 +59,7 @@ export function ConnectionOverlay() {
     {
       visible: true,
       fadeOut: false,
-      hasConnected: false,
+      hasConnected: initialHasConnected,
       tipIndex: 0,
       tipVisible: true,
     },
@@ -116,8 +124,8 @@ export function ConnectionOverlay() {
 
   const getStatusText = () => {
     if (state.fadeOut) return "Connected!";
-    if (!state.hasConnected) return "Connecting...";
-    if (reconnectAttempt <= 1) return "Reconnecting...";
+    if (!state.hasConnected) return "Connecting…";
+    if (reconnectAttempt <= 1) return "Reconnecting…";
     if (reconnectAttempt <= 5)
       return `Reconnecting — attempt ${reconnectAttempt}`;
     return `Still reconnecting — attempt ${reconnectAttempt}`;
@@ -135,7 +143,7 @@ export function ConnectionOverlay() {
     <LoadingScreen
       logoAlt=""
       logoTestId="connection-overlay-logo"
-      className={`fixed inset-0 z-100 ${animationClass}`}
+      className={`fixed inset-0 z-100 pt-[var(--safe-area-top,0px)] pb-[var(--safe-area-bottom,0px)] ${animationClass}`}
     >
       <p
         role="status"

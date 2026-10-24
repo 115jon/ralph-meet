@@ -435,7 +435,7 @@ export function ListenTogetherNowPlayingCard({
                 onKeyDown={handleSeekKeyDown}
                 onKeyUp={handleSeekKeyUp}
                 onBlur={commitSeek}
-                className="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                className="h-1.5 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
               />
               <span className="min-w-9 text-right text-ui-2xs text-rm-text-muted tabular-nums">
                 {formatListenTogetherDuration(durationMs)}
@@ -573,7 +573,7 @@ export function ListenTogetherNowPlayingCard({
             onKeyDown={handleSeekKeyDown}
             onKeyUp={handleSeekKeyUp}
             onBlur={commitSeek}
-            className="h-8 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
+            className="h-8 w-full cursor-pointer disabled:cursor-not-allowed"
           />
           <div className="flex items-center justify-between text-ui-2xs tabular-nums text-rm-text-muted">
             <span>{formatListenTogetherDuration(effectiveSeekValue)}</span>
@@ -662,13 +662,19 @@ export function ListenTogetherNowPlayingCard({
               if (!roomSlug) return;
               setLocalVolume(roomSlug, Number(event.currentTarget.value) / 100);
             }}
-            className="h-8 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
+            className="h-8 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
           />
           <span className="min-w-9 text-right text-ui-xs tabular-nums text-rm-text-muted">
             {Math.round(localVolume * 100)}%
           </span>
           <details className="relative shrink-0">
-            <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md text-rm-text-muted outline-none transition-colors duration-150 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text [&::-webkit-details-marker]:hidden">
+            <summary
+              className={cn(
+                "flex size-10 cursor-pointer list-none items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text [&::-webkit-details-marker]:hidden",
+                PRESS,
+                HIT,
+              )}
+            >
               <Icon name="privacy" size="sm" />
               <span className="sr-only">Audio options</span>
             </summary>

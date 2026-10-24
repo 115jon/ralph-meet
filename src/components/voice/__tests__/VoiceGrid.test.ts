@@ -101,7 +101,7 @@ describe("VoiceGrid focused stage", () => {
       peerSettings: { "user-2": { volume: 135 } },
     });
 
-    expect(markup).toContain("Stream Volume");
+    expect(markup).toContain("Stream volume");
     expect(markup).toContain('type="range"');
   });
 
@@ -120,7 +120,7 @@ describe("VoiceGrid focused stage", () => {
 
     const markup = render([makeFocusedScreenItem()], "remote-screen-user-2");
 
-    expect(markup).toContain("Stream Volume");
+    expect(markup).toContain("Stream volume");
     expect(markup).toContain('value="145"');
   });
 
@@ -137,7 +137,7 @@ describe("VoiceGrid focused stage", () => {
       "remote-screen-user-2",
     );
 
-    expect(markup).not.toContain("Stream Volume");
+    expect(markup).not.toContain("Stream volume");
     expect(markup).not.toContain('type="range"');
   });
 
@@ -161,7 +161,7 @@ describe("VoiceGrid focused stage", () => {
       "local-screen-user-1",
     );
 
-    expect(markup).toContain("Your Stream");
+    expect(markup).toContain("Your stream");
     expect(markup).not.toContain("You&#x27;s Screen");
   });
 

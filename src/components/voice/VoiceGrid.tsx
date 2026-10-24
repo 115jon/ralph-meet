@@ -1,7 +1,7 @@
 import { Slider } from "@/components/ContextMenu/ContextMenuItems";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
-import { PRESS } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { Icon } from "@/components/ui/icon";
 
 import { extractDominantColor } from "@/lib/color-utils";
@@ -24,7 +24,7 @@ const StreamContextMenu = lazy(() =>
 function getFocusedItemLabel(item: GridItem | undefined) {
   if (!item) return "";
   if (item.type !== "screen") return item.name;
-  if (item.isLocal) return "Your Stream";
+  if (item.isLocal) return "Your stream";
   const ownerName = item.name.replace(/'s Stream$/, "");
   return `${ownerName}'s Stream`;
 }
@@ -244,7 +244,8 @@ export const VoiceGrid = React.memo(
                   }
                   className={cn(
                     PRESS,
-                    "flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-ui-2xs font-medium text-white outline-none",
+                    HIT,
+                    "flex items-center gap-1.5 rounded-md bg-black/60 px-2.5 py-1.5 text-ui-2xs font-medium text-white outline-none",
                   )}
                 >
                   {isPreviewHidden ? (
@@ -343,7 +344,7 @@ export const VoiceGrid = React.memo(
                   </span>
                 </div>
                 <Slider
-                  label={isFocusedScreen ? "Stream Volume" : "User Volume"}
+                  label={isFocusedScreen ? "Stream volume" : "User volume"}
                   value={focusedPeerVolume}
                   onChange={(value) => {
                     if (!focusedUserId) return;

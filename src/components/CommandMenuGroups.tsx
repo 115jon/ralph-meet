@@ -19,7 +19,7 @@ const GROUP =
   "not-first:mt-1.5 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-1.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-ui-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-rm-text-muted";
 
 const KBD =
-  "inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] border border-rm-border-strong px-1 font-sans text-ui-2xs font-medium text-rm-text-muted";
+  "inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-rm-border-strong px-1 font-sans text-ui-2xs font-medium text-rm-text-muted";
 
 /** Shown on the highlighted row, and only where there is a keyboard. */
 function EnterHint() {

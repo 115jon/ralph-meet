@@ -85,7 +85,7 @@ export function InputControls({
             role="status"
             className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-surface px-3 py-1.5 text-ui-xs font-medium text-rm-warning-ink shadow-lg animate-in fade-in-0 zoom-in-[0.97] dark:bg-rm-bg-elevated"
           >
-            Added to Favorites
+            Added to favorites
           </div>
         )}
         <Button
@@ -95,7 +95,7 @@ export function InputControls({
           size="icon"
           aria-label="Open GIF picker"
           aria-expanded={activeMediaButton === "gifs"}
-          title={showFavoriteNotice ? "Added to Favorites" : "GIFs"}
+          title={showFavoriteNotice ? "Added to favorites" : "GIFs"}
           className={cn(
             mediaButtonClassName(activeMediaButton === "gifs"),
             showFavoriteNotice && "bg-rm-tint-2 text-rm-warning-ink",

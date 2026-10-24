@@ -108,7 +108,7 @@ function relationLabel(rel: { type: number; user: { status?: string } }) {
   if (rel.type === 1) return "Blocked";
   if (rel.user.status === "online") return "Online";
   if (rel.user.status === "idle") return "Idle";
-  if (rel.user.status === "dnd") return "Do Not Disturb";
+  if (rel.user.status === "dnd") return "Do not disturb";
   return "Offline";
 }
 
@@ -116,7 +116,7 @@ function relationLabel(rel: { type: number; user: { status?: string } }) {
 function removeCopy(relType: number) {
   if (relType === 0)
     return {
-      action: "Remove Friend",
+      action: "Remove friend",
       title: "Remove friend",
       body: (name: string) =>
         `${name} will be removed from your friends. You can send a new request later.`,
@@ -291,7 +291,7 @@ export default function FriendsView({
       ...(!hideCallOption
         ? [
             {
-              label: "Start a Call",
+              label: "Start a call",
               icon: <Icon name="call" size="sm" />,
               onClick: async () => {
                 const channelId = dmForUser?.id ?? (await openDm(friend.id));
@@ -407,7 +407,7 @@ export default function FriendsView({
               icon="invite"
               size="md"
               variant="ghost"
-              aria-label="Add Friend"
+              aria-label="Add friend"
               aria-pressed={addFriendMode}
               onClick={toggleAddFriend}
             />
@@ -419,7 +419,7 @@ export default function FriendsView({
               onClick={toggleAddFriend}
             >
               <Icon name="invite" size="sm" />
-              Add Friend
+              Add friend
             </Button>
           )}
         </div>
@@ -443,7 +443,7 @@ export default function FriendsView({
             void handleAddFriend();
           }}
         >
-          <Label htmlFor="friend-username">Add Friend</Label>
+          <Label htmlFor="friend-username">Add friend</Label>
           <p className="text-ui-xs text-rm-text-secondary">
             You can add friends by their username.
           </p>
@@ -466,7 +466,7 @@ export default function FriendsView({
               }}
             />
             <Button type="submit" className="max-md:min-h-11">
-              Send Request
+              Send request
             </Button>
           </div>
           <p
@@ -496,12 +496,15 @@ export default function FriendsView({
         </h2>
 
         {loading && filteredFriends.length === 0 && (
-          <div
-            role="status"
-            className="flex items-center justify-center gap-2 py-12 text-rm-text-secondary"
-          >
-            <Icon name="loader" size="md" className="animate-spin" />
-            <span className="text-ui-sm">Loading friends…</span>
+          <div role="status" className="flex flex-col gap-1 px-4 py-2 md:px-2">
+            <span className="sr-only">Loading friends</span>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                aria-hidden
+                className="h-14 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none md:h-12"
+              />
+            ))}
           </div>
         )}
 
@@ -522,7 +525,7 @@ export default function FriendsView({
             )}
             {tab === "all" && !addFriendMode && (
               <Button variant="secondary" onClick={toggleAddFriend}>
-                Add Friend
+                Add friend
               </Button>
             )}
           </div>

@@ -151,14 +151,14 @@ export function VoiceControls({
 
   const leave = activeActivity
     ? {
-        label: "Leave Activity",
+        label: "Leave activity",
         icon: "close" as const,
         onClick: leaveActivity,
         className: DOCK_DESTRUCTIVE,
       }
     : focusedItem?.isStreaming
       ? {
-          label: "Stop Watching",
+          label: "Stop watching",
           icon: "streamOff" as const,
           onClick: () => setFocusedId(null),
           className: DOCK_DESTRUCTIVE,

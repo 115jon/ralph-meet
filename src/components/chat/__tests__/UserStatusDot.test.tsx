@@ -30,7 +30,7 @@ describe("UserStatusDot", () => {
     );
   });
 
-  it("renders Do Not Disturb with a centered line", () => {
+  it("renders Do not disturb with a centered line", () => {
     const { container } = render(<UserStatusDot status="dnd" />);
 
     const line = container.firstElementChild?.firstElementChild;
@@ -62,12 +62,12 @@ describe("UserStatusDot", () => {
     const { container, getByRole } = render(
       <>
         <UserStatusDot status="online" />
-        <UserStatusDot status="dnd" label="Do Not Disturb" />
+        <UserStatusDot status="dnd" label="Do not disturb" />
       </>,
     );
 
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
-    expect(getByRole("img", { name: "Do Not Disturb" })).toHaveClass(
+    expect(getByRole("img", { name: "Do not disturb" })).toHaveClass(
       "bg-rm-status-dnd",
     );
   });

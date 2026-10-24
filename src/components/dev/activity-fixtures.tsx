@@ -1,6 +1,6 @@
 /**
  * Dev-only fixtures for the "act-*" surfaces (see routes/ui-fixtures.tsx):
- * the voice activities (Wordle, Warp Rush), the Voice Apps picker and the
+ * the voice activities (Wordle, Warp Rush), the Voice apps picker and the
  * Listen Together surfaces. Nothing here ships.
  *
  *   act-wordle | act-wordle-howto | act-wordle-hints | act-wordle-settings
@@ -215,7 +215,7 @@ function WarpFixture({ surface }: { surface: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Voice Apps                                                           */
+/* Voice apps                                                           */
 /* ------------------------------------------------------------------ */
 
 function AppsFixture({ surface }: { surface: string }) {

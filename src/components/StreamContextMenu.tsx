@@ -182,12 +182,12 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
 
   const handleServerMute = useCallback(() => {
     log.info("Server mute toggled for", userId);
-    alert("Server Mute: coming soon");
+    alert("Server mute: coming soon");
   }, [userId]);
 
   const handleServerDeafen = useCallback(() => {
     log.info("Server deafen toggled for", userId);
-    alert("Server Deafen: coming soon");
+    alert("Server deafen: coming soon");
   }, [userId]);
 
   const handleMove = useCallback(

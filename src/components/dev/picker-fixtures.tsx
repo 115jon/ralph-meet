@@ -283,7 +283,7 @@ function useAutoClick(match: ((button: HTMLButtonElement) => boolean) | null) {
 const clickTrending = (button: HTMLButtonElement) =>
   (button.textContent ?? "").includes("Trending");
 const clickFavorites = (button: HTMLButtonElement) =>
-  button.getAttribute("aria-label") === "View Favorites";
+  button.getAttribute("aria-label") === "View favorites";
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 

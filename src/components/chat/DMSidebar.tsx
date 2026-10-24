@@ -168,7 +168,7 @@ export default function DMSidebar({
       ...(!hideCallOption
         ? [
             {
-              label: "Start a Call",
+              label: "Start a call",
               icon: <Icon name="call" size="sm" />,
               onClick: () => {
                 onSelectDm(dm.id);
@@ -279,7 +279,7 @@ export default function DMSidebar({
         )}
 
         <h2 className={cn(SIDEBAR_CATEGORY, phone ? "px-4 pt-6 pb-2" : "px-4")}>
-          Direct Messages
+          Direct messages
         </h2>
 
         <DMListPanel

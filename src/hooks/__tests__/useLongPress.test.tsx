@@ -119,7 +119,7 @@ describe("ContextMenu on phones", () => {
         items={[
           { label: "Reply", onClick: onReply },
           { label: "", onClick: () => {}, divider: true, disabled: true },
-          { label: "Delete Message", onClick: () => {}, variant: "danger" },
+          { label: "Delete message", onClick: () => {}, variant: "danger" },
         ]}
         onClose={() => {}}
       />,
@@ -148,7 +148,7 @@ describe("ContextMenu on phones", () => {
             <ContextMenu
               x={0}
               y={0}
-              items={[{ label: "Copy Text", onClick: () => {} }]}
+              items={[{ label: "Copy text", onClick: () => {} }]}
               onClose={() => setOpen(false)}
             />
           ) : null}
@@ -161,7 +161,7 @@ describe("ContextMenu on phones", () => {
     act(() => vi.advanceTimersByTime(450));
 
     expect(
-      screen.getByRole("button", { name: "Copy Text" }),
+      screen.getByRole("button", { name: "Copy text" }),
     ).toBeInTheDocument();
     vi.useRealTimers();
   });

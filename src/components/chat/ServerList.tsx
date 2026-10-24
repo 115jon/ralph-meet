@@ -5,6 +5,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Channel, Server, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -139,7 +140,7 @@ export default function ServerList({
     );
     openMenu(event, [
       {
-        label: "Mark as Read",
+        label: "Mark as read",
         icon: <Icon name="check" size="sm" />,
         onClick: () => onMarkServerRead?.(server.id),
         disabled: !hasUnread,
@@ -150,7 +151,7 @@ export default function ServerList({
         onClick: () => navigator.clipboard.writeText(server.id),
       },
       {
-        label: "Leave Server",
+        label: "Leave server",
         icon: <Icon name="trash" size="sm" />,
         onClick: () => alert("Leave server not implemented yet"),
         variant: "danger",
@@ -311,7 +312,13 @@ export default function ServerList({
 
             {overflowCount > 0 && (
               <button
-                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text-muted transition-ui pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+                type="button"
+                aria-label={`Show ${overflowCount} more unread conversations`}
+                className={cn(
+                  "flex size-10 items-center justify-center rounded-full bg-rm-rail-item text-ui-2xs font-semibold text-rm-text-secondary tabular-nums pointer-fine:hover:text-rm-text",
+                  PRESS,
+                  HIT,
+                )}
                 onClick={() => setDmExpanded(true)}
               >
                 +{overflowCount}
@@ -320,7 +327,12 @@ export default function ServerList({
 
             {dmExpanded && unreadDms.length > MAX_VISIBLE_DMS && (
               <button
-                className="flex h-6 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-medium text-rm-text-muted transition-ui pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
+                type="button"
+                className={cn(
+                  "flex h-6 w-10 items-center justify-center rounded-full bg-rm-rail-item text-ui-2xs font-medium text-rm-text-secondary pointer-fine:hover:text-rm-text",
+                  PRESS,
+                  HIT,
+                )}
                 onClick={() => setDmExpanded(false)}
               >
                 Less

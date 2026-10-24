@@ -168,7 +168,7 @@ export default function InviteModal({
                 disabled={state.loading}
                 loading={state.loading}
               >
-                Generate Invite Link
+                Generate invite link
               </Button>
             </div>
           ) : (
@@ -211,7 +211,7 @@ export default function InviteModal({
                 }
                 className="-ml-2.5 text-rm-text-secondary"
               >
-                Generate New Link
+                Generate new link
               </Button>
             </div>
           )}

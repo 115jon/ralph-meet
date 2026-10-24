@@ -61,7 +61,7 @@ function ActiveCallSession({
     onLeft: () => {
       // SFU disconnected unexpectedly (network error, etc.)
       // Fully reset the call store so the UI cleans up (dashboard hides,
-      // call button returns). The user can re-join by clicking "Join Call"
+      // call button returns). The user can re-join by clicking "Join call"
       // in the DMCallRegion if the voice channel still has members.
       useCallStore.getState().endCall("disconnected");
     },

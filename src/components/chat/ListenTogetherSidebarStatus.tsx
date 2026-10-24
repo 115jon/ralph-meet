@@ -28,19 +28,23 @@ export function ListenTogetherSidebarStatus({
             loading="lazy"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-emerald-400">
+          <div className="flex h-full w-full items-center justify-center text-rm-success-ink">
             <Icon name="music" size="sm" />
           </div>
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <Icon name="music" size="xs" className="shrink-0 text-emerald-400" />
+          <Icon
+            name="music"
+            size="xs"
+            className="shrink-0 text-rm-success-ink"
+          />
           <span className="truncate text-ui-xs font-semibold text-rm-text-secondary">
             {track.title}
           </span>
         </div>
-        <span className="mt-0.5 block text-ui-2xs tabular-nums text-emerald-400/80">
+        <span className="mt-0.5 block text-ui-2xs tabular-nums text-rm-success-ink">
           {formatListenTogetherDuration(playback.effectiveSeekValue)}
         </span>
       </div>
