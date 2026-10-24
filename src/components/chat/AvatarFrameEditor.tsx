@@ -356,7 +356,9 @@ export function AvatarFrameEditor({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Phones: gap-2 so the 40px preview never crowds the content edge
+            at 360; the range is the one flexible child. */}
+        <div className="flex min-w-0 items-center gap-2 md:gap-3">
           <Icon
             name="image"
             size="sm"
