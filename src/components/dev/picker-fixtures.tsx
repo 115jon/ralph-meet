@@ -21,17 +21,16 @@ import EmojiPicker from "@/components/chat/EmojiPicker";
 import GifPickerModal from "@/components/chat/GifPickerModal";
 import SoundboardPicker from "@/components/chat/SoundboardPicker";
 import {
-  clearStoredKovaAuthSessionToken,
-  getStoredKovaAuthSessionToken,
-  setStoredKovaAuthSessionToken,
-} from "@/lib/desktop-auth";
+  installPlaceholderSession,
+  useFixtureSetup,
+} from "@/components/dev/sp-fixtures/api-stub";
 import type { GeneratedEmoji } from "@/lib/emoji";
 import type { GifPickerCategory, GifPickerItem } from "@/lib/gif-picker";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { Server } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
 import { useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 // ─── Seeded art ─────────────────────────────────────────────────────────────
 
@@ -204,10 +203,6 @@ function json(body: unknown) {
  * fixture's lifetime when the browser has none (a real one is left alone).
  */
 function installPickerStub() {
-  const placeholderSession = getStoredKovaAuthSessionToken()
-    ? null
-    : "ui-fixture-session";
-  if (placeholderSession) setStoredKovaAuthSessionToken(placeholderSession);
   const original = window.fetch;
   window.fetch = async (input, init) => {
     const url =
@@ -236,13 +231,15 @@ function installPickerStub() {
   };
   return () => {
     window.fetch = original;
-    if (placeholderSession) clearStoredKovaAuthSessionToken();
   };
 }
 
-/** Installs the stub and seeds stores before the first child render. */
-function useFixtureSetup() {
-  const [restore] = useState(() => {
+/**
+ * Installs the stub and seeds stores before the first child render; the
+ * fixture renders nothing until this reports ready (see useFixtureSetup).
+ */
+function usePickerSetup(): boolean {
+  return useFixtureSetup(() => {
     useGifFavoritesStore.setState({
       favorites: GIF_FAVORITES,
       loaded: true,
@@ -254,9 +251,13 @@ function useFixtureSetup() {
       "chat:gifs:recent:gifs",
       JSON.stringify(["good morning", "cat"]),
     );
-    return installPickerStub();
+    const clearSession = installPlaceholderSession();
+    const restoreFetch = installPickerStub();
+    return () => {
+      restoreFetch();
+      clearSession();
+    };
   });
-  useEffect(() => restore, [restore]);
 }
 
 /** Clicks the first button matching `match` once it renders. */
@@ -315,7 +316,7 @@ const FAKE_SFU = {
 } as unknown as SFUClient;
 
 export function PickerFixture({ surface }: { surface: string }) {
-  useFixtureSetup();
+  const ready = usePickerSetup();
   const autoClick =
     surface === "pk-gif-trending" ||
     surface === "pk-gif-expanded" ||
@@ -325,6 +326,7 @@ export function PickerFixture({ surface }: { surface: string }) {
         ? clickFavorites
         : null;
   useAutoClick(autoClick);
+  if (!ready) return null;
 
   switch (surface) {
     case "pk-emoji":
