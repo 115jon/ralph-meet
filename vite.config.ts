@@ -117,6 +117,13 @@ export default defineConfig(({ command }) => ({
       strict: false,
     },
   },
+  build: {
+    // Never inline fonts as data: URLs: the document CSP's font-src is
+    // 'self' + Google Fonts, so inlined @fontsource subsets (Fredoka,
+    // Press Start 2P) were blocked. Other assets keep the default limit.
+    assetsInlineLimit: (filePath: string) =>
+      /\.(?:woff2?|ttf|otf|eot)(?:$|\?)/i.test(filePath) ? false : undefined,
+  },
   plugins: [
     killerInstincts({ autoKill: true }),
     tanstackStart({
