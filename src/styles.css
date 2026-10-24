@@ -1171,8 +1171,11 @@
     background: var(--rm-selection);
   }
 
+  /* Links are accent ink (>= 4.5:1 on every ground); accent-hover is a fill
+     and drops to ~3:1 on the dark grounds. Also colours unstyled SDK links
+     such as Kova's "Forgot password?". */
   a {
-    color: var(--rm-accent-hover);
+    color: var(--rm-accent-ink);
     text-decoration: none;
   }
 
@@ -1964,6 +1967,14 @@
   --ra-color-text-secondary: var(--rm-text-secondary);
   --ra-color-text-tertiary: var(--rm-text-muted);
   --ra-color-border: var(--rm-border);
+  --ra-color-border-strong: var(--rm-border-strong);
+  --ra-color-error: var(--rm-danger-ink);
+  --ra-color-success: var(--rm-success-ink);
+  --ra-color-warning: var(--rm-warning-ink);
+  --ra-shadow: none;
+  --ra-radius: 8px;
+  --ra-radius-sm: 8px;
+  --ra-font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --ra-font-size: 15px;
 }
 
@@ -2001,14 +2012,6 @@
   .auth-split [data-ra-element="tab"] {
     justify-content: center;
   }
-  --ra-color-border-strong: var(--rm-border-strong);
-  --ra-color-error: var(--rm-danger-ink);
-  --ra-color-success: var(--rm-success-ink);
-  --ra-color-warning: var(--rm-warning-ink);
-  --ra-shadow: none;
-  --ra-radius: 8px;
-  --ra-radius-sm: 8px;
-  --ra-font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 .auth-split [data-ra-element="socialButtonsRoot"] {
