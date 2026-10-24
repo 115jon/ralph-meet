@@ -1,5 +1,5 @@
 import { apiPost } from "@/lib/api-client";
-import { describeApiError } from "@/lib/api-errors";
+import { toast } from "@/components/ui/toast";
 import { debugChatScroll } from "@/lib/chat-scroll-debug";
 import { getDisplayName } from "@/lib/display-name";
 import { getGifAttachmentProvider } from "@/lib/gif-picker";
@@ -13,8 +13,16 @@ import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { isSoundEnabled } from "@/stores/useSoundSettingsStore";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/shallow";
+import type { BanTarget } from "./BanMemberDialog";
 import type { VirtualMessageListHandle } from "./VirtualMessageList";
 
 function messageHistoryCursor(message: Pick<Message, "created_at" | "id">) {
@@ -1145,21 +1153,24 @@ export function useChatArea({
     );
   }, [userPermissions]);
 
+  // Ban opens BanMemberDialog (reason + confirm); the request runs from it.
+  const [banTarget, setBanTarget] = useState<BanTarget | null>(null);
   const handleBan = useCallback(
-    async (targetUserId: string, username: string) => {
+    (targetUserId: string, username: string) => {
       if (!state.activeServerId || state.activeServerId === "@me") return;
-      const reason = window.prompt(
-        `Ban ${username}?\n\nOptionally provide a reason:`,
-      );
-      if (reason === null) return;
-      try {
-        await apiPost(`/api/servers/${state.activeServerId}/bans`, {
-          user_id: targetUserId,
-          reason: reason || undefined,
-        });
-      } catch (err: any) {
-        alert(describeApiError(err, "ban this member"));
-      }
+      setBanTarget({ userId: targetUserId, username });
+    },
+    [state.activeServerId],
+  );
+  const closeBan = useCallback(() => setBanTarget(null), []);
+  const confirmBan = useCallback(
+    async (target: BanTarget, reason: string) => {
+      if (!state.activeServerId || state.activeServerId === "@me") return;
+      await apiPost(`/api/servers/${state.activeServerId}/bans`, {
+        user_id: target.userId,
+        reason: reason || undefined,
+      });
+      toast.success(`Banned ${target.username}`);
     },
     [state.activeServerId],
   );
@@ -1242,6 +1253,9 @@ export function useChatArea({
     confirmPinAction,
     handleJumpToMessage,
     handleBan,
+    banTarget,
+    closeBan,
+    confirmBan,
     handleThread,
     handleAtBottom,
     handleScrollRangeChange,

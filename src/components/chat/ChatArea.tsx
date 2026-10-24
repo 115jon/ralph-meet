@@ -37,6 +37,7 @@ import { Icon } from "@/components/ui/icon";
 import { ChatTypingIndicator } from "./ChatTypingIndicator";
 import { ChatWelcomeContent } from "./ChatWelcomeContent";
 import { DMCallRegion } from "./DMCallRegion";
+import { BanMemberDialog } from "./BanMemberDialog";
 import { DragDropOverlay } from "./DragDropOverlay";
 import { EmptyChatArea } from "./EmptyChatArea";
 
@@ -94,6 +95,9 @@ export default function ChatArea({
     confirmPinAction,
     handleJumpToMessage,
     handleBan,
+    banTarget,
+    closeBan,
+    confirmBan,
     handleThread,
     handleAtBottom,
     handleScrollRangeChange,
@@ -282,6 +286,12 @@ export default function ChatArea({
         onClose={onClose}
         onCall={onCall}
         dmUsername={dmUsername}
+      />
+
+      <BanMemberDialog
+        target={banTarget}
+        onClose={closeBan}
+        onBan={confirmBan}
       />
 
       {pinMessage && (

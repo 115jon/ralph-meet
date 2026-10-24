@@ -9,7 +9,9 @@ import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStor
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
+import { HIT } from "@/components/ui/interaction";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { GifProviderBranding } from "./GifProviderBranding";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
@@ -18,32 +20,44 @@ import React from "react";
 
 interface DeleteButtonProps {
   id: string;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<unknown>;
 }
 
 const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
+  const [confirming, setConfirming] = React.useState(false);
   return (
-    <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/att:opacity-100 transition-opacity z-20">
+    <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/att:opacity-100 pointer-fine:group-focus-within/att:opacity-100 transition-opacity z-20">
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          if (window.confirm("Delete this attachment?")) {
-            onDelete(id);
-          }
+          setConfirming(true);
         }}
-        className="p-1.5 bg-black/50 pointer-fine:hover:bg-rm-badge text-white/80 pointer-fine:hover:text-white rounded-lg transition-[background-color,color] shadow-sm"
-        aria-label="Delete image"
+        className={cn(
+          "relative rounded-md bg-black/50 p-1.5 text-white/80 transition-[background-color,color] pointer-fine:hover:bg-rm-danger pointer-fine:hover:text-rm-on-danger",
+          HIT,
+        )}
+        aria-label="Delete attachment"
       >
         <Icon name="trash" size="sm" />
       </button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Delete attachment"
+        description="This image will be removed from the message. This can't be undone."
+        confirmLabel="Delete attachment"
+        irreversible
+        errorAction="delete this attachment"
+        onConfirm={() => onDelete(id)}
+      />
     </div>
   );
 };
 
 interface ImageGridProps {
   attachments: Attachment[];
-  onDelete?: (attachmentId: string) => void;
+  onDelete?: (attachmentId: string) => void | Promise<unknown>;
   username?: string;
   displayName?: string | null;
   avatarUrl?: string | null;

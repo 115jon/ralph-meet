@@ -1,4 +1,6 @@
+import { toast } from "@/components/ui/toast";
 import { apiGet, apiPost, apiUpload } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { parseCustomEmojiToken } from "@/lib/emoji";
 import type { GifPickerItem, GifPickerMediaType } from "@/lib/gif-picker";
 import type { Message, User } from "@/lib/types";
@@ -593,7 +595,9 @@ export function useMessageInput({
 
       for (const file of filesArray) {
         if (file.size > 25 * 1024 * 1024) {
-          alert(`File "${file.name}" is too large (max 25MB)`);
+          toast.error(`${file.name} is too large to upload`, {
+            description: "Files can be up to 25 MB.",
+          });
           continue;
         }
 
@@ -768,7 +772,9 @@ export function useMessageInput({
         textareaRef.current?.focus();
       } catch (error) {
         console.error("GIF send failed:", error);
-        alert("Failed to send GIF");
+        toast.error(describeApiError(error, "send that GIF"), {
+          id: "rm-gif-send",
+        });
       }
     },
     [channelId, onSend, replyTo?.id],

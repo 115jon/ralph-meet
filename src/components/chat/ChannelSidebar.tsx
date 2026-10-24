@@ -48,6 +48,8 @@ import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { DISABLED, HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { Spinner } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { copyToClipboard } from "@/components/ui/toast";
 import {
   SIDEBAR_CATEGORY,
   SIDEBAR_ICON_SLOT,
@@ -929,6 +931,9 @@ export default function ChannelSidebar({
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
   const [voiceMemberMenu, setVoiceMemberMenu] =
     useState<VoiceMemberContextMenuTarget | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
+    null,
+  );
 
   const {
     handleChannelContextMenu,
@@ -940,8 +945,7 @@ export default function ChannelSidebar({
     serverId: serverId ?? undefined,
     onInviteClick,
     onSettingsClick,
-    deleteChannel,
-    deleteCategory,
+    onRequestDelete: setPendingDelete,
     uiDispatch,
     openMenu,
     markChannelRead,
@@ -1197,6 +1201,21 @@ export default function ChannelSidebar({
           />
         )}
 
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingDelete(null);
+          }}
+          irreversible
+          {...deleteConfirmCopy(pendingDelete)}
+          onConfirm={() => {
+            if (!pendingDelete) return;
+            return pendingDelete.kind === "channel"
+              ? deleteChannel(pendingDelete.id)
+              : deleteCategory(pendingDelete.serverId, pendingDelete.id);
+          }}
+        />
+
         {/* Context Menu Placeholder */}
         <div id="channel-context-menu" />
         {menu.isOpen && (
@@ -1233,13 +1252,34 @@ export default function ChannelSidebar({
 
 // ── Shared Sub-components & Hooks ────────────────────────────────────────────────
 
+/** A delete waiting on its ConfirmDialog. */
+type PendingDelete =
+  | { kind: "channel"; id: string; name: string }
+  | { kind: "category"; serverId: string; id: string; name: string };
+
+function deleteConfirmCopy(target: PendingDelete | null) {
+  if (target?.kind === "category") {
+    return {
+      title: "Delete category",
+      description: `${target.name} will be deleted. Its channels stay and move out of the category.`,
+      confirmLabel: "Delete category",
+      errorAction: "delete this category",
+    };
+  }
+  return {
+    title: "Delete channel",
+    description: `#${target?.name ?? ""} and all of its messages will be deleted. This can't be undone.`,
+    confirmLabel: "Delete channel",
+    errorAction: "delete this channel",
+  };
+}
+
 interface UseSidebarContextMenusProps {
   canManageChannels: boolean;
   serverId?: string;
   onInviteClick?: () => void;
   onSettingsClick?: () => void;
-  deleteChannel: (id: string) => void;
-  deleteCategory: (serverId: string, categoryId: string) => void;
+  onRequestDelete: (target: PendingDelete) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
   openMenu: (e: React.MouseEvent, items: any[]) => void;
   markChannelRead: (channelId: string) => void;
@@ -1256,8 +1296,7 @@ function useSidebarContextMenus({
   serverId,
   onInviteClick,
   onSettingsClick,
-  deleteChannel,
-  deleteCategory,
+  onRequestDelete,
   uiDispatch,
   openMenu,
   markChannelRead,
@@ -1288,8 +1327,11 @@ function useSidebarContextMenus({
           label: "Copy link",
           icon: <Icon name="link" size="sm" />,
           onClick: () => {
-            const path = `/channels/${serverId ?? ""}/${channel.id}`;
-            navigator.clipboard.writeText(`${window.location.origin}${path}`);
+            const path = `/chat/${serverId ?? ""}/${channel.id}`;
+            void copyToClipboard(
+              `${window.location.origin}${path}`,
+              "Channel link copied",
+            );
           },
           divider: true,
         },
@@ -1360,11 +1402,12 @@ function useSidebarContextMenus({
               {
                 label: "Delete channel",
                 icon: <Icon name="trash" size="sm" />,
-                onClick: () => {
-                  if (confirm(`Delete channel "${channel.name}"?`)) {
-                    deleteChannel(channel.id);
-                  }
-                },
+                onClick: () =>
+                  onRequestDelete({
+                    kind: "channel",
+                    id: channel.id,
+                    name: channel.name,
+                  }),
                 variant: "danger" as const,
                 divider: true,
               },
@@ -1379,14 +1422,14 @@ function useSidebarContextMenus({
               ID
             </span>
           ),
-          onClick: () => navigator.clipboard.writeText(channel.id),
+          onClick: () => void copyToClipboard(channel.id, "Channel ID copied"),
         },
       ];
       openMenu(e, items);
     },
     [
       canManageChannels,
-      deleteChannel,
+      onRequestDelete,
       openMenu,
       uiDispatch,
       markChannelRead,
@@ -1415,7 +1458,7 @@ function useSidebarContextMenus({
         {
           label: "Copy ID",
           icon: <Icon name="copy" size="sm" />,
-          onClick: () => navigator.clipboard.writeText(group.id!),
+          onClick: () => void copyToClipboard(group.id!, "Category ID copied"),
         },
         ...(canManageChannels
           ? [
@@ -1424,9 +1467,12 @@ function useSidebarContextMenus({
                 icon: <Icon name="trash" size="sm" />,
                 onClick: () => {
                   if (serverId && group.id) {
-                    if (confirm(`Delete category "${group.name}"?`)) {
-                      deleteCategory(serverId, group.id);
-                    }
+                    onRequestDelete({
+                      kind: "category",
+                      serverId,
+                      id: group.id,
+                      name: group.name,
+                    });
                   }
                 },
                 variant: "danger" as const,
@@ -1435,7 +1481,7 @@ function useSidebarContextMenus({
           : []),
       ]);
     },
-    [canManageChannels, deleteCategory, openMenu, serverId, uiDispatch],
+    [canManageChannels, onRequestDelete, openMenu, serverId, uiDispatch],
   );
 
   const handleSidebarContextMenu = useCallback(
@@ -1466,7 +1512,8 @@ function useSidebarContextMenus({
         {
           label: "Copy ID",
           icon: <Icon name="copy" size="sm" />,
-          onClick: () => serverId && navigator.clipboard.writeText(serverId),
+          onClick: () =>
+            serverId && void copyToClipboard(serverId, "Server ID copied"),
         },
       ]);
     },
@@ -1761,7 +1808,7 @@ function VoiceChannelMemberRow({
           className={cn(
             "relative size-6 shrink-0 overflow-hidden rounded-full",
             isSpeaking &&
-              "ring-2 ring-rm-success ring-offset-2 ring-offset-rm-bg-secondary",
+              "ring-2 ring-rm-status-online ring-offset-2 ring-offset-rm-bg-secondary",
           )}
         >
           {resolvedIdentity.avatarUrl ? (

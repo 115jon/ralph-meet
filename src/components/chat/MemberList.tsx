@@ -2,6 +2,8 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { ButtonBase } from "@/components/ui/button-base";
 import { Button, Spinner } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { copyToClipboard, toast } from "@/components/ui/toast";
 import { describeApiError } from "@/lib/api-errors";
 import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { IconButton } from "@/components/ui/IconButton";
@@ -513,7 +515,7 @@ export default function MemberList({
         {
           label: "Copy ID",
           icon: <Icon name="copy" size="sm" />,
-          onClick: () => navigator.clipboard.writeText(member.user.id),
+          onClick: () => void copyToClipboard(member.user.id, "User ID copied"),
           divider: !!onBan && member.user.id !== currentUserId,
         },
         ...(onBan && member.user.id !== currentUserId
@@ -531,22 +533,34 @@ export default function MemberList({
     [openMenu, setProfileUser, openDm, dispatch, onBan, currentUserId],
   );
 
+  // Kick waits on a ConfirmDialog; the request runs from its confirm button.
+  const [kickTarget, setKickTarget] = useState<{
+    userId: string;
+    username: string;
+  } | null>(null);
+
   const handleKick = useCallback(
-    async (userId: string, username: string) => {
+    (userId: string, username: string) => {
       if (onKick) {
-        await onKick(userId, username);
+        onKick(userId, username);
         return;
       }
       if (!serverId || serverId === "@me") return;
-      if (!confirm(`Kick ${username}?`)) return;
-      try {
-        await apiDelete(`/api/servers/${serverId}/members/${userId}`);
-      } catch (err) {
-        log.error("Failed to kick member:", err);
-      }
+      setKickTarget({ userId, username });
     },
     [onKick, serverId],
   );
+
+  const confirmKick = useCallback(async () => {
+    if (!kickTarget || !serverId) return;
+    try {
+      await apiDelete(`/api/servers/${serverId}/members/${kickTarget.userId}`);
+    } catch (err) {
+      log.error("Failed to kick member:", err);
+      throw err;
+    }
+    toast.success(`Kicked ${kickTarget.username}`);
+  }, [kickTarget, serverId]);
 
   // Tab content renderers
 
@@ -719,6 +733,19 @@ export default function MemberList({
             onKick={handleKick}
           />
         )}
+
+        <ConfirmDialog
+          open={kickTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setKickTarget(null);
+          }}
+          title="Kick member"
+          description={`${kickTarget?.username ?? ""} will be removed from this server. They can rejoin with an invite.`}
+          confirmLabel="Kick"
+          irreversible
+          errorAction="kick this member"
+          onConfirm={confirmKick}
+        />
       </div>
     </TooltipProvider>
   );
