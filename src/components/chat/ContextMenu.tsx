@@ -38,6 +38,8 @@ interface ContextMenuProps {
   items: ContextMenuItem[];
   topContent?: React.ReactNode;
   onClose: () => void;
+  /** Accessible name of the menu (sheet title on phones). */
+  label?: string;
 }
 
 function getDirectMenuItems(menu: HTMLElement | null): HTMLElement[] {
@@ -61,7 +63,12 @@ export default function ContextMenu(props: ContextMenuProps) {
   );
 }
 
-function ContextActionSheet({ items, topContent, onClose }: ContextMenuProps) {
+function ContextActionSheet({
+  items,
+  topContent,
+  onClose,
+  label,
+}: ContextMenuProps) {
   const [open, setOpen] = useState(true);
   // Owners unmount the menu on close; let the sheet slide away first.
   useEffect(() => {
@@ -76,6 +83,7 @@ function ContextActionSheet({ items, topContent, onClose }: ContextMenuProps) {
       onOpenChange={setOpen}
       items={items}
       header={topContent}
+      title={label}
     />
   );
 }
@@ -87,6 +95,7 @@ function PopoverContextMenu({
   topContent,
   onClose,
   isClosing,
+  label,
 }: ContextMenuProps) {
   const mounted = useMounted();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -316,6 +325,7 @@ function PopoverContextMenu({
       )}
       style={{ top: coords.y, left: coords.x }}
       role="menu"
+      aria-label={label}
       tabIndex={-1}
       onKeyDown={handleMenuKeyDown}
       onContextMenu={(e) => e.preventDefault()}

@@ -287,6 +287,7 @@ export function ListenTogetherPanel({
   const paneRatioRef = useRef(0.38);
   const { menu, openMenu, closeMenu, shouldRender, isClosing } =
     useContextMenu();
+  const [menuLabel, setMenuLabel] = useState<string | undefined>();
   const workspacePaneRatio = useListenTogetherStore(
     (state) => state.workspacePaneRatio,
   );
@@ -852,6 +853,7 @@ export function ListenTogetherPanel({
       setMobileActionsOpen(true);
       return;
     }
+    setMenuLabel(`Actions for ${result.title}`);
     openMenu(
       event,
       getListenTogetherContextMenuItems(actions, (action) => {
@@ -1480,6 +1482,7 @@ export function ListenTogetherPanel({
           topContent={menu.topContent}
           onClose={closeMenu}
           isClosing={isClosing}
+          label={menuLabel}
         />
       )}
       {mobileActionResult && (
