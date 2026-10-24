@@ -14,6 +14,15 @@ import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
  * Heights 28 / 32 / 40 (24 for dense `xs`), radius 8 (6 below 32px),
  * weight 500. Focus uses the global ring in styles.css.
  */
+/**
+ * Solid fills go tonal when disabled instead of fading (9.7): a faded accent
+ * or red still reads as the live primary action, and on miku/light themes it
+ * blends into the surface. Later in the class list than DISABLED, so
+ * tailwind-merge drops its opacity for these variants.
+ */
+const TONAL_DISABLED =
+  "disabled:bg-rm-tint-2 disabled:text-rm-text-muted disabled:opacity-100";
+
 const buttonVariants = cva(
   [
     "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-ui-sm font-medium outline-none",
@@ -26,9 +35,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [--hover-o:0.12]",
+        default: `bg-primary text-primary-foreground [--hover-o:0.12] ${TONAL_DISABLED}`,
         destructive: "bg-rm-danger-tint text-rm-danger-ink",
-        danger: "bg-rm-danger text-rm-on-danger [--hover-o:0.12]",
+        danger: `bg-rm-danger text-rm-on-danger [--hover-o:0.12] ${TONAL_DISABLED}`,
         outline: "border border-rm-border-strong bg-transparent text-rm-text",
         secondary: "bg-rm-tint-2 text-rm-text",
         ghost: "bg-transparent text-rm-text",

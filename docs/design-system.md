@@ -377,8 +377,14 @@ right-click opens a context menu on desktop. The item model is shared.
 9.6 **Keyboard-initiated actions do not animate** (command menu open/close,
 tab switch via arrows).
 
-9.7 **Disabled** is `opacity-45` + `cursor-not-allowed` (`DISABLED`), never a
-different colour set.
+9.7 **Disabled** is `opacity-45` + `cursor-not-allowed` (`DISABLED`) for
+ghost, secondary, outline, destructive, link and icon buttons. The two solid
+fills, `default` and `danger`, go tonal instead: `disabled:bg-rm-tint-2
+disabled:text-rm-text-muted` with no opacity (`TONAL_DISABLED` in
+`button.tsx`), because a faded accent or red still reads as the live primary
+action and washes into light/miku surfaces. Validate on submit where the
+missing input can be named; disable only when nothing could make the press
+work yet.
 
 ---
 
