@@ -128,6 +128,53 @@ describe("SettingsWorkbench", () => {
     ).toBeNull();
   });
 
+  it("moves a roving tabindex with the arrow keys so the ring can show", () => {
+    setWidth(1280);
+    render(<Harness onClose={() => {}} />);
+    const overview = screen.getByRole("button", { name: "Overview" });
+    const roles = screen.getByRole("button", { name: "Roles" });
+    expect(overview).toHaveAttribute("tabindex", "0");
+    expect(roles).toHaveAttribute("tabindex", "-1");
+
+    overview.focus();
+    fireEvent.keyDown(overview, { key: "ArrowDown" });
+    // The focused row is the list's one tab stop, never a -1 target (the
+    // global [tabindex="-1"]:focus-visible rule would hide its ring).
+    expect(roles).toHaveFocus();
+    expect(roles).toHaveAttribute("tabindex", "0");
+    expect(overview).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.keyDown(roles, { key: "Home" });
+    expect(overview).toHaveFocus();
+    expect(overview).toHaveAttribute("tabindex", "0");
+    expect(roles).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.keyDown(overview, { key: "ArrowUp" });
+    expect(roles).toHaveFocus();
+    expect(roles).toHaveAttribute("tabindex", "0");
+  });
+
+  it("labels the dialog through Radix's own DialogTitle id (no console error)", () => {
+    setWidth(1280);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<Harness onClose={() => {}} />);
+      const dialog = screen.getByRole("dialog", { name: "Server settings" });
+      const labelledBy = dialog.getAttribute("aria-labelledby");
+      expect(labelledBy).toBeTruthy();
+      expect(document.getElementById(labelledBy!)).toHaveTextContent(
+        "Server settings",
+      );
+      expect(
+        errors.mock.calls.some((call) =>
+          String(call[0]).includes("DialogTitle"),
+        ),
+      ).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it("steps back one level per Escape: confirm, nested page, list, close", () => {
     setWidth(390);
     const onClose = vi.fn();
