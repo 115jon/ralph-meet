@@ -9,6 +9,8 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 import EmojiToken from "./EmojiToken";
 
@@ -79,88 +81,94 @@ export function UploadSoundModal({
 
   const isEditMode = !!editSound;
 
+  // 13.4 field anatomy: Label above, gap-2, 36px fields (44 on phones).
+  const FIELD =
+    "flex h-9 w-full items-center rounded-md border border-rm-field-edge bg-transparent text-ui-sm text-rm-text max-md:min-h-11";
+  const required = (
+    <span aria-hidden className="text-rm-danger-ink">
+      *
+    </span>
+  );
+
   const fields = (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       {/* File Input */}
       {!isEditMode && (
-        <div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={fileInputId}>File {required}</Label>
+          {/* The visible field wraps the (visually hidden) file input, so
+              a click opens the picker and keyboard focus rings the field. */}
           <label
-            htmlFor={fileInputId}
-            className="block text-ui-sm font-semibold text-rm-text mb-2"
+            className={cn(
+              FIELD,
+              "cursor-pointer justify-between gap-2 py-1 pr-1 pl-3 transition-colors duration-150 ease-(--rm-ease-out) has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-(--rm-focus) pointer-fine:hover:border-rm-border-strong",
+            )}
           >
-            File <span className="text-destructive">*</span>
-          </label>
-          <label
-            htmlFor={fileInputId}
-            className="flex items-center justify-between border border-rm-border bg-rm-bg-hover rounded-xl p-1 pl-3 cursor-pointer pointer-fine:hover:border-primary/50 transition-colors"
-          >
-            <div className="flex items-center gap-2 text-rm-text-muted truncate pr-2">
-              <Icon name="upload" size="sm" />
-              <span className="text-ui-sm truncate">
-                {file ? file.name : "Choose a file"}
+            <input
+              id={fileInputId}
+              type="file"
+              accept="audio/*"
+              required
+              className="sr-only"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+            />
+            <span className="flex min-w-0 items-center gap-2 text-rm-text-muted">
+              <Icon name="upload" size="sm" className="shrink-0" />
+              <span className="truncate">
+                {file ? file.name : "Choose an audio file"}
               </span>
-            </div>
-            <span className="bg-rm-bg-active pointer-fine:hover:bg-rm-bg-floating text-rm-text text-ui-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 border border-rm-border">
+            </span>
+            <span
+              aria-hidden
+              className="flex h-7 shrink-0 items-center rounded-sm bg-rm-tint-2 px-2.5 font-medium text-rm-text max-md:h-9"
+            >
               Browse
             </span>
           </label>
-          <input
-            id={fileInputId}
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-          />
         </div>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex gap-4 max-md:flex-col">
         {/* Sound name */}
-        <div className="flex-1">
-          <label
-            htmlFor={soundNameInputId}
-            className="block text-ui-sm font-semibold text-rm-text mb-2"
-          >
-            Sound name <span className="text-destructive">*</span>
-          </label>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <Label htmlFor={soundNameInputId}>Sound name {required}</Label>
           <Input
             id={soundNameInputId}
             type="text"
+            required
             value={soundName}
             onChange={(e) => setSoundName(e.target.value)}
             placeholder="Sound name"
-            className="h-11"
+            className="max-md:min-h-11 max-md:text-ui-md"
           />
         </div>
 
         {/* Related emoji */}
-        <div className="relative w-40">
-          <label
-            htmlFor={emojiButtonId}
-            className="block text-ui-sm font-semibold text-rm-text mb-2"
-          >
-            Related emoji
-          </label>
+        <div className="relative flex flex-col gap-2 md:w-40">
+          <Label htmlFor={emojiButtonId}>Related emoji</Label>
           <button
             ref={emojiBtnRef}
             id={emojiButtonId}
             type="button"
             onClick={() => setIsEmojiPickerOpen(true)}
-            className="w-full h-11 flex items-center justify-center gap-2 bg-rm-bg-hover border border-rm-border rounded-xl px-3 text-ui-sm text-rm-text-muted pointer-fine:hover:border-primary/50 transition-colors"
+            className={cn(
+              FIELD,
+              "justify-center gap-2 px-3 text-rm-text-muted transition-colors duration-150 ease-(--rm-ease-out) pointer-fine:hover:border-rm-border-strong",
+            )}
             aria-haspopup="dialog"
             aria-expanded={isEmojiPickerOpen}
           >
             {relatedEmoji ? (
               <EmojiToken
                 value={relatedEmoji}
-                className="h-6 w-6 object-contain block"
-                fallbackClassName="text-ui-xl leading-none block"
+                className="block size-6 object-contain"
+                fallbackClassName="block text-ui-xl leading-none"
               />
             ) : (
               <>
                 <Icon name="emoji" size="md" />
-                <span>Click to select</span>
+                <span>Choose emoji</span>
               </>
             )}
           </button>
@@ -181,14 +189,9 @@ export function UploadSoundModal({
       </div>
 
       {/* Sound volume */}
-      <div>
-        <label
-          htmlFor={soundVolumeInputId}
-          className="block text-ui-sm font-semibold text-rm-text mb-2"
-        >
-          Sound volume
-        </label>
-        <div className="flex items-center h-10">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={soundVolumeInputId}>Sound volume</Label>
+        <div className="flex h-10 items-center">
           <input
             id={soundVolumeInputId}
             type="range"

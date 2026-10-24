@@ -788,7 +788,7 @@ function SearchPanelBody({
   const field = (
     <div
       className={cn(
-        "relative flex min-w-0 flex-1 flex-wrap items-center gap-1 rounded-lg border border-transparent bg-rm-tint-1 py-1 pr-1 pl-2.5",
+        "relative flex min-w-0 flex-1 flex-wrap items-center gap-1 rounded-lg border border-transparent bg-rm-tint-1 py-1 pr-1 pl-2.5 max-md:py-0",
         "focus-within:border-rm-focus",
         "max-md:min-h-11 md:min-h-9",
       )}
@@ -842,7 +842,7 @@ function SearchPanelBody({
         }
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        className="rm-search-input h-7 min-w-[8ch] flex-1 bg-transparent text-ui-sm text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-8 max-md:text-ui-md"
+        className="rm-search-input h-7 min-w-[8ch] flex-1 bg-transparent text-ui-sm text-rm-text outline-none placeholder:text-rm-text-muted max-md:h-auto max-md:min-h-11 max-md:text-ui-md"
       />
       <span id={`${inputId}-hint`} className="sr-only">
         Type from:, mentions:, in:, has:, before:, after:, during: or pinned: to

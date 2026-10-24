@@ -443,7 +443,7 @@ function PopoverContextMenu({
           ref={submenuRef}
           role="menu"
           aria-label={`${activeSubmenuItem.label} submenu`}
-          className={cn("absolute z-80 w-52 overflow-hidden", MENU_PANEL)}
+          className={cn("absolute z-70 w-52 overflow-hidden", MENU_PANEL)}
           style={submenuStyle}
         >
           {activeSubmenuItem.submenu}
