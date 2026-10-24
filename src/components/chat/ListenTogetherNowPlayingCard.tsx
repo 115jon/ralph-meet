@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { describeListenTogetherError } from "@/lib/listen-together";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
@@ -584,7 +585,7 @@ export function ListenTogetherNowPlayingCard({
         {error && (
           <div className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
             <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
-            {error.message}
+            {describeListenTogetherError(error, "control playback")}
           </div>
         )}
 

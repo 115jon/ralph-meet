@@ -50,6 +50,7 @@ import {
   getSoundboardMasterVolume,
   playSoundboardPlayback,
 } from "@/lib/voice/soundboard";
+import { describeListenTogetherError } from "@/lib/listen-together";
 import {
   getSoundboardUploadUrl,
   normalizeSoundboardUploadUrl,
@@ -1598,7 +1599,7 @@ export default function SoundboardPicker({
                 className="mt-3 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-xs text-rm-danger-ink"
               >
                 {activeView === "radio" && roomError
-                  ? roomError.message
+                  ? describeListenTogetherError(roomError, "start the radio")
                   : uploadError}
               </div>
             )}

@@ -11,6 +11,7 @@ import {
   type ListenTogetherSearchResponse,
   type ListenTogetherSearchResult,
   type ListenTogetherTrack,
+  describeListenTogetherError,
 } from "@/lib/listen-together";
 import type { SFUClient } from "@/lib/sfu-client";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -997,7 +998,7 @@ export function ListenTogetherPanel({
             {error && (
               <div className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
                 <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
-                {error.message}
+                {describeListenTogetherError(error, "update the queue")}
               </div>
             )}
           </div>
