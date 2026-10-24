@@ -176,9 +176,10 @@ export function VoiceDebugScreen({
   const isConnected = sessionState === "connected";
 
   return (
-    <div className="fixed inset-0 z-100 bg-rm-bg-primary flex flex-col text-rm-text text-ui-sm overflow-hidden">
+    <div className="fixed inset-0 z-100 bg-rm-bg-primary flex flex-col text-rm-text text-ui-sm overflow-hidden pb-[var(--safe-area-bottom,0px)]">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-rm-border bg-rm-bg-surface gap-2">
+      {/* Full-screen overlay: the top bar clears the notch / status bar. */}
+      <div className="flex items-center justify-between px-3 sm:px-5 pt-[calc(var(--safe-area-top,0px)+0.625rem)] pb-2.5 sm:pt-[calc(var(--safe-area-top,0px)+0.75rem)] sm:pb-3 border-b border-rm-border bg-rm-bg-surface gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rm-status-online animate-pulse shrink-0" />
           <span className="font-semibold text-ui-sm sm:text-ui-base text-rm-text tracking-tight truncate">
@@ -189,7 +190,7 @@ export function VoiceDebugScreen({
           <button
             id="copy-stats-btn"
             onClick={handleCopyStats}
-            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md border border-rm-border bg-rm-bg-surface pointer-fine:hover:bg-rm-bg-hover text-rm-text-primary transition-ui min-w-[80px]"
+            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md border border-rm-border bg-rm-bg-surface pointer-fine:hover:bg-rm-bg-hover text-rm-text transition-ui min-w-[80px]"
           >
             Copy Diagnostics
           </button>
