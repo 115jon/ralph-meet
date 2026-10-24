@@ -2553,7 +2553,7 @@ const XExpandableText = memo(
           <EmbedInlineText
             text={text}
             keyPrefix={keyPrefix}
-            linkClassName="text-primary transition-colors pointer-fine:hover:underline"
+            linkClassName="text-rm-accent-ink transition-colors pointer-fine:hover:underline"
             compactUrls
           />
         </div>
@@ -2587,7 +2587,7 @@ const XStandaloneTweetText = memo(
       expandedLabel="Show less"
       expandAriaLabel="Expand post text"
       collapseAriaLabel="Collapse post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-ui-sm font-medium text-primary transition-colors pointer-fine:hover:text-primary pointer-fine:hover:underline"
+      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-ui-sm font-medium text-rm-accent-ink transition-colors pointer-fine:hover:underline"
     />
   ),
 );

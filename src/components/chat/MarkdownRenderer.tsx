@@ -53,7 +53,7 @@ function renderInline(
       parts.push(
         <code
           key={`ic-${match.index}`}
-          className="rounded bg-rm-bg-elevated px-1.5 py-0.5 text-[0.85em] text-primary"
+          className="rounded bg-rm-bg-elevated px-1.5 py-0.5 text-[0.85em] text-rm-accent-ink"
         >
           {m.slice(1, -1)}
         </code>,
@@ -75,7 +75,7 @@ function renderInline(
             href={linkMatch[2]}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary pointer-fine:hover:underline"
+            className="text-rm-accent-ink pointer-fine:hover:underline"
           >
             {linkMatch[1]}
           </a>,
@@ -118,7 +118,7 @@ function renderInline(
           href={cleanUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary pointer-fine:hover:underline break-all"
+          className="text-rm-accent-ink pointer-fine:hover:underline break-all"
         >
           {cleanUrl}
         </a>,
