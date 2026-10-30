@@ -1,12 +1,13 @@
 /**
  * Public landing page (web only; Tauri shows DesktopLogin instead).
  *
- * Sections, top to bottom: header, hero over the interactive dither field,
- * the product stage (sticky rail, one feature per viewport), the kit ledger,
- * the platform split over a still field, the join-by-code close, footer.
- * Everything is server-rendered visible; motion is layered on after mount
- * (`./home/reveal`, the hero's scroll binding) and collapses to a calm
- * static page under reduced motion.
+ * Sections, top to bottom: header, the horizon-band hero (copy on the plain
+ * canvas, the product lit by a still dithered horizon), the product features,
+ * the kit ledger, the platform split, the join-by-code close (opened by the
+ * one dithered rule), footer.
+ * Everything is server-rendered and visible as shipped: there is no scroll
+ * reveal, no entrance animation and no dither motion, so no section is ever
+ * blank and reduced motion has nothing to stop.
  */
 
 import { HomeFooter } from "@/components/home/HomeFooter";
@@ -21,11 +22,10 @@ import {
   fetchDesktopReleases,
   type DesktopRelease,
 } from "@/components/home/releases";
-import { useRevealOnScroll } from "@/components/home/reveal";
 import { isWindows } from "@/lib/platform";
 import { useAuth } from "@kova/react";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 const subscribeToStaticPlatform = () => () => {};
 const getServerWindowsSnapshot = () => false;
@@ -41,7 +41,6 @@ function randomSlug(): string {
 export default function HomePageClient() {
   const navigate = useNavigate();
   const { isSignedIn } = useAuth();
-  const pageRef = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState("");
   const [releases, setReleases] = useState<DesktopRelease[]>(FALLBACK_RELEASES);
   const isWindowsUser = useSyncExternalStore(
@@ -49,8 +48,6 @@ export default function HomePageClient() {
     () => isWindows(),
     getServerWindowsSnapshot,
   );
-
-  useRevealOnScroll(pageRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,13 +74,10 @@ export default function HomePageClient() {
   };
 
   return (
-    <div
-      ref={pageRef}
-      className="rm-home relative flex min-h-dvh flex-col bg-rm-bg-primary font-ui text-rm-text"
-    >
+    <div className="relative flex min-h-dvh flex-col overflow-x-clip bg-ply-0 font-ui text-ink-1">
       <a
-        href="#home-hero-title"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-30 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-ui-sm focus:font-semibold focus:text-primary-foreground"
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-30 focus:rounded-md focus:bg-primary-fill focus:px-3 focus:py-2 focus:text-ui-sm focus:font-semibold focus:text-on-primary"
       >
         Skip to content
       </a>
@@ -93,7 +87,7 @@ export default function HomePageClient() {
         aria-hidden="true"
       />
       <HomeHeader />
-      <main>
+      <main id="main" tabIndex={-1} className="outline-none">
         <HomeHero
           onStartRoom={createRoom}
           isSignedIn={isSignedIn}

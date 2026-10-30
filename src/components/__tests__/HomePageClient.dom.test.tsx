@@ -22,12 +22,6 @@ vi.mock("@/lib/platform", () => ({
   isWindows: () => true,
 }));
 
-// The dither canvas needs WebGL2 and a real paint loop; neither exists in
-// jsdom. The fallback gradient host is enough for structure.
-vi.mock("@/components/home/LandingField", () => ({
-  LandingField: () => <div data-testid="landing-field" />,
-}));
-
 import HomePageClient from "@/components/HomePageClient";
 
 describe("HomePageClient", () => {

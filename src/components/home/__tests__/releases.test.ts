@@ -1,26 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { pointerToField } from "@/components/home/landing-field";
 import {
   FALLBACK_RELEASES,
   fetchDesktopReleases,
   mapGithubReleases,
 } from "@/components/home/releases";
-
-describe("pointerToField", () => {
-  it("maps a wide host onto the centred square canvas", () => {
-    const rect = { left: 0, top: 0, width: 1600, height: 800 };
-    // Square is 1600 wide, overhanging 400px above and below the host.
-    expect(pointerToField(800, 400, rect)).toEqual({ x: 0.5, y: 0.5 });
-    expect(pointerToField(0, 0, rect)).toEqual({ x: 0, y: 0.25 });
-    expect(pointerToField(1600, 800, rect)).toEqual({ x: 1, y: 0.75 });
-  });
-
-  it("maps a tall host and clamps outside points", () => {
-    const rect = { left: 100, top: 50, width: 400, height: 800 };
-    expect(pointerToField(300, 450, rect)).toEqual({ x: 0.5, y: 0.5 });
-    expect(pointerToField(-500, -500, rect)).toEqual({ x: 0, y: 0 });
-  });
-});
 
 describe("releases", () => {
   it("maps GitHub releases with an .exe asset and marks the first latest", () => {

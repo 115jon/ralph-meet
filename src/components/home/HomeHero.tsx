@@ -1,14 +1,10 @@
+import { Button } from "@/components/ui/button";
+import { DitherRule, DitherWord } from "@/components/ui/dither";
 import { Icon } from "@/components/ui/icon";
-import {
-  motion,
-  useMotionTemplate,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-} from "framer-motion";
-import { useRef } from "react";
-import { LandingField } from "./LandingField";
-import { CONTAINER, CTA_PRIMARY, CTA_SECONDARY } from "./ui";
+import { DitherHorizon } from "./HomeDither";
+import { KeyLink } from "./Keys";
+import { ResponsiveShot } from "./Shot";
+import { CONTAINER, DISPLAY_H1, LEDE } from "./ui";
 
 export interface HomeHeroProps {
   onStartRoom: () => void;
@@ -17,12 +13,19 @@ export interface HomeHeroProps {
   downloadUrl: string;
 }
 
+const MANIFEST: [string, string][] = [
+  ["Platform", "Windows, web, phone"],
+  ["Audio", "Opus, noise suppression"],
+  ["Host", "None. The room stays open"],
+];
+
 /**
- * First viewport. The copy is plain server-rendered text (no hidden initial
- * state), the field mounts behind it after first paint, and scrolling drives
- * three things from one progress value: the field's sweep and dimming, a
- * slow lift of the copy, and its fade. Under reduced motion the field renders
- * one frame and the copy stays put.
+ * The poster (type-mockups variant C). A Bricolage 800 headline set edge to
+ * edge with its last word printed in two accent inks, a 20px dithered rule
+ * under it, then three columns: the lede, the keys, and a silkscreen
+ * manifest. The real product stands on a still dithered horizon below; the
+ * horizon starts under the screenshot, so no line of text sits on dither.
+ * Everything is server-rendered and visible; nothing here animates.
  */
 export function HomeHero({
   onStartRoom,
@@ -30,78 +33,82 @@ export function HomeHero({
   isWindows,
   downloadUrl,
 }: HomeHeroProps) {
-  const ref = useRef<HTMLElement>(null);
-  const reduceMotion = useReducedMotion() ?? false;
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const lift = useTransform(scrollYProgress, [0, 1], [0, -120]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.55], [1, 0]);
-  const transform = useMotionTemplate`translate3d(0, ${lift}px, 0)`;
-
   const secondary = isSignedIn ? (
-    <a href="/chat" className={CTA_SECONDARY}>
+    <KeyLink href="/chat" paired>
       <Icon name="chat" size="sm" />
       Open the app
-    </a>
+    </KeyLink>
   ) : isWindows ? (
-    <a href={downloadUrl} className={CTA_SECONDARY}>
+    <KeyLink href={downloadUrl} paired>
       <Icon name="download" size="sm" />
       Download for Windows
-    </a>
+    </KeyLink>
   ) : (
-    <a href="#join" className={CTA_SECONDARY}>
+    <KeyLink href="#join" paired>
       Join with a code
-    </a>
+    </KeyLink>
   );
 
   return (
     <section
-      ref={ref}
       id="home-hero"
       aria-labelledby="home-hero-title"
-      className="relative isolate flex min-h-dvh flex-col overflow-hidden"
+      className="relative overflow-hidden"
     >
-      <LandingField
-        interactive
-        fade="both"
-        tone="full"
-        cell={5}
-        contrast={1.4}
-        progress={reduceMotion ? undefined : scrollYProgress}
-      />
-
-      <motion.div
-        style={reduceMotion ? undefined : { transform, opacity: copyOpacity }}
-        className={`${CONTAINER} relative z-10 flex flex-1 flex-col items-center justify-center pb-24 pt-32 text-center`}
-      >
-        <div className="rm-home-hero-copy flex flex-col items-center">
-          <h1
-            id="home-hero-title"
-            className="rm-home-h1 rm-home-enter max-w-[11ch] text-balance font-display text-rm-text"
-          >
-            The room is always open.
-          </h1>
-          <p
-            className="rm-home-lede rm-home-enter mt-6 max-w-[40ch] text-pretty text-rm-text-secondary md:mt-8"
-            style={{ "--enter-delay": "80ms" } as React.CSSProperties}
-          >
-            Voice, chat and video for the people you talk to every day. Start a
-            room, send the link, they&rsquo;re in.
+      <div className={`${CONTAINER} pt-[104px] md:pt-[136px]`}>
+        <h1 id="home-hero-title" className={DISPLAY_H1}>
+          The room is <br className="max-sm:hidden" />
+          always{" "}
+          <DitherWord ground="ply-0" cell={3}>
+            open.
+          </DitherWord>
+        </h1>
+        <DitherRule cell={3} className="mt-8 h-3 md:mt-12 md:h-5" />
+        <div className="mt-8 grid gap-8 md:grid-cols-12 md:gap-6">
+          <p className={`${LEDE} max-w-[32ch] md:col-span-4`}>
+            Start a room, send the link, they&rsquo;re in. Voice, chat and
+            screen share that stay up all evening.
           </p>
-          <div
-            className="rm-home-enter mt-8 flex flex-col items-stretch gap-3 md:mt-10 md:flex-row md:items-center"
-            style={{ "--enter-delay": "160ms" } as React.CSSProperties}
-          >
-            <button type="button" onClick={onStartRoom} className={CTA_PRIMARY}>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start md:col-span-4">
+            <Button size="lg" onClick={onStartRoom}>
               Start a room
               <Icon name="arrowRight" size="sm" />
-            </button>
+            </Button>
             {secondary}
           </div>
+          <ul className="silkscreen flex flex-col gap-2 text-ink-3 md:col-span-4 md:items-end md:text-right">
+            <li>Voice, chat and video for your people</li>
+            {MANIFEST.map(([k, v]) => (
+              <li key={k}>
+                <span className="text-ink-2">{k}</span> · {v}
+              </li>
+            ))}
+          </ul>
         </div>
-      </motion.div>
+      </div>
+
+      <div className="relative mt-12 md:mt-20">
+        <DitherHorizon className="absolute inset-x-0 top-[30%] bottom-0" />
+        <figure className={`${CONTAINER} relative max-md:pb-14`}>
+          <ResponsiveShot
+            desktop={{
+              name: "voice",
+              alt: "Ralph Meet on the desktop: the Lounge voice channel with four people on tiles, the channel tree listing who is in the call with Linus lit as talking, and the call controls below",
+              width: 1440,
+              height: 900,
+            }}
+            phone={{
+              name: "phone-voice",
+              alt: "Ralph Meet on a phone: the Lounge voice channel with four people on tiles, Linus lit as talking, and the call controls along the bottom",
+              width: 390,
+              height: 844,
+            }}
+            className="md:rounded-b-none md:border-b-0"
+            phoneClassName="max-w-[280px]"
+            sizes="(min-width: 1440px) 1360px, 92vw"
+          />
+        </figure>
+      </div>
     </section>
   );
 }

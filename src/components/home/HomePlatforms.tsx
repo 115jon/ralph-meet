@@ -1,94 +1,100 @@
-import { Icon } from "@/components/ui/icon";
-import { LandingField } from "./LandingField";
+import { Icon, type IconName } from "@/components/ui/icon";
 import type { DesktopRelease } from "./releases";
-import { Shot } from "./Shot";
-import { CONTAINER, CTA_PRIMARY, CTA_SECONDARY } from "./ui";
+import { PhoneShot } from "./Shot";
+import { KeyLink } from "./Keys";
+import { CONTAINER, DISPLAY_H2, FACT_TITLE, KICKER, LEDE } from "./ui";
 
 export interface HomePlatformsProps {
   release: DesktopRelease;
   isSignedIn: boolean;
 }
 
+const PLACES: { icon: IconName; title: string; body: string }[] = [
+  {
+    icon: "monitor",
+    title: "Windows",
+    body: "A desktop app with a tray icon and keybinds.",
+  },
+  {
+    icon: "globe",
+    title: "Browser",
+    body: "Nothing to install. Open a link and you're in.",
+  },
+  {
+    icon: "mobile",
+    title: "Phone",
+    body: "The same rooms in your phone's browser.",
+  },
+];
+
 /**
- * Second field moment: a quiet, still version of the hero's dither sits
- * behind the platform split, so the page returns to its material once
- * before the close. The phone frame on the right is the real responsive
- * app at 390 wide.
+ * Platform split: the places it runs and the download actions beside the
+ * real responsive app at 390 wide in a phone frame.
  */
 export function HomePlatforms({ release, isSignedIn }: HomePlatformsProps) {
   return (
     <section
       id="download"
       aria-labelledby="home-platforms-title"
-      className="relative isolate scroll-mt-16 overflow-hidden border-t border-rm-border"
+      className="scroll-mt-16 border-t border-line"
     >
-      <LandingField
-        still
-        tone="quiet"
-        cell={6}
-        seed={23}
-        contrast={1.15}
-        intensity={0.5}
-        opacity={0.85}
-      />
       <div
-        className={`${CONTAINER} relative z-10 grid items-center gap-16 py-24 lg:grid-cols-[minmax(0,6fr)_minmax(0,6fr)] lg:py-32`}
+        className={`${CONTAINER} grid items-center gap-14 py-16 md:py-24 lg:grid-cols-12 lg:gap-8`}
       >
-        <div className="max-w-[44ch]">
+        <div className="lg:col-span-7">
+          <p className={KICKER}>Download</p>
           <h2
             id="home-platforms-title"
-            data-reveal
-            className="rm-home-h2 text-balance font-display text-rm-text"
+            className={`${DISPLAY_H2} mt-3 max-w-[14ch]`}
           >
             On your desk. In your pocket.
           </h2>
-          <p
-            data-reveal
-            data-reveal-delay="60"
-            className="rm-home-lede mt-6 text-pretty text-rm-text-secondary"
-          >
-            Ralph Meet runs in your browser and as a Windows app, with the same
-            rooms and the same account everywhere.
+          <p className={`${LEDE} mt-6 max-w-[42ch]`}>
+            The same rooms and the same account everywhere, so you can start on
+            the desktop and carry on from the sofa.
           </p>
-          <div
-            data-reveal
-            data-reveal-delay="120"
-            className="mt-8 flex flex-col items-start gap-3 md:flex-row md:items-center"
-          >
-            <a href={release.downloadUrl} className={CTA_PRIMARY}>
+          <ul className="mt-10 grid gap-x-8 sm:grid-cols-3">
+            {PLACES.map((place) => (
+              <li
+                key={place.title}
+                className="border-t-2 border-ink-1 pt-4 pb-6"
+              >
+                <Icon
+                  name={place.icon}
+                  size="md"
+                  aria-hidden="true"
+                  className="text-ink-2"
+                />
+                <h3 className={`${FACT_TITLE} mt-3`}>{place.title}</h3>
+                <p className="mt-1 text-ui-sm text-pretty text-ink-2">
+                  {place.body}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            <KeyLink variant="primary" href={release.downloadUrl}>
               <Icon name="download" size="sm" />
               Download for Windows
-            </a>
-            <a
-              href={isSignedIn ? "/chat" : "/sign-in"}
-              className={CTA_SECONDARY}
-            >
+            </KeyLink>
+            <KeyLink href={isSignedIn ? "/chat" : "/sign-in"} paired>
               Open in the browser
-            </a>
+            </KeyLink>
           </div>
-          <p
-            data-reveal
-            data-reveal-delay="160"
-            className="mt-4 text-ui-xs text-rm-text-muted"
-          >
-            {release.name}, {release.fileName}. Windows 10 and later.
+          <p className="silkscreen mt-4 text-ink-3 [overflow-wrap:anywhere]">
+            {release.name} · {release.fileName} · Windows 10 and later
           </p>
         </div>
 
-        <figure
-          data-reveal
-          data-reveal-delay="100"
-          className="justify-self-center lg:justify-self-end"
-        >
-          <div className="w-[260px] overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface shadow-lg md:w-[300px]">
-            <Shot
-              name="phone-chat"
-              alt="Ralph Meet on a phone: a text channel with messages, a link preview and the composer"
-              width={390}
-              height={844}
-              sizes="300px"
-            />
-          </div>
+        <figure className="justify-self-center lg:col-span-4 lg:col-start-9">
+          <PhoneShot
+            name="phone-home"
+            alt="Ralph Meet on a phone: the Ralph HQ server with its text channels and the Lounge voice channel showing who is in it, above the bottom tab bar"
+            width={390}
+            height={844}
+            sizes="300px"
+            className="w-[260px] md:w-[300px]"
+          />
         </figure>
       </div>
     </section>

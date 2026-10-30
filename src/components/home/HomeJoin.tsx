@@ -1,7 +1,9 @@
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { DISABLED } from "@/components/ui/interaction";
+import { FieldPlate, Input } from "@/components/ui/input";
 import { useId } from "react";
-import { CONTAINER, CTA_PRIMARY, INLINE_LINK } from "./ui";
+import { DitherRule } from "@/components/ui/dither";
+import { CONTAINER, DISPLAY_H2, INLINE_LINK, KICKER, LEDE } from "./ui";
 
 export interface HomeJoinProps {
   room: string;
@@ -10,7 +12,11 @@ export interface HomeJoinProps {
   onStartRoom: () => void;
 }
 
-/** The close: a code field at poster scale. */
+/**
+ * The close: the poster's dithered rule again, a Bricolage head and lede
+ * on the left, and a legend-plate code field with the notched Join key on
+ * the right.
+ */
 export function HomeJoin({
   room,
   onRoomChange,
@@ -25,70 +31,67 @@ export function HomeJoin({
     <section
       id="join"
       aria-labelledby="home-join-title"
-      className="scroll-mt-16 border-t border-rm-border py-24 lg:py-40"
+      className="scroll-mt-16 pb-20 lg:pb-32"
     >
-      <div className={`${CONTAINER} flex flex-col items-center text-center`}>
-        <h2
-          id="home-join-title"
-          data-reveal
-          className="rm-home-h1 max-w-[12ch] text-balance font-display text-rm-text"
-        >
-          Got a code?
-        </h2>
-        <p
-          id={helpId}
-          data-reveal
-          data-reveal-delay="60"
-          className="rm-home-lede mt-6 max-w-[36ch] text-pretty text-rm-text-secondary"
-        >
-          Paste the code or link someone sent you. No account needed.
-        </p>
-
-        <form
-          data-reveal
-          data-reveal-delay="120"
-          onSubmit={onJoin}
-          className="mt-10 flex w-full max-w-[520px] flex-col gap-2 md:flex-row"
-        >
-          <label htmlFor={fieldId} className="sr-only">
-            Room code or link
-          </label>
-          <input
-            id={fieldId}
-            type="text"
-            name="room"
-            value={room}
-            onChange={(event) => onRoomChange(event.target.value)}
-            placeholder="hazy-river-4k2"
-            aria-describedby={helpId}
-            spellCheck={false}
-            autoComplete="off"
-            autoCapitalize="none"
-            inputMode="text"
-            enterKeyHint="go"
-            className="h-12 min-w-0 flex-1 rounded-md border border-rm-field-edge bg-rm-bg-surface px-4 text-ui-md text-rm-text outline-none transition-colors duration-150 ease-(--rm-ease-out) placeholder:text-rm-text-muted focus-visible:border-rm-accent-ink"
-          />
-          <button
-            type="submit"
-            disabled={!canJoin}
-            className={`${CTA_PRIMARY} ${DISABLED} h-12`}
+      <div className={CONTAINER}>
+        <DitherRule cell={3} className="h-3 md:h-5" />
+      </div>
+      <div
+        className={`${CONTAINER} grid gap-10 pt-14 md:grid-cols-12 md:items-end md:gap-8 lg:pt-20`}
+      >
+        <div className="md:col-span-6">
+          <p className={KICKER}>Join a room</p>
+          <h2
+            id="home-join-title"
+            className={`${DISPLAY_H2} mt-3 max-w-[12ch]`}
           >
-            Join room
-            <Icon name="arrowRight" size="sm" />
-          </button>
-        </form>
+            Got a code?
+          </h2>
+          <p id={helpId} className={`${LEDE} mt-6 max-w-[36ch]`}>
+            Paste the code or link someone sent you. No account needed.
+          </p>
+        </div>
 
-        <p
-          data-reveal
-          data-reveal-delay="180"
-          className="mt-6 text-ui-sm text-rm-text-secondary"
-        >
-          No code?{" "}
-          <button type="button" onClick={onStartRoom} className={INLINE_LINK}>
-            Start a new room
-          </button>
-          .
-        </p>
+        <div className="md:col-span-5 md:col-start-8">
+          <form
+            onSubmit={onJoin}
+            className="flex w-full flex-col gap-3 sm:flex-row sm:items-end"
+          >
+            <FieldPlate
+              label="Room code or link"
+              htmlFor={fieldId}
+              className="min-w-0 sm:flex-1"
+            >
+              <Input
+                id={fieldId}
+                type="text"
+                name="room"
+                inputSize="lg"
+                value={room}
+                onChange={(event) => onRoomChange(event.target.value)}
+                placeholder="hazy-river-4k2"
+                aria-describedby={helpId}
+                spellCheck={false}
+                autoComplete="off"
+                autoCapitalize="none"
+                inputMode="text"
+                enterKeyHint="go"
+              />
+            </FieldPlate>
+            <Button type="submit" size="lg" disabled={!canJoin}>
+              Join room
+              <Icon name="arrowRight" size="sm" />
+            </Button>
+          </form>
+
+          <p className="mt-5 text-ui-sm text-ink-2">
+            No code?{" "}
+            <button type="button" onClick={onStartRoom} className={INLINE_LINK}>
+              Start a new room
+            </button>
+            .
+          </p>
+        </div>
       </div>
     </section>
   );

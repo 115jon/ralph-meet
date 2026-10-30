@@ -1,7 +1,8 @@
 import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { UserButton, useAuth } from "@kova/react";
 import { useEffect, useState } from "react";
-import { CONTAINER, CTA_OUTLINE, CTA_PRIMARY, TEXT_LINK } from "./ui";
+import { buttonVariants } from "@/components/ui/button";
+import { CONTAINER, SILK_LINK } from "./ui";
 
 export const SCROLL_SENTINEL_ID = "home-scroll-sentinel";
 
@@ -13,8 +14,8 @@ const NAV = [
 
 /**
  * Fixed header laid out as a three-column grid rather than a bar: brand,
- * in-page links, account. Transparent over the hero; once the sentinel
- * under it scrolls away it takes the page ground and a hairline.
+ * in-page links in silkscreen, account. Transparent over the hero; once the
+ * sentinel under it scrolls away it takes the page ground and a hairline.
  */
 export function HomeHeader() {
   const { isSignedIn } = useAuth();
@@ -34,14 +35,14 @@ export function HomeHeader() {
   return (
     <header
       data-scrolled={scrolled ? "true" : "false"}
-      className="fixed inset-x-0 top-0 z-20 border-b border-transparent pt-[var(--safe-area-top,0px)] transition-colors duration-200 ease-(--rm-ease-out) data-[scrolled=true]:border-rm-border data-[scrolled=true]:bg-rm-bg-primary"
+      className="fixed inset-x-0 top-0 z-20 border-b border-transparent pt-[var(--safe-area-top,0px)] transition-colors duration-(--dur-3) ease-out data-[scrolled=true]:border-line data-[scrolled=true]:bg-ply-0"
     >
       <div
         className={`${CONTAINER} grid h-16 grid-cols-[1fr_auto] items-center gap-4 md:grid-cols-[1fr_auto_1fr]`}
       >
         <a
           href="#home-hero"
-          className="flex min-h-11 w-fit items-center gap-3 rounded-sm text-ui-base font-semibold tracking-[-0.01em] text-rm-text"
+          className="flex min-h-11 w-fit items-center gap-3 rounded-[2px] font-display text-[17px] font-extrabold tracking-[-0.02em] text-ink-1"
         >
           <ThemeAwareSplashLogo className="size-7 select-none" />
           Ralph Meet
@@ -49,11 +50,7 @@ export function HomeHeader() {
 
         <nav aria-label="Page" className="hidden items-center gap-8 md:flex">
           {NAV.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={`${TEXT_LINK} flex min-h-11 items-center text-ui-sm font-medium`}
-            >
+            <a key={item.href} href={item.href} className={SILK_LINK}>
               {item.label}
             </a>
           ))}
@@ -65,17 +62,20 @@ export function HomeHeader() {
         >
           {isSignedIn ? (
             <>
-              <a href="/chat" className={CTA_PRIMARY + " h-9 px-4 text-ui-sm"}>
+              <a
+                href="/chat"
+                className={buttonVariants({ variant: "primary", size: "sm" })}
+              >
                 Open the app
               </a>
-              <div className="flex size-9 items-center justify-center rounded-full bg-rm-tint-1">
+              <div className="flex size-9 items-center justify-center rounded-[2px] bg-tint-1">
                 {/* Colours come from the provider; the SDK ignores
                     per-instance appearance variables. */}
                 <UserButton afterSignOutUrl="/" size={32} />
               </div>
             </>
           ) : (
-            <a href="/sign-in" className={CTA_OUTLINE}>
+            <a href="/sign-in" className={`${SILK_LINK} text-ink-1`}>
               Sign in
             </a>
           )}
