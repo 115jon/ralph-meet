@@ -230,7 +230,7 @@ describe("custom server document security headers", () => {
     expect(response.statusText).toBe("Created");
     expect(response.headers.get("X-Preserved")).toBe("yes");
     expect(response.headers.get("Content-Security-Policy")).toBe(
-      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: https://auth.115jon.site https://api.github.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https:",
+      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: https://auth.115jon.site https://api.github.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https:",
     );
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
