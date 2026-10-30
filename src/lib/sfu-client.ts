@@ -1,3 +1,4 @@
+import { markVoice } from "@/lib/voice/latency-marks";
 import { clog } from "./console-logger";
 import { TypedEventEmitter } from "./event-emitter";
 import { wsUrl } from "./platform";
@@ -283,6 +284,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   ): void {
     const at = Date.now();
     const firstAt = this.latencyTimeline.firstByMilestone[milestone];
+    markVoice(milestone, {
+      ...details,
+      timelineId: this.latencyTimeline.timelineId,
+      roomSlug: this.roomSlug,
+      standby: this.standby,
+      first: firstAt === undefined,
+    });
     if (firstAt === undefined) {
       this.latencyTimeline.firstByMilestone[milestone] = at;
     }
@@ -312,6 +320,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private wireRoomEvents(): void {
     this.roomGW.on("media-bootstrap", (event) => {
       if (this.isLeaving) return;
+      this.markLatency("mediaBootstrapAt");
       if (
         this.roomParticipantEstablished &&
         this.participantId !== event.participantId
@@ -442,6 +451,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     });
 
     this.voiceGW.on("voice-ready", (event) => {
+      this.markLatency("voiceReadyAt");
       this.resolveVoiceReadiness();
       this.vad.refreshSpeakingState();
 
@@ -718,6 +728,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           });
         },
         onConnectionState: (state) => {
+          this.markLatency(`peerConnection:${state}`);
           this.emit("connection-state", { state });
         },
         onError: (error) => {

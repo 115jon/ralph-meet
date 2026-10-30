@@ -6,6 +6,7 @@ import {
   type SessionDescriptionPayload,
   type TrackInfo,
 } from "@/lib/types";
+import { markVoice } from "@/lib/voice/latency-marks";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
@@ -121,6 +122,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     this.connecting = true;
     const requestGeneration = ++this.connectionRequestGeneration;
     try {
+      markVoice("VoiceGW:ticket-start", { roomSlug: this.roomSlug });
       const protocols = await fetchSocketProtocols({
         audience: "voice",
         channelId: this.ticketContext.channelId,
@@ -132,6 +134,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         requestGeneration !== this.connectionRequestGeneration
       )
         return;
+      markVoice("VoiceGW:ticket-done", { roomSlug: this.roomSlug });
       const url = this.wsUrlGenerator(
         `/api/channels/${this.roomSlug}/voice?v=1`,
       );

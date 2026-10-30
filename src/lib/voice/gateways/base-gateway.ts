@@ -2,6 +2,7 @@ import { clog, ScopedLogger } from "@/lib/console-logger";
 import { TypedEventEmitter } from "@/lib/event-emitter";
 import type { ClientMessage, ServerMessage } from "@/lib/types";
 import { HeartbeatManager } from "../heartbeat-manager";
+import { markVoice } from "../latency-marks";
 
 export interface BaseGatewayEvents {
   connected: void;
@@ -78,6 +79,7 @@ export abstract class BaseGateway<
     socket.onopen = () => {
       if (this.ws !== socket) return;
       this.log.info("WebSocket connected, waiting for Hello");
+      markVoice(`${this.label}:ws-open`);
       this.emit("connected", undefined as never);
     };
 

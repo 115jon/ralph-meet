@@ -10,6 +10,7 @@ import {
   fetchSocketTicketBundle,
   type MediaBootstrap,
 } from "@/lib/voice/socket-ticket-client";
+import { markVoice } from "@/lib/voice/latency-marks";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
@@ -103,6 +104,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     try {
       const audience =
         options.roomSlug === "global-gateway" ? "global" : "room";
+      markVoice("RoomGW:ticket-start", { roomSlug: options.roomSlug });
       const bundle = await fetchSocketTicketBundle({
         audience,
         channelId: options.channelId,
@@ -114,6 +116,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
         requestGeneration !== this.connectionRequestGeneration
       )
         return;
+      markVoice("RoomGW:ticket-done", { roomSlug: options.roomSlug });
       if (bundle.mediaBootstrap) {
         this.emit("media-bootstrap", bundle.mediaBootstrap);
       }
