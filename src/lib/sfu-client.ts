@@ -703,6 +703,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       participantId,
       {
         onPublicationMetadata: (track) => {
+          // A standby's voice socket stays unidentified until promotion, and
+          // VoiceReady re-announces every publication then. Queueing this
+          // one too would announce it twice, and a stale copy (a standby
+          // track republished on claim) would send listeners to a dead track.
+          if (this.standby) return;
           this.markLatency("tracksReadySentAt", {
             source: "PartyTracks",
             trackName: track.track_name,
@@ -1143,6 +1148,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
       return this.partyTracksMedia.unpublishTrack(trackName);
     });
+  }
+
+  /**
+   * Pushes a publication again as a new SFU track (same alias and source),
+   * for one the SFU may have garbage-collected; see publication-liveness.
+   */
+  public republishTrack(trackName: string): boolean {
+    const republished =
+      this.partyTracksMedia?.republishTrack(trackName) ?? false;
+    if (republished) this.markLatency("republishRequestedAt", { trackName });
+    return republished;
   }
 
   public getPublishedTrack(trackName: string): MediaStreamTrack | null {

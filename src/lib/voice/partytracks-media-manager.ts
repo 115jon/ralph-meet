@@ -61,6 +61,8 @@ function sameMetadata(left: TrackInfo, right: TrackInfo): boolean {
  */
 export class PartyTracksMediaManager {
   private readonly publications = new Map<string, Publication>();
+  /** Republished-over transceivers, detached and kept until dispose. */
+  private readonly retiredPublications: Publication[] = [];
   private readonly offers = new Map<string, TrackInfo>();
   private readonly pulls = new Map<string, RemotePull>();
   private readonly unsubscribedTrackNames = new Set<string>();
@@ -78,6 +80,10 @@ export class PartyTracksMediaManager {
         this.peerConnectionState = state;
         this.callbacks.onConnectionState?.(state);
         if (state === "connected") this.replayPublishedTracks();
+        // Drop detached transceivers while the session is down: PartyTracks
+        // skips closing them then, and would otherwise re-push them (with no
+        // track) if it rebuilds the session.
+        else this.releaseRetiredPublications();
       },
       error: (error) => this.callbacks.onError?.(error),
     });
@@ -96,34 +102,77 @@ export class PartyTracksMediaManager {
         continue;
       }
 
-      const source$ = new BehaviorSubject(track);
-      const publication: Publication = {
-        currentTrack: track,
-        source$,
-        subscription: new Subscription(),
-      };
-      this.publications.set(trackName, publication);
-      this.callbacks.onPushStarted?.(trackName, track.kind);
-      publication.subscription = this.transport
-        .push(source$, {
-          participantId: this.participantId,
-          trackName,
-          kind: track.kind,
-        })
-        .subscribe({
-          next: (metadata) => {
-            if (
-              publication.latestMetadata &&
-              sameMetadata(publication.latestMetadata, metadata)
-            ) {
-              return;
-            }
-            publication.latestMetadata = metadata;
-            this.callbacks.onPublicationMetadata(metadata);
-          },
-          error: (error) => this.callbacks.onError?.(error),
-        });
+      this.startPublication(trackName, track, track.kind);
     }
+  }
+
+  /**
+   * Pushes a publication again as a new SFU track: same alias, same source
+   * track, fresh transceiver. For a publication the SFU may have dropped
+   * (see publication-liveness). Nothing is announced until the new push is
+   * answered.
+   *
+   * The old transceiver is detached (its sender sends nothing) but not
+   * closed until the session ends. Closing it renegotiates, and on a
+   * standby (where it is the first and only m-line) that reset the peer
+   * connection's ICE in testing, after which the SFU answered 410 for the
+   * whole session.
+   */
+  republishTrack(trackName: string): boolean {
+    if (this.disposed) return false;
+    const stale = this.publications.get(trackName);
+    if (!stale || !isMediaKind(stale.currentTrack.kind)) return false;
+    this.startPublication(
+      trackName,
+      stale.currentTrack,
+      stale.currentTrack.kind,
+    );
+    // PartyTracks hands each source emission to sender.replaceTrack(), which
+    // accepts null.
+    stale.source$.next(null as unknown as MediaStreamTrack);
+    this.retiredPublications.push(stale);
+    return true;
+  }
+
+  private releaseRetiredPublications(): void {
+    for (const publication of this.retiredPublications.splice(0)) {
+      publication.subscription.unsubscribe();
+      publication.source$.complete();
+    }
+  }
+
+  private startPublication(
+    trackName: string,
+    track: MediaStreamTrack,
+    kind: "audio" | "video",
+  ): void {
+    const source$ = new BehaviorSubject(track);
+    const publication: Publication = {
+      currentTrack: track,
+      source$,
+      subscription: new Subscription(),
+    };
+    this.publications.set(trackName, publication);
+    this.callbacks.onPushStarted?.(trackName, kind);
+    publication.subscription = this.transport
+      .push(source$, {
+        participantId: this.participantId,
+        trackName,
+        kind,
+      })
+      .subscribe({
+        next: (metadata) => {
+          if (
+            publication.latestMetadata &&
+            sameMetadata(publication.latestMetadata, metadata)
+          ) {
+            return;
+          }
+          publication.latestMetadata = metadata;
+          this.callbacks.onPublicationMetadata(metadata);
+        },
+        error: (error) => this.callbacks.onError?.(error),
+      });
   }
 
   private replayPublishedTracks(): void {
@@ -284,6 +333,7 @@ export class PartyTracksMediaManager {
       publication.source$.complete();
     }
     this.publications.clear();
+    this.releaseRetiredPublications();
     for (const trackName of [...this.pulls.keys()]) this.stopPull(trackName);
     this.offers.clear();
     this.unsubscribedTrackNames.clear();
