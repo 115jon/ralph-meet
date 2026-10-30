@@ -243,55 +243,56 @@ type ListenTogetherTestEvent = {
   };
 };
 
+/**
+ * Collects the Listen Together events a command produces, with no timing
+ * window. After the command, each socket sends a heartbeat and collection on
+ * that socket ends at its HeartbeatACK. The voice room handles a socket's
+ * frames in order and these commands do no I/O before broadcasting, so every
+ * event the command caused precedes the ACK. Sockets are flushed one after
+ * another so the sender's command is fully handled before an observer's
+ * barrier is sent.
+ */
 async function collectListenTogetherEventsForSockets(
   sockets: WebSocket[],
   send: () => void,
-  timeoutMs = 100,
 ): Promise<ListenTogetherTestEvent[][]> {
-  return new Promise((resolve) => {
-    const events = sockets.map(() => [] as ListenTogetherTestEvent[]);
-    let timer: ReturnType<typeof setTimeout>;
-    const listeners = sockets.map((socket, index) => {
-      const onMessage = (event: MessageEvent<string>) => {
-        const message = JSON.parse(event.data) as {
-          op: number;
-          d: ListenTogetherTestEvent;
-        };
-        if (
-          message.op !== 106 ||
-          !message.d.type?.startsWith("listen_together.")
-        ) {
-          return;
-        }
-        events[index]?.push(message.d);
-        clearTimeout(timer);
-        timer = setTimeout(finish, timeoutMs);
+  const events = sockets.map(() => [] as ListenTogetherTestEvent[]);
+  const listeners = sockets.map((socket, index) => {
+    const onMessage = (event: MessageEvent<string>) => {
+      const message = JSON.parse(event.data) as {
+        op: number;
+        d: ListenTogetherTestEvent;
       };
-      socket.addEventListener("message", onMessage);
-      return { socket, onMessage };
-    });
-    const finish = () => {
-      clearTimeout(timer);
-      for (const { socket, onMessage } of listeners) {
-        socket.removeEventListener("message", onMessage);
+      if (
+        message.op === 106 &&
+        message.d.type?.startsWith("listen_together.")
+      ) {
+        events[index]?.push(message.d);
       }
-      resolve(events);
     };
-    timer = setTimeout(finish, timeoutMs);
-    send();
+    socket.addEventListener("message", onMessage);
+    return { socket, onMessage };
   });
+  try {
+    send();
+    for (const socket of sockets) {
+      const ack = nextMessageWithOpcode(socket, 6);
+      socket.send(JSON.stringify({ op: 3, d: {} }));
+      await ack;
+    }
+  } finally {
+    for (const { socket, onMessage } of listeners) {
+      socket.removeEventListener("message", onMessage);
+    }
+  }
+  return events;
 }
 
 async function collectListenTogetherEvents(
   socket: WebSocket,
   send: () => void,
-  timeoutMs = 100,
 ): Promise<ListenTogetherTestEvent[]> {
-  const [events] = await collectListenTogetherEventsForSockets(
-    [socket],
-    send,
-    timeoutMs,
-  );
+  const [events] = await collectListenTogetherEventsForSockets([socket], send);
   return events ?? [];
 }
 
@@ -3382,11 +3383,14 @@ describe("VoiceRoom lifecycle", () => {
     const collectCommand = (d: Record<string, unknown>) =>
       collectListenTogetherEvents(socket, () => sendCommand(d));
 
+    // Long enough that playback cannot reach the end (and auto-advance on the
+    // alarm) while the test runs, however slow the runner is.
+    const trackDurationMs = 60 * 60 * 1000;
     const enqueued = await collectCommand({
       type: "listen_together.enqueue",
       room_slug: roomName,
       mode: "append",
-      entries: [listenTogetherMusicEntry()],
+      entries: [listenTogetherMusicEntry(trackDurationMs)],
     });
     expect(enqueued).toHaveLength(1);
     expect(enqueued[0]).toMatchObject({
@@ -3394,7 +3398,7 @@ describe("VoiceRoom lifecycle", () => {
       snapshot: { revision: 1 },
     });
     const firstEntryId = enqueued[0]?.snapshot?.currentEntryId ?? "";
-
+    expect(firstEntryId).not.toBe("");
     const paused = await collectCommand({
       type: "listen_together.pause",
       room_slug: roomName,
@@ -3404,7 +3408,7 @@ describe("VoiceRoom lifecycle", () => {
     expect(paused).toHaveLength(1);
     expect(paused[0]).toMatchObject({
       type: "listen_together.snapshot",
-      snapshot: { revision: 2, paused: true },
+      snapshot: { revision: 2, paused: true, currentEntryId: firstEntryId },
     });
 
     const sought = await collectCommand({
@@ -3425,9 +3429,9 @@ describe("VoiceRoom lifecycle", () => {
       mode: "append",
       entries: [
         {
-          ...listenTogetherMusicEntry(),
+          ...listenTogetherMusicEntry(trackDurationMs),
           track: {
-            ...listenTogetherMusicEntry().track,
+            ...listenTogetherMusicEntry(trackDurationMs).track,
             id: "music-2",
             videoId: "dQw4w9WgXcQ-2",
             title: "Second Track",
@@ -3531,11 +3535,13 @@ describe("VoiceRoom lifecycle", () => {
         sendCommand(d),
       );
 
+    // Long enough that playback cannot end and auto-advance mid-test.
+    const trackDurationMs = 60 * 60 * 1000;
     const enqueued = await collectCommand({
       type: "listen_together.enqueue",
       room_slug: roomName,
       mode: "append",
-      entries: [listenTogetherMusicEntry()],
+      entries: [listenTogetherMusicEntry(trackDurationMs)],
     });
     expect(enqueued[0]?.map((event) => event.type)).toEqual([
       "listen_together.snapshot",
@@ -3555,9 +3561,9 @@ describe("VoiceRoom lifecycle", () => {
       mode: "append",
       entries: [
         {
-          ...listenTogetherMusicEntry(),
+          ...listenTogetherMusicEntry(trackDurationMs),
           track: {
-            ...listenTogetherMusicEntry().track,
+            ...listenTogetherMusicEntry(trackDurationMs).track,
             id: "music-2",
             videoId: "dQw4w9WgXcQ-2",
             title: "Second Track",
