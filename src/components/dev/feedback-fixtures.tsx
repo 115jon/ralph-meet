@@ -7,7 +7,7 @@
  *   fx-confirm-channel    delete channel confirm (danger)
  *   fx-confirm-category   delete category confirm (danger)
  *   fx-confirm-kick       kick member confirm (danger)
- *   fx-confirm-ban        ban member with reason (red tint)
+ *   fx-confirm-ban        ban member with reason (danger)
  *   fx-confirm-attachment delete attachment confirm (danger)
  *   fx-confirm-error      a confirm whose request failed (inline error)
  *   fx-buttons            enabled vs disabled for every Button variant

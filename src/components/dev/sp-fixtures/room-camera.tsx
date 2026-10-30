@@ -6,6 +6,7 @@
  *   sp-camera-loading  camera modal while the camera is starting
  *   sp-camera-denied   camera permission denied
  *   sp-camera-none     no camera plugged in
+ *   sp-voice             Studio voice page with labeled devices
  *   sp-voice-permission  Studio voice page before mic access (unlabeled mics)
  *   sp-voice-loading     Studio voice page while devices are listed
  *   sp-voice-none        Studio voice page with no microphone
@@ -27,6 +28,7 @@ export const ROOM_CAMERA_SURFACES = [
   "sp-camera-loading",
   "sp-camera-denied",
   "sp-camera-none",
+  "sp-voice",
   "sp-voice-permission",
   "sp-voice-loading",
   "sp-voice-none",
@@ -123,6 +125,18 @@ export function useFixtureCamera(mode: CameraMode) {
       mode === "scanning"
         ? new Promise<MediaDeviceInfo[]>(() => {})
         : Promise.resolve(list());
+    if (mode === "denied" && navigator.permissions?.query) {
+      // A refused camera reads "denied" in the Permissions API too.
+      const query = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = (descriptor) =>
+        descriptor.name === ("camera" as PermissionName)
+          ? Promise.resolve({
+              state: "denied",
+              addEventListener() {},
+              removeEventListener() {},
+            } as unknown as PermissionStatus)
+          : query(descriptor);
+    }
     media.getUserMedia = async (constraints?: MediaStreamConstraints) => {
       if (constraints?.video) {
         if (mode === "loading") return new Promise<MediaStream>(() => {});

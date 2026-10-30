@@ -449,7 +449,8 @@ const noop = () => {};
 function Column({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-full overflow-y-auto overscroll-contain">
-      <div className="mx-auto flex w-full max-w-[520px] flex-col gap-6 px-4 py-6">
+      {/* Wide enough for the 640 media width plus the column padding. */}
+      <div className="mx-auto flex w-full max-w-[672px] flex-col gap-6 px-4 py-6">
         {children}
       </div>
     </div>

@@ -95,7 +95,8 @@ const REQUEST = {
     hostname: "ada-workstation",
   },
   requester: { city: "Nashville", country: "US", ip: "203.0.113.7" },
-  expiresAt: null,
+  // About four minutes left, so the poster's kicker and expiry bar show.
+  expiresAt: new Date(Date.now() + 4 * 60_000 + 12_000).toISOString(),
 };
 
 const LONG_REQUEST = {
@@ -204,10 +205,7 @@ function ActivateFixture({ surface }: { surface: string }) {
 
 function SignInDeviceFixture() {
   return (
-    <AuthSplitLayout
-      caption="Connecting a device"
-      subtitle={<DeviceWaitingNotice code="KDRW-7QXN" />}
-    >
+    <AuthSplitLayout subtitle={<DeviceWaitingNotice code="KDRW-7QXN" />}>
       <SignIn signUpUrl="/sign-up" appearance={AUTH_CARD_APPEARANCE} />
     </AuthSplitLayout>
   );
@@ -329,7 +327,7 @@ const SHARE: PublicShare = {
   original_edited: false,
   snapshot: {
     content:
-      "Shipping the Quiet Pro auth pages today. **Sign-in** is a flat 380px column now, and the art panel keeps the serif. Notes in #design-review.",
+      "Shipping the new sign-in pages today. **Sign-in** is one 400px column now, with the tree drawing beside it. Notes in #design-review.",
     author: {
       username: "ada",
       display_name: "Ada Lovelace, Countess of the Analytical Engine",

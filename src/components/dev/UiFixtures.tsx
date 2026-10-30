@@ -7,9 +7,17 @@
  */
 
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { SearchFixture } from "@/components/dev/search-fixtures";
 import { isSearchFixture } from "@/components/dev/search-fixture-surfaces";
 import { PublicFixture } from "@/components/dev/public-fixtures";
+import { FoundationFixture } from "@/components/dev/foundation-fixtures";
+import { StandaloneUpdaterView } from "@/components/StandaloneUpdater";
+import { DitherMockupsFixture } from "@/components/dev/dither-mockups";
+import { ComponentKitFixture } from "@/components/dev/component-kit-mockups";
+import { ConnectionStatesFixture } from "@/components/dev/connection-states-mockups";
+import { TypeMockupsFixture } from "@/components/dev/type-mockups";
+import { VoiceDebugFixture } from "@/components/dev/voice-debug-fixtures";
 import { PickerFixture } from "@/components/dev/picker-fixtures";
 import { EmbedFixture } from "@/components/dev/embed-fixtures";
 import {
@@ -29,6 +37,7 @@ import {
 } from "@/components/dev/sp-fixtures";
 import ChatArea from "@/components/chat/ChatArea";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
+import { ConnectionBanner as ChatConnectionBanner } from "@/components/chat/ConnectionBanner";
 import ContextMenu from "@/components/chat/ContextMenu";
 import DMSidebar from "@/components/chat/DMSidebar";
 import { EmptyChatArea } from "@/components/chat/EmptyChatArea";
@@ -36,7 +45,8 @@ import FriendsView from "@/components/chat/FriendsView";
 import InviteModal from "@/components/chat/InviteModal";
 import { PinModal } from "@/components/chat/PinModal";
 import { PinnedMessagesSidebar } from "@/components/chat/PinnedMessagesSidebar";
-import MessageItem from "@/components/chat/MessageItem";
+import VirtualMessageList from "@/components/chat/VirtualMessageList";
+import { registerFailedSendForFixture } from "@/stores/chat-actions";
 import MemberList from "@/components/chat/MemberList";
 import { UnreadBanner } from "@/components/chat/UnreadBanner";
 import { MobileMessagesTab } from "@/components/chat/mobile/MobileMessagesTab";
@@ -57,14 +67,16 @@ import VoiceChannelMediaStatusModal from "@/components/chat/VoiceChannelMediaSta
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ExternalLinkConfirmModal } from "@/components/ui/ExternalLinkConfirmModal";
 import { StreamContextMenu } from "@/components/StreamContextMenu";
-import { MentionAutocomplete } from "@/components/chat/MentionAutocomplete";
-import { HoveredMentionTooltip } from "@/components/chat/HoveredMentionTooltip";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
 import { useImageViewerStore } from "@/stores/useImageViewerStore";
 import { MobileNavigationSheet } from "@/components/chat/MobileNavigationSheet";
 import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
 import { SettingsHost } from "@/components/chat/SettingsHost";
 import { ActionSheet } from "@/components/ui/action-sheet";
+import {
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -92,7 +104,8 @@ import type {
   ListenTogetherSearchResponse,
   ListenTogetherStateSnapshot,
 } from "@/lib/listen-together";
-import shareFrame from "@/components/dev/assets/share-frame.webp";
+import shareFrameDev from "@/components/dev/assets/share-frame.webp";
+import shareFrameLanding from "@/components/dev/assets/share-frame-landing.webp";
 import coverNightdrive from "@/components/dev/assets/cover-nightdrive.webp";
 import coverPaperboats from "@/components/dev/assets/cover-paperboats.webp";
 import coverCopperline from "@/components/dev/assets/cover-copperline.webp";
@@ -112,9 +125,11 @@ import {
 import { DemoRoomChatPanel } from "@/components/DemoRoomChatPanel";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { VoiceHeader } from "@/components/voice/VoiceHeader";
 import { VoiceLanding } from "@/components/voice/VoiceLanding";
+import { ConnectionBanner } from "@/components/voice/ConnectionBanner";
 import type { GridItem } from "@/components/voice/types";
 import type { ChatMember, VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Category, Channel, Message, Server, User } from "@/lib/types";
@@ -123,7 +138,7 @@ import { type MobileTab, useMobileTabStore } from "@/stores/useMobileTabStore";
 import { useSearch } from "@tanstack/react-router";
 import { Icon } from "@/components/ui/icon";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import UserProfilePopover from "@/components/chat/UserProfilePopover";
 import UserAccountPopover from "@/components/chat/UserAccountPopover";
@@ -139,6 +154,19 @@ import {
   me as spMe,
 } from "@/components/dev/sp-fixtures/profiles";
 
+/**
+ * `&copy=landing`: product-neutral content for the landing page captures
+ * (public/screenshots/home). Channel names, the general channel's messages
+ * and the shared screen read as friends hanging out, with no dev chatter,
+ * internal hosts or third-party links. Read once at import; the fixture
+ * page is a full load per URL.
+ */
+const LANDING_COPY =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("copy") === "landing";
+
+const shareFrame = LANDING_COPY ? shareFrameLanding : shareFrameDev;
+
 const NOW = Date.parse("2026-10-22T14:32:00Z");
 const at = (minutesAgo: number) =>
   new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -149,7 +177,7 @@ const users: Record<string, User> = {
     username: "jon",
     display_name: "Jon",
     status: "online",
-    custom_status: "shipping the UI pass",
+    custom_status: LANDING_COPY ? "around tonight" : "shipping the UI pass",
   },
   ada: {
     id: "u-ada",
@@ -213,7 +241,7 @@ const channels: Channel[] = [
   {
     id: "ch-design",
     server_id: "s-1",
-    name: "design-system",
+    name: LANDING_COPY ? "game-night" : "design-system",
     channel_type: "text",
     category_id: "c-text",
     position: 1,
@@ -240,7 +268,7 @@ const channels: Channel[] = [
   {
     id: "ch-standup",
     server_id: "s-1",
-    name: "Standup",
+    name: LANDING_COPY ? "Movie night" : "Standup",
     channel_type: "voice",
     category_id: "c-voice",
     position: 1,
@@ -249,7 +277,7 @@ const channels: Channel[] = [
   {
     id: "ch-empty",
     server_id: "s-1",
-    name: "brand-new",
+    name: LANDING_COPY ? "clips" : "brand-new",
     channel_type: "text",
     category_id: "c-text",
     position: 3,
@@ -315,7 +343,7 @@ function msg(
   };
 }
 
-const messages: Message[] = [
+const devMessages: Message[] = [
   msg("m-1", users.ada!, "Morning all. Pushing the new token scale today.", 95),
   msg(
     "m-2",
@@ -384,11 +412,70 @@ const messages: Message[] = [
   }),
 ];
 
+const landingMessages: Message[] = [
+  msg("m-1", users.ada!, "Lounge is open if anyone's around tonight.", 95),
+  msg(
+    "m-2",
+    users.ada!,
+    "Trivia starts at 9. Ten questions, twenty seconds each.",
+    94,
+  ),
+  msg(
+    "m-3",
+    users.grace!,
+    "I'm in. Bringing snacks and a grudge from last week.",
+    80,
+    { reactions: [{ emoji: "😂", count: 3, me: true, users: ["u-me"] }] },
+  ),
+  msg(
+    "m-4",
+    users.linus!,
+    "Last week's scores are pinned. Ada, you're on notice.",
+    61,
+    {
+      reply_to_id: "m-2",
+      reply_to: messages_m2(),
+      is_pinned: true,
+      reactions: [
+        { emoji: "🔥", count: 5, me: false, users: ["u-ada", "u-grace"] },
+        { emoji: "👀", count: 1, me: false, users: ["u-ken"] },
+      ],
+    },
+  ),
+  msg("m-5", users.me!, "Queueing music for the break between rounds.", 40),
+  msg(
+    "m-6",
+    users.me!,
+    "Playlist for the break is up. **Night Drive** first, _obviously_.",
+    39,
+    { updated_at: at(38) },
+  ),
+  msg("m-7", users.grace!, "Adding two of mine to the queue.", 12),
+  msg("m-8", users.grace!, "Question pack for round two.", 11, {
+    attachments: [
+      {
+        id: "a-1",
+        filename: "round-two-questions.pdf",
+        file_key: "fixtures/ui-audit.pdf",
+        content_type: "application/pdf",
+        size_bytes: 412_000,
+      },
+    ],
+  }),
+  msg("m-9", users.ada!, "See you all in the Lounge.", 3, {
+    reply_count: 2,
+  }),
+];
+
+const messages: Message[] = LANDING_COPY ? landingMessages : devMessages;
+
 function messages_m2(): Message {
   return msg(
     "m-2",
     users.ada!,
-    "Spacing is now 4/8/12/16/24/32, radii are 6/8/12/16/20.",
+    LANDING_COPY
+      ? "Trivia starts at 9. Ten questions, twenty seconds each."
+      : "Spacing is now 4/8/12/16/24/32, radii are 6/8/12/16/20.",
     94,
   );
 }
@@ -425,8 +512,21 @@ const voiceMembers: VoiceChannelMember[] = [
 
 function seedStore(surface: string) {
   const isEmpty = surface === "shell-empty";
-  const isDm = surface === "shell-dm";
-  const activeChannelId = isEmpty ? "ch-empty" : isDm ? "dm-ada" : "ch-general";
+  // DM call fixtures render the DM shell: the call's conversation is the
+  // active channel, as in the app, so the strip sees its stage on screen.
+  const isDm = surface === "shell-dm" || surface.startsWith("dm-call-");
+  // Voice fixtures put the call's channel on screen (the title bar names it).
+  const voiceChannel =
+    surface === "voice-landing"
+      ? "ch-standup"
+      : surface.startsWith("voice")
+        ? "ch-lounge"
+        : null;
+  const activeChannelId = isEmpty
+    ? "ch-empty"
+    : isDm
+      ? "dm-ada"
+      : (voiceChannel ?? "ch-general");
   const list = isEmpty
     ? []
     : isDm
@@ -463,7 +563,7 @@ function seedStore(surface: string) {
     },
     dmChannels: surface === "dm-empty" ? [] : dmChannels,
     voiceChannelStates: { "ch-lounge": voiceMembers },
-    voiceChannelStartedAt: { "ch-lounge": NOW - 25 * 60_000 },
+    voiceChannelStartedAt: { "ch-lounge": Date.now() - 25 * 60_000 },
     channelMentionCounts: { "ch-design": 2 },
     serverMentionCounts: { "s-2": 4 },
     typingUsers: { "ch-general": new Set(["u-grace"]) },
@@ -543,9 +643,17 @@ function seedStore(surface: string) {
   } as never);
 }
 
-function Rail({ dm = false }: { dm?: boolean }) {
+function Rail({
+  dm = false,
+  voice = false,
+  loungeMembers = voiceMembers,
+}: {
+  dm?: boolean;
+  voice?: boolean;
+  loungeMembers?: VoiceChannelMember[];
+}) {
   return (
-    <div className="z-10 flex w-[72px] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none">
+    <div className="z-10 flex w-15 shrink-0 flex-col items-center overflow-y-auto bg-ply-0 scrollbar-none">
       <ServerList
         servers={servers}
         activeServerId={dm ? "@me" : "s-1"}
@@ -555,7 +663,8 @@ function Rail({ dm = false }: { dm?: boolean }) {
         channelsByServerId={{ "s-1": channels }}
         readStates={{ "ch-general": at(0) }}
         lastMessageAt={{ "ch-general": at(3), "ch-design": at(20) }}
-        voiceChannelStates={{ "ch-lounge": voiceMembers }}
+        voiceChannelStates={{ "ch-lounge": loungeMembers }}
+        localVoiceServerId={voice ? "s-1" : null}
         serverMentionCounts={{ "s-2": 4 }}
         homeBadgeCount={dm ? 0 : 1}
         unreadDms={
@@ -575,6 +684,9 @@ function Rail({ dm = false }: { dm?: boolean }) {
 }
 
 function Shell({ surface }: { surface: string }) {
+  // Phones open Members as a drawer over everything; the app starts it
+  // closed there, so the fixture does too.
+  const phone = useIsMobile();
   const dm = surface === "shell-dm";
   const channelId =
     surface === "shell-empty" ? "ch-empty" : dm ? "dm-ada" : "ch-general";
@@ -587,10 +699,10 @@ function Shell({ surface }: { surface: string }) {
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
-          <div className="flex min-h-0 flex-1">
-            <Rail dm={dm} />
-            <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
+        <div className="hidden h-full w-[324px] shrink-0 md:flex">
+          <Rail dm={dm} />
+          <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden border-r border-line bg-ply-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               {dm ? (
                 <DMSidebar activeChannelId="dm-ada" onSelectDm={() => {}} />
               ) : (
@@ -615,32 +727,47 @@ function Shell({ surface }: { surface: string }) {
                 />
               )}
             </div>
-          </div>
-          <div className="shrink-0 bg-rm-bg-secondary">
-            <UserPanel
-              user={users.me!}
-              serverId="s-1"
-              serverName="Ralph HQ"
-              voiceConnected={false}
-              voiceChannelId={null}
-              voiceChannelName={undefined}
-              onVoiceDisconnect={() => {}}
-              onVoiceNavigate={() => {}}
-              sfu={null}
-              gridItems={[]}
-              watchersByStreamer={{}}
-              sidebarWidthPx={240}
-            />
-            <div className="h-2 shrink-0" aria-hidden="true" />
+            <div className="shrink-0">
+              <UserPanel
+                user={users.me!}
+                serverId="s-1"
+                serverName="Ralph HQ"
+                voiceConnected={false}
+                voiceChannelId={null}
+                voiceChannelName={undefined}
+                onVoiceDisconnect={() => {}}
+                onVoiceNavigate={() => {}}
+                sfu={null}
+                gridItems={[]}
+                watchersByStreamer={{}}
+                sidebarWidthPx={264}
+              />
+              <div className="h-2 shrink-0" aria-hidden="true" />
+            </div>
           </div>
         </div>
         <div className="chat-main-content relative flex min-w-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
+          {surface === "shell-reconnecting" || surface === "shell-offline" ? (
+            <ChatConnectionBanner
+              state={surface === "shell-offline" ? "failed" : "reconnecting"}
+              message={
+                surface === "shell-offline" ? "No chat link" : "Reconnecting"
+              }
+              detail={
+                surface === "shell-offline"
+                  ? "Can't reach the chat server. Ralph keeps trying; new messages catch up when it's back."
+                  : "The chat link dropped. Keep reading and sending; new messages catch up when it's back."
+              }
+              attempt={surface === "shell-offline" ? undefined : 2}
+              onRetry={() => {}}
+            />
+          ) : null}
           <ChatArea
             channelId={channelId}
             channelName={channelName}
             onMenuClick={() => {}}
             onMembersClick={() => {}}
-            showMembers={!dm && surface !== "shell-chat"}
+            showMembers={!dm && !phone && surface !== "shell-chat"}
             isDM={dm}
             serverId={dm ? undefined : "s-1"}
             dmUsername={dm ? "ada" : undefined}
@@ -660,10 +787,10 @@ function FriendsShell() {
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
-          <div className="flex min-h-0 flex-1">
-            <Rail dm />
-            <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
+        <div className="hidden h-full w-[324px] shrink-0 md:flex">
+          <Rail dm />
+          <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden border-r border-line bg-ply-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               <DMSidebar
                 activeChannelId={null}
                 activeView="friends"
@@ -753,6 +880,34 @@ const linusScreen: GridItem = {
   isDeafened: false,
   isSpeaking: false,
 };
+
+/**
+ * The voice channel's members for a stage: one row per person on it (a
+ * screen share is the same person), with mute, deafen, camera and share
+ * flags read from their tiles. Someone still being rung isn't in yet.
+ */
+function voiceMembersFromItems(items: GridItem[]): VoiceChannelMember[] {
+  const byUser = new Map<string, VoiceChannelMember>();
+  for (const item of items) {
+    if (item.isRinging) continue;
+    const user = users[item.userId.replace(/^u-/, "")];
+    const member = byUser.get(item.userId) ?? {
+      clerk_user_id: item.userId,
+      name: user?.display_name ?? item.name.replace(/(?:'s|') Stream$/, ""),
+      username: user?.username,
+      display_name: user?.display_name,
+      ...voiceFlags,
+    };
+    if (item.type === "screen") member.self_stream = true;
+    else {
+      if (item.type === "camera") member.self_video = true;
+      if (item.isMuted) member.self_mute = true;
+      if (item.isDeafened) member.self_deaf = true;
+    }
+    byUser.set(item.userId, member);
+  }
+  return [...byUser.values()];
+}
 
 export const LISTEN_ROOM = "lounge";
 
@@ -990,10 +1145,10 @@ const tileStateItems: GridItem[] = [
   },
 ];
 
-/** Eight people, so a phone has to scroll the grid (VC-21). */
+/** Nine people: they fit at 1280x720 without scrolling; a phone scrolls. */
 const manyItems: GridItem[] = [
   ...gridItems,
-  ...["Margaret", "Alan", "Katherine", "Dennis"].map(
+  ...["Margaret", "Alan", "Katherine", "Dennis", "Barbara"].map(
     (name, i): GridItem => ({
       id: `g-extra-${i}`,
       userId: `u-extra-${i}`,
@@ -1039,24 +1194,43 @@ function VoiceRoom({
     focusId ?? (share && focus ? "g-linus-screen" : null),
   );
   const [showMembers, setShowMembers] = useState(true);
+  // Linus is talking (the LED and ring light from the speaking store, not
+  // from grid items), and mute/deafen come from the one settings row both
+  // the account row and the stage bar read.
+  useState(() => {
+    useChatStore.setState({
+      speakingUsers: { "u-linus": true },
+      voiceChannelStartedAt: { "ch-lounge": Date.now() - 25 * 60_000 },
+    });
+    const settings = useVoiceSettingsStore.getState();
+    useVoiceSettingsStore.setState({
+      currentUser: "u-me",
+      userSettings: {
+        ...settings.userSettings,
+        "u-me": {
+          ...settings.getSettings("u-me"),
+          isMuted: live,
+          isDeafened: live,
+        },
+      },
+      _cache: {},
+    });
+    return true;
+  });
+  const baseItems = live
+    ? gridItems.map((g) =>
+        g.isLocal ? { ...g, isMuted: true, isDeafened: true } : g,
+      )
+    : gridItems;
   const items =
-    itemsOverride ?? (share ? [...gridItems, linusScreen] : gridItems);
+    itemsOverride ?? (share ? [...baseItems, linusScreen] : baseItems);
   const focusedItem = items.find((g) => g.id === focusedId) ?? null;
   const watched: Record<string, boolean> = share ? { "u-linus": true } : {};
   const thumbnails: Record<string, string> =
     share || itemsOverride ? { "u-linus": shareFrame, "u-me": shareFrame } : {};
-  const linusVoice = share
-    ? [
-        {
-          clerk_user_id: "u-linus",
-          name: "Linus",
-          username: "linus",
-          display_name: "Linus",
-          ...voiceFlags,
-          self_stream: true,
-        },
-      ]
-    : [];
+  // The tree lists exactly the people on the stage, so the count, the rows
+  // and the tiles tell one story.
+  const loungeMembers = voiceMembersFromItems(items);
   const voiceActions = {
     isPreviewHidden: true,
     togglePreviewHidden: () => {},
@@ -1081,10 +1255,10 @@ function VoiceRoom({
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
-          <div className="flex min-h-0 flex-1">
-            <Rail />
-            <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
+        <div className="hidden h-full w-[324px] shrink-0 md:flex">
+          <Rail voice loungeMembers={loungeMembers} />
+          <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden border-r border-line bg-ply-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               <ChannelSidebar
                 channels={channels}
                 categories={categories}
@@ -1093,37 +1267,35 @@ function VoiceRoom({
                 serverName="Ralph HQ"
                 currentUserId="u-me"
                 onSelect={() => {}}
-                voiceChannelStates={{
-                  "ch-lounge": [
-                    { clerk_user_id: "u-me", name: "Jon", ...voiceFlags },
-                    ...voiceMembers,
-                    ...linusVoice,
-                  ],
-                }}
+                voiceChannelStates={{ "ch-lounge": loungeMembers }}
                 localVoiceChannelId="ch-lounge"
                 localVoiceConnected
               />
             </div>
-          </div>
-          <div className="shrink-0 bg-rm-bg-secondary">
-            <UserPanel
-              user={users.me!}
-              serverId="s-1"
-              serverName="Ralph HQ"
-              voiceConnected
-              voiceChannelId="ch-lounge"
-              voiceChannelName="Lounge"
-              onVoiceDisconnect={() => {}}
-              onVoiceNavigate={() => {}}
-              isCameraActive={live}
-              hasCamera
-              hasMicrophone
-              sfu={null}
-              gridItems={items}
-              watchersByStreamer={{}}
-              sidebarWidthPx={240}
-            />
-            <div className="h-2 shrink-0" aria-hidden="true" />
+            <div className="shrink-0">
+              <UserPanel
+                user={users.me!}
+                serverId="s-1"
+                serverName="Ralph HQ"
+                voiceConnected
+                voiceChannelId="ch-lounge"
+                voiceChannelName="Lounge"
+                onVoiceDisconnect={() => {}}
+                onVoiceNavigate={() => {}}
+                isCameraActive={live}
+                isScreenSharing={live}
+                hasCamera
+                hasMicrophone
+                sfu={null}
+                gridItems={items}
+                watchersByStreamer={{}}
+                sidebarWidthPx={264}
+                voiceSettingsUserId="u-me"
+                stageOnScreen
+                connectionState={connectionState}
+              />
+              <div className="h-2 shrink-0" aria-hidden="true" />
+            </div>
           </div>
         </div>
         <div className="chat-main-content relative flex min-w-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
@@ -1139,6 +1311,13 @@ function VoiceRoom({
                 showTextChat={false}
                 onToggleTextChat={() => {}}
                 onMenuClick={() => {}}
+              />
+            }
+            banner={
+              <ConnectionBanner
+                connectionState={connectionState}
+                joined
+                onRetry={() => {}}
               />
             }
             tray={
@@ -1176,6 +1355,8 @@ function VoiceRoom({
                 showMembers={showMembers}
                 setShowMembers={setShowMembers}
                 onOpenActivities={() => {}}
+                settingsUserId="u-me"
+                soundboard={{ serverId: "s-1", channelId: "ch-lounge" }}
               />
             }
           >
@@ -1190,8 +1371,10 @@ function VoiceRoom({
               voiceActions={voiceActions}
             />
             {listen && (
-              <div className="absolute inset-0 z-30 flex items-center justify-center bg-rm-scrim">
-                <div className="flex h-[min(600px,calc(100%-48px))] w-[min(1040px,calc(100%-48px))] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-2xl dark:bg-rm-bg-elevated">
+              /* Listen Together as a stage mode: the panel fills the stage
+                 (tiles hidden behind it), not a card floating over them. */
+              <div className="absolute inset-0 z-30 flex bg-ply-0 p-4">
+                <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-lg border border-line bg-ply-1">
                   <ListenTogetherPanel
                     sfu={null}
                     roomSlug={LISTEN_ROOM}
@@ -1237,7 +1420,7 @@ function RoomFixture({ step }: { step: "join" | "connecting" | "room" }) {
       header={
         <VoiceHeader
           channelName="design-review"
-          titleIcon="soundboard"
+          titleIcon="voiceChannel"
           connectionState="connected"
           joined
           focusedItem={focusedItem}
@@ -1275,6 +1458,7 @@ function RoomFixture({ step }: { step: "join" | "connecting" | "room" }) {
           showMembers={false}
           setShowMembers={() => {}}
           onOpenSettings={() => {}}
+          showMicDeafen
         />
       }
     >
@@ -1425,10 +1609,10 @@ function VoiceLandingFixture() {
     >
       <WebAppTitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="hidden h-full w-[312px] shrink-0 flex-col bg-rm-bg-secondary md:flex">
-          <div className="flex min-h-0 flex-1">
-            <Rail />
-            <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-sidebar">
+        <div className="hidden h-full w-[324px] shrink-0 md:flex">
+          <Rail />
+          <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden border-r border-line bg-ply-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               <ChannelSidebar
                 channels={channels}
                 categories={categories}
@@ -1465,29 +1649,48 @@ function Menus() {
         y={180}
         items={[
           {
+            label: "Delete channel",
+            icon: <Icon name="trash" size="sm" />,
+            onClick: () => {},
+            variant: "danger",
+          },
+          {
             label: "Mark as read",
-            icon: <Icon name="check" size="sm" />,
+            icon: <Icon name="markRead" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
             label: "Copy link",
-            icon: <Icon name="copy" size="sm" />,
+            icon: <Icon name="link" size="sm" />,
+            rightIcon: "Ctrl L",
             onClick: () => {},
           },
           {
-            label: "Notification settings",
-            subtitle: "All messages",
-            icon: <Icon name="check" size="sm" />,
+            label: "Copy channel ID",
+            icon: <Icon name="copyId" size="sm" />,
             onClick: () => {},
             disabled: true,
-            divider: true,
           },
           {
-            label: "Delete channel",
-            icon: <Icon name="trash" size="sm" />,
+            label: "Notifications",
+            subtitle: "All messages",
+            icon: <Icon name="bell" size="sm" />,
             onClick: () => {},
-            variant: "danger",
+            closeOnClick: false,
+            submenu: (
+              <DropdownMenuRadioGroup defaultValue="all">
+                <DropdownMenuRadioItem value="all">
+                  All messages
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="mentions">
+                  Only mentions
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="none">
+                  Nothing
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            ),
           },
         ]}
         onClose={() => {}}
@@ -1607,11 +1810,43 @@ function MobileFixture({ surface }: { surface: string }) {
       </div>
     );
   }
+  return <MobileChatFixture />;
+}
+
+/**
+ * The phone chat column. Stress params: `&name=` renames the channel (long,
+ * emoji, CJK), `&dm=1` addresses a person, `&text=` types into the composer
+ * (the phone send key replaces the GIF key).
+ */
+function MobileChatFixture() {
+  const name = fixtureParam("name") ?? "general";
+  const dm = fixtureParam("dm") === "1";
+  const text = fixtureParam("text");
+  useEffect(() => {
+    if (!text) return;
+    let tries = 0;
+    const id = window.setInterval(() => {
+      const field = document.querySelector<HTMLTextAreaElement>(
+        ".rm-composer textarea",
+      );
+      if (!field && ++tries < 60) return;
+      window.clearInterval(id);
+      if (!field) return;
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(field, text);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [text]);
   return (
     <div className="chat-main-content relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary">
       <ChatArea
         channelId="ch-general"
-        channelName="general"
+        channelName={name}
+        isDM={dm}
         onMenuClick={() => {}}
         onMembersClick={() => {}}
         showMembers={false}
@@ -1626,28 +1861,132 @@ function MobileFixture({ surface }: { surface: string }) {
  * with a reply, pinned badge, reactions (one reacted), an embed and a file.
  * Shoot with a hover on a row to see the 12.12 hover bar.
  */
+/**
+ * message-rows: the real list across a day boundary, with the unread
+ * banner, a mention of you, a reply, markdown, reactions (one yours), a
+ * failed send and a pending one. Hover a row for the action bar.
+ */
+const ROW_DAY = 24 * 60;
+const rowMessages: Message[] = [
+  msg("r-1", users.ada!, "Night. Leaving the build running.", ROW_DAY + 300),
+  msg(
+    "r-2",
+    users.grace!,
+    "Same. The `useShiftPressed` thing re-renders every row on each capital letter, by the way.",
+    ROW_DAY + 290,
+  ),
+  msg("r-3", users.ada!, "Morning all. Pushing the new token scale today.", 95),
+  msg(
+    "r-4",
+    users.ada!,
+    "Spacing is now 4/8/12/16/24/32, radii are 6/8/10/12. Everything else is a bug.",
+    94,
+  ),
+  msg(
+    "r-5",
+    users.grace!,
+    "Finally. @jon the `rounded-[24px]` on the settings card has been haunting me.",
+    80,
+    {
+      reactions: [
+        {
+          emoji: "😂",
+          count: 3,
+          me: true,
+          users: ["u-me", "u-ada", "u-linus"],
+        },
+      ],
+    },
+  ),
+  msg(
+    "r-6",
+    users.linus!,
+    "Can we also kill `transition-all`? 280 of them. Hover feels like it's dragging through syrup.",
+    61,
+    {
+      reply_to_id: "r-4",
+      reply_to: msg(
+        "r-4",
+        users.ada!,
+        "Spacing is now 4/8/12/16/24/32, radii are 6/8/10/12.",
+        94,
+      ),
+      is_pinned: true,
+      reactions: [
+        { emoji: "🔥", count: 5, me: false, users: ["u-ada", "u-grace"] },
+        { emoji: "👀", count: 1, me: false, users: ["u-ken"] },
+      ],
+    },
+  ),
+  msg("r-7", users.me!, "On it. Also moving the tooltips to one style.", 40),
+  msg(
+    "r-8",
+    users.me!,
+    "Reference pass: **Geist** for UI, _Geist Mono_ for numbers only.\n> Mono is never a costume.\nSpoiler for the review: ||it ships||.",
+    39,
+    { updated_at: at(38) },
+  ),
+  msg("r-9", users.grace!, "Attached the spec too.", 11, {
+    attachments: [
+      {
+        id: "a-r9",
+        filename: "ui-audit-2026-10.pdf",
+        file_key: "fixtures/ui-audit.pdf",
+        content_type: "application/pdf",
+        size_bytes: 412_000,
+      },
+    ],
+  }),
+  msg("r-10", users.ada!, "LGTM. Ship it when the screenshots match.", 3, {
+    reply_count: 2,
+  }),
+  msg("pending-fixture-failed", users.me!, "Pushing the captures now.", 1, {
+    nonce: "fixture-failed",
+    pending: true,
+  }),
+  msg("pending-fixture-sending", users.me!, "And the change log.", 0, {
+    nonce: "fixture-sending",
+    pending: true,
+  }),
+];
+
 function MessageRowsFixture() {
+  useState(() => {
+    registerFailedSendForFixture({
+      nonce: "fixture-failed",
+      channelId: "ch-general",
+      messageId: "pending-fixture-failed",
+      content: "Pushing the captures now.",
+      retrying: false,
+      retry: async () => {},
+      discard: () => {},
+    });
+    return true;
+  });
   return (
-    <div className="flex h-full flex-col bg-rm-bg-primary">
-      <UnreadBanner count={3} since={at(12)} onMarkAsRead={() => {}} />
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
-        {messages.slice(1).map((message, index, list) => (
-          <MessageItem
-            key={message.id}
-            id={`message-${message.id}`}
-            message={message}
-            showHeader={
-              index === 0 || list[index - 1]!.author_id !== message.author_id
-            }
-            currentUserId="u-me"
-            canPin
-            onReply={() => {}}
-            onPin={() => {}}
-            onUnpin={() => {}}
-            onJump={() => {}}
-            onThread={() => {}}
-          />
-        ))}
+    <div className="flex h-full flex-col bg-ply-0">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <UnreadBanner
+          count={3}
+          since={at(12)}
+          onMarkAsRead={() => {}}
+          className="absolute inset-x-0 top-0"
+        />
+        <VirtualMessageList
+          messages={rowMessages}
+          currentUserId="u-me"
+          canPin
+          canDeleteMessages
+          hasMore={false}
+          loading={false}
+          unreadSeparatorId="r-9"
+          onLoadMore={() => {}}
+          onReply={() => {}}
+          onPin={() => {}}
+          onUnpin={() => {}}
+          onJump={() => {}}
+          onThread={() => {}}
+        />
       </div>
     </div>
   );
@@ -1668,21 +2007,35 @@ function DmEmptyFixture() {
 }
 
 /**
- * The channel details page (members + Media/Pins/Threads/Links/Files tabs),
+ * The channel details page (members + Media/Threads/Links/Files tabs),
  * as the phone shows it full height, and as the desktop details column.
  */
 function MembersPageFixture() {
+  // You are in Lounge with Ada and Grace, and Ada is talking: their member
+  // rows carry the talk LED. Linus is typing.
+  useState(() => {
+    useChatStore.setState({
+      voiceChannelStates: {
+        "ch-lounge": [
+          ...voiceMembers,
+          { clerk_user_id: "u-me", name: "Jon", ...voiceFlags },
+        ],
+      },
+      speakingUsers: { "u-ada": true },
+    });
+    return true;
+  });
   return (
     <div className="flex h-full w-full justify-end bg-rm-bg-primary">
       <div className="flex h-full w-full flex-col bg-rm-bg-surface md:w-[360px] md:border-l md:border-rm-border">
         <MemberList
           members={members}
           onlineUsers={new Set(["u-me", "u-ada", "u-grace", "u-linus"])}
+          typingUsers={new Set(["u-linus"])}
           currentUserId="u-me"
           channelName="general"
           channelId={null}
           serverId="s-1"
-          pinnedMessages={[messages[3]!]}
           onClose={() => {}}
           onOpenSearch={() => {}}
           onOpenSettings={() => {}}
@@ -1892,6 +2245,12 @@ function DrawerFixture() {
 function DrawerOverDialogFixture() {
   const [dialogOpen, setDialogOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Open the drawer after the dialog has mounted, as a tap would, so the
+  // capture shows the stacked state (light scrim, dialog receding).
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDrawerOpen(true), 300);
+    return () => window.clearTimeout(timer);
+  }, []);
   return (
     <div className="relative h-full w-full">
       <MobileFixture surface="mobile" />
@@ -1907,7 +2266,7 @@ function DrawerOverDialogFixture() {
               <input
                 aria-label="Search emoji"
                 placeholder="Search emoji"
-                className="mx-4 min-h-12 rounded-lg border border-rm-border bg-rm-bg-primary px-3 text-ui-base text-rm-text"
+                className="mx-4 min-h-11 rounded-md border border-line-field bg-ply-2 px-3 text-ui-md text-ink-1"
               />
               <DrawerFooter>
                 <Button
@@ -2051,6 +2410,7 @@ function OverlaySurface({ surface }: { surface: string }) {
             open
             targetName="Lounge"
             currentType="voice"
+            currentName="Standup"
             onConfirm={noop}
             onCancel={noop}
           />
@@ -2149,14 +2509,7 @@ function OverlaySurface({ surface }: { surface: string }) {
             open
             onOpenChange={noop}
             onConfirm={noop}
-            preview={
-              <MessageItem
-                message={messages[4]!}
-                showHeader
-                currentUserId="u-me"
-                previewOnly
-              />
-            }
+            message={messages[4]!}
           />
         </OverShell>
       );
@@ -2189,18 +2542,25 @@ function OverlaySurface({ surface }: { surface: string }) {
           />
         </OverShell>
       );
+    case "ov-pins":
     case "ov-pins-empty":
     case "ov-pins-loading":
+      // A sheet: the docked form needs the chat layout to sit in.
       return (
         <OverShell>
           <PinnedMessagesSidebar
             open
-            messages={[]}
+            messages={
+              surface === "ov-pins"
+                ? [messages[3]!, messages[5]!, messages[4]!]
+                : []
+            }
             isLoading={surface === "ov-pins-loading"}
             onClose={noop}
             onJumpToMessage={noop}
             onUnpin={noop}
             canUnpin
+            forceMode="sheet"
           />
         </OverShell>
       );
@@ -2220,29 +2580,56 @@ function OverlaySurface({ surface }: { surface: string }) {
  */
 function VoiceDashboardFixture({ surface }: { surface: string }) {
   useFixtureDevices();
+  // Pinned at mount so the call clock reads the same on every render.
+  const [startedAt] = useState(() => Date.now() - 25 * 60_000);
   // Every surface mounts with its popover open: press the dock control that
   // owns it once the dashboard has rendered. The dashboard's own popover is
   // the connection details panel (signal button).
   useEffect(() => {
-    const label =
-      surface === "ov-noise-menu"
-        ? "Noise suppression"
-        : surface === "ov-stream-settings"
-          ? "Stream settings"
-          : "Voice connection details";
-    const id = window.setTimeout(() => {
-      document
-        .querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
-        ?.click();
-    }, 300);
-    return () => window.clearTimeout(id);
+    const ids: number[] = [];
+    if (surface === "ov-stream-settings") {
+      ids.push(
+        window.setTimeout(() => {
+          document
+            .querySelector<HTMLButtonElement>(
+              'button[aria-label="Stream settings"]',
+            )
+            ?.click();
+        }, 300),
+      );
+    } else if (surface === "ov-noise-menu" || surface === "ov-voice-details") {
+      // Voice options menu, then the item that opens the popover.
+      const item =
+        surface === "ov-noise-menu"
+          ? "Noise suppression…"
+          : "Connection details";
+      ids.push(
+        window.setTimeout(() => {
+          const trigger = document.querySelector<HTMLButtonElement>(
+            'button[aria-label="Voice options"]',
+          );
+          trigger?.dispatchEvent(
+            new PointerEvent("pointerdown", { bubbles: true }),
+          );
+          trigger?.click();
+        }, 300),
+        window.setTimeout(() => {
+          const row = Array.from(
+            document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+          ).find((el) => el.textContent?.trim() === item);
+          row?.click();
+        }, 700),
+      );
+    }
+    return () => ids.forEach((id) => window.clearTimeout(id));
   }, [surface]);
   return (
     <OverShell>
-      <div className="fixed bottom-0 left-0 z-20 w-[312px] max-md:w-full border-t border-rm-border bg-rm-bg-secondary">
+      <div className="fixed bottom-0 left-0 z-20 w-[312px] max-md:w-full border-t border-line bg-ply-1">
         <VoiceDashboard
           serverName="Ralph HQ"
           voiceChannelName="Lounge"
+          startedAt={startedAt}
           voiceChannelId="ch-lounge"
           serverId="s-1"
           localUserId="u-me"
@@ -2253,7 +2640,6 @@ function VoiceDashboardFixture({ surface }: { surface: string }) {
           availableQualities={["720p30", "1080p30", "1080p60"]}
           isCameraActive={false}
           hasCamera
-          hasMicrophone
           onVoiceDisconnect={noop}
           onVoiceNavigate={noop}
           onShareScreen={noop}
@@ -2266,6 +2652,91 @@ function VoiceDashboardFixture({ surface }: { surface: string }) {
         />
       </div>
     </OverShell>
+  );
+}
+
+/**
+ * The account row (UserPanel) across sidebar widths and presence states:
+ * the min (208, avatar only), the identity threshold, the default 264 and
+ * the max 368, for each status, with and without a custom status, plus a
+ * voice-connected strip. `&w=264` keeps one width.
+ */
+const ACCOUNT_ROW_WIDTHS = [208, 220, 240, 264, 312, 368];
+const ACCOUNT_ROW_CASES: Array<{
+  label: string;
+  status: User["status"];
+  custom?: string;
+  voice?: boolean;
+}> = [
+  { label: "online", status: "online" },
+  { label: "idle", status: "idle" },
+  { label: "dnd", status: "dnd" },
+  { label: "invisible", status: "offline" },
+  { label: "dnd + custom", status: "dnd", custom: "heads down until 5" },
+  {
+    label: "long custom",
+    status: "online",
+    custom: "shipping the redesign, then sleeping for a week :sleeping:",
+  },
+  { label: "voice + dnd", status: "dnd", voice: true },
+];
+
+function AccountRowMatrix() {
+  useFixtureDevices();
+  const only = Number(fixtureParam("w"));
+  const widths = only ? [only] : ACCOUNT_ROW_WIDTHS;
+  return (
+    <div className="h-full w-full overflow-auto bg-rm-bg-primary p-4">
+      <div
+        className="grid gap-x-3 gap-y-4"
+        style={{
+          gridTemplateColumns: `96px repeat(${widths.length}, max-content)`,
+        }}
+      >
+        <span />
+        {widths.map((width) => (
+          <span key={width} className="silkscreen text-ink-3">
+            {width}px
+          </span>
+        ))}
+        {ACCOUNT_ROW_CASES.map((row) => (
+          <Fragment key={row.label}>
+            <span className="silkscreen self-end pb-6 text-ink-3">
+              {row.label}
+            </span>
+            {widths.map((width) => (
+              <div
+                key={width}
+                data-account-row-case={`${row.label}@${width}`}
+                className="flex flex-col justify-end border border-line bg-ply-1"
+                style={{ width }}
+              >
+                <UserPanel
+                  user={{
+                    ...users.me!,
+                    status: row.status,
+                    custom_status: row.custom ?? null,
+                  }}
+                  serverId="s-1"
+                  serverName="Ralph HQ"
+                  voiceConnected={Boolean(row.voice)}
+                  voiceChannelId={row.voice ? "ch-lounge" : null}
+                  voiceChannelName={row.voice ? "Lounge" : undefined}
+                  connectionState={row.voice ? "connected" : undefined}
+                  stageOnScreen={false}
+                  onVoiceDisconnect={noop}
+                  onVoiceNavigate={noop}
+                  sfu={null}
+                  gridItems={[]}
+                  watchersByStreamer={{}}
+                  sidebarWidthPx={width}
+                />
+              </div>
+            ))}
+          </Fragment>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2321,28 +2792,34 @@ function AnchoredFixture({ surface }: { surface: string }) {
   );
 }
 
-/** Composer-anchored mention list and the hovered-mention tooltip. */
+/**
+ * The real composer (under the shell) with text typed into it: `@` opens the
+ * mention list anchored to the box; `&mention=chip` types a finished mention
+ * instead, and the capture hovers its chip to raise the name tooltip. Nothing
+ * here is positioned by hand.
+ */
 function MentionFixture() {
-  const candidates = [users.ada!, users.grace!, users.linus!, users.margaret!];
-  return (
-    <OverShell>
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 px-2 pb-24 md:left-[312px] md:px-4">
-        <div className="pointer-events-auto relative h-10">
-          <MentionAutocomplete
-            mentionQuery={{ query: "a", start: 0 }}
-            mentionCandidates={candidates}
-            mentionIndex={0}
-            setLocalState={noop}
-            insertMention={noop}
-          />
-        </div>
-      </div>
-      <HoveredMentionTooltip
-        hoveredMember={members.find((m) => m.user.id === "u-grace")}
-        pos={{ left: 220, top: 260 }}
-      />
-    </OverShell>
-  );
+  const chip = fixtureParam("mention") === "chip";
+  useEffect(() => {
+    let tries = 0;
+    const id = window.setInterval(() => {
+      const field = document.querySelector<HTMLTextAreaElement>(
+        ".rm-composer textarea",
+      );
+      if (!field && ++tries < 60) return;
+      window.clearInterval(id);
+      if (!field) return;
+      field.focus();
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(field, chip ? "@ada can you look at this? " : "hey @");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [chip]);
+  return <OverShell>{null}</OverShell>;
 }
 
 function ImageViewerFixture() {
@@ -2358,14 +2835,31 @@ function ImageViewerFixture() {
           content_type: "image/webp",
           size_bytes: 182_000,
         },
+        {
+          id: "img-2",
+          filename: "cover-nightdrive.webp",
+          file_key: "fixtures/cover-nightdrive.webp",
+          url: coverNightdrive,
+          content_type: "image/webp",
+          size_bytes: 64_400,
+        },
+        {
+          id: "img-3",
+          filename: "cover-paperboats.webp",
+          file_key: "fixtures/cover-paperboats.webp",
+          url: coverPaperboats,
+          content_type: "image/webp",
+          size_bytes: 71_900,
+        },
       ],
       0,
       {
-        author: users.grace!,
-        createdAt: at(11),
-        messageId: "m-8",
-        channelId: "ch-general",
-      } as never,
+        username: users.grace!.username,
+        // `&author=` stresses the header (long, emoji, CJK names).
+        display_name: fixtureParam("author") ?? users.grace!.display_name,
+        avatar_url: users.grace!.avatar_url ?? null,
+        created_at: fixtureParam("old") ? at(5000) : at(11),
+      },
     );
   }, [open]);
   return (
@@ -2400,6 +2894,9 @@ export default function UiFixtures() {
   let content: React.ReactNode;
   const surfaceName: string = surface;
   switch (surfaceName) {
+    case "account-row":
+      content = <AccountRowMatrix />;
+      break;
     case "friends":
       content = <FriendsShell />;
       break;
@@ -2513,6 +3010,51 @@ export default function UiFixtures() {
     case "message-rows":
       content = <MessageRowsFixture />;
       break;
+    case "foundation":
+      content = <FoundationFixture />;
+      break;
+    case "updater":
+    case "updater-downloading":
+    case "updater-error":
+      // The desktop updater window's screen, without Tauri.
+      content = (
+        <StandaloneUpdaterView
+          status={
+            surfaceName === "updater-downloading"
+              ? "downloading"
+              : surfaceName === "updater-error"
+                ? "error"
+                : "checking"
+          }
+          progress={42}
+        />
+      );
+      break;
+    case "dither-mockups":
+      content = <DitherMockupsFixture />;
+      break;
+    case "type-mockups":
+      content = <TypeMockupsFixture />;
+      break;
+    case "connection-states":
+      content = (
+        <ConnectionStatesFixture shell={<Shell surface="shell-chat" />} />
+      );
+      break;
+    case "component-kit":
+      content = <ComponentKitFixture />;
+      break;
+    case "voice-debug":
+    case "voice-debug-inbound":
+    case "voice-debug-details":
+    case "voice-debug-warmup":
+      content = (
+        <VoiceDebugFixture
+          surface={surfaceName}
+          shell={<Shell surface="shell-chat" />}
+        />
+      );
+      break;
     case "dm-empty":
       // The DM list with no conversations: desktop sidebar ≥md, the phone
       // Messages tab below.
@@ -2577,7 +3119,7 @@ export default function UiFixtures() {
   }
 
   return (
-    <div className="h-dvh w-full overflow-hidden bg-rm-bg-primary text-rm-text antialiased font-[Figtree,sans-serif]">
+    <div className="h-dvh w-full overflow-hidden bg-rm-bg-primary text-rm-text antialiased font-ui">
       {content}
       <SettingsHost />
     </div>

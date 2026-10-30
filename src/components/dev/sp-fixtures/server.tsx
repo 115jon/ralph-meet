@@ -17,8 +17,10 @@
  *   sp-server-delete         delete confirm armed (owner)
  *   sp-server-member         moderator without Manage server: fewer pages
  *   sp-server-invites-error  invite list failed to load
+ *   sp-server-invite-modal   the "Invite people" dialog (InviteModal)
  */
 
+import InviteModal from "@/components/chat/InviteModal";
 import ServerSettingsModal, {
   type ServerSettingsTab,
 } from "@/components/chat/ServerSettingsModal";
@@ -51,6 +53,7 @@ export const SERVER_SURFACES = [
   "sp-server-delete",
   "sp-server-member",
   "sp-server-invites-error",
+  "sp-server-invite-modal",
 ] as const;
 
 export const FIXTURE_ROLES: Role[] = [
@@ -162,45 +165,89 @@ const bans = [
   },
 ];
 
+const jon = { id: "u-me", username: "jon", display_name: "Jon" };
+const ada = { id: "u-ada", username: "ada", display_name: "Ada Lovelace" };
+const grace = {
+  id: "u-grace",
+  username: "grace",
+  display_name: "Grace Hopper",
+};
+
+/** Newest first, with the real action types (lib/audit-logger.ts). */
 const auditLogs: ServerAuditLog[] = [
   {
     id: "a-1",
     server_id: "s-1",
     actor_id: "u-me",
-    actor: { id: "u-me", username: "jon", display_name: "Jon" },
+    actor: jon,
     action_type: "ROLE_UPDATE",
     target_id: "r-mod",
-    changes: { name: "Moderator", permissions: 263232 },
+    changes: {
+      name: "Moderator",
+      color: "#3e9b4f",
+      permissions:
+        PERMISSIONS.KICK_MEMBERS |
+        PERMISSIONS.BAN_MEMBERS |
+        PERMISSIONS.MANAGE_MESSAGES |
+        PERMISSIONS.VIEW_AUDIT_LOG,
+    },
     created_at: at(12),
   },
   {
     id: "a-2",
     server_id: "s-1",
+    actor_id: "u-me",
+    actor: jon,
+    action_type: "MEMBER_ROLE_UPDATE",
+    target_id: "u-grace",
+    changes: { added_roles: ["r-crew"] },
+    created_at: at(240),
+  },
+  {
+    id: "a-3",
+    server_id: "s-1",
     actor_id: "u-ada",
-    actor: { id: "u-ada", username: "ada", display_name: "Ada Lovelace" },
-    action_type: "MEMBER_BAN_ADD",
+    actor: ada,
+    action_type: "MEMBER_BAN",
     target_id: "u-spam",
     reason: "Posting phishing links in #general",
     created_at: at(1440),
   },
   {
-    id: "a-3",
-    server_id: "s-1",
-    actor_id: "u-me",
-    actor: { id: "u-me", username: "jon", display_name: "Jon" },
-    action_type: "INVITE_CREATE",
-    target_id: "hq-crew-7k2",
-    created_at: at(240),
-  },
-  {
     id: "a-4",
     server_id: "s-1",
     actor_id: "u-grace",
-    actor: { id: "u-grace", username: "grace", display_name: "Grace Hopper" },
+    actor: grace,
     action_type: "CHANNEL_UPDATE",
     target_id: "ch-general",
     changes: { name: "general", description: "Day-to-day chat" },
     created_at: at(3000),
+  },
+  {
+    id: "a-5",
+    server_id: "s-1",
+    actor_id: "u-me",
+    actor: jon,
+    action_type: "ROLE_CREATE",
+    target_id: "r-mod",
+    changes: {
+      name: "Moderator",
+      color: "#3e9b4f",
+      permissions:
+        PERMISSIONS.KICK_MEMBERS |
+        PERMISSIONS.BAN_MEMBERS |
+        PERMISSIONS.VIEW_AUDIT_LOG,
+    },
+    created_at: at(5000),
+  },
+  {
+    id: "a-6",
+    server_id: "s-1",
+    actor_id: "u-me",
+    actor: jon,
+    action_type: "SERVER_UPDATE",
+    changes: { name: "Ralph HQ", allow_share_indexing: false },
+    created_at: at(9000),
   },
 ];
 
@@ -218,6 +265,11 @@ function serverRoutes(surface: string): StubRoute[] {
         surface === "sp-server-invites-error"
           ? fail(500, "D1_ERROR: no such table: invites")
           : ok(invites),
+    },
+    {
+      path: /^\/api\/servers\/s-1\/invites$/,
+      method: "POST",
+      reply: () => ok({ code: "hq-crew-7k2" }),
     },
     {
       path: /^\/api\/servers\/s-1\/settings$/,
@@ -246,7 +298,12 @@ function serverRoutes(surface: string): StubRoute[] {
     {
       path: /^\/api\/servers\/s-1\/members$/,
       method: "GET",
-      reply: () => ok([]),
+      reply: () =>
+        ok([
+          { user_id: "u-me", user: jon },
+          { user_id: "u-ada", user: ada },
+          { user_id: "u-grace", user: grace },
+        ]),
     },
   ];
 }
@@ -267,6 +324,16 @@ function tabFor(surface: string): ServerSettingsTab {
 
 function ServerFixture({ surface }: { surface: string }) {
   useApiStub(serverRoutes(surface));
+  if (surface === "sp-server-invite-modal") {
+    return (
+      <InviteModal
+        open
+        serverId="s-1"
+        serverName="Ralph HQ"
+        onClose={() => {}}
+      />
+    );
+  }
   const member = surface === "sp-server-member";
   return (
     <ServerSettingsModal

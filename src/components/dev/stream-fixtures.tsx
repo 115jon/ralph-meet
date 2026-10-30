@@ -18,7 +18,16 @@ import coverNightdrive from "@/components/dev/assets/cover-nightdrive.webp";
 import type { ScreenSource } from "@/components/DesktopScreenPickerUI";
 import type { ReactNode } from "react";
 
-const QUALITIES = ["720p30", "720p60", "1080p30", "1080p60", "1440p60"];
+const QUALITIES = [
+  "720p30",
+  "720p60",
+  "1080p30",
+  "1080p60",
+  "1440p30",
+  "1440p60",
+  "4k30",
+  "4k60",
+];
 const noop = () => {};
 
 const SOURCES: ScreenSource[] = [

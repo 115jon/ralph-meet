@@ -7,8 +7,10 @@
  *                                (pushed into the editor on phones)
  *   sp-channel-permissions-list  permissions, nothing selected
  *   sp-channel-voice             a voice channel's overview
+ *   sp-channel-invite            the channel invite dialog (ChannelInviteModal)
  */
 
+import ChannelInviteModal from "@/components/chat/ChannelInviteModal";
 import ChannelSettingsModal from "@/components/chat/ChannelSettingsModal";
 import { PERMISSIONS } from "@/lib/permissions";
 import type { Channel } from "@/lib/types";
@@ -21,6 +23,7 @@ export const CHANNEL_SURFACES = [
   "sp-channel-permissions",
   "sp-channel-permissions-list",
   "sp-channel-voice",
+  "sp-channel-invite",
 ];
 
 const channel: Channel = {
@@ -76,6 +79,11 @@ const overrides = [
 
 const routes: StubRoute[] = [
   {
+    path: /^\/api\/servers\/s-1\/invites$/,
+    method: "POST",
+    reply: () => ok({ code: "general-7d4x" }),
+  },
+  {
     path: /^\/api\/channels\/ch-[a-z]+\/permissions$/,
     method: "GET",
     reply: () => ok(overrides),
@@ -108,6 +116,17 @@ const routes: StubRoute[] = [
 
 function ChannelFixture({ surface }: { surface: string }) {
   useApiStub(routes);
+  if (surface === "sp-channel-invite") {
+    return (
+      <ChannelInviteModal
+        open
+        serverId="s-1"
+        serverName="Ralph HQ"
+        channel={channel}
+        onClose={() => {}}
+      />
+    );
+  }
   const onPermissions = surface.startsWith("sp-channel-permissions");
   return (
     <ChannelSettingsModal

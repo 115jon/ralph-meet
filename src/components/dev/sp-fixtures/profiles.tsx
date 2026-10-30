@@ -153,12 +153,15 @@ function Anchored({
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   return (
     <>
+      {/* An invisible anchor where a member row's avatar would be: the
+          popover positions against it, but nothing stray draws. */}
       <button
         type="button"
         ref={setAnchor}
-        aria-label="Fixture anchor"
+        aria-hidden="true"
+        tabIndex={-1}
         className={cn(
-          "fixed z-20 size-8 rounded-full bg-rm-tint-2",
+          "pointer-events-none fixed z-20 size-8 opacity-0",
           "top-40 right-[260px] max-md:right-4",
         )}
       />

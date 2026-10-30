@@ -5,8 +5,8 @@
  *
  *   act-wordle | act-wordle-howto | act-wordle-hints | act-wordle-settings
  *   act-wordle-done
- *   act-warp | act-warp-crash | act-warp-unsupported | act-warp-booting
- *   act-apps | act-apps-menu
+ *   act-warp | act-warp-unsupported | act-warp-booting
+ *   act-apps | act-apps-menu (the same single list; the old mode prop still works)
  *   act-listen | act-listen-empty | act-listen-history | act-listen-actions
  *   act-now-playing | act-soundboard
  */
@@ -80,8 +80,37 @@ function typeInto(input: HTMLInputElement, value: string) {
 /* Wordle                                                               */
 /* ------------------------------------------------------------------ */
 
+/** Other players, one with a name long enough to truncate in the rail. */
+const wordleParticipants = [
+  ...participants,
+  { userId: "u-max", name: "Maximilian Featherstonehaugh-Wells" },
+];
+
+/** An SFU stand-in whose app events the fixture can push by hand. */
+function makeEventSfu() {
+  const listeners = new Set<(event: Record<string, unknown>) => void>();
+  const sfu = {
+    voiceGW: { isReady: true, sendAppEvent: () => true },
+    resumeAudioContext: () => {},
+    on: (
+      _eventName: string,
+      listener: (event: Record<string, unknown>) => void,
+    ) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    off: () => {},
+  } as unknown as SFUClient;
+  return {
+    sfu,
+    emit: (event: Record<string, unknown>) =>
+      listeners.forEach((listener) => listener(event)),
+  };
+}
+
 function WordleFixture({ surface }: { surface: string }) {
   const [ready, setReady] = useState(false);
+  const [events] = useState(makeEventSfu);
 
   useEffect(() => {
     const dateKey = getNewYorkDateKey(new Date());
@@ -133,6 +162,45 @@ function WordleFixture({ surface }: { surface: string }) {
     };
   }, [surface]);
 
+  // The group rail has someone to show: solved, still playing, out of tries.
+  useEffect(() => {
+    if (!ready) return;
+    const dateKey = getNewYorkDateKey(new Date());
+    const progress = (
+      userId: string,
+      name: string,
+      guesses: string[],
+      finished: boolean,
+      missed: boolean,
+    ) =>
+      events.emit({
+        type: "wordle.progress",
+        channel_id: "ch-lounge",
+        puzzle_date: dateKey,
+        progress: { userId, name, guesses, streak: 2, finished, missed },
+      });
+    return whenPresent<HTMLButtonElement>(
+      'button[aria-label="Open channel stats"]',
+      () => {
+        progress(
+          "u-ada",
+          "Ada Lovelace",
+          ["adieu", "slate", "crane"],
+          true,
+          false,
+        );
+        progress("u-grace", "Grace Hopper", ["slate", "pride"], false, false);
+        progress(
+          "u-max",
+          "Maximilian Featherstonehaugh-Wells",
+          ["slate", "pride", "adieu", "audio", "stove", "moist"],
+          true,
+          true,
+        );
+      },
+    );
+  }, [ready, events]);
+
   useEffect(() => {
     if (!ready) return;
     if (surface === "act-wordle-hints") {
@@ -143,7 +211,7 @@ function WordleFixture({ surface }: { surface: string }) {
     }
     if (surface === "act-wordle-settings") {
       return whenPresent<HTMLButtonElement>(
-        'button[aria-label="Open Wordle settings"]',
+        'button[aria-label="Open settings"]',
         (button) => button.click(),
       );
     }
@@ -152,10 +220,10 @@ function WordleFixture({ surface }: { surface: string }) {
   if (!ready) return null;
   return (
     <WordleActivityStage
-      sfu={null}
+      sfu={events.sfu}
       channelId="ch-lounge"
       localUserId="u-me"
-      participants={participants}
+      participants={wordleParticipants}
     />
   );
 }
@@ -198,7 +266,7 @@ function WarpFixture({ surface }: { surface: string }) {
     return Booting ? (
       <Booting kind="booting" />
     ) : (
-      <div className="grid h-full place-items-center text-ui-sm text-rm-text-muted">
+      <div className="grid h-full place-items-center text-ui-sm text-ink-3">
         No booting state before this unit.
       </div>
     );
@@ -319,17 +387,20 @@ function NowPlayingCards() {
   return (
     <div className="grid h-full grid-cols-1 content-start gap-6 overflow-y-auto p-4 md:grid-cols-2 md:p-6">
       <div className="space-y-2">
-        <p className="text-ui-xs text-rm-text-muted">variant="mini"</p>
-        <ListenTogetherNowPlayingCard
-          playback={playback}
-          sfu={fakeSfu}
-          roomSlug={LISTEN_ROOM}
-          onOpenQueue={() => {}}
-        />
+        <p className="text-ui-xs text-ink-3">variant="mini"</p>
+        {/* The mini body as it sits in the floating player (ply-3). */}
+        <div className="max-w-[340px] rounded-xl border border-line bg-ply-3 shadow-float">
+          <ListenTogetherNowPlayingCard
+            playback={playback}
+            sfu={fakeSfu}
+            roomSlug={LISTEN_ROOM}
+            onOpenQueue={() => {}}
+          />
+        </div>
       </div>
       <div className="space-y-2">
-        <p className="text-ui-xs text-rm-text-muted">variant="panel"</p>
-        <div className="rounded-lg border border-rm-border bg-rm-bg-surface p-4">
+        <p className="text-ui-xs text-ink-3">variant="panel"</p>
+        <div className="rounded-lg border border-line bg-ply-2 p-4">
           <ListenTogetherNowPlayingCard
             playback={playback}
             sfu={fakeSfu}
