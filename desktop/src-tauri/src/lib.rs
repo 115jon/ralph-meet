@@ -61,6 +61,7 @@ mod app_updates;
 pub mod game_capture;
 mod hardware_encoder;
 mod media_devices;
+mod occlusion;
 mod permissions;
 mod screen_capture;
 mod thumbnail_toolbar;
@@ -884,14 +885,28 @@ pub fn run() {
             // Electron enables both by default; our CEF fork does not.
             ("--enable-gpu-rasterization".to_string(), None::<String>),
             ("--enable-zero-copy".to_string(), None::<String>),
-            // ── Renderer process: suppress unnecessary background work ─────────────────
-            (
-                "--disable-backgrounding-occluded-windows".to_string(),
-                None::<String>,
-            ),
+            // ── Renderer process priority ──────────────────────────────────────────────
+            // Keep the renderer's process priority up under game CPU load (WebRTC
+            // jitter). Occlusion backgrounding stays ON: a window covered by a game
+            // stops rAF, CSS animations and compositor frames. Voice activity runs
+            // in an AudioWorklet (src/lib/voice/vad-processor.worklet.js), which the
+            // page's timer throttling cannot slow down.
             (
                 "--disable-renderer-backgrounding".to_string(),
                 None::<String>,
+            ),
+            // CEF defaults to INFO logging into debug.log; a multi-hour call should
+            // not grow it. Warnings in debug builds, errors only in release.
+            (
+                "--log-severity".to_string(),
+                Some(
+                    if cfg!(debug_assertions) {
+                        "warning"
+                    } else {
+                        "error"
+                    }
+                    .to_string(),
+                ),
             ),
             (
                 "--enable-features".to_string(),
@@ -1089,6 +1104,19 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             thumbnail_toolbar::setup_taskbar_thumbnail_toolbar(app)?;
 
+            // ── Occlusion signal (rm://occlusion) for useAppActive() ────
+            {
+                #[cfg(target_os = "windows")]
+                let main_hwnd = app
+                    .get_webview_window("main")
+                    .and_then(|win| win.hwnd().ok())
+                    .map(|hwnd| hwnd.0 as isize)
+                    .unwrap_or(0);
+                #[cfg(not(target_os = "windows"))]
+                let main_hwnd = 0isize;
+                occlusion::start(app.handle(), main_hwnd);
+            }
+
             Ok(())
         })
         // ── Minimize to tray on close ────────────────────────────────────
@@ -1120,6 +1148,9 @@ pub fn run() {
                             window.label(),
                             focused
                         );
+                        if window.label() == "main" {
+                            occlusion::on_main_focus_changed(*focused);
+                        }
                     }
                     tauri::WindowEvent::Destroyed => {
                         log::info!("[WindowState][event:destroyed] label={}", window.label());

@@ -1,10 +1,34 @@
 import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import path from "path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type PluginOption } from "vite";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
 const shimDir = path.resolve(rootDir, "src/shims");
+
+/**
+ * TanStack's router plugin, from the copy @tanstack/react-start already
+ * installs (react-start -> start-plugin-core -> router-plugin), so the
+ * desktop build uses the same generator version as the web build.
+ * TODO: add "@tanstack/router-plugin" to devDependencies and import it
+ * directly (`import { tanstackRouter } from "@tanstack/router-plugin/vite"`).
+ */
+async function loadTanstackRouterPlugin() {
+  const fromRoot = createRequire(path.join(rootDir, "package.json"));
+  const fromStart = createRequire(
+    fromRoot.resolve("@tanstack/react-start/package.json"),
+  );
+  const fromCore = createRequire(
+    fromStart.resolve("@tanstack/start-plugin-core/package.json"),
+  );
+  const entry = fromCore.resolve("@tanstack/router-plugin/vite");
+  const mod = (await import(pathToFileURL(entry).href)) as {
+    tanstackRouter: (options: Record<string, unknown>) => PluginOption;
+  };
+  return mod.tanstackRouter;
+}
 
 /**
  * Desktop-specific Vite config.
@@ -15,7 +39,7 @@ const shimDir = path.resolve(rootDir, "src/shims");
  *   - Uses desktop/index.html as the entry point
  *   - Shares the same src/ directory for components, stores, and routes
  */
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, rootDir, "");
   const baseApiUrl =
     process.env.VITE_API_BASE_URL ||
@@ -24,86 +48,116 @@ export default defineConfig(({ mode }) => {
   const baseWsUrl = baseApiUrl
     .replace(/^https:/, "wss:")
     .replace(/^http:/, "ws:");
+  const tanstackRouter = await loadTanstackRouterPlugin();
 
   return {
     root: import.meta.dirname,
     envDir: rootDir,
     publicDir: path.resolve(rootDir, "public"),
-    plugins: [viteReact(), tailwindcss()],
+    plugins: [
+      // Desktop route tree: same src/routes as the web app, minus the server
+      // API handlers (src/routes/api/**, ~300 KB with the services they pull
+      // in), with each route's component split into its own lazy chunk.
+      // Must run before the React plugin.
+      tanstackRouter({
+        target: "react",
+        autoCodeSplitting: true,
+        routesDirectory: path.resolve(rootDir, "src/routes"),
+        generatedRouteTree: path.resolve(
+          import.meta.dirname,
+          "routeTree.desktop.gen.ts",
+        ),
+        routeFileIgnorePattern: "^api$",
+        quoteStyle: "double",
+      }),
+      viteReact(),
+      tailwindcss(),
+    ],
     resolve: {
-      alias: {
-        "@": path.resolve(rootDir, "src"),
+      alias: [
+        // Emoji data loads on demand (src/lib/emoji.ts imports the JSON set
+        // by its full path). Only the bare specifier is redirected.
+        {
+          find: /^@emoji-mart\/data$/,
+          replacement: path.resolve(
+            import.meta.dirname,
+            "shims/emoji-mart-data-empty.ts",
+          ),
+        },
+        ...Object.entries({
+          "@": path.resolve(rootDir, "src"),
 
-        // ── Tauri plugin resolution ────────────────────────────────────
-        // These live in desktop/node_modules but are imported from ../src/.
-        // Without explicit aliases, Vite walks up to root node_modules
-        // (which doesn't have them). Map them directly.
-        "@tauri-apps/plugin-shell": path.resolve(
-          import.meta.dirname,
-          "node_modules/@tauri-apps/plugin-shell",
-        ),
-        "@tauri-apps/plugin-updater": path.resolve(
-          import.meta.dirname,
-          "node_modules/@tauri-apps/plugin-updater",
-        ),
-        "@tauri-apps/plugin-process": path.resolve(
-          import.meta.dirname,
-          "node_modules/@tauri-apps/plugin-process",
-        ),
-        "@tauri-apps/plugin-autostart": path.resolve(
-          import.meta.dirname,
-          "node_modules/@tauri-apps/plugin-autostart",
-        ),
-        "@tauri-apps/plugin-notification": path.resolve(
-          import.meta.dirname,
-          "node_modules/@tauri-apps/plugin-notification",
-        ),
+          // ── Tauri plugin resolution ────────────────────────────────────
+          // These live in desktop/node_modules but are imported from ../src/.
+          // Without explicit aliases, Vite walks up to root node_modules
+          // (which doesn't have them). Map them directly.
+          "@tauri-apps/plugin-shell": path.resolve(
+            import.meta.dirname,
+            "node_modules/@tauri-apps/plugin-shell",
+          ),
+          "@tauri-apps/plugin-updater": path.resolve(
+            import.meta.dirname,
+            "node_modules/@tauri-apps/plugin-updater",
+          ),
+          "@tauri-apps/plugin-process": path.resolve(
+            import.meta.dirname,
+            "node_modules/@tauri-apps/plugin-process",
+          ),
+          "@tauri-apps/plugin-autostart": path.resolve(
+            import.meta.dirname,
+            "node_modules/@tauri-apps/plugin-autostart",
+          ),
+          "@tauri-apps/plugin-notification": path.resolve(
+            import.meta.dirname,
+            "node_modules/@tauri-apps/plugin-notification",
+          ),
 
-        // ── Shims for server-only / Cloudflare-only imports ────────────
-        "cloudflare:workers": path.resolve(
-          import.meta.dirname,
-          "shims/cloudflare-workers.ts",
-        ),
+          // ── Shims for server-only / Cloudflare-only imports ────────────
+          "cloudflare:workers": path.resolve(
+            import.meta.dirname,
+            "shims/cloudflare-workers.ts",
+          ),
 
-        // ── Shims for mobile-only Tauri plugins ─────────────────────────
-        "tauri-plugin-status-bar-color-api": path.resolve(
-          rootDir,
-          "src/shims/tauri-plugin-status-bar-color-api.ts",
-        ),
-        "@tanstack/react-start/server": path.resolve(
-          import.meta.dirname,
-          "shims/tanstack-react-start-server.ts",
-        ),
-        "@tanstack/react-start": path.resolve(
-          import.meta.dirname,
-          "shims/tanstack-react-start.ts",
-        ),
-        // ── use-sync-external-store shims (shared with web config) ─────
-        "use-sync-external-store/shim/with-selector": path.resolve(
-          shimDir,
-          "use-sync-external-store-with-selector.ts",
-        ),
-        "use-sync-external-store/shim/index.js": path.resolve(
-          shimDir,
-          "use-sync-external-store.ts",
-        ),
-        "use-sync-external-store/shim": path.resolve(
-          shimDir,
-          "use-sync-external-store.ts",
-        ),
-        "use-sync-external-store/with-selector.js": path.resolve(
-          shimDir,
-          "use-sync-external-store-with-selector.ts",
-        ),
-        "use-sync-external-store/with-selector": path.resolve(
-          shimDir,
-          "use-sync-external-store-with-selector.ts",
-        ),
-        "use-sync-external-store": path.resolve(
-          shimDir,
-          "use-sync-external-store.ts",
-        ),
-      },
+          // ── Shims for mobile-only Tauri plugins ─────────────────────────
+          "tauri-plugin-status-bar-color-api": path.resolve(
+            rootDir,
+            "src/shims/tauri-plugin-status-bar-color-api.ts",
+          ),
+          "@tanstack/react-start/server": path.resolve(
+            import.meta.dirname,
+            "shims/tanstack-react-start-server.ts",
+          ),
+          "@tanstack/react-start": path.resolve(
+            import.meta.dirname,
+            "shims/tanstack-react-start.ts",
+          ),
+          // ── use-sync-external-store shims (shared with web config) ─────
+          "use-sync-external-store/shim/with-selector": path.resolve(
+            shimDir,
+            "use-sync-external-store-with-selector.ts",
+          ),
+          "use-sync-external-store/shim/index.js": path.resolve(
+            shimDir,
+            "use-sync-external-store.ts",
+          ),
+          "use-sync-external-store/shim": path.resolve(
+            shimDir,
+            "use-sync-external-store.ts",
+          ),
+          "use-sync-external-store/with-selector.js": path.resolve(
+            shimDir,
+            "use-sync-external-store-with-selector.ts",
+          ),
+          "use-sync-external-store/with-selector": path.resolve(
+            shimDir,
+            "use-sync-external-store-with-selector.ts",
+          ),
+          "use-sync-external-store": path.resolve(
+            shimDir,
+            "use-sync-external-store.ts",
+          ),
+        }).map(([find, replacement]) => ({ find, replacement })),
+      ],
     },
     server: {
       port: 1420,
