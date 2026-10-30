@@ -150,6 +150,12 @@ describe("AudioPipeline lifecycle", () => {
     expect(audioContext).not.toHaveBeenCalled();
     expect(document.querySelectorAll("audio")).toHaveLength(1);
     expect(document.querySelector("audio")?.autoplay).toBe(true);
+    pipeline.attachRemoteAudioTrack(
+      "participant",
+      track,
+      "cam-audio-participant",
+    );
+    expect(document.querySelectorAll("audio")).toHaveLength(1);
     pipeline.removeParticipantVolume("participant");
   });
 
@@ -190,7 +196,10 @@ describe("AudioPipeline lifecycle", () => {
     pipeline.setParticipantVolume("participant", 1.5);
 
     expect(audioContext).toHaveBeenCalledOnce();
-    expect(document.querySelectorAll("audio")).toHaveLength(0);
+    const activators = document.querySelectorAll("audio");
+    expect(activators).toHaveLength(1);
+    expect(activators[0]?.volume).toBe(0);
+    expect(activators[0]?.muted).toBe(false);
     expect(
       (
         pipeline as unknown as {
@@ -199,6 +208,7 @@ describe("AudioPipeline lifecycle", () => {
       ).directAudioElements.get("participant"),
     ).toBeUndefined();
     pipeline.removeParticipantVolume("participant");
+    expect(document.querySelectorAll("audio")).toHaveLength(0);
   });
 
   it("preserves track-specific volume when promoting to Web Audio", () => {
@@ -228,6 +238,72 @@ describe("AudioPipeline lifecycle", () => {
     ).volumeGains;
     expect(gains.get("participant")?.get(trackName)?.gain.value).toBe(0.35);
     pipeline.removeParticipantVolume("participant");
+  });
+
+  it("keeps the direct sink until a suspended playback context is running", async () => {
+    const { context, sources } = createAudioContext();
+    let releaseResume: (() => void) | undefined;
+    (context.resume as ReturnType<typeof vi.fn>).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseResume = () => {
+            (context as { state: AudioContextState }).state = "running";
+            resolve();
+          };
+        }),
+    );
+    vi.stubGlobal(
+      "AudioContext",
+      vi.fn(function () {
+        return context;
+      }),
+    );
+    const pipeline = new AudioPipeline({ onAudioResumed: vi.fn() });
+    const track = { kind: "audio", readyState: "live" } as MediaStreamTrack;
+
+    pipeline.setMasterVolume(2);
+    pipeline.attachRemoteAudioTrack(
+      "participant",
+      track,
+      "cam-audio-participant",
+    );
+
+    expect(document.querySelectorAll("audio")).toHaveLength(1);
+    expect(document.querySelector("audio")?.volume).toBe(1);
+    expect(sources).toHaveLength(0);
+
+    releaseResume?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sources).toHaveLength(1);
+    expect(
+      (
+        pipeline as unknown as {
+          directAudioElements: Map<string, Map<string, unknown>>;
+        }
+      ).directAudioElements.get("participant"),
+    ).toBeUndefined();
+    pipeline.removeParticipantVolume("participant");
+  });
+
+  it("adopts a prewarmed interactive context on resume", async () => {
+    const { context } = createAudioContext();
+    (context as { state: AudioContextState }).state = "running";
+    const audioContext = vi.fn(function AudioContextMock(this: unknown) {
+      return context;
+    });
+    vi.stubGlobal("AudioContext", audioContext);
+
+    prewarmAudioContext();
+    const pipeline = new AudioPipeline({ onAudioResumed: vi.fn() });
+    await pipeline.resumeAudioContext();
+
+    expect(audioContext).toHaveBeenCalledWith({ latencyHint: "interactive" });
+    expect(
+      (pipeline as unknown as { volumeContext: AudioContext }).volumeContext,
+    ).toBe(context);
+    pipeline.dispose();
   });
 
   it("closes an unconsumed prewarmed context after its bounded lifetime", () => {

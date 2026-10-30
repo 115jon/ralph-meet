@@ -6,6 +6,7 @@ import {
   type SessionDescriptionPayload,
   type TrackInfo,
 } from "@/lib/types";
+import { markVoice } from "@/lib/voice/latency-marks";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
@@ -83,10 +84,15 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     ticketContext: { channelId?: string; serverId?: string },
   ) {
     this.clearCredentialsOnNextPrepare = false;
+    // Only a new participant needs a new socket. A fresh token for the
+    // participant this socket already identified (the room's Ready after the
+    // ticket's bootstrap token, a credential refresh) is kept for the next
+    // identify; the voice room has already admitted this socket.
     const replacingIdentifiedGeneration =
-      this.identifySent &&
-      (this.identifiedParticipantId !== participantId ||
-        this.identifiedVoiceToken !== voiceToken);
+      this.identifySent && this.identifiedParticipantId !== participantId;
+    if (this.identifySent && !replacingIdentifiedGeneration) {
+      this.identifiedVoiceToken = voiceToken;
+    }
 
     this.participantId = participantId;
     this.voiceToken = voiceToken;
@@ -121,6 +127,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     this.connecting = true;
     const requestGeneration = ++this.connectionRequestGeneration;
     try {
+      markVoice("VoiceGW:ticket-start", { roomSlug: this.roomSlug });
       const protocols = await fetchSocketProtocols({
         audience: "voice",
         channelId: this.ticketContext.channelId,
@@ -132,6 +139,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         requestGeneration !== this.connectionRequestGeneration
       )
         return;
+      markVoice("VoiceGW:ticket-done", { roomSlug: this.roomSlug });
       const url = this.wsUrlGenerator(
         `/api/channels/${this.roomSlug}/voice?v=1`,
       );

@@ -10,6 +10,7 @@ import {
   fetchSocketTicketBundle,
   type MediaBootstrap,
 } from "@/lib/voice/socket-ticket-client";
+import { markVoice } from "@/lib/voice/latency-marks";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
@@ -68,6 +69,7 @@ export interface ConnectOptions {
   serverId?: string;
   roomSlug: string;
   wsUrlGenerator: (path: string) => string;
+  standby?: boolean;
 }
 
 export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
@@ -102,6 +104,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     try {
       const audience =
         options.roomSlug === "global-gateway" ? "global" : "room";
+      markVoice("RoomGW:ticket-start", { roomSlug: options.roomSlug });
       const bundle = await fetchSocketTicketBundle({
         audience,
         channelId: options.channelId,
@@ -113,6 +116,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
         requestGeneration !== this.connectionRequestGeneration
       )
         return;
+      markVoice("RoomGW:ticket-done", { roomSlug: options.roomSlug });
       if (bundle.mediaBootstrap) {
         this.emit("media-bootstrap", bundle.mediaBootstrap);
       }
@@ -201,18 +205,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           );
         } else {
           this.send(
-            {
-              op: VoiceOpcode.Identify,
-              d: {
-                name: this.options?.name || "Guest",
-                username: this.options?.username,
-                display_name: this.options?.displayName,
-                avatar_url: this.options?.avatarUrl,
-                avatar_display: this.options?.avatarDisplay,
-                clerk_user_id: this.options?.clerkUserId,
-                supports_voice_state_deltas: true,
-              },
-            },
+            { op: VoiceOpcode.Identify, d: this.identifyPayload() },
             true,
           );
         }
@@ -316,18 +309,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           this.participantId = null;
           this.lastReplayableSeq = 0;
           this.send(
-            {
-              op: VoiceOpcode.Identify,
-              d: {
-                name: this.options?.name || "Guest",
-                username: this.options?.username,
-                display_name: this.options?.displayName,
-                avatar_url: this.options?.avatarUrl,
-                avatar_display: this.options?.avatarDisplay,
-                clerk_user_id: this.options?.clerkUserId,
-                supports_voice_state_deltas: true,
-              },
-            },
+            { op: VoiceOpcode.Identify, d: this.identifyPayload() },
             true,
           );
           break;
@@ -340,6 +322,34 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
   }
 
   // --- External API for sending specific messages ---
+
+  public promoteStandby(voice?: {
+    selfMute?: boolean;
+    selfDeaf?: boolean;
+  }): void {
+    if (this.options) this.options = { ...this.options, standby: false };
+    this.send({
+      op: VoiceOpcode.VoiceStateUpdate,
+      d: {
+        promote_standby: true,
+        ...(voice?.selfMute !== undefined ? { self_mute: voice.selfMute } : {}),
+        ...(voice?.selfDeaf !== undefined ? { self_deaf: voice.selfDeaf } : {}),
+      },
+    });
+  }
+
+  private identifyPayload() {
+    return {
+      name: this.options?.name || "Guest",
+      username: this.options?.username,
+      display_name: this.options?.displayName,
+      avatar_url: this.options?.avatarUrl,
+      avatar_display: this.options?.avatarDisplay,
+      clerk_user_id: this.options?.clerkUserId,
+      supports_voice_state_deltas: true,
+      ...(this.options?.standby ? { standby: true } : {}),
+    };
+  }
 
   public sendMuteUpdate(isMicOn: boolean, isCameraOn: boolean) {
     this.send({

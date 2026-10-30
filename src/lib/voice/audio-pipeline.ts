@@ -18,6 +18,10 @@ let _prewarmedContext: AudioContext | null = null;
 let _prewarmedContextCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 const PREWARMED_CONTEXT_LIFETIME_MS = 10_000;
 
+function createPlaybackAudioContext(): AudioContext {
+  return new AudioContext({ latencyHint: "interactive" });
+}
+
 function clearPrewarmedContextCleanupTimer(): void {
   if (_prewarmedContextCleanupTimer !== null) {
     clearTimeout(_prewarmedContextCleanupTimer);
@@ -49,7 +53,7 @@ function takePrewarmedAudioContext(): AudioContext | null {
 /**
  * Create and resume an AudioContext during a user gesture (click/tap).
  * The AudioPipeline will reuse this context instead of creating a new
- * suspended one. Call this from call Accept/Initiate button handlers.
+ * suspended one. Call this from call Accept/Initiate and voice-join clicks.
  *
  * Also resumes the sound effects AudioContext so a single user gesture
  * unlocks ALL audio — preventing the double "Interaction Required" modal.
@@ -58,7 +62,7 @@ export function prewarmAudioContext(): void {
   try {
     if (!_prewarmedContext || _prewarmedContext.state === "closed") {
       disposePrewarmedAudioContext();
-      _prewarmedContext = new AudioContext();
+      _prewarmedContext = createPlaybackAudioContext();
     }
     clearPrewarmedContextCleanupTimer();
     _prewarmedContextCleanupTimer = setTimeout(
@@ -99,6 +103,8 @@ export class AudioPipeline {
   private masterGainNode: GainNode | null = null;
   private volumeLevels: Map<string, number> = new Map();
   private trackVolumeLevels: Map<string, number> = new Map();
+  private participantPans: Map<string, number> = new Map();
+  private trackPans: Map<string, number> = new Map();
   private masterVolumeLevel = 1;
   private outputDeviceId = "default";
   private directAudioElements: Map<string, Map<string, HTMLAudioElement>> =
@@ -149,9 +155,9 @@ export class AudioPipeline {
    * Call this from a user gesture (like clicking "Join").
    */
   async resumeAudioContext(): Promise<void> {
-    if (!this.volumeContext) {
+    if (!this.volumeContext || this.volumeContext.state === "closed") {
       // Direct remote sinks do not need an AudioContext. Only adopt a context
-      // that was explicitly prewarmed or created by an enhanced audio path.
+      // that was explicitly prewarmed during the join click.
       const prewarmedContext = takePrewarmedAudioContext();
       if (prewarmedContext) this.volumeContext = prewarmedContext;
       else {
@@ -210,7 +216,7 @@ export class AudioPipeline {
       const element = directElements?.get(trackName);
       if (!element) continue;
       if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
-        this.promoteDirectTrack(participantId, trackName);
+        this.promoteDirectTrackWhenRunning(participantId, trackName);
       } else {
         element.volume = this.getDirectElementVolume(participantId, trackName);
       }
@@ -239,7 +245,7 @@ export class AudioPipeline {
     const element = this.directAudioElements.get(participantId)?.get(trackName);
     if (element) {
       if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
-        this.promoteDirectTrack(participantId, trackName);
+        this.promoteDirectTrackWhenRunning(participantId, trackName);
       } else {
         element.volume = this.getDirectElementVolume(participantId, trackName);
       }
@@ -252,19 +258,21 @@ export class AudioPipeline {
    */
   getAudioContext(): AudioContext {
     if (!this.volumeContext || this.volumeContext.state === "closed") {
-      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
+      this.volumeContext =
+        takePrewarmedAudioContext() ?? createPlaybackAudioContext();
     }
     return this.volumeContext;
   }
 
   setParticipantPan(participantId: string, pan: number): void {
     const clamped = Math.max(-1, Math.min(pan, 1));
+    this.participantPans.set(participantId, clamped);
     if (clamped !== 0) {
       const directTrackNames = [
         ...(this.directAudioElements.get(participantId)?.keys() ?? []),
       ];
       for (const trackName of directTrackNames) {
-        this.promoteDirectTrack(participantId, trackName);
+        this.promoteDirectTrackWhenRunning(participantId, trackName);
       }
     }
     const panners = this.spatialPanners.get(participantId);
@@ -280,11 +288,12 @@ export class AudioPipeline {
 
   setTrackPan(participantId: string, trackName: string, pan: number): void {
     const clamped = Math.max(-1, Math.min(pan, 1));
+    this.trackPans.set(`${participantId}::${trackName}`, clamped);
     if (
       clamped !== 0 &&
       this.directAudioElements.get(participantId)?.has(trackName)
     ) {
-      this.promoteDirectTrack(participantId, trackName);
+      this.promoteDirectTrackWhenRunning(participantId, trackName);
     }
     const node = this.spatialPanners.get(participantId)?.get(trackName);
     if (!node || !this.volumeContext) return;
@@ -307,6 +316,13 @@ export class AudioPipeline {
     trackName: string,
   ): MediaStream {
     if (track.kind !== "audio") return new MediaStream([track]);
+
+    const alreadyAttached = this.attachedRemoteStream(
+      participantId,
+      trackName,
+      track,
+    );
+    if (alreadyAttached) return alreadyAttached;
 
     this.removeTrackVolume(participantId, trackName);
     const stream = new MediaStream([track]);
@@ -343,7 +359,7 @@ export class AudioPipeline {
       );
     }
     if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
-      this.promoteDirectTrack(participantId, trackName);
+      this.promoteDirectTrackWhenRunning(participantId, trackName);
       return stream;
     }
     void this.applyDirectOutputDevice(element);
@@ -355,6 +371,26 @@ export class AudioPipeline {
       attachedAt: Date.now(),
     });
     return stream;
+  }
+
+  private attachedRemoteStream(
+    participantId: string,
+    trackName: string,
+    track: MediaStreamTrack,
+  ): MediaStream | null {
+    const element = this.directAudioElements.get(participantId)?.get(trackName);
+    const elementStream = element?.srcObject;
+    if (
+      elementStream instanceof MediaStream &&
+      elementStream.getAudioTracks().includes(track)
+    ) {
+      return elementStream;
+    }
+    const sourceStream = this.volumeSources
+      .get(participantId)
+      ?.get(trackName)?.mediaStream;
+    if (sourceStream?.getAudioTracks().includes(track)) return sourceStream;
+    return null;
   }
 
   private getDirectElementVolume(
@@ -384,6 +420,21 @@ export class AudioPipeline {
     return Math.max(0, gain * this.masterVolumeLevel);
   }
 
+  private getStoredPan(participantId: string, trackName: string): number {
+    return (
+      this.trackPans.get(`${participantId}::${trackName}`) ??
+      this.participantPans.get(participantId) ??
+      0
+    );
+  }
+
+  private needsWebAudio(participantId: string, trackName: string): boolean {
+    return (
+      this.getEffectiveDirectVolume(participantId, trackName) > 1 ||
+      this.getStoredPan(participantId, trackName) !== 0
+    );
+  }
+
   private removeDirectAudioTrack(
     participantId: string,
     trackName: string,
@@ -395,6 +446,28 @@ export class AudioPipeline {
     element.remove();
     elements?.delete(trackName);
     if (elements?.size === 0) this.directAudioElements.delete(participantId);
+  }
+
+  private promoteDirectTrackWhenRunning(
+    participantId: string,
+    trackName: string,
+  ): void {
+    const ctx = this.getAudioContext();
+    if (ctx.state === "running") {
+      this.promoteDirectTrack(participantId, trackName);
+      return;
+    }
+    const element = this.directAudioElements.get(participantId)?.get(trackName);
+    if (element) {
+      element.volume = this.getDirectElementVolume(participantId, trackName);
+      void element.play().catch(() => {});
+    }
+    void ctx.resume().then(() => {
+      if (this.volumeContext !== ctx || ctx.state !== "running") return;
+      if (!this.directAudioElements.get(participantId)?.has(trackName)) return;
+      if (!this.needsWebAudio(participantId, trackName)) return;
+      this.promoteDirectTrack(participantId, trackName);
+    });
   }
 
   private promoteDirectTrack(participantId: string, trackName: string): void {
@@ -439,7 +512,8 @@ export class AudioPipeline {
 
     if (!this.volumeContext) {
       // Reuse prewarmed context if available
-      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
+      this.volumeContext =
+        takePrewarmedAudioContext() ?? createPlaybackAudioContext();
     }
 
     const ctx = this.volumeContext;
@@ -475,14 +549,18 @@ export class AudioPipeline {
     // reads zeros from the un-activated track. In voice channels the
     // ParticipantCard's <VideoPlayer> element serves as the activator,
     // but in calls (and any context without a visible media element for
-    // audio tracks) we need an explicit one. The element is muted so all
-    // audible output goes through the Web Audio pipeline (ctx.destination).
+    // audio tracks) we need an explicit one. Volume stays 0 so the audible
+    // copy is the Web Audio graph. Do not set `muted`: Chrome treats a
+    // muted-only consumer as idle and grows the RTP jitter buffer to ~1s.
     const activatorStream = new MediaStream([track]);
     const activator = document.createElement("audio");
     activator.srcObject = activatorStream;
-    activator.volume = 0; // silent — Web Audio handles audible output
-    activator.muted = true; // also mute attribute for extra safety
+    activator.volume = 0;
     activator.autoplay = true;
+    activator.setAttribute("playsinline", "true");
+    activator.setAttribute("aria-hidden", "true");
+    activator.style.display = "none";
+    document.body?.appendChild(activator);
     activator.play().catch(() => {});
 
     // Store activator for cleanup
@@ -504,6 +582,7 @@ export class AudioPipeline {
       this.startFirstAudibleProbe(ctx, this.limiter!, this.masterGainNode!);
     }
     const pannerNode = ctx.createStereoPanner();
+    pannerNode.pan.value = this.getStoredPan(participantId, trackName);
 
     gainNode.gain.value = this.getTrackGain(participantId, trackName);
     source.connect(gainNode);
@@ -730,6 +809,7 @@ export class AudioPipeline {
       const activator = activators.get(trackName);
       if (activator) {
         activator.srcObject = null;
+        activator.remove();
         activators.delete(trackName);
       }
       if (activators.size === 0) this.activatorElements.delete(participantId);
@@ -748,7 +828,7 @@ export class AudioPipeline {
         const element = elements.get(trackName);
         if (!element) continue;
         if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
-          this.promoteDirectTrack(participantId, trackName);
+          this.promoteDirectTrackWhenRunning(participantId, trackName);
         } else {
           element.volume = this.getDirectElementVolume(
             participantId,
@@ -759,7 +839,8 @@ export class AudioPipeline {
     }
     if (!this.volumeContext && !this.masterGainNode) return;
     if (!this.volumeContext) {
-      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
+      this.volumeContext =
+        takePrewarmedAudioContext() ?? createPlaybackAudioContext();
     }
     const ctx = this.volumeContext;
     if (!this.masterGainNode) {
@@ -826,7 +907,8 @@ export class AudioPipeline {
     }
 
     if (!this.volumeContext) {
-      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
+      this.volumeContext =
+        takePrewarmedAudioContext() ?? createPlaybackAudioContext();
     }
     const ctx = this.volumeContext;
     ctx.resume().catch(() => {});
@@ -1006,6 +1088,8 @@ export class AudioPipeline {
     this.volumeSources.clear();
     this.volumeLevels.clear();
     this.trackVolumeLevels.clear();
+    this.participantPans.clear();
+    this.trackPans.clear();
     this.activatorElements.forEach((acts) =>
       acts.forEach((a) => {
         a.srcObject = null;

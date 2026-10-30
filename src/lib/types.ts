@@ -237,6 +237,7 @@ export interface IdentifyPayload {
   avatar_display?: AvatarDisplay | string | null;
   clerk_user_id?: string;
   supports_voice_state_deltas?: boolean;
+  standby?: boolean;
 }
 
 export interface SelectProtocolPayload {
@@ -359,6 +360,7 @@ export interface VoiceStateUpdateClientPayload {
   spatial_audio_enabled?: boolean;
   spatial_audio_high_fidelity?: boolean;
   spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
+  promote_standby?: boolean;
 }
 
 export interface VideoPayloadServer {

@@ -13,14 +13,12 @@ import { createFileRoute } from "@tanstack/react-router";
 
 type SignUpSearch = {
   redirect_url?: string;
-  native_handoff?: string;
 };
 
 export const Route = createFileRoute("/sign-up")({
   validateSearch: (search: Record<string, unknown>): SignUpSearch => {
     return {
       redirect_url: search.redirect_url as string | undefined,
-      native_handoff: search.native_handoff as string | undefined,
     };
   },
   component: SignUpPage,
@@ -45,19 +43,13 @@ function SignUpPage() {
 }
 
 function WebSignUpPage() {
-  const { redirect_url, native_handoff } = Route.useSearch();
+  const { redirect_url } = Route.useSearch();
   const afterSignUpTarget = sanitizeRedirectUrl(
     redirect_url,
     redirectOrigins(),
   );
-  const afterSignUpUrl = buildPostAuthSignInUrl(
-    afterSignUpTarget,
-    native_handoff,
-  );
-  const signInUrl = buildAuthRouteUrl("/sign-in", {
-    redirect_url,
-    native_handoff,
-  });
+  const afterSignUpUrl = buildPostAuthSignInUrl(afterSignUpTarget);
+  const signInUrl = buildAuthRouteUrl("/sign-in", { redirect_url });
 
   return (
     <AuthSplitLayout>

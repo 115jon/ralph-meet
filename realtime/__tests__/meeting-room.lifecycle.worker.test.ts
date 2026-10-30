@@ -280,6 +280,90 @@ async function hasMessageWithOpcode(
 }
 
 describe("MeetingRoom lifecycle", () => {
+  it("hides a standby identify until the session is promoted", async () => {
+    const roomName = crypto.randomUUID();
+    const seated = await openMeetingSocket(roomName, "seated-user");
+    const seatedReady = await identifyMeetingSocket(seated, {
+      name: "Seated",
+    });
+    const rosterJoin = hasMessageWithOpcode(seated, 15, 200);
+    const warming = await openMeetingSocket(roomName, "warming-user");
+    const warmingReadyPromise = nextMessageWithOpcode(warming, 2);
+    warming.send(
+      JSON.stringify({
+        op: 0,
+        d: { name: "Warming", standby: true },
+      }),
+    );
+    const warmingReady = (await warmingReadyPromise).d as {
+      participant_id: string;
+      participants: Array<{ id?: string }>;
+    };
+
+    expect(await rosterJoin).toBe(false);
+    expect(
+      warmingReady.participants.map((participant) => participant.id),
+    ).toContain(seatedReady.participant_id);
+
+    const late = await openMeetingSocket(roomName, "late-user");
+    const lateReady = await identifyMeetingSocket(late, { name: "Late" });
+    expect(
+      lateReady.participants.map((participant) => participant.id),
+    ).toContain(seatedReady.participant_id);
+    expect(
+      lateReady.participants.map((participant) => participant.id),
+    ).not.toContain(warmingReady.participant_id);
+
+    const promoted = nextMessageWithOpcodeMatching(seated, 15, (message) => {
+      const participant = (
+        message.d as { participant?: { id?: string }; action?: string }
+      ).participant;
+      return participant?.id === warmingReady.participant_id;
+    });
+    warming.send(
+      JSON.stringify({
+        op: 15,
+        d: { promote_standby: true, self_mute: false, self_deaf: false },
+      }),
+    );
+    expect((await promoted).d).toEqual(
+      expect.objectContaining({
+        action: "join",
+        participant: expect.objectContaining({
+          id: warmingReady.participant_id,
+          self_mute: false,
+          self_deaf: false,
+        }),
+      }),
+    );
+
+    seated.close(1000, "test complete");
+    warming.close(1000, "test complete");
+    late.close(1000, "test complete");
+  });
+
+  it("does not announce a standby session that leaves before promotion", async () => {
+    const roomName = crypto.randomUUID();
+    const seated = await openMeetingSocket(roomName, "seated-user");
+    await identifyMeetingSocket(seated, { name: "Seated" });
+    const warming = await openMeetingSocket(roomName, "warming-user");
+    const warmingReady = nextMessageWithOpcode(warming, 2);
+    warming.send(
+      JSON.stringify({
+        op: 0,
+        d: { name: "Warming", standby: true },
+      }),
+    );
+    await warmingReady;
+
+    const rosterChange = hasMessageWithOpcode(seated, 15, 200);
+    warming.send(JSON.stringify({ op: 11, d: {} }));
+    expect(await rosterChange).toBe(false);
+
+    seated.close(1000, "test complete");
+    warming.close(1000, "test complete");
+  });
+
   it("negotiates participant updates for mixed capable and legacy recipients", async () => {
     const roomName = crypto.randomUUID();
     const capable = await openMeetingSocket(roomName, "profile-capable");

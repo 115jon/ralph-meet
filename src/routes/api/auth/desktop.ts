@@ -1,15 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 /**
- * Compatibility entrypoint for older native builds. New desktop/mobile clients
- * open /sign-in?redirect_url=ralphmeet://auth directly.
+ * Compatibility entrypoint for older native builds that started the
+ * deep-link sign-in here. Desktop and mobile now sign in with a device code,
+ * so this lands on the device-code page instead of handing a session to a
+ * `ralphmeet://auth` link.
  */
-const GET = async ({ request }: any) => {
-  const signInUrl = new URL("/sign-in", request.url);
-  signInUrl.searchParams.set("redirect_url", "ralphmeet://auth");
+export const GET = async ({ request }: { request: Request }) => {
   return new Response(null, {
     status: 302,
-    headers: { Location: signInUrl.toString() },
+    headers: { Location: new URL("/activate", request.url).toString() },
   });
 };
 

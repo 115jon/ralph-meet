@@ -1,3 +1,4 @@
+import { markVoice } from "@/lib/voice/latency-marks";
 import { clog } from "./console-logger";
 import { TypedEventEmitter } from "./event-emitter";
 import { wsUrl } from "./platform";
@@ -7,6 +8,8 @@ import {
   type SFUEventMap,
   type TrackInfo,
   type VoiceConnectionStats,
+  type VoiceState,
+  type VoiceStateDelta,
 } from "./types";
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { AudioSentinel, OutboundAudioSentinel } from "./voice/audio-sentinel";
@@ -101,6 +104,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private voiceToken: string | null = null;
   private iceServers: IceServer[] = [];
   private connectArgs: ConnectArguments | null = null;
+  private standby = false;
+  private joinedSnapshot: SFUEventMap["joined"] | null = null;
+  private readonly deferredRemoteTracks = new Map<string, TrackInfo>();
   private partyTracksTransport: PartyTracksClientTransport | null = null;
   private partyTracksMedia: PartyTracksMediaManager | null = null;
   private partyTracksParticipantId: string | null = null;
@@ -252,12 +258,39 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.wireVoiceEvents();
   }
 
+  private pinLowLatencyPlayout(track: MediaStreamTrack): void {
+    if (track.kind !== "audio") return;
+    const receiver = this.partyTracksPeerConnection
+      ?.getReceivers()
+      .find((candidate) => candidate.track === track);
+    if (!receiver) return;
+    try {
+      if (receiver.jitterBufferTarget !== undefined) {
+        receiver.jitterBufferTarget = 0;
+      }
+      if ("playoutDelayHint" in receiver) {
+        (
+          receiver as RTCRtpReceiver & { playoutDelayHint?: number | null }
+        ).playoutDelayHint = 0;
+      }
+    } catch {
+      // Older receivers reject a zero target. Leave the default buffer.
+    }
+  }
+
   private markLatency(
     milestone: string,
     details?: Record<string, unknown>,
   ): void {
     const at = Date.now();
     const firstAt = this.latencyTimeline.firstByMilestone[milestone];
+    markVoice(milestone, {
+      ...details,
+      timelineId: this.latencyTimeline.timelineId,
+      roomSlug: this.roomSlug,
+      standby: this.standby,
+      first: firstAt === undefined,
+    });
     if (firstAt === undefined) {
       this.latencyTimeline.firstByMilestone[milestone] = at;
     }
@@ -287,6 +320,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private wireRoomEvents(): void {
     this.roomGW.on("media-bootstrap", (event) => {
       if (this.isLeaving) return;
+      this.markLatency("mediaBootstrapAt");
       if (
         this.roomParticipantEstablished &&
         this.participantId !== event.participantId
@@ -299,10 +333,20 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
       this.participantId = event.participantId;
       this.voiceToken = event.voiceToken;
-      this.ensurePartyTracksMedia(event.participantId, event.voiceToken);
+      this.ensurePartyTracksMedia(
+        event.participantId,
+        event.voiceToken,
+        event.iceServers,
+      );
+      // The ticket's bootstrap already carries this participant's voice
+      // token, so identify on the voice socket now instead of after the room
+      // socket's Identify round trip: VoiceReady (the room's track list) and
+      // our track announcement no longer wait on MediaReady.
+      this.connectVoice();
     });
 
     this.roomGW.on("media-ready", (event) => {
+      this.markLatency("mediaReadyAt");
       if (this.isNewParticipantGeneration(event.participantId)) {
         this.resetVoiceReadinessForParticipantChange();
         this.resetMediaSessionsForParticipantChange();
@@ -346,12 +390,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         source: "RoomGW ready",
         participantId: event.participantId,
       });
-      this.emit("joined", {
+      this.joinedSnapshot = {
         participantId: event.participantId,
         iceServers: event.iceServers,
         participants: event.participants,
         spatialAudioState: event.spatialAudioState,
-      });
+      };
+      this.emit("joined", this.joinedSnapshot);
       this.vad.refreshSpeakingState(true);
       this.connectVoice();
     });
@@ -380,15 +425,18 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.emit("error", { message: event.message });
     });
     this.roomGW.on("participant-joined", (event) => {
+      this.upsertStandbyParticipant(event.participant);
       this.emit("participant-joined", event);
     });
     this.roomGW.on("participant-left", (event) => {
       this.audio.removeParticipantVolume(event.participantId);
       this.partyTracksMedia?.removeParticipant(event.participantId);
       this.remoteSpeakingUntil.delete(event.participantId);
+      this.removeStandbyParticipant(event.participantId);
       this.emit("participant-left", event);
     });
     this.roomGW.on("voice-state-update", (event) => {
+      this.mergeStandbyVoiceState(event);
       this.emit("voice-state-update", event);
     });
     this.roomGW.on("profile-update", (event) => {
@@ -409,6 +457,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     });
 
     this.voiceGW.on("voice-ready", (event) => {
+      this.markLatency("voiceReadyAt");
       this.resolveVoiceReadiness();
       this.vad.refreshSpeakingState();
 
@@ -432,10 +481,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (this.partyTracksMedia) {
         this.partyTracksMedia.syncRemoteTracks(partyTracks);
       } else if (partyTracks.length > 0) {
-        sfuLog.warn(
-          "Ignoring PartyTracks descriptors because media credentials are unavailable",
-          { trackCount: partyTracks.length },
-        );
+        for (const track of partyTracks) {
+          this.deferredRemoteTracks.set(track.track_name, track);
+        }
       }
 
       if (this.nativeScreenReconnectRequired) {
@@ -471,9 +519,18 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       ) {
         return;
       }
+      if (!this.partyTracksMedia) {
+        if (track.sfu_track_name) {
+          this.deferredRemoteTracks.set(track.track_name, track);
+        }
+        return;
+      }
       this.offerPartyTracksOrDropLegacy([track], "TrackOffered");
     });
     this.voiceGW.on("stop-tracks", (event) => {
+      for (const trackName of event.track_names) {
+        this.deferredRemoteTracks.delete(trackName);
+      }
       const partyTrackNames = event.track_names.filter(
         (trackName) =>
           event.tracks?.some(
@@ -494,6 +551,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
     });
     this.voiceGW.on("client-disconnect", ({ participant_id }) => {
+      for (const [trackName, track] of this.deferredRemoteTracks) {
+        if (track.participant_id === participant_id) {
+          this.deferredRemoteTracks.delete(trackName);
+        }
+      }
+      this.partyTracksMedia?.removeParticipant(participant_id);
       this.remoteSpeakingUntil.delete(participant_id);
       this.emit("speaking", {
         participantId: participant_id,
@@ -656,6 +719,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           });
         },
         onRemoteTrack: ({ action, track, trackInfo }) => {
+          if (this.isLeaving && action === "add") return;
+          if (action === "add") this.pinLowLatencyPlayout(track);
           this.markLatency("remoteTrackReceivedAt", {
             source: "PartyTracks",
             trackName: trackInfo.track_name,
@@ -669,6 +734,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           });
         },
         onConnectionState: (state) => {
+          this.markLatency(`peerConnection:${state}`);
           this.emit("connection-state", { state });
         },
         onError: (error) => {
@@ -685,7 +751,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         },
       },
     );
+    this.flushDeferredRemoteTracks();
     this.resolvePartyTracksReadiness();
+  }
+
+  private flushDeferredRemoteTracks(): void {
+    if (!this.partyTracksMedia || this.deferredRemoteTracks.size === 0) return;
+    const tracks = [...this.deferredRemoteTracks.values()];
+    this.deferredRemoteTracks.clear();
+    this.partyTracksMedia.offerTracks(tracks);
   }
 
   private disposePartyTracksMedia(): void {
@@ -734,6 +808,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private connectVoice(): void {
     if (!this.participantId || !this.voiceToken) return;
+    // A standby session keeps its voice socket open but unidentified: the
+    // voice room only learns about a participant on VoiceIdentify, so until
+    // the user joins it neither offers this session anyone's tracks nor
+    // announces its (silent) publication to the room. Queued announcements
+    // flush on VoiceReady after promoteStandby().
+    if (this.standby) return;
     this.voiceGW.connectVoice(
       this.participantId,
       this.voiceToken,
@@ -786,7 +866,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       | import("@/lib/avatar-display").AvatarDisplay
       | string
       | null,
-    options?: { channelId?: string; serverId?: string },
+    options?: { channelId?: string; serverId?: string; standby?: boolean },
   ): void {
     if (this.isLeaving) {
       this.participantId = null;
@@ -794,6 +874,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
     this.isLeaving = false;
     this.resetLatencyTimeline();
+    this.standby = options?.standby === true;
+    this.deferredRemoteTracks.clear();
     this.connectArgs = {
       name,
       avatarUrl,
@@ -801,7 +883,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       username,
       displayName,
       avatarDisplay,
-      ...options,
+      channelId: options?.channelId,
+      serverId: options?.serverId,
     };
     this.createVoiceReadinessBarrier();
     this.createPartyTracksReadinessBarrier();
@@ -814,6 +897,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       channelId: options?.channelId,
       clerkUserId,
       serverId: options?.serverId,
+      standby: options?.standby === true,
       roomSlug: this.roomSlug,
       wsUrlGenerator: wsUrl,
     });
@@ -838,6 +922,64 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public getParticipantId(): string | null {
     return this.participantId;
+  }
+
+  private upsertStandbyParticipant(participant: VoiceState): void {
+    const snapshot = this.joinedSnapshot;
+    if (!this.standby || !snapshot) return;
+    const next = snapshot.participants.slice();
+    const index = next.findIndex((entry) => entry.id === participant.id);
+    if (index === -1) next.push(participant);
+    else next[index] = participant;
+    snapshot.participants = next;
+  }
+
+  private removeStandbyParticipant(participantId: string): void {
+    const snapshot = this.joinedSnapshot;
+    if (!this.standby || !snapshot) return;
+    snapshot.participants = snapshot.participants.filter(
+      (entry) => entry.id !== participantId,
+    );
+  }
+
+  private mergeStandbyVoiceState(event: {
+    participant: VoiceState | VoiceStateDelta;
+    action: "join" | "leave" | "update";
+    spatialAudioState?: SFUEventMap["joined"]["spatialAudioState"];
+  }): void {
+    const snapshot = this.joinedSnapshot;
+    if (!this.standby || !snapshot) return;
+    if (event.spatialAudioState) {
+      snapshot.spatialAudioState = event.spatialAudioState;
+    }
+    if (event.action === "leave") return;
+    const index = snapshot.participants.findIndex(
+      (entry) => entry.id === event.participant.id,
+    );
+    if (index === -1) return;
+    const next = snapshot.participants.slice();
+    next[index] = { ...next[index], ...event.participant };
+    snapshot.participants = next;
+  }
+
+  public replayJoinedSnapshot(): boolean {
+    const snapshot = this.joinedSnapshot;
+    if (!snapshot) return false;
+    this.joinedSnapshot = null;
+    this.emit("joined", snapshot);
+    return true;
+  }
+
+  public promoteStandby(voice?: {
+    selfMute?: boolean;
+    selfDeaf?: boolean;
+  }): void {
+    this.standby = false;
+    this.markLatency("standbyPromotedAt");
+    this.connectVoice();
+    this.flushDeferredRemoteTracks();
+    this.roomGW.promoteStandby(voice);
+    this.partyTracksMedia?.replayRemoteTracks();
   }
 
   public disconnect(reason: SFUDisconnectReason = "unknown"): void {
@@ -871,6 +1013,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.voiceToken = null;
     this.iceServers = [];
     this.connectArgs = null;
+    this.standby = false;
+    this.joinedSnapshot = null;
+    this.deferredRemoteTracks.clear();
   }
 
   public getConnectionState(): string {
@@ -1008,16 +1153,32 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.participantId ? `cam-audio-${this.participantId}` : null;
   }
 
+  public senderHasLiveTrack(track: MediaStreamTrack): boolean {
+    const pc = this.partyTracksPeerConnection;
+    if (!pc || track.readyState === "ended") return false;
+    return pc.getSenders().some((sender) => sender.track === track);
+  }
+
   public async publishTracks(
     stream: MediaStream,
     prefix: string,
   ): Promise<void> {
+    await this.publishTracksIf(stream, prefix, () => true);
+  }
+
+  public async publishTracksIf(
+    stream: MediaStream,
+    prefix: string,
+    stillCurrent: () => boolean,
+  ): Promise<boolean> {
+    if (!stillCurrent()) return false;
     this.markLatency("publishRequestedAt", {
       prefix,
       trackCount: stream.getTracks().length,
       kinds: stream.getTracks().map((track) => track.kind),
     });
     if (!this.partyTracksMedia) await this.partyTracksReadyPromise;
+    if (!stillCurrent()) return false;
     if (!this.partyTracksMedia) {
       throw new Error("PartyTracks media is unavailable");
     }
@@ -1030,6 +1191,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       prefix,
       source: "PartyTracks",
     });
+    return true;
   }
 
   public pullTracks(tracks: TrackInfo[]): void {
@@ -1084,10 +1246,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   ): boolean {
     const track = this.partyTracksMedia?.getPublishedTrack(trackName);
     if (!track) return false;
-    track.enabled = enabled;
-    if (trackName.startsWith("cam-audio-")) {
+    const microphone = trackName.startsWith("cam-audio-");
+    if (microphone) {
+      if (enabled) track.enabled = true;
       this.outboundAudioSentinel.resetMonitoring();
       this.vad.setMicrophoneEnabled(enabled);
+      sfuLog.info("Published microphone gate", { trackName, enabled });
+    } else {
+      track.enabled = enabled;
     }
     return true;
   }

@@ -21,6 +21,7 @@ import {
   issueSocketTicket,
   type SocketTicketAudience,
 } from "@/lib/voice/socket-ticket";
+import { generateTurnCredentials } from "../../../../realtime/meeting-room/turn-credentials";
 import { issueVoiceToken } from "../../../../realtime/voice-token";
 
 const SOCKET_TICKET_TTL_MS = 60_000;
@@ -45,6 +46,8 @@ type SocketTicketRequestBody = z.infer<typeof socketTicketRequestBodySchema>;
 type SocketTicketEnv = CloudflareEnv & {
   CALLS_APP_SECRET?: string;
   REALTIME_TICKET_SECRET?: string;
+  TURN_TOKEN_ID?: string;
+  TURN_TOKEN_SECRET?: string;
 };
 
 type TicketAdmission = {
@@ -56,6 +59,7 @@ type TicketAdmission = {
 };
 
 const POST = async ({ request }: { request: Request }) => {
+  const timing = createServerTiming();
   const env = getEnv() as SocketTicketEnv;
   const config = getSocketTicketConfig(env);
   if (!config.ok) {
@@ -86,7 +90,7 @@ const POST = async ({ request }: { request: Request }) => {
 
   const hasChannelId =
     typeof body.channelId === "string" && body.channelId.trim().length > 0;
-  const admission =
+  const admission = await timing.measure("admission", async () =>
     audience !== "global" && !hasChannelId
       ? await authorizePublicDemoTicket(
           request,
@@ -94,7 +98,8 @@ const POST = async ({ request }: { request: Request }) => {
           body,
           audience,
         )
-      : await authorizeAuthenticatedTicket(request, body, audience);
+      : authorizeAuthenticatedTicket(request, body, audience),
+  );
   if (admission instanceof Response) return noStore(admission);
 
   const expiresAt = Date.now() + SOCKET_TICKET_TTL_MS;
@@ -124,15 +129,14 @@ const POST = async ({ request }: { request: Request }) => {
 
   const mediaBootstrap =
     audience === "room" && env.CALLS_APP_SECRET
-      ? {
-          participant_id: nonce,
-          voice_token: await issueVoiceToken({
-            participantId: nonce,
+      ? await timing.measure("media", () =>
+          createRoomMediaBootstrap({
+            env,
+            nonce,
             roomSlug: admission.roomSlug,
             subject: admission.subject,
-            secret: env.CALLS_APP_SECRET,
           }),
-        }
+        )
       : undefined;
 
   const response = Response.json({
@@ -144,8 +148,78 @@ const POST = async ({ request }: { request: Request }) => {
     ticket,
   });
   if (admission.cookie) response.headers.append("Set-Cookie", admission.cookie);
+  response.headers.set("Server-Timing", timing.header());
   return noStore(response);
 };
+
+/**
+ * `Server-Timing` for the ticket: where the join's first round trip goes
+ * (admission = Kova session + channel checks, media = voice token + TURN).
+ * Durations only, no identifiers; `pnpm bench:voice` reads them.
+ */
+function createServerTiming() {
+  const entries: string[] = [];
+  const started = performance.now();
+  return {
+    async measure<T>(name: string, run: () => Promise<T>): Promise<T> {
+      const start = performance.now();
+      try {
+        return await run();
+      } finally {
+        entries.push(`${name};dur=${(performance.now() - start).toFixed(1)}`);
+      }
+    },
+    header(): string {
+      return [
+        ...entries,
+        `total;dur=${(performance.now() - started).toFixed(1)}`,
+      ].join(", ");
+    },
+  };
+}
+
+async function createRoomMediaBootstrap({
+  env,
+  nonce,
+  roomSlug,
+  subject,
+}: {
+  env: SocketTicketEnv;
+  nonce: string;
+  roomSlug: string;
+  subject: string;
+}) {
+  const secret = env.CALLS_APP_SECRET;
+  if (!secret) {
+    throw new Error("CALLS_APP_SECRET is required for room media bootstrap");
+  }
+  const [voiceToken, iceServers] = await Promise.all([
+    issueVoiceToken({
+      participantId: nonce,
+      roomSlug,
+      subject,
+      secret,
+    }),
+    generateTurnCredentials({
+      tokenId: env.TURN_TOKEN_ID ?? "",
+      tokenSecret: env.TURN_TOKEN_SECRET ?? "",
+      fetch,
+      log: {
+        info(message) {
+          console.info(`[socket-ticket] ${message}`);
+        },
+        warn(message) {
+          console.warn(`[socket-ticket] ${message}`);
+        },
+      },
+    }),
+  ]);
+  return {
+    participant_id: nonce,
+    voice_token: voiceToken,
+    ice_servers: iceServers,
+  };
+}
 
 async function authorizeAuthenticatedTicket(
   request: Request,

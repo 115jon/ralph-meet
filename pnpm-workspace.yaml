@@ -24,3 +24,4 @@ onlyBuiltDependencies:
   - workerd
 patchedDependencies:
   miniflare@4.20260708.1: patches/miniflare@4.20260708.1.patch
+  partytracks@0.0.56: patches/partytracks@0.0.56.patch

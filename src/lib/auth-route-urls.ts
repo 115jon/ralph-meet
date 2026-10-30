@@ -2,12 +2,6 @@ import { getPublicWebUrl } from "@/lib/platform";
 
 export type AuthRouteSearch = {
   redirect_url?: string;
-  /**
-   * @deprecated Leftover from the deep-link desktop sign-in. Desktop now uses
-   * device-code sign-in; this is only passed through by /sign-up until that
-   * route drops it.
-   */
-  native_handoff?: string;
 };
 
 const DEFAULT_REDIRECT = "/chat";
@@ -63,20 +57,10 @@ export function buildAuthRouteUrl(
     params.set("redirect_url", search.redirect_url);
   }
 
-  if (search.native_handoff) {
-    params.set("native_handoff", search.native_handoff);
-  }
-
   const query = params.toString();
   return query ? `${route}?${query}` : route;
 }
 
-export function buildPostAuthSignInUrl(
-  redirectUrl: string,
-  nativeHandoff?: string,
-): string {
-  return buildAuthRouteUrl("/sign-in", {
-    redirect_url: redirectUrl,
-    native_handoff: nativeHandoff,
-  });
+export function buildPostAuthSignInUrl(redirectUrl: string): string {
+  return buildAuthRouteUrl("/sign-in", { redirect_url: redirectUrl });
 }

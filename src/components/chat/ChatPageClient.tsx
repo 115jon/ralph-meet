@@ -38,6 +38,7 @@ import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
+import { useOccupiedVoiceStandby } from "@/lib/voice/voice-standby";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -205,6 +206,14 @@ export default function ChatPage() {
     isDmMode,
     setProfileUser,
   } = useChatPageLogic();
+  useOccupiedVoiceStandby({
+    serverId: activeServerId,
+    joinedChannelId: voiceState.joined ? voiceState.channelId : null,
+    activeChannelId,
+    channels,
+    voiceChannelStates,
+    user,
+  });
 
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
@@ -1239,6 +1248,8 @@ export default function ChatPage() {
                 hasCamera={localStreamState?.hasCamera}
                 hasMicrophone={localStreamState?.hasMicrophone}
                 onToggleCamera={() => localStreamState?.toggleCamera()}
+                onToggleMic={() => localStreamState?.toggleMic()}
+                onToggleDeafen={() => localStreamState?.toggleDeafen()}
                 sfu={localStreamState?.sfu ?? null}
                 gridItems={localStreamState?.gridItems ?? []}
                 watchersByStreamer={localStreamState?.watchersByStreamer ?? {}}

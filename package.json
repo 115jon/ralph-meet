@@ -26,6 +26,8 @@
     "typecheck": "tsc --noEmit",
     "logs": "node scripts/query-logs.mjs",
     "idle-probe": "node scripts/idle-probe.mjs",
+    "bench:voice": "node scripts/voice-latency/bench.mjs",
+    "bench:voice:verify": "node scripts/voice-latency/verify-standby.mjs",
     "prepare": "node scripts/copy-mediapipe.mjs && simple-git-hooks",
     "bump": "node scripts/bump-version.mjs"
   },
@@ -106,6 +108,7 @@
     "globals": "^17.4.0",
     "jsdom": "^29.1.1",
     "lint-staged": "^16.2.7",
+    "playwright-core": "1.64.1",
     "prettier": "3.8.1",
     "react-doctor": "0.9.2",
     "react-scan": "^0.5.7",

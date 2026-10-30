@@ -1,0 +1,42 @@
+diff --git a/dist/client/index.js b/dist/client/index.js
+index 030793c98d77b71e6d32020e35a4a9624ac8eed5..def9699d053af38f4adb3f3877b6bd7aee95602f 100644
+--- a/dist/client/index.js
++++ b/dist/client/index.js
+@@ -287,15 +287,15 @@ var PartyTracks = class {
+ 			})).then(({ tracks }) => {
+ 				const trackData = tracks.find((t) => t.mid === transceiver.mid);
+ 				if (trackData) {
+-					const cancelWait = waitForTransceiverToSendData(transceiver, () => {
+-						subscriber.next({
+-							...trackData,
+-							sessionId,
+-							location: "remote"
+-						});
++					// Ralph Meet: announce the track as soon as the SFU accepts it.
++					// Waiting for outbound RTP bytes delayed first audio by the
++					// time the encoder needs to send its first packet.
++					subscriber.next({
++						...trackData,
++						sessionId,
++						location: "remote"
+ 					});
+ 					subscriber.add(() => {
+-						cancelWait();
+ 						if (transceiver.mid) {
+ 							logger.debug("🔚 Closing pushed track ", trackName);
+ 							this.#closeTrackInBulk(peerConnection, transceiver.mid, sessionId);
+@@ -418,7 +418,13 @@ var PartyTracks = class {
+ 				else subscriber.error(/* @__PURE__ */ new Error("Missing Track Info"));
+ 				return trackMetadata.trackName;
+ 			});
+-		}).pipe(retryWithBackoff());
++		}).pipe(
++			// Ralph Meet: pushes are announced before the publisher sends
++			// packets, so a pull can briefly get not_found_track_error. Start
++			// retrying at 100 ms (not 250 ms) so that race costs ~100-300 ms;
++			// the 10 s ceiling is upstream's, for tracks that never arrive.
++			retryWithBackoff({ initialDelay: 100 })
++		);
+ 	}
+ 	/**
+ 	Pulls a track from the Realtime SFU. If trackData$ emits new TrackMetadata
