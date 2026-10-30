@@ -1,4 +1,6 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -205,13 +207,14 @@ function ProfileFieldRow({
                 {field === "username" ? (
                   <span
                     aria-hidden="true"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ui-sm text-rm-text-secondary"
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ui-base text-ink-2"
                   >
                     @
                   </span>
                 ) : null}
                 <Input
                   autoFocus
+                  inputSize="lg"
                   aria-label={label}
                   aria-invalid={
                     error || usernameCheck === "unavailable" ? true : undefined
@@ -245,13 +248,14 @@ function ProfileFieldRow({
                       void handleSave();
                     }
                   }}
-                  className={field === "username" ? "pl-7" : undefined}
+                  className={field === "username" ? "pl-9" : undefined}
                 />
               </div>
               <div className="flex shrink-0 justify-end gap-2">
                 <Button
                   type="button"
                   variant="ghost"
+                  size="lg"
                   onClick={handleCancel}
                   disabled={saving}
                   aria-label={`Cancel ${label.toLowerCase()} edit`}
@@ -260,6 +264,7 @@ function ProfileFieldRow({
                 </Button>
                 <Button
                   type="button"
+                  size="lg"
                   onClick={() => void handleSave()}
                   loading={saving}
                   disabled={
@@ -272,14 +277,14 @@ function ProfileFieldRow({
               </div>
             </div>
             <p
-              className="mt-2 min-h-4 text-ui-xs text-rm-text-secondary"
+              className="mt-2 min-h-4 text-ui-xs text-ink-2"
               role="status"
               aria-live="polite"
             >
               {usernameMessage}
             </p>
             {error ? (
-              <p className="mt-1 text-ui-xs text-rm-danger-ink" role="alert">
+              <p className="mt-1 text-ui-xs text-danger-ink" role="alert">
                 {error}
               </p>
             ) : null}
@@ -294,7 +299,6 @@ function ProfileFieldRow({
             <Button
               type="button"
               variant="secondary"
-              size="sm"
               onClick={handleEdit}
               ref={editButtonRef}
               aria-label={`Edit ${label.toLowerCase()}`}
@@ -388,7 +392,12 @@ function ClaimAccountCard() {
             description={`@${candidate.username}`}
             layout="inline"
             leading={
-              <span className="relative flex size-10 overflow-hidden rounded-full bg-rm-tint-2">
+              <span
+                className={cn(
+                  "relative flex size-10 bg-tint-2",
+                  avatarShape(candidate.avatar_url && candidate.avatar_display),
+                )}
+              >
                 {candidate.avatar_url ? (
                   <AvatarImage
                     src={candidate.avatar_url}
@@ -396,7 +405,7 @@ function ClaimAccountCard() {
                     display={candidate.avatar_display}
                   />
                 ) : (
-                  <span className="flex size-full items-center justify-center text-ui-sm font-semibold text-rm-text-secondary">
+                  <span className="flex size-full items-center justify-center text-ui-sm font-semibold text-ink-2">
                     {getDisplayInitial(candidate)}
                   </span>
                 )}
@@ -536,11 +545,16 @@ export default function AccountPanel() {
           id="profile"
           layout="stack"
           leading={
-            <span className="relative flex size-11 overflow-hidden rounded-full bg-rm-tint-2">
+            <span
+              className={cn(
+                "relative flex size-11 bg-tint-2",
+                avatarShape(avatarUrl && avatarDisplay),
+              )}
+            >
               {avatarUrl ? (
                 <AvatarImage src={avatarUrl} alt="" display={avatarDisplay} />
               ) : (
-                <span className="flex size-full items-center justify-center text-ui-base font-semibold text-rm-text">
+                <span className="flex size-full items-center justify-center text-ui-base font-semibold text-ink-1">
                   {getDisplayInitial({ name: profileValues.displayName })}
                 </span>
               )}

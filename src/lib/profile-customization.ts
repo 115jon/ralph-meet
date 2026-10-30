@@ -625,9 +625,24 @@ export function getDisplayNameFontStyle(
   );
 }
 
+/**
+ * Inline style for a display-name effect.
+ *
+ * Static by default (performance-motion P1-4, talk-tree-spec §6): effects
+ * render their resting frame in lists, with no animation and no permanent
+ * `will-change` layer. Pass `{ animate: true }` only while the name should
+ * play (its row is hovered or focused, or it sits in an open profile); see
+ * `ProfileDisplayName`.
+ *
+ * Only `pop` animates this style (a `translate` bob, composited). Gradient
+ * and neon play through a second layer instead (see
+ * `getDisplayNameEffectOverlayStyle`), so nothing repaints per frame.
+ */
 export function getDisplayNameEffectStyle(
   style: DisplayNameStyle,
+  options: { animate?: boolean } = {},
 ): CSSProperties {
+  const animate = options.animate === true;
   const primaryColor =
     normalizeHexColor(style.primaryColor) ??
     DEFAULT_DISPLAY_NAME_STYLE.primaryColor;
@@ -666,16 +681,11 @@ export function getDisplayNameEffectStyle(
         backgroundClip: "text",
         WebkitTextFillColor: "transparent",
         textShadow: `0 1px 0 ${withAlpha("#FFFFFF", 0.04)}`,
-        animation: "rm-display-name-gradient 7.5s ease-in-out infinite",
-        willChange: "background-position",
       };
     case "neon":
       return {
         color: mixHexColors(primaryColor, primaryHighlightAnchor, 0.12),
         textShadow: `0 0 5px ${withAlpha(primaryColor, 0.54)}, 0 0 12px ${withAlpha(primaryColor, 0.3)}, 0 0 20px ${withAlpha(secondaryColor, 0.16)}, 0 1px 4px ${withAlpha("#000000", 0.14)}`,
-        filter: "brightness(1.02)",
-        animation: "rm-display-name-neon 2.9s ease-in-out infinite",
-        willChange: "filter, opacity",
       };
     case "toon":
       return {
@@ -688,9 +698,12 @@ export function getDisplayNameEffectStyle(
       return {
         color: mixHexColors(primaryColor, primaryHighlightAnchor, 0.1),
         textShadow: `0 1px 0 ${subtleOutline}, 0 2px 0 ${withAlpha(secondaryColor, 0.88)}, 0 4px 0 ${withAlpha(secondaryColor, 0.52)}, 0 8px 16px ${withAlpha(secondaryColor, 0.18)}, 0 2px 8px ${withAlpha("#000000", 0.14)}`,
-        animation:
-          "rm-display-name-pop 2.35s cubic-bezier(0.33, 1, 0.68, 1) infinite",
-        willChange: "translate",
+        ...(animate
+          ? {
+              animation:
+                "rm-display-name-pop 2.35s cubic-bezier(0.33, 1, 0.68, 1) infinite",
+            }
+          : {}),
       };
     case "solid":
     default:
@@ -698,6 +711,60 @@ export function getDisplayNameEffectStyle(
         color: primaryColor,
         textShadow: `0 1px 0 ${darkOutline}, 0 4px 10px ${withAlpha(secondaryColor, 0.1)}`,
       };
+  }
+}
+
+/**
+ * The playing layer of a gradient or neon name, or null for effects that
+ * have none. `ProfileDisplayName` stacks it over the resting name (same
+ * text, `aria-hidden`) only while the effect plays. The layer animates
+ * opacity alone, so the compositor runs it from two painted frames:
+ *
+ * - gradient: the far end of the gradient sweep, cross-faded in and out over
+ *   the resting start (was a `background-position` tween, a paint per frame).
+ * - neon: a brighter fill and a wider glow breathing over the resting glow
+ *   (was a `filter: brightness() saturate()` tween).
+ */
+export function getDisplayNameEffectOverlayStyle(
+  style: DisplayNameStyle,
+): CSSProperties | null {
+  const primaryColor =
+    normalizeHexColor(style.primaryColor) ??
+    DEFAULT_DISPLAY_NAME_STYLE.primaryColor;
+  const secondaryColor =
+    normalizeHexColor(style.secondaryColor) ??
+    DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
+  const primaryHighlightAnchor =
+    getRelativeLuminance(primaryColor) > 0.62 ? "#111827" : "#FFFFFF";
+
+  switch (style.effect) {
+    case "gradient": {
+      const base = getDisplayNameEffectStyle(style);
+      return {
+        color: "transparent",
+        backgroundImage: base.backgroundImage,
+        backgroundSize: base.backgroundSize,
+        backgroundPosition: "100% 50%",
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+        textShadow: "none",
+        opacity: 0,
+        animation: "rm-display-name-gradient 7.5s ease-in-out infinite",
+      };
+    }
+    case "neon":
+      return {
+        color: withAlpha(
+          mixHexColors(primaryColor, primaryHighlightAnchor, 0.3),
+          0.42,
+        ),
+        textShadow: `0 0 4px ${withAlpha(primaryColor, 0.42)}, 0 0 14px ${withAlpha(primaryColor, 0.34)}, 0 0 24px ${withAlpha(secondaryColor, 0.2)}`,
+        opacity: 0,
+        animation: "rm-display-name-neon 2.9s ease-in-out infinite",
+      };
+    default:
+      return null;
   }
 }
 
@@ -767,28 +834,29 @@ export function hasCustomProfileColors(input: ProfileCustomizationInput) {
 
 /**
  * Profile variables for a user without custom colours: every value points at
- * the app's `--rm-*` theme tokens, so profiles follow light and dark themes.
+ * the app's layer-2 theme tokens, so profiles follow every theme.
  * Client-only; these strings are never valid input for the server.
  */
 function resolveThemeTokenProfile(banner: string | null): ResolvedProfileTheme {
   return {
     variables: {
-      "--rm-profile-custom-background": "var(--rm-bg-surface)",
-      "--rm-profile-custom-accent": "var(--rm-accent-solid)",
-      "--rm-profile-custom-accent-muted": "var(--rm-accent-tint)",
-      "--rm-profile-custom-text": "var(--rm-text-primary)",
-      "--rm-profile-custom-muted": "var(--rm-text-secondary)",
-      "--rm-profile-custom-ghost": "var(--rm-text-muted)",
-      "--rm-profile-custom-card-bg": "var(--rm-tint-1)",
-      "--rm-profile-custom-card-bg-strong": "var(--rm-tint-2)",
-      "--rm-profile-custom-card-border": "var(--rm-border)",
-      "--rm-profile-custom-button-bg": "var(--rm-accent-solid)",
-      "--rm-profile-custom-button-text": "var(--rm-on-accent)",
+      // A profile card is a float: ply-3, with no gradient surface.
+      "--rm-profile-custom-background": "var(--ply-3)",
+      "--rm-profile-custom-accent": "var(--primary-fill)",
+      "--rm-profile-custom-accent-muted": "var(--accent-tint)",
+      "--rm-profile-custom-text": "var(--ink-1)",
+      "--rm-profile-custom-muted": "var(--ink-2)",
+      "--rm-profile-custom-ghost": "var(--ink-3)",
+      "--rm-profile-custom-card-bg": "var(--tint-1)",
+      "--rm-profile-custom-card-bg-strong": "var(--tint-2)",
+      "--rm-profile-custom-card-border": "var(--line)",
+      "--rm-profile-custom-button-bg": "var(--primary-fill)",
+      "--rm-profile-custom-button-text": "var(--on-primary)",
       "--rm-profile-custom-button-shadow": "transparent",
-      "--rm-profile-custom-surface": "var(--rm-bg-surface)",
+      "--rm-profile-custom-surface": "none",
       "--rm-profile-custom-surface-overlay": "none",
       "--rm-profile-custom-surface-overlay-strong": "none",
-      "--rm-profile-custom-banner-fallback": banner ?? "var(--rm-accent-tint)",
+      "--rm-profile-custom-banner-fallback": banner ?? "var(--accent-tint)",
       "--rm-profile-custom-banner-overlay": "none",
     } as CSSProperties,
     // null tells ProfileDisplayName to read the rendered background instead.

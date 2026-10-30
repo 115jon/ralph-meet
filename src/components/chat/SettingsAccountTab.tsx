@@ -18,19 +18,29 @@ import {
   type AvatarUploadItem,
 } from "@/components/chat/AvatarPickerModal";
 import { CollectiblePicker } from "@/components/chat/collectibles/CollectiblePicker";
+import {
+  ProfileCard,
+  ProfileSections,
+  resolveProfileCardTheme,
+} from "@/components/chat/ProfileCard";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { UserNameplateLayer } from "@/components/chat/UserNameplateLayer";
+import { normalizeUserStatus } from "@/components/chat/UserStatusDot";
 import {
   RowError,
   SettingsCard,
   SettingsRow,
   type RowIds,
 } from "@/components/chat/settings/primitives";
-import { Button, Spinner } from "@/components/ui/button";
+import {
+  UnsavedBar,
+  useUnsavedNudge,
+} from "@/components/chat/settings/UnsavedBar";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DIALOG_SURFACE,
   DialogDescription,
   DialogOverlay,
   DialogPortal,
@@ -40,6 +50,12 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Skeleton } from "@/components/ui/skeleton";
 import { HIT, PRESS } from "@/components/ui/interaction";
 import { apiDelete, apiPatch, apiUpload } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
@@ -65,9 +81,7 @@ import {
   DISPLAY_NAME_FONT_OPTIONS,
   normalizeDisplayNameStyle,
   normalizeHexColor,
-  PROFILE_BANNER_CHIP_STYLE,
   PROFILE_COLOR_SWATCHES,
-  resolveProfileTheme,
   type DisplayNameStyle,
 } from "@/lib/profile-customization";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
@@ -83,6 +97,7 @@ import {
   useState,
   type ChangeEvent,
   type CSSProperties,
+  type MutableRefObject,
   type ReactNode,
 } from "react";
 
@@ -117,6 +132,9 @@ type CollectibleApplyUser = {
 };
 
 /** Starting values for fixtures and tests; production passes none. */
+/** A ref the host checks before closing; true means "don't close". */
+export type ProfileEditorCloseGuard = MutableRefObject<(() => boolean) | null>;
+
 export type ProfileEditorDraft = {
   pronouns?: string;
   bio?: string;
@@ -188,16 +206,32 @@ function withoutDecoration(
 /* Frame                                                                */
 /* ------------------------------------------------------------------ */
 
-function EditorHeader({ onClose }: { onClose?: () => void }) {
+function EditorHeader({
+  onClose,
+  saved = false,
+}: {
+  onClose?: () => void;
+  /** Briefly confirm a save (the unsaved bar has gone by then). */
+  saved?: boolean;
+}) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-rm-border px-4 md:px-6">
-      <h2 className="min-w-0 flex-1 truncate text-ui-xl font-semibold text-rm-text">
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4 md:px-6">
+      <h2 className="min-w-0 flex-1 truncate text-ui-lg font-semibold text-ink-1">
         Edit profile
       </h2>
+      {saved ? (
+        <p
+          role="status"
+          className="flex items-center gap-1.5 text-ui-sm text-ink-2 transition-opacity duration-(--dur-2) starting:opacity-0"
+        >
+          <Icon name="check" size="sm" className="text-success-ink" />
+          Changes saved
+        </p>
+      ) : null}
       {onClose ? (
         <IconButton
           icon="close"
-          size="sm"
+          size={28}
           aria-label="Close profile editor"
           onClick={onClose}
         />
@@ -214,23 +248,79 @@ function EditorStateBody({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Loading: the editor's two columns at their real sizes (the 340 popover
+ * card beside the settings cards), static, no shimmer.
+ */
+function EditorSkeleton() {
+  return (
+    <div className="@container min-h-0 flex-1 overflow-hidden">
+      <span role="status" className="sr-only">
+        Loading
+      </span>
+      <div className="mx-auto grid w-full max-w-[1040px] gap-6 px-4 py-4 md:px-6 md:py-6 @min-[840px]:grid-cols-[340px_minmax(0,1fr)] @min-[840px]:gap-8">
+        <div className="mx-auto flex w-full max-w-[340px] flex-col self-start overflow-hidden rounded-lg border border-line bg-ply-3">
+          <Skeleton className="h-24 rounded-none" />
+          <div className="flex flex-col gap-3 px-4 pb-4">
+            <Skeleton className="-mt-9 size-18 rounded-avatar ring-4 ring-ply-3" />
+            <Skeleton className="h-5 w-40 rounded-sm" />
+            <Skeleton className="h-4 w-28 rounded-sm" />
+            <Skeleton className="h-4 w-36 rounded-sm" />
+            <div className="flex gap-2 pt-1">
+              <Skeleton className="h-8 w-24 rounded-md" />
+              <Skeleton className="size-8 rounded-md" />
+            </div>
+            <Skeleton className="mt-1 h-3 w-16 rounded-sm" />
+            <Skeleton className="h-4 w-full rounded-sm" />
+            <Skeleton className="h-4 w-3/4 rounded-sm" />
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          {[3, 2, 4].map((rows, card) => (
+            <div
+              key={card}
+              className="flex flex-col rounded-lg border border-line bg-ply-2"
+            >
+              <Skeleton className="mx-4 mt-4 mb-1 h-5 w-32 rounded-sm" />
+              {Array.from({ length: rows }, (_, row) => (
+                <div
+                  key={row}
+                  className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0"
+                >
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <Skeleton className="h-4 w-28 rounded-sm" />
+                    <Skeleton className="h-3 w-48 max-w-full rounded-sm" />
+                  </div>
+                  <Skeleton className="h-8 w-20 rounded-md" />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Controls                                                             */
 /* ------------------------------------------------------------------ */
 
-const FIELD =
-  "min-h-11 border-rm-field-edge text-ui-md md:min-h-9 md:text-ui-sm";
+const FIELD = "min-h-11 text-ui-md md:min-h-8 md:text-ui-row";
 
+/** 28 swatches (36 on touch), packed in one row; selection is a ring. */
 const SWATCH = cn(
-  "size-9 shrink-0 rounded-md border border-rm-border-strong md:size-7",
+  "size-9 shrink-0 rounded-md border border-line-strong md:size-7",
   PRESS,
   HIT,
-  "aria-pressed:outline-2 aria-pressed:outline-offset-2 aria-pressed:outline-(--rm-focus)",
+  "aria-pressed:outline-2 aria-pressed:outline-offset-2 aria-pressed:outline-accent-ink",
 );
 
 /**
- * Preset swatches, the system colour picker and a hex field. `value` null
- * means "use the default" (`allowAuto`) or falls back to `fallback`.
+ * One row: the 8 preset swatches, a "+" chip that opens the custom colour
+ * popover (system picker and hex field), and a ghost Reset only while the
+ * value isn't the default. `value` null means "use the default"
+ * (`allowAuto`: follow the app theme) or falls back to `fallback`.
  */
 function ColorControl({
   ids,
@@ -251,11 +341,13 @@ function ColorControl({
   allowAuto?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const resolved = normalizeHexColor(value) ?? normalizeHexColor(fallback);
+  const normalized = normalizeHexColor(value);
+  const resolved = normalized ?? normalizeHexColor(fallback);
   const shown = draft ?? (value ? value.replace(/^#/, "") : "");
   const isDefault = allowAuto
     ? value === null
-    : normalizeHexColor(value) === normalizeHexColor(fallback);
+    : normalized === normalizeHexColor(fallback);
+  const isCustom = normalized !== null && !presets.includes(normalized);
 
   const commit = () => {
     if (draft === null) return;
@@ -272,11 +364,12 @@ function ColorControl({
   };
 
   return (
-    <div className="flex w-full flex-wrap items-center gap-2">
+    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
       <div
         role="group"
         aria-labelledby={ids.labelId}
-        className="flex flex-wrap gap-2"
+        aria-describedby={ids.descId}
+        className="flex flex-wrap items-center gap-1.5"
       >
         {presets.map((preset) => (
           <button
@@ -285,67 +378,105 @@ function ColorControl({
             className={SWATCH}
             style={{ background: preset }}
             aria-label={preset}
-            aria-pressed={normalizeHexColor(value) === preset}
+            aria-pressed={normalized === preset}
             onClick={() => onChange(preset)}
           />
         ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <label
-          className={cn(
-            SWATCH,
-            "flex cursor-pointer items-center justify-center bg-rm-tint-1 text-rm-text-secondary has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-(--rm-focus)",
-          )}
-        >
-          <Icon name="eyedropper" size="sm" />
-          <input
-            type="color"
-            className="absolute inset-0 size-full cursor-pointer opacity-0"
-            aria-label={`Pick a custom ${name}`}
-            value={(resolved ?? "#000000").toLowerCase()}
-            onChange={(event) =>
-              onChange(normalizeHexColor(event.currentTarget.value))
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                aria-label={`Custom ${name}`}
+                aria-pressed={isCustom}
+                className={cn(
+                  SWATCH,
+                  "flex items-center justify-center bg-tint-1 text-ink-2 pointer-fine:hover:text-ink-1",
+                )}
+                style={isCustom ? { background: normalized } : undefined}
+              />
             }
-          />
-        </label>
-        <div className="relative w-28">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ui-sm text-rm-text-muted"
           >
-            #
-          </span>
-          <Input
-            aria-label={`Hex ${name}`}
-            aria-describedby={ids.descId}
-            value={shown}
-            placeholder={allowAuto ? "Auto" : fallback.replace(/^#/, "")}
-            spellCheck={false}
-            autoComplete="off"
-            maxLength={7}
-            onChange={(event) => setDraft(event.currentTarget.value)}
-            onBlur={commit}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit();
-              }
-            }}
-            className={cn(FIELD, "pl-6 tabular-nums")}
-          />
-        </div>
-        <IconButton
-          icon="reset"
+            {isCustom ? null : <Icon name="add" size="sm" />}
+          </PopoverTrigger>
+          <PopoverContent
+            variant="panel"
+            align="start"
+            stacked
+            aria-label={`Custom ${name}`}
+            className="flex w-60 flex-col gap-3"
+          >
+            <p className="text-ui-sm font-medium text-ink-1">Custom {name}</p>
+            <div className="flex items-center gap-2">
+              <label
+                className={cn(
+                  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line-strong text-ink-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent-ink",
+                  PRESS,
+                )}
+                style={resolved ? { background: resolved } : undefined}
+              >
+                <Icon
+                  name="eyedropper"
+                  size="sm"
+                  className="rounded-xs bg-ply-3/80 p-0.5"
+                />
+                <input
+                  type="color"
+                  className="absolute inset-0 size-full cursor-pointer opacity-0"
+                  aria-label={`Pick a custom ${name}`}
+                  value={(resolved ?? "#000000").toLowerCase()}
+                  onChange={(event) =>
+                    onChange(normalizeHexColor(event.currentTarget.value))
+                  }
+                />
+              </label>
+              <div className="relative min-w-0 flex-1">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-num-sm text-ink-3"
+                >
+                  #
+                </span>
+                <Input
+                  aria-label={`Hex ${name}`}
+                  value={shown}
+                  placeholder={allowAuto ? "Auto" : fallback.replace(/^#/, "")}
+                  spellCheck={false}
+                  autoComplete="off"
+                  maxLength={7}
+                  onChange={(event) => setDraft(event.currentTarget.value)}
+                  onBlur={commit}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commit();
+                    }
+                  }}
+                  className={cn(FIELD, "pl-6 font-mono tabular-nums")}
+                />
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+      {isDefault ? (
+        allowAuto ? (
+          <span className="text-ui-xs text-ink-3">Auto</span>
+        ) : null
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
           size="sm"
-          variant="muted"
-          tooltip={`Use the default ${name}`}
-          disabled={isDefault}
+          aria-label={`Use the default ${name}`}
           onClick={() => {
             setDraft(null);
             onChange(allowAuto ? null : fallback);
           }}
-        />
-      </div>
+        >
+          Reset
+        </Button>
+      )}
     </div>
   );
 }
@@ -378,7 +509,7 @@ function CountedField({
           rows={3}
           placeholder={placeholder}
           onChange={(event) => onChange(event.currentTarget.value)}
-          className="w-full resize-y rounded-md border border-rm-field-edge bg-transparent px-3 py-2 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted md:text-ui-sm"
+          className="w-full resize-y rounded-md border border-line-field bg-transparent px-3 py-2 text-ui-md text-ink-1 outline-none placeholder:text-ink-3 md:text-ui-sm"
         />
       ) : (
         <Input
@@ -391,10 +522,7 @@ function CountedField({
           className={FIELD}
         />
       )}
-      <p
-        id={countId}
-        className="self-end text-ui-xs tabular-nums text-rm-text-muted"
-      >
+      <p id={countId} className="self-end text-ui-xs tabular-nums text-ink-3">
         {value.length}/{max}
       </p>
     </div>
@@ -416,7 +544,7 @@ function Thumb({
   return (
     <span
       className={cn(
-        "relative flex h-11 shrink-0 items-center justify-center overflow-hidden border border-rm-border bg-rm-tint-1 text-rm-text-muted",
+        "relative flex h-11 shrink-0 items-center justify-center overflow-hidden border border-line bg-tint-1 text-ink-3",
         wide ? "w-20" : "w-11",
         round ? "rounded-full" : "rounded-md",
       )}
@@ -434,8 +562,8 @@ function Thumb({
 const TILE = cn(
   "flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md border px-2 py-2 transition-colors duration-150",
   PRESS,
-  "aria-pressed:border-rm-accent-ink/60 aria-pressed:bg-rm-accent-tint",
-  "border-rm-border-strong pointer-fine:hover:bg-rm-tint-1",
+  "aria-pressed:border-accent-ink aria-pressed:bg-accent-tint",
+  "border-line-strong pointer-fine:hover:bg-tint-1",
 );
 
 function DisplayNameStyleDialog({
@@ -474,14 +602,17 @@ function DisplayNameStyleDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogPortal>
-        {/* Opened from the settings dialog: the modal-stacked layer (11.1),
-            not the menu layer. */}
-        <DialogOverlay className="z-60" />
+        {/* Opened over the editor: the stacked layer is automatic. */}
+        <DialogOverlay />
         <DialogSurface
           showCloseButton={false}
-          className="fixed inset-0 z-60 flex flex-col overflow-hidden bg-rm-bg-primary pt-[var(--safe-area-top,0px)] outline-none animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:duration-150 md:inset-auto md:left-1/2 md:top-1/2 md:max-h-[min(720px,calc(100dvh-32px))] md:w-[min(880px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-rm-border md:bg-rm-bg-surface md:pt-0 md:shadow-2xl md:dark:bg-rm-bg-elevated"
+          className={cn(
+            "fixed inset-0 z-50 flex flex-col overflow-hidden pt-[var(--safe-area-top,0px)] data-stacked:z-60 md:inset-auto md:left-1/2 md:top-[max(48px,12vh)] md:max-h-[min(720px,calc(100dvh-max(48px,12vh)-24px))] md:w-[min(880px,calc(100vw-32px))] md:-translate-x-1/2 md:pt-0",
+            DIALOG_SURFACE,
+            "max-md:rounded-none max-md:border-0",
+          )}
         >
-          <header className="flex h-14 shrink-0 items-center gap-2 border-b border-rm-border px-4 md:px-6">
+          <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-4 md:px-5">
             <DialogTitle className="min-w-0 flex-1 truncate">
               Display name style
             </DialogTitle>
@@ -490,7 +621,7 @@ function DisplayNameStyleDialog({
             </DialogDescription>
             <IconButton
               icon="close"
-              size="sm"
+              size={28}
               aria-label="Close display name style"
               onClick={onClose}
             />
@@ -502,7 +633,7 @@ function DisplayNameStyleDialog({
                 <section className="flex flex-col gap-2">
                   <h3
                     id={fontLabelId}
-                    className="text-ui-sm font-medium text-rm-text"
+                    className="text-ui-sm font-medium text-ink-1"
                   >
                     Font
                   </h3>
@@ -526,7 +657,7 @@ function DisplayNameStyleDialog({
                           displayNameStyle={{ ...draft, font: option.id }}
                           className="block text-ui-lg font-semibold leading-none"
                         />
-                        <span className="text-ui-xs text-rm-text-secondary">
+                        <span className="text-ui-xs text-ink-2">
                           {option.label}
                         </span>
                       </button>
@@ -537,7 +668,7 @@ function DisplayNameStyleDialog({
                 <section className="flex flex-col gap-2">
                   <h3
                     id={effectLabelId}
-                    className="text-ui-sm font-medium text-rm-text"
+                    className="text-ui-sm font-medium text-ink-1"
                   >
                     Effect
                   </h3>
@@ -574,7 +705,7 @@ function DisplayNameStyleDialog({
                 <section className="flex flex-col gap-2">
                   <h3
                     id={baseLabelId}
-                    className="text-ui-sm font-medium text-rm-text"
+                    className="text-ui-sm font-medium text-ink-1"
                   >
                     Base color
                   </h3>
@@ -597,7 +728,7 @@ function DisplayNameStyleDialog({
                 <section className="flex flex-col gap-2">
                   <h3
                     id={glowLabelId}
-                    className="text-ui-sm font-medium text-rm-text"
+                    className="text-ui-sm font-medium text-ink-1"
                   >
                     Highlight color
                   </h3>
@@ -637,7 +768,7 @@ function DisplayNameStyleDialog({
                     }}
                   />
                   <div className="flex flex-col gap-1 px-4 pb-4">
-                    <span className="relative -mt-6 block size-12 rounded-full border-2 border-[color:var(--rm-profile-custom-background)] bg-[var(--rm-profile-custom-card-bg-strong)]">
+                    <span className="relative -mt-6 block size-12 rounded-avatar border-2 border-[color:var(--rm-profile-custom-background)] bg-[var(--rm-profile-custom-card-bg-strong)]">
                       {avatarSrc ? (
                         <AvatarImage
                           src={avatarSrc}
@@ -658,8 +789,8 @@ function DisplayNameStyleDialog({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-start gap-3 rounded-lg border border-rm-border bg-rm-bg-primary px-3 py-3">
-                  <span className="relative block size-10 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
+                <div className="flex items-start gap-3 rounded-lg border border-line bg-ply-0 px-3 py-3">
+                  <span className="relative block size-10 shrink-0 overflow-hidden rounded-avatar bg-tint-3">
                     {avatarSrc ? (
                       <AvatarImage
                         src={avatarSrc}
@@ -674,12 +805,12 @@ function DisplayNameStyleDialog({
                       displayNameStyle={draft}
                       className="block truncate text-ui-base font-medium"
                     />
-                    <p className="text-ui-base text-rm-text">
+                    <p className="text-ui-base text-ink-1">
                       Does anyone read this?
                     </p>
                   </div>
                 </div>
-                <p className="text-pretty text-ui-xs text-rm-text-secondary">
+                <p className="text-pretty text-ui-xs text-ink-2">
                   Colors and effects can look a little different on light and
                   dark themes.
                 </p>
@@ -687,7 +818,7 @@ function DisplayNameStyleDialog({
             </div>
           </div>
 
-          <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-rm-border px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] md:px-6">
+          <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] md:px-6">
             <Button
               type="button"
               variant="ghost"
@@ -709,7 +840,7 @@ function DisplayNameStyleDialog({
                   Clear style
                 </Button>
               ) : null}
-              <Button type="button" variant="secondary" onClick={onClose}>
+              <Button type="button" variant="ghost" onClick={onClose}>
                 Cancel
               </Button>
               <Button
@@ -738,6 +869,7 @@ export default function SettingsAccountTab({
   onClose,
   initialDraft,
   initialError,
+  closeGuard,
 }: {
   authUserLoaded?: boolean;
   onClose?: () => void;
@@ -745,42 +877,50 @@ export default function SettingsAccountTab({
   initialDraft?: ProfileEditorDraft;
   /** Fixtures/tests: start with a failed-save message. */
   initialError?: string;
+  /**
+   * The host's close gate: while the draft is dirty the editor sets it to a
+   * function that nudges the unsaved bar and returns true (close refused).
+   */
+  closeGuard?: ProfileEditorCloseGuard;
 }) {
   const chatUser = useChatStore((s) => s.user);
 
   if (!chatUser) {
+    if (!authUserLoaded) {
+      return (
+        <div className="flex h-full min-h-0 flex-col">
+          <EditorHeader onClose={onClose} />
+          <EditorSkeleton />
+        </div>
+      );
+    }
     return (
       <div className="flex h-full min-h-0 flex-col">
         <EditorHeader onClose={onClose} />
         <EditorStateBody>
-          {authUserLoaded ? (
+          {
             <>
               <Icon
                 name="account"
                 size="3xl"
-                className="text-rm-text-muted max-md:hidden"
+                className="text-ink-3 max-md:hidden"
               />
               <Icon
                 name="account"
                 size="2xl"
-                className="text-rm-text-muted md:hidden"
+                className="text-ink-3 md:hidden"
               />
-              <p className="text-ui-lg font-semibold text-rm-text">
+              <p className="text-ui-lg font-semibold text-ink-1">
                 You&apos;re signed out
               </p>
-              <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
+              <p className="max-w-[36ch] text-pretty text-ui-sm text-ink-2">
                 Sign in again to edit your profile.
               </p>
               <Button asChild>
                 <a href="/sign-in">Sign in</a>
               </Button>
             </>
-          ) : (
-            <span role="status" className="text-rm-text-muted">
-              <Spinner className="size-6" />
-              <span className="sr-only">Loading</span>
-            </span>
-          )}
+          }
         </EditorStateBody>
       </div>
     );
@@ -793,6 +933,7 @@ export default function SettingsAccountTab({
       onClose={onClose}
       initialDraft={initialDraft}
       initialError={initialError}
+      closeGuard={closeGuard}
     />
   );
 }
@@ -802,11 +943,13 @@ function ProfileEditor({
   onClose,
   initialDraft,
   initialError,
+  closeGuard,
 }: {
   chatUser: User;
   onClose?: () => void;
   initialDraft?: ProfileEditorDraft;
   initialError?: string;
+  closeGuard?: ProfileEditorCloseGuard;
 }) {
   const { user } = useUser();
   const loadCurrentUser = useChatStore((s) => s.actions.loadCurrentUser);
@@ -862,6 +1005,8 @@ function ProfileEditor({
   >(() => chatUser.avatar_display ?? null);
   const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
   const [bannerPreview, setBannerPreview] = useState<AssetPreview | null>(null);
+  // The preview card plays the effect once per open; Preview plays it again.
+  const [effectPreviewCount, setEffectPreviewCount] = useState(0);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [removeBanner, setRemoveBanner] = useState(false);
   const [nameplatePreview, setNameplatePreview] = useState<AssetPreview | null>(
@@ -885,6 +1030,7 @@ function ProfileEditor({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
+  const { nudgeKey, nudge } = useUnsavedNudge();
 
   /* Sub-dialogs ----------------------------------------------------- */
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -943,7 +1089,7 @@ function ProfileEditor({
     storedTheme.profile_banner_color !== bannerColor ||
     !areDisplayNameStylesEqual(displayNameStyle, savedDisplayNameStyle);
 
-  const previewTheme = resolveProfileTheme({
+  const previewTheme = resolveProfileCardTheme({
     profile_accent_color: accentColor,
     profile_background_color: backgroundColor,
     profile_banner_color: bannerColor,
@@ -1354,13 +1500,35 @@ function ProfileEditor({
     user,
   ]);
 
-  const showFooter = hasChanges || Boolean(error) || saved;
+  // While dirty, closing (Escape, the scrim, the close button) nudges the
+  // unsaved bar instead of dropping the draft.
+  useEffect(() => {
+    if (!closeGuard) return undefined;
+    closeGuard.current = hasChanges
+      ? () => {
+          nudge();
+          return true;
+        }
+      : null;
+    return () => {
+      closeGuard.current = null;
+    };
+  }, [closeGuard, hasChanges, nudge]);
+
   const avatarWithoutDecoration = withoutDecoration(currentAvatarDisplay);
+  // "Member since Unknown" isn't worth a line: only a real date shows.
+  const hasReferenceDate = Boolean(
+    (activeServerId && activeServerId !== "@me"
+      ? previewMemberRecord?.joined_at
+      : null) ||
+    chatUser.created_at ||
+    user?.createdAt,
+  );
 
   /* Render ---------------------------------------------------------- */
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <EditorHeader onClose={onClose} />
+      <EditorHeader onClose={onClose} saved={saved && !hasChanges} />
 
       <input
         ref={nameplateInputRef}
@@ -1373,97 +1541,38 @@ function ProfileEditor({
 
       <div className="@container min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto grid w-full max-w-[1040px] gap-6 px-4 py-4 md:px-6 md:py-6 @min-[840px]:grid-cols-[340px_minmax(0,1fr)] @min-[840px]:items-start @min-[840px]:gap-8">
-          {/* Live preview ------------------------------------------- */}
+          {/* Live preview: the popover card others open, from the draft. */}
           <section
             aria-label="Profile preview"
             className="mx-auto flex w-full max-w-[340px] flex-col gap-4 @min-[840px]:sticky @min-[840px]:top-0"
-            style={previewTheme.variables}
           >
-            <ProfileSurfaceShell
-              display={currentAvatarDisplay}
-              className="w-full"
-              surfaceStyle={{
-                backgroundImage: "var(--rm-profile-custom-surface)",
+            <ProfileCard
+              size="popover"
+              user={{
+                username,
+                display_name: displayName,
+                pronouns: trimmedPronouns,
+                custom_status: trimmedStatus,
+                display_name_style: displayNameStyle,
+                avatar_display: currentAvatarDisplay,
+                banner_url: currentBannerUrl,
+                banner_content_type: currentBannerContentType,
               }}
+              theme={previewTheme}
+              name={displayName}
+              avatarSrc={currentAvatarSrc ?? null}
+              status={normalizeUserStatus(chatUser.status ?? "online")}
+              effectReplayKey={effectPreviewCount}
+              className="w-full"
             >
-              <div
-                className="relative h-28"
-                style={{
-                  background: "var(--rm-profile-custom-banner-fallback)",
-                }}
-              >
-                <ProfileAssetLayer
-                  url={currentBannerUrl}
-                  contentType={currentBannerContentType}
-                  alt=""
-                />
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background: "var(--rm-profile-custom-banner-overlay)",
-                  }}
-                />
-              </div>
-              <div className="relative flex flex-col gap-4 px-5 pb-6">
-                <div className="flex items-end justify-between gap-3">
-                  <span className="relative -mt-12 block size-24 shrink-0 rounded-full border-4 border-[color:var(--rm-profile-custom-background)] bg-[var(--rm-profile-custom-card-bg-strong)]">
-                    {currentAvatarSrc ? (
-                      <AvatarImage
-                        src={currentAvatarSrc}
-                        alt=""
-                        display={currentAvatarDisplay}
-                      />
-                    ) : (
-                      <span className="flex size-full items-center justify-center text-ui-2xl font-semibold text-[color:var(--rm-profile-custom-text)]">
-                        {getDisplayInitial({ name: displayName })}
-                      </span>
-                    )}
-                  </span>
-                  {trimmedStatus ? (
-                    <span
-                      className="min-w-0 truncate rounded-full border border-[color:var(--rm-profile-custom-card-border)] px-3 py-1.5 text-ui-sm text-[color:var(--rm-profile-custom-text)]"
-                      style={PROFILE_BANNER_CHIP_STYLE}
-                    >
-                      {trimmedStatus}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="min-w-0">
-                  <ProfileDisplayName
-                    text={displayName}
-                    displayNameStyle={displayNameStyle}
-                    className="block truncate text-ui-xl font-semibold text-[color:var(--rm-profile-custom-text)]"
-                    backgroundColor={previewTheme.backgroundColor}
-                    readableFallbackColor={previewTheme.textColor}
-                  />
-                  <p className="mt-1 truncate text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-                    @{username}
-                    {trimmedPronouns ? ` · ${trimmedPronouns}` : ""}
-                  </p>
-                </div>
-                {trimmedBio ? (
-                  <div className="rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3">
-                    <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-                      About me
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-ui-sm text-[color:var(--rm-profile-custom-text)]">
-                      {trimmedBio}
-                    </p>
-                  </div>
-                ) : null}
-                <div>
-                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
-                    {referenceDate.label}
-                  </p>
-                  <p className="mt-1 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
-                    {referenceDate.value}
-                  </p>
-                </div>
-              </div>
-            </ProfileSurfaceShell>
+              <ProfileSections
+                bio={trimmedBio}
+                memberSince={hasReferenceDate ? referenceDate : null}
+              />
+            </ProfileCard>
 
             {nameplateShownUrl ? (
-              <div className="relative flex min-h-12 items-center gap-3 overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2">
+              <div className="relative flex min-h-12 items-center gap-3 overflow-hidden rounded-lg border border-line bg-ply-2 px-3 py-2">
                 <UserNameplateLayer
                   nameplateUrl={nameplateShownUrl}
                   nameplateContentType={
@@ -1474,7 +1583,7 @@ function ProfileEditor({
                   alt=""
                   className="pointer-events-none absolute inset-0"
                 />
-                <span className="relative block size-8 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
+                <span className="relative block size-8 shrink-0 overflow-hidden rounded-avatar bg-tint-3">
                   {currentAvatarSrc ? (
                     <AvatarImage
                       src={currentAvatarSrc}
@@ -1486,7 +1595,7 @@ function ProfileEditor({
                 <ProfileDisplayName
                   text={displayName}
                   displayNameStyle={displayNameStyle}
-                  className="relative block min-w-0 truncate text-ui-base font-medium text-rm-text"
+                  className="relative block min-w-0 truncate text-ui-base font-medium text-ink-1"
                   minContrastRatio={2.8}
                 />
               </div>
@@ -1509,7 +1618,7 @@ function ProfileEditor({
                         display={avatarWithoutDecoration}
                       />
                     ) : (
-                      <span className="text-ui-base font-semibold text-rm-text">
+                      <span className="text-ui-base font-semibold text-ink-1">
                         {getDisplayInitial({ name: displayName })}
                       </span>
                     )}
@@ -1698,7 +1807,7 @@ function ProfileEditor({
               <SettingsRow
                 id="profile-custom-status"
                 label="Custom status"
-                description="Shown beside your avatar."
+                description="Shown under your name."
                 layout="block"
               >
                 {(ids) => (
@@ -1808,6 +1917,18 @@ function ProfileEditor({
                       <Button
                         type="button"
                         variant="ghost"
+                        aria-label="Preview profile effect"
+                        onClick={() =>
+                          setEffectPreviewCount((count) => count + 1)
+                        }
+                      >
+                        Preview
+                      </Button>
+                    ) : null}
+                    {profileEffect ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
                         aria-label="Remove profile effect"
                         onClick={() =>
                           handleRemoveCollectible("profile_effect")
@@ -1890,49 +2011,19 @@ function ProfileEditor({
         </div>
       </div>
 
-      {showFooter ? (
-        <footer className="shrink-0 border-t border-rm-border bg-rm-bg-primary px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] md:px-6">
-          {error ? <RowError className="mb-3 mt-0">{error}</RowError> : null}
-          <div className="flex items-center gap-2">
-            <p
-              role="status"
-              className="flex min-w-0 flex-1 items-center gap-2 truncate text-ui-sm font-medium text-rm-text"
-            >
-              {hasChanges ? (
-                "Unsaved changes"
-              ) : saved ? (
-                <>
-                  <Icon
-                    name="check"
-                    size="sm"
-                    className="shrink-0 text-rm-success-ink"
-                  />
-                  Changes saved
-                </>
-              ) : null}
-            </p>
-            {hasChanges ? (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={resetDraft}
-                  disabled={saving}
-                >
-                  Reset
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => void handleSave()}
-                  loading={saving}
-                >
-                  Save changes
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </footer>
+      {error ? (
+        <div className="shrink-0 border-t border-line bg-ply-0 px-4 pt-3 md:px-6">
+          <RowError className="mt-0 mb-3">{error}</RowError>
+        </div>
       ) : null}
+      <UnsavedBar
+        dirty={hasChanges}
+        saving={saving}
+        onReset={resetDraft}
+        onSave={() => void handleSave()}
+        nudgeKey={nudgeKey}
+        className="shrink-0 pb-[max(12px,var(--safe-area-bottom,0px))]"
+      />
 
       {avatarPickerOpen ? (
         <AvatarPickerModal

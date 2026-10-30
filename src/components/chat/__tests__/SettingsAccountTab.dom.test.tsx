@@ -130,6 +130,20 @@ describe("SettingsAccountTab (profile editor)", () => {
     expect(screen.getByRole("textbox", { name: "Pronouns" })).toHaveValue("");
   });
 
+  it("refuses a close while the draft is dirty and nudges the bar", () => {
+    mocks.state.user = USER;
+    const closeGuard = { current: null as (() => boolean) | null };
+    render(<SettingsAccountTab onClose={() => {}} closeGuard={closeGuard} />);
+
+    expect(closeGuard.current).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Pronouns" }), {
+      target: { value: "he/him" },
+    });
+    expect(closeGuard.current?.()).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(closeGuard.current).toBeNull();
+  });
+
   it("saves the draft and sends the custom status", async () => {
     mocks.state.user = USER;
     mocks.apiPatch.mockResolvedValueOnce({ ok: true });
