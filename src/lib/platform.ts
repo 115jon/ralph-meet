@@ -147,8 +147,9 @@ export function getPublicApiUrl(): string {
 /**
  * Public web origin to open in a system browser for user-facing flows.
  *
- * This intentionally does not use the local dev server: native auth handoff
- * should happen on the deployed Ralph Meet site, then deep-link back into Tauri.
+ * This intentionally does not use the local dev server: user-facing pages a
+ * native app opens (device-code approval at /activate, invites) live on the
+ * deployed Ralph Meet site.
  */
 export function getPublicWebUrl(): string {
   const envUrl =

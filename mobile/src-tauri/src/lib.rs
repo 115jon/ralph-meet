@@ -1,6 +1,6 @@
 // ── Ralph Meet Mobile — Tauri application entry point ────────────────────
 //
-// Mobile-specific entry point that shares the same Ralph Auth browser/deep-link flow as desktop, but without:
+// Mobile-specific entry point that shares the same device-code sign-in and invite deep links as desktop, but without:
 //   - CEF runtime (uses Android System WebView via Wry)
 //   - Screen capture / xcap (Android uses native getDisplayMedia)
 //   - System tray (not applicable on mobile)
@@ -37,12 +37,13 @@ pub fn run() {
                 )?;
             }
 
-            // Listen for deep link events (ralphmeet://auth?token=...)
-            // and forward them to the webview as a custom event
+            // Listen for deep link events (ralphmeet://invite/<code>) and
+            // forward them to the webview as a custom event. Sign-in uses a
+            // device code, not a deep link.
             let handle = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
                 log::info!("Deep link received: {:?}", event.payload());
-                // Forward to all webviews — the frontend handles token extraction
+                // Forward to all webviews — the frontend handles invite codes
                 let _ = handle.emit("deep-link", event.payload());
             });
 
