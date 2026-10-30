@@ -1,16 +1,27 @@
 /**
- * Whole-page states for public routes (design-system 14.1 / 14.3): an icon
- * illustration, a title, one line of body copy and at most a primary action
- * plus a way home. Never a card, border, shadow or blur around it.
+ * Whole-page states for public routes, on the one public frame: a 48px
+ * status tile, a title, one line of body copy, then 40px actions (one
+ * primary, optionally a way home). The tile carries the tone; the title
+ * stays ink-1.
  *
  * `RouteErrorPage` is the router's default error boundary and the share
  * route's: it never renders `error.message` (that can carry internals such
- * as D1 errors); the error goes to the console instead.
+ * as D1 errors); the error goes to the console instead. In the desktop app
+ * there is no marketing home, so its second action reloads the app.
  */
 
+import {
+  PublicActions,
+  PublicBody,
+  PublicFrame,
+  PublicTitle,
+  StatusTile,
+  type StatusTone,
+} from "@/components/auth/PublicFrame";
 import { Button } from "@/components/ui/button";
-import { Icon, type IconName } from "@/components/ui/icon";
+import { type IconName } from "@/components/ui/icon";
 import { clog } from "@/lib/console-logger";
+import { isTauri } from "@/lib/platform";
 import { useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -20,49 +31,26 @@ export function PageState({
   icon,
   title,
   body,
-  tone = "default",
+  tone = "neutral",
   children,
-  className = "min-h-dvh",
+  className,
 }: {
   icon: IconName;
   title: ReactNode;
   body?: ReactNode;
-  /** `danger` is a whole-view error: the title takes the danger ink. */
-  tone?: "default" | "danger";
+  /** The status tile's tone: `danger` for failures, `success` for done. */
+  tone?: StatusTone;
   /** Actions: one primary, optionally followed by a way home. */
   children?: ReactNode;
-  /** Height of the frame; defaults to the full viewport. */
   className?: string;
 }) {
   return (
-    <main
-      className={`flex w-full items-center justify-center bg-rm-bg-primary px-6 py-12 text-rm-text ${className}`}
-    >
-      <div className="flex max-w-[36ch] flex-col items-center gap-3 text-center">
-        <Icon
-          name={icon}
-          size="3xl"
-          className="text-rm-text-muted max-md:size-8"
-        />
-        <h1
-          className={`text-balance text-ui-lg font-semibold ${
-            tone === "danger" ? "text-rm-danger-ink" : "text-rm-text"
-          }`}
-        >
-          {title}
-        </h1>
-        {body ? (
-          <p className="text-pretty text-ui-sm text-rm-text-secondary">
-            {body}
-          </p>
-        ) : null}
-        {children ? (
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-            {children}
-          </div>
-        ) : null}
-      </div>
-    </main>
+    <PublicFrame className={className}>
+      <StatusTile icon={icon} tone={tone} />
+      <PublicTitle>{title}</PublicTitle>
+      {body ? <PublicBody>{body}</PublicBody> : null}
+      {children ? <PublicActions>{children}</PublicActions> : null}
+    </PublicFrame>
   );
 }
 
@@ -70,13 +58,15 @@ export function PageState({
 export function HomeLink({
   children = "Go home",
   variant = "ghost",
+  href = "/",
 }: {
   children?: ReactNode;
-  variant?: "default" | "secondary" | "ghost";
+  variant?: "primary" | "default" | "secondary" | "ghost";
+  href?: string;
 }) {
   return (
-    <Button asChild variant={variant}>
-      <a href="/">{children}</a>
+    <Button asChild variant={variant} size="lg">
+      <a href={href}>{children}</a>
     </Button>
   );
 }
@@ -99,6 +89,7 @@ export function RouteErrorPage({
   return (
     <PageState icon="alert" tone="danger" title={title} body={body}>
       <Button
+        size="lg"
         onClick={() => {
           reset();
           void router.invalidate();
@@ -106,7 +97,17 @@ export function RouteErrorPage({
       >
         Try again
       </Button>
-      <HomeLink />
+      {isTauri() ? (
+        <Button
+          variant="ghost"
+          size="lg"
+          onClick={() => window.location.reload()}
+        >
+          Reload app
+        </Button>
+      ) : (
+        <HomeLink />
+      )}
     </PageState>
   );
 }
@@ -118,7 +119,7 @@ export function NotFoundPage() {
       title="Page not found"
       body="The link may be broken, or the page may have moved."
     >
-      <HomeLink variant="default" />
+      <HomeLink variant="primary" />
     </PageState>
   );
 }

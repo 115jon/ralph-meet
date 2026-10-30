@@ -1,9 +1,18 @@
 import { apiGet, apiPost } from "@/lib/api-client";
 import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import {
+  PublicActions,
+  PublicBody,
+  PublicFrame,
+  PublicKicker,
+  PublicTitle,
+  StatusTile,
+} from "@/components/auth/PublicFrame";
 import { HomeLink, PageState } from "@/components/PageState";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -202,13 +211,12 @@ export default function InviteClient({
         return (
           <InviteFrame invite={state.invite}>
             {signedOut ? (
-              <Button asChild size="lg" className="w-full">
+              <Button asChild size="lg">
                 <a href={signInHref}>Sign in to join</a>
               </Button>
             ) : (
               <Button
                 size="lg"
-                className="w-full"
                 loading={joining}
                 onClick={() => void join(state.invite)}
               >
@@ -218,9 +226,16 @@ export default function InviteClient({
             <Button
               variant="ghost"
               size="lg"
-              className="w-full"
               disabled={joining}
-              onClick={() => void navigate({ to: signedOut ? "/" : "/chat" })}
+              onClick={() => {
+                // A signed-out visitor came from somewhere else (a chat, a
+                // message); send them back there rather than to the landing.
+                if (signedOut && window.history.length > 1) {
+                  window.history.back();
+                  return;
+                }
+                void navigate({ to: signedOut ? "/" : "/chat" });
+              }}
             >
               No thanks
             </Button>
@@ -233,7 +248,7 @@ export default function InviteClient({
             invite={state.invite}
             note="Sign in to accept this invite."
           >
-            <Button asChild size="lg" className="w-full">
+            <Button asChild size="lg">
               <a href={signInHref}>Sign in to join</a>
             </Button>
           </InviteFrame>
@@ -243,7 +258,7 @@ export default function InviteClient({
             title="Sign in to join"
             body="Sign in to see this invite and join the server."
           >
-            <Button asChild>
+            <Button asChild size="lg">
               <a href={signInHref}>Sign in to join</a>
             </Button>
           </PageState>
@@ -251,7 +266,8 @@ export default function InviteClient({
       case "joined":
         return (
           <PageState
-            icon="success"
+            icon="check"
+            tone="success"
             title={
               <>
                 Joined <InlineEmojiText text={state.server.name} />
@@ -260,7 +276,7 @@ export default function InviteClient({
             body="Opening the server…"
           >
             <Button
-              variant="secondary"
+              size="lg"
               onClick={() =>
                 void navigate({ href: serverPath(state.server.id) })
               }
@@ -281,10 +297,10 @@ export default function InviteClient({
             }
           >
             <Button
+              size="lg"
               onClick={() =>
                 void navigate({ href: serverPath(state.server.id) })
               }
-              className="max-w-full"
             >
               <span className="truncate">
                 Open <InlineEmojiText text={state.server.name} />
@@ -303,7 +319,9 @@ export default function InviteClient({
                 : "The link may be mistyped, or the invite was deleted. Ask for a new invite."
             }
           >
-            <HomeLink variant="secondary">Open Ralph Meet</HomeLink>
+            <HomeLink variant="primary" href="/chat">
+              Open Ralph Meet
+            </HomeLink>
           </PageState>
         );
       case "error": {
@@ -318,13 +336,14 @@ export default function InviteClient({
             body="Check your connection and try again."
           >
             <Button
+              size="lg"
               onClick={() =>
                 invite ? void join(invite) : setAttempt((n) => n + 1)
               }
             >
               Try again
             </Button>
-            <HomeLink>Open Ralph Meet</HomeLink>
+            <HomeLink href="/chat">Open Ralph Meet</HomeLink>
           </PageState>
         );
       }
@@ -347,79 +366,78 @@ function announcement(state: InviteState): string {
   }
 }
 
-/** 12.5 card with the server, plus the actions under it. */
+/**
+ * The invite on the public frame: the server's icon in the status tile, who
+ * invited you as a sentence-case lead-in, the server name as the display
+ * heading, how many are there, then the actions. No card inside the frame.
+ */
 function InviteFrame({
   invite,
-  note = "You've been invited to join",
+  note,
   children,
 }: {
   invite: InvitePreview;
+  /** A line under the heading (e.g. "Sign in to accept this invite."). */
   note?: string;
   children: React.ReactNode;
 }) {
   const inviter = invite.inviter.display_name ?? invite.inviter.username;
   return (
-    <main className="flex min-h-dvh w-full items-center justify-center bg-rm-bg-primary px-4 py-12 text-rm-text">
-      <div className="flex w-full max-w-[400px] flex-col gap-4">
-        <h1 className="text-center text-ui-sm text-rm-text-secondary">
-          {note}
-        </h1>
-        <section className="flex items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-surface p-4">
-          <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-rm-accent-tint text-ui-lg font-semibold text-rm-accent-ink">
-            {invite.server.icon_url ? (
-              <img
-                src={invite.server.icon_url}
-                alt=""
-                className="size-full object-cover"
-              />
-            ) : (
-              <span aria-hidden="true">
-                {invite.server.name.charAt(0).toUpperCase()}
-              </span>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-ui-md font-semibold text-pretty break-words text-rm-text">
-              <InlineEmojiText text={invite.server.name} />
-            </h2>
-            <p className="flex items-center gap-1.5 text-ui-sm text-rm-text-secondary">
-              <Icon name="members" size="sm" className="shrink-0" />
-              <span>{memberCount(invite.server.member_count)}</span>
-            </p>
-          </div>
-        </section>
-        <p className="text-center text-ui-xs text-rm-text-muted">
-          Invited by{" "}
-          <span className="font-medium text-rm-text-secondary">
-            <InlineEmojiText text={inviter} />
+    <PublicFrame>
+      <StatusTile tone="accent">
+        {invite.server.icon_url ? (
+          <img
+            src={invite.server.icon_url}
+            alt=""
+            className="size-full object-cover"
+          />
+        ) : (
+          <span className="text-ui-xl font-semibold">
+            {invite.server.name.charAt(0).toUpperCase()}
           </span>
-        </p>
-        <div className="mt-2 flex flex-col gap-2">{children}</div>
-      </div>
-    </main>
+        )}
+      </StatusTile>
+      <PublicKicker>
+        Invite <span aria-hidden="true">·</span>
+        <span className="sr-only">from</span>{" "}
+        <span className="text-ink-2">
+          <InlineEmojiText text={inviter} />
+        </span>
+      </PublicKicker>
+      <PublicTitle size="display" className="break-words">
+        <InlineEmojiText text={invite.server.name} />
+      </PublicTitle>
+      {note ? <PublicBody size="lead">{note}</PublicBody> : null}
+      <p className="silkscreen mt-4 flex h-5 items-center gap-2 text-ink-3">
+        <Icon name="members" size="xs" className="shrink-0" />
+        <span>{memberCount(invite.server.member_count)}</span>
+      </p>
+      <PublicActions>{children}</PublicActions>
+    </PublicFrame>
   );
 }
 
+/** The loaded invite's exact geometry, as static placeholders (no pulse). */
 function InviteSkeleton() {
   return (
-    <main
-      aria-busy="true"
-      className="flex min-h-dvh w-full items-center justify-center bg-rm-bg-primary px-4 py-12"
-    >
-      <div
-        aria-hidden="true"
-        className="flex w-full max-w-[400px] animate-pulse flex-col gap-4 motion-reduce:animate-none"
-      >
-        <div className="mx-auto h-3 w-44 rounded-md bg-rm-tint-1" />
-        <div className="flex items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-surface p-4">
-          <div className="size-12 rounded-lg bg-rm-tint-1" />
-          <div className="flex flex-1 flex-col gap-2">
-            <div className="h-4 w-2/3 rounded-md bg-rm-tint-1" />
-            <div className="h-3 w-1/3 rounded-md bg-rm-tint-1" />
-          </div>
+    <PublicFrame aria-busy>
+      <div aria-hidden="true">
+        <Skeleton className="mb-6 size-12 rounded-[2px]" />
+        <div className="mb-4 flex h-[14px] items-center">
+          <Skeleton className="h-2.5 w-1/2" />
         </div>
-        <div className="mt-2 h-10 rounded-md bg-rm-tint-1" />
+        <div className="flex h-[0.9em] items-center text-[length:clamp(2.75rem,2.2rem+2.6vw,4.25rem)]">
+          <Skeleton className="h-[0.7em] w-3/4" />
+        </div>
+        <Skeleton className="mt-6 h-2" />
+        <div className="mt-4 flex h-5 items-center">
+          <Skeleton className="h-2.5 w-24" />
+        </div>
+        <div className="mt-8 flex flex-col gap-3">
+          <Skeleton className="h-12 rounded-[2px]" />
+          <Skeleton className="h-12 rounded-[2px]" />
+        </div>
       </div>
-    </main>
+    </PublicFrame>
   );
 }

@@ -1,6 +1,11 @@
+import {
+  PublicFrame,
+  PublicKicker,
+  PublicTitle,
+} from "@/components/auth/PublicFrame";
 import { HomeLink, PageState } from "@/components/PageState";
-import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getAbuseEmail } from "@/lib/platform";
 import type { Attachment, EmbedInfo } from "@/lib/types";
 import { useClientDateFormatter } from "@/lib/client-date-format";
@@ -125,7 +130,7 @@ export function ShareGone() {
       title="This shared message is gone"
       body="The person who shared it removed the link, or it expired."
     >
-      <HomeLink variant="default">Open Ralph Meet</HomeLink>
+      <HomeLink variant="primary">Open Ralph Meet</HomeLink>
     </PageState>
   );
 }
@@ -139,7 +144,9 @@ export function ShareError({ onRetry }: { onRetry: () => void }) {
       title="Couldn't load this message"
       body="Check your connection and try again."
     >
-      <Button onClick={onRetry}>Try again</Button>
+      <Button size="lg" onClick={onRetry}>
+        Try again
+      </Button>
       <HomeLink>Open Ralph Meet</HomeLink>
     </PageState>
   );
@@ -147,24 +154,11 @@ export function ShareError({ onRetry }: { onRetry: () => void }) {
 
 function ShareFrame({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-dvh bg-rm-bg-primary text-rm-text">
-      <div className="mx-auto flex w-full max-w-[720px] flex-col px-4 pt-[max(32px,var(--safe-area-top,0px))] pb-[max(32px,var(--safe-area-bottom,0px))] md:px-6 md:py-16">
-        <header className="mb-8 flex items-center gap-3">
-          <a href="/" className="flex min-h-11 items-center gap-3 rounded-md">
-            <ThemeAwareSplashLogo className="size-8 select-none object-contain" />
-            <span className="flex flex-col">
-              <span className="text-ui-md font-semibold text-rm-text">
-                Ralph Meet
-              </span>
-              <span className="text-ui-xs text-rm-text-muted">
-                Shared message
-              </span>
-            </span>
-          </a>
-        </header>
-        {children}
-      </div>
-    </main>
+    <PublicFrame width="wide">
+      <PublicKicker>Shared from Ralph Meet</PublicKicker>
+      <PublicTitle size="display">Shared message</PublicTitle>
+      <div className="mt-8">{children}</div>
+    </PublicFrame>
   );
 }
 
@@ -189,8 +183,11 @@ function LoadedShare({ token, share }: { token: string; share: PublicShare }) {
         }
       />
 
-      <footer className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-rm-border pt-4 text-ui-xs text-rm-text-muted">
-        <span>
+      <footer className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-ui-xs text-ink-3">
+        <Button asChild variant="secondary" size="lg" className="max-sm:w-full">
+          <a href="/chat">Open in Ralph Meet</a>
+        </Button>
+        <span className="silkscreen">
           {share.expires_at
             ? `Expires ${formatDate(share.expires_at, {
                 month: "short",
@@ -203,7 +200,7 @@ function LoadedShare({ token, share }: { token: string; share: PublicShare }) {
         </span>
         <a
           href={`mailto:${getAbuseEmail()}`}
-          className="inline-flex min-h-11 items-center font-medium text-rm-accent-ink underline-offset-[3px] pointer-fine:hover:underline"
+          className="ml-auto inline-flex min-h-11 items-center rounded-[2px] text-ink-3 underline decoration-line-strong underline-offset-[3px] pointer-fine:hover:text-ink-2"
         >
           Report this share
         </a>
@@ -212,31 +209,22 @@ function LoadedShare({ token, share }: { token: string; share: PublicShare }) {
   );
 }
 
-/** 14.2: skeleton at the real card's geometry while the share loads. */
+/** 14.2: the real card's geometry as static placeholders (no pulse). */
 function ShareSkeleton() {
   return (
     <div
       aria-busy="true"
-      className="rounded-lg border border-rm-border bg-rm-bg-surface p-4"
+      className="rounded-[2px] border border-line bg-ply-2 p-4"
     >
       <span className="sr-only" role="status">
         Loading shared message
       </span>
-      <div
-        aria-hidden="true"
-        className="animate-pulse motion-reduce:animate-none"
-      >
-        <div className="mb-3 flex items-center gap-3">
-          <div className="size-10 rounded-full bg-rm-tint-1" />
-          <div className="flex flex-col gap-2">
-            <div className="h-3 w-32 rounded-md bg-rm-tint-1" />
-            <div className="h-3 w-20 rounded-md bg-rm-tint-1" />
-          </div>
-        </div>
-        <div className="flex flex-col gap-2">
-          <div className="h-4 w-full rounded-md bg-rm-tint-1" />
-          <div className="h-4 w-4/5 rounded-md bg-rm-tint-1" />
-          <div className="h-4 w-3/5 rounded-md bg-rm-tint-1" />
+      <div aria-hidden="true" className="flex gap-3">
+        <Skeleton className="size-8 shrink-0 rounded-avatar" />
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <Skeleton className="h-3.5 w-32" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
         </div>
       </div>
     </div>

@@ -1,14 +1,8 @@
 import SharedMessagePage from "@/components/chat/SharedMessagePage";
 import { RouteErrorPage } from "@/components/PageState";
-import { getDB } from "@/lib/api-helpers";
-import { hydrateInstagramEmbedsForShare } from "@/lib/share-embed-refresh";
 import { buildShareMetadata } from "@/lib/share-metadata";
-import { ServiceError } from "@/lib/service-error";
 import { getPublicWebUrl } from "@/lib/platform";
-import {
-  getPublicMessageShare,
-  type MessageShare,
-} from "@/services/message-share.service";
+import type { MessageShare } from "@/services/message-share.service";
 import {
   createFileRoute,
   type ErrorComponentProps,
@@ -24,6 +18,21 @@ interface ShareLoaderData {
 const loadPublicShare = createServerFn({ method: "GET" })
   .inputValidator((data: { token: string }) => data)
   .handler(async ({ data }): Promise<ShareLoaderData> => {
+    // Server-only modules load inside the handler. React Start's compiler
+    // strips the handler from the web client anyway, but the desktop build
+    // runs only the router plugin, so static imports here would put the
+    // embed fetcher and the share services (~65 KB) in its entry chunk.
+    const [
+      { getDB },
+      { hydrateInstagramEmbedsForShare },
+      { ServiceError },
+      { getPublicMessageShare },
+    ] = await Promise.all([
+      import("@/lib/api-helpers"),
+      import("@/lib/share-embed-refresh"),
+      import("@/lib/service-error"),
+      import("@/services/message-share.service"),
+    ]);
     const origin = getPublicWebUrl();
     const token = typeof data?.token === "string" ? data.token : "";
     try {

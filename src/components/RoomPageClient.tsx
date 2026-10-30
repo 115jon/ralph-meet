@@ -9,10 +9,17 @@ import { VoiceControls } from "@/components/voice/VoiceControls";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { VoiceHeader } from "@/components/voice/VoiceHeader";
 import { MembersTray, VoiceStage } from "@/components/voice/VoiceStage";
-import { Button, Spinner } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  PublicBody,
+  PublicFrame,
+  PublicKicker,
+  PublicTitle,
+} from "@/components/auth/PublicFrame";
+import { Button } from "@/components/ui/button";
+import { FieldPlate, Input } from "@/components/ui/input";
 import { IconButton } from "@/components/ui/IconButton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Num } from "@/components/ui/num";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { copyRoomLink } from "@/lib/room-links";
 import { getRoomPreflightWarnings } from "@/lib/room-preflight";
@@ -145,70 +152,58 @@ export function RoomJoinForm({
 }) {
   const nameId = useId();
   return (
-    <div className="flex h-full items-center justify-center overflow-y-auto bg-rm-bg-primary px-4 pt-[max(1.5rem,var(--safe-area-top,0px))] pb-[max(1.5rem,var(--safe-area-bottom,0px))]">
-      <div className="w-full max-w-[380px]">
-        <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <Icon name="soundboard" size="2xl" className="text-rm-text-muted" />
-          <h1 className="text-ui-xl font-semibold text-balance text-rm-text">
-            Join meeting
-          </h1>
-          <p className="text-ui-sm text-rm-text-secondary">
-            Room:{" "}
-            <span className="font-semibold break-words text-rm-text">
-              {slug}
-            </span>
-          </p>
-        </div>
+    <PublicFrame>
+      <PublicKicker>Meeting room</PublicKicker>
+      <PublicTitle size="display" className="break-words">
+        Join {slug}
+      </PublicTitle>
+      <PublicBody size="lead">Pick the name the room will see.</PublicBody>
 
-        <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          {warnings.length > 0 && (
-            <div
-              role="status"
-              className="flex items-start gap-2 rounded-md bg-rm-warning-tint px-3 py-2 text-ui-sm text-rm-warning-ink"
-            >
-              <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
-              <span className="text-pretty">
-                {warnings[0]}. You can still join, then check input settings
-                from the call controls.
-              </span>
-            </div>
-          )}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={nameId}>Your name</Label>
-            <Input
-              ref={inputRef}
-              id={nameId}
-              type="text"
-              value={name}
-              onChange={(e) => onNameChange(e.target.value)}
-              placeholder="Ada Lovelace"
-              className="pointer-coarse:min-h-11"
-              autoComplete="name"
-              required
-            />
-          </div>
-          <Button
-            type="submit"
-            size="lg"
-            disabled={!name.trim()}
-            className="w-full"
+      <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
+        {warnings.length > 0 && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-[2px] bg-warning-tint px-3 py-3 text-ui-sm text-warning-ink"
           >
-            Join room
-          </Button>
-        </form>
-      </div>
-    </div>
+            <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
+            <span className="text-pretty">
+              {warnings[0]}. You can still join, then check input settings from
+              the call controls.
+            </span>
+          </div>
+        )}
+        <FieldPlate label="Your name" htmlFor={nameId}>
+          <Input
+            ref={inputRef}
+            id={nameId}
+            type="text"
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            placeholder="Ada Lovelace"
+            inputSize="lg"
+            className="pointer-coarse:min-h-11"
+            autoComplete="name"
+            required
+          />
+        </FieldPlate>
+        <Button
+          type="submit"
+          size="lg"
+          disabled={!name.trim()}
+          className="w-full"
+        >
+          Join
+        </Button>
+      </form>
+    </PublicFrame>
   );
 }
 
 /** The wait between submitting a name and joining (exported for fixtures). */
 export function RoomConnecting({ slug }: { slug: string }) {
   return (
-    <div className="flex min-h-full flex-col items-center justify-center gap-3 bg-rm-bg-primary px-6 py-12 text-center">
-      <Spinner className="size-6 text-rm-text-muted" />
-      <span role="status" className="text-ui-sm text-rm-text-secondary">
-        Connecting to {slug}…
-      </span>
+    <div className="flex min-h-full flex-col items-center justify-center bg-ply-0">
+      <EmptyState loading title={`Connecting to ${slug}…`} />
     </div>
   );
 }
@@ -218,7 +213,7 @@ export function RoomConnecting({ slug }: { slug: string }) {
 /** Header extras for the room: copy the invite link, the watchers, the count. */
 export function RoomMeta({
   slug,
-  focused,
+  focused: _focused,
   gridItemsCount,
   localScreenWatchers,
 }: {
@@ -241,16 +236,13 @@ export function RoomMeta({
     window.setTimeout(() => setCopyState("idle"), 1600);
   };
 
-  const divider = cn(
-    "hidden h-4 w-px shrink-0 md:block",
-    focused ? "bg-white/20" : "bg-rm-border",
-  );
+  const divider = cn("hidden h-4 w-px shrink-0 md:block", "bg-line-strong");
 
   return (
     <>
       <IconButton
         icon={copyState === "copied" ? "check" : "link"}
-        size="sm"
+        size={32}
         variant="plain"
         tooltip={
           copyState === "copied"
@@ -260,13 +252,11 @@ export function RoomMeta({
               : "Copy room link"
         }
         className={cn(
-          focused
-            ? "text-white/80 pointer-fine:hover:text-white"
-            : copyState === "copied"
-              ? "text-rm-success-ink"
-              : copyState === "failed"
-                ? "text-rm-danger-ink"
-                : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
+          copyState === "copied"
+            ? "text-success-ink"
+            : copyState === "failed"
+              ? "text-danger-ink"
+              : "text-ink-3 pointer-fine:hover:text-ink-1",
         )}
         onClick={handleCopyRoomLink}
       />
@@ -281,13 +271,8 @@ export function RoomMeta({
         </>
       )}
       <div aria-hidden className={divider} />
-      <span
-        className={cn(
-          "hidden whitespace-nowrap text-ui-xs tabular-nums md:inline",
-          focused ? "text-white/70" : "text-rm-text-muted",
-        )}
-      >
-        {gridItemsCount} in room
+      <span className="hidden items-center gap-1 whitespace-nowrap text-ui-xs text-ink-3 md:inline-flex">
+        <Num>{gridItemsCount}</Num> in room
       </span>
     </>
   );
@@ -448,12 +433,13 @@ function RoomVoiceView({
       header={
         <VoiceHeader
           channelName={slug}
-          titleIcon="soundboard"
+          titleIcon="voiceChannel"
           connectionState={connectionState}
           joined={joined}
           focusedItem={focusedItem ?? null}
           currentScreenQuality={currentScreenQuality}
           sfu={sfu}
+          onToggleTextChat={undefined}
           meta={
             <RoomMeta
               slug={slug}
@@ -500,6 +486,7 @@ function RoomVoiceView({
           onOpenSettings={() => setIsSettingsOpen(true)}
           settingsUserId={settingsUserId}
           sfu={sfu}
+          showMicDeafen
         />
       }
     >
@@ -510,12 +497,12 @@ function RoomVoiceView({
         onDrop={handleDrop}
       >
         {isFileDragging && (
-          <div className="pointer-events-none absolute inset-4 z-30 flex items-center justify-center rounded-xl border border-dashed border-rm-accent-ink bg-rm-scrim">
-            <div className="rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-3 text-center shadow-lg dark:bg-rm-bg-elevated">
-              <p className="text-ui-sm font-semibold text-rm-text">
+          <div className="pointer-events-none absolute inset-4 z-30 flex items-center justify-center rounded-xl border border-dashed border-accent-ink bg-scrim">
+            <div className="rounded-lg border border-line bg-ply-3 px-4 py-3 text-center shadow-float">
+              <p className="text-ui-sm font-semibold text-ink-1">
                 Uploads unlock in the full app
               </p>
-              <p className="mt-1 text-ui-xs text-rm-text-secondary">
+              <p className="mt-1 text-ui-xs text-ink-2">
                 Drop to see how to sign in. GIFs still work here.
               </p>
             </div>
@@ -524,7 +511,7 @@ function RoomVoiceView({
         {audioStalled && isMicOn && (
           <div
             role="alert"
-            className="flex shrink-0 items-center justify-between gap-3 bg-rm-danger-tint px-4 py-2 text-ui-sm text-rm-danger-ink"
+            className="flex h-8 shrink-0 items-center justify-between gap-3 border-b border-line bg-danger-tint px-4 text-ui-xs text-danger-ink"
           >
             <div className="flex min-w-0 items-center gap-2">
               <Icon name="mic" state="off" size="sm" className="shrink-0" />
@@ -534,7 +521,8 @@ function RoomVoiceView({
             </div>
             <Button
               size="sm"
-              variant="destructive"
+              variant="secondary"
+              className="h-6"
               onClick={() => setIsSettingsOpen(true)}
             >
               Check settings

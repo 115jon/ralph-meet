@@ -47,13 +47,11 @@ vi.mock("@/components/auth/AuthSplitLayout", () => ({
   AuthSplitLayout: ({
     children,
     subtitle,
-    caption,
   }: {
     children: React.ReactNode;
     subtitle?: React.ReactNode;
-    caption?: string;
   }) => (
-    <div data-caption={caption}>
+    <div>
       {subtitle}
       {children}
     </div>
@@ -103,15 +101,11 @@ describe("/sign-in reached from /activate", () => {
   it("says a device is waiting and shows its code", () => {
     mocks.isSignedIn = false;
     mocks.search = { redirect_url: "/activate?code=ABCD-EFGH" };
-    const { container } = render(<SignInPage />);
+    render(<SignInPage />);
     expect(
       screen.getByText("A device is waiting to sign in"),
     ).toBeInTheDocument();
     expect(screen.getByText("ABCD-EFGH")).toBeInTheDocument();
-    expect(container.querySelector("[data-caption]")).toHaveAttribute(
-      "data-caption",
-      "Connecting a device",
-    );
   });
 
   it("stays generic for other return targets", () => {

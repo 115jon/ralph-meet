@@ -148,7 +148,6 @@ function WebSignInPage() {
 
   return (
     <AuthSplitLayout
-      caption={waitingDeviceCode !== null ? "Connecting a device" : undefined}
       subtitle={
         waitingDeviceCode !== null ? (
           <DeviceWaitingNotice code={waitingDeviceCode} />
