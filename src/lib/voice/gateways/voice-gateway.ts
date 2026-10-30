@@ -84,10 +84,15 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     ticketContext: { channelId?: string; serverId?: string },
   ) {
     this.clearCredentialsOnNextPrepare = false;
+    // Only a new participant needs a new socket. A fresh token for the
+    // participant this socket already identified (the room's Ready after the
+    // ticket's bootstrap token, a credential refresh) is kept for the next
+    // identify; the voice room has already admitted this socket.
     const replacingIdentifiedGeneration =
-      this.identifySent &&
-      (this.identifiedParticipantId !== participantId ||
-        this.identifiedVoiceToken !== voiceToken);
+      this.identifySent && this.identifiedParticipantId !== participantId;
+    if (this.identifySent && !replacingIdentifiedGeneration) {
+      this.identifiedVoiceToken = voiceToken;
+    }
 
     this.participantId = participantId;
     this.voiceToken = voiceToken;

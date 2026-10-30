@@ -338,9 +338,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         event.voiceToken,
         event.iceServers,
       );
+      // The ticket's bootstrap already carries this participant's voice
+      // token, so identify on the voice socket now instead of after the room
+      // socket's Identify round trip: VoiceReady (the room's track list) and
+      // our track announcement no longer wait on MediaReady.
+      this.connectVoice();
     });
 
     this.roomGW.on("media-ready", (event) => {
+      this.markLatency("mediaReadyAt");
       if (this.isNewParticipantGeneration(event.participantId)) {
         this.resetVoiceReadinessForParticipantChange();
         this.resetMediaSessionsForParticipantChange();

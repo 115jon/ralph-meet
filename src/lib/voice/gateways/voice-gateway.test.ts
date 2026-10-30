@@ -209,6 +209,52 @@ describe("VoiceGateway", () => {
     gateway.disconnect();
   });
 
+  it("keeps an identified socket when only the voice token is refreshed", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    const connect = (token: string) =>
+      gateway.connectVoice(
+        "participant-1",
+        token,
+        "voice-server-channel",
+        (path) => `ws://meet.test${path}`,
+        { channelId: "channel", serverId: "server" },
+      );
+
+    connect("bootstrap-token");
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+
+    // The room's Ready hands over a different token for the same participant.
+    connect("ready-token");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(TestWebSocket.instances).toHaveLength(1);
+    expect(socket.readyState).toBe(TestWebSocket.OPEN);
+    expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "participant-1",
+          voice_token: "bootstrap-token",
+          supports_listen_together_snapshot_events: true,
+        },
+      },
+    ]);
+    gateway.disconnect();
+  });
+
   it("ignores a stale close callback after creating a replacement socket", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",
