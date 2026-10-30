@@ -509,6 +509,29 @@ async function issuePartyTracksSessionCapability(
   return `${payload}.${bytesToBase64Url(new Uint8Array(signature))}`;
 }
 
+let voiceJoinGrantSeq = 0;
+
+/** Stands in for the MeetingRoom's push when a session joins the channel. */
+async function grantVoiceJoin(
+  roomName: string,
+  participantId: string,
+  subject = TEST_SUBJECT,
+  granted = true,
+) {
+  const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+  const response = await room.fetch("https://internal/voice-join-grant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      participant_id: participantId,
+      subject,
+      granted,
+      seq: ++voiceJoinGrantSeq,
+    }),
+  });
+  expect(response.status).toBe(200);
+}
+
 async function identifyVoiceSocket(
   socket: WebSocket,
   participantId: string,
@@ -516,6 +539,7 @@ async function identifyVoiceSocket(
   subject = TEST_SUBJECT,
   supportsSnapshotEvents = true,
 ) {
+  await grantVoiceJoin(roomName, participantId, subject);
   const response = nextJsonMessage(socket);
   const identifyPayload: Record<string, unknown> = {
     participant_id: participantId,
@@ -1800,6 +1824,7 @@ describe("VoiceRoom lifecycle", () => {
 
     const lateObserverId = crypto.randomUUID();
     const lateObserver = await openVoiceSocket(roomName, "late-observer-user");
+    await grantVoiceJoin(roomName, lateObserverId, "late-observer-user");
     const lateReady = nextJsonMessage(lateObserver);
     lateObserver.send(
       JSON.stringify({
@@ -1853,6 +1878,11 @@ describe("VoiceRoom lifecycle", () => {
     const postStopObserverId = crypto.randomUUID();
     const postStopObserver = await openVoiceSocket(
       roomName,
+      "post-stop-observer-user",
+    );
+    await grantVoiceJoin(
+      roomName,
+      postStopObserverId,
       "post-stop-observer-user",
     );
     const postStopReady = nextJsonMessage(postStopObserver);
@@ -2324,6 +2354,7 @@ describe("VoiceRoom lifecycle", () => {
 
     const lateParticipantId = crypto.randomUUID();
     const late = await openVoiceSocket(roomName, "native-stop-late");
+    await grantVoiceJoin(roomName, lateParticipantId, "native-stop-late");
     const ready = nextJsonMessage(late);
     late.send(
       JSON.stringify({
@@ -2545,6 +2576,7 @@ describe("VoiceRoom lifecycle", () => {
 
     const lateParticipantId = crypto.randomUUID();
     const late = await openVoiceSocket(roomName, "native-disconnect-late");
+    await grantVoiceJoin(roomName, lateParticipantId, "native-disconnect-late");
     const ready = nextJsonMessage(late);
     late.send(
       JSON.stringify({
@@ -2646,6 +2678,7 @@ describe("VoiceRoom lifecycle", () => {
 
     const lateParticipantId = crypto.randomUUID();
     const late = await openVoiceSocket(roomName, "native-replay-observer");
+    await grantVoiceJoin(roomName, lateParticipantId, "native-replay-observer");
     const ready = nextJsonMessage(late);
     late.send(
       JSON.stringify({

@@ -57,6 +57,18 @@ import { verifyPartyTracksSessionCapability } from "./partytracks-proxy";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { verifyVoiceToken } from "./voice-token";
 import {
+  VOICE_JOIN_GRANT_CHECK_PATH,
+  VOICE_JOIN_GRANT_PATH,
+  VOICE_JOIN_GRANT_WAIT_MS,
+  VOICE_MEDIA_AUTHORIZATION_PATH,
+  VoiceJoinGrantStore,
+  VoiceJoinGrantWaiters,
+  parseVoiceJoinGrantQuery,
+  parseVoiceJoinGrantUpdate,
+  serializeVoiceJoinGrantQuery,
+  type VoiceJoinGrantQuery,
+} from "./voice-join-grant";
+import {
   DemoChatStore,
   type DemoChatGifPayload,
   type DemoChatMessage,
@@ -78,6 +90,7 @@ interface Env {
   TURN_TOKEN_SECRET: string;
   DB: D1Database;
   REALTIME_TICKET_SECRET?: string;
+  MEETING_ROOM?: DurableObjectNamespace;
 }
 
 // ── Opcodes (voice-specific subset) ─────────────────────────────────────────
@@ -214,6 +227,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private roomSlug: string = "";
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
   private nativeScreenOperations = new Map<string, symbol>();
+  private voiceJoinGrants: VoiceJoinGrantStore;
+  private readonly voiceJoinGrantWaiters = new VoiceJoinGrantWaiters();
+  private readonly identifyingSockets = new Set<WebSocket>();
+  private voiceJoinGrantWaitMs = VOICE_JOIN_GRANT_WAIT_MS;
 
   constructor(ctx: DurableObjectState<unknown>, env: Env) {
     super(ctx, env);
@@ -240,6 +257,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     // zombie pruning alarm to falsely evict active users after 90 seconds.
 
     this.initSchema();
+    this.voiceJoinGrants = new VoiceJoinGrantStore(this.sql);
     this.scheduleAlarm();
 
     // Ensure roomSlug is loaded BEFORE any message processing.
@@ -456,6 +474,41 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         status: 101,
         headers: { "Sec-WebSocket-Protocol": "ralph.realtime.v1" },
         webSocket: client,
+      });
+    }
+
+    if (url.pathname === VOICE_JOIN_GRANT_PATH && request.method === "POST") {
+      const update = parseVoiceJoinGrantUpdate(
+        await request.json().catch(() => null),
+      );
+      if (!update) {
+        return Response.json(
+          { error: "Invalid voice join grant" },
+          { status: 400 },
+        );
+      }
+      const applied = this.voiceJoinGrants.apply(update);
+      if (applied) {
+        this.voiceJoinGrantWaiters.notify(update.participantId);
+        if (!update.granted) {
+          await this.disconnectParticipantImmediately(update.participantId);
+        }
+      }
+      return Response.json({ applied });
+    }
+
+    if (
+      url.pathname === VOICE_MEDIA_AUTHORIZATION_PATH &&
+      request.method === "POST"
+    ) {
+      const query = parseVoiceJoinGrantQuery(
+        await request.json().catch(() => null),
+      );
+      if (!query) {
+        return Response.json({ authorized: false }, { status: 400 });
+      }
+      return Response.json({
+        authorized: await this.waitForVoiceJoinGrant(query),
       });
     }
 
@@ -729,6 +782,14 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
       this.demoChatStore.pruneExpired(now);
       this.pruneLegacySoundboardPlaybackOwners(now);
+      this.voiceJoinGrants.prune(
+        now,
+        new Set(
+          [...this.sql.exec(`SELECT id FROM participants`)].map(
+            (row) => row.id as string,
+          ),
+        ),
+      );
 
       // Check active participants for zombie timeouts using SQLite
       const participants = this.sql.exec(
@@ -1900,6 +1961,88 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       supports_listen_together_snapshot_events?: boolean;
     },
   ) {
+    if (this.identifyingSockets.has(ws)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.AlreadyAuthenticated,
+          message: "Voice identify already in progress",
+        },
+      });
+      return;
+    }
+    this.identifyingSockets.add(ws);
+    try {
+      await this.identifyVoiceParticipant(ws, d);
+    } finally {
+      this.identifyingSockets.delete(ws);
+    }
+  }
+
+  /**
+   * Waits for the MeetingRoom's join grant for this participant. A grant the
+   * MeetingRoom already pushed answers immediately; otherwise the request
+   * waits for the push (the room Identify is usually in flight) and asks the
+   * MeetingRoom once in parallel in case a push was lost.
+   */
+  private async waitForVoiceJoinGrant(
+    query: VoiceJoinGrantQuery,
+  ): Promise<boolean> {
+    const state = this.voiceJoinGrants.state(
+      query.participantId,
+      query.subject,
+    );
+    if (state !== "unknown") return state === "granted";
+
+    void this.confirmVoiceJoinGrant(query).then((confirmed) => {
+      if (!confirmed) return;
+      this.voiceJoinGrants.recordConfirmed(query);
+      this.voiceJoinGrantWaiters.notify(query.participantId);
+    });
+
+    return this.voiceJoinGrantWaiters.wait(
+      query.participantId,
+      this.voiceJoinGrantWaitMs,
+      () => {
+        const next = this.voiceJoinGrants.state(
+          query.participantId,
+          query.subject,
+        );
+        return next === "unknown" ? null : next === "granted";
+      },
+    );
+  }
+
+  private async confirmVoiceJoinGrant(
+    query: VoiceJoinGrantQuery,
+  ): Promise<boolean> {
+    const namespace = this.env.MEETING_ROOM;
+    if (!namespace || !this.roomSlug) return false;
+    try {
+      const response = await namespace
+        .get(namespace.idFromName(this.roomSlug))
+        .fetch(`https://internal${VOICE_JOIN_GRANT_CHECK_PATH}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: serializeVoiceJoinGrantQuery(query),
+        });
+      if (!response.ok) return false;
+      const body = (await response.json()) as { granted?: unknown };
+      return body.granted === true;
+    } catch (error) {
+      roomLog.warn("Voice join grant check failed", error);
+      return false;
+    }
+  }
+
+  private async identifyVoiceParticipant(
+    ws: WebSocket,
+    d: {
+      participant_id: string;
+      voice_token: string;
+      supports_listen_together_snapshot_events?: boolean;
+    },
+  ) {
     if (this.getParticipantId(ws)) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -1967,6 +2110,33 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       return;
     }
 
+    // A valid voice token only proves identity. The participant must also be
+    // joined (not standby) in this channel's MeetingRoom before it may see
+    // tracks, publish or appear to the voice room.
+    const joinWaitStartedAt = Date.now();
+    const joined = await this.waitForVoiceJoinGrant({
+      participantId: d.participant_id,
+      subject: admission.subject,
+    });
+    const joinWaitMs = Date.now() - joinWaitStartedAt;
+    if (ws.readyState !== WebSocket.OPEN || this.getParticipantId(ws)) return;
+    if (!joined) {
+      roomLog.warn(
+        `VoiceIdentify refused: participant=${d.participant_id} has not joined the channel`,
+      );
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.AdmissionRejected,
+          message: "Voice channel join required",
+        },
+      });
+      try {
+        ws.close(CloseCode.AdmissionRejected, "Voice channel join required");
+      } catch {}
+      return;
+    }
+
     const clerkUserId =
       admission.accessMode === "authenticated" ? admission.subject : undefined;
 
@@ -2025,7 +2195,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       connectionId,
     );
 
-    roomLog.info(`VoiceIdentify: participant=${d.participant_id}`);
+    roomLog.info(
+      `VoiceIdentify: participant=${d.participant_id} join_wait_ms=${joinWaitMs}`,
+    );
     const existingTracks: TrackInfo[] = [];
     const tCursor = this.sql.exec(
       "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind FROM tracks WHERE participant_id != ? AND native_screen_pending = 0",
@@ -2057,6 +2229,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         participant_id: d.participant_id,
         tracks: existingTracks,
         speaking: speakingStates,
+        join_wait_ms: joinWaitMs,
       },
     });
     this.sendStreamWatcherSnapshot(ws);

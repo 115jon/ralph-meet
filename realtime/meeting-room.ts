@@ -46,6 +46,14 @@ import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordi
 import { generateTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
 import { issueVoiceToken } from "./voice-token";
 import {
+  VOICE_JOIN_GRANT_CHECK_PATH,
+  VOICE_JOIN_GRANT_PATH,
+  createVoiceJoinGrantSequence,
+  parseVoiceJoinGrantQuery,
+  serializeVoiceJoinGrantUpdate,
+  type VoiceJoinGrantQuery,
+} from "./voice-join-grant";
+import {
   scheduleMessagePostprocessing,
   scheduleR2Cleanup,
   scheduleServerMemberCacheInvalidation,
@@ -83,6 +91,7 @@ interface Env {
   CACHE: KVNamespace;
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   DEBUG?: string;
+  VOICE_ROOM?: DurableObjectNamespace;
 }
 
 // ── Opcodes ─────────────────────────────────────────────────────────────────
@@ -327,6 +336,9 @@ export class MeetingRoom extends DurableObject<Env> {
   private profileRequestCoordinator = new ProfileRequestCoordinator();
   private profileIdentities: Map<string, ProfileIdentity> = new Map();
   private resumableSessions: Map<string, WsAttachment> = new Map();
+  /** Non-standby Identify calls in flight: participantId -> admitted subject. */
+  private identifyingVoiceJoins = new Map<string, string>();
+  private readonly nextVoiceJoinGrantSeq = createVoiceJoinGrantSequence();
   /** Per-participant replay buffer: participantId → bounded replay entries. */
   private replayBuffers: Map<string, ReplayEntry[]> = new Map();
   /** Limits storage writes while a disconnected session is being replayed. */
@@ -737,6 +749,19 @@ export class MeetingRoom extends DurableObject<Env> {
       } catch (e) {
         return new Response(`Broadcast error: ${e}`, { status: 500 });
       }
+    }
+
+    if (
+      url.pathname === VOICE_JOIN_GRANT_CHECK_PATH &&
+      request.method === "POST"
+    ) {
+      const query = parseVoiceJoinGrantQuery(
+        await request.json().catch(() => null),
+      );
+      if (!query) {
+        return Response.json({ granted: false }, { status: 400 });
+      }
+      return Response.json({ granted: this.isVoiceJoinGranted(query) });
     }
 
     if (url.pathname === "/voice-session-check" && request.method === "POST") {
@@ -1187,6 +1212,7 @@ export class MeetingRoom extends DurableObject<Env> {
           // disconnect path skips this to avoid premature removal from
           // other clients' participant lists during brief reconnects.
           const expiredSession = this.resumableSessions.get(id);
+          if (expiredSession) this.revokeVoiceJoin(expiredSession);
           if (expiredSession && !expiredSession.standby) {
             this.broadcast({
               op: Op.VoiceStateUpdate,
@@ -2153,6 +2179,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.cleanupCallsForUser(resumable.clerk_user_id, "disconnected");
     }
 
+    this.revokeVoiceJoin(resumable);
     this.resumableSessions.delete(sessionId);
     this.replayBuffers.delete(sessionId);
     this.persistResumableSessions();
@@ -2170,6 +2197,74 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     return true;
+  }
+
+  // ── Voice join grants ──────────────────────────────────────────────────
+  // The voice room only serves participants this room reports as joined.
+
+  private get grantsVoiceJoins(): boolean {
+    return (
+      !!this.env.VOICE_ROOM &&
+      this.roomSlug !== "unknown" &&
+      this.roomSlug !== "global-gateway"
+    );
+  }
+
+  private isVoiceJoinGranted({
+    participantId,
+    subject,
+  }: VoiceJoinGrantQuery): boolean {
+    if (this.identifyingVoiceJoins.get(participantId) === subject) return true;
+    for (const session of this.sessions.values()) {
+      if (session.id !== participantId) continue;
+      return !session.standby && session.admission?.subject === subject;
+    }
+    const resumable = this.resumableSessions.get(participantId);
+    return (
+      !!resumable &&
+      !resumable.standby &&
+      resumable.admission?.subject === subject
+    );
+  }
+
+  /** Pushes join state to the channel's VoiceRoom without blocking. */
+  private pushVoiceJoinGrant(
+    participantId: string,
+    subject: string | undefined,
+    granted: boolean,
+  ): void {
+    const namespace = this.env.VOICE_ROOM;
+    if (!namespace || !subject || !this.grantsVoiceJoins) return;
+    const body = serializeVoiceJoinGrantUpdate({
+      participantId,
+      subject,
+      granted,
+      seq: this.nextVoiceJoinGrantSeq(),
+    });
+    const push = namespace
+      .get(namespace.idFromName(this.roomSlug))
+      .fetch(`https://internal${VOICE_JOIN_GRANT_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      })
+      .then(async (response) => {
+        if (!response.ok) {
+          meetingLog.warn(
+            `Voice join grant push rejected: status=${response.status}`,
+          );
+        }
+        await response.body?.cancel();
+      })
+      .catch((error: unknown) => {
+        meetingLog.warn("Voice join grant push failed", error);
+      });
+    this.ctx.waitUntil(push);
+  }
+
+  private revokeVoiceJoin(session: WsAttachment): void {
+    if (session.standby) return;
+    this.pushVoiceJoinGrant(session.id, session.admission?.subject, false);
   }
 
   // ── Voice token generation ─────────────────────────────────────────────
@@ -2441,6 +2536,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    let voiceJoin: { participantId: string; subject: string } | null = null;
     try {
       const admission = this.getSessionAdmission(ws);
       if (!admission) {
@@ -2454,6 +2550,14 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
       const participantId = admission.participantId;
+      // Grant voice before the slow profile/TURN/D1 work below, so a voice
+      // Identify sent straight from the ticket bootstrap waits only for this
+      // message to arrive, not for Ready. Standby sessions never get a grant.
+      if (d.standby !== true) {
+        voiceJoin = { participantId, subject: admission.subject };
+        this.identifyingVoiceJoins.set(participantId, admission.subject);
+        this.pushVoiceJoinGrant(participantId, admission.subject, true);
+      }
       const admittedUserId =
         admission.accessMode === "authenticated"
           ? admission.subject
@@ -2654,6 +2758,13 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     } catch (err) {
       meetingLog.error("handleIdentify crashed:", err);
+      if (voiceJoin && this.getSession(ws)?.id !== voiceJoin.participantId) {
+        this.pushVoiceJoinGrant(
+          voiceJoin.participantId,
+          voiceJoin.subject,
+          false,
+        );
+      }
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -2661,6 +2772,8 @@ export class MeetingRoom extends DurableObject<Env> {
           message: `Identify failed: ${err instanceof Error ? err.message : "Unknown error"}`,
         },
       });
+    } finally {
+      if (voiceJoin) this.identifyingVoiceJoins.delete(voiceJoin.participantId);
     }
   }
 
@@ -2735,6 +2848,7 @@ export class MeetingRoom extends DurableObject<Env> {
       (d.seq_ack === currentSeq ||
         (firstRetainedSeq !== undefined && firstRetainedSeq <= d.seq_ack + 1));
     if (!cursorIsValid) {
+      this.revokeVoiceJoin(oldAttachment);
       this.resumableSessions.delete(d.session_id);
       this.replayBuffers.delete(d.session_id);
       this.persistResumableSessions();
@@ -2759,6 +2873,7 @@ export class MeetingRoom extends DurableObject<Env> {
         RESUME_GRACE_PERIOD_MS,
       )
     ) {
+      this.revokeVoiceJoin(oldAttachment);
       this.resumableSessions.delete(d.session_id);
       this.replayBuffers.delete(d.session_id);
       this.persistResumableSessions();
@@ -2791,6 +2906,14 @@ export class MeetingRoom extends DurableObject<Env> {
     this.pendingResumeMessages.set(ws, []);
     try {
       this.persist(ws, resumedAttachment);
+      // Re-assert the grant in case the voice room lost or pruned it.
+      if (!resumedAttachment.standby) {
+        this.pushVoiceJoinGrant(
+          resumedAttachment.id,
+          resumedAttachment.admission?.subject,
+          true,
+        );
+      }
 
       await this.restoreSessionSubscriptions(ws, resumedAttachment);
 
@@ -2961,6 +3084,7 @@ export class MeetingRoom extends DurableObject<Env> {
         if (d.self_mute !== undefined) session.self_mute = d.self_mute;
         if (d.self_deaf !== undefined) session.self_deaf = d.self_deaf;
         this.persist(ws, session);
+        this.pushVoiceJoinGrant(session.id, session.admission?.subject, true);
         this.broadcast(
           {
             op: Op.VoiceStateUpdate,
@@ -3245,6 +3369,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // Ensure the alarm keeps running to prune expired resumable sessions
       this.ctx.waitUntil(this.scheduleAlarm());
     } else {
+      this.revokeVoiceJoin(session);
       this.resumableSessions.delete(participantId);
       this.replayBuffers.delete(participantId);
       this.replayPersistWrites.delete(participantId);
