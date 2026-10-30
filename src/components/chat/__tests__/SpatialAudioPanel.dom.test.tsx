@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { GridItem } from "@/components/voice/types";
 import { DEFAULT_SHARED_SPATIAL_STATE } from "@/lib/voice/spatial-audio";
+import { useChatStore } from "@/stores/chat-store";
 import { SpatialAudioPanel } from "../SpatialAudioPanel";
 
 const ANCHOR_RECT = {
@@ -78,6 +80,54 @@ describe("SpatialAudioPanel dismissal", () => {
     const panel = await screen.findByRole("dialog", { name: "Spatial audio" });
     fireEvent.keyDown(panel, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+    trigger.remove();
+  });
+});
+
+describe("SpatialAudioPanel speaking rings", () => {
+  const remote: GridItem = {
+    id: "ada-camera",
+    userId: "ada",
+    name: "Ada",
+    stream: null,
+    isLocal: false,
+    type: "avatar",
+    isStreaming: false,
+    isMuted: false,
+    isDeafened: false,
+  };
+
+  it("lights an avatar from the per-user speaking set, not the grid item", async () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    useChatStore.setState({ speakingUsers: {} });
+    render(
+      <SpatialAudioPanel
+        isOpen
+        anchorRef={{ current: trigger }}
+        gridItems={[remote]}
+        spatialAudioState={DEFAULT_SHARED_SPATIAL_STATE}
+        onUpdateSpatialAudioState={() => {}}
+        localSpatialEnabled
+        localHighFidelity
+        localUserId="user-1"
+        onLocalSpatialEnabledChange={() => {}}
+        onOpenVoiceSettings={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const avatar = await screen.findByTitle("Ada is not hearing spatial audio");
+    expect(avatar).not.toHaveAttribute("data-speaking");
+
+    act(() => {
+      useChatStore.setState({ speakingUsers: { ada: true } });
+    });
+    expect(avatar).toHaveAttribute("data-speaking");
+
+    act(() => {
+      useChatStore.setState({ speakingUsers: {} });
+    });
+    expect(avatar).not.toHaveAttribute("data-speaking");
     trigger.remove();
   });
 });

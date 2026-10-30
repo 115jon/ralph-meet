@@ -12,7 +12,7 @@ export function AudioCompatibilityHint({ children }: { children: ReactNode }) {
       <TooltipTrigger asChild>
         <span
           aria-label="Audio compatibility information"
-          className="ml-1 inline-flex cursor-help align-[-2px] text-rm-text-muted/80 pointer-fine:hover:text-rm-text"
+          className="ml-1 inline-flex cursor-help align-[-2px] rounded-xs text-ink-3 pointer-fine:hover:text-ink-1"
           tabIndex={0}
         >
           <Icon name="info" size="xs" />

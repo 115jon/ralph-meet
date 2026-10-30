@@ -1,4 +1,5 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { clog } from "@/lib/console-logger";
 import {
@@ -28,7 +29,10 @@ import { useChatStore } from "@/stores/chat-store";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import ContextMenu from "./ContextMenu";
 import InlineEmojiText from "./InlineEmojiText";
-import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
+import {
+  ListenTogetherNowPlayingCard,
+  ListenTogetherProgress,
+} from "./ListenTogetherNowPlayingCard";
 import {
   getListenTogetherContextMenuItems,
   getListenTogetherResultActions,
@@ -45,9 +49,13 @@ import {
   formatListenTogetherDuration,
   useListenTogetherPlaybackState,
 } from "./listen-together-playback";
-import { Button, Spinner } from "@/components/ui/button";
-import { Icon, type IconName } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
+import { Led, type LedState } from "@/components/ui/led";
+import { Num } from "@/components/ui/num";
 import { Tabs, tabId } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -79,28 +87,61 @@ function buildResolveFeedback(resolvedCount: number, skippedCount: number) {
   return `Queued ${resolvedCount} ${resolvedLabel}, skipped ${skippedCount}.`;
 }
 
-/** Empty state (design system 14.1): icon, title, one line, no card. */
-function ListenTogetherEmpty({
-  icon,
-  title,
-  body,
-}: {
-  icon: IconName;
-  title: string;
-  body: string;
-}) {
+/**
+ * Tracklist rows (J-card): title, one ink-3 line, running time right-aligned
+ * in Num. Row actions are a small toolbar over the row's end, revealed on
+ * hover or keyboard focus; on touch they sit in the row, always visible.
+ */
+const TRACK_ROW =
+  "group/row relative grid items-center gap-x-3 rounded-md px-2 py-1.5 outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1 has-focus-visible:bg-tint-1";
+const ROW_TITLE = "truncate text-ui-row font-medium text-ink-1";
+const ROW_META =
+  "flex min-w-0 items-center gap-1.5 truncate text-ui-xs text-ink-3";
+const ROW_TIME =
+  "justify-self-end text-ink-3 transition-opacity duration-(--dur-1) ease-out pointer-fine:group-hover/row:opacity-0 pointer-fine:group-has-focus-visible/row:opacity-0";
+const ROW_ACTIONS =
+  "flex items-center gap-1 pointer-coarse:col-span-full pointer-coarse:mt-1.5 pointer-coarse:justify-end pointer-fine:pointer-events-none pointer-fine:absolute pointer-fine:inset-y-0 pointer-fine:right-1 pointer-fine:my-auto pointer-fine:h-fit pointer-fine:rounded-md pointer-fine:border pointer-fine:border-line pointer-fine:bg-ply-3 pointer-fine:p-0.5 pointer-fine:opacity-0 pointer-fine:shadow-float pointer-fine:transition-opacity pointer-fine:duration-(--dur-1) pointer-fine:ease-out pointer-fine:group-hover/row:pointer-events-auto pointer-fine:group-hover/row:opacity-100 pointer-fine:group-has-focus-visible/row:pointer-events-auto pointer-fine:group-has-focus-visible/row:opacity-100";
+
+function TrackArt({ src, alt = "" }: { src?: string | null; alt?: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-      <Icon
-        name={icon}
-        size="3xl"
-        className="text-rm-text-muted max-md:size-8"
-      />
-      <p className="text-ui-md font-semibold text-rm-text">{title}</p>
-      <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
-        {body}
-      </p>
+    <div className="size-8 shrink-0 overflow-hidden rounded-sm bg-tint-1">
+      {src ? (
+        <img src={src} alt={alt} className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-ink-3">
+          <Icon name="music" size="sm" />
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * The now-playing row's own subscription: its glyph and the lit path that
+ * runs under it. The memoised row above it never re-renders for playback.
+ */
+function CurrentTrackGlyph({ roomSlug }: { roomSlug?: string | null }) {
+  const { isPaused } = useListenTogetherPlaybackState(roomSlug);
+  return (
+    <Icon
+      name={isPaused ? "pause" : "play"}
+      state="active"
+      size="sm"
+      className="text-path"
+      label={isPaused ? "Paused" : "Now playing"}
+    />
+  );
+}
+
+function CurrentTrackProgress({ roomSlug }: { roomSlug?: string | null }) {
+  const playback = useListenTogetherPlaybackState(roomSlug);
+  return (
+    <ListenTogetherProgress
+      playback={playback}
+      tone="path"
+      marker
+      className="col-start-3 mt-1.5"
+    />
   );
 }
 
@@ -159,52 +200,33 @@ export const listenTogetherQueueRowRenderer = {
 
     return (
       <div
-        className={cn(
-          "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2.5 transition-colors duration-150 md:gap-3 md:py-3",
-          isCurrent ? "bg-rm-accent-tint" : "pointer-fine:hover:bg-rm-tint-1",
-        )}
+        data-queue-row={entry.entryId}
+        aria-current={isCurrent ? "true" : undefined}
+        className={cn(TRACK_ROW, "grid-cols-[20px_32px_minmax(0,1fr)_auto]")}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center text-ui-xs font-semibold tabular-nums text-rm-text-muted">
+        <div className="flex justify-center">
           {isCurrent ? (
-            <span className="h-2 w-2 rounded-full bg-rm-accent-ink" />
+            <CurrentTrackGlyph roomSlug={roomSlug} />
           ) : (
-            index + 1
+            <Num className="text-ink-3">{index + 1}</Num>
           )}
         </div>
-        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-rm-tint-1 md:h-11 md:w-11">
-          {entry.track.artworkUrl ? (
-            <img
-              src={entry.track.artworkUrl}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-              <Icon name="headphones" size="sm" />
-            </div>
-          )}
-        </div>
+        <TrackArt src={entry.track.artworkUrl} />
         <div className="min-w-0">
-          <div className="truncate text-ui-sm font-semibold text-rm-text">
-            {entry.track.title}
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-ui-2xs text-rm-text-muted md:gap-2 md:text-ui-xs">
+          <div className={ROW_TITLE}>{entry.track.title}</div>
+          <div className={ROW_META}>
             <span className="truncate">
               {entry.track.artist || entry.track.sourceLabel}
             </span>
-            <span aria-hidden="true">•</span>
-            <span className="shrink-0">{entry.track.sourceLabel}</span>
-            {entry.track.kind === "music" && (
-              <>
-                <span aria-hidden="true">•</span>
-                <span className="shrink-0 tabular-nums">
-                  {formatListenTogetherDuration(entry.track.durationMs)}
-                </span>
-              </>
-            )}
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-ui-2xs text-rm-text-muted/75">
-            <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
+            <span aria-hidden="true">·</span>
+            <span
+              className={cn(
+                "size-4 shrink-0 bg-tint-3",
+                avatarShape(
+                  entry.requester.avatarUrl && entry.requester.avatarDisplay,
+                ),
+              )}
+            >
               {entry.requester.avatarUrl ? (
                 <AvatarImage
                   src={getAuthAssetUrl(entry.requester.avatarUrl)}
@@ -212,28 +234,35 @@ export const listenTogetherQueueRowRenderer = {
                   display={entry.requester.avatarDisplay}
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-rm-text-muted">
+                <span className="flex h-full w-full items-center justify-center text-ui-2xs">
                   {entry.requester.displayName.charAt(0).toUpperCase()}
-                </div>
+                </span>
               )}
-            </div>
+            </span>
             <InlineEmojiText
               text={entry.requester.displayName}
               className="truncate"
             />
             {entry.importBatchLabel && (
               <>
-                <span aria-hidden="true">•</span>
+                <span aria-hidden="true">·</span>
                 <span className="truncate">{entry.importBatchLabel}</span>
               </>
             )}
           </div>
         </div>
-        <div className="flex shrink-0 gap-1">
+        {entry.track.kind === "music" ? (
+          <Num className={ROW_TIME}>
+            {formatListenTogetherDuration(entry.track.durationMs)}
+          </Num>
+        ) : (
+          <span className={cn(ROW_TIME, "text-ui-xs")}>Radio</span>
+        )}
+        <div className={ROW_ACTIONS}>
           {!isCurrent && (
             <IconButton
               icon="play"
-              variant="muted"
+              size={28}
               onClick={() =>
                 sendQueueCommand({
                   type: "listen_together.play",
@@ -246,6 +275,7 @@ export const listenTogetherQueueRowRenderer = {
           )}
           <IconButton
             icon="trash"
+            size={28}
             variant="destructive"
             onClick={() =>
               sendQueueCommand({
@@ -257,6 +287,7 @@ export const listenTogetherQueueRowRenderer = {
             aria-label={`Remove ${entry.track.title}`}
           />
         </div>
+        {isCurrent ? <CurrentTrackProgress roomSlug={roomSlug} /> : null}
       </div>
     );
   },
@@ -275,6 +306,8 @@ export function ListenTogetherPanel({
   channelId,
   localUserId,
 }: ListenTogetherPanelProps) {
+  // No ticking: the panel re-renders on room changes only; the progress
+  // moves in CSS and the clock ticks in its own leaf.
   const playback = useListenTogetherPlaybackState(roomSlug);
   const { error, snapshot } = playback;
   const currentUser = useChatStore((state) => state.user);
@@ -854,8 +887,20 @@ export function ListenTogetherPanel({
       return;
     }
     setMenuLabel(`Actions for ${result.title}`);
+    // A keyboard press has no pointer position: open under the button.
+    const anchor =
+      event.type === "click" &&
+      event.detail === 0 &&
+      event.currentTarget instanceof Element
+        ? event.currentTarget.getBoundingClientRect()
+        : null;
     openMenu(
-      event,
+      anchor
+        ? new MouseEvent("contextmenu", {
+            clientX: anchor.left,
+            clientY: anchor.bottom + 4,
+          })
+        : event,
       getListenTogetherContextMenuItems(actions, (action) => {
         void handleResultAction(result, action);
       }),
@@ -876,17 +921,17 @@ export function ListenTogetherPanel({
     persistWorkspacePaneRatio(clamped);
   };
 
-  const roomSyncLabel = !roomSlug
-    ? "No room"
+  const roomSync: { label: string; led: LedState } = !roomSlug
+    ? { label: "No room", led: "off" }
     : !sfu
-      ? "Connect to listen"
+      ? { label: "Connect to listen", led: "off" }
       : sfu.voiceGW.isReady === false
-        ? "Connecting"
+        ? { label: "Connecting", led: "idle" }
         : error
-          ? "Sync issue"
+          ? { label: "Sync issue", led: "muted" }
           : snapshot
-            ? "Room synced"
-            : "Waiting for room";
+            ? { label: "Room synced", led: "talk" }
+            : { label: "Waiting for room", led: "idle" };
 
   const isResolveMode = inputMode === "resolve";
 
@@ -898,132 +943,122 @@ export function ListenTogetherPanel({
           "--listen-together-left-pane": `${workspacePaneRatio * 100}%`,
         } as React.CSSProperties
       }
-      className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3 md:gap-4 md:p-4 lg:grid lg:grid-cols-[minmax(280px,var(--listen-together-left-pane))_8px_minmax(0,1fr)] lg:overflow-hidden"
+      className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-3 md:p-4 lg:grid lg:grid-cols-[minmax(280px,var(--listen-together-left-pane))_9px_minmax(0,1fr)] lg:gap-3 lg:overflow-hidden"
     >
-      <section className="flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface lg:min-h-0">
-        <div className="border-b border-rm-border px-4 py-4 md:px-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-              <Icon
-                name="headphones"
-                size="sm"
-                className="text-rm-accent-ink"
-              />
+      <section
+        aria-labelledby="listen-together-add-title"
+        className="flex min-h-[280px] min-w-0 flex-col overflow-hidden lg:min-h-0"
+      >
+        <div className="flex flex-col gap-3 pb-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3
+              id="listen-together-add-title"
+              className="text-ui-sm font-semibold text-ink-1"
+            >
               Add to queue
-            </div>
-            <span className="text-ui-2xs text-rm-text-muted">
-              YouTube · Spotify
-            </span>
+            </h3>
+            <span className="text-ui-xs text-ink-3">YouTube · Spotify</span>
           </div>
-          <p className="mt-2 max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
+          <p className="max-w-[44ch] text-pretty text-ui-sm text-ink-2">
             Search a track or paste a link. Everyone in the room hears the same
             queue.
           </p>
-          <div className="mt-4 flex flex-col gap-3">
-            <form
-              className="flex flex-col gap-2 md:flex-row"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!trimmedInput || !voiceSessionHeaders) return;
-                if (isResolveMode) return;
+          <form
+            className="flex flex-col gap-2 md:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!trimmedInput || !voiceSessionHeaders) return;
+              if (isResolveMode) return;
 
-                recordSearchQuery(trimmedInput);
-                void runSearch(trimmedInput);
-              }}
-            >
-              <div className="relative flex-1">
-                {isResolveMode ? (
-                  <Icon
-                    name="link"
-                    size="sm"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-                  />
-                ) : (
-                  <Icon
-                    name="search"
-                    size="sm"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-                  />
-                )}
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={inputValue}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => {
-                    window.setTimeout(() => {
-                      if (document.activeElement !== searchInputRef.current) {
-                        setIsSearchFocused(false);
-                      }
-                    }, 0);
-                  }}
-                  onChange={(event) => {
-                    setInputValue(event.target.value);
-                    setResolveFeedback(null);
-                  }}
-                  placeholder="Search or paste YouTube / Spotify links"
-                  className="h-11 w-full rounded-md border border-rm-field-edge bg-transparent pl-10 pr-4 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted md:h-9 md:text-ui-sm"
-                />
-              </div>
-              {!isResolveMode && (
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  loading={isSearching}
-                  disabled={!trimmedInput || !voiceSessionHeaders}
-                  className="h-11 md:h-9"
-                >
-                  Search
-                </Button>
-              )}
-            </form>
-            <Tabs
-              label="Search for"
-              idBase="listen-together-filter"
-              panelId="listen-together-results"
-              items={[
-                { value: "track", label: "Tracks" },
-                { value: "collection", label: "Collections" },
-              ]}
-              value={searchFilter}
-              onValueChange={setSearchFilter}
-              className="h-8"
-            />
-            {resolveFeedback && (
-              <div
-                role="status"
-                className="rounded-md bg-rm-tint-1 px-3 py-2 text-ui-sm text-rm-text-secondary"
+              recordSearchQuery(trimmedInput);
+              void runSearch(trimmedInput);
+            }}
+          >
+            <div className="relative flex-1">
+              <Icon
+                name={isResolveMode ? "link" : "search"}
+                size="sm"
+                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-3"
+              />
+              <Input
+                ref={searchInputRef}
+                type="text"
+                value={inputValue}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => {
+                  window.setTimeout(() => {
+                    if (document.activeElement !== searchInputRef.current) {
+                      setIsSearchFocused(false);
+                    }
+                  }, 0);
+                }}
+                onChange={(event) => {
+                  setInputValue(event.target.value);
+                  setResolveFeedback(null);
+                }}
+                aria-label="Search or paste a link"
+                placeholder="Search or paste YouTube / Spotify links"
+                className="pl-8 max-md:h-10"
+              />
+            </div>
+            {!isResolveMode && (
+              <Button
+                type="submit"
+                variant="secondary"
+                loading={isSearching}
+                disabled={!trimmedInput || !voiceSessionHeaders}
+                className="max-md:h-10"
               >
-                {resolveFeedback}
-              </div>
+                Search
+              </Button>
             )}
-            {error && (
-              <div className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
-                <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
-                {describeListenTogetherError(error, "update the queue")}
-              </div>
-            )}
-          </div>
+          </form>
+          <Tabs
+            label="Search for"
+            idBase="listen-together-filter"
+            panelId="listen-together-results"
+            items={[
+              { value: "track", label: "Tracks" },
+              { value: "collection", label: "Collections" },
+            ]}
+            value={searchFilter}
+            onValueChange={setSearchFilter}
+            className="h-8 border-b border-line"
+          />
+          {resolveFeedback && (
+            <div
+              role="status"
+              className="rounded-md bg-tint-1 px-3 py-2 text-ui-sm text-ink-2"
+            >
+              {resolveFeedback}
+            </div>
+          )}
+          {error && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-md bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink"
+            >
+              <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
+              {describeListenTogetherError(error, "update the queue")}
+            </div>
+          )}
         </div>
 
         <div
           id="listen-together-results"
           role="tabpanel"
           aria-labelledby={tabId("listen-together-filter", searchFilter)}
-          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5"
+          className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1"
         >
           {isResolving ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-rm-text-secondary">
-              <Spinner className="size-6" />
-              <span className="text-ui-sm">Resolving link preview…</span>
-            </div>
+            <EmptyState size="sm" loading title="Resolving link preview…" />
           ) : resolvedPreview ? (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-2">
               <div
-                className="flex gap-3 rounded-lg bg-rm-accent-tint p-3"
+                className="flex gap-3 rounded-lg bg-tint-1 p-3"
                 onDoubleClick={playResolvedPreview}
               >
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
+                <div className="size-14 shrink-0 overflow-hidden rounded-md bg-tint-1">
                   {resolvedPreview.collection?.artworkUrl ||
                   resolvedPreview.tracks[0]?.artworkUrl ? (
                     <img
@@ -1036,24 +1071,24 @@ export function ListenTogetherPanel({
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                      <Icon name="headphones" size="lg" />
+                    <div className="flex h-full w-full items-center justify-center text-ink-3">
+                      <Icon name="music" size="lg" />
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-ui-sm font-semibold text-rm-text">
+                  <div className={ROW_TITLE}>
                     {resolvedPreview.collection?.title ??
                       resolvedPreview.tracks[0]?.title}
                   </div>
-                  <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
+                  <div className="truncate text-ui-xs text-ink-3">
                     {resolvedPreview.collection
                       ? [
                           resolvedPreview.collection.subtitle,
                           `${resolvedPreview.resolvedCount} tracks`,
                         ]
                           .filter(Boolean)
-                          .join(" • ")
+                          .join(" · ")
                       : [
                           resolvedPreview.tracks[0]?.artist,
                           formatListenTogetherDuration(
@@ -1063,11 +1098,11 @@ export function ListenTogetherPanel({
                           ),
                         ]
                           .filter(Boolean)
-                          .join(" • ")}
+                          .join(" · ")}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button size="sm" onClick={playResolvedPreview}>
-                      <Icon name="play" size="sm" />
+                      <Icon name="play" state="active" size="sm" />
                       Play now
                     </Button>
                     <Button
@@ -1082,51 +1117,47 @@ export function ListenTogetherPanel({
               </div>
               {resolvedPreview.collection &&
                 resolvedPreview.tracks.length > 1 && (
-                  <div className="space-y-2">
+                  <ol className="flex flex-col">
                     {resolvedPreview.tracks.map((track, index) => (
-                      <div
+                      <li
                         key={`${track.id}:${index}`}
-                        className="flex items-center gap-3 rounded-md bg-rm-tint-1 px-3 py-2"
-                      >
-                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-sm bg-rm-tint-1">
-                          {track.artworkUrl ? (
-                            <img
-                              src={track.artworkUrl}
-                              alt={`${track.title} artwork`}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                              <Icon name="headphones" size="sm" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-ui-xs font-semibold text-rm-text">
-                            {track.title}
-                          </div>
-                          <div className="truncate text-ui-2xs text-rm-text-muted">
-                            {track.artist || track.sourceLabel}
-                          </div>
-                        </div>
-                        {track.kind === "music" && (
-                          <span className="shrink-0 text-ui-2xs tabular-nums text-rm-text-muted">
-                            {formatListenTogetherDuration(track.durationMs)}
-                          </span>
+                        className={cn(
+                          TRACK_ROW,
+                          "grid-cols-[20px_32px_minmax(0,1fr)_auto]",
                         )}
-                      </div>
+                      >
+                        <Num className="text-center text-ink-3">
+                          {index + 1}
+                        </Num>
+                        <TrackArt
+                          src={track.artworkUrl}
+                          alt={`${track.title} artwork`}
+                        />
+                        <div className="min-w-0">
+                          <div className={ROW_TITLE}>{track.title}</div>
+                          <div className={ROW_META}>
+                            <span className="truncate">
+                              {track.artist || track.sourceLabel}
+                            </span>
+                          </div>
+                        </div>
+                        {track.kind === "music" ? (
+                          <Num className="text-ink-3">
+                            {formatListenTogetherDuration(track.durationMs)}
+                          </Num>
+                        ) : (
+                          <span />
+                        )}
+                      </li>
                     ))}
-                  </div>
+                  </ol>
                 )}
             </div>
           ) : isSearching ? (
-            <div className="flex items-center justify-center py-12 text-rm-text-secondary">
-              <Spinner className="size-6" />
-              <span className="sr-only">Loading</span>
-            </div>
+            <EmptyState size="sm" loading title="Searching…" />
           ) : isSearchFocused && !trimmedInput && queryHistory.length > 0 ? (
-            <div className="space-y-2">
-              <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-1 text-rm-text-muted">
+            <div className="flex flex-col">
+              <div className="px-2 pb-1 text-ui-xs text-ink-3">
                 Recent searches
               </div>
               {queryHistory.map((query) => (
@@ -1139,12 +1170,12 @@ export function ListenTogetherPanel({
                     setIsSearchFocused(true);
                     void runSearch(query);
                   }}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-ui-sm text-rm-text outline-none transition-colors duration-150 pointer-fine:hover:bg-rm-tint-2 md:min-h-9"
+                  className="flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-ui-sm text-ink-1 outline-none transition-colors duration-(--dur-1) ease-out focus-visible:outline-2 focus-visible:outline-focus pointer-fine:hover:bg-tint-1 pointer-coarse:h-11"
                 >
                   <Icon
                     name="search"
                     size="sm"
-                    className="shrink-0 text-rm-text-muted"
+                    className="shrink-0 text-ink-3"
                   />
                   <span className="truncate">{query}</span>
                 </button>
@@ -1152,25 +1183,25 @@ export function ListenTogetherPanel({
             </div>
           ) : searchResults.length === 0 ? (
             deferredSearchQuery ? (
-              <ListenTogetherEmpty
-                icon="search"
+              <EmptyState
+                size="sm"
                 title="No results"
-                body="Nothing matched that search. Try another title or artist, or paste a link."
+                description="Nothing matched that search. Try another title or artist, or paste a link."
               />
             ) : (
-              <ListenTogetherEmpty
-                icon="headphones"
+              <EmptyState
+                size="sm"
                 title="Find something to play"
-                body="Search tracks or collections, or paste a YouTube or Spotify link to queue music together."
+                description="Search tracks or collections, or paste a YouTube or Spotify link to queue music together."
               />
             )
           ) : (
-            <TooltipProvider delayDuration={100}>
-              <div className="space-y-3">
+            <TooltipProvider>
+              <ul className="flex flex-col">
                 {searchResults.map((result, index) => {
                   const isTrack = result.kind === "track";
                   return (
-                    <div
+                    <li
                       key={`${result.kind}:${result.id}:${index}`}
                       onContextMenu={(event) =>
                         presentResultActions(event, result)
@@ -1189,12 +1220,12 @@ export function ListenTogetherPanel({
                           : undefined
                       }
                       className={cn(
-                        "flex gap-3 rounded-lg bg-rm-tint-1 p-3 transition-colors duration-150",
-                        isTrack &&
-                          "select-none pointer-fine:hover:bg-rm-tint-2",
+                        TRACK_ROW,
+                        "grid-cols-[40px_minmax(0,1fr)_auto]",
+                        isTrack && "select-none",
                       )}
                     >
-                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
+                      <div className="size-10 shrink-0 overflow-hidden rounded-sm bg-tint-1">
                         {result.artworkUrl ? (
                           <img
                             src={result.artworkUrl}
@@ -1202,95 +1233,95 @@ export function ListenTogetherPanel({
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                            <Icon name="headphones" size="lg" />
+                          <div className="flex h-full w-full items-center justify-center text-ink-3">
+                            <Icon
+                              name={isTrack ? "music" : "playlist"}
+                              size="md"
+                            />
                           </div>
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-ui-sm font-semibold text-rm-text">
-                          {result.title}
-                        </div>
-                        <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
-                          {isTrack
-                            ? [
-                                result.artist,
-                                formatListenTogetherDuration(result.durationMs),
-                              ]
-                                .filter(Boolean)
-                                .join(" • ")
-                            : [result.subtitle, `${result.itemCount} items`]
-                                .filter(Boolean)
-                                .join(" • ")}
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {isTrack ? (
-                            <>
-                              <IconButton
-                                icon="play"
-                                variant="muted"
-                                tooltip="Play now"
-                                aria-label={`Play ${result.title} now`}
-                                onClick={() =>
-                                  void handleResultAction(result, "play-now")
-                                }
-                              />
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  enqueueTracks(
-                                    [convertSearchTrackToMusicTrack(result)],
-                                    "play-next",
-                                  )
-                                }
-                              >
-                                Play next
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  enqueueTracks(
-                                    [convertSearchTrackToMusicTrack(result)],
-                                    "append",
-                                  )
-                                }
-                              >
-                                Queue
-                              </Button>
-                              <ListenTogetherResultActionTrigger
-                                label={result.title}
-                                onClick={(event) =>
-                                  presentResultActions(event, result)
-                                }
-                              />
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  void queueSourceUrl(result.sourceUrl)
-                                }
-                              >
-                                Queue collection
-                              </Button>
-                              <ListenTogetherResultActionTrigger
-                                label={result.title}
-                                onClick={(event) =>
-                                  presentResultActions(event, result)
-                                }
-                              />
-                            </>
-                          )}
+                      <div className="min-w-0">
+                        <div className={ROW_TITLE}>{result.title}</div>
+                        <div className={ROW_META}>
+                          <span className="truncate">
+                            {isTrack
+                              ? result.artist || result.sourceLabel
+                              : [result.subtitle, `${result.itemCount} items`]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                          </span>
                         </div>
                       </div>
-                    </div>
+                      {isTrack ? (
+                        <Num className={ROW_TIME}>
+                          {formatListenTogetherDuration(result.durationMs)}
+                        </Num>
+                      ) : (
+                        <span className={cn(ROW_TIME, "text-ui-xs")}>
+                          Collection
+                        </span>
+                      )}
+                      <div className={ROW_ACTIONS}>
+                        {isTrack ? (
+                          <>
+                            <IconButton
+                              icon="play"
+                              iconState="active"
+                              size={28}
+                              tooltip="Play now"
+                              aria-label={`Play ${result.title} now`}
+                              onClick={() =>
+                                void handleResultAction(result, "play-now")
+                              }
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                enqueueTracks(
+                                  [convertSearchTrackToMusicTrack(result)],
+                                  "play-next",
+                                )
+                              }
+                            >
+                              Play next
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                enqueueTracks(
+                                  [convertSearchTrackToMusicTrack(result)],
+                                  "append",
+                                )
+                              }
+                            >
+                              Queue
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              void queueSourceUrl(result.sourceUrl)
+                            }
+                          >
+                            Queue collection
+                          </Button>
+                        )}
+                        <ListenTogetherResultActionTrigger
+                          label={result.title}
+                          onClick={(event) =>
+                            presentResultActions(event, result)
+                          }
+                        />
+                      </div>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </TooltipProvider>
           )}
         </div>
@@ -1319,25 +1350,33 @@ export function ListenTogetherPanel({
           persistWorkspacePaneRatio(paneRatioRef.current);
         }}
         onKeyDown={handlePaneKeyDown}
-        className="group relative hidden min-h-0 cursor-col-resize items-center justify-center rounded-full outline-none lg:flex"
+        className="group relative hidden min-h-0 cursor-col-resize items-center justify-center rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus lg:flex"
       >
-        <span className="h-16 w-1 rounded-full bg-rm-border-strong transition-colors duration-150 pointer-fine:group-hover:bg-rm-accent-ink group-focus-visible:bg-rm-accent-ink" />
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line"
+        />
+        <span
+          aria-hidden
+          className="relative h-8 w-1 rounded-full bg-line-strong opacity-0 transition-opacity duration-(--dur-1) ease-out group-focus-visible:opacity-100 pointer-fine:group-hover:opacity-100"
+        />
       </button>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-rm-border pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-        <div className="shrink-0 rounded-lg border border-rm-border bg-rm-bg-surface p-4 md:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-              <Icon
-                name="headphones"
-                size="sm"
-                className="text-rm-accent-ink"
-              />
+      <section
+        aria-labelledby="listen-together-now-title"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-line pt-4 lg:border-t-0 lg:pt-0"
+      >
+        <div className="shrink-0">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h3
+              id="listen-together-now-title"
+              className="text-ui-sm font-semibold text-ink-1"
+            >
               Now playing
-            </div>
-            <span className="inline-flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
-              <span className="h-1.5 w-1.5 rounded-full bg-rm-accent-ink" />
-              {roomSyncLabel}
+            </h3>
+            <span className="inline-flex items-center gap-1.5 text-ui-xs text-ink-3">
+              <Led state={roomSync.led} />
+              {roomSync.label}
             </span>
           </div>
           <ListenTogetherNowPlayingCard
@@ -1348,7 +1387,7 @@ export function ListenTogetherPanel({
           />
         </div>
 
-        <div className="flex min-h-[260px] min-w-0 flex-1 flex-col pt-4 md:pt-5">
+        <div className="flex min-h-[260px] min-w-0 flex-1 flex-col pt-4">
           <Tabs
             label="Listen Together room activity"
             idBase="listen-together"
@@ -1358,116 +1397,110 @@ export function ListenTogetherPanel({
                 value: "queue",
                 label: "Queue",
                 adornment: (
-                  <span className="text-ui-2xs tabular-nums text-rm-text-muted">
+                  <Num className="text-ink-3">
                     {snapshot?.queue?.length ?? 0}
-                  </span>
+                  </Num>
                 ),
               },
               {
                 value: "recently-played",
                 label: "Recently played",
                 adornment: (
-                  <span className="text-ui-2xs tabular-nums text-rm-text-muted">
+                  <Num className="text-ink-3">
                     {snapshot?.recentlyPlayed?.length ?? 0}
-                  </span>
+                  </Num>
                 ),
               },
             ]}
             value={activeRightTab}
             onValueChange={setActiveRightTab}
-            className="mb-3 h-9 shrink-0 border-b border-rm-border"
+            className="mb-2 h-9 shrink-0 border-b border-line"
           />
           <div
             id="listen-together-activity-panel"
             role="tabpanel"
             aria-labelledby={tabId("listen-together", activeRightTab)}
-            className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1"
+            className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1"
           >
             {activeRightTab === "queue" ? (
               snapshot?.queue?.length ? (
-                <div className="flex flex-col gap-1">
+                <ol className="flex flex-col">
                   {snapshot.queue.map((entry, index) => (
-                    <ListenTogetherQueueRow
-                      key={entry.entryId}
-                      entry={entry}
-                      index={index}
-                      isCurrent={entry.entryId === snapshot.currentEntryId}
-                      roomSlug={roomSlug}
-                      sfu={sfu}
-                      onCommandRejected={handleQueueCommandRejected}
-                      onCommandAccepted={handleQueueCommandAccepted}
-                    />
+                    <li key={entry.entryId}>
+                      <ListenTogetherQueueRow
+                        entry={entry}
+                        index={index}
+                        isCurrent={entry.entryId === snapshot.currentEntryId}
+                        roomSlug={roomSlug}
+                        sfu={sfu}
+                        onCommandRejected={handleQueueCommandRejected}
+                        onCommandAccepted={handleQueueCommandAccepted}
+                      />
+                    </li>
                   ))}
-                </div>
+                </ol>
               ) : (
-                <ListenTogetherEmpty
-                  icon="playlist"
+                <EmptyState
+                  size="sm"
                   title="Queue is empty"
-                  body="Search or paste a link to add the first track."
+                  description="Search or paste a link to add the first track."
                 />
               )
             ) : snapshot?.recentlyPlayed?.length ? (
-              <div className="space-y-2">
+              <ol className="flex flex-col">
                 {snapshot.recentlyPlayed.map((historyEntry) => (
-                  <div
+                  <li
                     key={historyEntry.historyId}
-                    className="flex items-center gap-3 rounded-lg bg-rm-tint-1 p-3"
+                    className={cn(
+                      TRACK_ROW,
+                      "grid-cols-[32px_minmax(0,1fr)_auto]",
+                    )}
                   >
-                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
-                      {historyEntry.entry.track.artworkUrl ? (
-                        <img
-                          src={historyEntry.entry.track.artworkUrl}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                          <Icon name="headphones" size="sm" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-ui-sm font-semibold text-rm-text">
+                    <TrackArt src={historyEntry.entry.track.artworkUrl} />
+                    <div className="min-w-0">
+                      <div className={ROW_TITLE}>
                         {historyEntry.entry.track.title}
                       </div>
-                      <div className="mt-1 truncate text-ui-xs text-rm-text-muted">
-                        {[
-                          historyEntry.entry.track.artist,
-                          historyEntry.entry.track.sourceLabel,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ")}
-                      </div>
-                      <div className="mt-1 truncate text-ui-2xs text-rm-text-muted/75">
-                        Played{" "}
-                        {formatDate(historyEntry.playedAt, {
-                          hour: "numeric",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
+                      <div className={ROW_META}>
+                        <span className="truncate">
+                          {[
+                            historyEntry.entry.track.artist,
+                            historyEntry.entry.track.sourceLabel,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() =>
-                        enqueueTracks(
-                          [getRequeueTrack(historyEntry.entry.track)],
-                          "append",
-                        )
-                      }
-                    >
-                      <Icon name="playlist" size="sm" />
-                      Requeue
-                    </Button>
-                  </div>
+                    <Num className={ROW_TIME} title="Played at">
+                      {formatDate(historyEntry.playedAt, {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </Num>
+                    <div className={ROW_ACTIONS}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() =>
+                          enqueueTracks(
+                            [getRequeueTrack(historyEntry.entry.track)],
+                            "append",
+                          )
+                        }
+                      >
+                        <Icon name="queueAdd" size="sm" />
+                        Requeue
+                      </Button>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ol>
             ) : (
-              <ListenTogetherEmpty
-                icon="clock"
+              <EmptyState
+                size="sm"
                 title="Nothing played yet"
-                body="Tracks show up here after they finish playing in this room."
+                description="Tracks show up here after they finish playing in this room."
               />
             )}
           </div>

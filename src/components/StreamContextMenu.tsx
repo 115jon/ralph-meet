@@ -196,7 +196,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     onClose();
   }, [onClose, onOpenMessage, onOpenMessageUser, resolvedTargetUserId]);
 
-  const entries: StreamMenuEntry[] = isLocal
+  const builtEntries: StreamMenuEntry[] = isLocal
     ? buildLocalMenu({
         isStreaming,
         onToggleScreenShare,
@@ -238,6 +238,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
         handleCopyId,
         showDisconnect,
       });
+  const entries = presentEntries(builtEntries);
 
   return (
     // The menu portals to <body>, but React events still bubble to the tile
@@ -269,6 +270,43 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     </div>
   );
 };
+
+/**
+ * Presentation pass over the built entries:
+ *  - the "Apps" submenu only ever held a disabled "No apps" row, so it goes
+ *    (with the divider it leaves behind);
+ *  - the red leave item says what it leaves ("Leave call"), so it can't be
+ *    read as stopping a stream.
+ */
+const PLACEHOLDER_SUBMENUS = new Set(["apps", "streaming-apps"]);
+
+function presentEntries(entries: StreamMenuEntry[]): StreamMenuEntry[] {
+  const mapped = entries
+    .filter(
+      (entry) =>
+        !(entry.type === "submenu" && PLACEHOLDER_SUBMENUS.has(entry.key)),
+    )
+    .map((entry): StreamMenuEntry => {
+      if (entry.type === "item" && entry.key === "disconnect") {
+        return { ...entry, label: "Leave call" };
+      }
+      if (entry.type === "submenu") {
+        return { ...entry, entries: presentEntries(entry.entries) };
+      }
+      return entry;
+    });
+  // Drop leading, trailing and doubled dividers.
+  return mapped.filter((entry, index) => {
+    if (entry.type !== "divider") return true;
+    const previous = mapped[index - 1];
+    const next = mapped[index + 1];
+    return (
+      previous !== undefined &&
+      previous.type !== "divider" &&
+      next !== undefined
+    );
+  });
+}
 
 function stopPropagation(event: React.SyntheticEvent) {
   event.stopPropagation();

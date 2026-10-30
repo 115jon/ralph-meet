@@ -1,20 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogDescription,
-  ResponsiveDialogFooter,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-} from "@/components/ui/responsive-dialog";
-import { DontAskAgainCheckbox } from "@/components/chat/DontAskAgainCheckbox";
+import { ConfirmCallDialog } from "@/components/chat/ConfirmCallDialog";
 import { START_CALL_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
-import { useCallback, useState } from "react";
-
-// ── LocalStorage key for "Don't ask again" ─────────────────────────────────
-const DONT_ASK_KEY = START_CALL_CONFIRM_KEY;
 
 interface StartCallModalProps {
   /** Whether the modal is visible */
@@ -39,46 +26,15 @@ export function StartCallModal({
   onConfirm,
   onCancel,
 }: StartCallModalProps) {
-  const [dontAskAgain, setDontAskAgain] = useState(false);
-
-  const handleConfirm = useCallback(() => {
-    if (dontAskAgain) {
-      try {
-        localStorage.setItem(DONT_ASK_KEY, "true");
-      } catch {
-        /* quota / private-mode — silently ignore */
-      }
-    }
-    onConfirm();
-  }, [dontAskAgain, onConfirm]);
-
   return (
-    <ResponsiveDialog
+    <ConfirmCallDialog
       open={open}
-      onOpenChange={(nextOpen) => !nextOpen && onCancel()}
-    >
-      <ResponsiveDialogContent className="md:max-w-sm">
-        <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Ready to start a call?</ResponsiveDialogTitle>
-          <ResponsiveDialogDescription>
-            You&apos;re about to call{" "}
-            <span className="font-semibold text-rm-text">{targetName}</span>.
-            Jump in when you&apos;re ready.
-          </ResponsiveDialogDescription>
-        </ResponsiveDialogHeader>
-        <DontAskAgainCheckbox
-          checked={dontAskAgain}
-          onCheckedChange={setDontAskAgain}
-        />
-        <ResponsiveDialogFooter>
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={handleConfirm}>
-            Start call
-          </Button>
-        </ResponsiveDialogFooter>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
+      title={`Call ${targetName}?`}
+      description={<>This rings {targetName} right away.</>}
+      confirmLabel="Start call"
+      skipConfirmKey={START_CALL_CONFIRM_KEY}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }

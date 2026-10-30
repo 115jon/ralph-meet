@@ -1,22 +1,23 @@
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { type ActivityType, useActivityStore } from "@/stores/useActivityStore";
-import { Icon } from "@/components/ui/icon";
-import { IconButton } from "@/components/ui/IconButton";
-import { PRESS } from "@/components/ui/interaction";
-import { useMemo, useState } from "react";
+import { DISABLED, PRESS } from "@/components/ui/interaction";
+import { type ReactNode, useMemo } from "react";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
+  ResponsiveDialogDescription,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 
-type Tab = "menu" | "activities";
-
 interface VoiceAppsModalProps {
   isOpen: boolean;
-  initialTab: Tab;
+  /**
+   * Which list the caller wants. There is one list now ("Activities"), so
+   * this is accepted for the callers that still pass their mode and ignored.
+   */
+  initialTab?: "menu" | "activities";
   onClose: () => void;
   sfu: SFUClient | null;
   serverId?: string | null;
@@ -25,186 +26,161 @@ interface VoiceAppsModalProps {
   gridItems: Array<{ userId: string; name: string; isLocal?: boolean }>;
 }
 
-/** A card row: the whole card is the button. */
+/**
+ * One activity: the whole cell is the button (ply-2, 1px line, radius 10, an
+ * ink overlay on hover, the global focus ring). PRESS draws the overlay, so
+ * hover is the tint-1 ink at 6% rather than a colour.
+ */
 const CARD = cn(
-  "flex w-full items-center gap-4 rounded-lg border border-rm-border bg-rm-bg-surface p-4 text-left outline-none",
+  "flex w-full flex-col items-start gap-3 rounded-lg border border-line bg-ply-2 p-3 text-left text-ink-1 outline-none",
   PRESS,
-  "[--hover-o:0.04] [--press-o:0.08]",
+  DISABLED,
+  "[--hover-o:0.06] [--press-o:0.1]",
 );
 
-/** Illustration: a 3x3 Wordle board on the activity's own palette. */
-function WordleLogo() {
+/** The preview well both cards share: ply-1 so the art sits one step down from the card. */
+const ART =
+  "h-20 w-full overflow-hidden rounded-md border border-line bg-ply-1";
+
+type Tile = "correct" | "present" | "absent";
+
+/** Three guesses of a five-letter board, drawn from the LED tokens. */
+const WORDLE_ROWS: Tile[][] = [
+  ["absent", "present", "absent", "absent", "absent"],
+  ["correct", "correct", "absent", "present", "absent"],
+  ["correct", "correct", "correct", "correct", "correct"],
+];
+
+const TILE_FILL: Record<Tile, string> = {
+  correct: "bg-talk",
+  present: "bg-idle",
+  absent: "bg-tint-3",
+};
+
+function WordleArt() {
   return (
-    <div
-      aria-hidden="true"
-      className="grid size-11 grid-cols-3 gap-0.5 rounded-sm bg-rm-activity-wordle-ink p-0.5"
-    >
-      {Array.from({ length: 9 }).map((_, index) => (
-        <div
-          key={index}
-          className={cn(
-            index >= 6
-              ? "bg-rm-activity-wordle-correct"
-              : index === 3 || index === 4
-                ? "bg-rm-activity-wordle-present"
-                : "border border-rm-activity-wordle-tile",
-          )}
-        />
-      ))}
+    <div aria-hidden="true" className={cn(ART, "grid place-items-center")}>
+      <div className="grid grid-cols-5 gap-0.5">
+        {WORDLE_ROWS.flat().map((tile, index) => (
+          <div
+            key={index}
+            className={cn("size-3.5 rounded-xs", TILE_FILL[tile])}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-/** Illustration: the tunnel, two speed lines and a ring, on the stage colour. */
-function WarpRushLogo() {
+/** The tunnel: three rings receding, two speed lines and the ship's bar. */
+function WarpRushArt() {
   return (
-    <div
-      aria-hidden="true"
-      className="relative size-11 overflow-hidden rounded-md bg-rm-activity-warp-bg"
-    >
-      <div className="absolute inset-x-2 top-2 h-0.5 -rotate-12 bg-rm-activity-warp-cyan" />
-      <div className="absolute inset-x-3 top-4 h-0.5 -rotate-12 bg-rm-activity-warp-cyan/60" />
-      <div className="absolute bottom-2 left-1/2 size-5 -translate-x-1/2 rounded-full border border-rm-activity-warp-cyan/60" />
-      <div className="absolute bottom-3 left-1/2 size-3 -translate-x-1/2 rounded-full border border-rm-activity-warp-cyan" />
-      <div className="absolute inset-x-4 bottom-2 h-0.5 rounded-full bg-rm-activity-warp-amber" />
+    <div aria-hidden="true" className={cn(ART, "relative bg-ply-0")}>
+      <div className="absolute top-1/2 left-1/2 size-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-live/25" />
+      <div className="absolute top-1/2 left-1/2 size-11 -translate-x-1/2 -translate-y-1/2 rounded-full border border-live/50" />
+      <div className="absolute top-1/2 left-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-live" />
+      <div className="absolute top-3 left-5 h-0.5 w-8 -rotate-12 rounded-full bg-live/60" />
+      <div className="absolute right-5 bottom-4 h-0.5 w-10 -rotate-12 rounded-full bg-live/40" />
+      <div className="absolute bottom-3 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-idle" />
     </div>
   );
+}
+
+const ACTIVITIES: Array<{
+  id: ActivityType;
+  title: string;
+  description: string;
+  art: ReactNode;
+}> = [
+  {
+    id: "wordle",
+    title: "Daily Word",
+    description:
+      "One shared puzzle a day. Everyone in the call sees how the others are doing.",
+    art: <WordleArt />,
+  },
+  {
+    id: "warp-rush",
+    title: "Warp Rush",
+    description:
+      "Fly the same tunnel as everyone in the call and see who scores highest.",
+    art: <WarpRushArt />,
+  },
+];
+
+/** The presence record an activity start broadcasts; the clock read lives outside render. */
+function createPresence(
+  userId: string,
+  channelId: string,
+  activity: ActivityType,
+) {
+  return { userId, channelId, activity, startedAt: Date.now() };
 }
 
 export function VoiceAppsModal({
   isOpen,
-  initialTab,
   onClose,
   sfu,
   channelId,
   localUserId,
   gridItems,
 }: VoiceAppsModalProps) {
-  const [tab, setTab] = useState<Tab>(initialTab);
   const setUserActivity = useActivityStore((s) => s.setUserActivity);
+  const canStart = !!localUserId && !!channelId;
 
-  const participants = useMemo(() => {
-    const byId = new Map<string, { userId: string; name: string }>();
-    for (const item of gridItems) {
-      if (item.userId)
-        byId.set(item.userId, { userId: item.userId, name: item.name });
-    }
-    return [...byId.values()];
+  const participantCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of gridItems) if (item.userId) ids.add(item.userId);
+    return ids.size;
   }, [gridItems]);
-
-  const handleClose = () => {
-    setTab(initialTab);
-    onClose();
-  };
 
   const startActivity = (activity: ActivityType) => {
     if (!localUserId || !channelId) return;
-    const presence = {
-      userId: localUserId,
-      channelId,
-      activity,
-      startedAt: Date.now(),
-    };
+    const presence = createPresence(localUserId, channelId, activity);
     setUserActivity(presence);
     sfu?.voiceGW.sendAppEvent({ type: "activity.start", ...presence });
-    handleClose();
+    onClose();
   };
 
-  const title = tab === "menu" ? "Voice apps" : "Activities";
+  const description = !canStart
+    ? "Join a voice channel to start one."
+    : participantCount > 1
+      ? `Starts for all ${participantCount} people in this call.`
+      : "Starts for everyone in this call.";
 
   return (
     <ResponsiveDialog
       open={isOpen}
-      onOpenChange={(nextOpen) => !nextOpen && handleClose()}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      <ResponsiveDialogContent
-        className="gap-0"
-        dialogClassName="flex h-[600px] max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 md:max-w-xl"
-      >
-        <ResponsiveDialogHeader className="flex-row items-center gap-1 md:border-b md:border-rm-border md:px-4 md:py-3">
-          {tab !== "menu" ? (
-            <IconButton
-              icon="chevronLeft"
-              variant="muted"
-              aria-label="Back to voice apps"
-              onClick={() => setTab("menu")}
-              className="-ml-1"
-            />
-          ) : null}
-          <ResponsiveDialogTitle className="text-ui-lg font-semibold">
-            {title}
-          </ResponsiveDialogTitle>
+      <ResponsiveDialogContent dialogClassName="max-h-[min(560px,calc(100dvh-2rem))] overflow-y-auto md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Activities</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            {description}
+          </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto py-4 md:p-4">
-          {tab === "menu" && (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setTab("activities")}
-                className={cn(CARD, "flex-col items-start gap-2")}
-              >
-                <span className="rounded-md bg-rm-accent-tint p-2 text-rm-accent-ink">
-                  <Icon name="activities" size="xl" />
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {ACTIVITIES.map((activity) => (
+            <button
+              key={activity.id}
+              type="button"
+              disabled={!canStart}
+              onClick={() => startActivity(activity.id)}
+              className={CARD}
+            >
+              {activity.art}
+              <span className="min-w-0">
+                <span className="block text-ui-row font-semibold">
+                  {activity.title}
                 </span>
-                <span>
-                  <span className="block text-ui-md font-semibold text-rm-text">
-                    Activities
-                  </span>
-                  <span className="mt-1 block text-pretty text-ui-sm text-rm-text-secondary">
-                    Play games, watch videos, and hang out with friends in the
-                    voice channel.
-                  </span>
+                <span className="mt-0.5 block text-ui-sm text-pretty text-ink-2">
+                  {activity.description}
                 </span>
-              </button>
-            </div>
-          )}
-
-          {tab === "activities" && (
-            <div className="flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={() => startActivity("wordle")}
-                className={CARD}
-              >
-                <WordleLogo />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-ui-base font-semibold text-rm-text">
-                    Daily Wordle
-                  </span>
-                  <span className="mt-1 block text-pretty text-ui-sm text-rm-text-secondary">
-                    Play the shared daily puzzle in the voice stage with group
-                    progress and streaks.
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => startActivity("warp-rush")}
-                className={CARD}
-              >
-                <WarpRushLogo />
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-2 text-ui-base font-semibold text-rm-text">
-                    Warp Rush 3D
-                    <span className="rounded-full bg-rm-tint-2 px-2 py-0.5 text-ui-2xs font-semibold text-rm-text-secondary">
-                      GPU stress
-                    </span>
-                  </span>
-                  <span className="mt-1 block text-pretty text-ui-sm text-rm-text-secondary">
-                    A hardware-acceleration workout with instanced debris,
-                    bloom, live FPS telemetry, and a shared voice-session
-                    leaderboard.
-                  </span>
-                </span>
-              </button>
-              {participants.length > 1 && (
-                <p className="text-ui-xs text-rm-text-muted">
-                  {participants.length} people are in this voice session.
-                </p>
-              )}
-            </div>
-          )}
+              </span>
+            </button>
+          ))}
         </div>
       </ResponsiveDialogContent>
     </ResponsiveDialog>

@@ -15,9 +15,13 @@ import { useEffect, useState } from "react";
  * on the next open instead of showing "Collecting connection data…" and
  * waiting up to 2 s for the next tick.
  *
+ * Pass `enabled` true only while a surface that shows the numbers is open
+ * (a latency tooltip, the details panel): every snapshot re-renders the
+ * caller. For an always-visible indicator use `useVoiceQuality()` instead.
+ *
  * @param sfu      – The SFUClient instance (may be null when disconnected)
  * @param enabled  – Set false when the panel is hidden to unsubscribe the
- *                   listener (the monitor keeps running regardless)
+ *                   listener (the stats hub keeps running regardless)
  */
 export function useVoiceStats(
   sfu: SFUClient | null,
@@ -48,4 +52,52 @@ export function useVoiceStats(
   }, [sfu, enabled]);
 
   return snapshot.sfu === sfu ? snapshot.stats : null;
+}
+
+/** Three-level call quality for the always-visible signal glyph. */
+export type VoiceQualityLevel = "connecting" | "good" | "warn" | "bad";
+
+/**
+ * Map one snapshot to a quality level. Media-path RTT (0 until the first
+ * receiver report) and outbound loss decide it; a failed or disconnected
+ * transport is always "bad".
+ */
+export function classifyVoiceQuality(
+  stats: VoiceConnectionStats | null,
+): VoiceQualityLevel {
+  if (!stats) return "connecting";
+  if (
+    stats.connectionState === "failed" ||
+    stats.connectionState === "disconnected"
+  ) {
+    return "bad";
+  }
+  if (stats.packetLossRate >= 0.05 || stats.ping >= 300) return "bad";
+  if (stats.packetLossRate >= 0.02 || stats.ping >= 150) return "warn";
+  return "good";
+}
+
+/**
+ * The quality level only. It listens to every stats snapshot but re-renders
+ * its caller only when the level changes (rarely), so a dashboard can colour
+ * its signal glyph without re-rendering every 2 s. Pair it with
+ * `useVoiceStats(sfu, tooltipOrPanelOpen)` for the numbers.
+ */
+export function useVoiceQuality(sfu: SFUClient | null): VoiceQualityLevel {
+  const [state, setState] = useState<{
+    sfu: SFUClient | null;
+    level: VoiceQualityLevel;
+  }>({ sfu: null, level: "connecting" });
+
+  useEffect(() => {
+    if (!sfu) return;
+    return sfu.subscribeConnectionStats((stats) => {
+      const level = classifyVoiceQuality(stats);
+      setState((prev) =>
+        prev.sfu === sfu && prev.level === level ? prev : { sfu, level },
+      );
+    });
+  }, [sfu]);
+
+  return state.sfu === sfu ? state.level : "connecting";
 }

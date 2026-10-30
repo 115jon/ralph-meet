@@ -3,8 +3,11 @@
  * soundboard manager.
  *
  *  - Parks in a corner, inside the safe area and clear of the chrome marked
- *    `data-floating-avoid` (composer, tab bar, voice dock). Players sharing a
- *    corner stack instead of covering each other.
+ *    `data-floating-avoid` (composer, tab bar, voice dock) and of the
+ *    headers pinned to the top of the window (8px under them). Players
+ *    sharing a corner stack instead of covering each other.
+ *  - Ply-3 at radius 12 with a line and the float shadow. It enters with a
+ *    fade and scale(.97) from its corner (200ms ease-out), never a loop.
  *  - Drag anywhere that isn't a control (touch or mouse); a flick carries on
  *    and snaps to the nearest corner. The move handle doubles as the
  *    keyboard and single-tap alternative (arrows pick a corner, a click moves
@@ -128,13 +131,45 @@ function readViewport(): Size {
   };
 }
 
-function readAvoidRects() {
+/**
+ * Chrome to stay clear of: anything marked `data-floating-avoid`, plus the
+ * headers pinned to the top of the window (title bar, channel and voice
+ * headers), so a top-corner player sits 8px under the header instead of
+ * over its search and buttons.
+ */
+function readAvoidElements(): HTMLElement[] {
   if (typeof document === "undefined") return [];
-  return Array.from(
+  const marked = Array.from(
     document.querySelectorAll<HTMLElement>("[data-floating-avoid]"),
-  )
-    .map((el) => el.getBoundingClientRect())
-    .filter((rect) => rect.width > 0 && rect.height > 0);
+  );
+  const headers = Array.from(
+    document.querySelectorAll<HTMLElement>("header"),
+  ).filter(
+    (el) => !el.closest("[data-floating-surface], [role='dialog'], article"),
+  );
+  return [...marked, ...headers];
+}
+
+/** How far from the top a header may start and still count as top chrome. */
+const TOP_CHROME_REACH = 40;
+const TOP_CHROME_MAX_HEIGHT = 96;
+
+function readAvoidRects(safeTop = 0) {
+  return readAvoidElements()
+    .map((el) => ({
+      rect: el.getBoundingClientRect(),
+      header:
+        el.tagName === "HEADER" && !el.hasAttribute("data-floating-avoid"),
+    }))
+    .filter(
+      ({ rect, header }) =>
+        rect.width > 0 &&
+        rect.height > 0 &&
+        (!header ||
+          (rect.top <= safeTop + TOP_CHROME_REACH &&
+            rect.height <= TOP_CHROME_MAX_HEIGHT)),
+    )
+    .map(({ rect }) => rect);
 }
 
 /** Top edge clear of headers; sides and bottom clear of the screen edge. */
@@ -148,16 +183,13 @@ interface Layout {
 }
 
 function readLayout(): Layout {
-  return {
-    viewport: readViewport(),
-    safe: {
-      top: readSafeArea("top"),
-      right: readSafeArea("right"),
-      bottom: readSafeArea("bottom"),
-      left: readSafeArea("left"),
-    },
-    avoid: readAvoidRects(),
+  const safe = {
+    top: readSafeArea("top"),
+    right: readSafeArea("right"),
+    bottom: readSafeArea("bottom"),
+    left: readSafeArea("left"),
   };
+  return { viewport: readViewport(), safe, avoid: readAvoidRects(safe.top) };
 }
 
 function positionFor(
@@ -332,9 +364,7 @@ export function FloatingSurface({
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(refresh);
-    document
-      .querySelectorAll("[data-floating-avoid]")
-      .forEach((el) => observer?.observe(el));
+    readAvoidElements().forEach((el) => observer?.observe(el));
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", refresh);
@@ -582,7 +612,7 @@ export function FloatingSurface({
     >
       <span
         aria-hidden
-        className="h-8 w-1 rounded-full bg-rm-border-strong opacity-0 transition-opacity duration-150 group-focus-visible/resize:opacity-100 pointer-fine:group-hover/resize:opacity-100"
+        className="h-8 w-1 rounded-full bg-line-strong opacity-0 transition-opacity duration-(--dur-2) ease-out group-focus-visible/resize:opacity-100 pointer-fine:group-hover/resize:opacity-100"
       />
     </div>
   );
@@ -593,9 +623,6 @@ export function FloatingSurface({
     transform: position
       ? `translate3d(${position.x}px, ${position.y}px, 0)`
       : undefined,
-    // Not `visibility: hidden`: the controls stay in the accessibility tree
-    // for the frame it takes to measure.
-    opacity: position ? undefined : 0,
     width:
       mode === "full"
         ? desktopWidth
@@ -605,7 +632,22 @@ export function FloatingSurface({
   };
 
   const surfaceShell =
-    "rounded-xl border border-rm-border bg-rm-bg-surface text-rm-text shadow-md dark:bg-rm-bg-elevated";
+    "rounded-xl border border-line bg-ply-3 text-ink-1 shadow-float";
+  // Presence (spec §6): fade + scale(.97) from the docked corner, 200ms
+  // ease-out. Transparent (not `visibility: hidden`, so the controls stay
+  // in the accessibility tree) for the frame it takes to measure; a face
+  // that swaps in later (minimise, restore) starts from the same state.
+  const presence = cn(
+    "transition-[opacity,scale] duration-(--dur-3) ease-out starting:scale-(--motion-scale-in) starting:opacity-0",
+    isTopCorner(prefs.corner)
+      ? isLeftCorner(prefs.corner)
+        ? "origin-top-left"
+        : "origin-top-right"
+      : isLeftCorner(prefs.corner)
+        ? "origin-bottom-left"
+        : "origin-bottom-right",
+    position ? "" : "scale-(--motion-scale-in) opacity-0",
+  );
 
   let face: ReactNode;
   if (mode === "bubble") {
@@ -622,8 +664,9 @@ export function FloatingSurface({
         }}
         onKeyDown={moveHandleProps.onKeyDown}
         className={cn(
-          "relative flex size-12 touch-none items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-bg-surface text-rm-text-secondary shadow-md dark:bg-rm-bg-elevated",
+          "relative flex size-12 touch-none items-center justify-center overflow-hidden rounded-full border border-line bg-ply-3 text-ink-2 shadow-float outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
           PRESS,
+          presence,
         )}
       >
         {bubble}
@@ -632,7 +675,7 @@ export function FloatingSurface({
   } else if (mode === "compact") {
     face = (
       <div
-        className={cn(surfaceShell, "touch-none overflow-hidden rounded-2xl")}
+        className={cn(surfaceShell, "touch-none overflow-hidden", presence)}
         onClick={(event) => {
           if ((event.target as HTMLElement).closest(INTERACTIVE)) return;
           setSheetOpen(true);
@@ -642,7 +685,7 @@ export function FloatingSurface({
         <button
           type="button"
           data-floating-focus=""
-          className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:inset-0 focus-visible:rounded-2xl"
+          className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:inset-0 focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-focus"
           onClick={() => setSheetOpen(true)}
         >
           Show {label.toLowerCase()} controls
@@ -651,24 +694,27 @@ export function FloatingSurface({
     );
   } else {
     face = (
-      <section aria-label={label} className={cn(surfaceShell, "relative")}>
-        <header className="flex h-9 touch-none items-center gap-1 border-b border-rm-border pr-1 pl-1">
+      <section
+        aria-label={label}
+        className={cn(surfaceShell, "relative", presence)}
+      >
+        <header className="flex h-10 touch-none items-center gap-1 border-b border-line px-1.5">
           <IconButton
             {...moveHandleProps}
             icon="dragHandle"
-            size="xs"
+            size={28}
             variant="muted"
             aria-label={`Move ${label.toLowerCase()}`}
             onClick={() => updatePrefs({ corner: nextCorner(prefs.corner) })}
             className="cursor-grab active:cursor-grabbing"
           />
-          <span className="min-w-0 flex-1 truncate text-ui-xs font-semibold text-rm-text-secondary">
+          <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-ink-1">
             {title ?? label}
           </span>
           {headerActions}
           <IconButton
             icon="minimize"
-            size="xs"
+            size={28}
             variant="muted"
             aria-label={minimizeLabel}
             tooltip="Minimise"
@@ -686,7 +732,7 @@ export function FloatingSurface({
   }
 
   const content = (
-    <TooltipProvider delayDuration={100}>
+    <TooltipProvider>
       <div
         ref={rootRef}
         data-testid={testId}
@@ -699,8 +745,9 @@ export function FloatingSurface({
           // the bodies keep touch scrolling (soundboard list, sliders).
           "fixed top-0 left-0 z-30 select-none",
           dragging ? "cursor-grabbing" : "",
+          // Corner to corner is on-screen movement: --ease-in-out.
           placed && !dragging
-            ? "transition-transform duration-[280ms] ease-(--rm-ease-drawer) motion-reduce:transition-none"
+            ? "transition-transform duration-(--dur-4) ease-in-out"
             : "",
           className,
         )}
@@ -750,7 +797,7 @@ export function FloatingSurface({
                   setSheetOpen(false);
                 }}
                 className={cn(
-                  "flex min-h-11 items-center gap-2 rounded-md bg-rm-tint-1 px-3 text-ui-sm font-medium text-rm-text",
+                  "flex min-h-11 items-center gap-2 rounded-md bg-tint-1 px-3 text-ui-sm font-medium text-ink-1 outline-none focus-visible:outline-2 focus-visible:outline-focus",
                   PRESS,
                 )}
               >
@@ -788,7 +835,7 @@ function CornerPicker({
     <div
       role="radiogroup"
       aria-label={`${label} position`}
-      className="grid grid-cols-2 gap-1 rounded-md bg-rm-tint-1 p-1"
+      className="grid grid-cols-2 gap-1 rounded-md bg-tint-1 p-1"
     >
       {(["top-left", "top-right", "bottom-left", "bottom-right"] as const).map(
         (option) => {
@@ -802,8 +849,8 @@ function CornerPicker({
               aria-label={CORNER_LABELS[option]}
               onClick={() => onPick(option)}
               className={cn(
-                "flex h-10 w-12 rounded-sm p-1.5",
-                checked ? "bg-rm-bg-surface dark:bg-rm-bg-elevated" : "",
+                "flex h-10 w-12 rounded-sm p-1.5 outline-none focus-visible:outline-2 focus-visible:outline-focus",
+                checked ? "bg-tint-3" : "",
                 isTopCorner(option) ? "items-start" : "items-end",
                 isLeftCorner(option) ? "justify-start" : "justify-end",
               )}
@@ -812,7 +859,7 @@ function CornerPicker({
                 aria-hidden
                 className={cn(
                   "h-3 w-4 rounded-xs",
-                  checked ? "bg-rm-text" : "bg-rm-text-muted",
+                  checked ? "bg-ink-1" : "bg-ink-3",
                 )}
               />
             </button>

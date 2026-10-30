@@ -117,7 +117,10 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    const parent = screen.getByRole("menuitem", { name: "More options" });
+    // Wait for the menu to settle: Base UI wires roving focus after mount.
+    const parent = await screen.findByRole("menuitem", {
+      name: "More options",
+    });
     act(() => parent.focus());
     fireEvent.keyDown(parent, { key: "ArrowRight" });
 

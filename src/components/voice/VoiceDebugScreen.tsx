@@ -1,36 +1,45 @@
+import {
+  classifyVoiceQuality,
+  type VoiceQualityLevel,
+} from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
+import { cn } from "@/lib/utils";
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
+  type ReactNode,
 } from "react";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { Spinner } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { LedLabel, type LedState } from "@/components/ui/led";
+import { Num } from "@/components/ui/num";
+import { RuleCard } from "@/components/ui/plate";
+import {
+  SIDEBAR_ICON_SLOT,
+  SIDEBAR_ROW,
+  SIDEBAR_ROW_IDLE,
+  SIDEBAR_ROW_SELECTED,
+  TREE_BRANCH_GAP,
+  TREE_BRANCH_LABEL,
+} from "@/components/ui/sidebar-row";
+import {
+  DitherReadouts,
+  DitherTimeline,
+  type TimelineLane,
+} from "./DitherChart";
+import {
+  CONNECTION_METRICS,
+  type ChartMetric,
+  type ChartSample,
+  type ConnectionMetricKey,
+} from "./dither-chart-model";
 
 const log = clog("VoiceDebug");
-
-const AreaChart = lazy(() =>
-  import("recharts").then((m) => ({ default: m.AreaChart })),
-);
-const Area = lazy(() => import("recharts").then((m) => ({ default: m.Area })));
-const ResponsiveContainer = lazy(() =>
-  import("recharts").then((m) => ({ default: m.ResponsiveContainer })),
-);
-const XAxis = lazy(() =>
-  import("recharts").then((m) => ({ default: m.XAxis })),
-);
-const YAxis = lazy(() =>
-  import("recharts").then((m) => ({ default: m.YAxis })),
-);
-const CHART_MARGIN = { top: 4, right: 4, bottom: 0, left: 0 };
-const AXIS_TICK_STYLE = { fontSize: 9, fill: "var(--rm-text-muted)" };
-const DEBUG_REFRESH_INTERVAL_MS = 1000;
 
 interface VoiceDebugScreenProps {
   sfu: SFUClient | null;
@@ -46,6 +55,7 @@ interface DebugData {
   roomSlug: string;
   transportHistory: {
     time: string;
+    timestamp: number;
     availableOutgoingBitrate: number;
     ping: number;
     outboundBitrate: number;
@@ -59,6 +69,7 @@ interface DebugData {
     string,
     {
       time: string;
+      timestamp: number;
       bitrate: number;
       packetsReceived: number;
       packetsLost: number;
@@ -69,6 +80,29 @@ interface DebugData {
   pulledTracks: { track_name: string; participant_id: string; kind: string }[];
 }
 
+/** Same mapping as the details popover's chart status. */
+const QUALITY_STATUS: Record<
+  VoiceQualityLevel,
+  { led: LedState; label: string }
+> = {
+  connecting: { led: "off", label: "Connecting" },
+  good: { led: "talk", label: "Stable" },
+  warn: { led: "idle", label: "Unsteady" },
+  bad: { led: "muted", label: "Poor" },
+};
+
+/** A transport state's light: connected talk, failed muted, pending idle. */
+export function connectionStateLed(state: string): LedState {
+  if (state === "connected") return "talk";
+  if (state === "failed" || state === "closed" || state === "disconnected") {
+    return "muted";
+  }
+  if (state === "idle" || state === "new") return "off";
+  return "idle";
+}
+
+const COPIED_MS = 2000;
+
 const formatBytes = (b: number) => {
   if (b >= 1e9) return `${(b / 1e9).toFixed(2)} GB`;
   if (b >= 1e6) return `${(b / 1e6).toFixed(2)} MB`;
@@ -76,7 +110,7 @@ const formatBytes = (b: number) => {
   return `${b} B`;
 };
 
-const formatKbps = (v: number) => `${Math.max(0, v / 1000).toFixed(2)} Kbps`;
+const formatKbps = (v: number) => `${Math.max(0, v / 1000).toFixed(2)} kbps`;
 
 const formatConnectionStateLabel = (state: string) =>
   state.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -89,6 +123,16 @@ const formatRelativeSampleTime = (timestamp: number | null | undefined) => {
   return `${Math.round(ageMs / 60_000)}m ago`;
 };
 
+const shortTrackName = (name: string) =>
+  name.replace(/^(cam|screen)-(audio|video)-/, "").slice(0, 12);
+
+const trackIcon = (name: string): IconName =>
+  name.includes("audio")
+    ? "speaker"
+    : name.includes("video")
+      ? "camera"
+      : "download";
+
 export function VoiceDebugScreen({
   sfu,
   onClose,
@@ -96,16 +140,16 @@ export function VoiceDebugScreen({
 }: VoiceDebugScreenProps) {
   const [section, setSection] = useState<SidebarSection>("transport");
   const [data, setData] = useState<DebugData | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [copied, setCopied] = useState(false);
 
+  // One read per stats snapshot (the hub's 2 s tick) rather than a timer of
+  // our own: the series only change when a snapshot lands. The first read
+  // opens the screen on the history gathered so far.
   useEffect(() => {
     if (!sfu) return;
     const update = () => setData(sfu.getDebugData());
     update();
-    intervalRef.current = setInterval(update, DEBUG_REFRESH_INTERVAL_MS);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return sfu.subscribeConnectionStats(update);
   }, [sfu]);
 
   // Close on escape
@@ -116,6 +160,13 @@ export function VoiceDebugScreen({
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  // "Copied" reverts after a beat; one timeout per copy, cleared on unmount.
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), COPIED_MS);
+    return () => window.clearTimeout(id);
+  }, [copied]);
 
   const handleCopyStats = useCallback(async () => {
     if (!sfu) return;
@@ -138,16 +189,7 @@ export function VoiceDebugScreen({
           2,
         ),
       );
-      const btn = document.getElementById("copy-stats-btn");
-      if (btn) {
-        const originalText = btn.innerText;
-        btn.innerText = "✓ Copied";
-        btn.classList.add("text-rm-success", "bg-rm-success/10");
-        setTimeout(() => {
-          btn.innerText = originalText;
-          btn.classList.remove("text-rm-success", "bg-rm-success/10");
-        }, 2000);
-      }
+      setCopied(true);
     } catch (err) {
       log.error("Failed to copy stats:", err);
     }
@@ -155,9 +197,9 @@ export function VoiceDebugScreen({
 
   if (!data) {
     return (
-      <div className="fixed inset-0 z-100 flex flex-col items-center justify-center gap-4 bg-rm-bg-primary">
-        <Spinner className="size-8 text-rm-accent-ink" />
-        <p className="text-rm-text-muted text-ui-sm font-medium animate-pulse">
+      <div className="fixed inset-0 z-100 flex flex-col items-center justify-center gap-4 bg-ply-0 text-ink-1">
+        <Spinner className="size-6 text-accent-ink" />
+        <p className="silkscreen text-ink-3" role="status">
           Gathering RTC metrics…
         </p>
       </div>
@@ -167,544 +209,524 @@ export function VoiceDebugScreen({
   const inboundTrackNames = Object.keys(data.inboundHistory);
   const stats = data.connStats;
   const sessionState = stats?.connectionState ?? data.connectionState;
-  const publishState = stats?.publishConnectionState ?? "idle";
-  const subscribeState =
-    stats?.subscribeConnectionState ??
-    (data.pulledTracks.length > 0 ? "connecting" : "idle");
-  const remoteTrackCount = stats?.remoteTrackCount ?? data.pulledTracks.length;
-  const lastSampleLabel = formatRelativeSampleTime(stats?.timestamp ?? null);
-  const isConnected = sessionState === "connected";
+
+  const overview = <SessionOverview data={data} />;
 
   return (
-    <div className="fixed inset-0 z-100 bg-rm-bg-primary flex flex-col text-rm-text text-ui-sm overflow-hidden pb-[var(--safe-area-bottom,0px)]">
-      {/* Top bar */}
-      {/* Full-screen overlay: the top bar clears the notch / status bar. */}
-      <div className="flex items-center justify-between px-3 sm:px-5 pt-[calc(var(--safe-area-top,0px)+0.625rem)] pb-2.5 sm:pt-[calc(var(--safe-area-top,0px)+0.75rem)] sm:pb-3 border-b border-rm-border bg-rm-bg-surface gap-2">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rm-status-online animate-pulse shrink-0" />
-          <span className="font-semibold text-ui-sm sm:text-ui-base text-rm-text tracking-tight truncate">
-            <InlineEmojiText text={`RTC DEBUG: ${data.roomSlug}`} />
-          </span>
+    <div className="fixed inset-0 z-100 flex flex-col overflow-hidden bg-ply-0 pb-[var(--safe-area-bottom,0px)] text-ui-sm text-ink-1">
+      {/* Top bar. Full-screen overlay: it clears the notch / status bar. */}
+      <header className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-line bg-ply-1 px-3 pt-[calc(var(--safe-area-top,0px)+0.5rem)] pb-2 sm:px-5">
+        <p className="silkscreen flex min-w-0 items-baseline gap-1.5 text-ink-3">
+          <span className="shrink-0">RTC debug ·</span>
+          <InlineEmojiText
+            text={data.roomSlug}
+            className="min-w-0 truncate text-ink-1"
+          />
+        </p>
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <Button variant="secondary" size="sm" onClick={handleCopyStats}>
+            <Icon name={copied ? "check" : "copy"} size="sm" />
+            {copied ? (
+              "Copied"
+            ) : (
+              <span>
+                Copy<span className="hidden sm:inline"> diagnostics</span>
+              </span>
+            )}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <Icon name="close" size="sm" />
+            Close
+          </Button>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <button
-            id="copy-stats-btn"
-            onClick={handleCopyStats}
-            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md border border-rm-border bg-rm-bg-surface pointer-fine:hover:bg-rm-bg-hover text-rm-text transition-ui min-w-[80px]"
-          >
-            Copy Diagnostics
-          </button>
-          <button
-            onClick={onClose}
-            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md bg-rm-status-dnd/10 pointer-fine:hover:bg-rm-status-dnd/20 text-rm-status-dnd transition-colors"
-          >
-            ✕ Close
-          </button>
-        </div>
-      </div>
+        <span role="status" className="sr-only">
+          {copied ? "Diagnostics copied" : ""}
+        </span>
+      </header>
 
-      <div className="flex flex-col sm:flex-row flex-1 overflow-hidden">
-        {/* Sidebar — vertical on desktop, horizontal scrollable tabs on mobile */}
-        <div className="sm:w-52 shrink-0 sm:border-r border-b sm:border-b-0 border-rm-border bg-rm-bg-surface sm:p-4 sm:space-y-4 sm:overflow-y-auto">
-          {/* Mobile: horizontal strip */}
-          <div className="flex sm:hidden items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-none">
-            <InlineEmojiText
-              text={channelName}
-              className="text-ui-xs font-semibold text-rm-text shrink-0"
-            />
-            <span
-              className={`text-ui-2xs font-semibold shrink-0 ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
-            >
-              {isConnected ? "●" : "○"}
-            </span>
-            <div className="w-px h-4 bg-rm-border mx-1" />
-            <SidebarItem
+      <div className="flex flex-1 flex-col overflow-hidden sm:flex-row">
+        {/* Sidebar: a tree on desktop, a scrolling strip of rows on phones. */}
+        <nav
+          aria-label="Debug sections"
+          className="shrink-0 border-b border-line bg-ply-1 sm:w-60 sm:overflow-y-auto sm:border-r sm:border-b-0"
+        >
+          <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5 scrollbar-none sm:hidden">
+            <NavRow
               id="transport"
               label="Transport"
+              icon="signal"
               active={section}
               onSelect={setSection}
             />
-            <SidebarItem
+            <NavRow
               id="outbound"
               label="Outbound"
+              icon="upload"
               active={section}
               onSelect={setSection}
             />
-            {inboundTrackNames.map((name) => {
-              const shortName = name
-                .replace(/^(cam|screen)-(audio|video)-/, "")
-                .slice(0, 10);
-              const kind = name.includes("audio")
-                ? "🔊"
-                : name.includes("video")
-                  ? "📹"
-                  : "⬇";
-              return (
-                <SidebarItem
-                  key={name}
-                  id={name}
-                  label={`${kind} ${shortName}`}
-                  active={section}
-                  onSelect={setSection}
-                />
-              );
-            })}
+            {inboundTrackNames.map((name) => (
+              <NavRow
+                key={name}
+                id={name}
+                label={shortTrackName(name)}
+                icon={trackIcon(name)}
+                active={section}
+                onSelect={setSection}
+              />
+            ))}
           </div>
 
-          {/* Desktop: vertical sidebar */}
-          <div className="hidden sm:block space-y-4">
-            <div className="space-y-1">
+          <div className="hidden flex-col gap-0.5 px-2 pt-4 pb-3 sm:flex">
+            <div className="mb-2 flex min-w-0 flex-col gap-1.5 px-2">
               <InlineEmojiText
                 text={channelName}
-                className="text-ui-sm font-semibold text-rm-text"
+                className="truncate font-display text-[18px] leading-6 font-extrabold tracking-[-0.02em] text-ink-1"
               />
-              <p
-                className={`text-ui-2xs font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
-              >
+              <LedLabel state={connectionStateLed(sessionState)}>
                 {formatConnectionStateLabel(sessionState)}
-              </p>
+              </LedLabel>
             </div>
-
-            <div className="space-y-0.5">
-              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                RTC Debug: Default
-              </p>
-              <SidebarItem
-                id="transport"
-                label="Transport"
-                active={section}
-                onSelect={setSection}
-              />
-              <SidebarItem
-                id="outbound"
-                label="Outbound"
-                active={section}
-                onSelect={setSection}
-              />
-            </div>
-
-            {inboundTrackNames.length > 0 && (
-              <div className="space-y-0.5">
-                <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
+            <p className={cn(TREE_BRANCH_LABEL, TREE_BRANCH_GAP)}>Session</p>
+            <NavRow
+              id="transport"
+              label="Transport"
+              icon="signal"
+              active={section}
+              onSelect={setSection}
+              wide
+            />
+            <NavRow
+              id="outbound"
+              label="Outbound"
+              icon="upload"
+              active={section}
+              onSelect={setSection}
+              wide
+            />
+            {inboundTrackNames.length > 0 ? (
+              <>
+                <p className={cn(TREE_BRANCH_LABEL, "pt-4")}>
                   Inbound
+                  <Num className="ml-auto text-ink-3">
+                    {inboundTrackNames.length}
+                  </Num>
                 </p>
-                {inboundTrackNames.map((name) => {
-                  const shortName = name
-                    .replace(/^(cam|screen)-(audio|video)-/, "")
-                    .slice(0, 12);
-                  const kind = name.includes("audio")
-                    ? "🔊"
-                    : name.includes("video")
-                      ? "📹"
-                      : "⬇";
-                  return (
-                    <SidebarItem
-                      key={name}
-                      id={name}
-                      label={`${kind} ${shortName}`}
-                      active={section}
-                      onSelect={setSection}
-                    />
-                  );
-                })}
-              </div>
-            )}
+                {inboundTrackNames.map((name) => (
+                  <NavRow
+                    key={name}
+                    id={name}
+                    label={shortTrackName(name)}
+                    icon={trackIcon(name)}
+                    active={section}
+                    onSelect={setSection}
+                    wide
+                  />
+                ))}
+              </>
+            ) : null}
           </div>
-        </div>
+        </nav>
 
         {/* Main content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-            <OverviewCard
-              label="Session"
-              value={formatConnectionStateLabel(sessionState)}
-            />
-            <OverviewCard
-              label="Publish"
-              value={formatConnectionStateLabel(publishState)}
-            />
-            <OverviewCard
-              label="Subscribe"
-              value={formatConnectionStateLabel(subscribeState)}
-            />
-            <OverviewCard
-              label="Remote Tracks"
-              value={String(remoteTrackCount)}
-            />
-            <OverviewCard label="Last Sample" value={lastSampleLabel} />
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="mx-auto flex max-w-[960px] flex-col gap-10 px-4 pt-5 pb-10 sm:px-8 sm:pt-8">
+            {section === "transport" && (
+              <TransportSection data={data} overview={overview} />
+            )}
+            {section === "outbound" && (
+              <OutboundSection data={data} overview={overview} />
+            )}
+            {section !== "transport" && section !== "outbound" && (
+              <InboundSection
+                trackName={section}
+                data={data}
+                overview={overview}
+              />
+            )}
           </div>
-          {section === "transport" && <TransportSection data={data} />}
-          {section === "outbound" && <OutboundSection data={data} />}
-          {section !== "transport" && section !== "outbound" && (
-            <InboundSection trackName={section} data={data} />
-          )}
-        </div>
+        </main>
       </div>
     </div>
   );
 }
 
-// ── Sidebar Item ────────────────────────────────────────────────────────
+// ── Sidebar row ─────────────────────────────────────────────────────────
 
-function SidebarItem({
+function NavRow({
   id,
   label,
+  icon,
   active,
   onSelect,
+  wide = false,
 }: {
   id: string;
   label: string;
+  icon: IconName;
   active: string;
   onSelect: (id: string) => void;
+  /** Full-width tree row (desktop); otherwise a strip chip (phones). */
+  wide?: boolean;
 }) {
   const isActive = active === id;
   return (
     <button
+      type="button"
       onClick={() => onSelect(id)}
-      className={`sm:w-full text-left px-2.5 sm:px-2 py-1 rounded text-ui-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-        isActive
-          ? "bg-rm-bg-active text-rm-text"
-          : "text-rm-text-muted pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text"
-      }`}
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        SIDEBAR_ROW,
+        isActive ? SIDEBAR_ROW_SELECTED : SIDEBAR_ROW_IDLE,
+        !wide && "w-auto shrink-0 whitespace-nowrap",
+      )}
     >
-      {label}
+      <span className={SIDEBAR_ICON_SLOT}>
+        <Icon name={icon} size="sm" />
+      </span>
+      <span className="min-w-0 truncate">{label}</span>
     </button>
   );
 }
 
-// ── Mini Chart Component ────────────────────────────────────────────────
+// ── Headings and rows ───────────────────────────────────────────────────
 
-function MiniChart({
-  data,
-  dataKey,
-  color = "var(--rm-accent)",
-  unit = "",
-  height = 80,
-}: {
-  data: any[];
-  dataKey: string;
-  color?: string;
-  unit?: string;
-  height?: number;
-}) {
-  // If plotting a bitrate, divide raw value by 1000 so the chart plots Kbps
-  const isBitrate = dataKey.toLowerCase().includes("bitrate");
-  const processedData = data.map((d) => ({
-    ...d,
-    [dataKey]: isBitrate
-      ? Math.max(0, (d[dataKey] ?? 0) / 1000)
-      : (d[dataKey] ?? 0),
-  }));
-  const maxVal = Math.max(...processedData.map((d) => d[dataKey]), 1);
-  const yMax = Math.ceil(maxVal * 1.2);
-  const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
-  const formatTick = useCallback((value: number) => `${value}${unit}`, [unit]);
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="h-20 flex items-center justify-center text-ui-2xs text-rm-text-muted">
-        No data
-      </div>
-    );
-  }
-
-  return (
-    <Suspense
-      fallback={
-        <div className="h-20 w-full flex items-center justify-center text-ui-2xs text-rm-text-muted">
-          Loading chart...
-        </div>
-      }
-    >
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={processedData} margin={CHART_MARGIN}>
-          <defs>
-            <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.25} />
-              <stop offset="100%" stopColor={color} stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <XAxis
-            dataKey="time"
-            tick={AXIS_TICK_STYLE}
-            axisLine={false}
-            tickLine={false}
-            interval="preserveStartEnd"
-            minTickGap={60}
-          />
-          <YAxis
-            domain={yDomain}
-            tick={AXIS_TICK_STYLE}
-            axisLine={false}
-            tickLine={false}
-            width={42}
-            tickCount={3}
-            tickFormatter={formatTick}
-          />
-          <Area
-            type="monotone" // smooth curve instead of harsh straight lines
-            dataKey={dataKey}
-            stroke={color}
-            strokeWidth={1.5}
-            fill={`url(#grad-${dataKey})`}
-            dot={false}
-            activeDot={false}
-            isAnimationActive={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </Suspense>
-  );
-}
-
-// ── Stat Row ────────────────────────────────────────────────────────────
-
-function StatRow({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-center justify-between py-1.5 border-b border-rm-border">
-      <span className="text-rm-text-muted text-ui-sm">{label}</span>
-      <span className="text-rm-text font-semibold tabular-nums text-ui-sm">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function OverviewCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-3 shadow-sm">
-      <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
-        {label}
-      </p>
-      <p className="mt-1 text-ui-sm font-semibold text-rm-text">{value}</p>
-    </div>
-  );
-}
-
-// ── Chart Card ──────────────────────────────────────────────────────────
-
-function ChartCard({
+/** The section's poster title with a silkscreen kicker and a status. */
+function SectionTitle({
+  kicker,
   title,
-  value,
-  data,
-  dataKey,
-  color,
-  unit,
+  titleId,
+  status,
 }: {
+  kicker: ReactNode;
   title: string;
-  value: string;
-  data: any[];
-  dataKey: string;
-  color?: string;
-  unit?: string;
+  titleId?: string;
+  status?: ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <div className="flex items-baseline justify-between">
-        <span className="text-ui-sm font-semibold text-rm-text">{title}</span>
-        <span className="text-ui-sm font-semibold text-rm-text tabular-nums">
-          {value}
-        </span>
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+      <div className="min-w-0">
+        <p className="silkscreen truncate text-ink-3">{kicker}</p>
+        <h2
+          id={titleId}
+          className="mt-2 font-display text-[40px] leading-[36px] font-extrabold tracking-[-0.04em] text-balance text-ink-1 [font-optical-sizing:auto] md:text-[56px] md:leading-[48px]"
+        >
+          {title}
+        </h2>
       </div>
-      <div className="bg-rm-bg-surface rounded-lg p-3 border border-rm-border shadow-sm">
-        <MiniChart data={data} dataKey={dataKey} color={color} unit={unit} />
-      </div>
+      {status ? <div className="pb-1">{status}</div> : null}
     </div>
   );
 }
 
-// ── Transport Section ───────────────────────────────────────────────────
+/** A silkscreen label and a value; numbers go in Num, states in LedLabel. */
+function StatRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-4 border-b border-line py-2">
+      <dt className="silkscreen shrink-0 text-ink-3">{label}</dt>
+      <dd className="flex min-w-0 justify-end text-right text-ink-1">
+        {typeof value === "string" || typeof value === "number" ? (
+          <Num size="sm" className="truncate">
+            {value}
+          </Num>
+        ) : (
+          value
+        )}
+      </dd>
+    </div>
+  );
+}
 
-function TransportSection({ data }: { data: DebugData }) {
+function StatGrid({ children }: { children: ReactNode }) {
+  return (
+    <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">{children}</dl>
+  );
+}
+
+function StateValue({ state }: { state: string }) {
+  return (
+    <LedLabel state={connectionStateLed(state)}>
+      {formatConnectionStateLabel(state)}
+    </LedLabel>
+  );
+}
+
+/** Session, transports, tracks and the sample age, on every section. */
+function SessionOverview({ data }: { data: DebugData }) {
   const stats = data.connStats;
-  const history = data.transportHistory;
-  const latest = history[history.length - 1];
   const sessionState = stats?.connectionState ?? data.connectionState;
   const publishState = stats?.publishConnectionState ?? "idle";
   const subscribeState =
     stats?.subscribeConnectionState ??
     (data.pulledTracks.length > 0 ? "connecting" : "idle");
   const remoteTrackCount = stats?.remoteTrackCount ?? data.pulledTracks.length;
+  return (
+    <RuleCard legend="Session" title="Overview">
+      <StatGrid>
+        <StatRow label="Session" value={<StateValue state={sessionState} />} />
+        <StatRow label="Publish" value={<StateValue state={publishState} />} />
+        <StatRow
+          label="Subscribe"
+          value={<StateValue state={subscribeState} />}
+        />
+        <StatRow label="Remote tracks" value={remoteTrackCount} />
+        <StatRow
+          label="Last sample"
+          value={formatRelativeSampleTime(stats?.timestamp ?? null)}
+        />
+      </StatGrid>
+    </RuleCard>
+  );
+}
+
+// ── Chart lanes ─────────────────────────────────────────────────────────
+
+const [M_BITRATE, M_LOSS, M_JITTER, M_RTT] = CONNECTION_METRICS as [
+  ChartMetric<ConnectionMetricKey>,
+  ChartMetric<ConnectionMetricKey>,
+  ChartMetric<ConnectionMetricKey>,
+  ChartMetric<ConnectionMetricKey>,
+];
+
+/** The uplink, from the snapshot's sample ring (same series as the popover). */
+const UPLINK_LANES: TimelineLane<ConnectionMetricKey>[] = [
+  { metric: M_BITRATE, height: 72 },
+  { metric: M_RTT, height: 48 },
+  { metric: M_JITTER, height: 40 },
+  { metric: M_LOSS, kind: "density" },
+];
+
+type BandwidthKey = "available" | "inbound";
+const BANDWIDTH_LANES: TimelineLane<BandwidthKey>[] = [
+  {
+    metric: {
+      key: "available",
+      label: "Available out",
+      unit: "kbps",
+      max: 500,
+    },
+    height: 56,
+  },
+  {
+    metric: { key: "inbound", label: "Inbound", unit: "kbps", max: 80 },
+    height: 56,
+  },
+];
+
+type OutboundKey = "bitrate" | "packets";
+const OUTBOUND_LANES: TimelineLane<OutboundKey>[] = [
+  {
+    metric: { key: "bitrate", label: "Bitrate", unit: "kbps", max: 80 },
+    height: 64,
+  },
+  {
+    metric: { key: "packets", label: "Packets sent", unit: "pkt/s", max: 60 },
+    height: 40,
+  },
+];
+
+type InboundKey = "bitrate" | "jitter" | "loss" | "packets";
+const INBOUND_LANES: TimelineLane<InboundKey>[] = [
+  {
+    metric: { key: "bitrate", label: "Bitrate", unit: "kbps", max: 80 },
+    height: 64,
+  },
+  { metric: { ...M_JITTER, key: "jitter" }, height: 40 },
+  {
+    metric: { key: "packets", label: "Packets", unit: "pkt/s", max: 60 },
+    height: 40,
+  },
+  { metric: { ...M_LOSS, key: "loss" }, kind: "density" },
+];
+
+/** Per-second rate of a cumulative counter between adjacent samples. */
+function rate(
+  prev: { timestamp: number } | undefined,
+  next: { timestamp: number },
+  delta: number,
+) {
+  if (!prev) return 0;
+  const dt = (next.timestamp - prev.timestamp) / 1000;
+  return dt > 0 ? Math.max(0, Math.round(delta / dt)) : 0;
+}
+
+const kbps = (bps: number) => Math.round(Math.max(0, bps) / 100) / 10;
+
+const EMPTY: never[] = [];
+
+// ── Transport Section ───────────────────────────────────────────────────
+
+function TransportSection({
+  data,
+  overview,
+}: {
+  data: DebugData;
+  overview: ReactNode;
+}) {
+  const stats = data.connStats;
+  const history = data.transportHistory;
+  const latest = history[history.length - 1];
+  const quality = QUALITY_STATUS[classifyVoiceQuality(stats)];
+  const bandwidth = useMemo<ChartSample<BandwidthKey>[]>(
+    () =>
+      history.map((h) => ({
+        t: h.timestamp,
+        available: kbps(h.availableOutgoingBitrate),
+        inbound: kbps(h.inboundBitrate),
+      })),
+    [history],
+  );
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-ui-sm font-semibold text-rm-status-idle border-b border-rm-border pb-2">
-        Transport · {data.participantId || "unknown"}
-      </h2>
+    <>
+      <section aria-labelledby="rtc-debug-title" className="flex flex-col">
+        <SectionTitle
+          kicker={<>Transport · {data.participantId || "unknown"}</>}
+          title="Connection"
+          titleId="rtc-debug-title"
+          status={<LedLabel state={quality.led}>{quality.label}</LedLabel>}
+        />
+        <DitherReadouts
+          metrics={CONNECTION_METRICS}
+          samples={stats?.samples ?? EMPTY}
+          className="mt-6"
+        />
+        <DitherTimeline
+          title="Audio uplink"
+          meta={stats?.codec?.name}
+          lanes={UPLINK_LANES}
+          samples={stats?.samples ?? EMPTY}
+          className="mt-2"
+        />
+      </section>
 
-      {/* Row 1: Available Outgoing Bitrate + Ping */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <ChartCard
-          title="Available Outgoing Bitrate"
-          value={formatKbps(latest?.availableOutgoingBitrate ?? 0)}
-          data={history}
-          dataKey="availableOutgoingBitrate"
-          color="var(--rm-accent)"
-          unit=""
-        />
-        <ChartCard
-          title="Ping"
-          value={`${latest?.ping ?? 0} ms`}
-          data={history}
-          dataKey="ping"
-          color="var(--rm-status-online)"
-          unit=""
-        />
-      </div>
+      <DitherTimeline
+        title="Bandwidth"
+        meta="estimates"
+        lanes={BANDWIDTH_LANES}
+        samples={bandwidth}
+      />
 
-      {/* Static stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow
-          label="Local Address"
-          value={stats?.localAddress || "(unknown)"}
-        />
-        <StatRow
-          label="Remote Address"
-          value={stats?.remoteAddress || "(unknown)"}
-        />
-      </div>
+      {overview}
 
-      {/* Row 2: Outbound + Inbound Bitrate Estimate */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <ChartCard
-          title="Outbound Bitrate Estimate"
-          value={formatKbps(latest?.outboundBitrate ?? 0)}
-          data={history}
-          dataKey="outboundBitrate"
-          color="var(--color-chart-4)"
-          unit=""
-        />
-        <ChartCard
-          title="Inbound Bitrate Estimate"
-          value={formatKbps(latest?.inboundBitrate ?? 0)}
-          data={history}
-          dataKey="inboundBitrate"
-          color="var(--rm-status-idle)"
-          unit=""
-        />
-      </div>
+      <RuleCard legend="Transport" title="Network">
+        <StatGrid>
+          <StatRow
+            label="Local address"
+            value={stats?.localAddress || "(unknown)"}
+          />
+          <StatRow
+            label="Remote address"
+            value={stats?.remoteAddress || "(unknown)"}
+          />
+          <StatRow
+            label="Outbound estimate"
+            value={formatKbps(latest?.outboundBitrate ?? 0)}
+          />
+          <StatRow
+            label="Inbound estimate"
+            value={formatKbps(latest?.inboundBitrate ?? 0)}
+          />
+          <StatRow
+            label="Packets received"
+            value={(latest?.packetsReceived ?? 0).toLocaleString()}
+          />
+          <StatRow
+            label="Packets sent"
+            value={(latest?.packetsSent ?? 0).toLocaleString()}
+          />
+          <StatRow
+            label="Bytes received"
+            value={formatBytes(latest?.bytesReceived ?? 0)}
+          />
+          <StatRow
+            label="Bytes sent"
+            value={formatBytes(latest?.bytesSent ?? 0)}
+          />
+        </StatGrid>
+      </RuleCard>
 
-      {/* Row 3: Packets Received + Packets Sent */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <ChartCard
-          title="Packets Received"
-          value={(latest?.packetsReceived ?? 0).toLocaleString()}
-          data={history}
-          dataKey="packetsReceived"
-          color="var(--color-chart-2)"
-          unit=""
-        />
-        <ChartCard
-          title="Packets Sent"
-          value={(latest?.packetsSent ?? 0).toLocaleString()}
-          data={history}
-          dataKey="packetsSent"
-          color="var(--rm-accent)"
-          unit=""
-        />
-      </div>
-
-      {/* Row 4: Bytes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <ChartCard
-          title="Bytes Received"
-          value={formatBytes(latest?.bytesReceived ?? 0)}
-          data={history}
-          dataKey="bytesReceived"
-          color="var(--color-chart-2)"
-          unit=""
-        />
-        <ChartCard
-          title="Bytes Sent"
-          value={formatBytes(latest?.bytesSent ?? 0)}
-          data={history}
-          dataKey="bytesSent"
-          color="var(--rm-accent)"
-          unit=""
-        />
-      </div>
-
-      {/* Additional stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow
-          label="Codec"
-          value={
-            stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"
-          }
-        />
-        <StatRow label="Sample Rate" value={`${stats?.sampleRate ?? 0} Hz`} />
-        <StatRow
-          label="Packet Loss Rate"
-          value={`${((stats?.packetLossRate ?? 0) * 100).toFixed(2)}%`}
-        />
-        <StatRow
-          label="Session State"
-          value={formatConnectionStateLabel(sessionState)}
-        />
-        <StatRow
-          label="Publish Transport"
-          value={formatConnectionStateLabel(publishState)}
-        />
-        <StatRow
-          label="Subscribe Transport"
-          value={formatConnectionStateLabel(subscribeState)}
-        />
-        <StatRow label="Remote Tracks" value={remoteTrackCount} />
-      </div>
-    </div>
+      <RuleCard legend="Media" title="Codec">
+        <StatGrid>
+          <StatRow
+            label="Codec"
+            value={
+              stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"
+            }
+          />
+          <StatRow label="Sample rate" value={`${stats?.sampleRate ?? 0} Hz`} />
+          <StatRow
+            label="Session loss"
+            value={`${((stats?.packetLossRate ?? 0) * 100).toFixed(2)}%`}
+          />
+        </StatGrid>
+      </RuleCard>
+    </>
   );
 }
 
 // ── Outbound Section ────────────────────────────────────────────────────
 
-function OutboundSection({ data }: { data: DebugData }) {
+function OutboundSection({
+  data,
+  overview,
+}: {
+  data: DebugData;
+  overview: ReactNode;
+}) {
   const stats = data.connStats;
   const history = data.transportHistory;
   const latest = history[history.length - 1];
+  const samples = useMemo<ChartSample<OutboundKey>[]>(
+    () =>
+      history.map((h, i) => {
+        const prev = history[i - 1];
+        return {
+          t: h.timestamp,
+          bitrate: kbps(h.outboundBitrate),
+          packets: rate(prev, h, h.packetsSent - (prev?.packetsSent ?? 0)),
+        };
+      }),
+    [history],
+  );
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-ui-sm font-semibold text-rm-status-idle border-b border-rm-border pb-2">
-        Outbound
-      </h2>
+    <>
+      <SectionTitle kicker="Publish" title="Outbound" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <ChartCard
-          title="Outbound Bitrate"
-          value={formatKbps(latest?.outboundBitrate ?? 0)}
-          data={history}
-          dataKey="outboundBitrate"
-          color="var(--color-chart-4)"
-          unit=""
-        />
-        <ChartCard
-          title="Packets Sent"
-          value={(latest?.packetsSent ?? 0).toLocaleString()}
-          data={history}
-          dataKey="packetsSent"
-          color="var(--rm-accent)"
-          unit=""
-        />
-      </div>
+      <DitherTimeline
+        title="Outbound"
+        meta={stats?.codec?.name}
+        lanes={OUTBOUND_LANES}
+        samples={samples}
+      />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow
-          label="Codec"
-          value={
-            stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"
-          }
-        />
-        <StatRow
-          label="Frames Encoded"
-          value={(stats?.framesEncoded ?? 0).toLocaleString()}
-        />
-        <StatRow label="Sample Rate" value={`${stats?.sampleRate ?? 0} Hz`} />
-        <StatRow
-          label="Audio Level"
-          value={(stats?.audioLevel ?? 0).toFixed(4)}
-        />
-      </div>
-    </div>
+      <RuleCard legend="Media" title="Encoder">
+        <StatGrid>
+          <StatRow
+            label="Codec"
+            value={
+              stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"
+            }
+          />
+          <StatRow
+            label="Packets sent"
+            value={(latest?.packetsSent ?? 0).toLocaleString()}
+          />
+          <StatRow
+            label="Frames encoded"
+            value={(stats?.framesEncoded ?? 0).toLocaleString()}
+          />
+          <StatRow label="Sample rate" value={`${stats?.sampleRate ?? 0} Hz`} />
+          <StatRow
+            label="Audio level"
+            value={(stats?.audioLevel ?? 0).toFixed(4)}
+          />
+        </StatGrid>
+      </RuleCard>
+
+      {overview}
+    </>
   );
 }
 
@@ -713,57 +735,80 @@ function OutboundSection({ data }: { data: DebugData }) {
 function InboundSection({
   trackName,
   data,
+  overview,
 }: {
   trackName: string;
   data: DebugData;
+  overview: ReactNode;
 }) {
-  const history = data.inboundHistory[trackName] || [];
-  const latest = history[history.length - 1];
+  const history = data.inboundHistory[trackName];
+  const latest = history?.[history.length - 1];
   const track = data.pulledTracks.find((t) => t.track_name === trackName);
+  // Loss per interval from the cumulative counters, so a burst shows where
+  // it happened instead of smearing into a session average.
+  const samples = useMemo<ChartSample<InboundKey>[]>(
+    () =>
+      (history ?? EMPTY).map((h, i) => {
+        const prev = history![i - 1];
+        const received = h.packetsReceived - (prev?.packetsReceived ?? 0);
+        const lost = Math.max(0, h.packetsLost - (prev?.packetsLost ?? 0));
+        const total = prev ? received + lost : 0;
+        return {
+          t: h.timestamp,
+          bitrate: kbps(h.bitrate),
+          jitter: Math.round(h.jitter * 10000) / 10,
+          packets: rate(prev, h, received),
+          loss: total > 0 ? Math.round((lost / total) * 1000) / 10 : 0,
+        };
+      }),
+    [history],
+  );
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-ui-sm font-semibold text-rm-status-idle border-b border-rm-border pb-2">
-        Inbound · {trackName}
-      </h2>
+    <>
+      <SectionTitle
+        kicker={<>Inbound · {track?.kind || "track"}</>}
+        title="Inbound"
+      />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow
-          label="Participant ID"
-          value={track?.participant_id || "unknown"}
-        />
-        <StatRow label="Kind" value={track?.kind || "unknown"} />
-      </div>
+      <RuleCard
+        legend="Track"
+        title={<span className="break-all">{trackName}</span>}
+      >
+        <StatGrid>
+          <StatRow
+            label="Participant ID"
+            value={track?.participant_id || "unknown"}
+          />
+          <StatRow label="Kind" value={track?.kind || "unknown"} />
+        </StatGrid>
+      </RuleCard>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <ChartCard
-          title="Bitrate"
-          value={formatKbps(latest?.bitrate ?? 0)}
-          data={history}
-          dataKey="bitrate"
-          color="var(--color-chart-2)"
-          unit=""
-        />
-        <ChartCard
-          title="Packets Received"
-          value={(latest?.packetsReceived ?? 0).toLocaleString()}
-          data={history}
-          dataKey="packetsReceived"
-          color="var(--rm-accent)"
-          unit=""
-        />
-      </div>
+      <DitherTimeline
+        title="Inbound track"
+        meta={track?.kind}
+        lanes={INBOUND_LANES}
+        samples={samples}
+      />
 
-      <div className="grid grid-cols-2 gap-4">
-        <StatRow
-          label="Packets Lost"
-          value={(latest?.packetsLost ?? 0).toLocaleString()}
-        />
-        <StatRow
-          label="Jitter"
-          value={`${((latest?.jitter ?? 0) * 1000).toFixed(2)} ms`}
-        />
-      </div>
-    </div>
+      <RuleCard legend="Counters" title="Receive">
+        <StatGrid>
+          <StatRow
+            label="Packets received"
+            value={(latest?.packetsReceived ?? 0).toLocaleString()}
+          />
+          <StatRow
+            label="Packets lost"
+            value={(latest?.packetsLost ?? 0).toLocaleString()}
+          />
+          <StatRow
+            label="Jitter"
+            value={`${((latest?.jitter ?? 0) * 1000).toFixed(2)} ms`}
+          />
+        </StatGrid>
+      </RuleCard>
+
+      {overview}
+    </>
   );
 }

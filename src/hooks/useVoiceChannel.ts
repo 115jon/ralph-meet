@@ -815,12 +815,6 @@ export function useVoiceChannel({
 
   const { isHookActive } = useNativeShareStats();
 
-  // Sync local speaking state to the global chat context
-  useEffect(() => {
-    // console.log("[useVoiceChannel] Syncing speakingUsers to global context:", speakingUsers);
-    setSpeakingUsers(speakingUsers, speakingSourceIdRef.current!);
-  }, [speakingUsers, setSpeakingUsers]);
-
   // Keep the synchronous source ref in lockstep with the reactive state so
   // imperative callbacks (toggleScreenShare) can re-target the active source.
   useEffect(() => {
@@ -1238,6 +1232,37 @@ export function useVoiceChannel({
   const isMicOn = !settingsMuted && hasMicrophone;
   const isMicOnRef = useRef(isMicOn);
   isMicOnRef.current = isMicOn;
+
+  // The speaking set every surface reads (via useIsSpeaking / useSpeakingAttr
+  // on leaf components). Two gates apply before it leaves this hook:
+  //   - your own entry only while your mic is live. The VAD can still report
+  //     a trailing "speaking" when you mute mid-word (it is stopped, not
+  //     flushed), and the server can echo it, so muted you never lights.
+  //   - peers you muted locally never light (the tile always behaved so; the
+  //     tree, the user panel and the call strip now agree with it).
+  const publishedSpeakingUsers = useMemo(() => {
+    const blocked: string[] = [];
+    if (!isMicOn) {
+      if (user?.id) blocked.push(user.id);
+      if (myIdRef.current) blocked.push(myIdRef.current);
+    }
+    for (const [peerId, setting] of Object.entries(peerSettings)) {
+      if ((setting as { muted?: boolean } | undefined)?.muted) {
+        blocked.push(peerId);
+      }
+    }
+    if (!blocked.some((id) => speakingUsers[id])) return speakingUsers;
+    const next = { ...speakingUsers };
+    for (const id of blocked) delete next[id];
+    return next;
+    // myIdRef is read at compute time; any change to who is speaking under
+    // that id arrives as a new speakingUsers object.
+  }, [speakingUsers, isMicOn, user?.id, peerSettings]);
+
+  // Sync the gated speaking state to the global chat context.
+  useEffect(() => {
+    setSpeakingUsers(publishedSpeakingUsers, speakingSourceIdRef.current!);
+  }, [publishedSpeakingUsers, setSpeakingUsers]);
 
   const restartVadMonitoring = useCallback(
     (
@@ -4888,7 +4913,8 @@ export function useVoiceChannel({
         isStreaming: false,
         isMuted: !isMicOn,
         isDeafened: isDeafened,
-        isSpeaking: !!speakingUsers[user?.id || myIdRef.current],
+        // Speaking is not part of the tile model: a flip would rebuild every
+        // tile. Leaves read useIsSpeaking(userId) / useSpeakingAttr(userId).
       });
 
       if (isScreenSharing) {
@@ -4912,7 +4938,6 @@ export function useVoiceChannel({
           isStreaming: true,
           isMuted: false,
           isDeafened: false,
-          isSpeaking: false,
         });
       }
     }
@@ -5070,8 +5095,7 @@ export function useVoiceChannel({
         isStreaming: false,
         isMuted: remote.selfMute || !!(peerSetting as any)?.muted,
         isDeafened: remote.selfDeaf,
-        isSpeaking:
-          !!speakingUsers[remote.clerkId] && !(peerSetting as any)?.muted,
+        // See the local tile: leaves read useIsSpeaking(userId).
       });
 
       if (remote.isStreaming || hasScreenTracks) {
@@ -5087,7 +5111,6 @@ export function useVoiceChannel({
           isStreaming: true,
           isMuted: false,
           isDeafened: false,
-          isSpeaking: false,
         });
       }
     }
@@ -5108,7 +5131,6 @@ export function useVoiceChannel({
     isScreenSharing,
     localScreenStream,
     remoteStreams,
-    speakingUsers,
     voiceChannelStates,
     channelId,
     peerSettings,
@@ -5217,7 +5239,7 @@ export function useVoiceChannel({
     connectionState,
     focusedId,
     setFocusedId,
-    speakingUsers,
+    speakingUsers: publishedSpeakingUsers,
     watchedStreams,
     watchersByStreamer,
     streamThumbnails,

@@ -124,6 +124,44 @@ describe("StreamContextMenu", () => {
     expect(parent).toHaveFocus();
   });
 
+  it("renders sliders inline in the panel and marks submenu panels interactive", async () => {
+    render(
+      <StreamContextMenu
+        userId="target"
+        x={40}
+        y={60}
+        isStreaming
+        watchedStreams={{ target: true }}
+        onClose={() => {}}
+      />,
+    );
+    const menu = await screen.findByRole("menu", { name: "User actions" });
+    // A slider is custom inline content between the item rows, not a row.
+    const slider = await screen.findByRole("slider", { name: "Stream volume" });
+    expect(menu).toContainElement(slider);
+    fireEvent.change(slider, { target: { value: "60" } });
+    await waitFor(() =>
+      expect(
+        useVoiceSettingsStore.getState().getSettings("viewer").peerSettings
+          .target?.streamVolume,
+      ).toBe(60),
+    );
+
+    // Toggles are menu item checkboxes carrying their state.
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Mute" }),
+    ).toHaveAttribute("aria-checked", "false");
+
+    const parent = screen.getByRole("menuitem", { name: "More options" });
+    act(() => parent.focus());
+    fireEvent.keyDown(parent, { key: "ArrowRight" });
+    const profile = await screen.findByRole("menuitem", { name: "Profile" });
+    expect(profile.closest('[role="menu"]')).toHaveAttribute(
+      "data-stream-preview-interactive",
+      "true",
+    );
+  });
+
   it("renders an action sheet with inline sliders and submenus on phones", async () => {
     isMobileMock.value = true;
     const onOpenMessageUser = vi.fn();

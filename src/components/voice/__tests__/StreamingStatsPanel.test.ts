@@ -358,7 +358,7 @@ describe("streamingStats display helpers — state matrix", () => {
     expect(connectionStateLabel("failed", true)).toBe("Failed");
   });
 
-  it("inks reconnecting as a warning and failed as danger, with an icon", () => {
+  it("lights reconnecting amber and failed red, as an LED label word", () => {
     setHook({ data: null, stale: false, isDesktop: true });
 
     const reconnecting = render({
@@ -366,11 +366,12 @@ describe("streamingStats display helpers — state matrix", () => {
       joined: true,
     });
     expect(reconnecting).toContain("Reconnecting");
-    expect(reconnecting).toContain("text-rm-warning-ink");
-    expect(reconnecting).toContain("<svg");
+    expect(reconnecting).toContain("text-warning-ink");
+    expect(reconnecting).toContain('data-state="idle"');
 
     const failed = render({ connectionState: "failed", joined: true });
-    expect(failed).toContain("text-rm-danger-ink");
+    expect(failed).toContain("text-danger-ink");
+    expect(failed).toContain('data-state="muted"');
     expect(failed).not.toContain("Stable");
   });
 

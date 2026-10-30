@@ -28,6 +28,7 @@ import {
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
 import {
   MENU_ITEM,
   MENU_ITEM_DEFAULT,
@@ -58,6 +59,11 @@ const SLIDER_KEYS = new Set([
   "PageDown",
 ]);
 
+/**
+ * A native range input (named, keyboard-complete, jsdom-friendly) drawn as the
+ * Talk Tree slider: 4px track, primary-fill range, 14px thumb. The input sits
+ * invisibly on top, so its focus ring is drawn on the thumb instead.
+ */
 function VolumeSlider({
   mode,
   volume,
@@ -70,36 +76,43 @@ function VolumeSlider({
   const max = mode === "output" ? 200 : 100;
   const fill = Math.min(100, (volume / max) * 100);
   const label = mode === "input" ? "Input volume" : "Output volume";
+  // The thumb's travel is the track minus its own 14px width.
+  const thumbLeft = `calc(${fill}% - ${(fill * 14) / 100}px)`;
 
   return (
-    <div className="px-2 pt-1.5 pb-2.5">
-      <div className="mb-2 flex items-center justify-between text-ui-xs font-medium text-rm-text-muted">
+    <div
+      // A drag on the slider must not swipe the phone sheet away.
+      data-base-ui-swipe-ignore=""
+      className="px-2 pt-1.5 pb-2.5"
+    >
+      <div className="mb-2 flex items-center justify-between text-ui-xs font-medium text-ink-3">
         <span>{label}</span>
-        <span className="text-rm-text tabular-nums">{volume}%</span>
+        <Num className="text-ink-1">{volume}%</Num>
       </div>
-      <div className="relative flex h-3 items-center pointer-coarse:h-11">
-        <div className="relative h-1.5 w-full rounded-full bg-rm-tint-2">
-          <div
-            className="absolute inset-y-0 left-0 rounded-full bg-primary"
-            style={{ width: `${fill}%` }}
-          />
-          <div
-            className="pointer-events-none absolute top-1/2 size-3 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface shadow-sm pointer-coarse:size-5"
-            style={{ left: `calc(${fill}% - 6px)` }}
-          />
-        </div>
+      <div className="relative flex h-3.5 items-center pointer-coarse:h-11">
         <input
           type="range"
           min="0"
           max={max}
           step="1"
           value={volume}
-          aria-label={mode === "input" ? "Input volume" : "Output volume"}
+          aria-label={label}
           onChange={(event) => onChange(parseInt(event.target.value, 10))}
           onKeyDown={(event) => {
             if (SLIDER_KEYS.has(event.key)) event.stopPropagation();
           }}
-          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+          className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+        />
+        <div className="h-1 w-full overflow-hidden rounded-full bg-tint-3">
+          <div
+            className="h-full rounded-full bg-primary-fill"
+            style={{ width: `calc(${fill}% + ${7 - (fill * 14) / 100}px)` }}
+          />
+        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full bg-primary-fill ring-2 ring-ply-3 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus pointer-coarse:size-5"
+          style={{ left: thumbLeft }}
         />
       </div>
     </div>
@@ -256,7 +269,7 @@ export function AudioDeviceMenu({
             <DropdownMenuSubTrigger icon={<Icon name={modeIcon} />}>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate">{deviceLabel}</span>
-                <span className="truncate text-ui-xs font-normal text-rm-text-muted">
+                <span className="truncate text-ui-xs font-normal text-ink-3">
                   {currentDeviceLabel}
                 </span>
               </span>

@@ -25,7 +25,8 @@ import { useNativeShareStats } from "@/hooks/useNativeShareStats";
 import { cn } from "@/lib/utils";
 import type { NativeShareStatsSnapshot } from "@/types/native-share-stats";
 import { useEffect, useRef, useState } from "react";
-import { Icon } from "@/components/ui/icon";
+import { LedLabel, type LedState } from "@/components/ui/led";
+import { Num } from "@/components/ui/num";
 import {
   connectionStatus,
   type ConnectionTone,
@@ -59,15 +60,17 @@ interface StreamingStatsPanelProps {
 }
 
 /**
- * Connection label ink per tone. Over focused media (`emphasized`) the
- * label sits on a black gradient, so it stays white and the icon carries the
- * warning/danger meaning; on theme surfaces the tone inks the text too.
+ * The connection word is a status LED label (DESIGN.md, LED label): connected
+ * lights talk green, reconnecting amber, a failure muted red, and a state
+ * still on its way stays unlit. Over focused media (`emphasized`) the word
+ * stays white so it reads on the black gradient; the LED still carries the
+ * state.
  */
-const TONE_INK: Record<ConnectionTone, string> = {
-  good: "text-rm-text-muted",
-  pending: "text-rm-text-muted",
-  warning: "text-rm-warning-ink",
-  danger: "text-rm-danger-ink",
+const TONE_LED: Record<ConnectionTone, LedState> = {
+  good: "talk",
+  pending: "off",
+  warning: "idle",
+  danger: "muted",
 };
 
 function ConnectionLabel({
@@ -82,25 +85,20 @@ function ConnectionLabel({
   className?: string;
 }) {
   const { label, tone } = connectionStatus(connectionState, joined);
-  const flagged = tone === "warning" || tone === "danger";
   return (
-    <span
+    <LedLabel
       role="status"
+      state={TONE_LED[tone]}
       className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap text-ui-xs font-medium",
-        emphasized ? "text-white/80" : TONE_INK[tone],
+        "whitespace-nowrap",
+        emphasized && "text-white/80",
         className,
       )}
     >
-      {flagged && (
-        <Icon
-          name={tone === "danger" ? "error" : "warning"}
-          size="xs"
-          className="shrink-0"
-        />
-      )}
-      {label}
-    </span>
+      {/* A phone header has no room for "Connected": the lit LED says it and
+          the word stays for screen readers. Anything else keeps its word. */}
+      <span className={cn(tone === "good" && "max-sm:sr-only")}>{label}</span>
+    </LedLabel>
   );
 }
 
@@ -191,25 +189,26 @@ function StreamingStatsContent({
 
   const toneClass =
     mode.tone === "hook"
-      ? "text-rm-success-ink"
+      ? "text-success-ink"
       : mode.tone === "unavailable"
-        ? "text-rm-danger-ink"
-        : "text-rm-warning-ink";
+        ? "text-danger-ink"
+        : "text-warning-ink";
 
-  const mutedClass = emphasized ? "text-white/60" : "text-rm-text-muted/70";
-  const valueClass = emphasized ? "text-white/90" : "text-rm-text/90";
-  const dividerClass = emphasized ? "bg-white/20" : "bg-rm-border";
+  // Over focused media the readout stays white; on theme surfaces it takes ink.
+  const mutedClass = emphasized ? "text-white/60" : "text-ink-3";
+  const valueClass = emphasized ? "text-white/90" : "text-ink-1";
+  const dividerClass = emphasized ? "bg-white/20" : "bg-line-strong";
 
   return (
     <div
       className={cn(
-        "text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2",
+        "flex items-center gap-2 text-ui-xs font-medium",
         className,
       )}
       title={`Capture ${mode.text}${backend ? ` (${backend})` : ""} · encoder ${data.encoder_backend}`}
     >
       {/* Capture mode (Req 8.2) */}
-      <span className={cn("font-bold", toneClass)}>{mode.text}</span>
+      <span className={cn("font-semibold", toneClass)}>{mode.text}</span>
 
       {/* Graphics_API_Backend — only while mode is hook (Req 8.3) */}
       {backend && (
@@ -226,45 +225,43 @@ function StreamingStatsContent({
       {/* Forwarded / dropped counts + computed fps (Req 8.5) */}
       <Divider className={dividerClass} />
       <span className={mutedClass}>
-        <span className={valueClass}>{fps.toFixed(0)}</span> fps
+        <Num className={valueClass}>{fps.toFixed(0)}</Num> fps
       </span>
       <span className={mutedClass}>
-        <span className={valueClass}>{data.captured_frames}</span> fwd
+        <Num className={valueClass}>{data.captured_frames}</Num> fwd
       </span>
       <span className={mutedClass}>
-        <span className={valueClass}>{data.dropped_frames}</span> drop
+        <Num className={valueClass}>{data.dropped_frames}</Num> drop
       </span>
 
       {/* Capture (fused-GPU) + encode timing in ms (Req 8.6) */}
       <Divider className={dividerClass} />
       <span className={mutedClass}>
-        gpu <span className={valueClass}>{usToMs(data.last_fused_gpu_us)}</span>
+        gpu <Num className={valueClass}>{usToMs(data.last_fused_gpu_us)}</Num>{" "}
         ms
       </span>
       <span className={mutedClass}>
         enc{" "}
-        <span className={valueClass}>{usToMs(data.last_encode_submit_us)}</span>
+        <Num className={valueClass}>{usToMs(data.last_encode_submit_us)}</Num>{" "}
         ms
       </span>
 
       {/* Negotiated resolution + fps, or a pending indicator (Req 9.2, 9.5) */}
       <Divider className={dividerClass} />
       {resolution && negotiatedFps ? (
-        <span className={valueClass}>
+        <Num className={valueClass}>
           {resolution}
           <span className={mutedClass}>@{negotiatedFps}</span>
-        </span>
+        </Num>
       ) : (
-        <span className={cn("italic normal-case", mutedClass)}>
-          negotiating…
-        </span>
+        <span className={mutedClass}>negotiating…</span>
       )}
 
       {/* Fallback reason when non-`none` (Req 8.7) */}
       {showFallback && (
         <>
           <Divider className={dividerClass} />
-          <span className="text-rm-warning-ink">{data.fallback_reason}</span>
+          <span className="text-warning-ink">{data.fallback_reason}</span>
         </>
       )}
 
@@ -273,7 +270,7 @@ function StreamingStatsContent({
         <>
           <Divider className={dividerClass} />
           <span
-            className="text-rm-warning-ink"
+            className="text-warning-ink"
             title="Stats refresh failed — showing last known values"
           >
             stale

@@ -24,6 +24,7 @@ import {
   PartyTracksTransport,
   type PartyTracksTransportCredentials,
 } from "./voice/partytracks-transport";
+import { StatsHub } from "./voice/stats-hub";
 import { ConnectionStatsMonitor } from "./voice/stats-monitor";
 import { VoiceActivityDetector } from "./voice/vad";
 import type { Observable, Subscription } from "rxjs";
@@ -83,6 +84,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public readonly stats: ConnectionStatsMonitor;
   public readonly audioSentinel: AudioSentinel;
   public readonly outboundAudioSentinel: OutboundAudioSentinel;
+  /**
+   * The only getStats() poller for the PartyTracks peer connection: one
+   * snapshot every 2 s (1 s while a sentinel suspects a stall), fanned out
+   * to the track stats, the connection stats and both audio sentinels.
+   */
+  public readonly statsHub: StatsHub;
 
   private readonly createPartyTracksTransport: (
     credentials: PartyTracksTransportCredentials,
@@ -226,6 +233,19 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       },
       onRecover: () => this.emit("outbound-audio-stalled", false),
       onFirstRtp: () => this.markLatency("outboundRtpAt"),
+    });
+
+    this.statsHub = new StatsHub({
+      pc: () => this.partyTracksPeerConnection,
+      isSuspect: () =>
+        this.audioSentinel.isSuspect() ||
+        this.outboundAudioSentinel.isSuspect(),
+    });
+    this.statsHub.addConsumer(({ report, pc, now, elapsedMs }) => {
+      this.stats.ingestTrackStats(report, now);
+      this.stats.ingestConnectionStats(report, pc, now);
+      this.audioSentinel.ingest(report, elapsedMs);
+      this.outboundAudioSentinel.ingest(report, elapsedMs);
     });
 
     this.wireRoomEvents();
@@ -605,10 +625,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       transport.peerConnection$.subscribe((peerConnection) => {
         this.partyTracksPeerConnection = peerConnection;
         this.markLatency("partyTracksPeerConnectionAvailableAt");
-        this.stats.startStatsMonitoring();
-        this.stats.startConnectionStatsMonitoring();
-        this.audioSentinel.start();
-        this.outboundAudioSentinel.start();
+        this.stats.beginConnectionStatsSession();
+        this.audioSentinel.resetMonitoring();
+        this.outboundAudioSentinel.resetMonitoring();
+        this.statsHub.stop();
+        this.statsHub.start();
       });
     this.partyTracksSessionSubscription =
       transport.session$?.subscribe(({ sessionId }) => {
@@ -678,6 +699,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.partyTracksMedia = null;
     this.partyTracksTransport = null;
     this.partyTracksParticipantId = null;
+    this.statsHub.stop();
     this.audioSentinel.stop();
     this.outboundAudioSentinel.stop();
     this.stats.stopStatsMonitoring();
@@ -1170,6 +1192,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public deleteClerkMapping(participantId: string): void {
     this.stats.deleteClerkMapping(participantId);
+  }
+
+  /** Notified after every stats snapshot; then read getStatsByClerkId(). */
+  public subscribeTrackStats(callback: () => void): () => void {
+    return this.stats.subscribeTrackStats(callback);
   }
 
   public subscribeConnectionStats(

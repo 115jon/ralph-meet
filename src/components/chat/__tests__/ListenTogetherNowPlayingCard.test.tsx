@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { ListenTogetherPlaybackState } from "@/components/chat/listen-together-playback";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ListenTogetherNowPlayingCard } from "../ListenTogetherNowPlayingCard";
@@ -55,8 +55,9 @@ function makePlaybackState(
       revision: 1,
       paused: false,
       currentEntryId: currentEntry.entryId,
-      anchorPositionMs: 0,
-      anchorUpdatedAt: 1_000,
+      // Anchored now, so the live position is the 5s the state reports.
+      anchorPositionMs: 5_000,
+      anchorUpdatedAt: Date.now(),
       lastUpdatedAt: 1_000,
       queue: [currentEntry],
       currentEntry,
@@ -68,7 +69,7 @@ function makePlaybackState(
 }
 
 describe("ListenTogetherNowPlayingCard", () => {
-  it("anchors the loudness switch thumb inside its compact audio menu", () => {
+  it("labels the loudness options and uses the shared switch", () => {
     render(
       <ListenTogetherNowPlayingCard
         playback={makePlaybackState()}
@@ -78,13 +79,13 @@ describe("ListenTogetherNowPlayingCard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Audio options"));
+    fireEvent.click(screen.getByRole("button", { name: "Loudness" }));
 
-    const thumb = screen
-      .getByRole("switch", { name: "Turn off loudness control" })
-      .querySelector("span");
-
-    expect(thumb).toHaveClass("left-0.5");
+    const toggle = screen.getByRole("switch", {
+      name: "Turn off loudness control",
+    });
+    expect(toggle).toHaveAttribute("data-slot", "switch");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 
   it("updates local loudness control without sending a room command", async () => {
@@ -105,7 +106,7 @@ describe("ListenTogetherNowPlayingCard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Audio options"));
+    fireEvent.click(screen.getByRole("button", { name: "Loudness" }));
     await user.click(
       screen.getByRole("switch", { name: "Turn off loudness control" }),
     );
@@ -559,7 +560,73 @@ describe("ListenTogetherNowPlayingCard", () => {
       />,
     );
 
-    expect(screen.getByText("Issue")).toHaveClass("text-rm-danger-ink");
+    expect(screen.getByText("Issue")).toHaveClass("text-danger-ink");
+  });
+
+  it("asks before clearing the queue and only then sends the command", async () => {
+    const sendAppEvent = vi.fn(() => true);
+    const user = userEvent.setup();
+    render(
+      <ListenTogetherNowPlayingCard
+        playback={makePlaybackState()}
+        sfu={{ voiceGW: { sendAppEvent } } as never}
+        roomSlug="room-1"
+        variant="panel"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Clear queue" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Clear the queue?",
+    });
+    expect(sendAppEvent).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(sendAppEvent).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Clear queue" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", { name: "Clear the queue?" }),
+      ).getByRole("button", { name: "Clear queue" }),
+    );
+    expect(sendAppEvent).toHaveBeenCalledWith({
+      type: "listen_together.clear",
+      room_slug: "room-1",
+    });
+  });
+
+  it("moves the progress with a CSS animation, paused while playback is paused", () => {
+    const { container, rerender } = render(
+      <ListenTogetherNowPlayingCard
+        playback={makePlaybackState()}
+        sfu={{ voiceGW: { sendAppEvent: vi.fn() } } as never}
+        roomSlug="room-1"
+        variant="mini"
+      />,
+    );
+    const fill = () =>
+      container.querySelector<HTMLElement>(
+        '[data-slot="listen-progress"] span span',
+      );
+    expect(fill()?.style.animation).toMatch(
+      /^rm-listen-progress 180000ms linear -50\d\dms 1 normal both running$/,
+    );
+
+    const base = makePlaybackState();
+    rerender(
+      <ListenTogetherNowPlayingCard
+        playback={{
+          ...base,
+          isPaused: true,
+          snapshot: { ...base.snapshot!, paused: true },
+        }}
+        sfu={{ voiceGW: { sendAppEvent: vi.fn() } } as never}
+        roomSlug="room-1"
+        variant="mini"
+      />,
+    );
+    expect(fill()?.style.animation).toMatch(/ paused$/);
   });
 
   it("stays hidden in mini mode when nothing is currently playing", () => {

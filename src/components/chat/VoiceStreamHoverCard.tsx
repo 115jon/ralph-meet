@@ -1,6 +1,9 @@
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Led } from "@/components/ui/led";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/icon";
 
 interface VoiceStreamHoverCardProps {
   displayName: string;
@@ -10,6 +13,7 @@ interface VoiceStreamHoverCardProps {
   className?: string;
 }
 
+/** No frame yet: a quiet ply-2 field with the live LED and one line. */
 function PlaceholderStreamPreview({
   displayName,
   isCurrentUser,
@@ -18,31 +22,17 @@ function PlaceholderStreamPreview({
   isCurrentUser: boolean;
 }) {
   return (
-    <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-rm-border bg-[radial-gradient(circle_at_top,color-mix(in_oklab,var(--rm-accent)_12%,transparent),transparent_42%)] px-5 py-4">
-      <div className="absolute inset-4 rounded-xl border border-rm-border bg-rm-bg-primary/70 shadow-inner shadow-black/10" />
-      <div className="absolute inset-x-8 top-7 h-10 rounded-full border border-rm-border bg-rm-bg-elevated/70" />
-      <div className="absolute inset-x-12 top-11 bottom-11 rounded-2xl border border-primary/15 bg-rm-bg-surface/85" />
-      <div className="absolute left-1/2 top-[3.25rem] h-12 w-12 -translate-x-1/2 rounded-2xl border border-primary/25 bg-primary/12 shadow-lg shadow-primary/10" />
-      <div className="absolute left-1/2 top-[4.05rem] h-14 w-px -translate-x-1/2 bg-primary/25" />
-      <div className="absolute inset-x-[30%] bottom-10 h-px bg-rm-border" />
-      <div className="absolute left-1/2 bottom-[2.2rem] h-6 w-6 -translate-x-1/2 rounded-full border border-rm-border bg-rm-bg-elevated/90" />
-      <div className="absolute inset-x-14 bottom-6 flex items-end justify-center gap-2">
-        <div className="h-6 w-6 rounded-full border border-rm-border bg-rm-bg-elevated/80" />
-        <div className="h-8 w-8 rounded-full border border-rm-border bg-rm-bg-elevated/95" />
-        <div className="h-6 w-6 rounded-full border border-rm-border bg-rm-bg-elevated/80" />
-      </div>
-      <div className="relative z-10 flex max-w-[14rem] flex-col items-center gap-3 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-lg shadow-primary/10">
-          <Icon name="stream" size="xl" />
-        </div>
-        <div>
-          <p className="text-ui-sm font-semibold text-rm-text">
-            {isCurrentUser ? "Your stream is live" : `${displayName} is live`}
-          </p>
-          <p className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
-            Preview syncing now. A fresh frame should appear in a moment.
-          </p>
-        </div>
+    <div className="flex size-full flex-col items-center justify-center gap-2 bg-ply-2 px-5 py-4 text-center">
+      <span className="flex size-10 items-center justify-center rounded-md bg-live-tint text-live-ink">
+        <Icon name="stream" size="lg" />
+      </span>
+      <div className="max-w-[14rem]">
+        <p className="text-ui-sm font-semibold text-ink-1">
+          {isCurrentUser ? "Your stream is live" : `${displayName} is live`}
+        </p>
+        <p className="mt-0.5 text-ui-xs text-pretty text-ink-3">
+          Preview syncing now. A fresh frame should appear in a moment.
+        </p>
       </div>
     </div>
   );
@@ -71,18 +61,19 @@ export function VoiceStreamHoverCard({
   return (
     <div
       className={cn(
-        "w-[292px] rounded-xl border border-rm-border bg-rm-bg-floating p-3 text-rm-text shadow-xl",
+        "w-[292px] rounded-lg border border-line bg-ply-3 p-3 text-ink-1 shadow-float",
         className,
       )}
       data-stream-hover-card="true"
     >
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-ui-sm font-semibold text-rm-text-muted">
+        <span className="text-ui-sm font-semibold text-ink-2">
           Streaming now
         </span>
-        <span className="rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-destructive">
-          LIVE
-        </span>
+        <Badge variant="live">
+          <Led state="live" />
+          Live
+        </Badge>
       </div>
 
       <button
@@ -91,10 +82,10 @@ export function VoiceStreamHoverCard({
         disabled={!hasWatchAction}
         onClick={handleWatchStream}
         className={cn(
-          "group/stream-thumb relative block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface text-left shadow-lg transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
-          hasWatchAction &&
-            "cursor-pointershadow-xl active:translate-y-0 active:scale-[0.98]",
-          !hasWatchAction && "cursor-default",
+          "group/stream-thumb relative block w-full overflow-hidden rounded-md border border-line bg-ply-2 text-left outline-none transition-[scale] duration-(--dur-1) ease-out",
+          hasWatchAction
+            ? "cursor-pointer enabled:active:scale-(--motion-press)"
+            : "cursor-default",
         )}
       >
         <div className="aspect-[16/10] w-full">
@@ -102,10 +93,7 @@ export function VoiceStreamHoverCard({
             <img
               src={resolvedThumbnailUrl}
               alt={`${displayName} stream preview`}
-              className={cn(
-                "h-full w-full object-cover transition-transform duration-200",
-                hasWatchAction && "",
-              )}
+              className="size-full object-cover"
             />
           ) : (
             <PlaceholderStreamPreview
@@ -114,41 +102,21 @@ export function VoiceStreamHoverCard({
             />
           )}
         </div>
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-0 bg-transparent transition-colors duration-200",
-            hasWatchAction &&
-              "pointer-fine:group-hover/stream-thumb:bg-rm-bg-primary/35",
-          )}
-        />
-        <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center justify-center">
-          <div
-            className={cn(
-              "rounded-full border border-rm-border bg-rm-bg-floating/90 px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text shadow-lg transition-ui",
-              hasWatchAction
-                ? "opacity-0stream-thumb:opacity-100"
-                : "opacity-100",
-            )}
-          >
-            {ctaLabel}
-          </div>
-        </div>
+        {hasWatchAction ? (
+          <div className="pointer-events-none absolute inset-0 bg-ply-0/0 transition-colors duration-(--dur-1) ease-out pointer-fine:group-hover/stream-thumb:bg-ply-0/35" />
+        ) : null}
       </button>
 
-      <button
+      <Button
         type="button"
+        variant={hasWatchAction ? "primary" : "secondary"}
         disabled={!hasWatchAction}
         onClick={handleWatchStream}
-        className={cn(
-          "mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border text-ui-sm font-semibold transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
-          hasWatchAction
-            ? "border-primary/20 bg-primary text-primary-foreground shadow-lg shadow-primary/20 pointer-fine:hover:bg-primary/90 active:scale-[0.98]"
-            : "cursor-default border-rm-border bg-rm-bg-elevated/70 text-rm-text-muted",
-        )}
+        className="mt-3 w-full"
       >
         <Icon name="screenShare" size="sm" />
         <span>{ctaLabel}</span>
-      </button>
+      </Button>
     </div>
   );
 }

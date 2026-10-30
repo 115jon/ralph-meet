@@ -18,8 +18,14 @@ vi.mock("@/hooks/useUserResolution", () => ({
     avatarDisplay: null,
   }),
 }));
+const soundboard = vi.hoisted(() => ({
+  setSoundboardMasterVolume: vi.fn(),
+}));
+
 vi.mock("@/lib/voice/soundboard", () => ({
   getSoundboardServerKey: (serverId?: string | null) => serverId || "dm-call",
+  getSoundboardMasterVolume: () => 0.6,
+  setSoundboardMasterVolume: soundboard.setSoundboardMasterVolume,
   pauseSoundboardPlayback: vi.fn(),
   resumeSoundboardPlayback: vi.fn(),
   setSoundboardPlaybackVolume: vi.fn(),
@@ -123,9 +129,25 @@ describe("FloatingSoundboardManager", () => {
     expect(screen.getByText("Soundboard")).toBeInTheDocument();
     expect(screen.getByText("Airhorn")).toBeInTheDocument();
     expect(screen.getByText("Drumroll")).toBeInTheDocument();
+    // One master volume in the header; per-sound volume waits behind each
+    // row's expand.
+    expect(
+      screen.getByRole("slider", { name: "Soundboard volume" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryAllByRole("slider", { name: /^Volume for/ }),
+    ).toHaveLength(0);
+    for (const name of ["Airhorn", "Drumroll"]) {
+      await user.click(
+        screen.getByRole("button", { name: `Show volume for ${name}` }),
+      );
+    }
     expect(screen.getAllByRole("slider", { name: /^Volume for/ })).toHaveLength(
       2,
     );
+    expect(
+      screen.getByRole("button", { name: "Hide volume for Airhorn" }),
+    ).toHaveAttribute("aria-expanded", "true");
 
     await user.click(
       screen.getByRole("button", { name: "Collapse soundboard manager" }),
@@ -180,7 +202,7 @@ describe("FloatingSoundboardManager", () => {
     await waitFor(() => {
       const tooltip = document.querySelector('[data-slot="tooltip-content"]');
       expect(tooltip).not.toBeNull();
-      expect(tooltip).toHaveClass("bg-rm-text", "text-rm-bg-primary");
+      expect(tooltip).toHaveClass("bg-ink-1", "text-ply-0");
     });
   });
 
@@ -198,6 +220,9 @@ describe("FloatingSoundboardManager", () => {
       />,
     );
 
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show volume for Airhorn" }),
+    );
     const slider = screen.getByRole("slider", { name: "Volume for Airhorn" });
     fireEvent.change(slider, { target: { value: "100" } });
 
@@ -208,6 +233,25 @@ describe("FloatingSoundboardManager", () => {
       playback_id: "first",
       volume: 1,
     });
+  });
+
+  it("sets the master volume from the header without sending a room event", () => {
+    const sendAppEvent = vi.fn(() => true);
+    render(
+      <FloatingSoundboardManager
+        serverId="server-1"
+        localUserId="user-1"
+        sfu={{ voiceGW: { sendAppEvent } } as unknown as SFUClient}
+      />,
+    );
+
+    const master = screen.getByRole("slider", { name: "Soundboard volume" });
+    expect(master.closest("header")).not.toBeNull();
+    fireEvent.change(master, { target: { value: "40" } });
+
+    expect(soundboard.setSoundboardMasterVolume).toHaveBeenLastCalledWith(0.4);
+    expect(screen.getByText("40%")).toBeInTheDocument();
+    expect(sendAppEvent).not.toHaveBeenCalled();
   });
 
   it("drags from both the header and the minimised bubble without toggling", async () => {

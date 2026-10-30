@@ -22,6 +22,8 @@ export function FloatingListenTogetherPlayer({
   roomSlug,
   onOpenQueue,
 }: FloatingListenTogetherPlayerProps) {
+  // No ticking: the card moves its progress in CSS and ticks its clock in a
+  // leaf, so the player itself renders only when the room changes.
   const playback = useListenTogetherPlaybackState(roomSlug);
   const entry = playback.currentEntry;
   if (!entry) return null;
@@ -61,7 +63,7 @@ export function FloatingListenTogetherPlayer({
       sheet={card("panel", "pb-2")}
       sheetTitle="Now playing"
     >
-      {card("mini", "rounded-none border-0 bg-transparent dark:bg-transparent")}
+      {card("mini")}
     </FloatingSurface>
   );
 }

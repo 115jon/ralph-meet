@@ -1,20 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogDescription,
-  ResponsiveDialogFooter,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-} from "@/components/ui/responsive-dialog";
-import { DontAskAgainCheckbox } from "@/components/chat/DontAskAgainCheckbox";
+import { ConfirmCallDialog } from "@/components/chat/ConfirmCallDialog";
 import { VOICE_SWITCH_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
-import { useCallback, useState } from "react";
-
-// ── LocalStorage key for "Don't ask again" ─────────────────────────────────
-const DONT_ASK_KEY = VOICE_SWITCH_CONFIRM_KEY;
 
 interface VoiceSwitchModalProps {
   /** Whether the modal is visible */
@@ -23,6 +10,11 @@ interface VoiceSwitchModalProps {
   targetName: string;
   /** What kind of voice session the user is currently in */
   currentType: "voice" | "call";
+  /**
+   * Name of the channel or call being left ("Standup"). Without it the body
+   * falls back to "your current voice channel" / "your current call".
+   */
+  currentName?: string;
   /** Called when the user confirms the switch */
   onConfirm: () => void;
   /** Called when the user cancels */
@@ -41,53 +33,25 @@ export function VoiceSwitchModal({
   open,
   targetName,
   currentType,
+  currentName,
   onConfirm,
   onCancel,
 }: VoiceSwitchModalProps) {
-  const [dontAskAgain, setDontAskAgain] = useState(false);
-
-  const handleConfirm = useCallback(() => {
-    if (dontAskAgain) {
-      try {
-        localStorage.setItem(DONT_ASK_KEY, "true");
-      } catch {
-        /* quota / private-mode — silently ignore */
-      }
-    }
-    onConfirm();
-  }, [dontAskAgain, onConfirm]);
-
-  const bodyText =
-    currentType === "call"
-      ? `Looks like you're in a call. Are you sure you want to switch to `
-      : `Looks like you're in another voice channel. Are you sure you want to switch to `;
+  const leaving =
+    currentName ??
+    (currentType === "call"
+      ? "your current call"
+      : "your current voice channel");
 
   return (
-    <ResponsiveDialog
+    <ConfirmCallDialog
       open={open}
-      onOpenChange={(nextOpen) => !nextOpen && onCancel()}
-    >
-      <ResponsiveDialogContent className="md:max-w-sm">
-        <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>You sure?</ResponsiveDialogTitle>
-          <ResponsiveDialogDescription>
-            {bodyText}
-            <span className="font-semibold text-rm-text">{targetName}</span>?
-          </ResponsiveDialogDescription>
-        </ResponsiveDialogHeader>
-        <DontAskAgainCheckbox
-          checked={dontAskAgain}
-          onCheckedChange={setDontAskAgain}
-        />
-        <ResponsiveDialogFooter>
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={handleConfirm}>
-            Confirm
-          </Button>
-        </ResponsiveDialogFooter>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
+      title={`Switch to ${targetName}?`}
+      description={<>You&apos;ll leave {leaving}.</>}
+      confirmLabel="Switch"
+      skipConfirmKey={VOICE_SWITCH_CONFIRM_KEY}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }

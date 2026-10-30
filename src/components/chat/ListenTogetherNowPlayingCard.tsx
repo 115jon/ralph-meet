@@ -1,4 +1,5 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { clog } from "@/lib/console-logger";
 import {
@@ -11,21 +12,239 @@ import { describeListenTogetherError } from "@/lib/listen-together";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
-import type { ListenTogetherPlaybackState } from "./listen-together-playback";
-import { formatListenTogetherDuration } from "./listen-together-playback";
+import {
+  formatListenTogetherDuration,
+  getListenTogetherLivePositionMs,
+  getListenTogetherProgressKey,
+  isListenTogetherProgressRunning,
+  type ListenTogetherPlaybackState,
+  type ListenTogetherPositionSource,
+  useListenTogetherClockNow,
+} from "./listen-together-playback";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
+import { Led, type LedState } from "@/components/ui/led";
+import { formatElapsed, Num } from "@/components/ui/num";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { HIT, PRESS } from "@/components/ui/interaction";
+import { Switch } from "@/components/ui/switch";
+import { useAppActive } from "@/hooks/useAppActive";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { RangeSlider } from "./floating/RangeSlider";
 
 const listenTogetherLog = clog("ListenTogether");
+
+/* ------------------------------------------------------------------ */
+/* Progress: CSS-driven, re-keyed only when the position jumps          */
+/* ------------------------------------------------------------------ */
+
+const PROGRESS_KEYFRAMES =
+  "@keyframes rm-listen-progress{from{transform:translateX(-100%)}to{transform:translateX(0)}}";
+
+/** One shared keyframe; React hoists it into <head> and dedupes it. */
+function ProgressKeyframes() {
+  return (
+    <style href="rm-listen-progress" precedence="default">
+      {PROGRESS_KEYFRAMES}
+    </style>
+  );
+}
+
+const PROGRESS_TONE = {
+  /** Seek bars: the spec slider (tint-3 track, primary-fill, 14px thumb). */
+  control: {
+    track: "h-1 bg-tint-3",
+    fill: "bg-primary-fill",
+    marker: "size-3.5 bg-primary-fill ring-2 ring-ply-3",
+  },
+  /** Tracklist rows: the lit path along a guide, ending in a node. */
+  path: {
+    track: "h-0.5 bg-guide",
+    fill: "bg-path",
+    marker: "size-1.5 bg-path",
+  },
+} as const;
+
+/**
+ * How far the shared track has played, moved by one linear CSS animation
+ * (`transform` only): duration = the track, a negative delay = time already
+ * played, paused with `animation-play-state`. Nothing re-renders while it
+ * runs; seek, pause, resume, the next track or the app coming back re-key it.
+ * The global `data-app-inactive` rule pauses it.
+ */
+export function ListenTogetherProgress({
+  playback,
+  tone = "control",
+  marker = false,
+  className,
+}: {
+  playback: ListenTogetherPositionSource;
+  tone?: keyof typeof PROGRESS_TONE;
+  marker?: boolean;
+  className?: string;
+}) {
+  const active = useAppActive();
+  if (playback.durationMs <= 0) return null;
+  const key = `${getListenTogetherProgressKey(playback)}|${active ? "on" : "off"}`;
+  return (
+    <div
+      aria-hidden
+      data-slot="listen-progress"
+      className={cn(
+        "pointer-events-none relative w-full rounded-full",
+        PROGRESS_TONE[tone].track,
+        className,
+      )}
+    >
+      <ProgressKeyframes />
+      <ProgressRun key={key} playback={playback} tone={tone} marker={marker} />
+    </div>
+  );
+}
+
+function ProgressRun({
+  playback,
+  tone,
+  marker,
+}: {
+  playback: ListenTogetherPositionSource;
+  tone: keyof typeof PROGRESS_TONE;
+  marker: boolean;
+}) {
+  // Read once per key: changing the delay of a running animation would
+  // count the elapsed time twice.
+  const [animation] = useState(() => {
+    const position = getListenTogetherLivePositionMs(playback, Date.now());
+    const state = isListenTogetherProgressRunning(playback)
+      ? "running"
+      : "paused";
+    return `rm-listen-progress ${playback.durationMs}ms linear ${-position}ms 1 normal both ${state}`;
+  });
+  return (
+    <>
+      <span className="absolute inset-0 overflow-hidden rounded-full">
+        <span
+          className={cn("absolute inset-0", PROGRESS_TONE[tone].fill)}
+          style={{ animation }}
+        />
+      </span>
+      {marker ? (
+        <span className="absolute inset-0" style={{ animation }}>
+          <span
+            className={cn(
+              "absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 rounded-full",
+              PROGRESS_TONE[tone].marker,
+            )}
+          />
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/** Elapsed time, ticking once a second in its own leaf while on screen. */
+export function ListenTogetherClock({
+  playback,
+  className,
+}: {
+  playback: ListenTogetherPositionSource;
+  className?: string;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const now = useListenTogetherClockNow(playback, ref);
+  return (
+    <Num ref={ref} className={className}>
+      {formatElapsed(getListenTogetherLivePositionMs(playback, now))}
+    </Num>
+  );
+}
+
+/**
+ * Seek: a native range input (keyboard, Escape to cancel) laid invisibly
+ * over the CSS progress. The input and the elapsed label update at 1 Hz in
+ * this leaf only.
+ */
+function SeekBar({
+  playback,
+  title,
+  disabled,
+  layout,
+  onPreview,
+  onCommit,
+  onCancel,
+  onKeyDown,
+  onKeyUp,
+}: {
+  playback: ListenTogetherPlaybackState;
+  title: string;
+  disabled: boolean;
+  layout: "inline" | "stacked";
+  onPreview: (positionMs: number) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  onKeyUp: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const now = useListenTogetherClockNow(playback, ref);
+  const position = getListenTogetherLivePositionMs(playback, now);
+  const max = playback.progressMax;
+  const elapsed = formatElapsed(position);
+  const total = formatListenTogetherDuration(playback.durationMs);
+
+  const track = (
+    <div className="group/seek relative flex h-5 min-w-0 flex-1 items-center rounded-sm has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-focus pointer-coarse:h-11">
+      <ListenTogetherProgress playback={playback} marker />
+      <input
+        type="range"
+        min={0}
+        max={max}
+        value={Math.min(position, max)}
+        disabled={disabled}
+        aria-label={`Seek ${title}`}
+        aria-valuetext={`${elapsed} of ${total}`}
+        onChange={(event) => onPreview(Number(event.currentTarget.value))}
+        onPointerUp={onCommit}
+        onPointerCancel={onCancel}
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onBlur={onCommit}
+        className="absolute inset-0 m-0 h-full w-full min-w-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+      />
+    </div>
+  );
+
+  if (layout === "inline") {
+    return (
+      <div ref={ref} className="flex items-center gap-2">
+        <Num className="min-w-9 text-ink-3">{elapsed}</Num>
+        {track}
+        <Num className="min-w-9 text-right text-ink-3">{total}</Num>
+      </div>
+    );
+  }
+  return (
+    <div ref={ref} className="flex flex-col gap-1">
+      {track}
+      <div className="flex items-center justify-between text-ink-3">
+        <Num>{elapsed}</Num>
+        <Num>{total}</Num>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Card                                                                 */
+/* ------------------------------------------------------------------ */
 
 function isCurrentSeekPreview(
   playback: ListenTogetherPlaybackState["localPlayback"],
@@ -61,13 +280,10 @@ export function ListenTogetherNowPlayingCard({
 }: ListenTogetherNowPlayingCardProps) {
   const {
     currentEntry,
-    durationMs,
-    effectiveSeekValue,
     error,
     localVolume,
     loudnessEnabled,
     loudnessPreset,
-    progressMax,
     setLocalVolume,
     setLocalPlayback,
     updateLoudnessSettings,
@@ -77,6 +293,7 @@ export function ListenTogetherNowPlayingCard({
   } = playback;
 
   const canControl = !!roomSlug && !!sfu && sfu.voiceGW.isReady !== false;
+  const [confirmClear, setConfirmClear] = useState(false);
   const pendingSeekRef = useRef<{
     entryId: string;
     positionMs: number;
@@ -94,22 +311,11 @@ export function ListenTogetherNowPlayingCard({
   if (!currentEntry) {
     if (variant !== "panel") return null;
     return (
-      <div
-        className={cn(
-          "flex flex-col items-center gap-3 px-6 py-12 text-center",
-          className,
-        )}
-      >
-        <Icon
-          name="headphones"
-          size="3xl"
-          className="text-rm-text-muted max-md:size-8"
-        />
-        <p className="text-ui-md font-semibold text-rm-text">Nothing playing</p>
-        <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
-          Queue a track to start listening together.
-        </p>
-      </div>
+      <EmptyState
+        className={className}
+        title="Nothing playing"
+        description="Queue a track to start listening together."
+      />
     );
   }
 
@@ -120,25 +326,26 @@ export function ListenTogetherNowPlayingCard({
       currentEntry.track.kind === "music" ? currentEntry.track.album : null,
     ]
       .filter(Boolean)
-      .join(" • ") || currentEntry.track.sourceLabel;
-  const requesterLine =
-    queueCount > 1
-      ? `Requested by ${currentEntry.requester.displayName} • ${queueCount} queued`
-      : `Requested by ${currentEntry.requester.displayName}`;
-  const syncBadge = error
-    ? {
-        label: "Issue",
-        className: "bg-rm-danger-tint text-rm-danger-ink",
-      }
-    : isPaused
-      ? {
-          label: "Paused",
-          className: "bg-rm-tint-2 text-rm-text-secondary",
-        }
-      : {
-          label: "Sync",
-          className: "bg-rm-accent-tint text-rm-accent-ink",
-        };
+      .join(" · ") || currentEntry.track.sourceLabel;
+  // The queue count shows once: on the queue button (mini) or the Queue tab.
+  const requesterLine = `Requested by ${currentEntry.requester.displayName}`;
+  const status: {
+    label: string;
+    led: LedState;
+    className: string;
+    normal?: boolean;
+  } = error
+    ? { label: "Issue", led: "muted", className: "text-danger-ink" }
+    : !canControl
+      ? { label: "Not connected", led: "off", className: "text-ink-3" }
+      : isPaused
+        ? { label: "Paused", led: "off", className: "text-ink-3" }
+        : {
+            label: "In sync",
+            led: "talk",
+            className: "text-ink-3",
+            normal: true,
+          };
 
   const artwork = currentEntry.track.artworkUrl ? (
     <img
@@ -147,8 +354,8 @@ export function ListenTogetherNowPlayingCard({
       className="h-full w-full object-cover"
     />
   ) : (
-    <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-      <Icon name="headphones" size={variant === "panel" ? "lg" : "sm"} />
+    <div className="flex h-full w-full items-center justify-center text-ink-3">
+      <Icon name="music" size={variant === "panel" ? "lg" : "md"} />
     </div>
   );
 
@@ -159,15 +366,55 @@ export function ListenTogetherNowPlayingCard({
       display={currentEntry.requester.avatarDisplay}
     />
   ) : (
-    <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-rm-text-muted">
+    <div className="flex h-full w-full items-center justify-center text-ui-2xs text-ink-3">
       {currentEntry.requester.displayName.charAt(0).toUpperCase()}
     </div>
   );
+  const requester = (
+    <div className="flex min-w-0 items-center gap-1.5 text-ui-xs text-ink-3">
+      <div
+        className={cn(
+          "size-4 shrink-0 bg-tint-3",
+          avatarShape(
+            currentEntry.requester.avatarUrl &&
+              currentEntry.requester.avatarDisplay,
+          ),
+        )}
+      >
+        {requesterAvatar}
+      </div>
+      <InlineEmojiText
+        text={requesterLine}
+        className="block min-w-0 truncate"
+      />
+    </div>
+  );
   const titleTriggerClassName = cn(
-    "block truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-elevated",
+    "block truncate rounded-xs text-ink-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
     variant === "mini"
-      ? "text-ui-sm font-semibold leading-tight text-rm-text"
-      : "text-ui-md font-semibold text-rm-text",
+      ? "text-ui-row font-medium"
+      : "text-ui-md font-semibold text-balance",
+  );
+  const title = (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className={titleTriggerClassName}
+          aria-label={`Track title: ${currentEntry.track.title}`}
+        >
+          {currentEntry.track.title}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="start"
+        sideOffset={10}
+        className="max-w-80"
+      >
+        <p className="break-words">{currentEntry.track.title}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 
   const sendCommand = (payload: Record<string, unknown>) => {
@@ -186,6 +433,8 @@ export function ListenTogetherNowPlayingCard({
       payload.type === "listen_together.pause" &&
       typeof payload.paused === "boolean"
     ) {
+      // The live position at the click, not the last render's.
+      const positionMs = getListenTogetherLivePositionMs(playback, Date.now());
       const previousCommandStates =
         localPlayback?.source === "command"
           ? (localPlayback.pendingStates ?? [])
@@ -195,7 +444,7 @@ export function ListenTogetherNowPlayingCard({
         (snapshot?.revision ?? 0) + previousCommandStates.length;
       setLocalPlayback(roomSlug, {
         paused: payload.paused,
-        positionMs: effectiveSeekValue,
+        positionMs,
         entryId: currentEntry.entryId,
         snapshotRevision: nextSnapshotRevision,
         source: "command",
@@ -204,7 +453,7 @@ export function ListenTogetherNowPlayingCard({
           ...previousCommandStates,
           {
             paused: payload.paused,
-            positionMs: effectiveSeekValue,
+            positionMs,
             snapshotRevision: nextSnapshotRevision,
             sequence: nextSequence,
           },
@@ -319,10 +568,44 @@ export function ListenTogetherNowPlayingCard({
       entryId: currentEntry.entryId,
     });
   };
+  const skip = () => {
+    sendCommand({
+      type: "listen_together.skip",
+      room_slug: roomSlug,
+      entryId: currentEntry.entryId,
+    });
+  };
+  const pauseLabel = isPaused
+    ? "Resume shared playback"
+    : "Pause shared playback";
+
+  const seek = (layout: "inline" | "stacked") => (
+    <SeekBar
+      playback={playback}
+      title={currentEntry.track.title}
+      disabled={!canControl}
+      layout={layout}
+      onPreview={updateSeekPreview}
+      onCommit={commitSeek}
+      onCancel={cancelSeek}
+      onKeyDown={handleSeekKeyDown}
+      onKeyUp={handleSeekKeyUp}
+    />
+  );
+
+  const statusChip = (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 text-ui-xs",
+        status.className,
+      )}
+    >
+      <Led state={status.led} />
+      {status.label}
+    </span>
+  );
 
   if (variant === "pill") {
-    const progress =
-      progressMax > 0 ? Math.min(1, effectiveSeekValue / progressMax) : 0;
     return (
       <div
         className={cn(
@@ -330,33 +613,30 @@ export function ListenTogetherNowPlayingCard({
           className,
         )}
       >
-        <div className="size-10 shrink-0 overflow-hidden rounded-md bg-rm-tint-1">
+        <div className="size-10 shrink-0 overflow-hidden rounded-md bg-tint-1">
           {artwork}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ui-sm font-semibold text-rm-text">
+          <p className="truncate text-ui-sm font-medium text-ink-1">
             {currentEntry.track.title}
           </p>
-          <p className="truncate text-ui-xs text-rm-text-secondary">
+          <p className="truncate text-ui-xs text-ink-3">
             {isPaused ? "Paused" : subtitle}
           </p>
         </div>
         <IconButton
           icon={isPaused ? "play" : "pause"}
-          size="md"
-          variant="ghost"
+          iconState="active"
+          size={40}
           shape="circle"
           onClick={togglePause}
           disabled={!canControl}
-          aria-label={
-            isPaused ? "Resume shared playback" : "Pause shared playback"
-          }
+          aria-label={pauseLabel}
         />
         {/* Progress as a hairline along the bottom edge; the sheet seeks. */}
-        <span
-          aria-hidden
-          className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-primary"
-          style={{ transform: `scaleX(${progress})` }}
+        <ListenTogetherProgress
+          playback={playback}
+          className="absolute inset-x-0 bottom-0 h-0.5 rounded-none bg-transparent"
         />
       </div>
     );
@@ -364,274 +644,122 @@ export function ListenTogetherNowPlayingCard({
 
   if (variant === "mini") {
     return (
-      <TooltipProvider delayDuration={100}>
-        <div
-          className={cn(
-            "rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-3 dark:bg-rm-bg-elevated max-md:px-2.5 max-md:py-2.5",
-            className,
-          )}
-        >
-          <div className="flex items-start gap-3 max-md:items-center max-md:gap-2.5">
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-rm-tint-1 max-md:h-10 max-md:w-10">
+      <TooltipProvider>
+        <div className={cn("flex flex-col gap-3 p-3", className)}>
+          <div className="flex items-start gap-3">
+            <div className="size-12 shrink-0 overflow-hidden rounded-md bg-tint-1">
               {artwork}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        tabIndex={0}
-                        className={titleTriggerClassName}
-                        aria-label={`Track title: ${currentEntry.track.title}`}
-                      >
-                        {currentEntry.track.title}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      align="start"
-                      sideOffset={10}
-                      className="max-w-[280px]"
-                    >
-                      <p className="break-words text-ui-sm font-semibold">
-                        {currentEntry.track.title}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <div className="mt-1 truncate text-ui-2xs text-rm-text-muted">
-                    {subtitle}
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    "inline-flex shrink-0 rounded-full px-2 py-0.5 text-ui-2xs font-semibold",
-                    syncBadge.className,
-                    "max-md:hidden",
-                  )}
-                >
-                  {syncBadge.label}
-                </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="flex min-w-0 items-baseline justify-between gap-2">
+                <div className="min-w-0 flex-1">{title}</div>
+                <span className="max-md:hidden">{statusChip}</span>
               </div>
-              <div className="mt-2 flex items-center gap-2 text-ui-2xs text-rm-text-muted max-md:hidden">
-                <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
-                  {requesterAvatar}
-                </div>
-                <InlineEmojiText
-                  text={requesterLine}
-                  className="block min-w-0 truncate"
-                />
-              </div>
+              <div className="truncate text-ui-xs text-ink-3">{subtitle}</div>
+              <div className="mt-1 max-md:hidden">{requester}</div>
             </div>
           </div>
-          <div className="mt-3 max-md:mt-2">
-            <div className="flex items-center gap-2">
-              <span className="min-w-9 text-ui-2xs text-rm-text-muted tabular-nums">
-                {formatListenTogetherDuration(effectiveSeekValue)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={progressMax}
-                value={Math.min(effectiveSeekValue, progressMax)}
-                disabled={!canControl}
-                aria-label={`Seek ${currentEntry.track.title}`}
-                onChange={(event) => {
-                  updateSeekPreview(Number(event.currentTarget.value));
-                }}
-                onPointerUp={commitSeek}
-                onPointerCancel={cancelSeek}
-                onKeyDown={handleSeekKeyDown}
-                onKeyUp={handleSeekKeyUp}
-                onBlur={commitSeek}
-                className="h-1.5 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
-              />
-              <span className="min-w-9 text-right text-ui-2xs text-rm-text-muted tabular-nums">
-                {formatListenTogetherDuration(durationMs)}
-              </span>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-2">
+          {seek("inline")}
+          <div className="flex items-center justify-between gap-2">
             {onOpenQueue ? (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={onOpenQueue}
-                className={cn(
-                  "inline-flex h-8 items-center gap-2 rounded-full bg-rm-tint-1 px-3 text-ui-xs font-medium text-rm-text-secondary outline-none pointer-fine:hover:text-rm-text max-md:w-8 max-md:justify-center max-md:gap-0 max-md:px-0",
-                  PRESS,
-                  HIT,
-                )}
                 aria-label="Open listen together queue"
               >
                 <Icon name="playlist" size="sm" />
-                <span className="max-md:hidden">
-                  {queueCount > 0 ? `Queue ${queueCount}` : "Open queue"}
-                </span>
-              </button>
+                {queueCount > 0 ? (
+                  <>
+                    Queue <Num className="text-ink-3">{queueCount}</Num>
+                  </>
+                ) : (
+                  "Open queue"
+                )}
+              </Button>
             ) : (
-              <div className="text-ui-2xs text-rm-text-muted">
+              <span className="text-ui-xs text-ink-3">
                 {currentEntry.track.sourceLabel}
-              </div>
+              </span>
             )}
-            <div className="flex shrink-0 items-center gap-1 max-md:gap-1.5">
+            <div className="flex shrink-0 items-center gap-1">
               <IconButton
                 icon={isPaused ? "play" : "pause"}
-                iconSize="sm"
-                variant="muted"
+                iconState="active"
+                size={32}
                 shape="circle"
-                className="bg-rm-tint-1"
-                onClick={() => {
-                  sendCommand({
-                    type: "listen_together.pause",
-                    room_slug: roomSlug,
-                    paused: !isPaused,
-                    entryId: currentEntry.entryId,
-                  });
-                }}
+                className="bg-tint-1"
+                onClick={togglePause}
                 disabled={!canControl}
-                aria-label={
-                  isPaused ? "Resume shared playback" : "Pause shared playback"
-                }
+                aria-label={pauseLabel}
               />
               <IconButton
                 icon="skip"
-                iconSize="sm"
-                variant="muted"
+                size={32}
                 shape="circle"
-                className="bg-rm-tint-1"
-                onClick={() => {
-                  sendCommand({
-                    type: "listen_together.skip",
-                    room_slug: roomSlug,
-                    entryId: currentEntry.entryId,
-                  });
-                }}
+                onClick={skip}
                 disabled={!canControl}
                 aria-label="Skip current track"
               />
             </div>
           </div>
+          {error ? (
+            <p className="flex items-start gap-1.5 text-ui-xs text-danger-ink">
+              <Icon name="warning" size="xs" className="mt-0.5 shrink-0" />
+              {describeListenTogetherError(error, "control playback")}
+            </p>
+          ) : null}
         </div>
       </TooltipProvider>
     );
   }
 
   return (
-    <TooltipProvider delayDuration={100}>
-      <div className={cn("min-w-0 space-y-4", className)}>
-        <div className="flex min-w-0 gap-4 md:gap-5">
-          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-rm-tint-1 md:h-24 md:w-24">
+    <TooltipProvider>
+      <div className={cn("flex min-w-0 flex-col gap-4", className)}>
+        <div className="flex min-w-0 gap-4">
+          <div className="size-20 shrink-0 overflow-hidden rounded-lg bg-tint-1 md:size-24">
             {artwork}
           </div>
-          <div className="min-w-0 flex-1 py-0.5">
-            {/* The queue badge wraps under the title at 360 instead of
-                pushing the row past the card edge (N9). */}
-            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <div className="min-w-0 max-w-full">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      tabIndex={0}
-                      className={titleTriggerClassName}
-                      aria-label={`Track title: ${currentEntry.track.title}`}
-                    >
-                      {currentEntry.track.title}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    align="start"
-                    sideOffset={10}
-                    className="max-w-[320px]"
-                  >
-                    <p className="break-words text-ui-sm font-semibold">
-                      {currentEntry.track.title}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-                <div className="mt-1 truncate text-ui-xs text-rm-text-muted md:text-ui-sm">
-                  {subtitle}
-                </div>
-              </div>
-              {queueCount > 0 && (
-                <span className="shrink-0 rounded-full bg-rm-accent-tint px-2 py-0.5 text-ui-2xs font-semibold tabular-nums text-rm-accent-ink">
-                  {queueCount} queued
-                </span>
-              )}
-            </div>
-            <div className="mt-3 flex min-w-0 items-center gap-2 text-ui-xs text-rm-text-muted">
-              <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
-                {requesterAvatar}
-              </div>
-              <InlineEmojiText
-                text={requesterLine}
-                className="block min-w-0 truncate"
-              />
+          <div className="flex min-w-0 flex-1 flex-col gap-1 py-0.5">
+            {title}
+            <div className="truncate text-ui-sm text-ink-2">{subtitle}</div>
+            {/* The room's sync state already heads the panel; only say
+                something here when it isn't the normal "in sync". */}
+            <div className="mt-auto flex min-w-0 items-center justify-between gap-3">
+              {requester}
+              {status.normal ? null : statusChip}
             </div>
           </div>
         </div>
 
-        <div className="space-y-1">
-          <input
-            type="range"
-            min={0}
-            max={progressMax}
-            value={Math.min(effectiveSeekValue, progressMax)}
-            disabled={!canControl}
-            aria-label={`Seek ${currentEntry.track.title}`}
-            onChange={(event) => {
-              updateSeekPreview(Number(event.currentTarget.value));
-            }}
-            onPointerUp={commitSeek}
-            onPointerCancel={cancelSeek}
-            onKeyDown={handleSeekKeyDown}
-            onKeyUp={handleSeekKeyUp}
-            onBlur={commitSeek}
-            className="h-8 w-full cursor-pointer disabled:cursor-not-allowed"
-          />
-          <div className="flex items-center justify-between text-ui-2xs tabular-nums text-rm-text-muted">
-            <span>{formatListenTogetherDuration(effectiveSeekValue)}</span>
-            <span>{formatListenTogetherDuration(durationMs)}</span>
-          </div>
-        </div>
+        {seek("stacked")}
 
         {error && (
-          <div className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink">
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-md bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink"
+          >
             <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
             {describeListenTogetherError(error, "control playback")}
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-2 md:justify-start">
+        <div className="flex items-center gap-2">
           <Button
             size="lg"
-            className="size-11 rounded-full px-0"
-            onClick={() => {
-              sendCommand({
-                type: "listen_together.pause",
-                room_slug: roomSlug,
-                paused: !isPaused,
-                entryId: currentEntry.entryId,
-              });
-            }}
+            className="size-10 rounded-full px-0 has-[>svg]:px-0"
+            onClick={togglePause}
             disabled={!canControl}
-            aria-label={
-              isPaused ? "Resume shared playback" : "Pause shared playback"
-            }
+            aria-label={pauseLabel}
           >
-            <Icon name={isPaused ? "play" : "pause"} size="lg" />
+            <Icon name={isPaused ? "play" : "pause"} state="active" size="lg" />
           </Button>
           <Button
             variant="secondary"
             size="lg"
             className="rounded-full"
-            onClick={() => {
-              sendCommand({
-                type: "listen_together.skip",
-                room_slug: roomSlug,
-                entryId: currentEntry.entryId,
-              });
-            }}
+            onClick={skip}
             disabled={!canControl}
           >
             <Icon name="skip" size="sm" />
@@ -639,10 +767,10 @@ export function ListenTogetherNowPlayingCard({
           </Button>
           <IconButton
             icon="trash"
-            size="md"
+            size={40}
             variant="destructive"
             shape="circle"
-            className="ml-auto md:ml-2"
+            className="ml-auto"
             onClick={() => {
               sendCommand({
                 type: "listen_together.remove",
@@ -652,95 +780,75 @@ export function ListenTogetherNowPlayingCard({
             }}
             disabled={!canControl}
             aria-label="Remove current track"
+            tooltip="Remove from queue"
           />
         </div>
 
-        <div className="flex min-h-11 items-center gap-3 border-t border-rm-border pt-3">
+        <div className="flex min-h-10 items-center gap-3 border-t border-line pt-3">
           <Icon
-            name="voiceChannel"
+            name={localVolume === 0 ? "speakerOff" : "voiceChannel"}
             size="sm"
-            className="shrink-0 text-rm-text-muted"
+            className="shrink-0 text-ink-3"
           />
-          <label className="sr-only" htmlFor="listen-together-volume">
-            Your volume
-          </label>
-          <input
+          <RangeSlider
             id="listen-together-volume"
-            type="range"
-            min={0}
-            max={100}
+            aria-label="Your volume"
+            aria-valuetext={`${Math.round(localVolume * 100)} percent local volume`}
             value={Math.round(localVolume * 100)}
             disabled={!roomSlug}
-            aria-valuetext={`${Math.round(localVolume * 100)} percent local volume`}
-            onChange={(event) => {
+            onValueChange={(value) => {
               if (!roomSlug) return;
-              setLocalVolume(roomSlug, Number(event.currentTarget.value) / 100);
+              setLocalVolume(roomSlug, value / 100);
             }}
-            className="h-8 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
+            className="flex-1"
           />
-          <span className="min-w-9 text-right text-ui-xs tabular-nums text-rm-text-muted">
+          <Num className="min-w-9 text-right text-ink-3">
             {Math.round(localVolume * 100)}%
-          </span>
+          </Num>
           <Popover>
             <PopoverTrigger
               render={
-                <button
-                  type="button"
-                  className={cn(
-                    "relative flex size-10 shrink-0 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text data-popup-open:text-rm-text",
-                    PRESS,
-                    HIT,
-                  )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 text-ink-2 data-popup-open:bg-tint-2"
                 />
               }
             >
-              <Icon name="privacy" size="sm" />
-              <span className="sr-only">Audio options</span>
+              <Icon name="sliders" size="sm" />
+              Loudness
             </PopoverTrigger>
             {/* Stacked: the panel variant also lives in the phone sheet. */}
             <PopoverContent
               side="top"
               align="end"
               stacked
-              aria-label="Audio options"
-              className="w-56 p-3"
+              aria-label="Loudness"
+              className="w-60 p-3"
             >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-ui-xs font-semibold text-rm-text">
-                    Loudness
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-ui-sm font-medium text-ink-1">
+                    Even out loudness
                   </div>
-                  <div className="text-ui-2xs text-rm-text-muted">
-                    Smooth out big volume changes.
+                  <div className="text-ui-xs text-ink-3">
+                    Smooths big jumps between tracks. Only you hear this.
                   </div>
                 </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={loudnessEnabled}
+                <Switch
+                  checked={loudnessEnabled}
+                  onCheckedChange={(enabled) =>
+                    updateLoudnessSettings({ enabled })
+                  }
                   aria-label={
                     loudnessEnabled
                       ? "Turn off loudness control"
                       : "Turn on loudness control"
                   }
-                  onClick={() =>
-                    updateLoudnessSettings({ enabled: !loudnessEnabled })
-                  }
-                  className={cn(
-                    "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-150",
-                    HIT,
-                    loudnessEnabled ? "bg-primary" : "bg-rm-field-edge",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-(--rm-ease-out)",
-                      loudnessEnabled ? "translate-x-4" : "translate-x-0",
-                    )}
-                  />
-                </button>
+                  className="mt-0.5"
+                />
               </div>
-              <div className="flex items-center gap-1 rounded-md bg-rm-tint-1 p-1">
+              <div className="flex items-center gap-1 rounded-md bg-tint-1 p-1">
                 {LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS.map(
                   ([preset, { label }]) => (
                     <button
@@ -751,10 +859,10 @@ export function ListenTogetherNowPlayingCard({
                       aria-pressed={loudnessPreset === preset}
                       onClick={() => updateLoudnessSettings({ preset })}
                       className={cn(
-                        "min-w-0 flex-1 rounded-sm px-2 py-1.5 text-ui-xs font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45",
+                        "h-7 min-w-0 flex-1 rounded-sm px-2 text-ui-xs font-medium outline-none transition-colors duration-(--dur-1) ease-out focus-visible:outline-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-45",
                         loudnessPreset === preset
-                          ? "bg-rm-tint-3 font-semibold text-rm-text"
-                          : "text-rm-text-muted pointer-fine:hover:text-rm-text",
+                          ? "bg-tint-3 text-ink-1"
+                          : "text-ink-3 pointer-fine:hover:text-ink-1",
                       )}
                     >
                       {label}
@@ -766,23 +874,39 @@ export function ListenTogetherNowPlayingCard({
           </Popover>
         </div>
 
-        <div className="flex items-center justify-between gap-3 text-ui-2xs text-rm-text-muted">
-          <span className="truncate">{currentEntry.track.sourceLabel}</span>
+        <div className="flex items-center justify-between gap-3">
+          <span className="truncate text-ui-xs text-ink-3">
+            {currentEntry.track.sourceLabel}
+          </span>
           <Button
             variant="ghost"
-            size="xs"
-            className="shrink-0 text-rm-text-secondary"
-            onClick={() => {
-              sendCommand({
-                type: "listen_together.clear",
-                room_slug: roomSlug,
-              });
-            }}
+            size="sm"
+            className="shrink-0 text-ink-2"
+            onClick={() => setConfirmClear(true)}
             disabled={!canControl}
           >
             Clear queue
           </Button>
         </div>
+        <ConfirmDialog
+          open={confirmClear}
+          onOpenChange={setConfirmClear}
+          title="Clear the queue?"
+          description="Every queued track is removed for everyone listening in this room."
+          confirmLabel="Clear queue"
+          irreversible
+          errorAction="clear the queue"
+          onConfirm={() => {
+            if (
+              !sendCommand({
+                type: "listen_together.clear",
+                room_slug: roomSlug,
+              })
+            ) {
+              throw new Error("Couldn't reach the voice room.");
+            }
+          }}
+        />
       </div>
     </TooltipProvider>
   );

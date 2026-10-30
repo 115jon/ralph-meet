@@ -165,15 +165,17 @@ export function StickerReactionsOverlay({
           });
         }
       } else if (displayMode === "bounce") {
+        // "bounce" is the wire name; it lands rather than bounces (spec §6:
+        // no overshoot). A short ease-out entrance, a hold, a faster exit.
         const id = crypto.randomUUID();
         const left = (Math.random() * 60 + 20).toFixed(1);
-        const rot = (Math.random() * 60 - 30).toFixed(1);
+        const rot = (Math.random() * 16 - 8).toFixed(1);
         newItems.push({
           id,
           url: stickerUrl,
           contentType,
           className:
-            "animate-reaction-bounce absolute top-0 w-16 h-16 pointer-events-none object-contain z-50",
+            "animate-reaction-land absolute top-1/4 w-16 h-16 -translate-x-1/2 pointer-events-none object-contain z-50",
           style: {
             left: `${left}%`,
             "--rot": `${rot}deg`,

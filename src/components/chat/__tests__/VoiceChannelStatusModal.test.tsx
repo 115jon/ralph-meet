@@ -48,12 +48,12 @@ const cases: Array<[string, ModalComponent, string]> = [
   [
     "VoiceChannelTextStatusModal",
     VoiceChannelTextStatusModal as ModalComponent,
-    "What are we chatting about?",
+    "Channel status",
   ],
   [
     "VoiceChannelMediaStatusModal",
     VoiceChannelMediaStatusModal as ModalComponent,
-    "Set the vibe",
+    "Channel vibe",
   ],
 ];
 

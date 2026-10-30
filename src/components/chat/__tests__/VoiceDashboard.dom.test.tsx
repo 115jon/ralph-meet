@@ -144,31 +144,99 @@ describe("VoiceDashboard stream settings menu", () => {
 });
 
 describe("VoiceDashboard noise suppression popover", () => {
-  it("opens from its trigger and closes on Escape and back", async () => {
+  it("opens from the voice options menu and closes on Escape and back", async () => {
     renderDashboard({ isScreenSharing: false });
-    const trigger = screen.getByRole("button", { name: "Noise suppression" });
+    const trigger = screen.getByRole("button", { name: "Voice options" });
 
     trigger.focus();
     fireEvent.click(trigger);
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /Noise suppression/ }),
+    );
     const panel = await screen.findByRole("dialog", {
       name: "Noise suppression",
     });
     expect(panel.closest("[data-rm-floating-layer]")).not.toBeNull();
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
 
     fireEvent.keyDown(panel, { key: "Escape" });
     await waitFor(() =>
-      expect(trigger).toHaveAttribute("aria-expanded", "false"),
+      expect(
+        screen.queryByRole("dialog", { name: "Noise suppression" }),
+      ).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(document.activeElement).toBe(trigger));
 
     fireEvent.click(trigger);
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /Noise suppression/ }),
+    );
     await screen.findByRole("dialog", { name: "Noise suppression" });
     act(() => {
       executeBackHandlers();
     });
     await waitFor(() =>
-      expect(trigger).toHaveAttribute("aria-expanded", "false"),
+      expect(
+        screen.queryByRole("dialog", { name: "Noise suppression" }),
+      ).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("VoiceDashboard call strip", () => {
+  it("holds camera, share, activities, soundboard and Leave, never mic or deafen", () => {
+    renderDashboard({ isScreenSharing: false, hasCamera: true });
+    for (const name of [
+      "Turn on camera",
+      "Share screen",
+      "Activities",
+      "Soundboard",
+      "Leave call",
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: "Mute" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deafen" })).toBeNull();
+    const solids = Array.from(document.querySelectorAll("button")).filter(
+      (button) => button.className.includes("bg-danger-fill"),
+    );
+    expect(solids).toHaveLength(1);
+  });
+
+  it("collapses to its status line while the call's stage is on screen", () => {
+    renderDashboard({ isScreenSharing: false, collapsed: true });
+    const strip = screen.getByRole("region", { name: "Voice call" });
+    expect(strip).toHaveAttribute("data-collapsed");
+    expect(strip.querySelector(".rm-collapse")).not.toHaveAttribute(
+      "data-open",
+    );
+    // The collapsed actions are inert, not just hidden.
+    expect(strip.querySelector(".rm-collapse-inner")).toHaveAttribute("inert");
+  });
+
+  it("says where the call is and what the connection is doing", () => {
+    renderDashboard({
+      isScreenSharing: false,
+      connectionState: "reconnecting",
+    });
+    expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
+  });
+
+  it("offers Retry when the connection failed", () => {
+    const onRetry = vi.fn();
+    renderDashboard({
+      isScreenSharing: false,
+      connectionState: "failed",
+      onRetry,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("never shows a pulsing signal icon or garbled text", () => {
+    renderDashboard({ isScreenSharing: false, connectionState: "connecting" });
+    const strip = screen.getByRole("region", { name: "Voice call" });
+    expect(strip.innerHTML).not.toContain("animate-pulse");
+    expect(strip.textContent).not.toContain("\u00e2\u20ac");
+    expect(screen.getByText("Connecting…")).toBeInTheDocument();
   });
 });

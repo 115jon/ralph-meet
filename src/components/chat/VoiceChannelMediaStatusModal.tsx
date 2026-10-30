@@ -20,6 +20,12 @@ import { useChatActions } from "@/stores/chat-store";
 import { Icon } from "@/components/ui/icon";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
+/** Both actions share one anatomy: icon tile, title, one line. */
+const ACTION_CARD =
+  "flex min-h-20 items-start gap-3 rounded-lg border border-line bg-ply-2 p-4 text-left transition-colors duration-(--dur-1) ease-out outline-none pointer-fine:hover:bg-tint-1 disabled:cursor-not-allowed disabled:opacity-45";
+const ACTION_CARD_ICON =
+  "flex size-10 shrink-0 items-center justify-center rounded-md bg-tint-2 text-ink-2";
+
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 
 type VoiceStatusMediaListResponse = {
@@ -99,27 +105,46 @@ function VoiceStatusMediaTile({
   onClick: () => void;
   disabled: boolean;
 }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isVideo = media.preview_content_type.startsWith("video/");
+  // Clips rest on their first frame and play only while you point at or focus
+  // the tile: a grid of looping clips would animate for as long as it's open.
+  const play = () => {
+    void videoRef.current?.play().catch(() => {});
+  };
+  const rest = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    video.currentTime = 0;
+  };
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="block w-full overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface p-1 transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+      onPointerEnter={isVideo ? play : undefined}
+      onPointerLeave={isVideo ? rest : undefined}
+      onFocus={isVideo ? play : undefined}
+      onBlur={isVideo ? rest : undefined}
+      className="block w-full overflow-hidden rounded-lg border border-line bg-ply-2 p-1 transition-colors duration-(--dur-1) ease-out outline-none pointer-fine:hover:bg-tint-1 disabled:cursor-not-allowed disabled:opacity-45"
     >
       <div
-        className="w-full overflow-hidden rounded-md bg-rm-bg-hover"
+        className="w-full overflow-hidden rounded-md bg-tint-1"
         style={{
           aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}`,
         }}
       >
-        {media.preview_content_type.startsWith("video/") ? (
+        {isVideo ? (
           <video
-            src={getMediaUrl(media.preview_url)}
+            ref={videoRef}
+            src={`${getMediaUrl(media.preview_url)}#t=0.001`}
             className="h-full w-full object-contain"
-            autoPlay
             loop
             muted
             playsInline
+            preload="metadata"
             aria-label="Media preview"
           />
         ) : (
@@ -325,7 +350,7 @@ export default function VoiceChannelMediaStatusModal({
     >
       <ResponsiveDialogContent dialogClassName="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Set the vibe</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Channel vibe</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Pick something and it will be set right away.
           </ResponsiveDialogDescription>
@@ -336,25 +361,25 @@ export default function VoiceChannelMediaStatusModal({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isBusy}
-            className="group flex min-h-36 flex-col items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className={ACTION_CARD}
           >
-            {uploading ? (
-              <span role="status" className="mb-4 text-rm-text">
-                <Spinner className="size-8" />
-                <span className="sr-only">Uploading</span>
-              </span>
-            ) : (
-              <Icon
-                name="upload"
-                size="2xl"
-                className="mb-4 text-rm-text-muted pointer-fine:group-hover:text-rm-text"
-              />
-            )}
-            <span className="text-ui-lg font-semibold text-rm-text">
-              Server uploads
+            <span className={ACTION_CARD_ICON}>
+              {uploading ? (
+                <span role="status">
+                  <Spinner className="size-5" />
+                  <span className="sr-only">Uploading</span>
+                </span>
+              ) : (
+                <Icon name="upload" size="lg" />
+              )}
             </span>
-            <span className="mt-1 text-ui-xs text-rm-text-muted">
-              Upload your own image or clip
+            <span className="min-w-0">
+              <span className="block text-ui-row font-semibold text-ink-1">
+                Server uploads
+              </span>
+              <span className="mt-0.5 block text-ui-xs text-ink-3">
+                Upload your own image or clip
+              </span>
             </span>
           </button>
 
@@ -362,21 +387,19 @@ export default function VoiceChannelMediaStatusModal({
             type="button"
             onClick={() => setShowGifPicker(true)}
             disabled={isBusy}
-            className="relative min-h-36 overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-colors pointer-fine:hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className={ACTION_CARD}
           >
-            <div className="absolute right-3 top-3 size-12 rounded-lg bg-rm-bg-hover" />
-            <div className="absolute bottom-3 right-10 size-8 rounded-md bg-rm-bg-hover" />
-            <div className="relative z-10 flex h-full flex-col justify-end">
-              <div className="mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-rm-bg-hover text-rm-text">
-                <Icon name="sparkle" size="lg" />
-              </div>
-              <span className="text-ui-lg font-semibold text-rm-text">
+            <span className={ACTION_CARD_ICON}>
+              <Icon name="sparkle" size="lg" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-ui-row font-semibold text-ink-1">
                 Choose GIF
               </span>
-              <span className="mt-1 text-ui-xs text-rm-text-muted">
+              <span className="mt-0.5 block text-ui-xs text-ink-3">
                 Open the GIF picker
               </span>
-            </div>
+            </span>
           </button>
         </div>
 
@@ -397,11 +420,9 @@ export default function VoiceChannelMediaStatusModal({
         {loadingRecents || hasRecents ? (
           <div>
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-ui-sm font-semibold text-rm-text">Recents</h3>
+              <h3 className="text-ui-sm font-semibold text-ink-1">Recents</h3>
               {loadingRecents ? (
-                <span className="text-ui-xs text-rm-text-muted">
-                  Loading...
-                </span>
+                <span className="text-ui-xs text-ink-3">Loading...</span>
               ) : null}
             </div>
 

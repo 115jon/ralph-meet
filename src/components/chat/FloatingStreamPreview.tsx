@@ -107,7 +107,7 @@ export default function FloatingStreamPreview({
   const label = `${displayName}'s stream`;
 
   return (
-    <TooltipProvider delayDuration={0}>
+    <TooltipProvider>
       <FloatingSurface
         id={`stream-preview-${slotIndex}`}
         label="Stream preview"
@@ -129,7 +129,7 @@ export default function FloatingStreamPreview({
         headerActions={
           <IconButton
             icon="arrowRight"
-            size="xs"
+            size={28}
             variant="muted"
             tooltip={`Go to ${channelName}`}
             aria-label={`Go to ${channelName}`}
@@ -139,7 +139,7 @@ export default function FloatingStreamPreview({
         compact={
           <div className="relative">
             {media(true)}
-            <span className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-sm bg-black/60 px-1.5 text-ui-2xs font-semibold text-white">
+            <span className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-sm bg-black/60 px-1.5 text-ui-xs font-medium text-white">
               <InlineEmojiText text={displayName} />
             </span>
           </div>
@@ -197,16 +197,23 @@ export default function FloatingStreamPreview({
           ) : null
         }
       >
-        <div className="group relative">
+        <div className="group/preview relative">
           {media()}
-          <div className="absolute right-2 bottom-2 z-20 flex items-center gap-1.5">
+          {/* Over video: a black/60 pill (the media-overlay exception to the
+              ply tokens). Revealed on hover or focus; always shown on touch
+              and while its menu is open. */}
+          <div
+            data-open={menuPosition ? "" : undefined}
+            className="absolute right-2 bottom-2 z-20 flex items-center gap-0.5 rounded-md bg-black/60 p-0.5 transition-opacity duration-(--dur-2) ease-out pointer-fine:opacity-0 pointer-fine:group-hover/preview:opacity-100 pointer-fine:group-has-focus-visible/preview:opacity-100 pointer-fine:data-open:opacity-100"
+          >
             <IconButton
               icon="sliders"
-              size="sm"
+              size={28}
               variant="plain"
-              tooltip="Stream Settings"
+              tooltip="Stream settings"
               aria-label="Open stream settings"
-              className="bg-black/55 text-white/85 pointer-fine:hover:bg-black/70 pointer-fine:hover:text-white"
+              aria-haspopup="menu"
+              className="text-white/85 [--hover-o:0] pointer-fine:hover:bg-white/15 pointer-fine:hover:text-white focus-visible:outline-2 focus-visible:outline-white"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
                 setMenuPosition((current) =>
@@ -216,11 +223,11 @@ export default function FloatingStreamPreview({
             />
             <IconButton
               icon="streamOff"
-              size="sm"
+              size={28}
               variant="plain"
               tooltip={primaryActionTooltip}
               aria-label={primaryActionAriaLabel}
-              className="bg-black/55 text-white/85 transition-colors pointer-fine:hover:bg-destructive pointer-fine:hover:text-destructive-foreground"
+              className="text-white/85 [--hover-o:0] pointer-fine:hover:bg-danger-fill pointer-fine:hover:text-on-danger focus-visible:outline-2 focus-visible:outline-white"
               onClick={() => {
                 onPrimaryAction();
                 setMenuPosition(null);

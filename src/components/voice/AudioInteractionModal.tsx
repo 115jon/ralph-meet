@@ -26,10 +26,9 @@ export function AudioInteractionModal({
     >
       <ResponsiveDialogContent className="md:max-w-sm">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Interaction required</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Turn on sound</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
-            Browsers require user interaction before they will play audio. Just
-            click okay to continue.
+            Your browser needs one click before it can play the call.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
@@ -37,10 +36,11 @@ export function AudioInteractionModal({
           <Button
             type="button"
             size="lg"
+            autoFocus
             className="w-full"
             onClick={onInteract}
           >
-            Okay
+            Turn on sound
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

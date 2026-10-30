@@ -87,7 +87,7 @@ describe("VoiceControls phone dock", () => {
       "Turn on camera",
       "Share screen",
       "More controls",
-      "Disconnect",
+      "Leave call",
     ]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
@@ -136,41 +136,72 @@ describe("VoiceControls states", () => {
     mocks.isMobile = false;
   });
 
+  it("leaves mic and deafen to the account row unless the bar is fullscreen", () => {
+    renderDock();
+    expect(screen.queryByRole("button", { name: "Mute" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deafen" })).toBeNull();
+  });
+
   it("tints muted and live controls and keeps Leave the only solid", () => {
     renderDock({
+      isFullscreen: true,
       isMicOn: false,
       isDeafened: true,
       isCameraOn: true,
       isScreenSharing: true,
     });
     expect(screen.getByRole("button", { name: "Unmute" }).className).toContain(
-      "bg-rm-danger-tint",
+      "bg-muted-state-tint",
     );
     expect(
       screen.getByRole("button", { name: "Undeafen" }).className,
-    ).toContain("bg-rm-danger-tint");
+    ).toContain("bg-muted-state-tint");
     for (const name of ["Turn off camera", "Stop sharing"]) {
       const button = screen.getByRole("button", { name });
-      expect(button.className).toContain("bg-rm-accent-tint");
-      expect(button.className).not.toContain("bg-primary");
+      expect(button.className).toContain("bg-live-tint");
+      expect(button.className).not.toContain("bg-primary-fill");
     }
-    const leave = screen.getByRole("button", { name: "Disconnect" });
-    expect(leave.className).toContain("bg-rm-danger ");
+    const leave = screen.getByRole("button", { name: "Leave call" });
+    expect(leave.className).toContain("bg-danger-fill");
+    const solids = Array.from(document.querySelectorAll("button")).filter(
+      (button) => button.className.includes("bg-danger-fill"),
+    );
+    expect(solids).toHaveLength(1);
   });
 
-  it("uses the destructive tint, not solid, for Stop watching and Leave activity", () => {
+  it("keeps Stop watching neutral and Leave call in the red slot", () => {
     const watch = renderDock({ focusedItem: { id: "s", isStreaming: true } });
     const stop = screen.getByRole("button", { name: "Stop watching" });
-    expect(stop.className).toContain("bg-rm-danger-tint");
-    expect(stop.className).not.toContain("bg-rm-danger ");
+    expect(stop.className).toContain("bg-tint-1");
+    expect(stop.className).not.toContain("bg-danger");
     fireEvent.click(stop);
     expect(watch.setFocusedId).toHaveBeenCalledWith(null);
+    expect(screen.getByRole("button", { name: "Leave call" })).toBeTruthy();
+  });
+
+  it("reads mute and deafen from the voice settings store when given a user", async () => {
+    const { useVoiceSettingsStore } =
+      await import("@/stores/useVoiceSettingsStore");
+    useVoiceSettingsStore.setState({
+      currentUser: "u-me",
+      userSettings: {
+        "u-me": {
+          ...useVoiceSettingsStore.getState().getSettings("u-me"),
+          isMuted: true,
+          isDeafened: true,
+        },
+      },
+      _cache: {},
+    });
+    renderDock({ isFullscreen: true, isMicOn: true, settingsUserId: "u-me" });
+    expect(screen.getByRole("button", { name: "Unmute" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undeafen" })).toBeTruthy();
   });
 
   it("draws the camera with one glyph: idle at rest, Fill when live", () => {
     renderDock();
     const camera = screen.getByRole("button", { name: "Turn on camera" });
     expect(camera.querySelector("svg")).toBeTruthy();
-    expect(camera.className).toContain("bg-rm-tint-1");
+    expect(camera.className).toContain("bg-tint-1");
   });
 });

@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
+import { useIsSpeaking } from "@/hooks/useIsSpeaking";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
 import type { GridItem } from "@/components/voice/types";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -15,8 +17,10 @@ import { DndContext, type DragEndEvent, useDraggable } from "@dnd-kit/core";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { HIT, PRESS } from "@/components/ui/interaction";
+import { Num } from "@/components/ui/num";
 import { ResponsivePopover } from "@/components/ui/popover";
-import { useMemo, useRef, useState } from "react";
+import { Switch } from "@/components/ui/switch";
+import { useId, useMemo, useRef, useState } from "react";
 
 interface SpatialAudioPanelProps {
   isOpen: boolean;
@@ -43,10 +47,50 @@ const MODES: Array<{ value: SpatialPlacementMode; label: string }> = [
   { value: "grid", label: "Grid" },
   { value: "manual", label: "Manual" },
 ];
+const SLIDERS = [
+  { label: "Room size", key: "roomSize", min: 10, max: 100 },
+  { label: "Distance", key: "distance", min: 10, max: 95 },
+  { label: "Arc angle", key: "arcAngle", min: 30, max: 180 },
+] as const;
 const EMPTY_PARTICIPANT_CAPABILITIES: Record<
   string,
   { enabled?: boolean; highFidelity?: boolean }
 > = {};
+
+function SpatialSlider({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label
+      // Dragging must not swipe the phone drawer.
+      data-base-ui-swipe-ignore=""
+      className="flex flex-col gap-2 text-ui-sm font-medium text-ink-2"
+    >
+      <span className="flex items-center justify-between">
+        <span>{label}</span>
+        <Num className="text-ink-1">{value}</Num>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full accent-primary-fill"
+      />
+    </label>
+  );
+}
 
 function DraggableAvatar({
   participant,
@@ -60,6 +104,7 @@ function DraggableAvatar({
   inactive: boolean;
 }) {
   const isSelf = participant.name === "You";
+  const isSpeaking = useIsSpeaking(participant.userId);
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: participant.userId,
@@ -70,20 +115,24 @@ function DraggableAvatar({
     <button
       ref={setNodeRef}
       type="button"
+      data-speaking={isSpeaking ? "" : undefined}
       title={
         inactive
           ? `${participant.name} is not hearing spatial audio`
           : participant.name
       }
       className={cn(
-        "absolute size-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-sm outline-none",
+        "absolute size-9 -translate-x-1/2 -translate-y-1/2 border-2 outline-none",
+        // No clip: HIT's pseudo-element extends the target outward.
+        avatarShape(
+          !isSelf && participant.avatar && participant.avatarDisplay,
+          { clip: false },
+        ),
         HIT,
-        isSelf ? "bg-rm-accent-solid" : "bg-rm-bg-elevated",
-        participant.isSpeaking || isSelf
-          ? "border-rm-accent-ink"
-          : "border-rm-border-strong",
-        inactive && "border-rm-warning-ink opacity-55 grayscale",
-        isDragging && "z-20 shadow-lg",
+        isSelf ? "bg-primary-fill" : "bg-ply-3",
+        isSpeaking ? "border-talk" : "border-line-strong",
+        inactive && "border-warning-ink opacity-55 grayscale",
+        isDragging && "z-20 shadow-float",
         disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing",
       )}
       style={{
@@ -95,12 +144,12 @@ function DraggableAvatar({
       {...attributes}
     >
       {isSelf && (
-        <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-ui-2xs font-semibold text-rm-text">
+        <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-ui-2xs font-semibold text-ink-1">
           You
         </span>
       )}
       {!isSelf && (
-        <span className="absolute inset-0 overflow-visible rounded-full">
+        <span className="absolute inset-0 overflow-visible rounded-[inherit]">
           {participant.avatar ? (
             <AvatarImage
               src={getAuthAssetUrl(participant.avatar)}
@@ -108,14 +157,14 @@ function DraggableAvatar({
               display={participant.avatarDisplay ?? null}
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center text-ui-xs font-semibold text-rm-text">
+            <span className="flex h-full w-full items-center justify-center text-ui-xs font-semibold text-ink-1">
               {participant.name[0]?.toUpperCase()}
             </span>
           )}
         </span>
       )}
       {inactive && (
-        <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full border border-rm-warning-ink bg-rm-bg-surface text-rm-warning-ink">
+        <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full border border-warning-ink bg-ply-3 text-warning-ink">
           <Icon name="warning" size="xs" />
         </span>
       )}
@@ -137,6 +186,7 @@ export function SpatialAudioPanel({
   onOpenVoiceSettings,
   onClose,
 }: SpatialAudioPanelProps) {
+  const enabledId = useId();
   const mapRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const panStartRef = useRef<{
@@ -261,16 +311,14 @@ export function SpatialAudioPanel({
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-ui-md font-semibold text-rm-text">
-            Spatial audio
-          </h3>
-          <p className="mt-1 text-ui-sm text-rm-text-secondary">
+          <h3 className="text-ui-md font-semibold text-ink-1">Spatial audio</h3>
+          <p className="mt-1 text-ui-sm text-ink-2">
             Shared room placement for everyone in this voice session.
           </p>
         </div>
         <IconButton
           icon="close"
-          size="sm"
+          size={28}
           variant="muted"
           aria-label="Close spatial audio"
           onClick={onClose}
@@ -278,8 +326,8 @@ export function SpatialAudioPanel({
       </div>
 
       {blocked && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-md bg-rm-warning-tint px-3 py-2">
-          <div className="flex items-center gap-2 text-ui-sm text-rm-warning-ink">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-md bg-warning-tint px-3 py-2">
+          <div className="flex items-center gap-2 text-ui-sm text-warning-ink">
             <Icon name="warning" size="sm" className="shrink-0" />
             Turn on high-fidelity audio to hear spatial audio.
           </div>
@@ -290,42 +338,40 @@ export function SpatialAudioPanel({
       )}
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <button
+        <div className="flex items-center gap-2.5">
+          <Switch
+            id={enabledId}
+            aria-label="Spatial audio"
+            checked={state.enabled}
+            onCheckedChange={(nextEnabled) => {
+              onLocalSpatialEnabledChange(nextEnabled);
+              commit({ enabled: nextEnabled });
+            }}
+          />
+          <label
+            htmlFor={enabledId}
+            className="text-ui-sm font-medium text-ink-1 select-none"
+          >
+            {state.enabled ? "On" : "Off"}
+          </label>
+        </div>
+        <Button
           type="button"
-          onClick={() => {
-            const nextEnabled = !state.enabled;
-            onLocalSpatialEnabledChange(nextEnabled);
-            commit({ enabled: nextEnabled });
-          }}
-          aria-pressed={state.enabled}
-          className={cn(
-            "inline-flex h-8 items-center gap-2 rounded-md px-3 text-ui-sm font-medium",
-            PRESS,
-            HIT,
-            state.enabled && localSpatialEnabled && localHighFidelity
-              ? "bg-rm-accent-tint font-semibold text-rm-accent-ink"
-              : "bg-rm-tint-1 text-rm-text-secondary pointer-fine:hover:text-rm-text",
-          )}
-        >
-          <Icon name="spatial" size="sm" />
-          {state.enabled ? "Spatial audio on" : "Spatial audio off"}
-        </button>
-        <button
-          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() =>
             commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })
           }
-          className={cn(
-            "inline-flex h-8 items-center gap-2 rounded-md bg-rm-tint-1 px-3 text-ui-sm font-medium text-rm-text-secondary pointer-fine:hover:text-rm-text",
-            PRESS,
-            HIT,
-          )}
         >
           <Icon name="reset" size="sm" /> Reset
-        </button>
+        </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-2">
+      <div
+        role="group"
+        aria-label="Placement"
+        className="mb-4 grid grid-cols-4 gap-0.5 rounded-md bg-tint-1 p-0.5"
+      >
         {MODES.map((mode) => (
           <button
             key={mode.value}
@@ -333,12 +379,11 @@ export function SpatialAudioPanel({
             onClick={() => commit({ placementMode: mode.value })}
             aria-pressed={state.placementMode === mode.value}
             className={cn(
-              "h-8 rounded-md px-3 text-ui-sm font-medium",
-              PRESS,
+              "relative h-7 rounded-sm px-3 text-ui-sm font-medium outline-none transition-colors duration-(--dur-1) ease-out",
               HIT,
               state.placementMode === mode.value
-                ? "bg-rm-tint-2 font-semibold text-rm-text"
-                : "bg-rm-tint-1 text-rm-text-secondary pointer-fine:hover:text-rm-text",
+                ? "bg-accent-tint font-semibold text-accent-ink"
+                : "text-ink-2 pointer-fine:hover:text-ink-1",
             )}
           >
             {mode.label}
@@ -347,32 +392,17 @@ export function SpatialAudioPanel({
       </div>
 
       <div className="mb-4 grid gap-4 md:grid-cols-3">
-        {[
-          ["Room size", "roomSize", 10, 100],
-          ["Distance", "distance", 10, 95],
-          ["Arc angle", "arcAngle", 30, 180],
-        ].map(([label, key, min, max]) => (
-          <label
+        {SLIDERS.map(({ label, key, min, max }) => (
+          <SpatialSlider
             key={key}
-            className="space-y-2 text-ui-sm font-medium text-rm-text-secondary"
-          >
-            <span className="flex justify-between">
-              <span>{label}</span>
-              <span className="tabular-nums">{(state as any)[key]}</span>
-            </span>
-            <input
-              type="range"
-              min={min as number}
-              max={max as number}
-              value={(state as any)[key]}
-              onChange={(event) =>
-                commit({
-                  [key]: Number(event.target.value),
-                } as Partial<SharedSpatialAudioState>)
-              }
-              className="w-full accent-primary"
-            />
-          </label>
+            label={label}
+            value={state[key]}
+            min={min}
+            max={max}
+            onChange={(next) =>
+              commit({ [key]: next } as Partial<SharedSpatialAudioState>)
+            }
+          />
         ))}
       </div>
 
@@ -381,7 +411,7 @@ export function SpatialAudioPanel({
           ref={mapRef}
           // Panning and dragging avatars must not swipe the phone drawer.
           data-base-ui-swipe-ignore=""
-          className="relative h-[360px] touch-none overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface"
+          className="relative h-[360px] touch-none overflow-hidden rounded-lg border border-line bg-ply-2"
           onWheel={onWheel}
           onPointerDown={onMapPointerDown}
           onPointerMove={onMapPointerMove}
@@ -390,15 +420,15 @@ export function SpatialAudioPanel({
         >
           <div
             ref={worldRef}
-            className="absolute inset-0 cursor-grab bg-[linear-gradient(var(--rm-border)_1px,transparent_1px),linear-gradient(90deg,var(--rm-border)_1px,transparent_1px)] active:cursor-grabbing"
+            className="absolute inset-0 cursor-grab bg-[linear-gradient(var(--line)_1px,transparent_1px),linear-gradient(90deg,var(--line)_1px,transparent_1px)] active:cursor-grabbing"
             style={{
               backgroundSize: `${Math.max(38, 78 / totalZoom)}px ${Math.max(38, 78 / totalZoom)}px`,
               transform: `translate(${view.panX}px, ${view.panY}px) scale(${totalZoom})`,
               transformOrigin: "50% 58%",
             }}
           >
-            <div className="absolute left-4 top-4 rounded-sm border border-rm-border bg-rm-bg-surface px-1.5 py-0.5 text-ui-xs font-medium text-rm-text-secondary tabular-nums">
-              {state.roomSize} m² room
+            <div className="absolute left-4 top-4 rounded-sm border border-line bg-ply-3 px-1.5 py-0.5 text-ui-xs font-medium text-ink-2">
+              <Num>{state.roomSize}</Num> m² room
             </div>
             {participants.map((participant) => {
               const caps =
@@ -420,7 +450,7 @@ export function SpatialAudioPanel({
               );
             })}
           </div>
-          <div className="absolute right-3 top-3 flex rounded-md border border-rm-border bg-rm-bg-surface">
+          <div className="absolute right-3 top-3 flex rounded-md border border-line bg-ply-3">
             <button
               type="button"
               aria-label="Zoom out"
@@ -431,7 +461,7 @@ export function SpatialAudioPanel({
                 }))
               }
               className={cn(
-                "flex size-8 items-center justify-center text-rm-text-muted pointer-fine:hover:text-rm-text",
+                "flex size-8 items-center justify-center text-ink-3 pointer-fine:hover:text-ink-1",
                 PRESS,
                 HIT,
               )}
@@ -443,12 +473,12 @@ export function SpatialAudioPanel({
               aria-label={`Reset zoom, now ${Math.round(totalZoom * 100)}%`}
               onClick={() => setView({ zoom: 1, panX: 0, panY: 0 })}
               className={cn(
-                "border-x border-rm-border px-2 text-ui-xs font-medium text-rm-text-secondary tabular-nums pointer-fine:hover:text-rm-text",
+                "border-x border-line px-2 text-ui-xs font-medium text-ink-2 pointer-fine:hover:text-ink-1",
                 PRESS,
                 HIT,
               )}
             >
-              {Math.round(totalZoom * 100)}%
+              <Num>{Math.round(totalZoom * 100)}%</Num>
             </button>
             <button
               type="button"
@@ -460,7 +490,7 @@ export function SpatialAudioPanel({
                 }))
               }
               className={cn(
-                "flex size-8 items-center justify-center text-rm-text-muted pointer-fine:hover:text-rm-text",
+                "flex size-8 items-center justify-center text-ink-3 pointer-fine:hover:text-ink-1",
                 PRESS,
                 HIT,
               )}
@@ -469,7 +499,7 @@ export function SpatialAudioPanel({
             </button>
           </div>
           {state.placementMode === "manual" && (
-            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-sm border border-rm-border bg-rm-bg-surface px-1.5 py-0.5 text-ui-xs text-rm-text-secondary">
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-sm border border-line bg-ply-3 px-1.5 py-0.5 text-ui-xs text-ink-2">
               <Icon name="move" size="xs" /> Drag members to reposition everyone
             </div>
           )}

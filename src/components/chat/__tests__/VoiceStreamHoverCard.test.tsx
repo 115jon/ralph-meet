@@ -11,7 +11,7 @@ describe("VoiceStreamHoverCard", () => {
     );
 
     expect(markup).toContain("Streaming now");
-    expect(markup).toContain("LIVE");
+    expect(markup).toContain("Live");
     expect(markup).toContain("Watch stream");
     expect(markup).toContain(
       "Preview syncing now. A fresh frame should appear in a moment.",

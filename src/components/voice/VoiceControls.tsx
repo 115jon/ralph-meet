@@ -1,9 +1,9 @@
 import { Menu } from "@base-ui/react/menu";
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 
 import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { ActionSheet } from "@/components/ui/action-sheet";
-import { DOCK_DESTRUCTIVE, DOCK_LEAVE } from "@/components/ui/dock";
+import { DOCK_LEAVE } from "@/components/ui/dock";
 import { DockButton } from "@/components/ui/dock-button";
 import { Icon, type IconName, type IconState } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
@@ -21,19 +21,32 @@ import type { ActivityType } from "@/stores/useActivityStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
+const SoundboardPicker = lazy(
+  () => import("@/components/chat/SoundboardPicker"),
+);
 
 /**
- * Container width (px) at which the dock shows every control inline. Below
- * it (phones, and the 456px main column at a 768 viewport) the dock keeps
- * mic, deafen, camera, share and Leave, and folds the rest into More.
- *
- * Full row: 7 x 48 + 6 x 8 gaps + 2 dividers (1 + 8) = 402 in the middle,
- * up to 3 x 48 + 2 x 8 on the right, the call's chat toggle on the left and
- * `px-6`: about 674.
+ * Container width (px) at which the bar shows every control inline. Below
+ * it (phones, narrow columns) it keeps the call's core controls and Leave,
+ * and folds the rest into More.
  */
 export const DOCK_FULL_MIN_WIDTH = 680;
 
-const DIVIDER = "hidden h-6 w-px shrink-0 bg-rm-border @min-[680px]:block";
+const DIVIDER = "hidden h-8 w-px shrink-0 bg-line @min-[680px]:block";
+
+/**
+ * A phone row can carry seven keys (mic, deafen, camera, share, more, stop
+ * watching, Leave). Rather than clip Leave, keys may give up to 44px of width
+ * (still a full touch target) before the row would overflow.
+ */
+const KEY_FIT = "shrink min-w-11";
+
+/**
+ * Call keys are 48 square with a 20px glyph (DESIGN.md, call dock; the kit's
+ * CallBar). `DockButton` defaults to 40, so every key here passes this. A key
+ * that sets its own `className` includes KEY_FIT itself.
+ */
+const KEY = { size: "lg", iconSize: "lg", className: KEY_FIT } as const;
 
 export interface DockMoreItem {
   key: string;
@@ -41,6 +54,15 @@ export interface DockMoreItem {
   icon: IconName;
   iconState?: IconState;
   onSelect: () => void;
+}
+
+/** What the soundboard picker needs to play into this call. */
+export interface StageSoundboardContext {
+  serverId?: string | null;
+  channelId?: string | null;
+  roomSlug?: string | null;
+  voiceSessionId?: string | null;
+  localUserId?: string | null;
 }
 
 interface VoiceControlsProps {
@@ -80,6 +102,15 @@ interface VoiceControlsProps {
   onOpenSettings?: () => void;
   settingsUserId?: string;
   sfu?: SFUClient | null;
+  /**
+   * Mic and deafen live in the account row (talk-tree-spec §3, "controls
+   * once per viewport"). The bar adds them only where that row is out of
+   * view: fullscreen, phones (sidebar closed) and the public room page, which
+   * has no account row. Default: fullscreen or phone.
+   */
+  showMicDeafen?: boolean;
+  /** Adds the soundboard to the bar (the call strip collapses on stage). */
+  soundboard?: StageSoundboardContext;
 }
 
 function supportsElementFullscreen() {
@@ -87,9 +118,11 @@ function supportsElementFullscreen() {
 }
 
 /**
- * The voice dock (design-system 12.13): 48px `DockButton`s, `gap-2`, the
- * shared `dockState` recipe, Leave as the only solid fill. It is a container
- * query, so it adapts to the column it sits in rather than the viewport.
+ * The stage bar (talk-tree-spec §3 rule 3): it owns the call's actions while
+ * the stage is on screen. 48px square keys on the shared `dockState` recipe,
+ * Leave as the only solid fill and always the last control, always meaning
+ * "leave the call". Stop watching and Leave activity are neutral and sit
+ * before the divider. A container query adapts it to its column.
  */
 export function VoiceControls({
   hasMicrophone,
@@ -121,10 +154,14 @@ export function VoiceControls({
   onOpenSettings,
   settingsUserId,
   sfu = null,
+  showMicDeafen,
+  soundboard,
 }: VoiceControlsProps) {
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isStickerOpen, setIsStickerOpen] = useState(false);
+  const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const soundboardBtnRef = useRef<HTMLButtonElement>(null);
   const isMobile = useIsMobile();
 
   const settings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
@@ -141,34 +178,19 @@ export function VoiceControls({
   }, []);
   const gifPickerVoiceMode = useMemo(() => (sfu ? { sfu } : undefined), [sfu]);
 
-  const isMicMuted = !isMicOn || !hasMicrophone;
+  // One source for mute and deafen: the voice settings store, the same one
+  // the account row reads, so the two surfaces can never disagree.
+  const micOn = settingsUserId ? !settings.isMuted : isMicOn;
+  const deafened = settingsUserId ? !!settings.isDeafened : isDeafened;
+  const isMicMuted = !micOn || !hasMicrophone;
+  const ownsMicDeafen = showMicDeafen ?? (isFullscreen || isMobile);
   const canFullscreen =
     !hideExtraControls &&
     (fullscreenSupported ?? (isCall || supportsElementFullscreen()));
   const showChatToggle =
     isCall && !hideExtraControls && !isFullscreen && !!toggleChatHidden;
   const showMembersToggle = !isCall && !!focusedItem;
-
-  const leave = activeActivity
-    ? {
-        label: "Leave activity",
-        icon: "close" as const,
-        onClick: leaveActivity,
-        className: DOCK_DESTRUCTIVE,
-      }
-    : focusedItem?.isStreaming
-      ? {
-          label: "Stop watching",
-          icon: "streamOff" as const,
-          onClick: () => setFocusedId(null),
-          className: DOCK_DESTRUCTIVE,
-        }
-      : {
-          label: "Disconnect",
-          icon: "disconnect" as const,
-          onClick: handleLeave,
-          className: DOCK_LEAVE,
-        };
+  const watchingStream = !!focusedItem?.isStreaming && !focusedItem?.isLocal;
 
   const toggleCameraWithPreview = () => {
     void handleVoiceCameraToggle({
@@ -197,6 +219,14 @@ export function VoiceControls({
       label: "Activities",
       icon: "activities",
       onSelect: onOpenActivities,
+    });
+  }
+  if (soundboard) {
+    moreItems.push({
+      key: "soundboard",
+      label: "Soundboard",
+      icon: "soundboard",
+      onSelect: () => setIsSoundboardOpen(true),
     });
   }
   if (sfu) {
@@ -244,12 +274,13 @@ export function VoiceControls({
 
   const moreTrigger = (
     <DockButton
+      {...KEY}
       state={isMoreOpen ? "open" : "rest"}
       icon="more"
       aria-label="More controls"
       aria-haspopup="menu"
       aria-expanded={isMoreOpen}
-      className="@min-[680px]:hidden"
+      className={cn(KEY_FIT, "@min-[680px]:hidden")}
       onClick={isMobile ? () => setIsMoreOpen(true) : undefined}
     />
   );
@@ -262,6 +293,7 @@ export function VoiceControls({
           <div className="hidden min-w-0 flex-1 basis-0 items-center gap-2 @min-[680px]:flex">
             {showChatToggle && (
               <DockButton
+                {...KEY}
                 state={isChatHidden ? "rest" : "open"}
                 icon="chat"
                 tooltip={isChatHidden ? "Show chat" : "Hide chat"}
@@ -271,29 +303,36 @@ export function VoiceControls({
             )}
           </div>
 
-          <div className="mx-auto flex shrink-0 items-center gap-2">
+          <div className="mx-auto flex max-w-full min-w-0 shrink items-center gap-2">
+            {ownsMicDeafen && (
+              <>
+                <DockButton
+                  {...KEY}
+                  state={isMicMuted ? "muted" : "rest"}
+                  icon="mic"
+                  tooltip={
+                    !hasMicrophone
+                      ? "No microphone detected"
+                      : micOn
+                        ? "Mute"
+                        : "Unmute"
+                  }
+                  disabled={!hasMicrophone}
+                  aria-pressed={isMicMuted}
+                  onClick={toggleMic}
+                />
+                <DockButton
+                  {...KEY}
+                  state={deafened ? "muted" : "rest"}
+                  icon="deafen"
+                  tooltip={deafened ? "Undeafen" : "Deafen"}
+                  aria-pressed={deafened}
+                  onClick={toggleDeafen}
+                />
+              </>
+            )}
             <DockButton
-              state={isMicMuted ? "muted" : "rest"}
-              icon="mic"
-              tooltip={
-                !hasMicrophone
-                  ? "No microphone detected"
-                  : isMicOn
-                    ? "Mute"
-                    : "Unmute"
-              }
-              disabled={!hasMicrophone}
-              aria-pressed={isMicMuted}
-              onClick={toggleMic}
-            />
-            <DockButton
-              state={isDeafened ? "muted" : "rest"}
-              icon="deafen"
-              tooltip={isDeafened ? "Undeafen" : "Deafen"}
-              aria-pressed={isDeafened}
-              onClick={toggleDeafen}
-            />
-            <DockButton
+              {...KEY}
               state={isCameraOn ? "live" : "rest"}
               icon="camera"
               tooltip={
@@ -308,6 +347,7 @@ export function VoiceControls({
               onClick={toggleCameraWithPreview}
             />
             <DockButton
+              {...KEY}
               state={isScreenSharing ? "live" : "rest"}
               icon="screenShare"
               tooltip={isScreenSharing ? "Stop sharing" : "Share screen"}
@@ -318,25 +358,39 @@ export function VoiceControls({
               }}
             />
 
-            {(onOpenActivities || sfu) && (
+            {(onOpenActivities || soundboard || sfu) && (
               <div aria-hidden className={DIVIDER} />
             )}
             {onOpenActivities && (
               <DockButton
+                {...KEY}
                 state="rest"
                 icon="activities"
                 tooltip="Activities"
-                className="hidden @min-[680px]:inline-flex"
+                className={cn(KEY_FIT, "hidden @min-[680px]:inline-flex")}
                 onClick={onOpenActivities}
+              />
+            )}
+            {soundboard && (
+              <DockButton
+                {...KEY}
+                ref={soundboardBtnRef}
+                state={isSoundboardOpen ? "open" : "rest"}
+                icon="soundboard"
+                tooltip="Soundboard"
+                aria-expanded={isSoundboardOpen}
+                className={cn(KEY_FIT, "hidden @min-[680px]:inline-flex")}
+                onClick={() => setIsSoundboardOpen((v) => !v)}
               />
             )}
             {sfu && (
               <DockButton
+                {...KEY}
                 state={isStickerOpen ? "open" : "rest"}
                 icon="sticker"
                 tooltip="GIF & sticker reactions"
                 aria-pressed={isStickerOpen}
-                className="hidden @min-[680px]:inline-flex"
+                className={cn(KEY_FIT, "hidden @min-[680px]:inline-flex")}
                 onClick={() => setIsStickerOpen((v) => !v)}
               />
             )}
@@ -358,7 +412,7 @@ export function VoiceControls({
                       <Menu.Popup
                         className={cn(
                           MENU_PANEL,
-                          "min-w-[200px] max-w-[280px] origin-(--transform-origin) outline-none transition-[opacity,transform] duration-150 ease-(--rm-ease-out) data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
+                          "rm-presence min-w-[200px] max-w-[280px] outline-none",
                         )}
                       >
                         {moreItems.map((item) => (
@@ -368,7 +422,7 @@ export function VoiceControls({
                             className={cn(
                               MENU_ITEM,
                               MENU_ITEM_DEFAULT,
-                              "data-[highlighted]:bg-rm-tint-2",
+                              "data-[highlighted]:bg-tint-2",
                             )}
                           >
                             <Icon
@@ -386,21 +440,43 @@ export function VoiceControls({
                 </Menu.Root>
               ))}
 
+            {/* Neutral exits that are NOT leaving the call sit before the
+                divider, so the red slot only ever means one thing. */}
+            {activeActivity && leaveActivity && (
+              <DockButton
+                {...KEY}
+                state="rest"
+                icon="close"
+                tooltip="Leave activity"
+                onClick={leaveActivity}
+              />
+            )}
+            {!activeActivity && watchingStream && (
+              <DockButton
+                {...KEY}
+                state="rest"
+                icon="streamOff"
+                tooltip="Stop watching"
+                onClick={() => setFocusedId(null)}
+              />
+            )}
+
             <div aria-hidden className={DIVIDER} />
             <IconButton
               variant="plain"
-              size="lg"
-              icon={leave.icon}
-              tooltip={leave.label}
-              className={leave.className}
-              onClick={leave.onClick}
+              {...KEY}
+              icon="disconnect"
+              tooltip="Leave call"
+              className={cn(KEY_FIT, DOCK_LEAVE)}
+              onClick={handleLeave}
             />
           </div>
 
-          {/* Trailing: fullscreen, settings, members. Only in the full row. */}
+          {/* Trailing: settings, fullscreen, members. Only in the full row. */}
           <div className="hidden min-w-0 flex-1 basis-0 items-center justify-end gap-2 @min-[680px]:flex">
             {onOpenSettings && (
               <DockButton
+                {...KEY}
                 state="rest"
                 icon="settings"
                 tooltip="Audio settings"
@@ -409,6 +485,7 @@ export function VoiceControls({
             )}
             {canFullscreen && (
               <DockButton
+                {...KEY}
                 state="rest"
                 icon={fullscreenIcon}
                 tooltip={fullscreenLabel}
@@ -417,6 +494,7 @@ export function VoiceControls({
             )}
             {showMembersToggle && (
               <DockButton
+                {...KEY}
                 state={showMembers ? "open" : "rest"}
                 icon="members"
                 tooltip={showMembers ? "Hide members" : "Show members"}
@@ -449,6 +527,24 @@ export function VoiceControls({
         onToggleCamera={toggleCamera}
         settingsUserId={settingsUserId}
       />
+      {soundboard && isSoundboardOpen && (
+        <Suspense fallback={null}>
+          <SoundboardPicker
+            open={isSoundboardOpen}
+            onClose={() => setIsSoundboardOpen(false)}
+            placement="top-start"
+            markerRef={soundboardBtnRef}
+            initialView="soundboard"
+            sfu={sfu}
+            serverId={soundboard.serverId}
+            channelId={soundboard.channelId}
+            roomSlug={soundboard.roomSlug}
+            voiceSessionId={soundboard.voiceSessionId}
+            isClosing={!isSoundboardOpen}
+            localUserId={soundboard.localUserId}
+          />
+        </Suspense>
+      )}
       {/* GIF Picker in voice reaction mode */}
       {gifPickerVoiceMode && (
         <Suspense fallback={null}>

@@ -16,12 +16,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { Spinner } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 import { VoiceHeader } from "../voice/VoiceHeader";
 import { VoiceLanding } from "../voice/VoiceLanding";
 import { MembersTray, VoiceStage } from "../voice/VoiceStage";
+import { ConnectionBanner } from "../voice/ConnectionBanner";
+import {
+  clearVoiceSessionStatus,
+  publishVoiceSessionStatus,
+  useVoiceSessionStatus,
+} from "../voice/voice-session-status";
+import type { VoiceActions } from "../voice/types";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({
@@ -196,6 +203,37 @@ export default function VoiceChannelView({
   }>(null);
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
+
+  // Retry after a failed connection: leave the dead session, then join again
+  // on the next task (handleJoin skips while a session object still exists).
+  const handleJoinRef = useRef(handleJoin);
+  useEffect(() => {
+    handleJoinRef.current = handleJoin;
+  }, [handleJoin]);
+  const retryConnection = useCallback(() => {
+    handleLeave();
+    setTimeout(() => void handleJoinRef.current(), 0);
+  }, [handleLeave]);
+
+  // Publish the session's connection state for the call strip (UserPanel),
+  // which lives outside this view.
+  useEffect(() => {
+    if (!joined) return;
+    const current = useVoiceSessionStatus.getState();
+    publishVoiceSessionStatus({
+      channelId,
+      connectionState,
+      joinedAt:
+        current.channelId === channelId && current.joinedAt
+          ? current.joinedAt
+          : Date.now(),
+      retry: retryConnection,
+    });
+  }, [joined, channelId, connectionState, retryConnection]);
+  useEffect(() => {
+    if (!joined) return;
+    return () => clearVoiceSessionStatus(channelId);
+  }, [joined, channelId]);
 
   useEffect(() => {
     gridItemsRef.current = gridItems;
@@ -488,6 +526,75 @@ export default function VoiceChannelView({
       />
     ) : null;
 
+  // One stable object, so the memoised grid and tiles don't re-render when
+  // nothing they use changed (a fresh literal per render defeated the memo).
+  const voiceActions = useMemo<VoiceActions>(
+    () => ({
+      onToggleScreenShare: toggleScreenShare,
+      isCurrentUserStreaming: isScreenSharing,
+      currentScreenQuality: currentScreenQuality,
+      currentScreenSource,
+      isStreamingAudio: isStreamingAudio,
+      onToggleStreamAudio: onToggleStreamAudio,
+      onToggleWatch: onToggleWatch,
+      onOpenProfileUser,
+      onOpenMessageUser,
+      watchedStreams: watchedStreams,
+      availableQualities,
+      onLeave: handleLeave,
+      isMuted: !isMicOn,
+      onToggleMute: toggleMic,
+      isDeafened,
+      onToggleDeafen: toggleDeafen,
+      onChangeSource: openScreenShareModal,
+      watchersByStreamer,
+      togglePreviewHidden,
+      isPreviewHidden,
+      alwaysShowStreamPreview,
+      onToggleAlwaysShowStreamPreview,
+      sfu,
+      serverId,
+      localUserId,
+    }),
+    [
+      toggleScreenShare,
+      isScreenSharing,
+      currentScreenQuality,
+      currentScreenSource,
+      isStreamingAudio,
+      onToggleStreamAudio,
+      onToggleWatch,
+      onOpenProfileUser,
+      onOpenMessageUser,
+      watchedStreams,
+      availableQualities,
+      handleLeave,
+      isMicOn,
+      toggleMic,
+      isDeafened,
+      toggleDeafen,
+      openScreenShareModal,
+      watchersByStreamer,
+      togglePreviewHidden,
+      isPreviewHidden,
+      alwaysShowStreamPreview,
+      onToggleAlwaysShowStreamPreview,
+      sfu,
+      serverId,
+      localUserId,
+    ],
+  );
+  const soundboardContext = useMemo(
+    () => ({
+      serverId,
+      channelId,
+      roomSlug,
+      voiceSessionId,
+      localUserId,
+    }),
+    [serverId, channelId, roomSlug, voiceSessionId, localUserId],
+  );
+
   // ── Not-connected landing page ──
   if (!joined) {
     return (
@@ -501,34 +608,6 @@ export default function VoiceChannelView({
       />
     );
   }
-
-  const voiceActions = {
-    onToggleScreenShare: toggleScreenShare,
-    isCurrentUserStreaming: isScreenSharing,
-    currentScreenQuality: currentScreenQuality,
-    currentScreenSource,
-    isStreamingAudio: isStreamingAudio,
-    onToggleStreamAudio: onToggleStreamAudio,
-    onToggleWatch: onToggleWatch,
-    onOpenProfileUser,
-    onOpenMessageUser,
-    watchedStreams: watchedStreams,
-    availableQualities: getAvailableStreamQualities(),
-    onLeave: handleLeave,
-    isMuted: !isMicOn,
-    onToggleMute: toggleMic,
-    isDeafened,
-    onToggleDeafen: toggleDeafen,
-    onChangeSource: () => setIsScreenModalOpen(true),
-    watchersByStreamer,
-    togglePreviewHidden,
-    isPreviewHidden,
-    alwaysShowStreamPreview,
-    onToggleAlwaysShowStreamPreview,
-    sfu,
-    serverId,
-    localUserId,
-  };
 
   // ── Connected state ──
   return (
@@ -546,6 +625,13 @@ export default function VoiceChannelView({
           showTextChat={showTextChat}
           onToggleTextChat={onToggleTextChat}
           onMenuClick={onMenuClick}
+        />
+      }
+      banner={
+        <ConnectionBanner
+          connectionState={connectionState}
+          joined={joined}
+          onRetry={retryConnection}
         />
       }
       tray={
@@ -595,18 +681,19 @@ export default function VoiceChannelView({
           onOpenActivities={onOpenActivities}
           settingsUserId={settingsUserId}
           sfu={sfu}
+          soundboard={soundboardContext}
         />
       }
     >
       {activityStage ? (
         <Suspense
           fallback={
-            <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
-              <Spinner className="size-6 text-rm-text-muted" />
-              <span className="text-ui-sm text-rm-text-secondary">
-                Loading activity…
-              </span>
-            </div>
+            <EmptyState
+              loading
+              title="Loading activity…"
+              size="sm"
+              className="h-full"
+            />
           }
         >
           {activityStage}
@@ -636,7 +723,7 @@ export default function VoiceChannelView({
             });
             setIsScreenModalOpen(false);
           }}
-          availableQualities={voiceActions.availableQualities}
+          availableQualities={availableQualities}
         />
       </Suspense>
     </VoiceStage>

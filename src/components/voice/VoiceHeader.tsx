@@ -2,13 +2,12 @@ import { IconButton } from "@/components/ui/IconButton";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
-import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { getAuthAssetUrl } from "@/lib/platform";
-import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { LedLabel } from "@/components/ui/led";
 import type { ReactNode } from "react";
 import { QualityMonitor } from "./QualityMonitor";
+import { TileAvatar } from "./TileParts";
 
 function getFocusedItemLabel(
   item: { type?: string; isLocal?: boolean; name?: string } | null | undefined,
@@ -40,6 +39,11 @@ interface VoiceHeaderProps {
 
 const EMPTY_FOCUSED_WATCHERS: StreamWatcherIdentity[] = [];
 
+/**
+ * The stage header: always a 48px bar above the stage (talk-tree-spec §3),
+ * so it never sits on top of a shared screen. When a tile is on stage, the
+ * bar names it ("Linus's Stream") with its quality readout and a Live word.
+ */
 export function VoiceHeader({
   channelName,
   connectionState,
@@ -55,179 +59,93 @@ export function VoiceHeader({
   meta,
 }: VoiceHeaderProps) {
   const focusedLabel = getFocusedItemLabel(focusedItem);
-  // The floating header reads white over a camera or screen; over a member's
-  // avatar tile there is no media, so it keeps theme ink (light themes too).
-  const overMedia = Boolean(focusedItem) && focusedItem.type !== "avatar";
 
-  const menuButton = onMenuClick && (
-    <IconButton
-      aria-label="Open sidebar"
-      icon="menu"
-      size="sm"
-      variant="plain"
-      className={cn(
-        "md:hidden",
-        overMedia
-          ? "text-white/80 pointer-fine:hover:text-white"
-          : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
-      )}
-      onClick={onMenuClick}
-    />
-  );
-  const chatButton = !showTextChat && onToggleTextChat && (
-    <IconButton
-      icon="chat"
-      size="sm"
-      variant="plain"
-      tooltip="Chat"
-      className={cn(
-        overMedia
-          ? "text-white/80 pointer-fine:hover:text-white"
-          : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
-      )}
-      onClick={onToggleTextChat}
-    />
-  );
-
-  /* Unfocused: chrome above the grid (12.1). A shrink-0 sibling of the
-   * scroller, so tiles never slide under it. */
-  if (!focusedItem) {
-    return (
-      <header
-        data-voice-header="bar"
-        className="relative z-20 box-content flex h-12 shrink-0 items-center gap-2 border-b border-rm-border bg-rm-bg-primary px-4 pt-[var(--safe-area-top,0px)]"
-      >
-        {menuButton}
-        <div className="flex min-w-0 items-center gap-2">
-          <Icon
-            name={titleIcon}
-            size="lg"
-            className="shrink-0 text-rm-text-muted"
-          />
-          <h2 className="min-w-0 truncate text-ui-md font-semibold text-rm-text">
-            <InlineEmojiText text={channelName} />
-          </h2>
-        </div>
-        <div aria-hidden className="h-4 w-px shrink-0 bg-rm-border" />
-        <StreamingStatsPanel
-          connectionState={connectionState}
-          joined={joined}
-          className="min-w-0"
-        />
-        {meta}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {chatButton}
-        </div>
-      </header>
-    );
-  }
-
-  /* Focused: an overlay on the media, the one place the header floats. */
   return (
-    <div
-      data-voice-header="overlay"
-      className={cn(
-        "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-4 pt-[calc(var(--safe-area-top,0px)+8px)] pb-8",
-        overMedia && "bg-linear-to-b from-black/70 via-black/35 to-transparent",
-      )}
+    <header
+      data-voice-header="bar"
+      className="relative z-20 box-content flex h-12 shrink-0 items-center gap-2 border-b border-line bg-ply-0 px-4 pt-[var(--safe-area-top,0px)]"
     >
-      <div className="pointer-events-auto flex min-h-8 min-w-0 flex-wrap items-center gap-2">
-        {menuButton}
-        <div
-          className={cn(
-            "flex min-w-0 items-center gap-2",
-            overMedia ? "text-white/80" : "text-rm-text-secondary",
-          )}
-        >
-          <Icon name={titleIcon} size="lg" className="shrink-0" />
-          <h2
-            className={cn(
-              "min-w-0 truncate text-ui-md font-semibold",
-              overMedia ? "text-white" : "text-rm-text",
-            )}
-          >
-            <InlineEmojiText text={channelName} />
-          </h2>
-        </div>
-        <div
-          aria-hidden
-          className={cn(
-            "h-4 w-px shrink-0",
-            overMedia ? "bg-white/20" : "bg-rm-border-strong",
-          )}
+      {onMenuClick && (
+        <IconButton
+          aria-label="Open sidebar"
+          icon="menu"
+          size={32}
+          variant="muted"
+          className="md:hidden"
+          onClick={onMenuClick}
         />
-        <StreamingStatsPanel
-          connectionState={connectionState}
-          joined={joined}
-          emphasized={overMedia}
-        />
-        {meta}
-        <div
-          className={cn(
-            "flex min-w-0 items-center gap-2 rounded-full py-1 pr-3 pl-1",
-            overMedia ? "bg-black/45 text-white" : "bg-rm-tint-2 text-rm-text",
-          )}
-        >
+      )}
+      <div className="flex min-w-0 shrink items-center gap-2">
+        <Icon name={titleIcon} size="lg" className="shrink-0 text-ink-3" />
+        <h2 className="min-w-0 truncate font-display [font-optical-sizing:auto] text-[18px] leading-6 font-extrabold tracking-[-0.02em] text-ink-1">
+          <InlineEmojiText text={channelName} />
+        </h2>
+      </div>
+      <div aria-hidden className="h-4 w-px shrink-0 bg-line-strong" />
+      <StreamingStatsPanel
+        connectionState={connectionState}
+        joined={joined}
+        className="min-w-0 shrink-0"
+      />
+      {meta}
+
+      {focusedItem ? (
+        <>
+          <div aria-hidden className="h-4 w-px shrink-0 bg-line-strong" />
           <div
-            className={cn(
-              "relative flex size-6 shrink-0 items-center justify-center overflow-visible rounded-full",
-              overMedia ? "bg-white/10" : "bg-rm-tint-2",
-            )}
+            data-focused-label=""
+            className="flex min-w-0 items-center gap-2 text-ink-1"
           >
-            {focusedItem.avatar ? (
-              <AvatarImage
-                src={getAuthAssetUrl(focusedItem.avatar)}
-                alt=""
-                display={focusedItem.avatarDisplay}
-              />
-            ) : (
-              <span className="text-ui-2xs font-semibold">
-                {focusedItem.name[0]}
-              </span>
+            <TileAvatar
+              name={focusedItem.name ?? ""}
+              avatar={focusedItem.avatar}
+              avatarDisplay={focusedItem.avatarDisplay}
+              sizeClassName="size-5"
+              initialClassName="text-ui-2xs"
+            />
+            <span className="min-w-0 truncate font-display [font-optical-sizing:auto] text-[14px] leading-5 font-bold">
+              <InlineEmojiText text={focusedLabel} />
+            </span>
+            {focusedItem.isStreaming && (
+              <>
+                <span className="shrink-0 text-num-xs text-ink-3">
+                  <QualityMonitor
+                    track={focusedItem.stream?.getVideoTracks?.()[0]}
+                    signaledQuality={
+                      focusedItem.isLocal ? currentScreenQuality : null
+                    }
+                    sfu={sfu}
+                    userId={focusedItem.userId}
+                    type={focusedItem.type === "screen" ? "screen" : "cam"}
+                  />
+                </span>
+                <LedLabel state="live" className="shrink-0">
+                  Live
+                </LedLabel>
+              </>
             )}
-          </div>
-          <span className="truncate text-ui-xs font-semibold">
-            <InlineEmojiText text={focusedLabel} />
-          </span>
-          {focusedWatchers.length > 0 && (
-            <>
-              <div
-                aria-hidden
-                className={cn(
-                  "h-4 w-px shrink-0",
-                  overMedia ? "bg-white/15" : "bg-rm-border-strong",
-                )}
-              />
+            {focusedWatchers.length > 0 && (
               <StreamWatcherList
                 watchers={focusedWatchers}
                 variant="inline"
-                className="max-w-[min(42vw,18rem)]"
+                className="max-w-[min(32vw,16rem)]"
               />
-            </>
-          )}
-        </div>
-      </div>
-      <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-        {focusedItem.isStreaming && (
-          <div className="flex items-center gap-1.5 rounded-sm bg-black/55 px-2 py-1">
-            <span className="text-ui-2xs font-semibold text-white tabular-nums">
-              <QualityMonitor
-                track={focusedItem.stream?.getVideoTracks()[0]}
-                signaledQuality={
-                  focusedItem.isLocal ? currentScreenQuality : null
-                }
-                sfu={sfu}
-                userId={focusedItem.userId}
-                type={focusedItem.type === "screen" ? "screen" : "cam"}
-              />
-            </span>
-            <span className="rounded-xs bg-rm-danger px-1 text-ui-2xs font-semibold text-rm-on-danger">
-              Live
-            </span>
+            )}
           </div>
+        </>
+      ) : null}
+
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {!showTextChat && onToggleTextChat && (
+          <IconButton
+            icon="chat"
+            size={32}
+            variant="muted"
+            tooltip="Chat"
+            onClick={onToggleTextChat}
+          />
         )}
-        {chatButton}
       </div>
-    </div>
+    </header>
   );
 }

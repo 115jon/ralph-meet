@@ -17,7 +17,12 @@ export interface GridItem {
   isStreaming: boolean;
   isMuted: boolean;
   isDeafened: boolean;
-  isSpeaking: boolean;
+  /**
+   * @deprecated Speaking is not part of the tile model: a flip would rebuild
+   * every tile and re-render the grid. Leaves read `useIsSpeaking(userId)` /
+   * `useSpeakingAttr(userId)` instead. Set only by fixtures and tests.
+   */
+  isSpeaking?: boolean;
   serverMute?: boolean;
   selfMute?: boolean;
   isRinging?: boolean;

@@ -14,7 +14,8 @@ const cases = [
   {
     name: "StartCallModal",
     key: START_CALL_CONFIRM_KEY,
-    title: "Ready to start a call?",
+    title: "Call Ralph?",
+    body: "This rings Ralph right away.",
     confirm: "Start call",
     render: (onConfirm: () => void, onCancel: () => void) => (
       <StartCallModal
@@ -28,19 +29,36 @@ const cases = [
   {
     name: "VoiceSwitchModal",
     key: VOICE_SWITCH_CONFIRM_KEY,
-    title: "You sure?",
-    confirm: "Confirm",
+    title: "Switch to General?",
+    body: "You'll leave Standup.",
+    confirm: "Switch",
     render: (onConfirm: () => void, onCancel: () => void) => (
       <VoiceSwitchModal
         open
         targetName="General"
         currentType="voice"
+        currentName="Standup"
         onConfirm={onConfirm}
         onCancel={onCancel}
       />
     ),
   },
 ];
+
+it("falls back to a generic body when the current channel has no name", () => {
+  render(
+    <VoiceSwitchModal
+      open
+      targetName="General"
+      currentType="call"
+      onConfirm={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  );
+  expect(
+    screen.getByText("You'll leave your current call."),
+  ).toBeInTheDocument();
+});
 
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
@@ -60,6 +78,15 @@ describe.each(cases)("$name", (c) => {
     fireEvent.click(screen.getByRole("button", { name: c.confirm }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem(c.key)).toBe("true");
+  });
+
+  it("says what happens and focuses the primary button, not the checkbox", () => {
+    render(c.render(vi.fn(), vi.fn()));
+    expect(screen.getByText(c.body)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: c.confirm })).toHaveFocus();
+    expect(
+      screen.getByRole("checkbox", { name: "Don't ask again" }),
+    ).not.toHaveFocus();
   });
 
   it("does not persist when the box is left unchecked", () => {

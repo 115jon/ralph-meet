@@ -15,9 +15,14 @@ import {
   getWarpRushRingRenderState,
 } from "@/lib/warp-rush";
 import { cn } from "@/lib/utils";
-import { Button, Spinner } from "@/components/ui/button";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { HIT } from "@/components/ui/interaction";
+import { HIT, PRESS } from "@/components/ui/interaction";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Num } from "@/components/ui/num";
+import { useAppActive } from "@/hooks/useAppActive";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -93,7 +98,7 @@ const PRESETS: Record<WarpRushPreset, LoadPresetConfig> = {
     ringRadius: 12,
   },
   ultra: {
-    label: "Ultra",
+    label: "High",
     starLayers: 4,
     starsPerLayer: 12000,
     dustPerLayer: 2800,
@@ -103,7 +108,7 @@ const PRESETS: Record<WarpRushPreset, LoadPresetConfig> = {
     ringRadius: 12.5,
   },
   meltdown: {
-    label: "Meltdown",
+    label: "Max",
     starLayers: 5,
     starsPerLayer: 17000,
     dustPerLayer: 4200,
@@ -114,6 +119,8 @@ const PRESETS: Record<WarpRushPreset, LoadPresetConfig> = {
   },
 };
 const PRESET_ORDER: WarpRushPreset[] = ["balanced", "ultra", "meltdown"];
+/** The game renders at most this often, however fast the display refreshes. */
+const FRAME_INTERVAL_MS = 1000 / 60;
 const RENDER_SCALES = [
   { label: "0.85x", value: 0.85 },
   { label: "1.0x", value: 1 },
@@ -277,10 +284,15 @@ export function WarpRushActivityStage({
     dpr: 1,
   });
   const [rendererLabel, setRendererLabel] = useState("Booting renderer...");
-  const [accelerationLabel, setAccelerationLabel] = useState(
-    "Checking acceleration",
-  );
+  const [statsOpen, setStatsOpen] = useState(false);
   const [bootAttempt, setBootAttempt] = useState(0);
+  // The render loop runs only while the app is worth drawing: visible, and
+  // not unfocused behind a fullscreen game (talk-tree-spec §5f). The scene
+  // effect registers its start/stop here so a change never rebuilds the scene.
+  const appActive = useAppActive();
+  const appActiveRef = useRef(appActive);
+  const syncLoopRef = useRef<() => void>(() => {});
+  const statsOpenRef = useRef(statsOpen);
   const [pilotStates, setPilotStates] = useState<
     Record<string, PilotPresenceState>
   >({});
@@ -306,6 +318,15 @@ export function WarpRushActivityStage({
   useEffect(() => {
     bestRef.current = bestScore;
   }, [bestScore]);
+
+  useEffect(() => {
+    appActiveRef.current = appActive;
+    syncLoopRef.current();
+  }, [appActive]);
+
+  useEffect(() => {
+    statsOpenRef.current = statsOpen;
+  }, [statsOpen]);
 
   useEffect(() => {
     remotePilotsRef.current = Object.fromEntries(
@@ -473,6 +494,8 @@ export function WarpRushActivityStage({
     let disposed = false;
     let accumulator = 0;
     let lastTimestamp = 0;
+    let nextFrameAt = 0;
+    let loopRunning = false;
     let fpsFrames = 0;
     let fpsElapsed = 0;
     let hudElapsed = 0;
@@ -521,11 +544,6 @@ export function WarpRushActivityStage({
     queueMicrotask(() => {
       if (disposed) return;
       setRendererLabel(finalRendererLabel);
-      setAccelerationLabel(
-        isLikelySoftwareRenderer(finalRendererLabel)
-          ? "Fallback renderer likely"
-          : "Hardware acceleration likely",
-      );
       setStatus("running");
     });
 
@@ -762,6 +780,7 @@ export function WarpRushActivityStage({
       keys.down = false;
       accumulator = 0;
       lastTimestamp = 0;
+      nextFrameAt = 0;
       crashBroadcasted = false;
       setScore(0);
       setSlipstreamActive(false);
@@ -829,6 +848,15 @@ export function WarpRushActivityStage({
 
     const renderFrame = (timestamp: number) => {
       if (disposed) return;
+
+      // 60 fps cap: a 120 or 144 Hz display would otherwise run the whole sim
+      // and the bloom pass at double speed for no visible gain. The 1ms slack
+      // keeps vsync jitter from dropping a frame on a 60 Hz display.
+      if (timestamp + 1 < nextFrameAt) return;
+      nextFrameAt =
+        nextFrameAt && timestamp - nextFrameAt < FRAME_INTERVAL_MS
+          ? nextFrameAt + FRAME_INTERVAL_MS
+          : timestamp + FRAME_INTERVAL_MS;
 
       if (!lastTimestamp) lastTimestamp = timestamp;
       const frameSeconds = clamp(
@@ -1068,37 +1096,71 @@ export function WarpRushActivityStage({
       fpsFrames += 1;
       fpsElapsed += frameSeconds;
       if (fpsElapsed >= 0.24) {
-        const fps = fpsFrames / fpsElapsed;
-        setPerfStats({
-          fps: Math.round(fps),
-          frameMs: Number((1000 / Math.max(fps, 1)).toFixed(1)),
-          drawCalls: renderer.info.render.calls,
-          triangles: renderer.info.render.triangles,
-          points: renderer.info.render.points,
-          dpr: Number(renderer.getPixelRatio().toFixed(2)),
-        });
+        // Telemetry is only worth a re-render while someone is reading it.
+        if (statsOpenRef.current) {
+          const fps = fpsFrames / fpsElapsed;
+          setPerfStats({
+            fps: Math.round(fps),
+            frameMs: Number((1000 / Math.max(fps, 1)).toFixed(1)),
+            drawCalls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            points: renderer.info.render.points,
+            dpr: Number(renderer.getPixelRatio().toFixed(2)),
+          });
+        }
         fpsFrames = 0;
         fpsElapsed = 0;
       }
     };
 
+    // Start and stop the loop with the app: stopped, nothing is simulated or
+    // drawn (the run holds still); on resume the clocks restart so the gap is
+    // not treated as one long frame.
+    const startLoop = () => {
+      if (loopRunning || disposed) return;
+      loopRunning = true;
+      lastTimestamp = 0;
+      nextFrameAt = 0;
+      renderer.setAnimationLoop(renderFrame);
+    };
+    const stopLoop = () => {
+      if (!loopRunning) return;
+      loopRunning = false;
+      renderer.setAnimationLoop(null);
+    };
+    const syncLoop = () => {
+      if (appActiveRef.current && document.visibilityState !== "hidden") {
+        startLoop();
+      } else {
+        stopLoop();
+      }
+    };
+    syncLoopRef.current = syncLoop;
+    document.addEventListener("visibilitychange", syncLoop);
+    cleanupFns.push(() =>
+      document.removeEventListener("visibilitychange", syncLoop),
+    );
+
     resize();
     resetRun();
-    renderer.setAnimationLoop(renderFrame);
+    syncLoop();
 
     return () => {
       disposed = true;
-      renderer.setAnimationLoop(null);
+      stopLoop();
+      syncLoopRef.current = () => {};
       for (const cleanup of cleanupFns.reverse()) cleanup();
     };
   }, [bootAttempt, channelId, course, preset, renderScale]);
 
-  // Stale pilots drop off the board; a slow clock keeps render pure.
+  // Stale pilots drop off the board; a slow clock keeps render pure. It stops
+  // with the app, like the render loop.
   const [leaderboardNow, setLeaderboardNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!appActive) return;
     const id = window.setInterval(() => setLeaderboardNow(Date.now()), 2000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [appActive]);
   const sortedLeaderboard = useMemo(
     () =>
       Object.values(pilotStates)
@@ -1122,136 +1184,102 @@ export function WarpRushActivityStage({
     0,
   );
 
-  const panel =
-    "rounded-xl border border-rm-activity-warp-cyan/15 bg-rm-activity-warp-bg/60";
-  const eyebrow =
-    "flex items-center gap-2 text-ui-2xs font-semibold uppercase tracking-[0.08em]";
-  const tile =
-    "rounded-lg border border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 px-3 py-3";
-  const chip =
-    "rounded-full border border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 px-3 py-1";
+  // HUD floats: ply-3 with a line and the float shadow, over the dark canvas.
+  const panel = "rounded-lg border border-line bg-ply-3 shadow-float";
+  const statRows: Array<[string, string]> = [
+    ["Frame rate", `${perfStats.fps} fps`],
+    ["Frame time", `${perfStats.frameMs} ms`],
+    ["Triangles", formatStat(perfStats.triangles)],
+    ["Draw calls", formatStat(perfStats.drawCalls)],
+    ["Points", formatStat(perfStats.points)],
+    ["Pixel ratio", String(perfStats.dpr)],
+  ];
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-rm-activity-warp-bg text-rm-activity-warp-ink">
+    <div className="@container relative h-full w-full overflow-hidden bg-ply-0 text-ink-1">
       <div ref={stageRef} className="absolute inset-0" />
 
-      <div className="pointer-events-none absolute inset-0 bg-radial-[circle_at_top] from-rm-activity-warp-cyan/15 to-transparent to-30%" />
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-rm-activity-warp-bg/10 to-rm-activity-warp-bg/80" />
-
       {status === "running" || status === "crashed" ? (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 md:p-5">
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 @[720px]:p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="pointer-events-auto flex w-full max-w-[440px] flex-col gap-3">
-              <div className={cn(panel, "p-4 md:p-5")}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className={cn(eyebrow, "text-rm-activity-warp-cyan")}>
-                      <Icon name="activities" size="sm" />
-                      Warp Rush 3D
-                    </div>
-                    <h2 className="mt-2 text-balance text-ui-xl font-bold md:text-ui-2xl">
-                      Shared tunnel sprint
-                    </h2>
-                    <p className="mt-2 max-w-[36ch] text-pretty text-ui-sm text-rm-activity-warp-ink-muted max-md:hidden">
-                      Same seed, same hazards, live ghost ships. Draft the pilot
-                      ahead and compare acceleration modes without changing the
-                      sim.
-                    </p>
-                  </div>
-                  <div
-                    className={cn(
-                      "shrink-0 rounded-full border px-3 py-1 text-ui-2xs font-semibold",
-                      softwareRendererLikely
-                        ? "border-rm-activity-warp-amber/40 text-rm-activity-warp-amber"
-                        : "border-rm-activity-warp-green/40 text-rm-activity-warp-green",
-                    )}
-                  >
-                    {accelerationLabel}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-                  <div className={tile}>
-                    <div
-                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
-                    >
-                      Score
-                    </div>
-                    <div className="mt-2 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-cyan">
-                      {formatStat(score)}
-                    </div>
-                  </div>
-                  <div className={tile}>
-                    <div
-                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
-                    >
-                      Best
-                    </div>
-                    <div className="mt-2 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-magenta">
-                      {formatStat(bestScore)}
-                    </div>
-                  </div>
-                  <div className={tile}>
-                    <div
-                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
-                    >
-                      <Icon name="noiseSuppression" size="xs" />
-                      Draft
-                    </div>
-                    <div
-                      className={cn(
-                        "mt-2 text-ui-sm font-semibold",
-                        slipstreamActive
-                          ? "text-rm-activity-warp-green"
-                          : "text-rm-activity-warp-ink",
-                      )}
-                    >
-                      {slipstreamActive
-                        ? `+${Math.round(WARP_RUSH_SLIPSTREAM_BONUS * 100)}% speed`
-                        : "No draft"}
-                    </div>
-                  </div>
-                  <div className={tile}>
-                    <div
-                      className={cn(eyebrow, "text-rm-activity-warp-ink-muted")}
-                    >
-                      <Icon name="members" size="xs" />
-                      Rival
-                    </div>
-                    <div className="mt-2 text-ui-sm font-semibold tabular-nums">
-                      {nearestRivalGap === null
-                        ? "Open tunnel"
-                        : `${nearestRivalGap.toFixed(1)}m ahead`}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div
+            <section
+              aria-label="Your run"
               className={cn(
                 panel,
-                "pointer-events-auto w-full max-w-[340px] p-4 md:p-5",
+                "pointer-events-auto w-full max-w-[340px] p-4",
               )}
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className={cn(eyebrow, "text-rm-activity-warp-cyan")}>
-                  <Icon name="trophy" size="sm" />
-                  Session board
+              <h2 className="text-ui-md font-semibold">Warp Rush</h2>
+              <p className="mt-0.5 hidden max-w-[40ch] text-ui-sm text-pretty text-ink-2 @[720px]:block">
+                Race through the same tunnel as everyone in the call. Steer
+                around the debris, and fly close behind another ship to draft
+                for a speed boost.
+              </p>
+
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+                <div>
+                  <dt className="text-ui-xs text-ink-3">Score</dt>
+                  <dd className="font-mono text-ui-xl font-semibold tabular-nums">
+                    {formatStat(score)}
+                  </dd>
                 </div>
-                <div
-                  className={cn(
-                    chip,
-                    "text-ui-2xs text-rm-activity-warp-ink-muted",
+                <div>
+                  <dt className="text-ui-xs text-ink-3">Best</dt>
+                  <dd className="font-mono text-ui-xl font-semibold tabular-nums">
+                    {formatStat(bestScore)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="flex items-center gap-1.5 text-ui-xs text-ink-3">
+                    <Icon name="noiseSuppression" size="xs" />
+                    Draft
+                  </dt>
+                  <dd
+                    className={cn(
+                      "text-ui-sm font-medium",
+                      slipstreamActive ? "text-success-ink" : "text-ink-1",
+                    )}
+                  >
+                    {slipstreamActive
+                      ? `+${Math.round(WARP_RUSH_SLIPSTREAM_BONUS * 100)}% speed`
+                      : "Not drafting"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="flex items-center gap-1.5 text-ui-xs text-ink-3">
+                    <Icon name="members" size="xs" />
+                    Next ship
+                  </dt>
+                  <dd className="text-ui-sm font-medium tabular-nums">
+                    {nearestRivalGap === null
+                      ? "None ahead"
+                      : `${nearestRivalGap.toFixed(1)}m ahead`}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section
+              aria-label="Scores"
+              className={cn(
+                panel,
+                "pointer-events-auto hidden w-full max-w-[300px] flex-col @[720px]:flex",
+              )}
+            >
+              <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1">
+                <h3 className="text-ui-row font-semibold">Scores</h3>
+                <span className="text-ui-xs text-ink-3">
+                  {remotePilotCount > 0 ? (
+                    <>
+                      <Num>{remotePilotCount + 1}</Num> playing
+                    </>
+                  ) : (
+                    "Just you"
                   )}
-                >
-                  {remotePilotCount > 0
-                    ? `${remotePilotCount + 1} live`
-                    : "Solo warm-up"}
-                </div>
+                </span>
               </div>
 
-              <div className="mt-3 max-h-[44dvh] space-y-2 overflow-y-auto pr-1">
+              <ul className="max-h-[44dvh] overflow-y-auto px-2 pb-2">
                 {sortedLeaderboard.length > 0 ? (
                   sortedLeaderboard.map((entry, index) => {
                     const participant = participantMap.get(entry.userId);
@@ -1259,203 +1287,173 @@ export function WarpRushActivityStage({
                       participant?.name ?? entry.name ?? "Pilot";
                     const avatar = participant?.avatar ?? entry.avatar ?? null;
                     return (
-                      <div
+                      <li
                         key={entry.userId}
-                        className="flex items-center gap-3 rounded-lg border border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 px-3 py-2.5"
+                        className="flex min-h-10 items-center gap-2.5 rounded-sm px-2 py-1.5"
                       >
-                        <div className="flex size-9 items-center justify-center rounded-full bg-rm-activity-warp-cyan/15 text-ui-xs font-bold tabular-nums text-rm-activity-warp-cyan">
+                        <Num className="w-4 text-right text-ink-3">
                           {index + 1}
-                        </div>
-                        {avatar ? (
-                          <img
-                            src={getAuthAssetUrl(avatar)}
-                            alt=""
-                            className="size-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex size-10 items-center justify-center rounded-full bg-rm-activity-warp-magenta/15 text-ui-sm font-bold text-rm-activity-warp-magenta">
-                            {displayName.slice(0, 1).toUpperCase()}
-                          </div>
-                        )}
+                        </Num>
+                        <Avatar
+                          name={displayName}
+                          src={avatar ? getAuthAssetUrl(avatar) : null}
+                          size={24}
+                          ring="ply-3"
+                        />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-ui-sm font-semibold">
+                          <div
+                            className="truncate text-ui-sm font-medium"
+                            title={displayName}
+                          >
                             {displayName}
                           </div>
-                          <div className="mt-1 flex items-center gap-2 text-ui-xs text-rm-activity-warp-ink-muted">
-                            <span>{PRESETS[entry.preset].label}</span>
-                            <span>
-                              {entry.crashed
-                                ? "Crashed"
-                                : entry.slipstream
-                                  ? "Drafting"
-                                  : "Running"}
-                            </span>
+                          <div className="truncate text-ui-xs text-ink-3">
+                            {entry.crashed
+                              ? "Crashed"
+                              : entry.slipstream
+                                ? "Drafting"
+                                : "Flying"}
+                            {" · "}
+                            {PRESETS[entry.preset].label}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-ui-lg font-bold tabular-nums text-rm-activity-warp-cyan">
+                          <div className="font-mono text-ui-row font-semibold tabular-nums">
                             {formatStat(entry.best)}
                           </div>
-                          <div className="text-ui-xs text-rm-activity-warp-ink-muted">
-                            Peak
-                          </div>
+                          <div className="text-ui-xs text-ink-3">Best</div>
                         </div>
-                      </div>
+                      </li>
                     );
                   })
                 ) : (
-                  <p className="px-1 py-4 text-pretty text-ui-sm text-rm-activity-warp-ink-muted">
-                    Launch the activity in the same voice session and live
-                    rivals will start ghosting into the tunnel.
-                  </p>
+                  <li className="px-2 py-3 text-ui-sm text-pretty text-ink-3">
+                    Other players in this call show up here, and as ghost ships
+                    in the tunnel.
+                  </li>
                 )}
-              </div>
-            </div>
+              </ul>
+            </section>
           </div>
 
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <div
+            <p
               className={cn(
                 panel,
-                "pointer-events-auto flex max-w-full flex-wrap items-center gap-2 px-3 py-3 max-md:hidden md:px-4",
+                "pointer-events-auto hidden flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 text-ui-sm text-ink-2 @[720px]:flex",
               )}
             >
-              <div className={cn(eyebrow, "pr-1 text-rm-activity-warp-cyan")}>
-                <Icon name="spatial" size="sm" />
-                Controls
-              </div>
-              {[
-                "Mouse / touch steer",
-                "WASD trim",
-                "Draft a ghost",
-                "Space restart",
-              ].map((label) => (
-                <span key={label} className={cn(chip, "text-ui-sm")}>
-                  {label}
-                </span>
-              ))}
-            </div>
+              <span>Steer with the mouse</span>
+              <span className="flex items-center gap-1.5">
+                Trim with
+                <KbdGroup>
+                  <Kbd>W</Kbd>
+                  <Kbd>A</Kbd>
+                  <Kbd>S</Kbd>
+                  <Kbd>D</Kbd>
+                </KbdGroup>
+              </span>
+              <span className="flex items-center gap-1.5">
+                Restart with <Kbd>Space</Kbd>
+              </span>
+            </p>
 
-            <div
+            <section
+              aria-label="Game settings"
               className={cn(
                 panel,
-                "pointer-events-auto w-full max-w-[640px] p-3 md:p-4",
+                "pointer-events-auto flex w-full max-w-[460px] flex-col gap-2 p-3",
               )}
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <div className={cn(eyebrow, "mr-1 text-rm-activity-warp-cyan")}>
-                  <Icon name="zap" size="sm" />
-                  Load
+              {softwareRendererLikely ? (
+                <p className="flex items-start gap-2 rounded-md bg-warning-tint px-2.5 py-1.5 text-ui-xs text-pretty text-warning-ink">
+                  <Icon name="warning" size="sm" className="mt-px" />
+                  This browser is drawing without graphics acceleration, so the
+                  game may run slowly.
+                </p>
+              ) : null}
+
+              {statsOpen ? (
+                <div id="warp-rush-stats" className="flex flex-col gap-2">
+                  <dl className="grid grid-cols-3 gap-x-4 gap-y-2">
+                    {statRows.map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="text-ui-xs text-ink-3">{label}</dt>
+                        <dd>
+                          <Num size="sm">{value}</Num>
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="text-ui-xs break-words text-ink-3">
+                    Renderer:{" "}
+                    <span className="text-ink-2">{rendererLabel}</span>
+                  </div>
                 </div>
-                {PRESET_ORDER.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={preset === option}
-                    onClick={() => setPreset(option)}
-                    className={cn(
-                      "relative min-h-8 rounded-full border px-4 text-ui-sm font-medium transition-colors duration-150",
-                      HIT,
-                      preset === option
-                        ? "border-rm-activity-warp-cyan bg-rm-activity-warp-cyan/20 font-semibold"
-                        : "border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 text-rm-activity-warp-ink-muted pointer-fine:hover:text-rm-activity-warp-ink",
-                    )}
-                  >
-                    {PRESETS[option].label}
-                  </button>
-                ))}
-              </div>
+              ) : null}
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <div
-                  className={cn(eyebrow, "mr-1 text-rm-activity-warp-magenta")}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Segmented
+                  label="Quality"
+                  value={preset}
+                  onChange={setPreset}
+                  options={PRESET_ORDER.map((option) => ({
+                    value: option,
+                    label: PRESETS[option].label,
+                  }))}
+                />
+                <Segmented
+                  label="Resolution"
+                  value={renderScale}
+                  onChange={setRenderScale}
+                  mono
+                  options={RENDER_SCALES.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={statsOpen}
+                  aria-controls="warp-rush-stats"
+                  onClick={() => setStatsOpen((open) => !open)}
+                  className="ml-auto"
                 >
                   <Icon name="gauge" size="sm" />
-                  Scale
-                </div>
-                {RENDER_SCALES.map((option) => (
-                  <button
-                    key={option.label}
-                    type="button"
-                    aria-pressed={renderScale === option.value}
-                    onClick={() => setRenderScale(option.value)}
-                    className={cn(
-                      "relative min-h-8 rounded-full border px-4 text-ui-sm font-medium transition-colors duration-150",
-                      HIT,
-                      renderScale === option.value
-                        ? "border-rm-activity-warp-magenta bg-rm-activity-warp-magenta/20 font-semibold"
-                        : "border-rm-activity-warp-ink/10 bg-rm-activity-warp-ink/5 text-rm-activity-warp-ink-muted pointer-fine:hover:text-rm-activity-warp-ink",
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+                  Stats
+                </Button>
               </div>
-
-              <div className="mt-3 flex flex-wrap gap-2 text-ui-xs tabular-nums">
-                <div className={chip}>{perfStats.fps} FPS</div>
-                <div className={chip}>{perfStats.frameMs}ms frame</div>
-                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
-                  {formatStat(perfStats.triangles)} tris
-                </div>
-                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
-                  {formatStat(perfStats.drawCalls)} draws
-                </div>
-                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
-                  {formatStat(perfStats.points)} points
-                </div>
-                <div className={cn(chip, "text-rm-activity-warp-ink-muted")}>
-                  DPR {perfStats.dpr}
-                </div>
-              </div>
-
-              <div className="mt-3 min-w-0 rounded-md border border-rm-activity-warp-ink/10 bg-rm-activity-warp-bg/40 px-3 py-2 text-ui-xs text-rm-activity-warp-ink-muted">
-                <span className="font-semibold">Renderer</span>
-                <span className="ml-2 inline-block max-w-full break-all align-middle text-rm-activity-warp-ink">
-                  {rendererLabel}
-                </span>
-              </div>
-            </div>
+            </section>
           </div>
         </div>
       ) : null}
 
       {status === "crashed" && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-rm-activity-warp-bg/70 px-6">
-          <div className="flex max-w-md flex-col items-center gap-3 py-12 text-center">
-            <Icon
-              name="warning"
-              size="3xl"
-              className="text-rm-activity-warp-amber max-md:size-8"
-            />
-            <h3 className="text-ui-lg font-semibold">Hull breach</h3>
-            <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-activity-warp-ink-muted">
-              You hit debris. The course stays the same each run, so try a
-              different line through the tunnel.
-            </p>
-            <dl className="flex items-center justify-center gap-6 py-1">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-scrim px-6">
+          <div
+            role="group"
+            aria-label="Run over"
+            className="flex w-full max-w-sm flex-col items-center gap-4 rounded-xl border border-line bg-ply-3 p-6 text-center shadow-modal"
+          >
+            <div className="flex flex-col gap-1">
+              <h3 className="text-ui-lg font-semibold">You hit debris</h3>
+              <p className="text-ui-sm text-pretty text-ink-2">
+                The course is the same every run, so try a different line
+                through the tunnel.
+              </p>
+            </div>
+            <dl className="grid w-full grid-cols-2 divide-x divide-line rounded-lg border border-line bg-ply-2 py-3">
               <div>
-                <dt className="text-ui-xs text-rm-activity-warp-ink-muted">
-                  Run
-                </dt>
-                <dd className="mt-1 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-cyan">
+                <dt className="text-ui-xs text-ink-3">This run</dt>
+                <dd className="font-mono text-ui-xl font-semibold tabular-nums">
                   {formatStat(score)}
                 </dd>
               </div>
               <div>
-                <dt className="text-ui-xs text-rm-activity-warp-ink-muted">
-                  Best
-                </dt>
-                <dd className="mt-1 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-magenta">
+                <dt className="text-ui-xs text-ink-3">Best</dt>
+                <dd className="font-mono text-ui-xl font-semibold tabular-nums">
                   {formatStat(bestScore)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-ui-xs text-rm-activity-warp-ink-muted">
-                  Live FPS
-                </dt>
-                <dd className="mt-1 text-ui-2xl font-bold tabular-nums text-rm-activity-warp-green">
-                  {perfStats.fps}
                 </dd>
               </div>
             </dl>
@@ -1483,10 +1481,60 @@ export function WarpRushActivityStage({
 }
 
 /**
+ * One row of mutually exclusive choices: a ply-tint well (radius 8) holding
+ * 28px segments (radius 6, concentric at 2px padding). The chosen segment is
+ * tint-3; the rest are bare until hovered.
+ */
+function Segmented<T extends string | number>({
+  label,
+  value,
+  onChange,
+  options,
+  mono = false,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: Array<{ value: T; label: string }>;
+  /** The labels are numbers ("1.25x"): set them in the number face. */
+  mono?: boolean;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex items-center gap-2">
+      <span className="text-ui-xs text-ink-3">{label}</span>
+      <div className="flex rounded-md bg-tint-1 p-0.5">
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "h-7 rounded-sm px-2.5 outline-none",
+                mono ? "text-num-sm" : "text-ui-sm font-medium",
+                PRESS,
+                HIT,
+                selected
+                  ? "bg-tint-3 text-ink-1"
+                  : "text-ink-2 pointer-fine:hover:text-ink-1",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
  * The stage before a frame renders (booting) or when WebGL is missing
- * (unsupported), on the theme's page colours. Empty-state anatomy (14.1,
- * 14.3): icon or spinner, title, one line, one action; the failure title is
- * danger ink and never the renderer's raw error.
+ * (unsupported): an EmptyState on the canvas ground. Booting is the pending
+ * (half-resolved, still) glyph; the failure names the problem and the one fix, never the
+ * renderer's raw error.
  */
 export function WarpRushStatusScreen({
   kind,
@@ -1497,39 +1545,27 @@ export function WarpRushStatusScreen({
 }) {
   return (
     <div
-      role={kind === "unsupported" ? "alert" : "status"}
-      className="flex h-full w-full flex-col items-center justify-center gap-3 bg-rm-bg-primary px-6 py-12 text-center"
+      role={kind === "unsupported" ? "alert" : undefined}
+      className="flex h-full w-full items-center justify-center bg-ply-0"
     >
       {kind === "booting" ? (
-        <>
-          <Spinner className="size-6 text-rm-text-secondary" />
-          <h2 className="text-ui-md font-semibold text-rm-text">
-            Starting Warp Rush
-          </h2>
-          <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
-            Setting up the 3D renderer for this device.
-          </p>
-        </>
+        <EmptyState
+          loading
+          title="Starting Warp Rush"
+          description="Setting up the 3D view for this device."
+        />
       ) : (
-        <>
-          <Icon
-            name="warning"
-            size="3xl"
-            className="text-rm-text-muted max-md:size-8"
-          />
-          <h2 className="text-ui-md font-semibold text-rm-danger-ink">
-            Warp Rush can&apos;t start
-          </h2>
-          <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
-            This browser couldn&apos;t open a WebGL canvas. Turn on hardware
-            acceleration in your browser settings, then try again.
-          </p>
-          {onRetry ? (
-            <Button variant="secondary" onClick={onRetry}>
-              Try again
-            </Button>
-          ) : null}
-        </>
+        <EmptyState
+          title="Warp Rush can't start"
+          description="This browser couldn't open a 3D canvas. Turn on graphics acceleration in your browser settings, then try again."
+          action={
+            onRetry ? (
+              <Button variant="secondary" onClick={onRetry}>
+                Try again
+              </Button>
+            ) : undefined
+          }
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { describeApiError } from "@/lib/api-errors";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Num } from "@/components/ui/num";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -94,9 +95,7 @@ export default function VoiceChannelTextStatusModal({
     >
       <ResponsiveDialogContent className="md:max-w-md">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>
-            What are we chatting about?
-          </ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Channel status</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Let others know what you&apos;re up to in the voice channel.
           </ResponsiveDialogDescription>
@@ -115,19 +114,19 @@ export default function VoiceChannelTextStatusModal({
                 )
               }
               placeholder={`Status for ${channel.name}`}
-              className="h-11 pr-12"
+              inputSize="lg"
+              className="pr-12"
               maxLength={MAX_VOICE_CHANNEL_STATUS_TEXT}
             />
             <IconButton
               ref={emojiBtnRef}
               icon="emoji"
-              iconSize="sm"
+              size={28}
               variant="muted"
-              shape="circle"
               type="button"
               aria-label="Insert emoji"
               onClick={() => setShowEmojiPicker((current) => !current)}
-              className="absolute right-2 top-1/2 -translate-y-1/2"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2"
             />
 
             <EmojiPicker
@@ -144,26 +143,29 @@ export default function VoiceChannelTextStatusModal({
             />
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setText("")}
-              className="-ml-2 text-rm-text-secondary"
-            >
-              Clear
-            </Button>
-            <span className="text-ui-2xs font-semibold tabular-nums text-rm-text-muted">
+          <p className="text-end text-ui-xs text-ink-3">
+            <Num>
               {normalizedText.length} / {MAX_VOICE_CHANNEL_STATUS_TEXT}
-            </span>
-          </div>
+            </Num>
+          </p>
 
           {error ? <RowError>{error}</RowError> : null}
         </div>
 
         <ResponsiveDialogFooter>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          {/* Clear sits at the start of the action row, apart from the
+              Cancel / Set status pair. */}
+          {text ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setText("")}
+              className="md:mr-auto"
+            >
+              Clear
+            </Button>
+          ) : null}
+          <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button

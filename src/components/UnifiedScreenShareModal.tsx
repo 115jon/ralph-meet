@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { copyToClipboard } from "@/components/ui/toast";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -60,7 +61,7 @@ export function ScreenShareUnsupportedDialog({
     <ResponsiveDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <ResponsiveDialogContent className="md:max-w-sm">
         <ResponsiveDialogHeader>
-          <span className="mb-1 flex size-10 items-center justify-center rounded-lg bg-rm-tint-2 text-rm-text-secondary">
+          <span className="mb-1 flex size-10 items-center justify-center rounded-lg bg-tint-2 text-ink-2">
             <Icon name="screenShare" size="lg" />
           </span>
           <ResponsiveDialogTitle>
@@ -71,7 +72,21 @@ export function ScreenShareUnsupportedDialog({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         <ResponsiveDialogFooter>
-          <Button onClick={onClose}>Got it</Button>
+          {/* The phone app's own URL isn't a link a computer can open. */}
+          {reason === "mobile-app" ? null : (
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void copyToClipboard(window.location.href, "Link copied")
+              }
+            >
+              <Icon name="link" size="sm" />
+              Copy link for my computer
+            </Button>
+          )}
+          <Button autoFocus onClick={onClose}>
+            Got it
+          </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>
     </ResponsiveDialog>

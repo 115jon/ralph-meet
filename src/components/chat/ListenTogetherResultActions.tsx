@@ -16,8 +16,10 @@ export function ListenTogetherResultActionTrigger({
   return (
     <IconButton
       icon="more"
+      size={28}
       variant="muted"
       aria-label={`More actions for ${label}`}
+      aria-haspopup="menu"
       onClick={onClick}
     />
   );

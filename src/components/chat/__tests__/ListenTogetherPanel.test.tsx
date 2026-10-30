@@ -215,22 +215,15 @@ describe("ListenTogetherPanel", () => {
         localUserId="user-1"
       />,
     );
-    const row = screen
-      .getAllByText("Track One")
-      .find((element) => element.classList.contains("text-[13px]"))
-      ?.closest("div.grid");
-    expect(row).not.toBeNull();
+    const queueRow = () => document.querySelector('[data-queue-row="entry-1"]');
+    const row = queueRow();
+    expect(row).toBeInstanceOf(HTMLElement);
 
     await act(async () => {
-      vi.advanceTimersByTime(250);
+      vi.advanceTimersByTime(1_000);
     });
 
-    expect(
-      screen
-        .getAllByText("Track One")
-        .find((element) => element.classList.contains("text-[13px]"))
-        ?.closest("div.grid"),
-    ).toBe(row);
+    expect(queueRow()).toBe(row);
   });
 
   it("does not request room state when the queue panel opens", () => {

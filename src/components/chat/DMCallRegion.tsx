@@ -1,15 +1,11 @@
 "use client";
 
 import { getDisplayName } from "@/lib/display-name";
-import {
-  CALL_ACCEPT,
-  DOCK_DESTRUCTIVE,
-  DOCK_LEAVE,
-} from "@/components/ui/dock";
+import { CALL_ACCEPT, DOCK_LEAVE } from "@/components/ui/dock";
 import { DockButton } from "@/components/ui/dock-button";
 import { IconButton } from "@/components/ui/IconButton";
+import { LedLabel, type LedState } from "@/components/ui/led";
 import { useUserResolution } from "@/hooks/useUserResolution";
-import { getAuthAssetUrl } from "@/lib/platform";
 import { playCallEnd, playRingStop, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import type { AvatarDisplay } from "@/lib/avatar-display";
@@ -23,7 +19,6 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { Icon } from "@/components/ui/icon";
 import {
   lazy,
   Suspense,
@@ -33,8 +28,13 @@ import {
   useState,
   type MouseEvent,
 } from "react";
-import { AvatarImage } from "./AvatarImage";
-import InlineEmojiText from "./InlineEmojiText";
+import { TileAvatar, TileNameplate } from "@/components/voice/TileParts";
+import {
+  ROW_TILE_AVATAR_BOX,
+  ROW_TILE_AVATAR_SIZE,
+  TILE_SURFACE,
+  useTileTintStyle,
+} from "@/components/voice/tile-utils";
 import { VoiceControls } from "@/components/voice/VoiceControls";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 
@@ -44,9 +44,86 @@ const UnifiedScreenShareModal = lazy(() =>
   })),
 );
 
-/* Lobby / ringing actions use the dock geometry (48px IconButton). Join
- * voice is the conventional green on the shared success token (one solid),
- * Join with video is a resting tint, Decline / Cancel the solid danger. */
+/* Lobby / ringing actions use the stage-bar geometry: 48px square keys with a
+ * 20px glyph (the kit's call dock). Join voice is the talk LED green, Join
+ * with video a resting tint, and Decline / Cancel the one solid danger fill
+ * (they end the call, like Leave). */
+const KEY = { size: "lg", iconSize: "lg" } as const;
+
+/** A person's call status as a lit word: LED plus silkscreen (spec §5a). */
+type LobbyStatus =
+  | { kind: "you" }
+  | { kind: "led"; state: LedState; label: string };
+
+/**
+ * A person in the lobby or while ringing, drawn as the same call tile as
+ * the stage (talk-tree-spec §8: DM calls use the same tiles). The ringing
+ * ring is the one allowed loop and unmounts when ringing ends.
+ */
+function LobbyTile({
+  item,
+  status,
+  ringing,
+  dimmed,
+}: {
+  item: {
+    id: string;
+    name: string;
+    avatar?: string | null;
+    avatarDisplay?: AvatarDisplay | string | null;
+    isMuted: boolean;
+    isDeafened: boolean;
+  };
+  status: LobbyStatus | null;
+  ringing: boolean;
+  dimmed: boolean;
+}) {
+  const tint = useTileTintStyle(item.id);
+  return (
+    <li className="aspect-video h-full max-w-full shrink-0">
+      <div
+        style={tint}
+        className={cn(
+          "@container relative h-full w-full overflow-hidden rounded-lg border border-line",
+          TILE_SURFACE,
+        )}
+      >
+        <div
+          className={cn(
+            "absolute inset-0 flex justify-center",
+            ROW_TILE_AVATAR_BOX,
+            dimmed && "opacity-45",
+          )}
+        >
+          <TileAvatar
+            name={item.name}
+            avatar={item.avatar}
+            avatarDisplay={item.avatarDisplay}
+            sizeClassName={ROW_TILE_AVATAR_SIZE}
+            ringing={ringing}
+          />
+        </div>
+        <TileNameplate
+          name={item.name}
+          overMedia={false}
+          state={{ isMuted: item.isMuted, isDeafened: item.isDeafened }}
+          meta={
+            status ? (
+              status.kind === "you" ? (
+                <span className="silkscreen shrink-0 text-ink-3">You</span>
+              ) : (
+                <LedLabel state={status.state} className="shrink-0">
+                  {status.label}
+                </LedLabel>
+              )
+            ) : null
+          }
+          className="absolute bottom-2 left-2"
+        />
+      </div>
+    </li>
+  );
+}
 
 function getEventEpochMs(event: MouseEvent<HTMLElement>) {
   return Math.round(performance.timeOrigin + event.timeStamp);
@@ -312,7 +389,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       name: remoteDisplayName,
       avatar: computedRemoteUser.avatar_url,
       avatarDisplay: computedRemoteUser.avatar_display,
-      type: "camera",
+      type: "avatar",
       isLocal: false,
       isSpeaking: false,
       isMuted: true,
@@ -424,9 +501,6 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     );
   const isFullscreenView = hasVideoFeed || isExpanded || isChatHidden;
   const showVideoStage = isFullscreenView && hasJoinedSFU;
-  const isLobby = !hasJoinedSFU || !isActive;
-  const lobbyItems =
-    isActive && hasJoinedSFU ? displayItems : lobbyParticipants;
 
   return (
     <section
@@ -435,14 +509,14 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         isExpanded ? "expanded" : isChatHidden ? "chat-hidden" : "inline"
       }
       className={cn(
-        "flex w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary",
+        "flex w-full shrink-0 flex-col overflow-hidden bg-ply-0",
         isExpanded
           ? // Expanded call: a full-screen surface, padded for the notch and
             // the home indicator (3.6). The dock panel pads the bottom.
             "fixed inset-0 z-50 pt-[var(--safe-area-top,0px)] pr-[var(--safe-area-right,0px)] pl-[var(--safe-area-left,0px)]"
           : isChatHidden
             ? "absolute inset-0 z-30"
-            : "relative min-h-72 border-b border-rm-border",
+            : "relative border-b border-line",
       )}
     >
       {showVideoStage ? (
@@ -450,7 +524,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
          * tearing the video layer diagonally while the region resizes. */
         <div
           className={cn(
-            "relative min-h-0 transform-gpu bg-black",
+            "relative min-h-0 transform-gpu",
             isExpanded || isChatHidden ? "flex-1" : "h-64 md:h-80",
           )}
         >
@@ -486,111 +560,64 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
           />
         </div>
       ) : (
-        /* Lobby / ringing / audio-only: people as avatars on the page colour. */
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-6">
-          <ul className="flex flex-wrap items-start justify-center gap-8 md:gap-16">
-            {lobbyItems.map((p: any) => {
-              const item = isLobby
-                ? {
-                    id: p.id,
-                    userId: p.id,
-                    name: p.name || p.username,
-                    avatar: p.avatarUrl || p.avatar,
-                    avatarDisplay: p.avatarDisplay || p.avatar_display,
-                    isLocal: p.isLocal ?? p.id === currentUser?.id,
-                    isMuted: p.isMuted ?? false,
-                    isDeafened: p.isDeafened ?? false,
-                    isSpeaking: false,
-                    isRinging: isRingingOutgoing && p.id !== currentUser?.id,
-                    isInVoice: p.isInVoice ?? true,
-                    isReconnecting: p.isReconnecting ?? false,
-                  }
-                : p;
-              const src = item.avatar
-                ? getAuthAssetUrl(item.avatar)
-                : undefined;
-              const isCalling =
-                item.isRinging || (isRingingIncoming && !item.isLocal);
-              const status = item.isLocal
-                ? "You"
-                : isLobby && isRingingOutgoing
-                  ? "Calling…"
-                  : isLobby && isRingingIncoming
-                    ? "is calling…"
-                    : isLobby && isActive
-                      ? item.isReconnecting
-                        ? "Reconnecting"
-                        : item.isInVoice
-                          ? "In voice"
-                          : "Not in voice"
-                      : null;
-              return (
-                <li
-                  key={item.id}
-                  className="flex w-24 flex-col items-center md:w-32"
-                >
-                  <div className="relative size-24 md:size-32">
-                    {isCalling && (
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute inset-0 rounded-full border-2 border-rm-status-online/60 animate-ring-ping motion-reduce:hidden"
-                      />
-                    )}
-                    <div
-                      className={cn(
-                        "relative h-full w-full overflow-visible rounded-full bg-rm-tint-2",
-                        item.isSpeaking && "ring-2 ring-rm-status-online",
-                        isLobby &&
-                          item.isReconnecting &&
-                          "opacity-45 grayscale",
-                        isLobby &&
-                          !item.isLocal &&
-                          !item.isInVoice &&
-                          !item.isRinging &&
-                          !isRingingIncoming &&
-                          "opacity-45",
-                        isCalling && "opacity-60",
-                      )}
-                    >
-                      {src ? (
-                        <AvatarImage
-                          src={src}
-                          alt={item.name}
-                          display={
-                            item.avatarDisplay ?? item.avatar_display ?? null
-                          }
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center rounded-full text-ui-2xl font-semibold text-rm-text">
-                          {item.name?.[0]?.toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-
-                    {(item.isMuted || item.isDeafened) && (
-                      <div className="absolute -right-1 -bottom-1 flex size-8 items-center justify-center rounded-full bg-rm-bg-surface text-rm-danger-ink ring-2 ring-rm-bg-primary">
-                        <Icon
-                          name={item.isDeafened ? "deafen" : "mic"}
-                          state="off"
-                          size="sm"
-                          label={item.isDeafened ? "Deafened" : "Muted"}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="mt-3 w-full truncate text-center text-ui-sm font-semibold text-rm-text">
-                    <InlineEmojiText text={item.name} />
-                  </p>
-                  {status && (
-                    <p className="text-center text-ui-xs text-rm-text-secondary">
-                      {status}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+        /* Lobby, ringing and audio-only calls: people as call tiles, the
+         * same anatomy as the stage. Short windows get shorter tiles. */
+        <div className="h-44 shrink-0 px-4 pt-4 pb-2 [@media(min-height:800px)]:h-56">
+          {isActive && hasJoinedSFU ? (
+            <VoiceGrid
+              layoutMode="row"
+              items={displayItems}
+              focusedId={null}
+              onFocus={() => {}}
+              globalDeafened={isDeafened}
+              currentSettings={{ peerSettings: {} }}
+              watchedStreams={callVoice.watchedStreams}
+              streamThumbnails={callVoice.streamThumbnails}
+              className="p-0"
+            />
+          ) : (
+            <ul className="flex h-full items-center justify-center gap-2">
+              {lobbyParticipants.map((p) => {
+                const ringing =
+                  (isRingingOutgoing && !p.isLocal) ||
+                  (isRingingIncoming && !p.isLocal);
+                const status: LobbyStatus = p.isLocal
+                  ? { kind: "you" }
+                  : isRingingOutgoing
+                    ? { kind: "led", state: "idle", label: "Ringing" }
+                    : isRingingIncoming
+                      ? { kind: "led", state: "idle", label: "Calling" }
+                      : p.isReconnecting
+                        ? { kind: "led", state: "idle", label: "Reconnecting" }
+                        : p.isInVoice
+                          ? { kind: "led", state: "talk", label: "In voice" }
+                          : {
+                              kind: "led",
+                              state: "off",
+                              label: "Not in voice",
+                            };
+                return (
+                  <LobbyTile
+                    key={p.id}
+                    item={{
+                      id: p.id,
+                      name: p.name,
+                      avatar: p.avatarUrl,
+                      avatarDisplay: p.avatarDisplay,
+                      isMuted: p.isMuted,
+                      isDeafened: p.isDeafened,
+                    }}
+                    status={status}
+                    ringing={ringing}
+                    dimmed={
+                      !!p.isReconnecting ||
+                      (!p.isLocal && !p.isInVoice && !ringing)
+                    }
+                  />
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 
@@ -598,7 +625,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       <div
         className={cn(
           "shrink-0",
-          showVideoStage && "border-t border-rm-border bg-rm-bg-surface",
+          showVideoStage && "border-t border-line bg-ply-1",
           isExpanded && "pb-[var(--safe-area-bottom,0px)]",
         )}
       >
@@ -637,8 +664,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               {isRingingOutgoing ? (
                 <IconButton
                   variant="plain"
-                  size="lg"
-                  icon="close"
+                  {...KEY}
+                  icon="disconnect"
                   tooltip="Cancel call"
                   className={DOCK_LEAVE}
                   onClick={handleCancelCall}
@@ -646,6 +673,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               ) : (
                 <>
                   <DockButton
+                    {...KEY}
                     state="rest"
                     icon="camera"
                     tooltip="Join with video"
@@ -653,7 +681,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                   />
                   <IconButton
                     variant="plain"
-                    size="lg"
+                    {...KEY}
                     icon="call"
                     iconState="active"
                     tooltip="Join voice"
@@ -661,14 +689,13 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                     onClick={(event) => handleAccept(getEventEpochMs(event))}
                   />
                   {isRingingIncoming && (
-                    // One solid fill per surface (1.1): Join voice keeps the
-                    // success fill, Decline is the destructive tint (13.2).
+                    // Decline ends the call: the same solid as Leave.
                     <IconButton
                       variant="plain"
-                      size="lg"
-                      icon="close"
+                      {...KEY}
+                      icon="disconnect"
                       tooltip="Decline"
-                      className={DOCK_DESTRUCTIVE}
+                      className={DOCK_LEAVE}
                       onClick={handleDecline}
                     />
                   )}
