@@ -7,6 +7,10 @@ import {
 } from "partytracks/client";
 import { map, type Observable, type Subscription } from "rxjs";
 
+const BOOTSTRAP_STUN_SERVERS: IceServer[] = [
+  { urls: ["stun:stun.cloudflare.com:3478"] },
+];
+
 type PushOptions = Parameters<PartyTracks["push"]>[1];
 type PullOptions = Parameters<PartyTracks["pull"]>[1];
 
@@ -93,7 +97,11 @@ export class PartyTracksTransport {
       Authorization: `Bearer ${credentials.voiceToken}`,
       "X-Voice-Session-Id": credentials.participantId,
     });
-    this.iceServers = [...(credentials.iceServers ?? [])];
+    this.iceServers = [
+      ...(credentials.iceServers?.length
+        ? credentials.iceServers
+        : BOOTSTRAP_STUN_SERVERS),
+    ];
     const resolveApiUrl = options.resolveApiUrl ?? apiUrl;
     const prefix = resolveApiUrl(
       `/api/channels/${encodeURIComponent(credentials.roomSlug)}/partytracks`,
@@ -102,7 +110,7 @@ export class PartyTracksTransport {
     this.client = factory({
       prefix,
       headers: this.headers,
-      ...(credentials.iceServers ? { iceServers: this.iceServers } : undefined),
+      iceServers: this.iceServers,
     });
     this.peerConnection$ = this.client.peerConnection$;
     this.session$ = this.client.session$;

@@ -1,0 +1,27 @@
+diff --git a/dist/client/index.js b/dist/client/index.js
+index 030793c98d77b71e6d32020e35a4a9624ac8eed5..db4f8f7509ca08b9097e375aec1be51609c2d088 100644
+--- a/dist/client/index.js
++++ b/dist/client/index.js
+@@ -287,15 +287,15 @@ var PartyTracks = class {
+ 			})).then(({ tracks }) => {
+ 				const trackData = tracks.find((t) => t.mid === transceiver.mid);
+ 				if (trackData) {
+-					const cancelWait = waitForTransceiverToSendData(transceiver, () => {
+-						subscriber.next({
+-							...trackData,
+-							sessionId,
+-							location: "remote"
+-						});
++					// Ralph Meet: announce the track as soon as the SFU accepts it.
++					// Waiting for outbound RTP bytes delayed first audio by the
++					// time the encoder needs to send its first packet.
++					subscriber.next({
++						...trackData,
++						sessionId,
++						location: "remote"
+ 					});
+ 					subscriber.add(() => {
+-						cancelWait();
+ 						if (transceiver.mid) {
+ 							logger.debug("🔚 Closing pushed track ", trackName);
+ 							this.#closeTrackInBulk(peerConnection, transceiver.mid, sessionId);

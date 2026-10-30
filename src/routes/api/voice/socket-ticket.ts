@@ -21,6 +21,7 @@ import {
   issueSocketTicket,
   type SocketTicketAudience,
 } from "@/lib/voice/socket-ticket";
+import { generateTurnCredentials } from "../../../../realtime/meeting-room/turn-credentials";
 import { issueVoiceToken } from "../../../../realtime/voice-token";
 
 const SOCKET_TICKET_TTL_MS = 60_000;
@@ -45,6 +46,8 @@ type SocketTicketRequestBody = z.infer<typeof socketTicketRequestBodySchema>;
 type SocketTicketEnv = CloudflareEnv & {
   CALLS_APP_SECRET?: string;
   REALTIME_TICKET_SECRET?: string;
+  TURN_TOKEN_ID?: string;
+  TURN_TOKEN_SECRET?: string;
 };
 
 type TicketAdmission = {
@@ -124,15 +127,12 @@ const POST = async ({ request }: { request: Request }) => {
 
   const mediaBootstrap =
     audience === "room" && env.CALLS_APP_SECRET
-      ? {
-          participant_id: nonce,
-          voice_token: await issueVoiceToken({
-            participantId: nonce,
-            roomSlug: admission.roomSlug,
-            subject: admission.subject,
-            secret: env.CALLS_APP_SECRET,
-          }),
-        }
+      ? await createRoomMediaBootstrap({
+          env,
+          nonce,
+          roomSlug: admission.roomSlug,
+          subject: admission.subject,
+        })
       : undefined;
 
   const response = Response.json({
@@ -146,6 +146,49 @@ const POST = async ({ request }: { request: Request }) => {
   if (admission.cookie) response.headers.append("Set-Cookie", admission.cookie);
   return noStore(response);
 };
+
+async function createRoomMediaBootstrap({
+  env,
+  nonce,
+  roomSlug,
+  subject,
+}: {
+  env: SocketTicketEnv;
+  nonce: string;
+  roomSlug: string;
+  subject: string;
+}) {
+  const secret = env.CALLS_APP_SECRET;
+  if (!secret) {
+    throw new Error("CALLS_APP_SECRET is required for room media bootstrap");
+  }
+  const [voiceToken, iceServers] = await Promise.all([
+    issueVoiceToken({
+      participantId: nonce,
+      roomSlug,
+      subject,
+      secret,
+    }),
+    generateTurnCredentials({
+      tokenId: env.TURN_TOKEN_ID ?? "",
+      tokenSecret: env.TURN_TOKEN_SECRET ?? "",
+      fetch,
+      log: {
+        info(message) {
+          console.info(`[socket-ticket] ${message}`);
+        },
+        warn(message) {
+          console.warn(`[socket-ticket] ${message}`);
+        },
+      },
+    }),
+  ]);
+  return {
+    participant_id: nonce,
+    voice_token: voiceToken,
+    ice_servers: iceServers,
+  };
+}
 
 async function authorizeAuthenticatedTicket(
   request: Request,

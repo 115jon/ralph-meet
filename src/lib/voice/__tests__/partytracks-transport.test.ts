@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { TrackInfo } from "@/lib/types";
 import type { PartyTracksConfig } from "partytracks/client";
 import { BehaviorSubject, Observable, Subject, of } from "rxjs";
@@ -57,7 +59,17 @@ class FakePartyTracks implements PartyTracksClient {
 }
 
 describe("PartyTracksTransport", () => {
-  it("omits PartyTracks iceServers when bootstrap has none", () => {
+  it("announces PartyTracks publications without waiting for outbound RTP bytes", () => {
+    const source = readFileSync(
+      fileURLToPath(import.meta.resolve("partytracks/client")),
+      "utf8",
+    );
+    expect(source).not.toContain(
+      "waitForTransceiverToSendData(transceiver, () => {",
+    );
+  });
+
+  it("gives PartyTracks STUN when bootstrap has no ICE so it does not fetch generate-ice-servers", () => {
     const fake = new FakePartyTracks();
     const factory = vi.fn((_config: PartyTracksConfig) => fake);
 
@@ -71,7 +83,9 @@ describe("PartyTracksTransport", () => {
     );
 
     expect(factory).toHaveBeenCalledWith(
-      expect.not.objectContaining({ iceServers: expect.anything() }),
+      expect.objectContaining({
+        iceServers: [{ urls: ["stun:stun.cloudflare.com:3478"] }],
+      }),
     );
   });
   it("uses one PartyTracks session for microphone publication and remote pulls", () => {

@@ -137,6 +137,7 @@ describe("socket ticket route", () => {
       media_bootstrap?: {
         participant_id: string;
         voice_token: string;
+        ice_servers: Array<{ urls: string[] }>;
       };
       ticket: string;
     };
@@ -154,6 +155,9 @@ describe("socket ticket route", () => {
       throw new Error("Expected a verified room bootstrap");
     }
     expect(body.media_bootstrap.participant_id).toBe(verification.claims.nonce);
+    expect(body.media_bootstrap.ice_servers).toEqual([
+      { urls: ["stun:stun.cloudflare.com:3478"] },
+    ]);
     await expect(
       verifyVoiceToken({
         token: body.media_bootstrap.voice_token,

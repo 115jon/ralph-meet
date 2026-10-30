@@ -8,6 +8,9 @@ patchedDependencies:
   miniflare@4.20260708.1:
     hash: 1f969d41a5a70f676fe3e9c8f195e29f5f31202bf560dd30a127a85634ee0210
     path: patches/miniflare@4.20260708.1.patch
+  partytracks@0.0.56:
+    hash: 92babfb02a5bd65c68551bba3a6ef3f7d45b695f3f2d4505804a595bd6d6240f
+    path: patches/partytracks@0.0.56.patch
 
 importers:
 
@@ -123,7 +126,7 @@ importers:
         version: 0.4.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       partytracks:
         specifier: ^0.0.56
-        version: 0.0.56
+        version: 0.0.56(patch_hash=92babfb02a5bd65c68551bba3a6ef3f7d45b695f3f2d4505804a595bd6d6240f)
       radix-ui:
         specifier: ^1.4.3
         version: 1.4.3(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -12375,7 +12378,7 @@ snapshots:
 
   parseurl@1.3.3: {}
 
-  partytracks@0.0.56:
+  partytracks@0.0.56(patch_hash=92babfb02a5bd65c68551bba3a6ef3f7d45b695f3f2d4505804a595bd6d6240f):
     dependencies:
       cookie: 1.1.1
       jose: 6.2.8
