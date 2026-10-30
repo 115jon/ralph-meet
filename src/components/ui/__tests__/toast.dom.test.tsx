@@ -31,14 +31,16 @@ afterEach(() => {
 });
 
 describe("toast", () => {
-  it("renders a role=status card with a dismiss button in a z-80 stack", async () => {
+  it("renders a card in sonner's live region, with a dismiss button in a z-80 stack", async () => {
     const { container } = render(<Toaster />);
     act(() => {
       toast.success("Server ID copied");
     });
 
-    const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent("Server ID copied");
+    const text = await screen.findByText("Server ID copied");
+    // One announcer only: sonner's aria-live section, no nested role=status.
+    expect(text.closest("[aria-live]")).not.toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
     const stack = document.querySelector<HTMLElement>("[data-sonner-toaster]");
     expect(stack?.style.zIndex).toBe("80");

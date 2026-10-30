@@ -23,9 +23,15 @@ import * as React from "react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { FocusScope } from "@radix-ui/react-focus-scope";
 
-import { isDialogTopmost } from "@/components/ui/dialog-stack";
+import {
+  isDialogTopmost,
+  KEYBOARD_PRESENCE_VARS,
+  useOpenedByKeyboard,
+  useOpenedOverModal,
+} from "@/components/ui/dialog-stack";
 import { Icon } from "@/components/ui/icon";
 import {
+  MENU_HINT,
   MENU_ICON,
   MENU_ITEM,
   MENU_LABEL,
@@ -36,10 +42,16 @@ import { FLOATING_LAYER_ATTR } from "@/components/ui/popover";
 import { useDialogBackButton } from "@/hooks/useBackButton";
 import { cn } from "@/lib/utils";
 
+const preventDefault = (event: Event) => event.preventDefault();
+
 type DropdownMenuContextValue = {
   id: string;
   /** DropdownMenuContent reports its `anchor` element (null on unmount). */
   setAnchor: (element: Element | null) => void;
+  /** Opened from the keyboard (Enter, Shift+F10, the context-menu key). */
+  byKeyboard: boolean;
+  /** Opened while a modal layer is open: the menus-over-modals layer (z-70). */
+  overModal: boolean;
 };
 const DropdownMenuContext =
   React.createContext<DropdownMenuContextValue | null>(null);
@@ -67,6 +79,8 @@ function DropdownMenu({
   const isOpen = isControlled ? open : uncontrolledOpen;
   const id = React.useId();
   const anchorRef = React.useRef<Element | null>(null);
+  const byKeyboard = useOpenedByKeyboard(isOpen);
+  const overModal = useOpenedOverModal(isOpen);
   const setAnchor = React.useCallback((element: Element | null) => {
     anchorRef.current = element;
   }, []);
@@ -86,8 +100,8 @@ function DropdownMenu({
   );
 
   const contextValue = React.useMemo(
-    () => ({ id, setAnchor }),
-    [id, setAnchor],
+    () => ({ id, setAnchor, byKeyboard, overModal }),
+    [id, setAnchor, byKeyboard, overModal],
   );
 
   return (
@@ -176,10 +190,36 @@ type PanelProps = Omit<
   /** Opened from a dialog: the stacked layer (z-60). */
   stacked?: boolean;
   finalFocus?: MenuPrimitive.Popup.Props["finalFocus"];
+  /**
+   * Element to focus on open (Base UI's popup focus manager). Context menus
+   * opened at the pointer pass their first row so arrow keys work at once.
+   */
+  initialFocus?:
+    | boolean
+    | React.RefObject<HTMLElement | null>
+    | (() => HTMLElement | boolean | null | undefined);
 };
 
-const PANEL_MOTION =
-  "origin-(--transform-origin) transition-[opacity,scale] duration-180 ease-(--rm-ease-out) data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-ending-style:duration-120 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-opacity";
+/** Presence (styles/motion.css): fade + scale from the anchor. */
+const PANEL_MOTION = "rm-presence";
+
+/**
+ * Menu timing (overlays §3b): scale .96 -> 1 from the anchor over 140ms;
+ * the exit is opacity only, 80ms. Submenus fade in 120ms from their trigger
+ * row. motion.css reads these vars on the popup itself.
+ */
+const MENU_PRESENCE_VARS = {
+  "--motion-scale-in": "0.96",
+  "--motion-scale-out": "1",
+  "--dur-3": "140ms",
+  "--dur-3-exit": "80ms",
+} as React.CSSProperties;
+const SUBMENU_PRESENCE_VARS = {
+  "--motion-scale-in": "0.98",
+  "--motion-scale-out": "1",
+  "--dur-3": "120ms",
+  "--dur-3-exit": "80ms",
+} as React.CSSProperties;
 
 function MenuPanel({
   className,
@@ -187,10 +227,11 @@ function MenuPanel({
   side,
   align,
   sideOffset,
-  alignOffset = 0,
+  alignOffset,
   anchor,
   stacked = false,
   finalFocus,
+  initialFocus,
   children,
   isSubmenu = false,
   ...props
@@ -210,27 +251,53 @@ function MenuPanel({
       <MenuPrimitive.Positioner
         side={side ?? (isSubmenu ? "inline-end" : "bottom")}
         align={align ?? "start"}
-        sideOffset={sideOffset ?? (isSubmenu ? 4 : 6)}
-        alignOffset={alignOffset}
+        // Submenus sit 2px off the parent panel with their first row level
+        // with the trigger row (panel padding 4 + border 1).
+        sideOffset={sideOffset ?? (isSubmenu ? 2 : 6)}
+        alignOffset={alignOffset ?? (isSubmenu ? -5 : 0)}
         collisionPadding={8}
         anchor={anchor}
-        className={cn(stacked ? "z-60" : "z-50", "outline-none")}
+        className={cn(
+          context?.overModal ? "z-70" : stacked ? "z-60" : "z-50",
+          "outline-none",
+        )}
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           data-dialog-root-id={isSubmenu ? undefined : context?.id}
           data-dialog-back-enabled={isSubmenu ? undefined : "true"}
           finalFocus={finalFocus}
+          // Supported by Base UI's MenuPopup, not yet in its public types.
+          {...(initialFocus === undefined
+            ? null
+            : ({ initialFocus } as object))}
           className={cn(
             MENU_PANEL,
-            "flex max-h-(--available-height) w-max max-w-[min(280px,var(--available-width))] min-w-[180px] flex-col overflow-y-auto text-rm-text outline-none",
+            "flex max-h-(--available-height) w-max max-w-[min(280px,var(--available-width))] min-w-[200px] flex-col overflow-y-auto text-ink-1 outline-none",
             PANEL_MOTION,
             className,
           )}
-          style={style}
+          data-keyboard={context?.byKeyboard ? "" : undefined}
+          style={{
+            ...(isSubmenu ? SUBMENU_PRESENCE_VARS : MENU_PRESENCE_VARS),
+            ...(context?.byKeyboard ? KEYBOARD_PRESENCE_VARS : null),
+            ...style,
+          }}
           {...props}
         >
-          <FocusScope asChild>
+          {/*
+           * Pauses the focus trap of a Radix dialog under this menu (Radix
+           * keeps one scope stack). The top-level panel leaves open/close
+           * focus to Base UI (`initialFocus` / `finalFocus`); a submenu lets
+           * the scope focus its first control, so custom submenu content
+           * (a reaction strip, a slider) is reachable from the keyboard, and
+           * hands focus back to its trigger row when it closes.
+           */}
+          <FocusScope
+            asChild
+            onMountAutoFocus={isSubmenu ? undefined : preventDefault}
+            onUnmountAutoFocus={isSubmenu ? undefined : preventDefault}
+          >
             <div className="contents">{children}</div>
           </FocusScope>
         </MenuPrimitive.Popup>
@@ -248,11 +315,9 @@ function DropdownMenuSubContent(props: PanelProps) {
 }
 
 const ITEM_INK = {
-  default:
-    "text-rm-text data-highlighted:bg-rm-tint-2 data-[popup-open]:bg-rm-tint-2",
-  danger: "text-rm-danger-ink data-highlighted:bg-rm-danger-tint",
-  warning:
-    "text-rm-warning-ink data-highlighted:bg-[color-mix(in_oklab,var(--rm-warning-ink)_14%,transparent)]",
+  default: "text-ink-1 data-highlighted:bg-tint-2 data-[popup-open]:bg-tint-2",
+  danger: "text-danger-ink data-highlighted:bg-danger-tint",
+  warning: "text-warning-ink data-highlighted:bg-warning-tint",
 } as const;
 
 type ItemVariant = keyof typeof ITEM_INK;
@@ -283,20 +348,12 @@ function MenuRowContent({
   return (
     <>
       {icon ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            MENU_ICON,
-            "flex size-4 items-center justify-center [&_svg]:size-4",
-          )}
-        >
+        <span aria-hidden="true" className={MENU_ICON}>
           {icon}
         </span>
       ) : null}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {hint ? (
-        <span className="shrink-0 text-ui-xs text-rm-text-muted">{hint}</span>
-      ) : null}
+      {hint ? <span className={MENU_HINT}>{hint}</span> : null}
     </>
   );
 }
@@ -345,7 +402,7 @@ function DropdownMenuSubTrigger({
       <Icon
         name="chevronRight"
         size="xs"
-        className="shrink-0 text-rm-text-muted rtl:rotate-180"
+        className="shrink-0 text-ink-3 rtl:rotate-180"
       />
     </MenuPrimitive.SubmenuTrigger>
   );
@@ -367,8 +424,8 @@ function DropdownMenuRadioItem({
       {...props}
     >
       <MenuRowContent icon={icon}>{children}</MenuRowContent>
-      <MenuPrimitive.RadioItemIndicator className="flex size-4 shrink-0 items-center justify-center text-rm-text">
-        <Icon name="check" size="xs" />
+      <MenuPrimitive.RadioItemIndicator className="flex size-4 shrink-0 items-center justify-center text-ink-1">
+        <Icon name="check" size="sm" />
       </MenuPrimitive.RadioItemIndicator>
     </MenuPrimitive.RadioItem>
   );
@@ -390,9 +447,16 @@ function DropdownMenuCheckboxItem({
       {...props}
     >
       <MenuRowContent icon={icon}>{children}</MenuRowContent>
-      <MenuPrimitive.CheckboxItemIndicator className="flex size-4 shrink-0 items-center justify-center text-rm-text">
-        <Icon name="check" size="xs" />
-      </MenuPrimitive.CheckboxItemIndicator>
+      {/* A toggle row carries an LED: unlit off, talk-lit on (the row's
+          menuitemcheckbox role carries the state for assistive tech). */}
+      <span
+        aria-hidden="true"
+        data-slot="led"
+        data-state="talk"
+        data-size="6"
+        data-toggle=""
+        className="rm-led ms-auto"
+      />
     </MenuPrimitive.CheckboxItem>
   );
 }

@@ -9,43 +9,77 @@ import {
   type IconSize,
   type IconState,
 } from "@/components/ui/icon";
-import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
+import { DISABLED, HIT, PRESS, PRESS_ICON } from "@/components/ui/interaction";
 import { cn } from "@/lib/utils";
 import React from "react";
 
 type IconButtonVariant = "ghost" | "muted" | "active" | "destructive" | "plain";
-type IconButtonSize = "xs" | "sm" | "md" | "lg";
+
+/**
+ * Talk Tree sizes (spec §7) are the pixel steps 24 / 28 / 32 / 40 with icons
+ * 16 / 16 / 18 / 20. The named steps are the older API and keep their pixel
+ * sizes (xs 24, sm 32, md 40, lg 48).
+ */
+type IconButtonSize = 24 | 28 | 32 | 40 | "xs" | "sm" | "md" | "lg";
+
+/**
+ * The state a toggle shows (spec §7):
+ *   idle     ghost, Bold glyph
+ *   toggled  tint-2 fill, Fill glyph          (a panel this opens is open)
+ *   off      muted-state tint + ink, Fill     (mic muted, deafened, camera off)
+ *   live     live tint + ink, Fill            (camera on, sharing)
+ * Sets the glyph weight unless `iconState` is passed. Pair a toggle with
+ * `aria-pressed`.
+ */
+type IconButtonTone = "idle" | "toggled" | "off" | "live";
 
 const SIZE_CLASSES: Record<IconButtonSize, string> = {
+  24: "size-6 rounded-sm",
+  28: "size-7 rounded-sm",
+  32: "size-8 rounded-md",
+  40: "size-10 rounded-md",
   xs: "size-6 rounded-sm",
   sm: "size-8 rounded-md",
   md: "size-10 rounded-md",
   lg: "size-12 rounded-lg",
 };
 
-/** Icon step per button size: 20 in 32 and 40px targets, 24 in 48. */
 const ICON_SIZE: Record<IconButtonSize, IconSize> = {
+  24: "sm",
+  28: "sm",
+  32: "md",
+  40: "lg",
   xs: "sm",
-  sm: "lg",
+  sm: "md",
   md: "lg",
   lg: "xl",
 };
 
-/**
- * Quiet Pro: bare until hovered (a currentColor overlay), tonal when pressed
- * or active. Destructive turns its ink red on hover, so the overlay becomes a
- * red tint; it never fills solid.
- */
+/** Bare until hovered (an ink overlay), tonal when pressed or active. */
 const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
   ghost:
-    "text-rm-text-secondary pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text",
+    "text-ink-2 pointer-fine:hover:text-ink-1 aria-pressed:bg-tint-2 aria-pressed:text-ink-1",
   muted:
-    "text-rm-text-muted pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text",
-  active: "bg-rm-tint-2 text-rm-text",
+    "text-ink-3 pointer-fine:hover:text-ink-1 aria-pressed:bg-tint-2 aria-pressed:text-ink-1",
+  active: "bg-tint-2 text-ink-1",
   destructive:
-    "text-rm-text-muted pointer-fine:hover:text-rm-danger-ink focus-visible:text-rm-danger-ink",
+    "text-ink-3 pointer-fine:hover:text-danger-ink focus-visible:text-danger-ink",
   /** No colour of its own: the caller paints it (the dock recipe). */
   plain: "",
+};
+
+const TONE_CLASSES: Record<IconButtonTone, string> = {
+  idle: "",
+  toggled: "bg-tint-2 text-ink-1",
+  off: "bg-muted-state-tint text-muted-state pointer-fine:hover:text-muted-state",
+  live: "bg-live-tint text-live-ink pointer-fine:hover:text-live-ink [--hover-o:0.12]",
+};
+
+const TONE_ICON: Record<IconButtonTone, IconState> = {
+  idle: "idle",
+  toggled: "active",
+  off: "off",
+  live: "active",
 };
 
 const SHAPE_CLASSES = {
@@ -61,14 +95,16 @@ type IconButtonBaseProps = Omit<
   icon: IconName;
   /**
    * Icon weight state: "active" (Fill) for on/selected, "off" for the
-   * concept's muted partner. Defaults to idle (Bold).
+   * concept's muted partner. Defaults to the tone's weight (idle: Bold).
    */
   iconState?: IconState;
   /** Icon size step override (defaults based on button size) */
   iconSize?: IconSize;
-  /** Visual variant */
+  /** Visual variant (default ghost) */
   variant?: IconButtonVariant;
-  /** Button size */
+  /** Toggle state (talk-tree-spec §7): idle, toggled, off, live. */
+  tone?: IconButtonTone;
+  /** 24 | 28 | 32 | 40, or the legacy xs | sm | md | lg. Default 32. */
   size?: IconButtonSize;
   /** Border radius shape */
   shape?: "square" | "circle";
@@ -97,6 +133,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       iconState,
       iconSize,
       variant = "ghost",
+      tone,
       size = "sm",
       shape = "square",
       tooltip,
@@ -109,6 +146,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     ref,
   ) => {
     const resolvedIconSize = iconSize ?? ICON_SIZE[size];
+    const resolvedIconState = iconState ?? (tone ? TONE_ICON[tone] : undefined);
     const ariaLabel = props["aria-label"] ?? tooltip;
 
     if (import.meta.env.DEV && !ariaLabel && !props["aria-labelledby"]) {
@@ -121,13 +159,20 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       <button
         ref={ref}
         type={type ?? "button"}
+        data-tone={tone}
         className={cn(
           "inline-flex shrink-0 items-center justify-center outline-none",
           PRESS,
+          PRESS_ICON,
+          "transition-[scale,color,background-color]",
           HIT,
           DISABLED,
           SIZE_CLASSES[size],
-          VARIANT_CLASSES[variant],
+          // A set tone owns the fill and ink, so the variant's own
+          // aria-pressed tint can't override it.
+          tone && tone !== "idle"
+            ? TONE_CLASSES[tone]
+            : VARIANT_CLASSES[variant],
           SHAPE_CLASSES[shape],
           className,
         )}
@@ -136,7 +181,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       >
         <Icon
           name={icon}
-          state={iconState}
+          state={resolvedIconState}
           size={resolvedIconSize}
           className={iconClassName}
         />

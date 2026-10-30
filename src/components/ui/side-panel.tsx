@@ -14,6 +14,9 @@
  * The docked column is part of the layout (no scrim, no focus trap); the
  * hardware/browser back button still closes it. The sheet and drawer share the
  * dialog stack with every other modal surface.
+ *
+ * Plies: the docked column is a ply-1 panel; the sheet and drawer are floats
+ * and keep their primitive's ply-3 surface.
  */
 
 import * as React from "react";
@@ -98,7 +101,7 @@ function PanelHeader({
   titleId: string;
 }) {
   const phone = mode === "drawer";
-  const titleClass = "min-w-0 truncate text-ui-md font-semibold text-rm-text";
+  const titleClass = "min-w-0 truncate text-ui-row font-semibold text-ink-1";
   const titleNode =
     mode === "sheet" ? (
       <SheetTitle id={titleId} className={cn(titleClass, "flex-none")}>
@@ -118,7 +121,7 @@ function PanelHeader({
     <div
       data-slot="side-panel-header"
       className={cn(
-        "relative z-20 flex shrink-0 items-center gap-2 border-b border-rm-border",
+        "relative z-20 flex shrink-0 items-center gap-2 border-b border-line",
         phone
           ? "min-h-12 pt-[var(--safe-area-top,0px)] pr-2 pl-1"
           : "h-12 pr-2 pl-4",
@@ -203,7 +206,7 @@ export function SidePanel({
         data-mode="dock"
         {...labelProps}
         className={cn(
-          "flex h-full min-h-0 w-[360px] shrink-0 flex-col border-l border-rm-border bg-rm-bg-primary",
+          "flex h-full min-h-0 w-[360px] shrink-0 flex-col border-l border-line bg-ply-1",
           dockClassName,
         )}
       >
@@ -217,7 +220,7 @@ export function SidePanel({
         <SheetContent
           data-mode="sheet"
           aria-label={label}
-          className={cn("bg-rm-bg-primary dark:bg-rm-bg-primary", className)}
+          className={className}
           // Focus the panel itself, like the drawer does: landing on the close
           // button shows its ring on every pointer open.
           onOpenAutoFocus={(event) => {
@@ -247,10 +250,7 @@ export function SidePanel({
         <DrawerContent
           data-mode="drawer"
           aria-label={label}
-          className={cn(
-            "bg-rm-bg-primary pb-[var(--safe-area-bottom,0px)] dark:bg-rm-bg-primary",
-            className,
-          )}
+          className={cn("pb-[var(--safe-area-bottom,0px)]", className)}
         >
           {hideHeader ? (
             <DrawerTitle className="sr-only">{label}</DrawerTitle>

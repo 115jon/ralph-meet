@@ -11,7 +11,7 @@ import {
 
 const classes = (value: string) => value.split(/\s+/).filter(Boolean);
 
-describe("sidebar row recipe (design-system 12.3)", () => {
+describe("sidebar row recipe (talk-tree-spec §3)", () => {
   it("is a 32px row that grows to 44px on coarse pointers", () => {
     const row = classes(sidebarRowClass());
     expect(row).toEqual(
@@ -19,9 +19,9 @@ describe("sidebar row recipe (design-system 12.3)", () => {
         "h-8",
         "pointer-coarse:min-h-11",
         "px-2",
-        "gap-2.5",
-        "rounded-md",
-        "text-ui-base",
+        "gap-2",
+        "rounded-sm",
+        "text-ui-row",
         "font-medium",
       ]),
     );
@@ -29,11 +29,11 @@ describe("sidebar row recipe (design-system 12.3)", () => {
 
   it("selects with a tint and hovers only on fine pointers", () => {
     const selected = classes(sidebarRowClass({ selected: true }));
-    expect(selected).toContain("bg-rm-tint-2");
-    expect(selected).not.toContain("pointer-fine:hover:bg-rm-tint-1");
+    expect(selected).toContain("bg-tint-2");
+    expect(selected).not.toContain("pointer-fine:hover:bg-tint-1");
 
     const idle = classes(sidebarRowClass());
-    expect(idle).toContain("pointer-fine:hover:bg-rm-tint-1");
+    expect(idle).toContain("pointer-fine:hover:bg-tint-1");
     expect(idle.some((c) => c.startsWith("hover:"))).toBe(false);
   });
 
@@ -72,7 +72,7 @@ describe("sidebar row recipe (design-system 12.3)", () => {
       expect.arrayContaining(["px-2", "py-2"]),
     );
     expect(classes(SIDEBAR_CATEGORY)).toEqual(
-      expect.arrayContaining(["px-2", "pt-4", "pb-1", "uppercase"]),
+      expect.arrayContaining(["px-2", "pt-4", "pb-1", "silkscreen"]),
     );
   });
 
@@ -80,5 +80,19 @@ describe("sidebar row recipe (design-system 12.3)", () => {
     expect(classes(PHONE_ROW)).toEqual(
       expect.arrayContaining(["min-h-12", "px-4", "gap-3"]),
     );
+  });
+
+  it("has the 32px tree channel row", () => {
+    const tree = classes(sidebarRowClass({ tree: true, tall: true }));
+    expect(tree).toEqual(
+      expect.arrayContaining([
+        "h-8",
+        "px-2",
+        "gap-2",
+        "rounded-sm",
+        "text-ui-row",
+      ]),
+    );
+    expect(tree).not.toContain("h-10");
   });
 });

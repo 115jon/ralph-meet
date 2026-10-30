@@ -2,7 +2,7 @@
 
 /**
  * Desktop side sheet (design-system 12.10): a modal panel attached to a
- * screen edge, 360 wide, on the modal layer (z-50) over `bg-rm-scrim`.
+ * screen edge, 360 wide, on the modal layer (z-50) over `bg-scrim`.
  * Phones use a Drawer with `direction` instead (see ui/side-panel.tsx).
  *
  * Built on ui/dialog.tsx, so it shares the dialog stack: the hardware/browser
@@ -28,6 +28,7 @@ import {
   DialogSurface,
   DialogTitle,
   DialogTrigger,
+  BEHIND_CUE,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +73,8 @@ const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
           data-slot="sheet-content"
           showCloseButton={showCloseButton}
           className={cn(
-            "fixed z-50 flex flex-col overscroll-contain border-rm-border bg-rm-bg-surface text-rm-text shadow-2xl outline-none ease-drawer dark:bg-rm-bg-elevated data-[state=closed]:animate-out data-[state=closed]:duration-150 data-[state=open]:animate-in data-[state=open]:duration-240",
+            "fixed z-50 flex flex-col overscroll-contain border-line bg-ply-3 text-ink-1 shadow-modal outline-none ease-drawer data-stacked:z-60 data-[state=closed]:animate-out data-[state=closed]:duration-(--dur-4-exit) data-[state=open]:animate-in data-[state=open]:duration-260 data-keyboard:duration-100! data-keyboard:[--tw-enter-translate-x:0]! data-keyboard:[--tw-enter-translate-y:0]!",
+            BEHIND_CUE,
             SIDE_CLASSES[side],
             className,
           )}
@@ -91,7 +93,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sheet-header"
       className={cn(
-        "flex h-12 shrink-0 items-center gap-2 border-b border-rm-border px-4",
+        "flex h-12 shrink-0 items-center gap-2 border-b border-line px-4",
         className,
       )}
       {...props}
@@ -117,7 +119,7 @@ function SheetTitle({
     <DialogTitle
       data-slot="sheet-title"
       className={cn(
-        "min-w-0 flex-1 truncate text-ui-md font-semibold text-rm-text",
+        "min-w-0 flex-1 truncate text-ui-row font-semibold text-ink-1",
         className,
       )}
       {...props}
@@ -132,7 +134,7 @@ function SheetDescription({
   return (
     <DialogDescription
       data-slot="sheet-description"
-      className={cn("text-ui-sm text-rm-text-muted", className)}
+      className={cn("text-ui-sm text-ink-2", className)}
       {...props}
     />
   );

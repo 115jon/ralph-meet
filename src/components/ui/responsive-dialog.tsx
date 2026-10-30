@@ -106,6 +106,9 @@ const ResponsiveDialogContent = React.forwardRef<
       onInteractOutside: _onInteractOutside,
       onFocusOutside: _onFocusOutside,
       forceMount: _forceMount,
+      size: _size,
+      placement: _placement,
+      initialFocus: _initialFocus,
       ...drawerProps
     } = props;
     return (

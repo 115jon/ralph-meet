@@ -1,0 +1,258 @@
+/* ============================================================
+   Instrument motion (talk-tree-spec §6, performance-motion §5).
+
+   Only transform, opacity, translate, scale and rotate animate. Nothing
+   loops at rest: the only infinite animations are a pending spinner and an
+   incoming/outgoing call ring, and both unmount when their state ends.
+
+   Durations (exits run at about 0.7x):
+     --dur-1 100  hover, press
+     --dur-2 150  tooltip, toggle, small popover    (exit 100)
+     --dur-3 200  menu, popover, list insert        (exit 140)
+     --dur-4 250  dialog, panel, drawer             (exit 180)
+     --dur-speak-on 60 / --dur-speak-off 220        LED and ring
+   Curves live in @theme (styles.css) so `ease-out`, `ease-spring` etc.
+   exist as utilities: --ease-out (default, enter AND exit), --ease-in-out
+   (on-screen movement only), --ease-drawer, --ease-spring.
+   ============================================================ */
+
+:root {
+  --dur-instant: 0ms;
+  --dur-1: 100ms;
+  --dur-2: 150ms;
+  --dur-2-exit: 100ms;
+  --dur-3: 200ms;
+  --dur-3-exit: 140ms;
+  --dur-4: 250ms;
+  --dur-4-exit: 180ms;
+  --dur-speak-on: 60ms;
+  --dur-speak-off: 220ms;
+
+  /* Motion amplitudes. The reduced-motion rule zeroes these, so every
+     primitive below keeps its fade and drops its travel/scale. */
+  --motion-scale-in: 0.97;
+  --motion-scale-out: 0.985;
+  --motion-scale-dialog: 0.96;
+  --motion-shift: 4px;
+  --motion-panel-shift: 16px;
+  --motion-press: 0.97;
+  --motion-press-icon: 0.96;
+
+  /* Legacy motion aliases */
+  --rm-ease-out: var(--ease-out);
+  --rm-ease-in-out: var(--ease-in-out);
+  --rm-ease-drawer: var(--ease-drawer);
+  --rm-dur-1: var(--dur-1);
+  --rm-dur-2: var(--dur-2);
+  --rm-dur-3: var(--dur-3);
+  --rm-dur-4: var(--dur-4);
+}
+
+/* ---------- 1. presence ----------
+   Fade plus scale from the anchor, keyed to Base UI's data attributes
+   (popover, menu, select, toast). Radix overlays (Dialog, Tooltip) use the
+   tw-animate keyframes in their primitives because Radix waits for
+   `animationend`, not `transitionend`. */
+.rm-presence {
+  transform-origin: var(--transform-origin, center);
+  transition:
+    opacity var(--dur-3) var(--ease-out),
+    scale var(--dur-3) var(--ease-out);
+}
+.rm-presence[data-starting-style] {
+  opacity: 0;
+  scale: var(--motion-scale-in);
+}
+.rm-presence[data-ending-style] {
+  opacity: 0;
+  scale: var(--motion-scale-out);
+  transition-duration: var(--dur-3-exit);
+}
+.rm-presence[data-instant] {
+  transition-duration: 0ms;
+}
+.rm-presence-sm {
+  transition-duration: var(--dur-2);
+}
+.rm-presence-sm[data-ending-style] {
+  transition-duration: var(--dur-2-exit);
+}
+
+/* ---------- 2. collapse ----------
+   Height-free: the grid track animates 0fr -> 1fr on a small subtree, the
+   child fades. Never in the message list or voice grid.
+     <div class="rm-collapse" data-open>
+       <div class="rm-collapse-inner">…</div>
+     </div> */
+.rm-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-3) var(--ease-out);
+}
+.rm-collapse[data-open] {
+  grid-template-rows: 1fr;
+}
+.rm-collapse > .rm-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--dur-3) var(--ease-out);
+}
+.rm-collapse[data-open] > .rm-collapse-inner {
+  opacity: 1;
+}
+
+/* ---------- 3. list-enter / list-exit ----------
+   Insertion animates only under an ancestor with [data-animate-enter],
+   which is set after first paint (useAnimateEnter), so the initial render
+   and history loads never animate. Removal: wrap the store update in
+   document.startViewTransition and give rows `view-transition-class:
+   list-row` (see the ::view-transition rules below). */
+[data-animate-enter] .rm-list-enter {
+  transition:
+    opacity var(--dur-3) var(--ease-out),
+    translate var(--dur-3) var(--ease-out);
+}
+@starting-style {
+  [data-animate-enter] .rm-list-enter {
+    opacity: 0;
+    translate: 0 var(--motion-shift);
+  }
+}
+
+::view-transition-old(.list-row) {
+  animation: rm-vt-fade-out var(--dur-3-exit) var(--ease-out) both;
+}
+::view-transition-group(.list-row) {
+  animation-duration: var(--dur-3);
+  animation-timing-function: var(--ease-in-out);
+}
+
+/* ---------- 4. panel ----------
+   Side panels: startViewTransition({ types: ["panel-open"] }) with
+   `view-transition-name: side-panel` on the panel. */
+::view-transition-new(side-panel) {
+  animation: rm-vt-panel-in var(--dur-4) var(--ease-spring) both;
+}
+::view-transition-old(side-panel) {
+  animation: rm-vt-panel-out var(--dur-4-exit) var(--ease-out) both;
+}
+::view-transition-group(.tile) {
+  animation-duration: var(--dur-3);
+  animation-timing-function: var(--ease-in-out);
+}
+
+@keyframes rm-vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes rm-vt-panel-in {
+  from {
+    opacity: 0;
+    translate: var(--motion-panel-shift) 0;
+  }
+}
+@keyframes rm-vt-panel-out {
+  to {
+    opacity: 0;
+    translate: var(--motion-panel-shift) 0;
+  }
+}
+
+/* ---------- 5. speaking: the LED and the ring ----------
+   See foundation.css (.rm-led, .rm-speak). Painted once; only opacity
+   transitions, 60ms on and 220ms off. */
+
+/* ---------- 6. press / hover ----------
+   Colours change at --dur-1. Icon buttons press at scale(.96), buttons at
+   (.97). The recipes live in components/ui/interaction.ts; these classes
+   are for hand-written controls. */
+.rm-press {
+  transition:
+    scale var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+.rm-press:active:not(:disabled, [aria-disabled="true"]) {
+  scale: var(--motion-press);
+}
+
+/* Pending spinner: one of the allowed loops, only while mounted. */
+@keyframes rm-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+.rm-spinner {
+  display: block;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: rm-spin 700ms linear infinite;
+}
+
+/* ============================================================
+   App inactive: hidden, minimised, or behind a fullscreen game. Every CSS
+   animation pauses (useAppActive sets the attribute; rAF/canvas/video
+   loops subscribe to the same hook and stop).
+   ============================================================ */
+:root[data-app-inactive] *,
+:root[data-app-inactive] *::before,
+:root[data-app-inactive] *::after {
+  animation-play-state: paused !important;
+}
+
+/* ============================================================
+   Reduced motion: ONE global rule. Translate and scale amplitudes go to
+   zero, durations cap at 100ms so opacity still eases, decorative arbitrary
+   animations stop. LEDs and the speaking ring keep working (state, not
+   motion) with instant transitions.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-scale-in: 1;
+    --motion-scale-out: 1;
+    --motion-scale-dialog: 1;
+    --motion-shift: 0px;
+    --motion-panel-shift: 0px;
+    --motion-press: 1;
+    --motion-press-icon: 1;
+    --dur-2: 100ms;
+    --dur-3: 100ms;
+    --dur-3-exit: 100ms;
+    --dur-4: 100ms;
+    --dur-4-exit: 100ms;
+    --dur-speak-on: 0ms;
+    --dur-speak-off: 0ms;
+  }
+
+  /* tw-animate (Radix overlays, legacy keyframes): keep the fade only. */
+  :where(.animate-in, .animate-out) {
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-enter-scale: 1;
+    --tw-enter-rotate: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+    --tw-exit-scale: 1;
+    --tw-exit-rotate: 0;
+    --tw-duration: 100ms;
+  }
+
+  /* Decorative loops stop. The spinner is exempt (it carries state). */
+  [class*="animate-["]:not(.rm-spinner),
+  .animate-pulse,
+  .animate-wiggle,
+  .animate-clack,
+  .animate-ping,
+  .animate-bounce {
+    animation: none !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 100ms !important;
+  }
+}

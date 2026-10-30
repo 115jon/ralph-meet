@@ -109,7 +109,7 @@ const RULES = [
   {
     id: "raw-color",
     severity: "high",
-    rule: "Colour 7.1: no hex / rgb() / oklch() literals in components; use an rm-* role token (add one if the role is missing).",
+    rule: "Colour 7.1: no hex / rgb() / oklch() literals in components; use a semantic token (bg-ply-*, text-ink-*, line, accent-*, status roles); add one if the role is missing.",
     ext: ["tsx"],
     find: (line) => {
       if (!/className|style=|cn\(|clsx\(|`/.test(line)) return [];
@@ -123,7 +123,7 @@ const RULES = [
   {
     id: "palette-color",
     severity: "medium",
-    rule: "Colour 7.1: Tailwind palette hues (bg-red-500, text-zinc-400, …) bypass the theme. Use rm-* tokens.",
+    rule: "Colour 7.1: Tailwind palette hues (bg-red-500, text-zinc-400, …) bypass the theme. Use semantic tokens (ply, ink, tint, line, accent, status).",
     ext: ["tsx"],
     find: (line) =>
       matchAll(
@@ -240,12 +240,15 @@ const RULES = [
   {
     id: "arbitrary-shadow",
     severity: "low",
-    rule: "Elevation 6.1: shadows are --rm-shadow-1/2/3 (shadow-sm/lg/2xl); no hand-rolled shadow-[…] except the inset hairline on <kbd>.",
+    rule: "Elevation 6.1: shadows are the named elevation tokens (shadow-float, shadow-sm/lg/2xl); no hand-rolled shadow-[…] except token-coloured rings (0_0_0_Npx_var(--…)) and inset hairlines (inset_0_±Npx_0_var(--…)).",
     ext: ["tsx"],
     find: (line) =>
       matchAll(line, /(?<![\w-])shadow-\[([^\]]+)\]/g, (m) =>
+        // Legacy elevation token, a ring in a token colour, or an inset
+        // hairline in a token colour. No literal colours: raw-color covers those.
         /var\(--rm-shadow-[123]\)/.test(m[1]) ||
-        /^inset_0_-1px_0_var\(--rm-border-strong\)$/.test(m[1])
+        /^0_0_0_\d+px_var\(--[\w-]+\)$/.test(m[1]) ||
+        /^inset_0_-?\d+px_0_var\(--[\w-]+\)$/.test(m[1])
           ? null
           : m[0],
       ),

@@ -110,12 +110,17 @@ export const ICONS = {
 
   /* Composer */
   paperclip: { glyph: "paperclip" },
-  gif: { glyph: "gif" },
+  gif: { glyph: "gif", fill: true },
   sticker: { glyph: "sticker", fill: true },
-  emoji: { glyph: "smiley" },
+  emoji: { glyph: "smiley", fill: true },
   send: { glyph: "paper-plane-right" },
   image: { glyph: "image" },
   imageBroken: { glyph: "image-broken" },
+  /* Emoji picker category rail (people, activity, places, objects and
+     symbols reuse emoji, gamepad, globe, lightbulb and like) */
+  nature: { glyph: "leaf" },
+  food: { glyph: "fork-knife" },
+  flag: { glyph: "flag" },
 
   /* Voice and video */
   mic: { glyph: "microphone", fill: true },
@@ -138,6 +143,9 @@ export const ICONS = {
   speaker: { glyph: "speaker-hifi" },
   headphones: { glyph: "headphones" },
   speakerOff: { glyph: "speaker-slash" },
+  /* Volume controls: low and high levels (mute is speakerOff) */
+  speakerLow: { glyph: "speaker-low" },
+  speakerHigh: { glyph: "speaker-high" },
   noiseSuppression: { glyph: "wind" },
   spatial: { glyph: "cube" },
 
@@ -148,6 +156,8 @@ export const ICONS = {
   play: { glyph: "play", fill: true },
   pause: { glyph: "pause", fill: true },
   stop: { glyph: "stop" },
+  windowMaximize: { glyph: "square" },
+  windowRestore: { glyph: "copy" },
   skip: { glyph: "skip-forward" },
 
   /* Devices and platforms */

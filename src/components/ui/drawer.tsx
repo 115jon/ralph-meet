@@ -21,10 +21,16 @@
  */
 
 import * as React from "react";
+
+import { ButtonDefaults } from "@/components/ui/button";
 import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 import { FocusScope } from "@radix-ui/react-focus-scope";
 
-import { containsSlot, isDialogTopmost } from "@/components/ui/dialog-stack";
+import {
+  containsSlot,
+  isDialogTopmost,
+  useModalLayer,
+} from "@/components/ui/dialog-stack";
 import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
 import {
   executeBackHandlers,
@@ -73,6 +79,8 @@ type ContentDismissHandlers = {
 
 type DrawerRootContextValue = {
   id: string;
+  open: boolean;
+  modal: boolean;
   openerRef: React.RefObject<HTMLElement | null>;
   direction: DrawerDirection;
   hasSnapPoints: boolean;
@@ -222,12 +230,14 @@ function Drawer({
   const contextValue = React.useMemo(
     () => ({
       id,
+      open: isOpen,
+      modal,
       openerRef,
       direction,
       hasSnapPoints,
       registerDismissHandlers,
     }),
-    [id, direction, hasSnapPoints, registerDismissHandlers],
+    [id, isOpen, modal, direction, hasSnapPoints, registerDismissHandlers],
   );
 
   const root = (
@@ -327,9 +337,12 @@ function DrawerClose({
 
 function DrawerOverlay({
   className,
+  stacked = false,
   ...props
 }: Omit<React.ComponentProps<typeof DrawerPrimitive.Backdrop>, "className"> & {
   className?: string;
+  /** Over another modal layer: the light stacked scrim (.24) at z-60. */
+  stacked?: boolean;
 }) {
   const root = React.useContext(DrawerRootContext);
   return (
@@ -341,7 +354,12 @@ function DrawerOverlay({
       data-rm-snap={root?.hasSnapPoints ? "" : undefined}
       // Nested drawers (an action sheet over the nav sheet) keep their scrim.
       forceRender
-      className={cn("fixed inset-0 z-50 bg-rm-scrim", className)}
+      data-stacked={stacked ? "" : undefined}
+      className={cn(
+        "fixed inset-0 z-50 bg-scrim",
+        stacked && "z-60 bg-scrim-stacked",
+        className,
+      )}
       {...props}
     />
   );
@@ -357,7 +375,7 @@ function DrawerHandle({ className }: { className?: string }) {
       aria-hidden="true"
       data-slot="drawer-handle"
       className={cn(
-        "mx-auto mt-2 mb-1 h-1 w-9 shrink-0 rounded-full bg-rm-border-strong",
+        "mx-auto mt-2 mb-1 h-1 w-9 shrink-0 rounded-full bg-line-strong",
         className,
       )}
     />
@@ -411,6 +429,16 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
     const accessibleLabel = props["aria-label"] ?? "Drawer";
     const registerDismissHandlers = root?.registerDismissHandlers;
     const openerRef = root?.openerRef;
+    const layer = useModalLayer(Boolean(root?.open && root.modal));
+    const layerRef = layer.ref;
+    const mergedRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        layerRef(node);
+        if (typeof ref === "function") ref(node);
+        else if (ref) ref.current = node;
+      },
+      [layerRef, ref],
+    );
 
     React.useLayoutEffect(
       () =>
@@ -420,7 +448,9 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
 
     return (
       <DrawerPortal>
-        {hideOverlay ? null : <DrawerOverlay className={overlayClassName} />}
+        {hideOverlay ? null : (
+          <DrawerOverlay stacked={layer.stacked} className={overlayClassName} />
+        )}
         {/*
          * The viewport owns swipe and touch-scroll arbitration, and Base UI
          * measures it to resolve snap points, so it needs the window's size.
@@ -433,15 +463,20 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
           className="absolute inset-0"
         >
           <DrawerPrimitive.Popup
-            ref={ref}
+            ref={mergedRef}
             data-slot="drawer-content"
             // Motion hook (styles.css); data-slot may be overridden, e.g.
             // ActionSheet tags itself data-slot="action-sheet".
             data-rm-drawer=""
             data-dialog-root-id={root?.id}
             data-dialog-back-enabled="true"
+            data-stacked={layer.stacked ? "" : undefined}
             className={cn(
-              "fixed z-50 flex min-h-0 flex-col overscroll-contain border-rm-border bg-rm-bg-surface text-rm-text shadow-[var(--rm-shadow-3)] outline-none dark:bg-rm-bg-elevated",
+              "fixed z-50 flex min-h-0 flex-col overscroll-contain border-line bg-ply-3 text-ink-1 shadow-modal outline-none data-stacked:z-60",
+              // Behind a stacked layer: recede with the individual scale /
+              // translate properties (styles.css owns `transform` for the
+              // swipe). The transition list is extended so they ease too.
+              "origin-top [transition-property:transform,opacity,scale,translate]! data-behind:scale-[0.96] data-behind:-translate-y-2.5 motion-reduce:data-behind:scale-100 motion-reduce:data-behind:translate-y-0",
               SIDE_CLASSES[direction],
               className,
             )}
@@ -502,13 +537,25 @@ function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
+function DrawerFooter({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="drawer-footer"
-      className={cn("mt-auto flex flex-col gap-2 px-4 pt-3", className)}
+      className={cn(
+        "mt-auto flex flex-col gap-2 px-4 pt-3 [&>[data-slot=button]]:w-full",
+        className,
+      )}
       {...props}
-    />
+    >
+      {/* Sheet keys are 48 (thumb reach) and a secondary sits by the primary. */}
+      <ButtonDefaults size="lg" paired>
+        {children}
+      </ButtonDefaults>
+    </div>
   );
 }
 
@@ -521,7 +568,10 @@ function DrawerTitle({
   return (
     <DrawerPrimitive.Title
       data-slot="drawer-title"
-      className={cn("text-ui-lg font-semibold text-rm-text", className)}
+      className={cn(
+        "font-display [font-optical-sizing:auto] text-[22px] leading-7 font-extrabold tracking-[-0.02em] text-balance text-ink-1",
+        className,
+      )}
       {...props}
     />
   );
@@ -539,7 +589,7 @@ function DrawerDescription({
   return (
     <DrawerPrimitive.Description
       data-slot="drawer-description"
-      className={cn("text-ui-sm text-pretty text-rm-text-muted", className)}
+      className={cn("text-ui-base text-pretty text-ink-2", className)}
       {...props}
     />
   );

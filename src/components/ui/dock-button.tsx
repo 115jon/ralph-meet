@@ -10,13 +10,13 @@ export type DockButtonProps = Omit<IconButtonProps, "variant" | "iconState"> & {
 };
 
 /**
- * An `IconButton` painted with the dock recipe in `ui/dock.ts`.
- * (48px by default: HIT, PRESS, `xl` glyph) painted with the
- * dock recipe. Pass `aria-pressed` for toggles; the state already sets the
+ * An `IconButton` painted with the call-control recipe in `ui/dock.ts`:
+ * 40px by default (the stage bar, 20px glyph), 32 in the call strip and the
+ * account row. Pass `aria-pressed` for toggles; the state already sets the
  * glyph weight.
  */
 export const DockButton = React.forwardRef<HTMLButtonElement, DockButtonProps>(
-  ({ state, quiet, size = "lg", className, ...props }, ref) => (
+  ({ state, quiet, size = 40, className, ...props }, ref) => (
     <IconButton
       ref={ref}
       size={size}

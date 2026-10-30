@@ -24,7 +24,12 @@ import * as React from "react";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { FocusScope } from "@radix-ui/react-focus-scope";
 
-import { isDialogTopmost } from "@/components/ui/dialog-stack";
+import {
+  isDialogTopmost,
+  KEYBOARD_PRESENCE_VARS,
+  useOpenedByKeyboard,
+  useOpenedOverModal,
+} from "@/components/ui/dialog-stack";
 import {
   Drawer,
   DrawerContent,
@@ -47,7 +52,21 @@ type PopoverContextValue = {
   id: string;
   /** PopoverContent reports its `anchor` element (null on unmount). */
   setAnchor: (element: Element | null) => void;
+  /** Opened from the keyboard: opacity only, 100ms. */
+  byKeyboard: boolean;
+  /** Opened while a modal layer is open: the menus-over-modals layer (z-70). */
+  overModal: boolean;
 };
+
+/**
+ * Popover presence (overlays §3b): fade + scale .96 from the trigger,
+ * 160ms in, 100ms out. motion.css reads these vars on the popup itself.
+ */
+const POPOVER_PRESENCE_VARS = {
+  "--motion-scale-in": "0.96",
+  "--dur-3": "160ms",
+  "--dur-3-exit": "100ms",
+} as React.CSSProperties;
 
 const PopoverContext = React.createContext<PopoverContextValue | null>(null);
 
@@ -89,6 +108,8 @@ function Popover({
   const isOpen = isControlled ? open : uncontrolledOpen;
   const id = React.useId();
   const anchorRef = React.useRef<Element | null>(null);
+  const byKeyboard = useOpenedByKeyboard(isOpen);
+  const overModal = useOpenedOverModal(isOpen);
 
   const setOpen = React.useCallback(
     (nextOpen: boolean, details?: PopoverPrimitive.Root.ChangeEventDetails) => {
@@ -132,8 +153,8 @@ function Popover({
     anchorRef.current = element;
   }, []);
   const contextValue = React.useMemo(
-    () => ({ id, setAnchor }),
-    [id, setAnchor],
+    () => ({ id, setAnchor, byKeyboard, overModal }),
+    [id, setAnchor, byKeyboard, overModal],
   );
 
   return (
@@ -159,6 +180,8 @@ const VARIANT = {
   menu: "w-max max-w-[min(280px,var(--available-width))]",
   /** Rich content (profile, account, notifications): max 360, own body. */
   rich: "w-[min(360px,var(--available-width))] max-w-[360px]",
+  /** Rich content with the standard 16px body padding (profile, account: 340). */
+  panel: "w-[min(340px,var(--available-width))] max-w-[360px] p-4",
 } as const;
 
 type PopoverContentProps = Omit<
@@ -229,7 +252,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
           collisionPadding={collisionPadding}
           anchor={anchor}
           className={cn(
-            stacked ? "z-60" : "z-50",
+            context?.overModal ? "z-70" : stacked ? "z-60" : "z-50",
             "outline-none",
             positionerClassName,
           )}
@@ -244,11 +267,17 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
             className={cn(
               MENU_PANEL,
               VARIANT[variant],
-              "flex max-h-(--available-height) origin-(--transform-origin) flex-col overflow-y-auto text-rm-text outline-none",
-              "transition-[opacity,scale] duration-180 ease-(--rm-ease-out) data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-ending-style:duration-120 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-opacity",
+              "flex max-h-(--available-height) origin-(--transform-origin) flex-col overflow-y-auto text-ink-1 outline-none",
+              // Presence (styles/motion.css): fade + scale from the anchor.
+              "rm-presence",
               className,
             )}
-            style={style}
+            data-keyboard={context?.byKeyboard ? "" : undefined}
+            style={{
+              ...POPOVER_PRESENCE_VARS,
+              ...(context?.byKeyboard ? KEYBOARD_PRESENCE_VARS : null),
+              ...style,
+            }}
             {...props}
           >
             {/*

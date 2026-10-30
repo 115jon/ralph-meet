@@ -256,7 +256,7 @@ describe("DropdownMenu", () => {
     const trigger = screen.getByRole("button", { name: "More" });
     fireEvent.click(trigger);
     const item = await screen.findByRole("menuitem", { name: "Copy link" });
-    expect(item.className).toContain("min-h-8");
+    expect(item.className).toContain("min-h-9");
 
     fireEvent.click(item);
     expect(onCopy).toHaveBeenCalled();

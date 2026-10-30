@@ -22,9 +22,11 @@ type UpdateStatus =
   | "error";
 
 /**
- * Headless component that checks for app updates on startup
- * and every 30 minutes. When an update is found, it shows
- * a toast-style notification with download + restart controls.
+ * Headless component that checks for app updates in the background, 10 s
+ * after launch and every 30 minutes. The launch itself never waits on it:
+ * StandaloneUpdater only installs an update it hears about within a short
+ * budget. When an update is found, it shows a toast-style notification with
+ * download + restart controls.
  */
 export function UpdateChecker() {
   const [status, setStatus] = useState<UpdateStatus>("idle");
@@ -123,15 +125,15 @@ export function UpdateChecker() {
   if (status === "idle" || status === "checking" || dismissed) return null;
 
   return (
-    <div className="fixed right-6 bottom-6 z-100 w-full max-w-[360px] rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200 dark:bg-rm-bg-elevated">
+    <div className="fixed right-6 bottom-6 z-100 w-full max-w-[360px] rounded-lg border border-line bg-ply-3 p-4 shadow-float animate-in fade-in slide-in-from-bottom-2 duration-200">
       {status === "available" && (
         <>
           <div className="flex flex-col gap-1.5">
-            <p className="text-ui-sm font-semibold text-rm-text">
+            <p className="text-ui-sm font-semibold text-ink-1">
               Update available — v{updateInfo?.version}
             </p>
             {updateInfo?.body && (
-              <p className="text-ui-xs text-rm-text-muted leading-relaxed line-clamp-3">
+              <p className="text-ui-xs text-ink-3 leading-relaxed line-clamp-3">
                 {updateInfo.body}
               </p>
             )}
@@ -147,7 +149,7 @@ export function UpdateChecker() {
 
       {status === "downloading" && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-ui-sm font-semibold text-rm-text">
+          <p className="text-ui-sm font-semibold text-ink-1">
             Downloading update…
           </p>
           <div
@@ -156,34 +158,32 @@ export function UpdateChecker() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={progress}
-            className="mt-1 h-1 overflow-hidden rounded-full bg-rm-tint-2"
+            className="mt-1 h-1 overflow-hidden rounded-full bg-tint-2"
           >
             <div
-              className="h-full origin-left rounded-full bg-rm-accent-ink transition-transform duration-200"
+              className="h-full origin-left rounded-full bg-accent-ink transition-transform duration-200"
               style={{ transform: `scaleX(${progress / 100})` }}
             />
           </div>
-          <p className="text-ui-xs text-rm-text-muted tabular-nums">
-            {progress}%
-          </p>
+          <p className="text-num-xs text-ink-3">{progress}%</p>
         </div>
       )}
 
       {status === "ready" && (
         <div className="flex flex-col gap-1">
-          <p className="text-ui-sm font-semibold text-rm-text">
+          <p className="text-ui-sm font-semibold text-ink-1">
             Update installed
           </p>
-          <p className="text-ui-xs text-rm-text-muted">Restarting…</p>
+          <p className="text-ui-xs text-ink-3">Restarting…</p>
         </div>
       )}
 
       {status === "error" && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-ui-sm font-semibold text-rm-danger-ink">
+          <p className="text-ui-sm font-semibold text-danger-ink">
             Unable to update
           </p>
-          <p className="text-ui-xs text-rm-text-secondary">
+          <p className="text-ui-xs text-ink-2">
             Check your connection and try again.
           </p>
           <div className="mt-1 flex gap-2">

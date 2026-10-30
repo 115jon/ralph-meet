@@ -1,38 +1,48 @@
 /**
- * Quiet Pro menu recipe, shared by the hand-rolled context menus and popover
- * menus. The highlight is tonal (a neutral tint mixed from the text colour),
- * never a solid accent fill, so the one solid fill on screen stays the
- * primary action. Danger and warning items tint their own ink.
+ * C1 panel menu (DESIGN.md, Menus), shared by DropdownMenu, Select, the
+ * hand-rolled context menus and popover menus.
  *
- * Highlight changes are instant: menus are high-frequency surfaces.
+ *   panel  2px corners, p-1, ply-3, a line-strong edge with a 2px ink-1 top
+ *          rule, shadow-float; width 200..280
+ *   row    36 high (44 on coarse pointers), 2px corners, px-3, gap 12,
+ *          Geist 14 500, a fixed 16px icon column in ink-2
+ *   label  silkscreen title row, 32 high, ink-3
+ *   hint   Martian 11 in ink-3, right-aligned (an outline key cap when it is
+ *          a <Kbd>); toggle rows carry an LED in the hint slot
+ *
+ * Highlight is a neutral ink tint (tint-2) and changes instantly: menus are
+ * high-frequency surfaces. Danger rows tint their own ink.
  */
 
-/** Floating panel: radius 12, surface, the one place a shadow appears. */
+/** Floating panel. Base UI popups add `rm-presence` for the open motion. */
 export const MENU_PANEL =
-  "rounded-lg border border-rm-border bg-rm-bg-surface p-1 shadow-lg dark:bg-rm-bg-elevated overscroll-contain";
+  "rounded-[2px] border border-line-strong border-t-2 border-t-ink-1 bg-ply-3 p-1 text-ink-1 shadow-float overscroll-contain [&_[data-slot=kbd]]:border [&_[data-slot=kbd]]:border-line-strong [&_[data-slot=kbd]]:border-b [&_[data-slot=kbd]]:bg-transparent [&_[data-slot=kbd]]:text-ink-2";
 
 /** Row geometry and ink. Pair with one highlight below. */
 export const MENU_ITEM =
-  "group flex min-h-8 pointer-coarse:min-h-11 w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-ui-sm font-medium outline-none select-none disabled:cursor-default disabled:opacity-45 aria-disabled:cursor-default aria-disabled:opacity-45";
+  "group flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-3 rounded-[2px] px-3 py-1.5 text-left text-ui-row font-medium outline-none select-none disabled:cursor-default disabled:opacity-45 aria-disabled:cursor-default aria-disabled:opacity-45";
 
 export const MENU_ITEM_DEFAULT =
-  "text-rm-text pointer-fine:hover:enabled:bg-rm-tint-2 focus-visible:bg-rm-tint-2";
-export const MENU_ITEM_DEFAULT_ON = "bg-rm-tint-2 text-rm-text";
+  "text-ink-1 pointer-fine:hover:enabled:bg-tint-2 focus-visible:bg-tint-2";
+export const MENU_ITEM_DEFAULT_ON = "bg-tint-2 text-ink-1";
 
 export const MENU_ITEM_DANGER =
-  "text-rm-danger-ink pointer-fine:hover:enabled:bg-rm-danger-tint focus-visible:bg-rm-danger-tint";
-export const MENU_ITEM_DANGER_ON = "bg-rm-danger-tint text-rm-danger-ink";
+  "text-danger-ink pointer-fine:hover:enabled:bg-danger-tint focus-visible:bg-danger-tint";
+export const MENU_ITEM_DANGER_ON = "bg-danger-tint text-danger-ink";
 
 export const MENU_ITEM_WARNING =
-  "text-rm-warning-ink pointer-fine:hover:enabled:bg-[color-mix(in_oklab,var(--rm-warning-ink)_14%,transparent)] focus-visible:bg-[color-mix(in_oklab,var(--rm-warning-ink)_14%,transparent)]";
-export const MENU_ITEM_WARNING_ON =
-  "bg-[color-mix(in_oklab,var(--rm-warning-ink)_14%,transparent)] text-rm-warning-ink";
+  "text-warning-ink pointer-fine:hover:enabled:bg-warning-tint focus-visible:bg-warning-tint";
+export const MENU_ITEM_WARNING_ON = "bg-warning-tint text-warning-ink";
 
-/** Leading icon: subdued in the neutral row, inherits ink in danger rows. */
+/** Leading icon: ink-2 in the neutral row, inherits ink on hover and in danger rows. */
 export const MENU_ICON =
-  "shrink-0 text-rm-text-muted pointer-fine:group-hover:text-current";
+  "flex size-4 shrink-0 items-center justify-center text-ink-2 pointer-fine:group-hover:text-current group-data-highlighted:text-current [&_svg]:size-4";
 
-export const MENU_SEPARATOR = "-mx-1 my-1 h-px shrink-0 bg-rm-border";
+/** Trailing hint (shortcut, value): Martian 11 in ink-3. */
+export const MENU_HINT = "ms-auto shrink-0 pl-3 text-num-xs text-ink-3";
 
+export const MENU_SEPARATOR = "-mx-1 my-1 h-px shrink-0 bg-line";
+
+/** Title / group label: a silkscreen row in ink-3. */
 export const MENU_LABEL =
-  "px-2 pt-1.5 pb-1 text-ui-xs font-medium text-rm-text-muted";
+  "silkscreen flex min-h-8 items-center px-3 text-ink-3";

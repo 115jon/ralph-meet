@@ -1,26 +1,27 @@
 import type { IconState } from "@/components/ui/icon";
 
 /**
- * The voice dock recipe (design-system 12.13), shared by every voice control:
- * the stage dock (VoiceControls), the DM call dock, the sidebar voice strip
- * (VoiceDashboard) and the user panel's mic/deafen buttons.
+ * The call-control recipe (talk-tree-spec §3, §7), shared by every voice
+ * control: the stage bar (VoiceControls), the DM call bar, the call strip
+ * (VoiceDashboard) and the account row's mic/deafen buttons.
  *
- *   rest   neutral tint, Bold glyph            mic on, camera off
- *   open   stronger neutral tint, Fill glyph   a picker or tray this opens
- *   muted  danger tint, the "off" Fill glyph   mic muted, deafened
- *   live   accent tint, Fill glyph             camera on, sharing
+ *   rest   neutral tint, Bold glyph                  mic on, camera off
+ *   open   stronger neutral tint, Fill glyph         a picker or tray this opens
+ *   muted  muted-state tint + ink, "off" Fill glyph  mic muted, deafened
+ *   live   live (azure) tint + ink, Fill glyph       camera on, sharing
  *
- * Nothing here is a solid fill: Leave (`variant="danger"` Button / the
- * `DOCK_LEAVE` class) is the one solid in a dock, and Stop watching / Leave
- * Activity use `DOCK_DESTRUCTIVE`, the red tint.
+ * Muted and live never share a hue in any theme (tokens contract). Nothing
+ * here is a solid fill: Leave (`DOCK_LEAVE`) is the one solid danger fill in
+ * any call surface, and it always means "leave the call". Stop watching and
+ * leaving an activity are neutral `rest` buttons, not red.
  */
 export type DockState = "rest" | "open" | "muted" | "live";
 
 const STATE_CLASSES: Record<DockState, string> = {
-  rest: "bg-rm-tint-1 text-rm-text",
-  open: "bg-rm-tint-3 text-rm-text",
-  muted: "bg-rm-danger-tint text-rm-danger-ink",
-  live: "bg-rm-accent-tint text-rm-accent-ink [--hover-o:0.12]",
+  rest: "bg-tint-1 text-ink-1",
+  open: "bg-tint-3 text-ink-1",
+  muted: "bg-muted-state-tint text-muted-state",
+  live: "bg-live-tint text-live-ink [--hover-o:0.12]",
 };
 
 /**
@@ -28,7 +29,7 @@ const STATE_CLASSES: Record<DockState, string> = {
  * row of tinted squares would read as a toolbar of pressed buttons. Muted
  * and live keep their tint so the state never relies on the glyph alone.
  */
-const QUIET_REST = "bg-transparent text-rm-text-secondary";
+const QUIET_REST = "bg-transparent text-ink-2";
 
 export function dockState(
   state: DockState,
@@ -45,14 +46,17 @@ export function dockIconState(state: DockState): IconState {
   return "active";
 }
 
-/** The one solid fill in a dock: leave the call. */
-export const DOCK_LEAVE = "bg-rm-danger text-rm-on-danger [--hover-o:0.12]";
-
-/** Stop watching / Leave activity: red tint, not solid (13.2 destructive). */
-export const DOCK_DESTRUCTIVE = "bg-rm-danger-tint text-rm-danger-ink";
+/** The one solid fill in a call surface: leave (or decline) the call. */
+export const DOCK_LEAVE = "bg-danger-fill text-on-danger [--hover-o:0.12]";
 
 /**
- * Accept a call (DM lobby, incoming call modal): the conventional green, on
- * the theme's success token so both surfaces share one colour.
+ * Destructive rows that aren't leaving (13.2): red tint, never solid. Not
+ * used in the call bars any more; kept for menus.
  */
-export const CALL_ACCEPT = "bg-rm-success text-rm-on-success [--hover-o:0.12]";
+export const DOCK_DESTRUCTIVE = "bg-danger-tint text-danger-ink";
+
+/**
+ * Accept a call (DM lobby, incoming call modal): the talk LED green, with
+ * its contrast-checked ink.
+ */
+export const CALL_ACCEPT = "bg-talk text-on-talk [--hover-o:0.12]";

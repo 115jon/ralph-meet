@@ -95,4 +95,39 @@ describe("ConfirmDialog", () => {
     );
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  describe("Cancel focus ring", () => {
+    it("lands on Cancel but hides the ring until a key press on a pointer open", async () => {
+      fireEvent.pointerDown(document.body);
+      render(<Harness onConfirm={vi.fn()} />);
+      const dialog = await screen.findByRole("dialog");
+      const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+      await waitFor(() => expect(cancel).toHaveFocus());
+      expect(dialog).toHaveAttribute("data-pointer-focus");
+
+      // Tab (or any key) hands the ring back, so keyboard users never lose it.
+      fireEvent.keyDown(cancel, { key: "Tab" });
+      await waitFor(() =>
+        expect(dialog).not.toHaveAttribute("data-pointer-focus"),
+      );
+    });
+
+    it("keeps modifier-only presses from revealing the ring", async () => {
+      fireEvent.pointerDown(document.body);
+      render(<Harness onConfirm={vi.fn()} />);
+      const dialog = await screen.findByRole("dialog");
+      await waitFor(() => expect(dialog).toHaveAttribute("data-pointer-focus"));
+      fireEvent.keyDown(document.body, { key: "Shift" });
+      expect(dialog).toHaveAttribute("data-pointer-focus");
+    });
+
+    it("shows the ring at once when the dialog was opened from the keyboard", async () => {
+      fireEvent.keyDown(document.body, { key: "Enter" });
+      render(<Harness onConfirm={vi.fn()} />);
+      const dialog = await screen.findByRole("dialog");
+      const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+      await waitFor(() => expect(cancel).toHaveFocus());
+      expect(dialog).not.toHaveAttribute("data-pointer-focus");
+    });
+  });
 });

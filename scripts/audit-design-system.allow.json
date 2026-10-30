@@ -99,6 +99,22 @@
       "file": "src/components/ui/DitherField.tsx",
       "rule": "raw-color",
       "reason": "Dithered art surface (6.5, like AuthArtPanel): colours are inks read off the active theme at runtime and given alpha for the fallback gradient."
+    },
+    {
+      "file": "src/components/ui/avatar.tsx",
+      "rule": "arbitrary-text-size",
+      "reason": "Avatar initials scale with the avatar box (18/20/24/32/40/80). No text-ui step fits 8-10px or 30px, so each size step carries its own glyph size (talk-tree-spec avatar sizes)."
+    },
+    {
+      "file": "src/components/ui/avatar.tsx",
+      "rule": "off-grid-spacing",
+      "match": "size-\\[18px\\]",
+      "reason": "The 18px avatar is the tree occupant size (talk-tree-spec, tree occupant row)."
+    },
+    {
+      "file": "src/components/ui/switch.tsx",
+      "rule": "off-grid-spacing",
+      "reason": "Switch geometry from the spec: 30x18 track, 14px thumb travel (talk-tree-spec, Switch)."
     }
   ]
 }

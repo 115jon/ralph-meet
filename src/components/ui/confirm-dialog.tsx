@@ -101,7 +101,7 @@ export function ConfirmDialog({
         else if (!busy) close();
       }}
     >
-      <ResponsiveDialogContent className="md:max-w-sm">
+      <ResponsiveDialogContent size="sm">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
@@ -112,14 +112,14 @@ export function ConfirmDialog({
         {error ? (
           <p
             role="alert"
-            className="flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink"
+            className="flex items-start gap-2 rounded-md bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink"
           >
             <Icon name="warning" size="sm" className="mt-px shrink-0" />
             <span className="min-w-0">{error}</span>
           </p>
         ) : null}
         <ResponsiveDialogFooter>
-          <Button variant="secondary" disabled={busy} onClick={close}>
+          <Button variant="ghost" disabled={busy} onClick={close}>
             {cancelLabel}
           </Button>
           <Button

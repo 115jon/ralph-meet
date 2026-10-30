@@ -15,21 +15,22 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 describe("dockState recipe", () => {
   it("paints each state with a tint, never a solid fill", () => {
-    expect(dockState("rest")).toBe("bg-rm-tint-1 text-rm-text");
-    expect(dockState("open")).toBe("bg-rm-tint-3 text-rm-text");
-    expect(dockState("muted")).toBe("bg-rm-danger-tint text-rm-danger-ink");
-    expect(dockState("live")).toContain("bg-rm-accent-tint");
-    expect(dockState("live")).toContain("text-rm-accent-ink");
+    expect(dockState("rest")).toBe("bg-tint-1 text-ink-1");
+    expect(dockState("open")).toBe("bg-tint-3 text-ink-1");
+    expect(dockState("muted")).toBe("bg-muted-state-tint text-muted-state");
+    // Live is the azure LED, never the accent (talk-tree-spec §1e).
+    expect(dockState("live")).toContain("bg-live-tint");
+    expect(dockState("live")).toContain("text-live-ink");
     for (const state of ["rest", "open", "muted", "live"] as const) {
       expect(dockState(state)).not.toMatch(
-        /bg-primary|bg-rm-danger(?!-)|bg-rm-accent-solid/,
+        /bg-primary|bg-danger-fill|bg-accent/,
       );
     }
   });
 
   it("drops only the resting tint in quiet rows", () => {
     expect(dockState("rest", { quiet: true })).toBe(
-      "bg-transparent text-rm-text-secondary",
+      "bg-transparent text-ink-2",
     );
     expect(dockState("muted", { quiet: true })).toBe(dockState("muted"));
     expect(dockState("live", { quiet: true })).toBe(dockState("live"));
@@ -43,26 +44,26 @@ describe("dockState recipe", () => {
   });
 
   it("keeps Leave the only solid, and the destructive and accept tokens apart", () => {
-    expect(DOCK_LEAVE).toContain("bg-rm-danger ");
-    expect(DOCK_DESTRUCTIVE).toContain("bg-rm-danger-tint");
-    expect(DOCK_DESTRUCTIVE).not.toContain("bg-rm-danger ");
-    expect(CALL_ACCEPT).toContain("bg-rm-success");
-    expect(CALL_ACCEPT).toContain("text-rm-on-success");
+    expect(DOCK_LEAVE).toContain("bg-danger-fill");
+    expect(DOCK_DESTRUCTIVE).toContain("bg-danger-tint");
+    expect(DOCK_DESTRUCTIVE).not.toContain("bg-danger-fill");
+    expect(CALL_ACCEPT).toContain("bg-talk");
+    expect(CALL_ACCEPT).toContain("text-on-talk");
   });
 });
 
 describe("DockButton", () => {
-  it("renders a 48px IconButton with the state's tint and an accessible name", () => {
+  it("renders a 40px IconButton with the state's tint and an accessible name", () => {
     render(
       <TooltipProvider>
         <DockButton state="muted" icon="mic" aria-label="Unmute" aria-pressed />
       </TooltipProvider>,
     );
     const button = screen.getByRole("button", { name: "Unmute" });
-    expect(button.className).toContain("size-12");
-    expect(button.className).toContain("bg-rm-danger-tint");
+    expect(button.className).toContain("size-10");
+    expect(button.className).toContain("bg-muted-state-tint");
     // No IconButton variant colour leaks in to fight the recipe.
-    expect(button.className).not.toContain("aria-pressed:bg-rm-tint-2");
+    expect(button.className).not.toContain("aria-pressed:bg-tint-2");
     expect(button.getAttribute("aria-pressed")).toBe("true");
   });
 

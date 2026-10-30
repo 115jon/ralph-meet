@@ -1,0 +1,535 @@
+/* ============================================================
+   Talk Tree tokens (talk-tree-spec §1). Three layers:
+
+   1. Theme inputs (`--t-*`): literal values, set per theme in the blocks
+      below and nowhere else. The contrast contract test
+      (src/styles/__tests__/theme-contract.test.ts) parses these blocks, so
+      keep every value a hex or a percentage, one declaration per line.
+   2. Roles (`--ply-*`, `--ink-*`, `--line*`, `--accent-*`, LEDs, …): the
+      only names components may use. Derived from layer 1 in one shared
+      block; Tailwind maps them in styles.css (`bg-ply-2`, `text-ink-3`).
+   3. Legacy aliases (`--rm-*` and the shadcn set): point at layer 2 so
+      unmigrated components render coherently. Delete an alias when nothing
+      references it.
+
+   Themes are colourways of the same panel: they change neutral tint,
+   primary fill, accent, brand and shadow colour, never structure. LED hues
+   (talk, live, danger, idle) are fixed; only lightness moves for contrast.
+   ============================================================ */
+
+/* ---------- Layer 1: default dark (also the no-class fallback) ---------- */
+:root,
+.dark {
+  --t-scheme: dark;
+  --t-ply-0: #000000;
+  --t-ply-1: #0b0b0d;
+  --t-ply-2: #141417;
+  --t-ply-3: #1b1b1f;
+  --t-ply-4: #232328;
+  --t-ink-1: #f2f2f3;
+  --t-ink-2: #b4b4ba;
+  --t-ink-3: #8b8b92;
+  --t-ink-off: #55555c;
+  --t-primary-fill: #f2f2f3;
+  --t-on-primary: #000000;
+  --t-accent-ink: #a5adff;
+  --t-accent-tint-mix: 16%;
+  --t-brand: #f2f2f3;
+  --t-brand-2: #a5adff;
+  --t-shadow-rgb: 0 0 0;
+  --t-shadow-alpha: 1;
+  --t-line-mix: 8%;
+  --t-line-strong-mix: 14%;
+  --t-line-field-mix: 40%;
+  --t-guide-mix: 12%;
+  --t-scrim: 0.56;
+  /* LEDs: fixed hues, per-scheme lightness */
+  --t-talk: #3ddc84;
+  --t-on-talk: #000000;
+  --t-success-ink: #3ddc84;
+  --t-live: #4cc2ff;
+  --t-live-ink: #4cc2ff;
+  --t-live-tint-mix: 16%;
+  --t-danger-fill: #d4343a;
+  --t-on-danger: #ffffff;
+  --t-danger-ink: #ff6b6b;
+  --t-danger-tint-mix: 14%;
+  --t-idle: #f5b83d;
+  --t-warning-ink: #f5b83d;
+  --t-badge: #d42f33;
+  --t-on-badge: #ffffff;
+  color-scheme: dark;
+}
+
+.light {
+  --t-scheme: light;
+  --t-ply-0: #f4f4f5;
+  --t-ply-1: #fafafa;
+  --t-ply-2: #ffffff;
+  --t-ply-3: #ffffff;
+  --t-ply-4: #f0f0f2;
+  --t-ink-1: #0b0b0d;
+  --t-ink-2: #4a4a52;
+  --t-ink-3: #6b6b73;
+  --t-ink-off: #a1a1a8;
+  --t-primary-fill: #0b0b0d;
+  --t-on-primary: #ffffff;
+  --t-accent-ink: #4a54d4;
+  --t-accent-tint-mix: 12%;
+  --t-brand: #0b0b0d;
+  --t-brand-2: #4a54d4;
+  --t-shadow-rgb: 0 0 0;
+  --t-shadow-alpha: 0.34;
+  --t-line-mix: 9%;
+  --t-line-strong-mix: 16%;
+  --t-line-field-mix: 48%;
+  --t-guide-mix: 18%;
+  --t-scrim: 0.28;
+  --t-talk: #1a9a52;
+  /* black: white on this green is 3.6:1, black is 5.8:1 (also on idle
+     and live fills, which share the ink) */
+  --t-on-talk: #000000;
+  --t-success-ink: #14803f;
+  --t-live: #0a7ec2;
+  --t-live-ink: #0a6aa6;
+  --t-live-tint-mix: 12%;
+  --t-danger-fill: #c8282e;
+  --t-on-danger: #ffffff;
+  --t-danger-ink: #c4262b;
+  --t-danger-tint-mix: 10%;
+  --t-idle: #a86b0c;
+  --t-warning-ink: #946006;
+  --t-badge: #c8282e;
+  --t-on-badge: #ffffff;
+  color-scheme: light;
+}
+
+/* Miku: indigo-night neutrals, teal interaction, teal + pink identity. */
+.miku-dark {
+  --t-scheme: dark;
+  --t-ply-0: #06060b;
+  --t-ply-1: #0d0c15;
+  --t-ply-2: #15141f;
+  --t-ply-3: #1c1b28;
+  --t-ply-4: #252433;
+  --t-ink-1: #f1f0f7;
+  --t-ink-2: #b6b4c8;
+  --t-ink-3: #8e8ba4;
+  --t-ink-off: #57546a;
+  --t-primary-fill: #39c5bb;
+  --t-on-primary: #06060b;
+  --t-accent-ink: #4fd3c8;
+  --t-accent-tint-mix: 16%;
+  --t-brand: #39c5bb;
+  --t-brand-2: #f872a5;
+  --t-shadow-rgb: 0 0 0;
+  --t-shadow-alpha: 1;
+  --t-line-mix: 8%;
+  --t-line-strong-mix: 14%;
+  --t-line-field-mix: 40%;
+  --t-guide-mix: 12%;
+  --t-scrim: 0.56;
+  --t-talk: #3ddc84;
+  --t-on-talk: #000000;
+  --t-success-ink: #3ddc84;
+  --t-live: #4cc2ff;
+  --t-live-ink: #4cc2ff;
+  --t-live-tint-mix: 16%;
+  --t-danger-fill: #d4343a;
+  --t-on-danger: #ffffff;
+  --t-danger-ink: #ff6b6b;
+  --t-danger-tint-mix: 14%;
+  --t-idle: #f5b83d;
+  --t-warning-ink: #f5b83d;
+  --t-badge: #d42f33;
+  --t-on-badge: #ffffff;
+  color-scheme: dark;
+}
+
+.miku-light {
+  --t-scheme: light;
+  --t-ply-0: #f1f3f7;
+  --t-ply-1: #f8f9fc;
+  --t-ply-2: #ffffff;
+  --t-ply-3: #ffffff;
+  --t-ply-4: #ebeef4;
+  --t-ink-1: #10132a;
+  --t-ink-2: #454a66;
+  --t-ink-3: #62667f;
+  --t-ink-off: #a0a3b8;
+  --t-primary-fill: #007a72;
+  --t-on-primary: #ffffff;
+  --t-accent-ink: #00756d;
+  --t-accent-tint-mix: 12%;
+  --t-brand: #00a399;
+  --t-brand-2: #e04f8a;
+  --t-shadow-rgb: 16 19 42;
+  --t-shadow-alpha: 0.34;
+  --t-line-mix: 9%;
+  --t-line-strong-mix: 16%;
+  --t-line-field-mix: 48%;
+  --t-guide-mix: 18%;
+  --t-scrim: 0.28;
+  --t-talk: #1a9a52;
+  /* black: white on this green is 3.6:1, black is 5.8:1 (also on idle
+     and live fills, which share the ink) */
+  --t-on-talk: #000000;
+  --t-success-ink: #14803f;
+  --t-live: #0a7ec2;
+  --t-live-ink: #0a6aa6;
+  --t-live-tint-mix: 12%;
+  --t-danger-fill: #c8282e;
+  --t-on-danger: #ffffff;
+  --t-danger-ink: #c4262b;
+  --t-danger-tint-mix: 10%;
+  --t-idle: #a86b0c;
+  --t-warning-ink: #946006;
+  --t-badge: #c8282e;
+  --t-on-badge: #ffffff;
+  color-scheme: light;
+}
+
+/* Spider-Man: navy neutrals, BLUE is interaction, RED is identity only. */
+.spiderman-dark {
+  --t-scheme: dark;
+  --t-ply-0: #02030a;
+  --t-ply-1: #0a0c16;
+  --t-ply-2: #12141f;
+  --t-ply-3: #191c28;
+  --t-ply-4: #222533;
+  --t-ink-1: #f0f2f8;
+  --t-ink-2: #b3b8c9;
+  --t-ink-3: #8b91a5;
+  --t-ink-off: #545a6e;
+  --t-primary-fill: #2563eb;
+  --t-on-primary: #ffffff;
+  --t-accent-ink: #7fa8ff;
+  --t-accent-tint-mix: 16%;
+  --t-brand: #e50914;
+  --t-brand-2: #2563eb;
+  --t-shadow-rgb: 0 0 0;
+  --t-shadow-alpha: 1;
+  --t-line-mix: 8%;
+  --t-line-strong-mix: 14%;
+  --t-line-field-mix: 40%;
+  --t-guide-mix: 12%;
+  --t-scrim: 0.56;
+  --t-talk: #3ddc84;
+  --t-on-talk: #000000;
+  --t-success-ink: #3ddc84;
+  --t-live: #4cc2ff;
+  --t-live-ink: #4cc2ff;
+  --t-live-tint-mix: 16%;
+  --t-danger-fill: #d4343a;
+  --t-on-danger: #ffffff;
+  --t-danger-ink: #ff6b6b;
+  --t-danger-tint-mix: 14%;
+  --t-idle: #f5b83d;
+  --t-warning-ink: #f5b83d;
+  --t-badge: #d42f33;
+  --t-on-badge: #ffffff;
+  color-scheme: dark;
+}
+
+.spiderman-light {
+  --t-scheme: light;
+  --t-ply-0: #f2f4f8;
+  --t-ply-1: #f9fafc;
+  --t-ply-2: #ffffff;
+  --t-ply-3: #ffffff;
+  --t-ply-4: #ebeef5;
+  --t-ink-1: #0b1020;
+  --t-ink-2: #454b5e;
+  --t-ink-3: #626879;
+  --t-ink-off: #a0a5b5;
+  --t-primary-fill: #1d4ed8;
+  --t-on-primary: #ffffff;
+  --t-accent-ink: #1d4ed8;
+  --t-accent-tint-mix: 12%;
+  --t-brand: #d0101c;
+  --t-brand-2: #1d4ed8;
+  --t-shadow-rgb: 11 16 32;
+  --t-shadow-alpha: 0.34;
+  --t-line-mix: 9%;
+  --t-line-strong-mix: 16%;
+  --t-line-field-mix: 48%;
+  --t-guide-mix: 18%;
+  --t-scrim: 0.28;
+  --t-talk: #1a9a52;
+  /* black: white on this green is 3.6:1, black is 5.8:1 (also on idle
+     and live fills, which share the ink) */
+  --t-on-talk: #000000;
+  --t-success-ink: #14803f;
+  --t-live: #0a7ec2;
+  --t-live-ink: #0a6aa6;
+  --t-live-tint-mix: 12%;
+  --t-danger-fill: #c8282e;
+  --t-on-danger: #ffffff;
+  --t-danger-ink: #c4262b;
+  --t-danger-tint-mix: 10%;
+  --t-idle: #a86b0c;
+  --t-warning-ink: #946006;
+  --t-badge: #c8282e;
+  --t-on-badge: #ffffff;
+  color-scheme: light;
+}
+
+/* ---------- Layer 2: roles ----------
+   Declared on every theme class as well as :root so the colour-mix tints
+   resolve against the theme of the element that carries the class (a
+   fixture or preview can scope a theme to a subtree). */
+:root,
+.dark,
+.light,
+.miku-dark,
+.miku-light,
+.spiderman-dark,
+.spiderman-light {
+  /* Plies: strict order, nothing invents an in-between elevation. */
+  --ply-0: var(--t-ply-0);
+  --ply-1: var(--t-ply-1);
+  --ply-2: var(--t-ply-2);
+  --ply-3: var(--t-ply-3);
+  --ply-4: var(--t-ply-4);
+
+  /* Ink */
+  --ink-1: var(--t-ink-1);
+  --ink-2: var(--t-ink-2);
+  --ink-3: var(--t-ink-3);
+  --ink-off: var(--t-ink-off);
+
+  /* Hover / selected / pressed: ink tints, never a hue. */
+  --tint-1: color-mix(in srgb, var(--ink-1) 6%, transparent);
+  --tint-2: color-mix(in srgb, var(--ink-1) 10%, transparent);
+  --tint-3: color-mix(in srgb, var(--ink-1) 16%, transparent);
+
+  /* Lines never take a brand hue (except the lit path, which is accent). */
+  --line: color-mix(in srgb, var(--ink-1) var(--t-line-mix), transparent);
+  --line-strong: color-mix(
+    in srgb,
+    var(--ink-1) var(--t-line-strong-mix),
+    transparent
+  );
+  --line-field: color-mix(
+    in srgb,
+    var(--ink-1) var(--t-line-field-mix),
+    transparent
+  );
+  --guide: color-mix(in srgb, var(--ink-1) var(--t-guide-mix), transparent);
+  --path: var(--accent-ink);
+  --focus: var(--accent-ink);
+
+  /* Primary (white silkscreen by default) and accent are separate. */
+  --primary-fill: var(--t-primary-fill);
+  --on-primary: var(--t-on-primary);
+  --accent-ink: var(--t-accent-ink);
+  --accent-tint: color-mix(
+    in srgb,
+    var(--accent-ink) var(--t-accent-tint-mix),
+    transparent
+  );
+
+  /* LEDs: the only saturated colour in the default theme. */
+  --talk: var(--t-talk);
+  --on-talk: var(--t-on-talk);
+  --talk-tint: color-mix(in srgb, var(--t-talk) 14%, transparent);
+  --live: var(--t-live);
+  --live-ink: var(--t-live-ink);
+  --live-tint: color-mix(
+    in srgb,
+    var(--t-live) var(--t-live-tint-mix),
+    transparent
+  );
+  --danger-fill: var(--t-danger-fill);
+  --on-danger: var(--t-on-danger);
+  --danger-ink: var(--t-danger-ink);
+  --danger-tint: color-mix(
+    in srgb,
+    var(--danger-ink) var(--t-danger-tint-mix),
+    transparent
+  );
+  /* Muted mic / deafened: its own name so it can be retuned alone. */
+  --muted-state: var(--danger-ink);
+  --muted-state-tint: var(--danger-tint);
+  --idle: var(--t-idle);
+  --warning-ink: var(--t-warning-ink);
+  --warning-tint: color-mix(in srgb, var(--t-warning-ink) 14%, transparent);
+  --success-ink: var(--t-success-ink);
+  --success-tint: color-mix(in srgb, var(--t-success-ink) 14%, transparent);
+  --status-online: var(--talk);
+  --status-idle: var(--idle);
+  --status-dnd: var(--t-danger-fill);
+  --status-offline: var(--ink-off);
+  --badge: var(--t-badge);
+  --on-badge: var(--t-on-badge);
+
+  /* Brand: identity only (rail mark, theme mark, selection, banner slot). */
+  --brand: var(--t-brand);
+  --brand-2: var(--t-brand-2);
+  --brand-ink: var(--t-brand);
+
+  /* Elevation: nothing on ply-0..2. Ply-3 floats get shadow-2, dialogs and
+     drawers shadow-3. Light themes run at a third of the alpha. */
+  --shadow-rgb: var(--t-shadow-rgb);
+  --shadow-1: 0 1px 2px
+    rgb(var(--shadow-rgb) / calc(0.3 * var(--t-shadow-alpha)));
+  --shadow-2: 0 8px 24px -6px
+    rgb(var(--shadow-rgb) / calc(0.6 * var(--t-shadow-alpha)));
+  --shadow-3: 0 24px 64px -12px
+    rgb(var(--shadow-rgb) / calc(0.72 * var(--t-shadow-alpha)));
+  --scrim: rgb(0 0 0 / var(--t-scrim));
+  --scrim-stacked: rgb(0 0 0 / 0.24);
+  --selection: color-mix(in srgb, var(--brand) 32%, transparent);
+
+  /* ---------- Layer 3: legacy aliases (do not use in new code) ---------- */
+  --rm-bg-primary: var(--ply-0);
+  --rm-bg-secondary: var(--ply-1);
+  --rm-bg-sidebar: var(--ply-1);
+  --rm-sidebar: var(--ply-1);
+  --rm-server-bar: var(--ply-0);
+  --rm-bg-surface: var(--ply-2);
+  --rm-bg-elevated: var(--ply-2);
+  --rm-bg-floating: var(--ply-3);
+  --rm-rail-item: var(--ply-2);
+  --rm-bg-hover: var(--tint-1);
+  --rm-bg-active: var(--tint-2);
+  --rm-channel-hover: var(--tint-1);
+  --rm-channel-active: var(--tint-2);
+  --rm-tint-1: var(--tint-1);
+  --rm-tint-2: var(--tint-2);
+  --rm-tint-3: var(--tint-3);
+  --rm-border: var(--line);
+  --rm-border-strong: var(--line-strong);
+  --rm-field-edge: var(--line-field);
+  --rm-focus: var(--focus);
+  --rm-scrim: var(--scrim);
+  --rm-selection: var(--selection);
+  --rm-text-primary: var(--ink-1);
+  --rm-text-secondary: var(--ink-2);
+  --rm-text-muted: var(--ink-3);
+  --rm-text-ghost: var(--ink-off);
+  /* The raw accent was the interactive hue; it is now the accent ink. */
+  --rm-accent: var(--accent-ink);
+  --rm-accent-hover: var(--accent-ink);
+  --rm-accent-dim: var(--accent-tint);
+  --rm-accent-tint: var(--accent-tint);
+  --rm-glow: var(--accent-tint);
+  --rm-accent-solid: var(--primary-fill);
+  --rm-on-accent: var(--on-primary);
+  --rm-accent-ink: var(--accent-ink);
+  --rm-favourite: var(--accent-ink);
+  --rm-danger: var(--danger-fill);
+  --rm-on-danger: var(--on-danger);
+  --rm-danger-ink: var(--danger-ink);
+  --rm-danger-tint: var(--danger-tint);
+  --rm-success: var(--talk);
+  --rm-on-success: var(--on-talk);
+  --rm-success-ink: var(--success-ink);
+  --rm-success-tint: var(--success-tint);
+  --rm-warning-ink: var(--warning-ink);
+  --rm-warning-tint: var(--warning-tint);
+  --rm-badge: var(--badge);
+  --rm-status-online: var(--status-online);
+  --rm-status-idle: var(--status-idle);
+  --rm-status-dnd: var(--status-dnd);
+  --rm-status-offline: var(--status-offline);
+  --rm-role-mod: var(--talk);
+  --rm-shadow-rgb: var(--shadow-rgb);
+  --rm-shadow-1: var(--shadow-1);
+  --rm-shadow-2: var(--shadow-2);
+  --rm-shadow-3: var(--shadow-3);
+
+  /* shadcn layer (radix/shadcn-generated components read these). */
+  --background: var(--ply-0);
+  --foreground: var(--ink-1);
+  --card: var(--ply-2);
+  --card-foreground: var(--ink-1);
+  --popover: var(--ply-3);
+  --popover-foreground: var(--ink-1);
+  --primary: var(--primary-fill);
+  --primary-foreground: var(--on-primary);
+  --secondary: var(--ply-4);
+  --secondary-foreground: var(--ink-1);
+  --muted: var(--ply-2);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--ply-4);
+  --accent-foreground: var(--ink-1);
+  --destructive: var(--danger-fill);
+  --destructive-foreground: var(--on-danger);
+  --warning: var(--idle);
+  --warning-foreground: var(--ply-0);
+  --border: var(--line);
+  --input: var(--line-field);
+  --ring: var(--focus);
+  --chart-1: var(--accent-ink);
+  --chart-2: var(--talk);
+  --chart-3: var(--idle);
+  --chart-4: var(--live);
+  --chart-5: var(--danger-ink);
+  --sidebar: var(--ply-1);
+  --sidebar-foreground: var(--ink-1);
+  --sidebar-primary: var(--primary-fill);
+  --sidebar-primary-foreground: var(--on-primary);
+  --sidebar-accent: var(--tint-2);
+  --sidebar-accent-foreground: var(--ink-1);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--focus);
+}
+
+/* Non-colour roles, theme-independent. */
+:root {
+  --radius: 0.625rem;
+
+  /* Chrome sizes (talk-tree-spec §3) */
+  --rm-size-header: 48px;
+  --rm-size-rail: 60px;
+  --rm-size-row: 28px;
+  --rm-size-tree: 264px;
+
+  /* Activity stages (Wordle, WarpRush) draw their own palette, the same in
+     every theme. */
+  --rm-activity-wordle-correct: #3f8f4f;
+  --rm-activity-wordle-present: #b08a2e;
+  --rm-activity-wordle-absent: #5b6270;
+  --rm-activity-wordle-tile: #d3d6da;
+  --rm-activity-wordle-key: #818384;
+  --rm-activity-wordle-ink: #ffffff;
+  --rm-activity-wordle-hc-correct: #b45309;
+  --rm-activity-wordle-hc-present: #1d4ed8;
+  --rm-activity-warp-bg: #020617;
+  --rm-activity-warp-ink: #e2e8f0;
+  --rm-activity-warp-ink-muted: #94a3b8;
+  --rm-activity-warp-ink-dim: #64748b;
+  --rm-activity-warp-cyan: #67e8f9;
+  --rm-activity-warp-magenta: #f0abfc;
+  --rm-activity-warp-amber: #fcd34d;
+  --rm-activity-warp-green: #6ee7b7;
+
+  /* Profile surfaces (collectibles): media overlays, not theme surfaces. */
+  --rm-profile-banner-fallback: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-ink) 36%, var(--ply-2)),
+    color-mix(in srgb, var(--accent-ink) 16%, var(--ply-3)) 58%,
+    color-mix(in srgb, var(--ply-1) 82%, black 18%)
+  );
+  --rm-profile-banner-overlay:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.34)),
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.18),
+      transparent 55%,
+      rgba(0, 0, 0, 0.28)
+    );
+  --rm-profile-surface-overlay: linear-gradient(
+    180deg,
+    rgba(6, 7, 10, 0.02),
+    rgba(6, 7, 10, 0.1) 44%,
+    rgba(6, 7, 10, 0.22)
+  );
+  --rm-profile-surface-overlay-strong: linear-gradient(
+    180deg,
+    rgba(6, 7, 10, 0.03),
+    rgba(6, 7, 10, 0.12) 44%,
+    rgba(6, 7, 10, 0.32)
+  );
+}
