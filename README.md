@@ -56,6 +56,23 @@ pnpm typecheck
 pnpm test
 ```
 
+### Local sign-in (Kova app)
+
+`pnpm dev` signs in with the **Ralph Meet (dev)** Kova app. `pnpm dev:prod-auth`
+signs in with the live **Ralph Meet** app instead, on port 5199. The startup log
+prints one `[ralph] Kova sign-in: …` line naming the app in use.
+
+`RALPH_AUTH=dev|prod` (default `dev`) is read by `vite.config.ts` in `vite dev`
+only. It takes the matching publishable key from `wrangler.toml` (dev:
+`[env.mobile-dev.vars]`, prod: top-level `[vars]`) and gives the browser and the
+local worker the same value, so they cannot disagree. That value beats
+`VITE_KOVA_AUTH_PUBLISHABLE_KEY` in `.env.local` and `.dev.vars`, so you don't
+need to set it there. `vite build` and deploys ignore `RALPH_AUTH` and keep the
+live key from `[vars]`.
+
+Prod sign-in only works from an origin listed on the live Kova app (its
+`allowed_origins` and `redirect_uris`). Localhost is not listed by default.
+
 Do not use locally built desktop or CEF artifacts as release-signing inputs.
 Release provenance must be verified by the repository's release workflow.
 
