@@ -1,4 +1,5 @@
 import {
+  describeListenTogetherError,
   getListenTogetherInputMode,
   isListenTogetherResolvableUrl,
   isValidListenTogetherVideoId,
@@ -48,5 +49,23 @@ describe("listen together helpers", () => {
         "https://music.youtube.com/watch?v=abc123XYZ90",
       ),
     ).toBe("resolve");
+  });
+
+  it("shows client playback copy and hides voice room log wording", () => {
+    expect(
+      describeListenTogetherError(
+        {
+          code: "PLAYBACK_BLOCKED",
+          message: "Unable to start playback here. Press play to try again.",
+        },
+        "control playback",
+      ),
+    ).toBe("Unable to start playback here. Press play to try again.");
+    const copy = describeListenTogetherError(
+      { code: "ROOM_MISMATCH", message: "Voice room mismatch" },
+      "control playback",
+    );
+    expect(copy).toMatch(/^Unable to control playback\./);
+    expect(copy).not.toContain("mismatch");
   });
 });

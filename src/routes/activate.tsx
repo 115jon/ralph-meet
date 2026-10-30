@@ -11,7 +11,7 @@ type ActivateSearch = {
 
 /**
  * Kova's device verification URL for Ralph Meet:
- * https://meet.115jon.site/activate?code=XXXX-XXXX
+ * https://<public web host>/activate?code=XXXX-XXXX (host from config)
  */
 export const Route = createFileRoute("/activate")({
   validateSearch: (search: Record<string, unknown>): ActivateSearch => {

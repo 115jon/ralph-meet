@@ -9,64 +9,140 @@ import {
   useListenTogetherStore,
 } from "@/stores/useListenTogetherStore";
 import type { ListenTogetherLoudnessPreset } from "@/lib/voice/listen-together-audio";
+import { useAppActive } from "@/hooks/useAppActive";
 import { useListenTogetherAudioSettingsStore } from "@/stores/useListenTogetherAudioSettingsStore";
-import { useCallback, useSyncExternalStore } from "react";
+import { type RefObject, useEffect, useState } from "react";
 
-interface ListenTogetherRoomClock {
-  nowMs: number;
-  listeners: Set<() => void>;
-  interval: number | null;
-}
+/* ------------------------------------------------------------------ */
+/* Position: pure functions over the playback state                     */
+/* ------------------------------------------------------------------ */
 
-const roomClocks = new Map<string, ListenTogetherRoomClock>();
+/** The fields the position math needs (tests may build them by hand). */
+export type ListenTogetherPositionSource = Pick<
+  ListenTogetherPlaybackState,
+  "snapshot" | "localPlayback" | "durationMs"
+>;
 
-function getRoomClock(roomSlug: string) {
-  let clock = roomClocks.get(roomSlug);
-  if (!clock) {
-    clock = { nowMs: Date.now(), listeners: new Set(), interval: null };
-    roomClocks.set(roomSlug, clock);
+/**
+ * Where the shared track is at `now`. A local seek preview or a local pause
+ * pins it; otherwise it runs from the room's anchor.
+ */
+export function getListenTogetherLivePositionMs(
+  { snapshot, localPlayback, durationMs }: ListenTogetherPositionSource,
+  now: number,
+): number {
+  if (
+    localPlayback &&
+    (localPlayback.source === "seek" || localPlayback.paused)
+  ) {
+    return clampListenTogetherPosition(localPlayback.positionMs, durationMs);
   }
-  return clock;
+  if (!snapshot) return 0;
+  return clampListenTogetherPosition(
+    Math.max(
+      snapshot.positionMs,
+      getListenTogetherPositionMs(
+        snapshot,
+        durationMs,
+        now || snapshot.anchorUpdatedAt || 0,
+      ),
+    ),
+    durationMs,
+  );
 }
 
-function subscribeToRoomClock(roomSlug: string, listener: () => void) {
-  const clock = getRoomClock(roomSlug);
-  clock.listeners.add(listener);
-  if (clock.interval === null) {
-    clock.interval = window.setInterval(() => {
-      clock.nowMs = Date.now();
-      for (const subscriber of clock.listeners) subscriber();
-    }, 250);
+/** Whether the position advances on its own right now. */
+export function isListenTogetherProgressRunning({
+  snapshot,
+  localPlayback,
+  durationMs,
+}: ListenTogetherPositionSource): boolean {
+  return (
+    !!snapshot?.currentEntry &&
+    !snapshot.paused &&
+    durationMs > 0 &&
+    localPlayback?.source !== "seek" &&
+    !localPlayback?.paused
+  );
+}
+
+/**
+ * Changes whenever the position jumps (seek, pause, resume, next track) and
+ * never while it just runs. CSS progress re-keys on it.
+ */
+export function getListenTogetherProgressKey(
+  source: ListenTogetherPositionSource,
+): string {
+  const { snapshot, durationMs } = source;
+  const entryId = snapshot?.currentEntry?.entryId ?? "none";
+  if (isListenTogetherProgressRunning(source) && snapshot) {
+    return `${entryId}|run|${snapshot.anchorPositionMs}@${snapshot.anchorUpdatedAt}|${snapshot.positionMs}|${durationMs}`;
   }
-
-  return () => {
-    clock.listeners.delete(listener);
-    if (clock.listeners.size > 0) return;
-    if (clock.interval !== null) window.clearInterval(clock.interval);
-    clock.interval = null;
-    roomClocks.delete(roomSlug);
-  };
+  // Not running: the position doesn't depend on the time.
+  return `${entryId}|hold|${getListenTogetherLivePositionMs(source, 0)}|${durationMs}`;
 }
 
-function useListenTogetherRoomClock(
-  roomSlug: string | null | undefined,
-  enabled: boolean,
-) {
-  const subscribe = useCallback(
-    (listener: () => void) =>
-      roomSlug && enabled ? subscribeToRoomClock(roomSlug, listener) : () => {},
-    [enabled, roomSlug],
-  );
-  const getSnapshot = useCallback(
-    () => (roomSlug && enabled ? getRoomClock(roomSlug).nowMs : 0),
-    [enabled, roomSlug],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot, () => 0);
+/**
+ * Re-renders its caller once per second of track time while the track runs,
+ * the app is active and `target` is on screen, aligned so the label flips on
+ * the second. Returns the time to compute the position at.
+ */
+export function useListenTogetherClockNow(
+  source: ListenTogetherPositionSource,
+  target?: RefObject<Element | null>,
+): number {
+  const running = isListenTogetherProgressRunning(source);
+  const active = useAppActive();
+  const visible = useOnScreen(target);
+  const anchor = source.snapshot
+    ? source.snapshot.anchorPositionMs - (source.snapshot.anchorUpdatedAt ?? 0)
+    : 0;
+  const phase = ((anchor % 1000) + 1000) % 1000;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!running || !active || !visible) return;
+    let id: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const current = Date.now();
+      setNow(current);
+      const intoSecond = (((current + phase) % 1000) + 1000) % 1000;
+      id = setTimeout(tick, 1000 - intoSecond);
+    };
+    tick();
+    return () => clearTimeout(id);
+  }, [running, active, visible, phase]);
+
+  return now;
 }
+
+/** True unless `target` is known to be scrolled or collapsed out of view. */
+function useOnScreen(target?: RefObject<Element | null>) {
+  const [onScreen, setOnScreen] = useState(true);
+  useEffect(() => {
+    const el = target?.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry) setOnScreen(entry.isIntersecting);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [target]);
+  return onScreen;
+}
+
+/* ------------------------------------------------------------------ */
+/* The hook                                                             */
+/* ------------------------------------------------------------------ */
 
 export interface ListenTogetherPlaybackState {
   currentEntry: ListenTogetherQueueEntry | null;
   durationMs: number;
+  /**
+   * The position at the room's last anchor, not a live value. Views read the
+   * position through ListenTogetherProgress / useListenTogetherClockNow, and
+   * handlers through getListenTogetherLivePositionMs(state, Date.now()).
+   */
   effectiveSeekValue: number;
   error: ListenTogetherRoomState["error"];
   isPaused: boolean;
@@ -134,30 +210,12 @@ export function useListenTogetherPlaybackState(
   const isPaused = isSeekOverride
     ? (snapshot?.paused ?? true)
     : (localPlayback?.paused ?? snapshot?.paused ?? true);
-  const playbackNowMs = useListenTogetherRoomClock(
-    roomSlug,
-    !!snapshot?.currentEntry && !isPaused,
-  );
-
   const currentEntry = snapshot?.currentEntry ?? null;
   const durationMs = snapshot?.durationMs ?? 0;
-  const effectiveSeekValue = isSeekOverride
-    ? clampListenTogetherPosition(localPlayback.positionMs, durationMs)
-    : localPlayback?.paused
-      ? clampListenTogetherPosition(localPlayback.positionMs, durationMs)
-      : snapshot
-        ? clampListenTogetherPosition(
-            Math.max(
-              snapshot.positionMs,
-              getListenTogetherPositionMs(
-                snapshot,
-                durationMs,
-                playbackNowMs || snapshot.anchorUpdatedAt || 0,
-              ),
-            ),
-            durationMs,
-          )
-        : 0;
+  const effectiveSeekValue = getListenTogetherLivePositionMs(
+    { snapshot, localPlayback, durationMs },
+    0,
+  );
 
   return {
     currentEntry,

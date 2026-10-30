@@ -1,43 +1,122 @@
 // ============================================================================
-// AudioDeviceMenu — context menu for the mic/headphone caret buttons
+// AudioDeviceMenu — the menu behind the mic/headphone caret buttons
 //
-// mode="input"  → input device list + input volume + Voice Settings shortcut
-// mode="output" → output device list + output volume + Voice Settings shortcut
+// mode="input"  → input device list + input volume + Voice settings shortcut
+// mode="output" → output device list + output volume + Voice settings shortcut
 //
-// Uses createPortal to render at document.body level, avoiding overflow
-// clipping from sidebar containers. Submenu position is calculated
-// dynamically using getBoundingClientRect to avoid overlap + viewport clipping.
+// Desktop: a DropdownMenu anchored to the caret (design-system 12.7), the
+// device list in a submenu that flips when there is no room. Phones: the same
+// items in an ActionSheet (13.1). The host mounts this only while it is open
+// and unmounts it from `onClose`.
 // ============================================================================
 
-import { useMounted } from "@/hooks/useMounted";
+import { useUser } from "@kova/react";
+import { useShallow } from "zustand/shallow";
+
+import { ActionSheet } from "@/components/ui/action-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
+import {
+  MENU_ITEM,
+  MENU_ITEM_DEFAULT,
+  MENU_ITEM_DEFAULT_ON,
+} from "@/components/ui/menu";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@kova/react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
-import { useShallow } from "zustand/shallow";
-import {
-  Check,
-  ChevronRight,
-  Headphones,
-  Mic,
-  Settings,
-  Volume2,
-} from "./Icons";
 
 interface AudioDeviceMenuProps {
   mode: "input" | "output";
   onClose: () => void;
   onOpenVoiceSettings: () => void;
-  /** Anchor element to position near */
+  /** The caret the menu is anchored to (it also toggles the menu). */
   anchorRef: React.RefObject<HTMLElement | null>;
+}
+
+/** Keys the range input keeps for itself instead of the menu's roving focus. */
+const SLIDER_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
+/**
+ * A native range input (named, keyboard-complete, jsdom-friendly) drawn as the
+ * Talk Tree slider: 4px track, primary-fill range, 14px thumb. The input sits
+ * invisibly on top, so its focus ring is drawn on the thumb instead.
+ */
+function VolumeSlider({
+  mode,
+  volume,
+  onChange,
+}: {
+  mode: "input" | "output";
+  volume: number;
+  onChange: (value: number) => void;
+}) {
+  const max = mode === "output" ? 200 : 100;
+  const fill = Math.min(100, (volume / max) * 100);
+  const label = mode === "input" ? "Input volume" : "Output volume";
+  // The thumb's travel is the track minus its own 14px width.
+  const thumbLeft = `calc(${fill}% - ${(fill * 14) / 100}px)`;
+
+  return (
+    <div
+      // A drag on the slider must not swipe the phone sheet away.
+      data-base-ui-swipe-ignore=""
+      className="px-2 pt-1.5 pb-2.5"
+    >
+      <div className="mb-2 flex items-center justify-between text-ui-xs font-medium text-ink-3">
+        <span>{label}</span>
+        <Num className="text-ink-1">{volume}%</Num>
+      </div>
+      <div className="relative flex h-3.5 items-center pointer-coarse:h-11">
+        <input
+          type="range"
+          min="0"
+          max={max}
+          step="1"
+          value={volume}
+          aria-label={label}
+          onChange={(event) => onChange(parseInt(event.target.value, 10))}
+          onKeyDown={(event) => {
+            if (SLIDER_KEYS.has(event.key)) event.stopPropagation();
+          }}
+          className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+        />
+        <div className="h-1 w-full overflow-hidden rounded-full bg-tint-3">
+          <div
+            className="h-full rounded-full bg-primary-fill"
+            style={{ width: `calc(${fill}% + ${7 - (fill * 14) / 100}px)` }}
+          />
+        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full bg-primary-fill ring-2 ring-ply-3 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus pointer-coarse:size-5"
+          style={{ left: thumbLeft }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function AudioDeviceMenu({
@@ -46,7 +125,7 @@ export function AudioDeviceMenu({
   onOpenVoiceSettings,
   anchorRef,
 }: AudioDeviceMenuProps) {
-  const mounted = useMounted();
+  const isMobile = useIsMobile();
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
   const { audioInputs, audioOutputs } = useMediaDevices();
@@ -56,13 +135,6 @@ export function AudioDeviceMenu({
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
 
-  const [showDeviceSubmenu, setShowDeviceSubmenu] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
-  const [submenuPos, setSubmenuPos] = useState({ top: 0, left: 0 });
-  const menuRef = useRef<HTMLDivElement>(null);
-  const deviceRowRef = useRef<HTMLButtonElement>(null);
-  const submenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const defaultInput = audioInputs.find((d) => d.deviceId === "default");
   const defaultOutput = audioOutputs.find((d) => d.deviceId === "default");
   const devices =
@@ -70,107 +142,26 @@ export function AudioDeviceMenu({
       ? [
           {
             deviceId: "default",
-            label: defaultInput?.label || "Default Microphone",
+            label: defaultInput?.label || "Default microphone",
             groupId: defaultInput?.groupId,
-            kind: "audioinput" as MediaDeviceKind,
           },
           ...audioInputs.filter((d) => d.deviceId !== "default"),
         ]
       : [
           {
             deviceId: "default",
-            label: defaultOutput?.label || "Default Speaker",
+            label: defaultOutput?.label || "Default speaker",
             groupId: defaultOutput?.groupId,
-            kind: "audiooutput" as MediaDeviceKind,
           },
           ...audioOutputs.filter((d) => d.deviceId !== "default"),
         ];
 
   const currentDeviceId =
     mode === "input" ? vSettings.inputDeviceId : vSettings.outputDeviceId;
+  const currentDeviceLabel =
+    devices.find((d) => d.deviceId === currentDeviceId)?.label ?? "Default";
   const volume =
     mode === "input" ? vSettings.inputVolume : vSettings.outputVolume;
-
-  // Position main menu above anchor
-  useLayoutEffect(() => {
-    if (!anchorRef.current || !menuRef.current) return;
-    const anchorRect = anchorRef.current.getBoundingClientRect();
-    const menuHeight = menuRef.current.offsetHeight;
-
-    setMenuPos({
-      top: anchorRect.top - menuHeight - 8,
-      left: anchorRect.left,
-    });
-  }, [anchorRef]);
-
-  // Position submenu to the right of the device row, clamped to viewport
-  const updateSubmenuPos = useCallback(() => {
-    if (!deviceRowRef.current || !menuRef.current) return;
-    const rowRect = deviceRowRef.current.getBoundingClientRect();
-    const menuRect = menuRef.current.getBoundingClientRect();
-    const submenuWidth = 200;
-    const submenuHeight = Math.min(devices.length * 36 + 12, 252); // approx item height + padding, capped at max-h
-
-    // Place to the right of the main menu
-    let left = menuRect.right + 4;
-    // If off right edge, flip to left
-    if (left + submenuWidth > window.innerWidth - 8) {
-      left = menuRect.left - submenuWidth - 4;
-    }
-
-    // Align top with the device row
-    let top = rowRect.top;
-    // If clipping below viewport, shift up
-    if (top + submenuHeight > window.innerHeight - 8) {
-      top = window.innerHeight - submenuHeight - 8;
-    }
-    // If shifted above viewport, clamp to 8
-    if (top < 8) top = 8;
-
-    setSubmenuPos({ top, left });
-  }, [devices.length]);
-
-  useLayoutEffect(() => {
-    if (showDeviceSubmenu) {
-      const frameId = requestAnimationFrame(updateSubmenuPos);
-      return () => cancelAnimationFrame(frameId);
-    }
-  }, [showDeviceSubmenu, updateSubmenuPos]);
-
-  const clearSubmenuTimer = useCallback(() => {
-    const submenuTimer = submenuTimerRef.current;
-    if (submenuTimer !== null) {
-      submenuTimerRef.current = null;
-      clearTimeout(submenuTimer);
-    }
-  }, []);
-
-  // Close on outside click (delay to avoid catching the opening click)
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        // Also check if click is inside the submenu portal
-        const submenuEl = document.getElementById("audio-device-submenu");
-        if (submenuEl && submenuEl.contains(e.target as Node)) return;
-        onClose();
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    const timer = setTimeout(() => {
-      document.addEventListener("mousedown", handleClick);
-    }, 50);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [onClose]);
-
-  // Cleanup hover timer
-  useEffect(() => clearSubmenuTimer, [clearSubmenuTimer]);
 
   const handleDeviceSelect = (deviceId: string) => {
     const device = devices.find((d) => d.deviceId === deviceId);
@@ -188,187 +179,132 @@ export function AudioDeviceMenu({
     );
   };
 
-  const handleDeviceHover = (entering: boolean) => {
-    clearSubmenuTimer();
-    if (entering) {
-      submenuTimerRef.current = setTimeout(() => {
-        submenuTimerRef.current = null;
-        setShowDeviceSubmenu(true);
-      }, 80);
-    } else {
-      submenuTimerRef.current = setTimeout(() => {
-        submenuTimerRef.current = null;
-        setShowDeviceSubmenu(false);
-      }, 200);
-    }
-  };
+  const modeIcon = mode === "input" ? "mic" : "headphones";
+  const title = mode === "input" ? "Input settings" : "Output settings";
+  const deviceLabel = mode === "input" ? "Input device" : "Output device";
 
-  const ModeIcon = mode === "input" ? Mic : Headphones;
-  const deviceLabel = mode === "input" ? "Input Device" : "Output Device";
-
-  if (!mounted) return null;
-
-  return createPortal(
-    <>
-      {/* Main menu */}
-      <div
-        ref={menuRef}
-        className="fixed z-70 animate-in fade-in slide-in-from-bottom-2 duration-200"
-        style={{ top: menuPos.top, left: menuPos.left }}
-      >
-        <div className="w-[220px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl backdrop-blur-xl">
-          {/* Header */}
-          <div className="px-3 py-2 border-b border-rm-border rounded-t-xl">
-            <div className="flex items-center gap-2">
-              <ModeIcon size={12} className="text-rm-text-muted" />
-              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-                {mode === "input" ? "Input" : "Output"} Settings
-              </span>
-            </div>
-          </div>
-
-          <div className="p-1.5">
-            {/* Device Selector Row */}
-            <div
-              onMouseEnter={() => handleDeviceHover(true)}
-              onMouseLeave={() => handleDeviceHover(false)}
-            >
-              <button
-                ref={deviceRowRef}
-                onClick={() => setShowDeviceSubmenu(!showDeviceSubmenu)}
-                className={cn(
-                  "w-full text-left px-3 py-2 text-ui-xs font-medium rounded-lg transition-colors flex items-center justify-between group",
-                  showDeviceSubmenu
-                    ? "bg-rm-accent/10 text-rm-accent"
-                    : "text-rm-text hover:bg-rm-bg-hover",
-                )}
-              >
-                <span className="flex items-center gap-2 min-w-0 flex-1">
-                  <ModeIcon size={14} className="opacity-60 shrink-0" />
-                  <span className="flex flex-col min-w-0">
-                    <span className="leading-tight">{deviceLabel}</span>
-                    <span className="text-ui-2xs text-rm-text-muted/60 font-normal truncate leading-tight">
-                      {devices.find((d) => d.deviceId === currentDeviceId)
-                        ?.label ?? "Default"}
-                    </span>
-                  </span>
-                </span>
-                <ChevronRight
-                  size={12}
-                  className="transition-transform duration-200 shrink-0"
-                />
-              </button>
-            </div>
-
-            {/* Divider */}
-            <div className="h-px bg-rm-border my-1" />
-
-            {/* Volume Slider */}
-            <div className="px-3 py-2">
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted flex items-center gap-1.5">
-                  <Volume2 size={11} className="opacity-60" />
-                  {mode === "input" ? "Input Volume" : "Output Volume"}
-                </span>
-                <span className="text-ui-2xs font-bold text-primary tabular-nums">
-                  {volume}%
-                </span>
-              </div>
-              <div className="group/slider relative h-1.5 rounded-full bg-rm-bg-primary">
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full bg-primary transition-ui"
-                  style={{
-                    width: `${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}%`,
-                  }}
-                />
-                <div
-                  className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface opacity-0 shadow-lg transition-opacity group-hover/slider:opacity-100"
-                  style={{
-                    left: `calc(${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}% - 6px)`,
-                  }}
-                />
-                <input
-                  type="range"
-                  min="0"
-                  max={mode === "output" ? 200 : 100}
-                  step="1"
-                  value={volume}
-                  aria-label={
-                    mode === "input" ? "Input volume" : "Output volume"
-                  }
-                  onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
-                  className="absolute inset-0 z-10 w-full h-full cursor-pointer opacity-0"
-                />
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="h-px bg-rm-border my-1" />
-
-            {/* Voice Settings Link */}
-            <button
-              onClick={() => {
-                onClose();
-                onOpenVoiceSettings();
-              }}
-              className="w-full text-left px-3 py-2 text-ui-xs font-medium text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors flex items-center gap-2"
-            >
-              <Settings size={14} className="opacity-60" />
-              Voice Settings
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Device submenu — rendered as a SIBLING (not child) at body level */}
-      {showDeviceSubmenu && (
-        <div
-          id="audio-device-submenu"
-          className="fixed z-80 animate-in fade-in slide-in-from-left-2 duration-150"
-          style={{ top: submenuPos.top, left: submenuPos.left }}
-          onMouseEnter={() => handleDeviceHover(true)}
-          onMouseLeave={() => handleDeviceHover(false)}
-        >
-          <div className="w-[200px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl backdrop-blur-xl">
-            <div className="p-1.5 max-h-[240px] overflow-y-auto custom-scrollbar">
-              {devices.map((device) => {
-                const isSelected = device.deviceId === currentDeviceId;
-                return (
-                  <button
-                    key={device.deviceId}
-                    onClick={() => handleDeviceSelect(device.deviceId)}
-                    className={cn(
-                      "w-full text-left px-3 py-2 text-ui-2xs font-medium rounded-lg transition-ui flex items-center gap-2",
-                      isSelected
-                        ? "bg-rm-accent/10 text-rm-accent"
-                        : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-                    )}
-                  >
-                    <div
+  if (isMobile) {
+    return (
+      <ActionSheet
+        open
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+        title={title}
+        showTitle
+        header={
+          <VolumeSlider
+            mode={mode}
+            volume={volume}
+            onChange={handleVolumeChange}
+          />
+        }
+        items={[
+          {
+            key: "device",
+            label: deviceLabel,
+            subtitle: currentDeviceLabel,
+            icon: <Icon name={modeIcon} />,
+            onClick: () => {},
+            closeOnClick: false,
+            submenu: (
+              <div role="radiogroup" aria-label={deviceLabel}>
+                {devices.map((device) => {
+                  const selected = device.deviceId === currentDeviceId;
+                  return (
+                    <button
+                      key={device.deviceId}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => handleDeviceSelect(device.deviceId)}
                       className={cn(
-                        "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                        isSelected
-                          ? "border-rm-accent bg-rm-accent"
-                          : "border-rm-text-muted/30",
+                        MENU_ITEM,
+                        selected ? MENU_ITEM_DEFAULT_ON : MENU_ITEM_DEFAULT,
                       )}
                     >
-                      {isSelected && (
-                        <Check
-                          size={8}
-                          className="text-white"
-                          strokeWidth={3}
-                        />
-                      )}
-                    </div>
-                    <span className="truncate">{device.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-    </>,
-    document.body,
+                      <span className="min-w-0 flex-1 truncate">
+                        {device.label}
+                      </span>
+                      {selected ? <Icon name="check" size="xs" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ),
+          },
+          {
+            key: "voice-settings",
+            label: "Voice settings",
+            icon: <Icon name="settings" />,
+            onClick: onOpenVoiceSettings,
+          },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <DropdownMenu
+      open
+      modal={false}
+      onOpenChange={(open) => {
+        // A press on the caret is not an outside press (the menu ignores
+        // presses on its anchor), so the caret's own click toggles it.
+        if (!open) onClose();
+      }}
+    >
+      <DropdownMenuContent
+        anchor={anchorRef}
+        side="top"
+        align="start"
+        sideOffset={8}
+        finalFocus={anchorRef}
+        aria-label={title}
+        className="w-60"
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{title}</DropdownMenuLabel>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger icon={<Icon name={modeIcon} />}>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate">{deviceLabel}</span>
+                <span className="truncate text-ui-xs font-normal text-ink-3">
+                  {currentDeviceLabel}
+                </span>
+              </span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent aria-label={deviceLabel}>
+              <DropdownMenuRadioGroup
+                value={currentDeviceId}
+                onValueChange={(value: string) => handleDeviceSelect(value)}
+              >
+                {devices.map((device) => (
+                  <DropdownMenuRadioItem
+                    key={device.deviceId}
+                    value={device.deviceId}
+                  >
+                    {device.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <VolumeSlider
+          mode={mode}
+          volume={volume}
+          onChange={handleVolumeChange}
+        />
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          icon={<Icon name="settings" />}
+          onClick={onOpenVoiceSettings}
+        >
+          Voice settings
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

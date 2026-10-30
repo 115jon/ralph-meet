@@ -1,4 +1,5 @@
 import {
+  getDisplayNameEffectOverlayStyle,
   getDisplayNameEffectStyle,
   getDisplayNameFontStyle,
   normalizeDisplayColor,
@@ -9,6 +10,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import InlineEmojiText from "./InlineEmojiText";
+import {
+  useDecorationPlayback,
+  type DecorationPlayback,
+} from "./ProfileAssetLayer";
 
 interface ProfileDisplayNameProps {
   text: string;
@@ -18,6 +23,12 @@ interface ProfileDisplayNameProps {
   backgroundColor?: string | null;
   readableFallbackColor?: string | null;
   minContrastRatio?: number;
+  /**
+   * When the effect plays. `"hover"` (default): static, plays while the
+   * row holds the pointer or focus. `true`: plays while mounted (an open
+   * profile surface). `false`: always static.
+   */
+  animate?: DecorationPlayback;
 }
 
 export function ProfileDisplayName({
@@ -28,6 +39,7 @@ export function ProfileDisplayName({
   backgroundColor,
   readableFallbackColor,
   minContrastRatio,
+  animate = "hover",
 }: ProfileDisplayNameProps) {
   const [spanNode, setSpanNode] = useState<HTMLSpanElement | null>(null);
   const normalizedStyle = useMemo(
@@ -92,6 +104,14 @@ export function ProfileDisplayName({
       }) ?? normalizedStyle,
     [contrastContext, minContrastRatio, normalizedStyle],
   );
+  const hasMotion =
+    resolvedStyle?.effect === "gradient" ||
+    resolvedStyle?.effect === "neon" ||
+    resolvedStyle?.effect === "pop";
+  const playing = useDecorationPlayback(
+    hasMotion ? spanNode : null,
+    hasMotion ? animate : false,
+  );
 
   if (!resolvedStyle) {
     return (
@@ -101,17 +121,37 @@ export function ProfileDisplayName({
     );
   }
 
+  // Gradient and neon play on a second copy of the name that only fades
+  // (compositor-only); it mounts while the effect plays and never in lists.
+  const overlayStyle = playing
+    ? getDisplayNameEffectOverlayStyle(resolvedStyle)
+    : null;
+
   return (
     <span
       ref={handleSpanRef}
-      className={cn("inline-block max-w-full align-top", className)}
+      className={cn(
+        "inline-block max-w-full align-top",
+        overlayStyle && "relative",
+        className,
+      )}
       style={{
         ...getDisplayNameFontStyle(resolvedStyle.font),
-        ...getDisplayNameEffectStyle(resolvedStyle),
+        ...getDisplayNameEffectStyle(resolvedStyle, { animate: playing }),
         ...style,
       }}
     >
       <InlineEmojiText text={text} />
+      {overlayStyle ? (
+        <span
+          aria-hidden="true"
+          data-display-name-overlay=""
+          className="pointer-events-none absolute inset-0 overflow-hidden text-ellipsis select-none"
+          style={{ padding: "inherit", ...overlayStyle }}
+        >
+          <InlineEmojiText text={text} />
+        </span>
+      ) : null}
     </span>
   );
 }

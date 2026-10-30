@@ -138,7 +138,7 @@ describe("MicTestWidget", () => {
     );
     const { rerender } = render(view(-50));
 
-    fireEvent.click(screen.getByRole("button", { name: "Mic Test" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test mic" }));
 
     await waitFor(() => expect(previewAudio.play).toHaveBeenCalled());
     rerender(view(-20));
@@ -189,7 +189,7 @@ describe("MicTestWidget", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Mic Test" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test mic" }));
 
     await waitFor(() => expect(context.close).toHaveBeenCalled());
     expect(getUserMedia).toHaveBeenCalledTimes(1);

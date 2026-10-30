@@ -292,7 +292,11 @@ interface PendingCall extends StoredPendingCall {
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
-const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3; // 45s — 3 missed heartbeats
+// 90s — 6 missed heartbeats. Chrome throttles timers in a tab hidden for 5+
+// minutes to one wake-up a minute, so its 15s heartbeat arrives ~60s apart;
+// 3 beats (45s) evicted every background tab every few minutes. Still under
+// Cloudflare's ~100s idle-socket close, which the 60s beats keep open.
+const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 6;
 const PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie detection fires first
 const CALL_RING_TIMEOUT_MS = 30_000; // auto-cancel after 30s
 const RESUME_GRACE_PERIOD_MS = 120_000; // 2 min — keep session resumable after disconnect

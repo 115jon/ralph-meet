@@ -519,7 +519,15 @@ function getTikTokPlayerApiMedia(
   const videoUrl = getTikTokPlayerApiDirectVideoUrl(item);
   if (!videoUrl) return undefined;
 
-  const durationMs = readPositiveNumber(item?.video_info?.meta?.duration);
+  // `meta.duration` is whole seconds (51 for a 51 s clip). Treat values too
+  // large to be seconds as milliseconds in case the API ever switches.
+  const rawDuration = readPositiveNumber(item?.video_info?.meta?.duration);
+  const durationMs =
+    rawDuration === undefined
+      ? undefined
+      : rawDuration > 6 * 60 * 60
+        ? rawDuration
+        : rawDuration * 1000;
   return [
     {
       type: "video",
@@ -578,14 +586,61 @@ function mapTikTokPlayerApiMetadata(item: any): TikTokProxyMetadata | null {
   };
 }
 
-async function fetchTikTokPlayerApiMetadata(
+interface TikTokPlayerApiLookup {
+  metadata: TikTokProxyMetadata | null;
+  /** TikTok's own player API confirmed the post no longer exists. */
+  gone: boolean;
+  /** The request failed in a way worth retrying (network, 429, 5xx). */
+  transient: boolean;
+}
+
+/**
+ * TikTok's player API answers a deleted, private or region-removed post with
+ * `results: [{ code: "nil_core_data" }]` (or lists it in `fatal_item_ids`)
+ * instead of an item. That is the only positive "gone" signal: oEmbed keeps
+ * returning a generic player for dead posts and tikwm only says "parsing
+ * failed".
+ */
+export function isTikTokPlayerApiGonePayload(
+  payload: unknown,
+  itemId: string,
+): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const record = payload as Record<string, unknown>;
+  if (Array.isArray(record.items) && record.items.length > 0) return false;
+
+  const fatal = Array.isArray(
+    (record.extra as Record<string, unknown> | undefined)?.fatal_item_ids,
+  )
+    ? ((record.extra as Record<string, unknown>).fatal_item_ids as unknown[])
+    : [];
+  if (fatal.some((value) => String(value) === itemId)) return true;
+
+  const results = Array.isArray(record.results) ? record.results : [];
+  return results.some((result) => {
+    if (!result || typeof result !== "object") return false;
+    const entry = result as Record<string, unknown>;
+    const id = String(entry.id_str ?? entry.id ?? "");
+    return (
+      (id === "" || id === itemId) &&
+      typeof entry.code === "string" &&
+      /nil_core_data|not_?found|deleted|private/i.test(entry.code)
+    );
+  });
+}
+
+function isTransientUpstreamStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function fetchTikTokPlayerApiLookup(
   rawUrl: string,
-): Promise<TikTokProxyMetadata | null> {
+): Promise<TikTokPlayerApiLookup> {
   const resolvedUrl = await resolveTikTokLookupUrl(rawUrl);
   const itemId =
     extractTikTokItemId(resolvedUrl) ?? extractTikTokItemId(rawUrl);
   if (!itemId) {
-    return null;
+    return { metadata: null, gone: false, transient: false };
   }
 
   const apiUrl = `https://www.tiktok.com/player/api/v1/items?item_ids=${encodeURIComponent(itemId)}`;
@@ -607,18 +662,26 @@ async function fetchTikTokPlayerApiMetadata(
         contentType,
         sourceUrl: rawUrl,
       });
-      return null;
+      return {
+        metadata: null,
+        gone: false,
+        transient: isTransientUpstreamStatus(response.status),
+      };
     }
 
     const payload = (await readJsonCapped(response)) as any;
     const item = Array.isArray(payload?.items) ? payload.items[0] : null;
-    return mapTikTokPlayerApiMetadata(item);
+    return {
+      metadata: mapTikTokPlayerApiMetadata(item),
+      gone: !item && isTikTokPlayerApiGonePayload(payload, itemId),
+      transient: false,
+    };
   } catch (error) {
     log.warn("TikTok player api request threw", {
       sourceUrl: rawUrl,
       error: error instanceof Error ? error.message : String(error),
     });
-    return null;
+    return { metadata: null, gone: false, transient: true };
   }
 }
 
@@ -777,16 +840,30 @@ async function fetchTikTokTikwmMetadata(
   };
 }
 
-export async function fetchTikTokProxyMetadata(
+export interface TikTokProxyLookup {
+  metadata: TikTokProxyMetadata | null;
+  /** Confirmed deleted/private: safe to tombstone and negative-cache. */
+  unavailable: boolean;
+  /** No metadata because an upstream was down; retry later. */
+  transient: boolean;
+}
+
+export async function fetchTikTokProxyLookup(
   url: string,
-): Promise<TikTokProxyMetadata | null> {
-  const playerMetadata = await fetchTikTokPlayerApiMetadata(url);
+): Promise<TikTokProxyLookup> {
+  const player = await fetchTikTokPlayerApiLookup(url);
+  const playerMetadata = player.metadata;
   const shouldSupplementWithTikwm =
     !hasTikTokMetadataContent(playerMetadata) ||
     playerMetadata.postType === "slideshow";
 
   if (!shouldSupplementWithTikwm) {
-    return playerMetadata;
+    return { metadata: playerMetadata, unavailable: false, transient: false };
+  }
+
+  // A post TikTok itself reports as gone will not come back from tikwm.
+  if (player.gone) {
+    return { metadata: null, unavailable: true, transient: false };
   }
 
   const tikwmMetadata = await fetchTikTokTikwmMetadata(url);
@@ -794,10 +871,25 @@ export async function fetchTikTokProxyMetadata(
     hasTikTokMetadataContent(playerMetadata) &&
     hasTikTokMetadataContent(tikwmMetadata)
   ) {
-    return mergeTikTokMetadata(playerMetadata, tikwmMetadata);
+    return {
+      metadata: mergeTikTokMetadata(playerMetadata, tikwmMetadata),
+      unavailable: false,
+      transient: false,
+    };
   }
 
-  return tikwmMetadata ?? playerMetadata;
+  const metadata = tikwmMetadata ?? playerMetadata;
+  return {
+    metadata,
+    unavailable: false,
+    transient: !metadata && player.transient,
+  };
+}
+
+export async function fetchTikTokProxyMetadata(
+  url: string,
+): Promise<TikTokProxyMetadata | null> {
+  return (await fetchTikTokProxyLookup(url)).metadata;
 }
 
 export async function lookupInstagramOEmbed(url: string): Promise<{

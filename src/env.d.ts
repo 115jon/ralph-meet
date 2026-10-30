@@ -6,6 +6,11 @@ import type { BackgroundTaskEnvelope } from "./lib/background-tasks";
 // These are defined in wrangler.toml and injected at runtime
 
 declare global {
+  interface ImportMetaEnv {
+    /** `vite dev` only: the Kova key RALPH_AUTH picked (lib/dev-auth-target). */
+    readonly RALPH_DEV_KOVA_KEY?: string;
+  }
+
   interface CloudflareEnv {
     DB: D1Database;
     BUCKET: R2Bucket;

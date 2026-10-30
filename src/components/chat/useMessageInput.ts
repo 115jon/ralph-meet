@@ -1,7 +1,10 @@
+import { toast } from "@/components/ui/toast";
 import { apiGet, apiPost, apiUpload } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { parseCustomEmojiToken } from "@/lib/emoji";
 import type { GifPickerItem, GifPickerMediaType } from "@/lib/gif-picker";
 import type { Message, User } from "@/lib/types";
+import { COMPOSER_RESTORE_EVENT } from "@/stores/chat-actions";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
@@ -12,6 +15,13 @@ import {
   replaceTextRange,
   type ComposerCustomEmojiMap,
 } from "./message-input-utils";
+
+/**
+ * The composer field's floor, in px: one line of text plus its vertical
+ * padding (13+22+13 desktop, 12+24+12 phone). Matches the 48px slot keys and
+ * the plate's `min-h-12`. Heights are set inline, so this must not drift.
+ */
+export const COMPOSER_MIN_HEIGHT_PX = 48;
 
 export interface UploadedFile {
   id: string;
@@ -26,9 +36,12 @@ export interface UploadedFile {
 export interface PendingUpload {
   tempId: string;
   file: File;
+  /** 0..1 once a transport reports it. `fetch` can't, so today it stays 0. */
   progress: number;
   previewUrl?: string;
   abortController: AbortController;
+  /** Set when the upload failed: the tile stays with a Retry instead of vanishing. */
+  error?: string;
 }
 
 export interface UploadedFileInfo {
@@ -107,6 +120,12 @@ export function useMessageInput({
         | ((prev: MessageInputState) => Partial<MessageInputState>),
     ) => {
       const updates = typeof payload === "function" ? payload(state) : payload;
+      const keys = Object.keys(updates) as (keyof MessageInputState)[];
+      // Nothing changed (a hover that stays on the same chip, a scroll with no
+      // tooltip open): keep the state object so React skips the render.
+      if (keys.every((key) => Object.is(state[key], updates[key]))) {
+        return state;
+      }
       return { ...state, ...updates };
     },
     {
@@ -131,6 +150,11 @@ export function useMessageInput({
   const handleFileUploadRef = useRef<
     ((files: FileList | File[]) => void) | null
   >(null);
+  // Latest state for listeners that must not re-subscribe on every keystroke.
+  const valueRef = useRef("");
+  valueRef.current = value;
+  const pendingUploadsRef = useRef<PendingUpload[]>([]);
+  pendingUploadsRef.current = pendingUploads;
 
   const members = useChatStore((s) => s.members);
 
@@ -138,12 +162,15 @@ export function useMessageInput({
     if (textareaRef.current && twinRef.current) {
       twinRef.current.scrollTop = textareaRef.current.scrollTop;
     }
+    // The tooltip is anchored to viewport coordinates measured on hover, so
+    // anything that moves the chips under it must drop it.
+    setLocalState({ hoveredMention: null });
   }, []);
 
   const syncHeight = useCallback(() => {
     const ta = textareaRef.current;
     if (ta) {
-      ta.style.height = "32px";
+      ta.style.height = `${COMPOSER_MIN_HEIGHT_PX}px`;
       const newHeight = Math.min(ta.scrollHeight, 200);
       ta.style.height = newHeight + "px";
       if (twinRef.current) {
@@ -283,6 +310,7 @@ export function useMessageInput({
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setLocalState({
         value: e.target.value,
+        hoveredMention: null,
         composerCustomEmojiMap: pruneComposerCustomEmojiMap(
           e.target.value,
           composerCustomEmojiMap,
@@ -310,19 +338,19 @@ export function useMessageInput({
       const el = document.elementFromPoint(e.clientX, e.clientY);
       ta.style.removeProperty("pointer-events");
 
-      if (el && el.hasAttribute("data-mention")) {
-        const username = el.getAttribute("data-mention");
-        if (username) {
-          setLocalState({ hoveredMention: username });
-          const rect = el.getBoundingClientRect();
-          setLocalState({
-            mentionTooltipPos: {
-              left: rect.left + rect.width / 2,
-              top: rect.top,
-            },
-          });
-          return;
-        }
+      const username = el?.getAttribute("data-mention");
+      if (el && username) {
+        const rect = el.getBoundingClientRect();
+        const left = rect.left + rect.width / 2;
+        const top = rect.top;
+        setLocalState((prev: MessageInputState) =>
+          prev.hoveredMention === username &&
+          prev.mentionTooltipPos.left === left &&
+          prev.mentionTooltipPos.top === top
+            ? {}
+            : { hoveredMention: username, mentionTooltipPos: { left, top } },
+        );
+        return;
       }
       setLocalState({ hoveredMention: null });
     },
@@ -347,7 +375,7 @@ export function useMessageInput({
         fileInfos,
         nsfwAttachmentIds.length > 0 ? nsfwAttachmentIds : undefined,
       );
-      setLocalState({ value: "" });
+      setLocalState({ value: "", hoveredMention: null });
       uploadedFiles.forEach((f) => {
         if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
       });
@@ -356,11 +384,14 @@ export function useMessageInput({
       lastTypingRef.current = 0;
       setLocalState({ mentionQuery: null });
       if (textareaRef.current) {
-        textareaRef.current.style.height = "32px";
+        textareaRef.current.style.height = `${COMPOSER_MIN_HEIGHT_PX}px`;
       }
       if (twinRef.current) {
-        twinRef.current.style.height = "32px";
+        twinRef.current.style.height = `${COMPOSER_MIN_HEIGHT_PX}px`;
       }
+      // Sending from the phone key (or a keyboard-focused button) must not
+      // strand focus on a control that is about to unmount.
+      textareaRef.current?.focus();
     }
   }, [composerCustomEmojiMap, onSend, replyTo, uploadedFiles, value]);
 
@@ -476,6 +507,9 @@ export function useMessageInput({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // An IME is mid-composition: Enter/Tab/arrows/Escape belong to its
+      // candidate window (keyCode 229 covers Safari's keydown-after-end).
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       const ta = textareaRef.current;
 
       if (e.key === "ArrowLeft" && ta) {
@@ -593,7 +627,9 @@ export function useMessageInput({
 
       for (const file of filesArray) {
         if (file.size > 25 * 1024 * 1024) {
-          alert(`File "${file.name}" is too large (max 25MB)`);
+          toast.error(`${file.name} is too large to upload`, {
+            description: "Files can be up to 25 MB.",
+          });
           continue;
         }
 
@@ -615,6 +651,7 @@ export function useMessageInput({
           pendingUploads: [...prev.pendingUploads, pending],
         }));
 
+        let failure: string | null = null;
         try {
           const formData = new FormData();
           formData.append("file", file);
@@ -643,15 +680,21 @@ export function useMessageInput({
             ],
           }));
         } catch (err) {
-          if ((err as Error).name !== "AbortError") {
+          if ((err as Error).name === "AbortError") {
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+          } else {
+            // Keep the tile (and its preview) so the file can be retried.
             console.error("Upload failed:", err);
+            failure = describeApiError(err, "upload that file");
           }
-          if (previewUrl) URL.revokeObjectURL(previewUrl);
         } finally {
+          const failed = failure;
           setLocalState((prev: { pendingUploads: PendingUpload[] }) => ({
-            pendingUploads: prev.pendingUploads.filter(
-              (p) => p.tempId !== tempId,
-            ),
+            pendingUploads: failed
+              ? prev.pendingUploads.map((p) =>
+                  p.tempId === tempId ? { ...p, error: failed } : p,
+                )
+              : prev.pendingUploads.filter((p) => p.tempId !== tempId),
           }));
         }
       }
@@ -669,6 +712,31 @@ export function useMessageInput({
     window.addEventListener("drop-files", handler);
     return () => window.removeEventListener("drop-files", handler);
   }, []);
+
+  // A failed send was deleted (`COMPOSER_RESTORE_EVENT`, detail
+  // `{ channelId, content }`): put its text back, but only into an empty
+  // composer for the same channel, so nothing the user typed is overwritten.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{ channelId?: string; content?: string } | undefined>
+      ).detail;
+      if (!detail?.content || detail.channelId !== channelId) return;
+      if (valueRef.current.trim().length > 0) return;
+      e.preventDefault();
+      const content = detail.content;
+      setLocalState({ value: content, mentionQuery: null });
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.focus();
+        ta.setSelectionRange(content.length, content.length);
+        syncHeight();
+      });
+    };
+    window.addEventListener(COMPOSER_RESTORE_EVENT, handler);
+    return () => window.removeEventListener(COMPOSER_RESTORE_EVENT, handler);
+  }, [channelId, syncHeight]);
 
   const handleReplyChange = useCallback(() => {
     if (replyTo) {
@@ -696,6 +764,20 @@ export function useMessageInput({
       };
     });
   }, []);
+
+  /** Re-run a failed upload: the failed tile is replaced by a fresh one. */
+  const retryUpload = useCallback(
+    (tempId: string) => {
+      const failed = pendingUploadsRef.current.find((p) => p.tempId === tempId);
+      if (!failed) return;
+      if (failed.previewUrl) URL.revokeObjectURL(failed.previewUrl);
+      setLocalState((prev: { pendingUploads: PendingUpload[] }) => ({
+        pendingUploads: prev.pendingUploads.filter((p) => p.tempId !== tempId),
+      }));
+      void handleFileUpload([failed.file]);
+    },
+    [handleFileUpload],
+  );
 
   const removeUploadedFile = useCallback((id: string) => {
     setLocalState((prev: { uploadedFiles: UploadedFile[] }) => {
@@ -768,7 +850,9 @@ export function useMessageInput({
         textareaRef.current?.focus();
       } catch (error) {
         console.error("GIF send failed:", error);
-        alert("Failed to send GIF");
+        toast.error(describeApiError(error, "send that GIF"), {
+          id: "rm-gif-send",
+        });
       }
     },
     [channelId, onSend, replyTo?.id],
@@ -802,6 +886,7 @@ export function useMessageInput({
     handleKeyDown,
     handleFileUpload,
     cancelUpload,
+    retryUpload,
     removeUploadedFile,
     toggleUploadedFileSensitive,
     handlePaste,

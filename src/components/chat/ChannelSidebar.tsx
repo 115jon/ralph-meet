@@ -1,5 +1,6 @@
+import { LONG_PRESS_TARGET, useLongPressMenu } from "@/hooks/useLongPress";
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { useUptime } from "@/hooks/useUptime";
+import { useSpeakingAttr } from "@/hooks/useIsSpeaking";
 import { apiPatch } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
@@ -30,7 +31,8 @@ import {
   DndContext,
   type DragEndEvent,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -42,39 +44,35 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Icon } from "@/components/ui/icon";
+import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
+import { Spinner } from "@/components/ui/button";
+import { Avatar } from "@/components/ui/avatar";
+import { CountBadge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Led } from "@/components/ui/led";
+import { Num, NumClock } from "@/components/ui/num";
+import { ThemeBanner } from "@/components/ui/theme-slots";
+import { TreeBranch, TreeLeaf, useAnimateEnter } from "@/components/ui/tree";
+import { useAppActive } from "@/hooks/useAppActive";
+import { copyToClipboard } from "@/components/ui/toast";
 import {
-  Bell,
-  CalendarPlus,
-  CheckCheck,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  CopyPlus,
-  Edit2,
-  EyeOff,
-  FolderPlus,
-  Gamepad2,
-  Gem,
-  GripVertical,
-  Hash,
-  HeadphoneOff,
-  LayoutGrid,
-  Link,
-  Loader2,
-  MicOff,
-  Plus,
-  PlusCircle,
-  Settings,
-  Shield,
-  Sparkles,
-  Trash2,
-  UserPlus,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
+  OCCUPANT_ROW,
+  ROW_ACTION_BUTTON,
+  ROW_ACTIONS,
+  ROW_META_SWAP,
+  ROW_NAME_FADE,
+  SIDEBAR_ICON_SLOT,
+  SIDEBAR_UNREAD_PILL,
+  TREE_BRANCH_GAP,
+  TREE_BRANCH_LABEL,
+  sidebarRowClass,
+} from "@/components/ui/sidebar-row";
+import { getChannelIcon } from "@/lib/channel-icon";
 
 import {
   lazy,
+  memo,
   Suspense,
   useCallback,
   useEffect,
@@ -83,14 +81,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { useShallow } from "zustand/shallow";
-import { useTheme } from "next-themes";
 import ChannelInviteModal from "./ChannelInviteModal";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
 import { AvatarImage } from "./AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
 import { UserDisplayName } from "./UserDisplayName";
 import UserProfilePopover from "./UserProfilePopover";
 import { VoiceStreamHoverCard } from "./VoiceStreamHoverCard";
@@ -225,6 +222,14 @@ function groupChannelsByCategory(
 
 // ── Sortable Channel Item ──────────────────────────────────────────────────
 
+type VoiceMemberTarget = {
+  id: string;
+  username: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  avatar_display?: User["avatar_display"];
+};
+
 interface SortableChannelItemProps {
   channel: Channel;
   isActive: boolean;
@@ -238,37 +243,15 @@ interface SortableChannelItemProps {
   listenTogetherRoomSlug: string | null;
   currentUserId: string | null;
   isDraggable: boolean;
-  groupId: string | null;
-  speakingUsers: Record<string, boolean>;
+  /** Folded away by a collapsed category. */
+  hidden: boolean;
   streamPreviewChannelId: string | null;
   streamThumbnails: Record<string, string>;
-  user: User | null;
   canManageChannels: boolean;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  onUserContextMenu: (
-    e: React.MouseEvent,
-    target: {
-      id: string;
-      username: string;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      avatar_display?: User["avatar_display"];
-    },
-  ) => void;
-  onCreateChannel: (categoryId: string | null) => void;
-  onEditChannel: (channel: Channel) => void;
-  onInviteToChannel: (channel: Channel) => void;
-  onPopoverUser: (
-    u: {
-      id: string;
-      username: string;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      avatar_display?: User["avatar_display"];
-    },
-    anchor: HTMLElement,
-  ) => void;
+  onUserContextMenu: (e: React.MouseEvent, target: VoiceMemberTarget) => void;
+  uiDispatch: React.Dispatch<SidebarAction>;
   onWatchStream?: (channelId: string, userId: string) => void;
 }
 
@@ -285,48 +268,65 @@ function VoiceChannelMediaDisplay({
   isRemoving: boolean;
   readOnly?: boolean;
 }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Channel media is decoration in a list: a still frame at rest, playing
+  // only while it is hovered or focused (spec §6: nothing loops at rest).
+  const play = () => void videoRef.current?.play().catch(() => {});
+  const pause = () => videoRef.current?.pause();
   return (
-    <div className="group/media relative overflow-hidden rounded-xl border border-white/8 bg-black/30 shadow-[0_16px_34px_rgba(0,0,0,0.28)]">
+    <div
+      className="group/media relative overflow-hidden rounded-lg border border-line bg-ply-2"
+      onPointerEnter={play}
+      onPointerLeave={pause}
+      onFocus={play}
+      onBlur={pause}
+    >
       <div
-        className="w-full overflow-hidden bg-black/25"
+        className="w-full overflow-hidden"
         style={{
           aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}`,
         }}
       >
         {media.preview_content_type.startsWith("video/") ? (
           <video
+            ref={videoRef}
             src={getMediaUrl(media.preview_url)}
-            autoPlay
             loop
             muted
             playsInline
+            preload="metadata"
             aria-label="Voice channel media preview"
-            className="h-full w-full object-contain transition-transform duration-200"
+            className="h-full w-full object-contain"
           />
         ) : (
           <img
             src={getAuthAssetUrl(media.preview_url)}
             alt={media.alt_text ?? "Voice channel status media"}
-            className="h-full w-full object-contain transition-transform duration-200"
+            className="h-full w-full object-contain"
             loading="lazy"
           />
         )}
       </div>
 
       {!readOnly && (
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+        <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 aria-label="Change media"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui hover:border-white/30 hover:bg-black/75 hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-md border border-line bg-ply-3 text-ink-2 shadow-float pointer-fine:hover:text-ink-1",
+                  PRESS,
+                  HIT,
+                  "md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100 md:pointer-fine:group-focus-within/media:opacity-100",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   onChange();
                 }}
               >
-                <Edit2 className="h-3.5 w-3.5" />
+                <Icon name="edit" size="sm" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8}>
@@ -340,17 +340,20 @@ function VoiceChannelMediaDisplay({
                 type="button"
                 aria-label="Remove media"
                 disabled={isRemoving}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui hover:border-destructive/50 hover:bg-destructive/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                aria-busy={isRemoving || undefined}
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-md border border-line bg-ply-3 text-ink-2 shadow-float pointer-fine:hover:text-danger-ink",
+                  PRESS,
+                  HIT,
+                  DISABLED,
+                  "md:pointer-fine:opacity-0 md:pointer-fine:group-hover/media:opacity-100 md:pointer-fine:group-focus-within/media:opacity-100",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove();
                 }}
               >
-                {isRemoving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
+                {isRemoving ? <Spinner /> : <Icon name="trash" size="sm" />}
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8}>
@@ -363,7 +366,155 @@ function VoiceChannelMediaDisplay({
   );
 }
 
-function SortableChannelItem({
+/**
+ * The call clock on a voice channel row. It selects only this channel's
+ * start time and ticks inside NumClock, so a second passing re-renders this
+ * leaf and nothing else.
+ */
+function VoiceChannelClock({ channelId }: { channelId: string }) {
+  const startedAt = useChatStore(
+    (s) => s.voiceChannelStartedAt[channelId] ?? null,
+  );
+  if (!startedAt) return null;
+  return <NumClock since={startedAt} size="xs" className="text-ink-3" />;
+}
+
+/**
+ * The trunk inside each occupant leaf: the centre of the channel row's
+ * 20px icon slot (8px row inset + 10), so the guide drops from the speaker
+ * glyph.
+ */
+const VOICE_GUIDE_X = 18;
+/** Occupant rows are 28 (OCCUPANT_ROW, h-7) with a 24px square avatar. */
+const OCCUPANT_ROW_H = 28;
+/** The 32px channel row's 16px glyph ends 8px above the first occupant. */
+const VOICE_GUIDE_STEM = 8;
+
+// ── Occupant leave (talk-tree-spec §5c) ────────────────────────────────────
+// The store drops a person the moment they leave. The tree keeps their row
+// mounted locally for the exit: the LED goes out and the row fades over
+// 140ms, then the siblings close up over 200ms on a height-free collapse
+// (a negative margin of one row, from the row-height var; nothing measured).
+// Never on first paint, under reduced motion, or while the app is inactive.
+
+export const OCCUPANT_LEAVE_FADE_MS = 140;
+export const OCCUPANT_LEAVE_CLOSE_MS = 200;
+
+const LEAVING_ROW_STYLE: React.CSSProperties = {
+  opacity: 0,
+  marginBottom: "calc(var(--rm-tree-rh) * -1)",
+  transition: `opacity ${OCCUPANT_LEAVE_FADE_MS}ms var(--ease-out), margin-bottom ${OCCUPANT_LEAVE_CLOSE_MS}ms var(--ease-in-out) ${OCCUPANT_LEAVE_FADE_MS}ms`,
+  pointerEvents: "none",
+};
+
+export interface OccupantRow<T> {
+  item: T;
+  key: string;
+  leaving: boolean;
+}
+
+interface LeavingRows<T> {
+  items: readonly T[];
+  leaving: { item: T; key: string; index: number }[];
+}
+
+function mergeLeavingRows<T>(
+  state: LeavingRows<T>,
+  keyOf: (item: T) => string,
+): OccupantRow<T>[] {
+  const rows: OccupantRow<T>[] = state.items.map((item) => ({
+    item,
+    key: keyOf(item),
+    leaving: false,
+  }));
+  for (const entry of [...state.leaving].sort((a, b) => a.index - b.index)) {
+    rows.splice(Math.min(entry.index, rows.length), 0, {
+      item: entry.item,
+      key: entry.key,
+      leaving: true,
+    });
+  }
+  return rows;
+}
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/**
+ * `items` plus the rows that just left, flagged `leaving`, held in their
+ * old place for the exit and dropped when it ends. A key that comes back
+ * mid-exit returns as a normal row.
+ */
+export function useLeavingRows<T>(
+  items: readonly T[],
+  keyOf: (item: T) => string,
+): OccupantRow<T>[] {
+  const painted = useAnimateEnter();
+  const appActive = useAppActive();
+  const [state, setState] = useState<LeavingRows<T>>(() => ({
+    items,
+    leaving: [],
+  }));
+
+  let current = state;
+  if (state.items !== items) {
+    // Derive during render (the documented pattern for state from props),
+    // so the departing row never blinks out for a frame.
+    const nextKeys = new Set(items.map(keyOf));
+    const kept = state.leaving.filter((entry) => !nextKeys.has(entry.key));
+    const animate = painted && appActive && !prefersReducedMotion();
+    const gone = animate
+      ? mergeLeavingRows(state, keyOf)
+          .map((row, index) => ({ ...row, index }))
+          .filter((row) => !row.leaving && !nextKeys.has(row.key))
+          .map(({ item, key, index }) => ({ item, key, index }))
+      : [];
+    current = { items, leaving: [...kept, ...gone] };
+    setState(current);
+  }
+
+  // Drop each departed row once its exit has played.
+  const timersRef = useRef(new Map<string, number>());
+  useEffect(() => {
+    const timers = timersRef.current;
+    const leavingKeys = new Set(state.leaving.map((entry) => entry.key));
+    for (const [key, timer] of timers) {
+      if (leavingKeys.has(key)) continue;
+      window.clearTimeout(timer);
+      timers.delete(key);
+    }
+    for (const key of leavingKeys) {
+      if (timers.has(key)) continue;
+      timers.set(
+        key,
+        window.setTimeout(() => {
+          timers.delete(key);
+          setState((prev) => ({
+            ...prev,
+            leaving: prev.leaving.filter((entry) => entry.key !== key),
+          }));
+        }, OCCUPANT_LEAVE_FADE_MS + OCCUPANT_LEAVE_CLOSE_MS),
+      );
+    }
+  }, [state.leaving]);
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
+
+  return useMemo(() => mergeLeavingRows(current, keyOf), [current, keyOf]);
+}
+
+const occupantKey = (member: VoiceChannelMember) => member.clerk_user_id;
+
+const SortableChannelItem = memo(function SortableChannelItem({
   channel,
   isActive,
   unread,
@@ -376,22 +527,18 @@ function SortableChannelItem({
   listenTogetherRoomSlug,
   currentUserId,
   isDraggable,
-  groupId: _groupId,
-  speakingUsers,
+  hidden,
   streamPreviewChannelId,
   streamThumbnails,
-  user: _user,
   canManageChannels,
   onSelect,
   onContextMenu,
   onUserContextMenu,
-  onCreateChannel: _onCreateChannel,
-  onEditChannel,
-  onInviteToChannel,
-  onPopoverUser,
+  uiDispatch,
   onWatchStream,
 }: SortableChannelItemProps) {
   const { dispatch } = useChatActions();
+  const channelLongPress = useLongPressMenu((e) => onContextMenu(e, channel));
   // Combine server-wide permission with per-channel override
   const canManage =
     canManageChannels ||
@@ -416,27 +563,26 @@ function SortableChannelItem({
     zIndex: isDragging ? 50 : undefined,
   };
 
-  const voiceStartedAt = useChatStore((s) =>
-    isVoice && vcMembers.length > 0
-      ? (s.voiceChannelStartedAt[channel.id] ?? null)
-      : null,
-  );
-  const uptime = useUptime(voiceStartedAt, isVoice && vcMembers.length > 0);
+  const occupantRows = useLeavingRows(vcMembers, occupantKey);
+  const occupied = isVoice && vcMembers.length > 0;
   const currentVoiceMember =
     vcMembers.find((member) => member.clerk_user_id === currentUserId) ?? null;
-  const shouldRenderVoiceStatus = Boolean(
+  const youAreHere = Boolean(
     isVoice &&
     currentVoiceMember &&
     localVoiceConnected &&
+    localVoiceChannelId === channel.id,
+  );
+  const shouldRenderVoiceStatus = Boolean(
+    youAreHere &&
     localVoiceSessionId &&
-    localVoiceChannelId === channel.id &&
+    currentVoiceMember &&
     !isVoiceMemberReconnecting(currentVoiceMember),
   );
   const currentStatusText = channel.voice_status?.text ?? null;
   const textStatus = currentStatusText?.trim() ?? "";
   const mediaStatus = channel.voice_status?.media ?? null;
   const textStatusLabel = textStatus ? "Edit status" : "Set status";
-  const mediaStatusLabel = mediaStatus ? "Change media" : "Set media";
   const voiceSessionHeaders = localVoiceSessionId
     ? { "X-Voice-Session-Id": localVoiceSessionId }
     : undefined;
@@ -445,9 +591,10 @@ function SortableChannelItem({
   const shouldRenderVoiceStatusReadOnly = Boolean(
     isVoice &&
     !shouldRenderVoiceStatus &&
-    vcMembers.length > 0 &&
+    occupied &&
     (textStatus || mediaStatus),
   );
+  const actionCount = canManage ? 2 : 1;
 
   const handleRemoveVoiceMedia = async () => {
     if (!mediaStatus || isRemovingVoiceMedia) return;
@@ -471,124 +618,190 @@ function SortableChannelItem({
     }
   };
 
-  return (
-    <div ref={setNodeRef} style={style}>
-      <div
+  const onPopoverUser = useCallback(
+    (u: VoiceMemberTarget, anchor: HTMLElement) =>
+      uiDispatch({ type: "SET_POPOVER_USER", user: u, anchor }),
+    [uiDispatch],
+  );
+
+  const row = (
+    <div
+      className={sidebarRowClass({
+        tree: true,
+        selected: isActive,
+        unread,
+        className: cn("cursor-pointer", isActive && "font-semibold"),
+      })}
+      style={
+        { "--row-actions-w": `${actionCount * 26}px` } as React.CSSProperties
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(channel.id)}
+        onContextMenu={(e) => onContextMenu(e, channel)}
+        {...channelLongPress}
+        aria-label={`Open ${isVoice ? "voice" : "text"} channel ${channel.name}`}
+        aria-current={isActive ? "page" : undefined}
         className={cn(
-          "group relative mb-0.5 mx-2 flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors outline-none",
-          isActive
-            ? "bg-rm-bg-active text-rm-text"
-            : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
-          unread && !isActive && "text-rm-text font-semibold",
+          "absolute inset-0 z-10 rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus",
+          LONG_PRESS_TARGET,
         )}
-      >
-        <button
-          type="button"
-          onClick={() => onSelect(channel.id)}
-          onContextMenu={(e) => onContextMenu(e, channel)}
-          aria-label={`Open ${isVoice ? "voice" : "text"} channel ${channel.name}`}
-          className="absolute inset-0 z-10 rounded-md outline-none"
-        />
-        {/* Drag handle */}
-        {isDraggable && (
-          <GripVertical
-            className="relative z-20 h-3 w-3 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40 hover:!opacity-80"
-            {...attributes}
-            {...listeners}
-          />
-        )}
-
-        {isVoice ? (
-          <Volume2 className="h-4 w-4 shrink-0 opacity-60" />
-        ) : (
-          <Hash className="h-4 w-4 shrink-0 opacity-60" />
-        )}
-
-        <InlineEmojiText
-          text={channel.name}
-          className="flex-1 truncate text-ui-base font-medium"
-        />
-
-        {/* Icons column */}
-        <div className="flex items-center gap-1">
-          {/* Mention count badge */}
-          {mentionCount > 0 && (
-            <div className="badge-count">
-              {mentionCount > 99 ? "99+" : mentionCount}
-            </div>
-          )}
-          {/* Voice channel uptime — visible by default, hidden on hover */}
-          {uptime && (
-            <span className="text-ui-2xs font-medium tabular-nums text-rm-success block group-hover:hidden translate-y-px">
-              {uptime}
-            </span>
-          )}
-          {/* Action buttons (mutually exclusive with uptime) */}
-          <div
-            className={cn(
-              "relative z-20 items-center gap-1",
-              uptime ? "hidden group-hover:flex" : "flex",
-            )}
-          >
-            {canManage && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Channel settings"
-                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-rm-bg-hover"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditChannel(channel);
-                    }}
-                  >
-                    <Settings className="h-3.5 w-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={8}>
-                  Channel settings
-                </TooltipContent>
-              </Tooltip>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Invite to channel"
-                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-rm-bg-hover"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onInviteToChannel(channel);
-                  }}
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={8}>
-                Invite to channel
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-
-        {/* Unread dot */}
-        {unread && (
-          <div className="absolute -left-2 h-2 w-1 rounded-r-full bg-rm-text" />
-        )}
-      </div>
-
-      {isVoice && localVoiceChannelId === channel.id && (
-        <ListenTogetherSidebarStatus roomSlug={listenTogetherRoomSlug} />
+      />
+      {/* Drag handle: sits in the list's 8px gutter so it takes no width
+          from the row; revealed on fine-pointer hover only. */}
+      {isDraggable && (
+        <span
+          className="absolute top-1/2 -left-2 z-20 flex h-5 w-2 -translate-y-1/2 cursor-grab items-center justify-center text-ink-3 opacity-0 transition-opacity duration-(--dur-1) active:cursor-grabbing pointer-fine:group-hover:opacity-100"
+          {...attributes}
+          {...listeners}
+        >
+          <Icon name="dragHandle" size="xs" />
+        </span>
       )}
 
-      {shouldRenderVoiceStatus && (
-        <>
-          <div className="mb-1 ml-7 mr-2">
+      <span
+        className={cn(SIDEBAR_ICON_SLOT, youAreHere && "text-path")}
+        data-path={youAreHere ? "" : undefined}
+      >
+        <Icon name={getChannelIcon(channel)} size="sm" />
+      </span>
+
+      <InlineEmojiText
+        text={channel.name}
+        className={cn("min-w-0 flex-1 truncate", ROW_NAME_FADE)}
+      />
+
+      {/* Trailing meta: steps aside while the hover actions show. */}
+      {(mentionCount > 0 || occupied) && (
+        <span
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 text-ink-3",
+            ROW_META_SWAP,
+          )}
+        >
+          {occupied && (
+            <>
+              <Num aria-label={`${vcMembers.length} in the call`}>
+                {vcMembers.length}
+              </Num>
+              <span aria-hidden className="text-num-xs">
+                ·
+              </span>
+              <VoiceChannelClock channelId={channel.id} />
+            </>
+          )}
+          {mentionCount > 0 && <CountBadge count={mentionCount} />}
+        </span>
+      )}
+
+      {/* Hover actions overlay the trailing edge; nothing is reserved. */}
+      <span className={ROW_ACTIONS}>
+        {canManage && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Channel settings"
+                className={ROW_ACTION_BUTTON}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  uiDispatch({
+                    type: "SET_CHANNEL_SETTINGS",
+                    value: channel.id,
+                  });
+                }}
+              >
+                <Icon name="settings" size="sm" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={8}>
+              Channel settings
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Invite to channel"
+              className={ROW_ACTION_BUTTON}
+              onClick={(e) => {
+                e.stopPropagation();
+                uiDispatch({ type: "SET_INVITE_CHANNEL", value: channel.id });
+              }}
+            >
+              <Icon name="invite" size="sm" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={8}>
+            Invite to channel
+          </TooltipContent>
+        </Tooltip>
+      </span>
+
+      {unread && <span aria-hidden className={SIDEBAR_UNREAD_PILL} />}
+    </div>
+  );
+
+  return (
+    // Collapse: each row closes on the height-free grid track, so a
+    // category folds without measuring and rows that stay (the open
+    // channel, your call) keep their place.
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="rm-collapse -mx-2"
+      data-open={hidden ? undefined : ""}
+      inert={hidden || undefined}
+    >
+      <div className="rm-collapse-inner px-2">
+        {isVoice ? (
+          <TreeBranch
+            header={row}
+            guideX={VOICE_GUIDE_X}
+            rowHeight={OCCUPANT_ROW_H}
+            stem={VOICE_GUIDE_STEM}
+            data-you-are-here={youAreHere ? "" : undefined}
+          >
+            {occupantRows.map(({ item: m, leaving }) => (
+              <VoiceOccupantLeaf
+                key={m.clerk_user_id}
+                member={m}
+                leaving={leaving}
+                channelId={channel.id}
+                isCurrentUser={m.clerk_user_id === currentUserId}
+                isCurrentClientVoiceConnected={
+                  localVoiceConnected && localVoiceChannelId === channel.id
+                }
+                streamThumbnailUrl={
+                  streamPreviewChannelId === channel.id
+                    ? (streamThumbnails[m.clerk_user_id] ??
+                      m.stream_preview_url ??
+                      null)
+                    : (m.stream_preview_url ?? null)
+                }
+                onContextMenu={onUserContextMenu}
+                onPopoverUser={onPopoverUser}
+                onWatchStream={onWatchStream}
+              />
+            ))}
+          </TreeBranch>
+        ) : (
+          row
+        )}
+
+        {isVoice && localVoiceChannelId === channel.id && (
+          <ListenTogetherSidebarStatus roomSlug={listenTogetherRoomSlug} />
+        )}
+
+        {shouldRenderVoiceStatus && (
+          <div className="flex flex-col gap-1 pt-0.5 pb-1 pl-7">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-rm-bg-hover"
+                  className="group/text flex h-6 max-w-full items-center gap-1.5 self-start rounded-sm px-1.5 text-left text-ui-xs font-medium outline-none transition-colors duration-(--dur-1) pointer-fine:hover:bg-tint-1 focus-visible:outline-2 focus-visible:outline-focus"
                   onClick={(event) => {
                     event.stopPropagation();
                     setIsVoiceTextStatusOpen(true);
@@ -596,26 +809,26 @@ function SortableChannelItem({
                 >
                   <span
                     className={cn(
-                      "truncate text-ui-xs font-medium leading-4",
-                      textStatus
-                        ? "text-rm-text-secondary"
-                        : "text-rm-text-muted",
+                      "truncate",
+                      textStatus ? "text-ink-2" : "text-ink-3",
                     )}
                   >
                     <InlineEmojiText
                       text={textStatus || "Set a channel status"}
                     />
                   </span>
-                  <Edit2 className="h-3 w-3 shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text" />
+                  <Icon
+                    name="edit"
+                    size="xs"
+                    className="shrink-0 text-ink-3 transition-colors pointer-fine:group-hover/text:text-ink-1"
+                  />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={8}>
                 {textStatusLabel}
               </TooltipContent>
             </Tooltip>
-          </div>
 
-          <div className="mb-2 ml-7 mr-2">
             {mediaStatus ? (
               <VoiceChannelMediaDisplay
                 media={mediaStatus}
@@ -626,49 +839,31 @@ function SortableChannelItem({
                 }}
               />
             ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-bg-hover/50 px-4 py-4 text-left text-rm-text-muted transition-colors hover:border-primary/35 hover:bg-rm-bg-hover hover:text-rm-text sm:min-h-[108px]"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setIsVoiceMediaStatusOpen(true);
-                    }}
-                  >
-                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-rm-bg-hover text-rm-text-muted transition-colors group-hover/vibe:bg-rm-bg-active group-hover/vibe:text-rm-text">
-                      <Sparkles className="h-4 w-4" />
-                    </div>
-                    <span className="text-ui-sm font-semibold text-rm-text">
-                      Set the vibe
-                    </span>
-                    <span className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
-                      Add a GIF, still image, or short clip for this channel.
-                    </span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={8}>
-                  {mediaStatusLabel}
-                </TooltipContent>
-              </Tooltip>
+              <button
+                type="button"
+                className="flex h-6 items-center gap-1.5 self-start rounded-sm px-1.5 text-ui-xs font-medium text-ink-3 outline-none transition-colors duration-(--dur-1) pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-focus"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsVoiceMediaStatusOpen(true);
+                }}
+              >
+                <Icon name="sparkle" size="xs" className="shrink-0" />
+                Set the vibe
+              </button>
             )}
           </div>
-        </>
-      )}
+        )}
 
-      {/* Read-only voice channel status — visible to users not currently in the voice channel */}
-      {shouldRenderVoiceStatusReadOnly && (
-        <>
-          {textStatus && (
-            <div className="mb-1 ml-7 mr-2">
-              <span className="inline-block max-w-full truncate px-1 py-0.5 text-ui-xs font-medium leading-4 text-rm-text-secondary">
+        {/* Read-only voice channel status — visible to users not currently in the voice channel */}
+        {shouldRenderVoiceStatusReadOnly && (
+          <div className="flex flex-col gap-1 pt-0.5 pb-1 pl-7">
+            {textStatus && (
+              <span className="block max-w-full truncate px-1.5 text-ui-xs leading-6 font-medium text-ink-2">
                 <InlineEmojiText text={textStatus} />
               </span>
-            </div>
-          )}
+            )}
 
-          {mediaStatus && (
-            <div className="mb-2 ml-7 mr-2">
+            {mediaStatus && (
               <VoiceChannelMediaDisplay
                 media={mediaStatus}
                 isRemoving={false}
@@ -680,57 +875,27 @@ function SortableChannelItem({
                   /* no-op: read-only */
                 }}
               />
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </div>
+        )}
+      </div>
 
-      {/* Voice Members List */}
-      {isVoice && vcMembers.length > 0 && (
-        <div className="mb-2 ml-7 flex flex-col gap-0.5">
-          {vcMembers.map((m) => (
-            <VoiceChannelMemberRow
-              key={m.clerk_user_id}
-              member={m}
-              channelId={channel.id}
-              isCurrentUser={m.clerk_user_id === currentUserId}
-              isCurrentClientVoiceConnected={
-                localVoiceConnected && localVoiceChannelId === channel.id
-              }
-              isSpeaking={!!speakingUsers[m.clerk_user_id]}
-              streamThumbnailUrl={
-                streamPreviewChannelId === channel.id
-                  ? (streamThumbnails[m.clerk_user_id] ??
-                    m.stream_preview_url ??
-                    null)
-                  : (m.stream_preview_url ?? null)
-              }
-              onContextMenu={onUserContextMenu}
-              onPopoverUser={onPopoverUser}
-              onWatchStream={onWatchStream}
-            />
-          ))}
-        </div>
-      )}
+      <VoiceChannelTextStatusModal
+        open={isVoiceTextStatusOpen}
+        channel={channel}
+        voiceSessionId={localVoiceSessionId}
+        onClose={() => setIsVoiceTextStatusOpen(false)}
+      />
 
-      <>
-        <VoiceChannelTextStatusModal
-          open={isVoiceTextStatusOpen}
-          channel={channel}
-          voiceSessionId={localVoiceSessionId}
-          onClose={() => setIsVoiceTextStatusOpen(false)}
-        />
-
-        <VoiceChannelMediaStatusModal
-          open={isVoiceMediaStatusOpen}
-          channel={channel}
-          voiceSessionId={localVoiceSessionId}
-          onClose={() => setIsVoiceMediaStatusOpen(false)}
-        />
-      </>
+      <VoiceChannelMediaStatusModal
+        open={isVoiceMediaStatusOpen}
+        channel={channel}
+        voiceSessionId={localVoiceSessionId}
+        onClose={() => setIsVoiceMediaStatusOpen(false)}
+      />
     </div>
   );
-}
+});
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -794,21 +959,9 @@ export default function ChannelSidebar({
   canReorder = false,
   canManageChannels = false,
 }: Props) {
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    const timeout = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(timeout);
-  }, []);
-  const isMiku =
-    mounted &&
-    (resolvedTheme === "miku-light" || resolvedTheme === "miku-dark");
-  const isSpiderman =
-    mounted &&
-    (resolvedTheme === "spiderman-light" || resolvedTheme === "spiderman-dark");
-  const { user, speakingUsers } = useChatStore(
-    useShallow((s) => ({ user: s.user, speakingUsers: s.speakingUsers })),
-  );
+  // The sidebar never subscribes to the speaking set: each occupant leaf
+  // selects its own flag (useSpeakingAttr), so a VAD edge re-renders one row.
+  const user = useChatStore((s) => s.user);
   const effectiveCurrentUserId = currentUserId ?? user?.id ?? null;
   const {
     deleteChannel,
@@ -821,9 +974,13 @@ export default function ChannelSidebar({
     createChannel,
   } = useChatActions();
 
-  // DnD sensors
+  // DnD sensors. Mouse drags after 5px; touch needs a 250ms hold first, so a
+  // finger scrolling the list never picks up a channel.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 8 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -918,6 +1075,9 @@ export default function ChannelSidebar({
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
   const [voiceMemberMenu, setVoiceMemberMenu] =
     useState<VoiceMemberContextMenuTarget | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
+    null,
+  );
 
   const {
     handleChannelContextMenu,
@@ -929,8 +1089,7 @@ export default function ChannelSidebar({
     serverId: serverId ?? undefined,
     onInviteClick,
     onSettingsClick,
-    deleteChannel,
-    deleteCategory,
+    onRequestDelete: setPendingDelete,
     uiDispatch,
     openMenu,
     markChannelRead,
@@ -959,11 +1118,17 @@ export default function ChannelSidebar({
     [],
   );
 
-  const toggleCategory = (catId: string) => {
-    uiDispatch({ type: "TOGGLE_CATEGORY", id: catId });
-  };
+  const toggleCategory = useCallback(
+    (catId: string) => {
+      uiDispatch({ type: "TOGGLE_CATEGORY", id: catId });
+    },
+    [uiDispatch],
+  );
 
-  const grouped = groupChannelsByCategory(channels, categories);
+  const grouped = useMemo(
+    () => groupChannelsByCategory(channels, categories),
+    [channels, categories],
+  );
 
   // Handle drag end — reorder channels within a category group
   const handleDragEnd = useCallback(
@@ -1022,61 +1187,35 @@ export default function ChannelSidebar({
   );
 
   return (
-    <TooltipProvider delayDuration={0}>
+    <TooltipProvider>
       <div
-        className="flex h-full flex-col bg-rm-bg-secondary select-none border-x border-rm-border overflow-hidden"
+        className="flex h-full flex-col overflow-hidden bg-ply-1 select-none"
         onContextMenu={handleSidebarContextMenu}
       >
-        {/* Server Header */}
-        {isMiku || isSpiderman ? (
-          <button
-            type="button"
-            className="server-banner-box flex cursor-pointer flex-col justify-start p-4 relative border-b-2 border-rm-border select-none outline-none group/banner overflow-hidden shrink-0"
-            aria-label="Open server menu"
-            onClick={handleServerHeaderClick}
-          >
-            <div className="server-banner-content relative z-10 text-white flex flex-col items-start w-full">
-              <h1 className="font-black text-[20px] tracking-wide leading-tight uppercase truncate max-w-full drop-shadow-md">
-                {serverName.split(" ").map((word, i) => (
-                  <span key={i} className="block">
-                    <InlineEmojiText text={word} />
-                  </span>
-                ))}
-              </h1>
-              <div className="flex items-center gap-2 mt-1 opacity-90">
-                <span className="font-black text-lg text-white/50">
-                  {isMiku ? "01" : "🕸️"}
-                </span>
-                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
-                  {isMiku ? "初音ミク" : "SPIDER-MAN"}
-                </span>
-              </div>
-            </div>
-            <ChevronDown className="absolute right-3 bottom-3 h-4 w-4 text-rm-text/75 dark:text-white/60 group-hover/banner:opacity-100 transition-opacity z-10" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="flex cursor-pointer items-center justify-between border-b border-rm-border px-4 font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
-            style={{
-              height: "calc(48px + var(--safe-area-top, 0px))",
-              paddingTop: "var(--safe-area-top, 0px)",
-            }}
-            aria-label="Open server menu"
-            onClick={handleServerHeaderClick}
-          >
-            <div className="flex items-center min-w-0">
-              <InlineEmojiText
-                text={serverName}
-                className="truncate text-ui-base"
-              />
-              <ChevronDown className="ml-1 h-4 w-4 shrink-0 text-rm-text-muted" />
-            </div>
-          </button>
-        )}
+        {/* Server header: 48px, Bricolage 17/800 with the chevron on the
+            far edge. The theme banner slot decorates it without changing
+            its structure. */}
+        <button
+          type="button"
+          className="relative flex shrink-0 cursor-pointer items-center justify-between gap-2 border-b border-line px-4 text-left font-display-tuned text-[17px] leading-6 font-extrabold tracking-[-0.01em] text-ink-1 outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1 active:bg-tint-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+          style={{
+            height: "calc(48px + var(--safe-area-top, 0px))",
+            paddingTop: "var(--safe-area-top, 0px)",
+          }}
+          aria-label="Open server menu"
+          onClick={handleServerHeaderClick}
+        >
+          <InlineEmojiText text={serverName} className="min-w-0 truncate" />
+          <Icon
+            name="chevronDown"
+            size="sm"
+            className="relative z-10 shrink-0 text-ink-2"
+          />
+          <ThemeBanner />
+        </button>
 
-        {/* Channels List */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-2 px-2">
+        {/* The Talk Tree */}
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-2">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -1099,8 +1238,6 @@ export default function ChannelSidebar({
                 streamPreviewChannelId={streamPreviewChannelId}
                 streamThumbnails={streamThumbnails}
                 currentUserId={effectiveCurrentUserId}
-                user={user}
-                speakingUsers={speakingUsers}
                 canReorder={canReorder}
                 canManageChannels={canManageChannels}
                 onSelect={onSelect}
@@ -1178,6 +1315,21 @@ export default function ChannelSidebar({
           />
         )}
 
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingDelete(null);
+          }}
+          irreversible
+          {...deleteConfirmCopy(pendingDelete)}
+          onConfirm={() => {
+            if (!pendingDelete) return;
+            return pendingDelete.kind === "channel"
+              ? deleteChannel(pendingDelete.id)
+              : deleteCategory(pendingDelete.serverId, pendingDelete.id);
+          }}
+        />
+
         {/* Context Menu Placeholder */}
         <div id="channel-context-menu" />
         {menu.isOpen && (
@@ -1214,13 +1366,34 @@ export default function ChannelSidebar({
 
 // ── Shared Sub-components & Hooks ────────────────────────────────────────────────
 
+/** A delete waiting on its ConfirmDialog. */
+type PendingDelete =
+  | { kind: "channel"; id: string; name: string }
+  | { kind: "category"; serverId: string; id: string; name: string };
+
+function deleteConfirmCopy(target: PendingDelete | null) {
+  if (target?.kind === "category") {
+    return {
+      title: "Delete category",
+      description: `${target.name} will be deleted. Its channels stay and move out of the category.`,
+      confirmLabel: "Delete category",
+      errorAction: "delete this category",
+    };
+  }
+  return {
+    title: "Delete channel",
+    description: `#${target?.name ?? ""} and all of its messages will be deleted. This can't be undone.`,
+    confirmLabel: "Delete channel",
+    errorAction: "delete this channel",
+  };
+}
+
 interface UseSidebarContextMenusProps {
   canManageChannels: boolean;
   serverId?: string;
   onInviteClick?: () => void;
   onSettingsClick?: () => void;
-  deleteChannel: (id: string) => void;
-  deleteCategory: (serverId: string, categoryId: string) => void;
+  onRequestDelete: (target: PendingDelete) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
   openMenu: (e: React.MouseEvent, items: any[]) => void;
   markChannelRead: (channelId: string) => void;
@@ -1237,8 +1410,7 @@ function useSidebarContextMenus({
   serverId,
   onInviteClick,
   onSettingsClick,
-  deleteChannel,
-  deleteCategory,
+  onRequestDelete,
   uiDispatch,
   openMenu,
   markChannelRead,
@@ -1251,44 +1423,47 @@ function useSidebarContextMenus({
         (channel.permissions != null &&
           hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
       const items = [
-        // ── Mark As Read ───────────────────────────────────────────────
+        // ── Mark as read ───────────────────────────────────────────────
         {
-          label: "Mark As Read",
-          icon: <CheckCheck className="h-4 w-4" />,
+          label: "Mark as read",
+          icon: <Icon name="markRead" size="sm" />,
           onClick: () => markChannelRead(channel.id),
           divider: true,
         },
         // ── Invite / Link ──────────────────────────────────────────────
         {
-          label: "Invite to Channel",
-          icon: <UserPlus className="h-4 w-4" />,
+          label: "Invite to channel",
+          icon: <Icon name="invite" size="sm" />,
           onClick: () =>
             uiDispatch({ type: "SET_INVITE_CHANNEL", value: channel.id }),
         },
         {
-          label: "Copy Link",
-          icon: <Link className="h-4 w-4" />,
+          label: "Copy link",
+          icon: <Icon name="link" size="sm" />,
           onClick: () => {
-            const path = `/channels/${serverId ?? ""}/${channel.id}`;
-            navigator.clipboard.writeText(`${window.location.origin}${path}`);
+            const path = `/chat/${serverId ?? ""}/${channel.id}`;
+            void copyToClipboard(
+              `${window.location.origin}${path}`,
+              "Channel link copied",
+            );
           },
           divider: true,
         },
         // ── Notifications (placeholders — need backend) ────────────────
         {
-          label: "Mute Channel",
-          icon: <VolumeX className="h-4 w-4" />,
-          rightIcon: <ChevronRight className="h-3.5 w-3.5" />,
+          label: "Mute channel",
+          icon: <Icon name="speakerOff" size="sm" />,
+          rightIcon: <Icon name="chevronRight" size="xs" />,
           onClick: () => {
             /* needs backend: per-user per-channel mute */
           },
           disabled: true,
         },
         {
-          label: "Notification Settings",
-          subtitle: "All Messages",
-          icon: <Bell className="h-4 w-4" />,
-          rightIcon: <ChevronRight className="h-3.5 w-3.5" />,
+          label: "Notification settings",
+          subtitle: "All messages",
+          icon: <Icon name="bell" size="sm" />,
+          rightIcon: <Icon name="chevronRight" size="xs" />,
           onClick: () => {
             /* needs backend: per-user per-channel notification prefs */
           },
@@ -1299,8 +1474,8 @@ function useSidebarContextMenus({
         ...(channelCanManage
           ? [
               {
-                label: "Edit Channel",
-                icon: <Settings className="h-4 w-4" />,
+                label: "Edit channel",
+                icon: <Icon name="settings" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CHANNEL_SETTINGS",
@@ -1308,8 +1483,8 @@ function useSidebarContextMenus({
                   }),
               },
               {
-                label: "Duplicate Channel",
-                icon: <CopyPlus className="h-4 w-4" />,
+                label: "Duplicate channel",
+                icon: <Icon name="copy" size="sm" />,
                 onClick: () => {
                   if (serverId) {
                     createChannel(
@@ -1326,8 +1501,8 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Create Text Channel",
-                icon: <PlusCircle className="h-4 w-4" />,
+                label: "Create text channel",
+                icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1339,35 +1514,36 @@ function useSidebarContextMenus({
         ...(channelCanManage
           ? [
               {
-                label: "Delete Channel",
-                icon: <Trash2 className="h-4 w-4" />,
-                onClick: () => {
-                  if (confirm(`Delete channel "${channel.name}"?`)) {
-                    deleteChannel(channel.id);
-                  }
-                },
+                label: "Delete channel",
+                icon: <Icon name="trash" size="sm" />,
+                onClick: () =>
+                  onRequestDelete({
+                    kind: "channel",
+                    id: channel.id,
+                    name: channel.name,
+                  }),
                 variant: "danger" as const,
                 divider: true,
               },
             ]
           : [{ label: "", onClick: () => {}, divider: true, disabled: true }]),
-        // ── Copy Channel ID ────────────────────────────────────────────
+        // ── Copy channel ID ────────────────────────────────────────────
         {
-          label: "Copy Channel ID",
-          icon: <Copy className="h-4 w-4" />,
+          label: "Copy channel ID",
+          icon: <Icon name="copy" size="sm" />,
           rightIcon: (
-            <span className="text-ui-2xs font-bold bg-rm-bg-surface border border-rm-border rounded px-1 py-0.5 leading-none">
+            <span className="rounded-xs bg-tint-2 px-1 text-ui-xs font-medium text-ink-2">
               ID
             </span>
           ),
-          onClick: () => navigator.clipboard.writeText(channel.id),
+          onClick: () => void copyToClipboard(channel.id, "Channel ID copied"),
         },
       ];
       openMenu(e, items);
     },
     [
       canManageChannels,
-      deleteChannel,
+      onRequestDelete,
       openMenu,
       uiDispatch,
       markChannelRead,
@@ -1383,8 +1559,8 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Create Channel",
-                icon: <Plus className="h-4 w-4" />,
+                label: "Create channel",
+                icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1395,19 +1571,22 @@ function useSidebarContextMenus({
           : []),
         {
           label: "Copy ID",
-          icon: <Copy className="h-4 w-4" />,
-          onClick: () => navigator.clipboard.writeText(group.id!),
+          icon: <Icon name="copy" size="sm" />,
+          onClick: () => void copyToClipboard(group.id!, "Category ID copied"),
         },
         ...(canManageChannels
           ? [
               {
-                label: "Delete Category",
-                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete category",
+                icon: <Icon name="trash" size="sm" />,
                 onClick: () => {
                   if (serverId && group.id) {
-                    if (confirm(`Delete category "${group.name}"?`)) {
-                      deleteCategory(serverId, group.id);
-                    }
+                    onRequestDelete({
+                      kind: "category",
+                      serverId,
+                      id: group.id,
+                      name: group.name,
+                    });
                   }
                 },
                 variant: "danger" as const,
@@ -1416,7 +1595,7 @@ function useSidebarContextMenus({
           : []),
       ]);
     },
-    [canManageChannels, deleteCategory, openMenu, serverId, uiDispatch],
+    [canManageChannels, onRequestDelete, openMenu, serverId, uiDispatch],
   );
 
   const handleSidebarContextMenu = useCallback(
@@ -1425,7 +1604,7 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Create Channel",
+                label: "Create channel",
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1433,21 +1612,22 @@ function useSidebarContextMenus({
                   }),
               },
               {
-                label: "Create Category",
+                label: "Create category",
                 onClick: () =>
                   uiDispatch({ type: "SET_CREATE_CATEGORY", value: true }),
               },
             ]
           : []),
         {
-          label: "Invite to Server",
+          label: "Invite to server",
           divider: true,
           onClick: () => onInviteClick?.(),
         },
         {
           label: "Copy ID",
-          icon: <Copy className="h-4 w-4" />,
-          onClick: () => serverId && navigator.clipboard.writeText(serverId),
+          icon: <Icon name="copy" size="sm" />,
+          onClick: () =>
+            serverId && void copyToClipboard(serverId, "Server ID copied"),
         },
       ]);
     },
@@ -1458,13 +1638,13 @@ function useSidebarContextMenus({
     (e: React.MouseEvent | React.KeyboardEvent) => {
       openMenu(e as unknown as React.MouseEvent, [
         {
-          label: "Server Boost",
-          icon: <Gem className="h-4 w-4" />,
+          label: "Server boost",
+          icon: <Icon name="gem" size="sm" />,
           onClick: () => {},
         },
         {
-          label: "Invite to Server",
-          icon: <UserPlus className="h-4 w-4" />,
+          label: "Invite to server",
+          icon: <Icon name="invite" size="sm" />,
           divider: canManageChannels,
           variant: "default",
           onClick: () => onInviteClick?.(),
@@ -1472,13 +1652,13 @@ function useSidebarContextMenus({
         ...(canManageChannels
           ? [
               {
-                label: "Server Settings",
-                icon: <Settings className="h-4 w-4" />,
+                label: "Server settings",
+                icon: <Icon name="settings" size="sm" />,
                 onClick: () => onSettingsClick?.(),
               },
               {
-                label: "Create Channel",
-                icon: <PlusCircle className="h-4 w-4" />,
+                label: "Create channel",
+                icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1486,43 +1666,43 @@ function useSidebarContextMenus({
                   }),
               },
               {
-                label: "Create Category",
-                icon: <FolderPlus className="h-4 w-4" />,
+                label: "Create category",
+                icon: <Icon name="folderAdd" size="sm" />,
                 onClick: () =>
                   uiDispatch({ type: "SET_CREATE_CATEGORY", value: true }),
               },
               {
-                label: "Create Event",
-                icon: <CalendarPlus className="h-4 w-4" />,
+                label: "Create event",
+                icon: <Icon name="event" size="sm" />,
                 onClick: () => {},
               },
               {
-                label: "App Directory",
-                icon: <LayoutGrid className="h-4 w-4" />,
+                label: "App directory",
+                icon: <Icon name="grid" size="sm" />,
                 divider: true,
                 onClick: () => {},
               },
             ]
           : []),
         {
-          label: "Notification Settings",
-          icon: <Bell className="h-4 w-4" />,
+          label: "Notification settings",
+          icon: <Icon name="bell" size="sm" />,
           onClick: () => {},
         },
         {
-          label: "Privacy Settings",
-          icon: <Shield className="h-4 w-4" />,
+          label: "Privacy settings",
+          icon: <Icon name="shield" size="sm" />,
           divider: true,
           onClick: () => {},
         },
         {
           label: "Edit Per-server Profile",
-          icon: <Edit2 className="h-4 w-4" />,
+          icon: <Icon name="edit" size="sm" />,
           onClick: () => {},
         },
         {
-          label: "Hide Muted Channels",
-          icon: <EyeOff className="h-4 w-4" />,
+          label: "Hide muted channels",
+          icon: <Icon name="eyeOff" size="sm" />,
           onClick: () => {},
         },
       ]);
@@ -1538,52 +1718,38 @@ function useSidebarContextMenus({
   };
 }
 
-// ── Voice Channel Member Row ────────────────────────────────────────────────
-// Resolves the user's avatar from the server members store as a fallback when
-// the gateway-provided VoiceChannelMember.avatar_url is missing (e.g. when the
-// user hasn't uploaded a custom avatar and the Clerk profile fetch didn't run).
+// ── Voice occupant leaf ─────────────────────────────────────────────────────
+// One person hanging off the voice channel's guide. Its LED is the node at
+// the tick's end and lights from this leaf's own speaking flag
+// (useSpeakingAttr), so a VAD edge re-renders this row and nothing else.
+// Resolves the avatar from the members store when the gateway-provided
+// VoiceChannelMember.avatar_url is missing.
 
-interface VoiceChannelMemberRowProps {
+interface VoiceOccupantLeafProps {
   member: VoiceChannelMember;
+  /** Left the channel: held for the exit (LED out, fade, close up). */
+  leaving?: boolean;
   channelId: string;
   isCurrentUser: boolean;
   isCurrentClientVoiceConnected: boolean;
-  isSpeaking: boolean;
   streamThumbnailUrl: string | null;
-  onContextMenu: (
-    e: React.MouseEvent,
-    target: {
-      id: string;
-      username: string;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      avatar_display?: User["avatar_display"];
-    },
-  ) => void;
-  onPopoverUser: (
-    u: {
-      id: string;
-      username: string;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      avatar_display?: User["avatar_display"];
-    },
-    anchor: HTMLElement,
-  ) => void;
+  onContextMenu: (e: React.MouseEvent, target: VoiceMemberTarget) => void;
+  onPopoverUser: (u: VoiceMemberTarget, anchor: HTMLElement) => void;
   onWatchStream?: (channelId: string, userId: string) => void;
 }
 
-function VoiceChannelMemberRow({
+const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
   member,
+  leaving = false,
   channelId,
   isCurrentUser,
   isCurrentClientVoiceConnected,
-  isSpeaking,
   streamThumbnailUrl,
   onContextMenu,
   onPopoverUser,
   onWatchStream,
-}: VoiceChannelMemberRowProps) {
+}: VoiceOccupantLeafProps) {
+  const speakingAttr = useSpeakingAttr(member.clerk_user_id);
   const activity = useActivityStore((state) => {
     const presence = state.activeByUser[member.clerk_user_id];
     return presence?.channelId === channelId ? presence : undefined;
@@ -1713,16 +1879,38 @@ function VoiceChannelMemberRow({
 
   useEffect(() => clearPreviewCloseTimeout, [clearPreviewCloseTimeout]);
 
+  const silenced = member.self_mute || member.self_deaf || isMutedByCurrentUser;
+
   return (
-    <>
+    <TreeLeaf
+      self={isCurrentUser && !isReconnecting && !leaving}
+      node={
+        <Led
+          state={isReconnecting || silenced || leaving ? "off" : "talk"}
+          follow="speaking"
+        />
+      }
+      data-voice-connection-state={
+        isReconnecting ? "reconnecting" : "connected"
+      }
+      data-leaving={leaving ? "" : undefined}
+      aria-hidden={leaving || undefined}
+      inert={leaving || undefined}
+      className={cn(
+        isReconnecting && "opacity-50",
+        // The row above a departing last row stops drawing its lower trunk
+        // at once, so no stub hangs under it while the exit plays.
+        "[&:has(+[data-leaving]:last-child)>[data-seg=down]]:opacity-0",
+      )}
+      style={leaving ? LEAVING_ROW_STYLE : undefined}
+      {...(leaving ? null : speakingAttr)}
+    >
       <button
         type="button"
-        data-voice-connection-state={
-          isReconnecting ? "reconnecting" : "connected"
-        }
         className={cn(
-          "group/vc-user flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-rm-bg-hover outline-none",
-          isReconnecting && "opacity-50 grayscale",
+          OCCUPANT_ROW,
+          "-ml-1 pl-1 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus in-data-speaking:text-ink-1",
+          isCurrentUser && "text-ink-1",
         )}
         aria-label={`Open profile for ${resolvedIdentity.name}`}
         onMouseEnter={(event) => openStreamPreview(event.currentTarget)}
@@ -1735,85 +1923,100 @@ function VoiceChannelMemberRow({
           if (e.button === 0) onPopoverUser(userInfo, e.currentTarget);
         }}
       >
-        <div
+        <span
           className={cn(
-            "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-[0.96]",
-            isSpeaking
-              ? "ring-[3px] ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10"
-              : "z-0",
+            "relative size-6 shrink-0 in-data-speaking:outline-2 in-data-speaking:-outline-offset-2 in-data-speaking:outline-talk",
+            avatarShape(resolvedIdentity.avatarUrl && resolvedAvatarDisplay),
           )}
         >
-          <div className="absolute inset-0 overflow-visible rounded-full">
-            {resolvedIdentity.avatarUrl ? (
-              <AvatarImage
-                src={getAuthAssetUrl(resolvedIdentity.avatarUrl)}
-                alt=""
-                display={resolvedAvatarDisplay}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-primary/10 text-ui-2xs font-bold text-primary">
-                {resolvedIdentity.name[0]?.toUpperCase()}
-              </div>
-            )}
-          </div>
-        </div>
+          {resolvedIdentity.avatarUrl ? (
+            <AvatarImage
+              src={getAuthAssetUrl(resolvedIdentity.avatarUrl)}
+              alt=""
+              display={resolvedAvatarDisplay}
+            />
+          ) : (
+            <Avatar name={resolvedIdentity.name} size={24} />
+          )}
+        </span>
         <UserDisplayName
           text={resolvedIdentity.name}
           displayNameStyle={resolvedDisplayNameStyle}
-          className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text"
+          className="min-w-0 flex-1 truncate"
         />
-        <div className="ml-auto flex items-center gap-1">
+        <span className="ml-auto flex shrink-0 items-center gap-1 text-ink-3 [&_svg]:size-3.5">
           {shouldShowStreamState && (
-            <div className="flex items-center justify-center rounded-xs bg-[#ed4245] px-[4px] py-[2px] text-ui-2xs font-bold leading-none tracking-wider text-white">
-              LIVE
-            </div>
+            <span aria-label="Live" role="img" className="flex">
+              <Icon name="screenShare" size="xs" className="text-live-ink" />
+            </span>
           )}
-          {activity && <Gamepad2 className="h-3.5 w-3.5 text-primary" />}
-          <div className="flex items-center gap-1 opacity-60">
-            {member.self_video && <Shield className="h-3.5 w-3.5" />}
-            {member.self_mute && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span aria-label="Self-muted">
-                    <MicOff className="h-3.5 w-3.5 text-rm-danger" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={6}>
-                  Self-muted
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {member.self_deaf && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span aria-label="Self-deafened">
-                    <HeadphoneOff className="h-3.5 w-3.5 text-rm-danger" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={6}>
-                  Self-deafened
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {isMutedByCurrentUser && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span aria-label="Muted by you">
-                    <VolumeX className="h-3.5 w-3.5 text-rm-danger" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={6}>
-                  Muted by you
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        </div>
+          {activity && (
+            <Icon name="activities" size="xs" className="text-accent-ink" />
+          )}
+          {member.self_video && (
+            <Icon
+              name="camera"
+              state="active"
+              size="xs"
+              className="text-live-ink"
+            />
+          )}
+          {member.self_mute && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span aria-label="Self-muted" className="flex">
+                  <Icon
+                    name="mic"
+                    state="off"
+                    size="xs"
+                    className="text-muted-state"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6}>
+                Self-muted
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {member.self_deaf && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span aria-label="Self-deafened" className="flex">
+                  <Icon
+                    name="deafen"
+                    state="off"
+                    size="xs"
+                    className="text-muted-state"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6}>
+                Self-deafened
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {isMutedByCurrentUser && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span aria-label="Muted by you" className="flex">
+                  <Icon
+                    name="speakerOff"
+                    size="xs"
+                    className="text-muted-state"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6}>
+                Muted by you
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
       </button>
 
-      {shouldShowStreamState && streamPreviewPosition && (
+      {shouldShowStreamState && streamPreviewPosition && !leaving && (
         <div
-          className="fixed z-40"
+          className="fixed z-30"
           style={{
             left: streamPreviewPosition.left,
             top: streamPreviewPosition.top,
@@ -1837,9 +2040,11 @@ function VoiceChannelMemberRow({
           />
         </div>
       )}
-    </>
+    </TreeLeaf>
   );
-}
+});
+
+// ── Category branch ──────────────────────────────────────────────────────
 
 interface ChannelCategoryGroupProps {
   group: CategoryGroup;
@@ -1856,8 +2061,6 @@ interface ChannelCategoryGroupProps {
   channelMentionCounts: Record<string, number>;
   streamPreviewChannelId: string | null;
   streamThumbnails: Record<string, string>;
-  user: User | null;
-  speakingUsers: Record<string, boolean>;
   canReorder: boolean;
   canManageChannels: boolean;
   onSelect: (channelId: string) => void;
@@ -1869,19 +2072,15 @@ interface ChannelCategoryGroupProps {
   handleChannelContextMenu: (e: React.MouseEvent, channel: Channel) => void;
   handleUserContextMenu: (
     e: React.MouseEvent,
-    target: {
-      id: string;
-      username: string;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      avatar_display?: User["avatar_display"];
-    },
+    target: VoiceMemberTarget,
   ) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
   onWatchStream?: (channelId: string, userId: string) => void;
 }
 
-function ChannelCategoryGroup({
+const EMPTY_VOICE_MEMBERS: VoiceChannelMember[] = [];
+
+const ChannelCategoryGroup = memo(function ChannelCategoryGroup({
   group,
   isCollapsed,
   activeChannelId,
@@ -1896,8 +2095,6 @@ function ChannelCategoryGroup({
   channelMentionCounts,
   streamPreviewChannelId,
   streamThumbnails,
-  user,
-  speakingUsers,
   canReorder,
   canManageChannels,
   onSelect,
@@ -1908,48 +2105,68 @@ function ChannelCategoryGroup({
   uiDispatch,
   onWatchStream,
 }: ChannelCategoryGroupProps) {
-  const channelIds = group.channels.map((c) => c.id);
+  const channelIds = useMemo(
+    () => group.channels.map((c) => c.id),
+    [group.channels],
+  );
+  const categoryLongPress = useLongPressMenu((e) =>
+    handleCategoryContextMenu(e, group),
+  );
 
   return (
-    <div className="mb-3">
-      {/* Category Header */}
+    <div
+      role="group"
+      aria-label={group.name}
+      className={cn("flex flex-col gap-0.5", TREE_BRANCH_GAP)}
+    >
+      {/* Branch label: silkscreen in a fixed 24px row; the chevron sits in
+          the 20px icon column so the label starts on the channel-name edge. */}
       <div
-        className="group flex cursor-pointer items-center py-1.5 pr-2 transition-colors hover:text-rm-text text-rm-text-muted"
+        className={cn(TREE_BRANCH_LABEL, "group", LONG_PRESS_TARGET)}
         onContextMenu={(e) => handleCategoryContextMenu(e, group)}
+        {...categoryLongPress}
       >
         <button
           type="button"
-          className="flex flex-1 items-center gap-0.5 overflow-hidden outline-none"
+          className={cn(
+            "absolute inset-0 z-10 rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus",
+            HIT,
+          )}
           aria-expanded={!isCollapsed}
           aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${group.name}`}
           onClick={() => group.id && toggleCategory(group.id)}
-        >
-          <ChevronDown
+        />
+        <span className="flex size-5 shrink-0 items-center justify-center">
+          <Icon
+            name="chevronDown"
+            size="xs"
             className={cn(
-              "h-3 w-3 shrink-0 transition-transform duration-200",
+              "transition-transform duration-(--dur-2) ease-out",
               isCollapsed && "-rotate-90",
             )}
           />
-          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] truncate leading-none pt-0.5">
-            <InlineEmojiText text={group.name} />
-          </span>
-        </button>
+        </span>
+        <span className="min-w-0 flex-1 truncate transition-colors duration-(--dur-1) pointer-fine:group-hover:text-ink-2">
+          <InlineEmojiText text={group.name} />
+        </span>
         {canManageChannels && (
-          <button
-            type="button"
-            className="rounded-sm p-0.5 transition-colors hover:text-rm-text"
-            aria-label={`Create channel in ${group.name}`}
-            onClick={() =>
-              uiDispatch({
-                type: "SET_CREATE_CHANNEL",
-                value: {
-                  categoryId: group.id?.startsWith("__") ? null : group.id,
-                },
-              })
-            }
-          >
-            <Plus className="h-4 w-4" />
-          </button>
+          <span className={ROW_ACTIONS}>
+            <button
+              type="button"
+              className={cn(ROW_ACTION_BUTTON, "size-5 [&_svg]:size-3.5")}
+              aria-label={`Create channel in ${group.name}`}
+              onClick={() =>
+                uiDispatch({
+                  type: "SET_CREATE_CHANNEL",
+                  value: {
+                    categoryId: group.id?.startsWith("__") ? null : group.id,
+                  },
+                })
+              }
+            >
+              <Icon name="add" size="sm" />
+            </button>
+          </span>
         )}
       </div>
 
@@ -1961,14 +2178,10 @@ function ChannelCategoryGroup({
         {group.channels.map((channel) => {
           const isActive = activeChannelId === channel.id;
           const isVoice = channel.channel_type === "voice";
-          const vcMembers = voiceChannelStates[channel.id] || [];
+          const vcMembers =
+            voiceChannelStates[channel.id] ?? EMPTY_VOICE_MEMBERS;
           const isConnectedVoice =
             isVoice && vcMembers.some((m) => m.clerk_user_id === currentUserId);
-
-          if (isCollapsed && !isActive && !isConnectedVoice) {
-            return null;
-          }
-
           const unread =
             !isActive && isUnread(channel.id, readStates, lastMessageAt);
 
@@ -1978,6 +2191,7 @@ function ChannelCategoryGroup({
               channel={channel}
               isActive={isActive}
               unread={unread}
+              hidden={isCollapsed && !isActive && !isConnectedVoice}
               mentionCount={channelMentionCounts[channel.id] ?? 0}
               isVoice={isVoice}
               vcMembers={vcMembers}
@@ -1987,30 +2201,13 @@ function ChannelCategoryGroup({
               listenTogetherRoomSlug={listenTogetherRoomSlug}
               currentUserId={currentUserId}
               isDraggable={canReorder}
-              groupId={group.id}
-              speakingUsers={speakingUsers}
               streamPreviewChannelId={streamPreviewChannelId}
               streamThumbnails={streamThumbnails}
-              user={user}
               canManageChannels={canManageChannels}
               onSelect={onSelect}
               onContextMenu={handleChannelContextMenu}
               onUserContextMenu={handleUserContextMenu}
-              onCreateChannel={(categoryId) =>
-                uiDispatch({
-                  type: "SET_CREATE_CHANNEL",
-                  value: { categoryId },
-                })
-              }
-              onEditChannel={(ch) =>
-                uiDispatch({ type: "SET_CHANNEL_SETTINGS", value: ch.id })
-              }
-              onInviteToChannel={(ch) =>
-                uiDispatch({ type: "SET_INVITE_CHANNEL", value: ch.id })
-              }
-              onPopoverUser={(u, anchor) =>
-                uiDispatch({ type: "SET_POPOVER_USER", user: u, anchor })
-              }
+              uiDispatch={uiDispatch}
               onWatchStream={onWatchStream}
             />
           );
@@ -2018,4 +2215,4 @@ function ChannelCategoryGroup({
       </SortableContext>
     </div>
   );
-}
+});

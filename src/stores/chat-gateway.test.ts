@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState, type ChatState } from "@/lib/chat-reducer";
 import type { ChatRestActions } from "./chat-actions";
 
@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/voice/socket-ticket-client", () => ({
   fetchSocketProtocols: mocks.fetchSocketProtocols,
+  SocketTicketError: class extends Error {
+    constructor(readonly status: number) {
+      super(`Socket ticket request failed (${status})`);
+    }
+  },
 }));
 vi.mock("@/lib/platform", () => ({
   getCurrentPresencePlatform: () => "web",
@@ -72,6 +77,7 @@ vi.mock("./useSoundSettingsStore", () => ({
 }));
 
 import { createChatGateway } from "./chat-gateway";
+import { SocketTicketError } from "@/lib/voice/socket-ticket-client";
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
@@ -273,5 +279,276 @@ describe("chat gateway continuity", () => {
     );
 
     gateway.disconnectGateway();
+  });
+});
+
+describe("chat gateway wake", () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockResolvedValue([]);
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function connected() {
+    const fixture = createFixture();
+    fixture.gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = FakeWebSocket.instances.at(-1)!;
+    socket.open();
+    return { ...fixture, socket };
+  }
+
+  it("retries at once instead of waiting out the backoff", async () => {
+    const { gateway, socket } = await connected();
+    socket.disconnect();
+    // Two failed attempts push the backoff past 2s.
+    await vi.advanceTimersByTimeAsync(1600);
+    FakeWebSocket.instances.at(-1)!.disconnect();
+    const before = FakeWebSocket.instances.length;
+
+    gateway.wake();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(FakeWebSocket.instances.length).toBe(before + 1);
+    gateway.disconnectGateway();
+  });
+
+  it("probes an open socket and keeps it when it answers", async () => {
+    const { gateway, socket, dispatch } = await connected();
+
+    gateway.wake();
+    expect(sentMessages(socket)).toContainEqual({ op: 3 });
+    socket.message({ op: 6 });
+    await vi.advanceTimersByTimeAsync(6000);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "SET_CONNECTED",
+      connected: false,
+    });
+    gateway.disconnectGateway();
+  });
+
+  it("drops a socket that died while the page slept and reconnects", async () => {
+    const { gateway, dispatch } = await connected();
+
+    gateway.wake();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_CONNECTED",
+      connected: false,
+    });
+
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    gateway.disconnectGateway();
+  });
+
+  it("does nothing after an intentional disconnect", async () => {
+    const { gateway } = await connected();
+    gateway.disconnectGateway();
+
+    gateway.wake();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+});
+
+describe("chat gateway sign-in failure and first-load steps", () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockReset();
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("retries a single 401 on the normal backoff without saying signed out", async () => {
+    mocks.fetchSocketProtocols
+      .mockRejectedValueOnce(new SocketTicketError(401))
+      .mockResolvedValue([]);
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_GATEWAY_FAILURE", failure: "auth" }),
+    );
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_GATEWAY_FAILURE", failure: "auth" }),
+    );
+    gateway.disconnectGateway();
+  });
+
+  it("reports auth after two 401s in a row, then retries only once a minute", async () => {
+    mocks.fetchSocketProtocols.mockRejectedValue(new SocketTicketError(401));
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(1600);
+
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_GATEWAY_FAILURE",
+      failure: "auth",
+    });
+    const attemptsBefore = dispatch.mock.calls.filter(
+      ([action]) => action.type === "SET_RECONNECT_ATTEMPT",
+    ).length;
+
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(4);
+    // The slow retry is not a reconnect attempt: the strip keeps "Signed out".
+    expect(
+      dispatch.mock.calls.filter(
+        ([action]) => action.type === "SET_RECONNECT_ATTEMPT",
+      ),
+    ).toHaveLength(attemptsBefore);
+    gateway.disconnectGateway();
+  });
+
+  it("a 401 then a 503 is not two refusals in a row", async () => {
+    mocks.fetchSocketProtocols
+      .mockRejectedValueOnce(new SocketTicketError(401))
+      .mockRejectedValueOnce(new SocketTicketError(503))
+      .mockRejectedValueOnce(new SocketTicketError(401))
+      .mockResolvedValue([]);
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(4);
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_GATEWAY_FAILURE", failure: "auth" }),
+    );
+    gateway.disconnectGateway();
+  });
+
+  it("the slow retry clears signed out once the session is back", async () => {
+    mocks.fetchSocketProtocols
+      .mockRejectedValueOnce(new SocketTicketError(401))
+      .mockRejectedValueOnce(new SocketTicketError(401))
+      .mockResolvedValue([]);
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(dispatch).toHaveBeenLastCalledWith({
+      type: "SET_GATEWAY_FAILURE",
+      failure: "auth",
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_GATEWAY_FAILURE",
+      failure: null,
+    });
+    gateway.disconnectGateway();
+  });
+
+  it("keeps retrying with backoff on other ticket failures", async () => {
+    mocks.fetchSocketProtocols.mockRejectedValue(new SocketTicketError(503));
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_GATEWAY_FAILURE", failure: "auth" }),
+    );
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    gateway.disconnectGateway();
+  });
+
+  it("tries once more when the page comes back, and clears the failure on success", async () => {
+    mocks.fetchSocketProtocols
+      .mockRejectedValueOnce(new SocketTicketError(401))
+      .mockRejectedValueOnce(new SocketTicketError(401))
+      .mockResolvedValue([]);
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_GATEWAY_FAILURE",
+      failure: "auth",
+    });
+
+    gateway.wake();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_GATEWAY_FAILURE",
+      failure: null,
+    });
+    gateway.disconnectGateway();
+  });
+
+  it("reports the first-load steps: ticket, socket, ready", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([]);
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    socket.message({ op: 2, d: { participant_id: "session-1" } });
+
+    const steps = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "SET_CONNECT_STEP")
+      .map((action) => action.step);
+    expect(steps).toEqual([0, 1, 2, 3]);
+    gateway.disconnectGateway();
+  });
+
+  it("leaving /chat after Ready keeps step 3, so coming back is a reconnect", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([]);
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    socket.message({ op: 2, d: { participant_id: "session-1" } });
+
+    gateway.disconnectGateway();
+    dispatch.mockClear();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+    FakeWebSocket.instances[1]!.open();
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_CONNECT_STEP" }),
+    );
+    gateway.disconnectGateway();
+  });
+
+  it("leaving /chat before Ready resets to step 0 for a clean cold load", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([]);
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+    FakeWebSocket.instances[0]!.open();
+
+    dispatch.mockClear();
+    gateway.disconnectGateway();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_CONNECT_STEP",
+      step: 0,
+    });
   });
 });

@@ -7,9 +7,11 @@ import {
 } from "@/components/ui/tooltip";
 import { getDownloadUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { useEffect, useRef, useState } from "react";
+import { Num } from "@/components/ui/num";
+import { MediaPlayButton } from "./embeds/MediaPlayButton";
 import {
-  BigPlayIcon,
   DownloadIcon,
   ExpandIcon,
   PauseIcon,
@@ -39,10 +41,7 @@ function TipButton({
       <TooltipTrigger asChild>
         <ButtonBase
           onClick={onClick}
-          className={cn(
-            "p-1.5 rounded-md hover:bg-white/10 transition-colors",
-            className,
-          )}
+          className={cn("rounded-md p-1.5", PRESS, HIT, className)}
           aria-label={label}
         >
           {children}
@@ -84,10 +83,10 @@ export function VideoDownloadButton({
               href={getDownloadUrl(src)}
               download={filename}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-black/70 transition-ui border border-white/10"
+              className="flex size-8 items-center justify-center rounded-md border border-line bg-ply-3 text-ink-1 shadow-float outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-ply-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
               aria-label="Download"
             >
-              <DownloadIcon />
+              <DownloadIcon className="size-4" />
             </a>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6}>
@@ -135,10 +134,9 @@ export function VideoProgressBar({
   return (
     <div
       ref={progressRef}
-      className={cn(
-        "group/bar relative rounded-full cursor-pointer mb-2 transition-ui",
-        dragging ? "h-2" : "h-1 hover:h-1.5",
-      )}
+      // A 12px hit band; the 4px rail inside thickens with scaleY on hover
+      // (transform only: the old height change re-laid the bar per frame).
+      className="group/bar relative mb-1 h-3 cursor-pointer"
     >
       <input
         type="range"
@@ -152,33 +150,36 @@ export function VideoProgressBar({
         aria-label="Video progress"
         className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
       />
-      <div className="absolute inset-0 rounded-full bg-white/15" />
-      <div
-        className="absolute inset-y-0 left-0 rounded-full bg-white/25"
-        style={{ width: `${buffered}%` }}
-      />
-      <div
-        className="absolute inset-y-0 left-0 rounded-full bg-primary"
-        style={{
-          width: `${displayProgress}%`,
-          transition: dragging ? "none" : "width 0.1s",
-        }}
-      />
       <div
         className={cn(
-          "absolute top-1/2 -translate-y-1/2 rounded-full bg-white shadow-lg transition-opacity",
-          dragging
-            ? "w-3.5 h-3.5 opacity-100"
-            : "w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-100",
+          "absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/20 transition-transform duration-(--dur-1) ease-out",
+          dragging ? "scale-y-150" : "pointer-fine:group-hover/bar:scale-y-150",
         )}
-        style={{ left: `calc(${displayProgress}% - ${dragging ? 7 : 5}px)` }}
+      >
+        <div
+          className="absolute inset-0 origin-left bg-white/30"
+          style={{ transform: `scaleX(${buffered / 100})` }}
+        />
+        <div
+          className="absolute inset-0 origin-left bg-white"
+          style={{ transform: `scaleX(${displayProgress / 100})` }}
+        />
+      </div>
+      <div
+        className={cn(
+          "absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-white shadow-float transition-opacity duration-(--dur-1) ease-out",
+          dragging
+            ? "opacity-100"
+            : "pointer-fine:opacity-0 pointer-fine:group-hover/bar:opacity-100",
+        )}
+        style={{ left: `calc(${displayProgress}% - 6px)` }}
       />
       {dragging && (
         <div
-          className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded-md bg-rm-bg-elevated border border-rm-border shadow-lg text-ui-2xs font-mono font-bold text-rm-text tabular-nums whitespace-nowrap pointer-events-none"
+          className="pointer-events-none absolute -top-8 -translate-x-1/2 whitespace-nowrap rounded-sm border border-line bg-ply-3 px-1.5 py-0.5 text-ink-1 shadow-float"
           style={{ left: `${displayProgress}%` }}
         >
-          {formatDuration(displayTime)}
+          <Num>{formatDuration(displayTime)}</Num>
         </div>
       )}
     </div>
@@ -280,15 +281,15 @@ export function VideoControlBar({
         {/* Play / Pause / Replay — no tooltip */}
         <ButtonBase
           onClick={togglePlay}
-          className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
+          className={cn("rounded-md p-1.5", PRESS, HIT)}
           aria-label={ended ? "Replay" : playing ? "Pause" : "Play"}
         >
           {ended ? <PlayAgainIcon /> : playing ? <PauseIcon /> : <PlayIcon />}
         </ButtonBase>
 
-        <span className="text-ui-2xs font-medium tabular-nums text-white/60 ml-1">
+        <Num className="ml-1 text-white/80">
           {formatDuration(displayTime)} / {formatDuration(duration)}
-        </span>
+        </Num>
 
         <div className="flex-1" />
 
@@ -302,7 +303,7 @@ export function VideoControlBar({
         >
           <ButtonBase
             onClick={toggleMute}
-            className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
+            className={cn("rounded-md p-1.5", PRESS, HIT)}
             aria-label={muted ? "Unmute" : "Mute"}
             aria-expanded={volumePopoverOpen}
           >
@@ -325,7 +326,7 @@ export function VideoControlBar({
                 : "scale-95 opacity-0 pointer-events-none",
             )}
           >
-            <div className="flex flex-col items-center bg-black/70 backdrop-blur-md rounded-lg px-2 py-3 border border-white/10 shadow-xl">
+            <div className="flex flex-col items-center rounded-lg border border-line bg-ply-3 px-2 py-3 shadow-float">
               <input
                 type="range"
                 min={0}
@@ -333,7 +334,7 @@ export function VideoControlBar({
                 step={0.05}
                 value={muted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-1.5 h-20 accent-primary cursor-pointer appearance-none rounded-full bg-white/20 [writing-mode:vertical-lr] [direction:rtl]"
+                className="h-20 w-1.5 cursor-pointer appearance-none rounded-full bg-tint-3 accent-primary-fill [writing-mode:vertical-lr] [direction:rtl]"
                 aria-label="Volume"
               />
             </div>
@@ -356,20 +357,22 @@ interface SplashOverlayProps {
   splashIcon: "play" | "pause";
 }
 
+/**
+ * A press echo after play/pause: the play disc fades out while it grows
+ * (`splash`, transform and opacity, 300ms). It rests at opacity 0, so where
+ * reduced motion removes the keyframes nothing is left over the video.
+ */
 export function SplashOverlay({ splashKey, splashIcon }: SplashOverlayProps) {
   if (splashKey === 0) return null;
   return (
     <div
       key={splashKey}
-      className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+      className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
     >
-      <div className="w-14 h-14 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white animate-[splash_0.5s_ease-out_forwards]">
-        {splashIcon === "play" ? (
-          <PlayIcon className="w-6 h-6" />
-        ) : (
-          <PauseIcon />
-        )}
-      </div>
+      <MediaPlayButton
+        icon={splashIcon}
+        className="opacity-0 animate-[splash_300ms_var(--ease-out)_forwards]"
+      />
     </div>
   );
 }
@@ -381,18 +384,14 @@ interface BigPlayOverlayProps {
   ended: boolean;
 }
 
+/** The shared play disc, centred on the frame (the frame is the button). */
 export function BigPlayOverlay({ isViewer, ended }: BigPlayOverlayProps) {
   return (
-    <div className="absolute inset-0 flex items-center justify-center">
-      <div
-        className={cn(
-          "rounded-full backdrop-blur-sm flex items-center justify-center transition-transform",
-          "w-14 h-14 bg-black/50 border border-white/10 shadow-2xl text-white",
-          isViewer && "w-16 h-16",
-        )}
-      >
-        {ended ? <PlayAgainIcon /> : <BigPlayIcon />}
-      </div>
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <MediaPlayButton
+        icon={ended ? "replay" : "play"}
+        size={isViewer ? "lg" : "md"}
+      />
     </div>
   );
 }

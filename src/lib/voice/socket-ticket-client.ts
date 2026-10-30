@@ -21,6 +21,14 @@ type SocketTicketResponse = {
   ticket?: unknown;
 };
 
+/** A refused ticket request; `status` 401 means the session is gone. */
+export class SocketTicketError extends Error {
+  constructor(readonly status: number) {
+    super(`Socket ticket request failed (${status})`);
+    this.name = "SocketTicketError";
+  }
+}
+
 export type MediaBootstrap = {
   participantId: string;
   voiceToken: string;
@@ -49,7 +57,7 @@ async function requestSocketTicket(
   });
 
   if (!response.ok) {
-    throw new Error(`Socket ticket request failed (${response.status})`);
+    throw new SocketTicketError(response.status);
   }
 
   return (await response.json()) as SocketTicketResponse;

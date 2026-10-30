@@ -1,11 +1,21 @@
 import type { GifPickerItem, GifPickerMediaType } from "@/lib/gif-picker";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import { GIF_FAVORITE_ADDED_EVENT } from "@/stores/useGifFavoritesStore";
 import { useEffect, useRef, useState } from "react";
 import GifPickerModal from "./GifPickerModal";
 import EmojiPicker from "./EmojiPicker";
-import { Gif, Smile, Sticker } from "./Icons";
-import { Send } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { PRESS } from "@/components/ui/interaction";
+
+/** A 48px slot key inside the composer plate; the ring draws inside it. */
+const SLOT = "rounded-none focus-visible:outline-offset-[-2px]";
 
 export function InputControls({
   showEmoji,
@@ -66,61 +76,82 @@ export function InputControls({
   };
 
   const activeMediaButton = showGifPicker ? gifPickerMediaType : null;
-  const mediaButtonClassName = (isActive: boolean, hiddenClassName = "") =>
-    cn(
-      hiddenClassName,
-      "flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]",
-      isActive
-        ? "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none"
-        : "text-rm-text-muted hover:text-primary",
-    );
 
   const gifPickerMarkerRef =
     gifPickerMediaType === "stickers" ? stickerBtnRef : gifBtnRef;
 
+  // Flush 48px slot keys. An open picker shows the toggled tint (and the
+  // Fill glyph where the concept ships one). GIF is a silkscreen word.
+  const toggleTone = (active: boolean) => (active ? "toggled" : "idle");
+
   return (
-    <div className="ml-2 mt-0.5 flex items-center gap-0.5 text-rm-text-muted md:gap-1">
+    <div className="flex items-center text-ink-2">
       <div className="relative">
         {showFavoriteNotice && (
-          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-yellow-500/30 dark:border-yellow-300/20 bg-rm-bg-floating px-3 py-1.5 text-xs font-bold text-yellow-800 dark:text-yellow-200 shadow-2xl animate-in fade-in slide-in-from-bottom-1">
-            Added to Favorites
+          <div
+            role="status"
+            className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 rounded-sm bg-ink-1 px-2 py-1 text-ui-xs font-medium whitespace-nowrap text-ply-0 animate-in fade-in-0 zoom-in-[0.97] duration-(--dur-2)"
+          >
+            Added to favorites
           </div>
         )}
-        <button
-          ref={gifBtnRef}
-          type="button"
-          aria-label="Open GIF picker"
-          title={showFavoriteNotice ? "Added to Favorites" : "GIFs"}
-          className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96] hover:text-primary",
-            activeMediaButton === "gifs" &&
-              "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none",
-            showFavoriteNotice &&
-              "animate-pulse bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 ring-2 ring-yellow-500/60 dark:ring-yellow-300/60",
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              ref={gifBtnRef}
+              type="button"
+              aria-label="Open GIF picker"
+              aria-expanded={activeMediaButton === "gifs"}
+              data-tone={
+                activeMediaButton === "gifs" || showFavoriteNotice
+                  ? "toggled"
+                  : "idle"
+              }
+              className={cn(
+                "silkscreen relative inline-flex h-12 min-w-11 shrink-0 items-center justify-center px-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus max-md:w-12",
+                PRESS,
+                // Phones: once there is something to send, the send key
+                // takes this slot's width at the end of the row.
+                canSend && "max-md:hidden",
+                activeMediaButton === "gifs" || showFavoriteNotice
+                  ? "bg-tint-2 text-ink-1"
+                  : "text-ink-2 pointer-fine:hover:text-ink-1",
+                showFavoriteNotice && "text-warning-ink",
+              )}
+              onClick={() => openGifPicker("gifs")}
+            >
+              GIF
+            </button>
+          </TooltipTrigger>
+          {!showFavoriteNotice && (
+            <TooltipContent side="top" sideOffset={8}>
+              GIFs
+            </TooltipContent>
           )}
-          onClick={() => openGifPicker("gifs")}
-        >
-          <Gif className="h-5 w-5" />
-        </button>
+        </Tooltip>
       </div>
-      <button
+      <IconButton
         ref={stickerBtnRef}
-        type="button"
+        icon="sticker"
+        size="lg"
+        tone={toggleTone(activeMediaButton === "stickers")}
         aria-label="Open sticker picker"
-        title="Stickers"
+        aria-expanded={activeMediaButton === "stickers"}
+        tooltip="Stickers"
         onClick={() => openGifPicker("stickers")}
-        className={mediaButtonClassName(
-          activeMediaButton === "stickers",
-          "hidden md:flex",
-        )}
-      >
-        <Sticker className="h-5 w-5" />
-      </button>
+        className={cn(SLOT, "max-md:hidden")}
+      />
       <div className="relative">
-        <button
+        <IconButton
           ref={emojiBtnRef}
-          type="button"
+          icon="emoji"
+          iconState={showEmoji ? "active" : "idle"}
+          size="lg"
+          className={SLOT}
+          tone={toggleTone(showEmoji)}
           aria-label="Open emoji picker"
+          aria-expanded={showEmoji}
+          tooltip="Emoji"
           onClick={() =>
             setLocalState(
               (prev: { showEmoji: boolean; showGifPicker: boolean }) => ({
@@ -129,10 +160,7 @@ export function InputControls({
               }),
             )
           }
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96] hover:text-primary"
-        >
-          <Smile className="h-5 w-5" />
-        </button>
+        />
         <EmojiPicker
           open={showEmoji}
           onSelect={handleEmojiSelect}
@@ -150,23 +178,24 @@ export function InputControls({
           markerRef={gifPickerMarkerRef}
         />
       ) : null}
-      <div
-        className={cn(
-          "flex items-center overflow-hidden transition-ui ease-out md:hidden",
-          canSend
-            ? "w-8 opacity-100"
-            : "w-0 opacity-0 -ml-2 pointer-events-none",
-        )}
-      >
-        <button
+      {/* Phone send: absent until there is something to send (no dead slot
+          at the row's end), then a 40px primary key in the 48px slot the
+          GIF key gives up, so the text column keeps its width. */}
+      {canSend ? (
+        <Button
           type="button"
+          size="icon"
           aria-label="Send message"
+          // Keep focus (and the phone keyboard) on the textarea: a pointer
+          // press would otherwise move focus onto this button, which then
+          // unmounts the moment the send clears the field.
+          onPointerDown={(e) => e.preventDefault()}
           onClick={onSend}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-ui bg-primary text-primary-foreground hover:bg-primary/90 enabled:active:scale-[0.96]"
+          className="m-1 animate-in fade-in-0 zoom-in-90 duration-(--dur-2) ease-out md:hidden"
         >
-          <Send className="h-4 w-4 ml-0.5" />
-        </button>
-      </div>
+          <Icon name="send" size="lg" />
+        </Button>
+      ) : null}
     </div>
   );
 }

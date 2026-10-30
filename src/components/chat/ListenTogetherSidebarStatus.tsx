@@ -1,14 +1,16 @@
-import { Music2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
-import {
-  formatListenTogetherDuration,
-  useListenTogetherPlaybackState,
-} from "./listen-together-playback";
+import { ListenTogetherClock } from "./ListenTogetherNowPlayingCard";
+import { useListenTogetherPlaybackState } from "./listen-together-playback";
 
 interface ListenTogetherSidebarStatusProps {
   roomSlug?: string | null;
 }
 
+/**
+ * What the room is listening to, under the voice channel in the tree. Only
+ * the elapsed time ticks, in its own leaf.
+ */
 export function ListenTogetherSidebarStatus({
   roomSlug,
 }: ListenTogetherSidebarStatusProps) {
@@ -18,8 +20,8 @@ export function ListenTogetherSidebarStatus({
   if (!track) return null;
 
   return (
-    <div className="mb-1 ml-7 mr-2 flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-rm-text-muted">
-      <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md bg-rm-bg-elevated ring-1 ring-white/8">
+    <div className="mr-2 mb-1 ml-7 flex min-w-0 items-center gap-2 rounded-sm px-1 py-1">
+      <div className="size-7 shrink-0 overflow-hidden rounded-sm bg-tint-1">
         {track.artworkUrl ? (
           <img
             src={track.artworkUrl}
@@ -28,21 +30,24 @@ export function ListenTogetherSidebarStatus({
             loading="lazy"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-emerald-400">
-            <Music2 className="h-3.5 w-3.5" />
+          <div className="flex h-full w-full items-center justify-center text-ink-3">
+            <Icon name="music" size="sm" />
           </div>
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <Music2 className="h-3 w-3 shrink-0 text-emerald-400" />
-          <span className="truncate text-ui-xs font-semibold text-rm-text-secondary">
+          <Icon
+            name={playback.isPaused ? "pause" : "play"}
+            state="active"
+            size="xs"
+            className="shrink-0 text-ink-3"
+          />
+          <span className="truncate text-ui-xs font-medium text-ink-2">
             {track.title}
           </span>
         </div>
-        <span className="mt-0.5 block text-ui-2xs tabular-nums text-emerald-400/80">
-          {formatListenTogetherDuration(playback.effectiveSeekValue)}
-        </span>
+        <ListenTogetherClock playback={playback} className="block text-ink-3" />
       </div>
     </div>
   );

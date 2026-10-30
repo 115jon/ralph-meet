@@ -1,4 +1,5 @@
 import type { Attachment } from "@/lib/types";
+import { Spinner } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import React from "react";
 import { useVideoPlaybackAvailability } from "@/lib/video-playback-availability";
@@ -68,7 +69,7 @@ export function ImageViewerContent({
               src={videoPosterUrl}
               alt=""
               className={cn(
-                "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-200 select-none",
+                "max-w-full max-h-[60dvh] md:max-h-[75dvh] object-contain rounded-md shadow-modal transition-opacity duration-(--dur-2) ease-out select-none",
                 isLoaded ? "opacity-100" : "opacity-0",
               )}
               onLoad={(e) => {
@@ -83,8 +84,12 @@ export function ImageViewerContent({
               draggable={false}
             />
             {(playbackAvailability === "checking" || !isLoaded) && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <div
+                role="status"
+                className="absolute inset-0 flex items-center justify-center text-ink-3"
+              >
+                <Spinner className="size-6" />
+                <span className="sr-only">Loading</span>
               </div>
             )}
             <GifProviderBranding
@@ -126,13 +131,13 @@ export function ImageViewerContent({
         return (
           <button
             type="button"
-            className="relative border-0 bg-transparent p-0 transition-transform duration-75 ease-out outline-none"
+            className="relative rounded-md border-0 bg-transparent p-0"
             style={{
               transform: `translate(${translateX}px, ${pan.y}px) scale(${scale})`,
               transition:
                 isDragging || isSwipeDragging
                   ? "none"
-                  : "transform 0.2s ease-out",
+                  : "transform var(--dur-3) var(--ease-out)",
             }}
             onClick={interactive ? (e) => handleImageClick(e) : undefined}
             tabIndex={interactive ? 0 : -1}
@@ -144,7 +149,7 @@ export function ImageViewerContent({
               src={getUrl(currentImage)}
               alt=""
               className={cn(
-                "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-200 select-none",
+                "max-w-full max-h-[60dvh] md:max-h-[75dvh] object-contain rounded-md shadow-modal transition-opacity duration-(--dur-2) ease-out select-none",
                 isLoaded ? "opacity-100" : "opacity-0",
                 interactive &&
                   (isZoomed
@@ -163,8 +168,12 @@ export function ImageViewerContent({
               draggable={false}
             />
             {!isLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <div
+                role="status"
+                className="absolute inset-0 flex items-center justify-center text-ink-3"
+              >
+                <Spinner className="size-6" />
+                <span className="sr-only">Loading</span>
               </div>
             )}
             <GifProviderBranding

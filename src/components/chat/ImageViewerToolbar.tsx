@@ -1,61 +1,65 @@
 import { getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { getWebOrigin } from "@/lib/platform";
+import { Icon } from "@/components/ui/icon";
+import { HIT, PRESS, PRESS_ICON } from "@/components/ui/interaction";
+import { Num } from "@/components/ui/num";
 import { cn } from "@/lib/utils";
-import { formatRelative } from "date-fns";
-import { enUS } from "date-fns/locale";
+
+/**
+ * Icon control in the viewer's one toolbar group: 32px ghost keys on the
+ * ply-3 bar on desktop; full 44px keys in the phone header bar.
+ */
+export const VIEWER_BUTTON = cn(
+  "flex size-8 shrink-0 max-md:size-11 items-center justify-center rounded-md text-ink-2 pointer-fine:hover:text-ink-1 data-popup-open:bg-tint-2 data-popup-open:text-ink-1 aria-expanded:bg-tint-2 aria-expanded:text-ink-1",
+  PRESS,
+  PRESS_ICON,
+  HIT,
+);
+
+/**
+ * The bar the viewer's controls sit in: one floating group (ply-3, line,
+ * shadow) on desktop. On phones the whole header is one flat ply-0 bar, so
+ * the group drops its plate.
+ */
+export const VIEWER_BAR =
+  "flex items-center gap-0.5 rounded-lg border border-line bg-ply-3 p-1 shadow-float max-md:gap-0 max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none";
 import {
-  ChevronRight,
-  Copy,
-  Download,
-  FileDigit,
-  Info,
-  Link as LinkIcon,
-  MessageSquare,
-  MoreHorizontal,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
-import { useEffect, useRef } from "react";
-import { AvatarImage } from "./AvatarImage";
-import { UserDisplayName } from "./UserDisplayName";
+  ActionSheet,
+  type ActionSheetItem,
+} from "@/components/ui/action-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+import { Fragment, useState } from "react";
+import InlineEmojiText from "./InlineEmojiText";
+import { PreviewAvatar } from "./MessagePreviewCard";
+import { useMessageTimeFormat } from "./message-time";
 
-const formatRelativeLocale: Record<string, string> = {
-  lastWeek: "eeee 'at' p",
-  yesterday: "'Yesterday at' p",
-  today: "'Today at' p",
-  tomorrow: "'Tomorrow at' p",
-  nextWeek: "eeee 'at' p",
-  other: "P",
-};
-
-const locale = {
-  ...enUS,
-  formatRelative: (token: string) =>
-    formatRelativeLocale[token] || formatRelativeLocale.other,
-};
-
-export function formatFriendlyDate(dateInput: string | Date): string {
-  const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
-  return formatRelative(date, new Date(), { locale });
-}
-
+/** `182 KB`, `1.4 MB`: one decimal from MB up. */
 export const formatBytes = (bytes: number) => {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+  );
+  const value = bytes / Math.pow(1024, i);
+  return `${i >= 2 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
 };
 
 interface ImageViewerToolbarProps {
   context: any;
   currentImage: any;
-  showMore: boolean;
-  showDetails: boolean;
   dimensions: { width: number; height: number } | null;
-  setLocalState: (update: any) => void;
   viewDispatch: (action: any) => void;
   close: () => void;
   getUrl: (img: any) => string;
@@ -63,37 +67,29 @@ interface ImageViewerToolbarProps {
   isAnimatedMedia?: boolean;
 }
 
+type MoreItem = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  onSelect?: () => void;
+  danger?: boolean;
+  divider?: boolean;
+};
+
+const DETAIL_LABEL = "mb-1 text-ui-xs text-ink-3";
+
 export function ImageViewerToolbar({
   context,
   currentImage,
-  showMore,
-  showDetails,
   dimensions,
-  setLocalState,
   viewDispatch,
   close,
   getUrl,
   isVideo,
   isAnimatedMedia,
 }: ImageViewerToolbarProps) {
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setLocalState({ showMore: false, showDetails: false });
-      }
-    };
-    if (showMore) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showMore, setLocalState]);
+  const isMobile = useIsMobile();
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const handleCopyLink = () => {
     if (currentImage) {
@@ -102,14 +98,12 @@ export function ImageViewerToolbar({
         ? url
         : `${getWebOrigin()}${url}`;
       navigator.clipboard.writeText(shareableUrl);
-      setLocalState({ showMore: false });
     }
   };
 
   const handleCopyId = () => {
     if (currentImage) {
       navigator.clipboard.writeText(currentImage.id);
-      setLocalState({ showMore: false });
     }
   };
 
@@ -123,7 +117,6 @@ export function ImageViewerToolbar({
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type]: blob }),
       ]);
-      setLocalState({ showMore: false });
     } catch (err) {
       console.error("Failed to copy image", err);
     }
@@ -139,248 +132,312 @@ export function ImageViewerToolbar({
     }, 0);
   };
 
-  const formattedDate = context?.created_at
-    ? formatFriendlyDate(context.created_at)
-    : "";
-  const displayName = getDisplayName(context, "Unknown User");
+  const moreItems: MoreItem[] = [
+    ...(!isVideo
+      ? [
+          {
+            key: "copy-image",
+            label: "Copy image",
+            icon: <Icon name="copy" size="sm" />,
+            onSelect: handleCopyImage,
+          },
+        ]
+      : []),
+    {
+      key: "copy-link",
+      label: "Copy link",
+      icon: <Icon name="link" size="sm" />,
+      onSelect: handleCopyLink,
+    },
+    {
+      key: "details",
+      label: "View details",
+      icon: <Icon name="info" size="sm" />,
+      divider: true,
+    },
+    {
+      key: "copy-id",
+      label: "Copy attachment ID",
+      icon: <Icon name="copyId" size="sm" />,
+      onSelect: handleCopyId,
+    },
+  ];
 
-  return (
-    <div className="absolute top-0 left-0 right-0 z-50 flex items-start justify-between gap-2 bg-linear-to-b from-rm-bg-primary/80 to-transparent p-2 pointer-events-none md:items-center md:p-4">
-      {/* Left: User Info */}
-      <div className="flex min-w-0 items-center gap-3 pointer-events-auto">
-        {context?.avatar_url && (
-          <div className="h-7 w-7 overflow-visible rounded-full md:h-8 md:w-8">
-            <AvatarImage
-              src={getAuthAssetUrl(context.avatar_url)}
-              alt={displayName}
-              display={context.avatar_display}
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        )}
-        <div className="flex min-w-0 flex-col">
-          <UserDisplayName
-            user={context}
-            fallback="Unknown User"
-            className="block truncate text-sm font-bold leading-none text-rm-text drop-shadow-md"
-          />
-          {formattedDate && (
-            <span className="truncate text-ui-2xs font-medium text-rm-text-muted drop-shadow-md">
-              {formattedDate}
-            </span>
-          )}
+  const detailsPanel = (
+    <section
+      aria-label="Image details panel"
+      className="flex flex-col gap-3 text-left"
+    >
+      <h3 className="text-ui-sm font-semibold text-ink-1">
+        {isAnimatedMedia
+          ? "GIF details"
+          : isVideo
+            ? "Video details"
+            : "Image details"}
+      </h3>
+      <div>
+        <div className={DETAIL_LABEL}>Filename</div>
+        <div className="rounded-sm bg-tint-1 px-2 py-1.5 text-ui-xs break-all text-ink-1">
+          {currentImage.filename}
         </div>
       </div>
-
-      {/* Right: Tool groups */}
-      <div className="flex shrink-0 items-center gap-2 pointer-events-auto">
-        {/* Action buttons pill group */}
-        <div className="flex items-center gap-0.5 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl px-1 py-1 shadow-lg">
-          {!isVideo && (
-            <>
-              <button
-                type="button"
-                onClick={() => viewDispatch({ type: "ZOOM_OUT" })}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
-                aria-label="Zoom out"
-                title="Zoom Out"
-              >
-                <ZoomOut size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={() => viewDispatch({ type: "ZOOM_IN" })}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
-                aria-label="Zoom in"
-                title="Zoom In"
-              >
-                <ZoomIn size={18} />
-              </button>
-            </>
-          )}
-
-          {currentImage?.message_id &&
-            typeof context?.onJumpToMessage === "function" && (
-              <button
-                type="button"
-                onClick={handleForward}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
-                aria-label="Jump to message"
-                title="Jump to Message"
-              >
-                <MessageSquare size={18} />
-              </button>
-            )}
-
-          <a
-            href={currentImage.downloadUrl || getUrl(currentImage)}
-            download={currentImage.filename}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
-            aria-label="Download attachment"
-            title="Download"
-          >
-            <Download size={18} />
-          </a>
-
-          {/* More Dropdown */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setLocalState((prev: any) => ({
-                  showMore: !prev.showMore,
-                  showDetails: false,
-                }));
-              }}
-              className={cn(
-                "p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none",
-                showMore && "bg-primary text-primary-foreground",
-              )}
-              aria-expanded={showMore}
-              aria-haspopup="menu"
-              aria-label="More attachment actions"
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            {showMore && (
-              <div className="absolute top-full right-0 z-70 mt-2 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-visible rounded-lg border border-rm-border bg-rm-bg-elevated py-1 shadow-2xl animate-in slide-in-from-top-2 fade-in duration-200 md:w-64">
-                {!isVideo && (
-                  <button
-                    type="button"
-                    onClick={handleCopyImage}
-                    className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none"
-                  >
-                    Copy Image
-                    <Copy
-                      size={14}
-                      className="opacity-50 group-hover:opacity-100"
-                    />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none"
-                >
-                  Copy Link
-                  <LinkIcon
-                    size={14}
-                    className="opacity-50 group-hover:opacity-100"
-                  />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLocalState((prev: any) => ({
-                      showDetails: !prev.showDetails,
-                    }));
-                  }}
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center justify-between group transition-colors outline-none",
-                    showDetails
-                      ? "bg-primary/20 text-primary"
-                      : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground",
-                  )}
-                >
-                  View Details
-                  <ChevronRight
-                    size={14}
-                    className={cn(
-                      "transition-transform duration-200",
-                      showDetails
-                        ? "rotate-90 opacity-100"
-                        : "opacity-50 group-hover:opacity-100",
-                    )}
-                  />
-                </button>
-
-                <div className="h-px bg-rm-border my-1" />
-                <button
-                  type="button"
-                  onClick={handleCopyId}
-                  className="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors"
-                >
-                  Copy Attachment ID
-                  <FileDigit
-                    size={14}
-                    className="opacity-50 group-hover:opacity-100"
-                  />
-                </button>
-
-                {showDetails && (
-                  <section
-                    className="absolute top-full right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-rm-border bg-rm-bg-elevated p-4 shadow-xl animate-in slide-in-from-top-2 fade-in duration-200 cursor-default outline-none md:top-0 md:right-[calc(100%+8px)] md:mt-0 md:w-64 md:max-w-64 md:slide-in-from-right-4"
-                    aria-label="Image details panel"
-                  >
-                    <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
-                      <Info size={14} className="text-primary" />
-                      {isAnimatedMedia
-                        ? "GIF Details"
-                        : isVideo
-                          ? "Video Details"
-                          : "Image Details"}
-                    </h3>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                          Filename
-                        </div>
-                        <div className="text-xs text-rm-text break-all bg-rm-bg-surface/40 p-2 rounded border border-rm-border font-mono">
-                          {currentImage.filename}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                            Dimensions
-                          </div>
-                          <div className="text-sm text-rm-text font-medium">
-                            {dimensions
-                              ? `${dimensions.width}×${dimensions.height}`
-                              : "—"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                            Size
-                          </div>
-                          <div className="text-sm text-rm-text font-medium">
-                            {formatBytes(currentImage.size_bytes)}
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
-                          Type
-                        </div>
-                        <div className="text-xs text-rm-text-muted font-mono">
-                          {currentImage.content_type}
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )}
-              </div>
-            )}
-          </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className={DETAIL_LABEL}>Dimensions</div>
+          <Num size="sm" className="text-ink-1">
+            {dimensions ? `${dimensions.width}×${dimensions.height}` : "—"}
+          </Num>
         </div>
+        <div>
+          <div className={DETAIL_LABEL}>Size</div>
+          <Num size="sm" className="text-ink-1">
+            {formatBytes(currentImage.size_bytes)}
+          </Num>
+        </div>
+      </div>
+      <div>
+        <div className={DETAIL_LABEL}>Type</div>
+        <div className="text-ui-xs break-all text-ink-2">
+          {currentImage.content_type}
+        </div>
+      </div>
+    </section>
+  );
 
-        {/* Close button – own pill group */}
-        <div className="bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
+  const hasAuthor = Boolean(
+    context?.display_name?.trim() || context?.username?.trim(),
+  );
+  const displayName = hasAuthor ? getDisplayName(context) : "";
+  const createdAt: string | undefined = context?.created_at;
+  const sizeLabel =
+    typeof currentImage.size_bytes === "number" && currentImage.size_bytes > 0
+      ? formatBytes(currentImage.size_bytes)
+      : null;
+  const metaLabel = [
+    sizeLabel,
+    dimensions ? `${dimensions.width}×${dimensions.height}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const moreTrigger = isMobile ? (
+    <>
+      <button
+        type="button"
+        onClick={() => setSheetOpen(true)}
+        className={VIEWER_BUTTON}
+        aria-expanded={sheetOpen}
+        aria-haspopup="menu"
+        aria-label="More attachment actions"
+      >
+        <Icon name="more" size="md" />
+      </button>
+      <ActionSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        title="Attachment actions"
+        items={moreItems.map(
+          (item): ActionSheetItem => ({
+            key: item.key,
+            label: item.label,
+            rightIcon: item.icon,
+            onClick: item.onSelect ?? (() => {}),
+            variant: item.danger ? "danger" : "default",
+            divider: item.divider,
+            submenu: item.key === "details" ? detailsPanel : undefined,
+            closeOnClick: item.key === "details" ? false : undefined,
+          }),
+        )}
+      />
+    </>
+  ) : (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
           <button
             type="button"
-            onClick={close}
-            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
-            aria-label="Close media viewer"
-          >
-            <X size={18} />
-          </button>
+            className={VIEWER_BUTTON}
+            aria-label="More attachment actions"
+          />
+        }
+      >
+        <Icon name="more" size="md" />
+      </DropdownMenuTrigger>
+      {/* The viewer is a z-50 dialog: the menu goes on the stacked layer. */}
+      <DropdownMenuContent align="end" sideOffset={8} stacked>
+        {moreItems.map((item) =>
+          item.key === "details" ? (
+            <DropdownMenuSub key={item.key}>
+              <DropdownMenuSubTrigger icon={item.icon}>
+                {item.label}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent
+                stacked
+                side="inline-start"
+                className="w-64 p-3"
+              >
+                {detailsPanel}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          ) : (
+            <Fragment key={item.key}>
+              <DropdownMenuItem
+                icon={item.icon}
+                variant={item.danger ? "danger" : "default"}
+                onClick={item.onSelect}
+              >
+                {item.label}
+              </DropdownMenuItem>
+              {item.divider ? <DropdownMenuSeparator /> : null}
+            </Fragment>
+          ),
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  return (
+    <div
+      data-slot="image-viewer-toolbar"
+      className={cn(
+        "absolute inset-x-0 top-0 z-50 flex justify-between",
+        // Phone: one opaque 52px bar under the status bar, author left
+        // (truncating), keys right. Nothing from the page shows through.
+        "items-center gap-1 border-b border-line bg-ply-0 py-1 pr-1 pl-3 pt-[calc(4px+var(--safe-area-top,0px))]",
+        // Desktop: two floating groups over the scrim.
+        "md:pointer-events-none md:items-start md:gap-3 md:border-0 md:bg-transparent md:p-4 md:pt-[calc(16px+var(--safe-area-top,0px))]",
+      )}
+    >
+      {/* Left: who posted it and when. Hidden when the viewer has no author. */}
+      {hasAuthor ? (
+        <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2.5 md:h-10 md:flex-initial md:rounded-lg md:border md:border-line md:bg-ply-3 md:py-1 md:pr-3 md:pl-2 md:shadow-float">
+          <PreviewAvatar
+            name={displayName}
+            src={
+              context?.avatar_url ? getAuthAssetUrl(context.avatar_url) : null
+            }
+            display={context?.avatar_display}
+            size={isMobile ? 32 : 24}
+          />
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-ui-sm leading-tight font-semibold text-ink-1">
+              <InlineEmojiText text={displayName} />
+            </span>
+            {createdAt ? <ViewerTime value={createdAt} /> : null}
+          </div>
         </div>
+      ) : (
+        <span aria-hidden="true" className="flex-1 md:flex-initial" />
+      )}
+
+      {/* Right: one toolbar group. File, view, actions, then close. */}
+      <div
+        role="toolbar"
+        aria-label="Media actions"
+        className={cn(VIEWER_BAR, "pointer-events-auto min-w-0 shrink-0")}
+      >
+        <div className="hidden min-w-0 flex-col justify-center px-2 md:flex md:max-w-60">
+          <span
+            className="truncate text-ui-sm font-medium text-ink-1"
+            title={currentImage.filename}
+          >
+            {currentImage.filename}
+          </span>
+          {metaLabel ? (
+            <Num className="truncate text-ink-3">{metaLabel}</Num>
+          ) : null}
+        </div>
+        <span
+          aria-hidden="true"
+          className="mx-1 hidden h-5 w-px bg-line md:block"
+        />
+
+        {/* Phones zoom with a tap on the image; the keys would crowd out
+            the author. */}
+        {!isVideo && !isMobile && (
+          <>
+            <button
+              type="button"
+              onClick={() => viewDispatch({ type: "ZOOM_OUT" })}
+              className={VIEWER_BUTTON}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              <Icon name="zoomOut" size="md" />
+            </button>
+            <button
+              type="button"
+              onClick={() => viewDispatch({ type: "ZOOM_IN" })}
+              className={VIEWER_BUTTON}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              <Icon name="zoomIn" size="md" />
+            </button>
+          </>
+        )}
+
+        {currentImage?.message_id &&
+          typeof context?.onJumpToMessage === "function" && (
+            <button
+              type="button"
+              onClick={handleForward}
+              className={VIEWER_BUTTON}
+              aria-label="Jump to message"
+              title="Jump to message"
+            >
+              <Icon name="chat" size="md" />
+            </button>
+          )}
+
+        <a
+          href={currentImage.downloadUrl || getUrl(currentImage)}
+          download={currentImage.filename}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={VIEWER_BUTTON}
+          aria-label="Download attachment"
+          title="Download"
+        >
+          <Icon name="download" size="md" />
+        </a>
+
+        {moreTrigger}
+
+        <span aria-hidden="true" className="mx-1 h-5 w-px bg-line" />
+
+        <button
+          type="button"
+          onClick={close}
+          className={VIEWER_BUTTON}
+          aria-label="Close media viewer"
+          title="Close (Esc)"
+        >
+          <Icon name="close" size="md" />
+        </button>
       </div>
     </div>
+  );
+}
+
+/** Time-only in `Num` today; the short day before it otherwise. */
+function ViewerTime({ value }: { value: string }) {
+  const { time, shortDate, full } = useMessageTimeFormat();
+  const t = time(value);
+  const day = shortDate(value);
+  return (
+    <time
+      dateTime={value}
+      title={full(value)}
+      className="truncate text-ui-xs leading-tight whitespace-nowrap text-ink-3"
+    >
+      {day === t ? (
+        <Num>{t}</Num>
+      ) : (
+        <>
+          {day} <Num>{t}</Num>
+        </>
+      )}
+    </time>
   );
 }

@@ -21,7 +21,7 @@ describe("AvatarFrameEditor", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders as an interactive top-level modal layer", () => {
+  it("renders as a top-placed medium dialog with a scrim", () => {
     render(
       <AvatarFrameEditor
         image={{ src: "blob:test-avatar" }}
@@ -31,7 +31,12 @@ describe("AvatarFrameEditor", () => {
       />,
     );
 
-    const modalLayer = screen.getByRole("presentation");
-    expect(modalLayer).toHaveClass("z-70", "pointer-events-auto");
+    const dialog = screen.getByRole("dialog", { name: "Frame your avatar" });
+    expect(dialog).toHaveAttribute("data-size", "md");
+    expect(dialog).toHaveAttribute("data-placement", "top");
+    expect(dialog).not.toHaveClass("z-60");
+    expect(
+      document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
+    ).toContain("bg-scrim");
   });
 });

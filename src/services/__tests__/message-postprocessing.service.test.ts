@@ -125,14 +125,15 @@ describe("message postprocessing", () => {
     );
   });
 
-  it("preserves stored embeds when resolution has a provider failure", async () => {
+  it("keeps a stored embed whose URL failed transiently and asks for a retry", async () => {
+    const stored = [{ id: "embed-old", url: "https://example.test" }];
     const db = createMockD1();
     db.mockQuery("SELECT m.id", {
       id: "message-1",
       channel_id: "channel-1",
       content: "https://example.test",
       content_revision: 1,
-      embeds: JSON.stringify([{ url: "https://old.example" }]),
+      embeds: JSON.stringify(stored),
       author_id: "author-1",
       author_username: "author",
       author_display_name: null,
@@ -140,17 +141,77 @@ describe("message postprocessing", () => {
       reply_to_id: null,
       server_id: "server-1",
     });
-    extractionStatusMock.mockResolvedValue({ embeds: [], hadFailures: true });
+    // The extractor hands back the previous embed for a URL that failed.
+    extractionStatusMock.mockImplementation(
+      async (_content: string, options?: { previous?: unknown[] }) => ({
+        embeds: options?.previous ?? [],
+        hadFailures: true,
+      }),
+    );
     const broadcast = vi.fn(async () => undefined);
 
-    await processMessagePostprocessingTask(
+    const outcome = await processMessagePostprocessingTask(
       db as never,
       { messageId: "message-1", channelId: "channel-1", revision: 1 },
       broadcast,
     );
 
+    expect(extractionStatusMock).toHaveBeenCalledWith("https://example.test", {
+      previous: stored,
+    });
+    expect(outcome).toEqual({ retryEmbeds: true });
     expect(db.getCalls("UPDATE messages SET embeds")).toHaveLength(0);
     expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it("stores the embeds that resolved even when another URL fails", async () => {
+    const db = createMockD1();
+    db.mockQuery("SELECT m.id", {
+      id: "message-1",
+      channel_id: "channel-1",
+      content: "https://a.test https://b.test",
+      content_revision: 1,
+      embeds: "[]",
+      author_id: "author-1",
+      author_username: "author",
+      author_display_name: null,
+      author_avatar_url: null,
+      reply_to_id: null,
+      server_id: "server-1",
+    });
+    db.mockQuery("UPDATE messages SET embeds", { meta: { changes: 1 } });
+    db.mockQuery("SELECT content_revision FROM messages", {
+      content_revision: 1,
+    });
+    extractionStatusMock.mockResolvedValue({
+      embeds: [{ url: "https://a.test" }],
+      hadFailures: true,
+    });
+    const broadcast = vi.fn(async () => undefined);
+
+    const outcome = await processMessagePostprocessingTask(
+      db as never,
+      {
+        messageId: "message-1",
+        channelId: "channel-1",
+        revision: 1,
+        notify: false,
+      },
+      broadcast,
+    );
+
+    expect(outcome).toEqual({ retryEmbeds: true });
+    expect(db.getCalls("UPDATE messages SET embeds")).toHaveLength(1);
+    expect(broadcast).toHaveBeenCalledWith(
+      { kind: "server", id: "server-1" },
+      "MESSAGE_UPDATE",
+      {
+        id: "message-1",
+        channel_id: "channel-1",
+        content_revision: 1,
+        embeds: [{ url: "https://a.test" }],
+      },
+    );
   });
 
   it("replays an empty embed update after its first broadcast fails", async () => {

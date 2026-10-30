@@ -10,14 +10,16 @@ interface ProfileFrameLayerProps {
   display?: AvatarDisplay | string | null;
   order: ProfileFrameLayerOrder;
   className?: string;
-  fitToSurface?: boolean;
 }
 
+/**
+ * One render order of a profile frame. Fills the frame box (the card plus the
+ * footprint ProfileSurfaceShell reserves around it); see lib/profile-frame.
+ */
 export function ProfileFrameLayer({
   display,
   order,
   className,
-  fitToSurface = false,
 }: ProfileFrameLayerProps) {
   const layers = getProfileFrameLayers(display, order);
   if (!layers.length) return null;
@@ -29,17 +31,17 @@ export function ProfileFrameLayer({
         className,
       )}
       aria-hidden="true"
+      data-frame-order={order}
     >
       {layers.map((layer) => (
         <img
           key={layer.id}
           src={layer.src}
           alt=""
-          className={cn(
-            "absolute left-1/2 max-w-none -translate-x-1/2 object-contain",
-          )}
-          style={getProfileFrameLayerStyle(display, layer, { fitToSurface })}
-          loading="lazy"
+          data-frame-layer={layer.type}
+          className="absolute left-0 max-w-none select-none"
+          style={getProfileFrameLayerStyle(display, layer)}
+          draggable={false}
           decoding="async"
         />
       ))}

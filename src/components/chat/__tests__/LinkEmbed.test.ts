@@ -93,7 +93,7 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("width:280px");
+    expect(markup).toContain("width:400px");
     expect(markup).toContain("aspect-ratio:1080/1920");
   });
 
@@ -186,7 +186,7 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("grid-cols-2 h-[220px] sm:h-[300px]");
+    expect(markup).toContain("grid-cols-2 h-[220px] md:h-[300px]");
     expect(markup).not.toContain("grid-rows-2");
   });
 
@@ -366,7 +366,7 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain("w-full max-w-full justify-start");
-    expect(markup).toContain("block w-fit max-w-full rounded-[20px]");
+    expect(markup).toContain("block w-fit max-w-full rounded-md");
     expect(markup).not.toContain("bg-black/30");
     expect(markup).toContain("Add clip to favorites");
     expect(markup).toContain(
@@ -399,7 +399,7 @@ describe("LinkEmbed - X mixed media", () => {
       "h-auto max-h-[420px] w-auto max-w-full object-contain object-left",
     );
     expect(markup).toContain(
-      "block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
+      "block w-fit max-w-full rounded-md border border-line bg-tint-1",
     );
   });
 
@@ -453,7 +453,9 @@ describe("LinkEmbed - X mixed media", () => {
 
     expect(markup).toContain('href="https://www.twitch.tv/rikohgg"');
     expect(markup).toContain(">twitch.tv/rikohgg<");
-    expect(markup).toContain("text-primary transition-colors hover:underline");
+    expect(markup).toContain(
+      "text-accent-ink underline-offset-3 pointer-fine:hover:underline",
+    );
   });
 
   it("keeps single quoted tweet media in a smaller compact card", () => {
@@ -500,10 +502,7 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("h-[180px]");
     expect(markup).toContain("object-center");
     expect(markup).toContain("mx-auto");
-    expect(markup).not.toContain(
-      "max-w-[240px] rounded-[18px] border border-rm-border/45",
-    );
-    expect(markup).not.toContain("rounded-[18px]");
+    expect(markup).not.toContain("max-w-[240px] rounded-md border border-line");
     expect(markup).toContain("Open quoted post on X");
   });
 
@@ -546,9 +545,8 @@ describe("LinkEmbed - X mixed media", () => {
     );
     expect(markup).toContain("mx-auto");
     expect(markup).toContain("block w-fit max-w-full");
-    expect(markup).not.toContain("rounded-[20px]");
     expect(markup).not.toContain(
-      "block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
+      "block w-fit max-w-full rounded-md border border-line bg-tint-1",
     );
   });
 
@@ -631,7 +629,7 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).not.toContain(">Show more<");
   });
 
-  it("uses compact X header time and restores the X footer timestamp row", () => {
+  it("shows the X post date once, as a short date in the header", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-30T05:00:00-05:00"));
 
@@ -651,10 +649,13 @@ describe("LinkEmbed - X mixed media", () => {
         fields: [],
       });
 
-      expect(markup).toContain("· 21h");
+      // One date format: the short date in the header (the server
+      // snapshot formats in UTC), the full date in its title, no footer row.
+      expect(markup).toContain(">Jun 29, 2026<");
+      expect(markup).toContain('title="Monday, June 29, 2026 at 1:00 PM"');
       expect(markup).toContain(">X<");
-      expect(markup).toContain("2026");
       expect(markup).not.toContain("Yesterday at");
+      expect(markup.match(/>Jun 29, 2026</g)?.length).toBe(1);
     } finally {
       vi.useRealTimers();
     }
@@ -762,7 +763,9 @@ describe("LinkEmbed - X mixed media", () => {
     );
     expect(markup).toContain("Open in Instagram");
     expect(markup).toContain("Instagram");
-    expect(markup).toContain("VsNE-OHk_8a.png");
+    // The provider dot and name replace the hotlinked Instagram favicon.
+    expect(markup).toContain("data-embed-dot");
+    expect(markup).not.toContain("VsNE-OHk_8a.png");
     expect(markup).toContain("craziest work");
     expect(markup).toContain("chardanceswag");
     expect(markup).not.toContain(

@@ -13,14 +13,18 @@ import {
   type ClientDateFormatter,
 } from "@/lib/client-date-format";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 import {
-  ImagePlus,
-  LockKeyhole,
-  MessageCircle,
-  Send,
-  Sparkles,
-} from "lucide-react";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface DemoChatGif {
@@ -160,60 +164,48 @@ export function DemoRoomChatPanel({
   return (
     <aside
       className={cn(
-        "flex min-h-0 flex-col border-t border-rm-border bg-rm-bg-surface/95 backdrop-blur md:w-[380px] md:border-l md:border-t-0",
+        "flex min-h-0 flex-col border-t border-line bg-ply-1 md:w-[360px] md:border-t-0 md:border-l",
         className,
       )}
     >
-      <div className="border-b border-rm-border px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-accent-dim text-rm-accent ring-1 ring-rm-accent/20">
-              <MessageCircle className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-rm-text">Temporary Chat</h2>
-              <p className="text-ui-2xs font-medium text-rm-text-muted">
-                Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
-              </p>
-            </div>
-          </div>
-          <Sparkles className="h-4 w-4 text-rm-accent opacity-80" />
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
+        <Icon name="chat" size="lg" className="shrink-0 text-ink-3" />
+        <div className="min-w-0">
+          <h2 className="truncate text-ui-sm font-semibold text-ink-1">
+            Temporary chat
+          </h2>
+          <p className="truncate text-ui-xs text-ink-3">
+            Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
+          </p>
         </div>
       </div>
 
       <div
         ref={scrollRef}
-        className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
       >
         {messages.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-primary/40 p-4 text-center">
-            <p className="text-sm font-semibold text-rm-text">
-              No messages yet
-            </p>
-            <p className="mt-1 text-xs text-rm-text-muted">
-              Say hi before this room forgets the conversation in{" "}
-              {DEMO_CHAT_TTL_MINUTES} minutes.
-            </p>
-          </div>
+          <EmptyState
+            size="sm"
+            title="No messages yet"
+            description={`Say hi. This room forgets the conversation after ${DEMO_CHAT_TTL_MINUTES} minutes.`}
+          />
         ) : (
           messages.map((message) => (
-            <article
-              key={message.id}
-              className="group rounded-2xl bg-rm-bg-primary/55 p-3 ring-1 ring-white/5"
-            >
-              <div className="mb-1 flex items-center justify-between gap-3">
-                <span className="truncate text-xs font-bold text-rm-text">
+            <article key={message.id} className="group">
+              <div className="mb-0.5 flex items-baseline gap-2">
+                <span className="truncate text-ui-sm font-semibold text-ink-1">
                   <InlineEmojiText text={message.author_name} />
                 </span>
                 <time
-                  className="shrink-0 text-ui-2xs font-medium text-rm-text-muted"
+                  className="shrink-0 text-num-xs text-ink-3"
                   dateTime={formatDateTimeAttribute(message.created_at)}
                 >
                   {formatChatTime(message.created_at, formatDate)}
                 </time>
               </div>
               {message.content && (
-                <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-rm-text/90">
+                <p className="whitespace-pre-wrap wrap-break-word text-ui-sm text-ink-1">
                   <InlineEmojiText text={message.content} />
                 </p>
               )}
@@ -225,22 +217,21 @@ export function DemoRoomChatPanel({
 
       <form
         onSubmit={handleSubmit}
-        className="relative border-t border-rm-border p-3"
+        className="relative border-t border-line p-3"
       >
-        <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-ui-2xs font-semibold text-amber-800 dark:text-amber-100/90">
-          <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
-          Messages and GIFs here are demo-only and expire after{" "}
-          {DEMO_CHAT_TTL_MINUTES} minutes.
-        </div>
-        <div className="flex items-end gap-2 rounded-2xl bg-rm-bg-primary p-2 ring-1 ring-white/5">
+        <div className="flex items-end gap-1 rounded-lg border border-line bg-ply-2 p-1.5">
           <button
             type="button"
             onClick={onUploadBlocked}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-focus",
+              PRESS,
+              HIT,
+            )}
             title="Uploads are in the full app"
             aria-label="Uploads are in the full app"
           >
-            <ImagePlus className="h-4 w-4" />
+            <Icon name="image" size="lg" />
           </button>
           <textarea
             value={value}
@@ -257,25 +248,36 @@ export function DemoRoomChatPanel({
             maxLength={DEMO_CHAT_MAX_CONTENT_LENGTH}
             aria-label="Message this demo room"
             placeholder="Message this room"
-            className="custom-scrollbar max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm font-medium text-rm-text outline-none placeholder:text-rm-text-muted/55"
+            className="max-h-28 min-h-8 flex-1 resize-none bg-transparent px-1 py-1.5 text-ui-md text-ink-1 outline-none placeholder:text-ink-3 md:text-ui-base"
           />
           <button
             type="button"
             onClick={() => setShowGifPicker((current) => !current)}
-            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-xs font-bold tracking-wide text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-primary"
+            aria-pressed={showGifPicker}
+            aria-label="Open GIF picker"
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-focus aria-pressed:bg-tint-2 aria-pressed:text-ink-1",
+              PRESS,
+              HIT,
+            )}
           >
-            GIF
+            <Icon name="gif" size="lg" />
           </button>
           <button
             type="submit"
             disabled={!value.trim()}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-fill text-on-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+              PRESS,
+              HIT,
+              DISABLED,
+            )}
             aria-label="Send message"
           >
-            <Send className="h-4 w-4" />
+            <Icon name="send" size="lg" />
           </button>
         </div>
-        <div className="mt-1 flex justify-end px-2 text-ui-2xs font-semibold text-rm-text-muted/70">
+        <div className="mt-1 flex justify-end px-2 text-num-xs text-ink-3">
           {characterCounter.label}
         </div>
         <GifPickerModal
@@ -298,54 +300,28 @@ export function DemoUploadBlockerModal({
   onSignIn,
 }: DemoUploadBlockerModalProps) {
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <DialogSurface
-          showCloseButton={false}
-          className="fixed inset-0 z-50 m-0 flex items-center justify-center border-0 bg-black/65 p-4 backdrop-blur-sm"
-          aria-labelledby="demo-upload-blocker-title"
-        >
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
-            <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
-                <LockKeyhole className="h-5 w-5" />
-              </div>
-              <h2
-                id="demo-upload-blocker-title"
-                className="text-xl font-semibold text-rm-text"
-              >
-                Uploads are in the full app
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">
-                Sign in to Ralph Meet to upload images and files with persistent
-                chat, attachment storage, and the full server experience.
-              </p>
-            </div>
-            <div className="space-y-3 px-6 py-5">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100/90">
-                You can try out our GIF implementation for a limited time.
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={onSignIn}
-                  className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110"
-                >
-                  Sign in for uploads
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-sm font-bold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
-                >
-                  Stay in demo
-                </button>
-              </div>
-            </div>
-          </div>
-        </DialogSurface>
-      </DialogPortal>
-    </Dialog>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent dialogClassName="md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
+            Uploads are in the full app
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Sign in to Ralph Meet to upload images and files, with persistent
+            chat and attachment storage. GIFs work here in the demo.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogFooter>
+          <Button variant="secondary" onClick={onClose}>
+            Stay in demo
+          </Button>
+          <Button onClick={onSignIn}>Sign in to upload</Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 
@@ -357,7 +333,7 @@ function DemoChatGifPreview({ gif }: { gif: DemoChatGif }) {
       href={gif.source_url || gif.url}
       target="_blank"
       rel="noreferrer"
-      className="relative mt-2 block overflow-hidden rounded-xl border border-rm-border bg-black/20"
+      className="relative mt-2 block overflow-hidden rounded-md border border-line bg-ply-2"
     >
       {gif.content_type === "video/mp4" ? (
         <video

@@ -15,17 +15,14 @@ import {
   getWarpRushRingRenderState,
 } from "@/lib/warp-rush";
 import { cn } from "@/lib/utils";
-import {
-  AlertTriangle,
-  Gauge,
-  Move3D,
-  Rocket,
-  RotateCcw,
-  Trophy,
-  Users,
-  Wind,
-  Zap,
-} from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Icon } from "@/components/ui/icon";
+import { HIT, PRESS } from "@/components/ui/interaction";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Num } from "@/components/ui/num";
+import { useAppActive } from "@/hooks/useAppActive";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -101,7 +98,7 @@ const PRESETS: Record<WarpRushPreset, LoadPresetConfig> = {
     ringRadius: 12,
   },
   ultra: {
-    label: "Ultra",
+    label: "High",
     starLayers: 4,
     starsPerLayer: 12000,
     dustPerLayer: 2800,
@@ -111,7 +108,7 @@ const PRESETS: Record<WarpRushPreset, LoadPresetConfig> = {
     ringRadius: 12.5,
   },
   meltdown: {
-    label: "Meltdown",
+    label: "Max",
     starLayers: 5,
     starsPerLayer: 17000,
     dustPerLayer: 4200,
@@ -122,6 +119,8 @@ const PRESETS: Record<WarpRushPreset, LoadPresetConfig> = {
   },
 };
 const PRESET_ORDER: WarpRushPreset[] = ["balanced", "ultra", "meltdown"];
+/** The game renders at most this often, however fast the display refreshes. */
+const FRAME_INTERVAL_MS = 1000 / 60;
 const RENDER_SCALES = [
   { label: "0.85x", value: 0.85 },
   { label: "1.0x", value: 1 },
@@ -285,10 +284,15 @@ export function WarpRushActivityStage({
     dpr: 1,
   });
   const [rendererLabel, setRendererLabel] = useState("Booting renderer...");
-  const [accelerationLabel, setAccelerationLabel] = useState(
-    "Checking acceleration",
-  );
-  const [failureReason, setFailureReason] = useState<string | null>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [bootAttempt, setBootAttempt] = useState(0);
+  // The render loop runs only while the app is worth drawing: visible, and
+  // not unfocused behind a fullscreen game (talk-tree-spec §5f). The scene
+  // effect registers its start/stop here so a change never rebuilds the scene.
+  const appActive = useAppActive();
+  const appActiveRef = useRef(appActive);
+  const syncLoopRef = useRef<() => void>(() => {});
+  const statsOpenRef = useRef(statsOpen);
   const [pilotStates, setPilotStates] = useState<
     Record<string, PilotPresenceState>
   >({});
@@ -314,6 +318,15 @@ export function WarpRushActivityStage({
   useEffect(() => {
     bestRef.current = bestScore;
   }, [bestScore]);
+
+  useEffect(() => {
+    appActiveRef.current = appActive;
+    syncLoopRef.current();
+  }, [appActive]);
+
+  useEffect(() => {
+    statsOpenRef.current = statsOpen;
+  }, [statsOpen]);
 
   useEffect(() => {
     remotePilotsRef.current = Object.fromEntries(
@@ -481,6 +494,8 @@ export function WarpRushActivityStage({
     let disposed = false;
     let accumulator = 0;
     let lastTimestamp = 0;
+    let nextFrameAt = 0;
+    let loopRunning = false;
     let fpsFrames = 0;
     let fpsElapsed = 0;
     let hudElapsed = 0;
@@ -505,13 +520,9 @@ export function WarpRushActivityStage({
         powerPreference: "high-performance",
       });
     } catch (error) {
+      console.warn("Warp Rush: WebGL renderer failed to initialize", error);
       queueMicrotask(() => {
         if (disposed) return;
-        setFailureReason(
-          error instanceof Error
-            ? error.message
-            : "WebGL renderer failed to initialize.",
-        );
         setStatus("unsupported");
       });
       return;
@@ -533,12 +544,6 @@ export function WarpRushActivityStage({
     queueMicrotask(() => {
       if (disposed) return;
       setRendererLabel(finalRendererLabel);
-      setAccelerationLabel(
-        isLikelySoftwareRenderer(finalRendererLabel)
-          ? "Fallback renderer likely"
-          : "Hardware acceleration likely",
-      );
-      setFailureReason(null);
       setStatus("running");
     });
 
@@ -775,6 +780,7 @@ export function WarpRushActivityStage({
       keys.down = false;
       accumulator = 0;
       lastTimestamp = 0;
+      nextFrameAt = 0;
       crashBroadcasted = false;
       setScore(0);
       setSlipstreamActive(false);
@@ -842,6 +848,15 @@ export function WarpRushActivityStage({
 
     const renderFrame = (timestamp: number) => {
       if (disposed) return;
+
+      // 60 fps cap: a 120 or 144 Hz display would otherwise run the whole sim
+      // and the bloom pass at double speed for no visible gain. The 1ms slack
+      // keeps vsync jitter from dropping a frame on a 60 Hz display.
+      if (timestamp + 1 < nextFrameAt) return;
+      nextFrameAt =
+        nextFrameAt && timestamp - nextFrameAt < FRAME_INTERVAL_MS
+          ? nextFrameAt + FRAME_INTERVAL_MS
+          : timestamp + FRAME_INTERVAL_MS;
 
       if (!lastTimestamp) lastTimestamp = timestamp;
       const frameSeconds = clamp(
@@ -1081,37 +1096,77 @@ export function WarpRushActivityStage({
       fpsFrames += 1;
       fpsElapsed += frameSeconds;
       if (fpsElapsed >= 0.24) {
-        const fps = fpsFrames / fpsElapsed;
-        setPerfStats({
-          fps: Math.round(fps),
-          frameMs: Number((1000 / Math.max(fps, 1)).toFixed(1)),
-          drawCalls: renderer.info.render.calls,
-          triangles: renderer.info.render.triangles,
-          points: renderer.info.render.points,
-          dpr: Number(renderer.getPixelRatio().toFixed(2)),
-        });
+        // Telemetry is only worth a re-render while someone is reading it.
+        if (statsOpenRef.current) {
+          const fps = fpsFrames / fpsElapsed;
+          setPerfStats({
+            fps: Math.round(fps),
+            frameMs: Number((1000 / Math.max(fps, 1)).toFixed(1)),
+            drawCalls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            points: renderer.info.render.points,
+            dpr: Number(renderer.getPixelRatio().toFixed(2)),
+          });
+        }
         fpsFrames = 0;
         fpsElapsed = 0;
       }
     };
 
+    // Start and stop the loop with the app: stopped, nothing is simulated or
+    // drawn (the run holds still); on resume the clocks restart so the gap is
+    // not treated as one long frame.
+    const startLoop = () => {
+      if (loopRunning || disposed) return;
+      loopRunning = true;
+      lastTimestamp = 0;
+      nextFrameAt = 0;
+      renderer.setAnimationLoop(renderFrame);
+    };
+    const stopLoop = () => {
+      if (!loopRunning) return;
+      loopRunning = false;
+      renderer.setAnimationLoop(null);
+    };
+    const syncLoop = () => {
+      if (appActiveRef.current && document.visibilityState !== "hidden") {
+        startLoop();
+      } else {
+        stopLoop();
+      }
+    };
+    syncLoopRef.current = syncLoop;
+    document.addEventListener("visibilitychange", syncLoop);
+    cleanupFns.push(() =>
+      document.removeEventListener("visibilitychange", syncLoop),
+    );
+
     resize();
     resetRun();
-    renderer.setAnimationLoop(renderFrame);
+    syncLoop();
 
     return () => {
       disposed = true;
-      renderer.setAnimationLoop(null);
+      stopLoop();
+      syncLoopRef.current = () => {};
       for (const cleanup of cleanupFns.reverse()) cleanup();
     };
-  }, [channelId, course, preset, renderScale]);
+  }, [bootAttempt, channelId, course, preset, renderScale]);
 
+  // Stale pilots drop off the board; a slow clock keeps render pure. It stops
+  // with the app, like the render loop.
+  const [leaderboardNow, setLeaderboardNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!appActive) return;
+    const id = window.setInterval(() => setLeaderboardNow(Date.now()), 2000);
+    return () => window.clearInterval(id);
+  }, [appActive]);
   const sortedLeaderboard = useMemo(
     () =>
       Object.values(pilotStates)
         .filter(
           (entry) =>
-            Date.now() - entry.updatedAt < 12000 ||
+            leaderboardNow - entry.updatedAt < 12000 ||
             entry.userId === localUserId,
         )
         .sort(
@@ -1121,7 +1176,7 @@ export function WarpRushActivityStage({
             right.updatedAt - left.updatedAt,
         )
         .slice(0, 8),
-    [localUserId, pilotStates],
+    [leaderboardNow, localUserId, pilotStates],
   );
   const softwareRendererLikely = isLikelySoftwareRenderer(rendererLabel);
   const remotePilotCount = sortedLeaderboard.reduce(
@@ -1129,318 +1184,388 @@ export function WarpRushActivityStage({
     0,
   );
 
+  // HUD floats: ply-3 with a line and the float shadow, over the dark canvas.
+  const panel = "rounded-lg border border-line bg-ply-3 shadow-float";
+  const statRows: Array<[string, string]> = [
+    ["Frame rate", `${perfStats.fps} fps`],
+    ["Frame time", `${perfStats.frameMs} ms`],
+    ["Triangles", formatStat(perfStats.triangles)],
+    ["Draw calls", formatStat(perfStats.drawCalls)],
+    ["Points", formatStat(perfStats.points)],
+    ["Pixel ratio", String(perfStats.dpr)],
+  ];
+
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#020617] text-white">
+    <div className="@container relative h-full w-full overflow-hidden bg-ply-0 text-ink-1">
       <div ref={stageRef} className="absolute inset-0" />
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_28%),linear-gradient(180deg,rgba(2,6,23,0.12),rgba(2,6,23,0.82))]" />
+      {status === "running" || status === "crashed" ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 @[720px]:p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <section
+              aria-label="Your run"
+              className={cn(
+                panel,
+                "pointer-events-auto w-full max-w-[340px] p-4",
+              )}
+            >
+              <h2 className="text-ui-md font-semibold">Warp Rush</h2>
+              <p className="mt-0.5 hidden max-w-[40ch] text-ui-sm text-pretty text-ink-2 @[720px]:block">
+                Race through the same tunnel as everyone in the call. Steer
+                around the debris, and fly close behind another ship to draft
+                for a speed boost.
+              </p>
 
-      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 sm:p-4 md:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="pointer-events-auto flex w-full max-w-[440px] flex-col gap-3">
-            <div className="rounded-3xl border border-cyan-300/15 bg-slate-950/48 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.42)] backdrop-blur-2xl sm:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.28em] text-cyan-200/74">
-                    <Rocket size={14} />
-                    Warp Rush 3D
-                  </div>
-                  <h2 className="mt-2 text-2xl font-black leading-none text-white sm:text-[2rem]">
-                    Shared tunnel sprint
-                  </h2>
-                  <p className="mt-2 max-w-[34ch] text-sm leading-6 text-slate-300">
-                    Same seed, same hazards, live ghost ships. Draft the pilot
-                    ahead and compare acceleration modes without changing the
-                    sim.
-                  </p>
-                </div>
-                <div
-                  className={cn(
-                    "shrink-0 rounded-full border px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em]",
-                    softwareRendererLikely
-                      ? "border-amber-300/35 bg-amber-400/10 text-amber-100"
-                      : "border-emerald-300/30 bg-emerald-400/10 text-emerald-100",
-                  )}
-                >
-                  {accelerationLabel}
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    Score
-                  </div>
-                  <div className="mt-2 text-2xl font-black text-cyan-200">
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+                <div>
+                  <dt className="text-ui-xs text-ink-3">Score</dt>
+                  <dd className="font-mono text-ui-xl font-semibold tabular-nums">
                     {formatStat(score)}
-                  </div>
+                  </dd>
                 </div>
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    Best
-                  </div>
-                  <div className="mt-2 text-2xl font-black text-fuchsia-200">
+                <div>
+                  <dt className="text-ui-xs text-ink-3">Best</dt>
+                  <dd className="font-mono text-ui-xl font-semibold tabular-nums">
                     {formatStat(bestScore)}
-                  </div>
+                  </dd>
                 </div>
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    <Wind size={12} />
+                <div>
+                  <dt className="flex items-center gap-1.5 text-ui-xs text-ink-3">
+                    <Icon name="noiseSuppression" size="xs" />
                     Draft
-                  </div>
-                  <div
+                  </dt>
+                  <dd
                     className={cn(
-                      "mt-2 text-sm font-bold",
-                      slipstreamActive ? "text-emerald-200" : "text-slate-200",
+                      "text-ui-sm font-medium",
+                      slipstreamActive ? "text-success-ink" : "text-ink-1",
                     )}
                   >
                     {slipstreamActive
                       ? `+${Math.round(WARP_RUSH_SLIPSTREAM_BONUS * 100)}% speed`
-                      : "No draft"}
-                  </div>
+                      : "Not drafting"}
+                  </dd>
                 </div>
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    <Users size={12} />
-                    Rival
-                  </div>
-                  <div className="mt-2 text-sm font-bold text-slate-100">
+                <div>
+                  <dt className="flex items-center gap-1.5 text-ui-xs text-ink-3">
+                    <Icon name="members" size="xs" />
+                    Next ship
+                  </dt>
+                  <dd className="text-ui-sm font-medium tabular-nums">
                     {nearestRivalGap === null
-                      ? "Open tunnel"
+                      ? "None ahead"
                       : `${nearestRivalGap.toFixed(1)}m ahead`}
-                  </div>
+                  </dd>
                 </div>
-              </div>
-            </div>
+              </dl>
+            </section>
 
-            {failureReason && (
-              <div className="rounded-full border border-amber-300/28 bg-slate-950/72 px-4 py-2 text-xs text-amber-50 backdrop-blur-xl">
-                {failureReason}
+            <section
+              aria-label="Scores"
+              className={cn(
+                panel,
+                "pointer-events-auto hidden w-full max-w-[300px] flex-col @[720px]:flex",
+              )}
+            >
+              <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1">
+                <h3 className="text-ui-row font-semibold">Scores</h3>
+                <span className="text-ui-xs text-ink-3">
+                  {remotePilotCount > 0 ? (
+                    <>
+                      <Num>{remotePilotCount + 1}</Num> playing
+                    </>
+                  ) : (
+                    "Just you"
+                  )}
+                </span>
               </div>
-            )}
-          </div>
 
-          <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.4)] backdrop-blur-2xl sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/80">
-                <Trophy size={14} />
-                Session board
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-2xs uppercase tracking-[0.18em] text-slate-300">
-                {remotePilotCount > 0
-                  ? `${remotePilotCount + 1} live`
-                  : "Solo warm-up"}
-              </div>
-            </div>
-
-            <div className="mt-3 max-h-[44vh] space-y-2 overflow-y-auto pr-1">
-              {sortedLeaderboard.length > 0 ? (
-                sortedLeaderboard.map((entry, index) => {
-                  const participant = participantMap.get(entry.userId);
-                  const displayName =
-                    participant?.name ?? entry.name ?? "Pilot";
-                  const avatar = participant?.avatar ?? entry.avatar ?? null;
-                  return (
-                    <div
-                      key={entry.userId}
-                      className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5"
-                    >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/15 text-xs font-black text-cyan-100">
-                        {index + 1}
-                      </div>
-                      {avatar ? (
-                        <img
-                          src={getAuthAssetUrl(avatar)}
-                          alt=""
-                          className="h-10 w-10 rounded-full object-cover"
+              <ul className="max-h-[44dvh] overflow-y-auto px-2 pb-2">
+                {sortedLeaderboard.length > 0 ? (
+                  sortedLeaderboard.map((entry, index) => {
+                    const participant = participantMap.get(entry.userId);
+                    const displayName =
+                      participant?.name ?? entry.name ?? "Pilot";
+                    const avatar = participant?.avatar ?? entry.avatar ?? null;
+                    return (
+                      <li
+                        key={entry.userId}
+                        className="flex min-h-10 items-center gap-2.5 rounded-sm px-2 py-1.5"
+                      >
+                        <Num className="w-4 text-right text-ink-3">
+                          {index + 1}
+                        </Num>
+                        <Avatar
+                          name={displayName}
+                          src={avatar ? getAuthAssetUrl(avatar) : null}
+                          size={24}
+                          ring="ply-3"
                         />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-400/15 text-sm font-black text-fuchsia-100">
-                          {displayName.slice(0, 1).toUpperCase()}
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold text-white">
-                          {displayName}
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
-                          <span>{PRESETS[entry.preset].label}</span>
-                          <span>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className="truncate text-ui-sm font-medium"
+                            title={displayName}
+                          >
+                            {displayName}
+                          </div>
+                          <div className="truncate text-ui-xs text-ink-3">
                             {entry.crashed
                               ? "Crashed"
                               : entry.slipstream
                                 ? "Drafting"
-                                : "Running"}
-                          </span>
+                                : "Flying"}
+                            {" · "}
+                            {PRESETS[entry.preset].label}
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-black text-cyan-100">
-                          {formatStat(entry.best)}
+                        <div className="text-right">
+                          <div className="font-mono text-ui-row font-semibold tabular-nums">
+                            {formatStat(entry.best)}
+                          </div>
+                          <div className="text-ui-xs text-ink-3">Best</div>
                         </div>
-                        <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
-                          Peak
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-center text-sm text-slate-300">
-                  Launch the activity in the same voice session and live rivals
-                  will start ghosting into the tunnel.
-                </div>
+                      </li>
+                    );
+                  })
+                ) : (
+                  <li className="px-2 py-3 text-ui-sm text-pretty text-ink-3">
+                    Other players in this call show up here, and as ghost ships
+                    in the tunnel.
+                  </li>
+                )}
+              </ul>
+            </section>
+          </div>
+
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <p
+              className={cn(
+                panel,
+                "pointer-events-auto hidden flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 text-ui-sm text-ink-2 @[720px]:flex",
               )}
-            </div>
+            >
+              <span>Steer with the mouse</span>
+              <span className="flex items-center gap-1.5">
+                Trim with
+                <KbdGroup>
+                  <Kbd>W</Kbd>
+                  <Kbd>A</Kbd>
+                  <Kbd>S</Kbd>
+                  <Kbd>D</Kbd>
+                </KbdGroup>
+              </span>
+              <span className="flex items-center gap-1.5">
+                Restart with <Kbd>Space</Kbd>
+              </span>
+            </p>
+
+            <section
+              aria-label="Game settings"
+              className={cn(
+                panel,
+                "pointer-events-auto flex w-full max-w-[460px] flex-col gap-2 p-3",
+              )}
+            >
+              {softwareRendererLikely ? (
+                <p className="flex items-start gap-2 rounded-md bg-warning-tint px-2.5 py-1.5 text-ui-xs text-pretty text-warning-ink">
+                  <Icon name="warning" size="sm" className="mt-px" />
+                  This browser is drawing without graphics acceleration, so the
+                  game may run slowly.
+                </p>
+              ) : null}
+
+              {statsOpen ? (
+                <div id="warp-rush-stats" className="flex flex-col gap-2">
+                  <dl className="grid grid-cols-3 gap-x-4 gap-y-2">
+                    {statRows.map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="text-ui-xs text-ink-3">{label}</dt>
+                        <dd>
+                          <Num size="sm">{value}</Num>
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="text-ui-xs break-words text-ink-3">
+                    Renderer:{" "}
+                    <span className="text-ink-2">{rendererLabel}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Segmented
+                  label="Quality"
+                  value={preset}
+                  onChange={setPreset}
+                  options={PRESET_ORDER.map((option) => ({
+                    value: option,
+                    label: PRESETS[option].label,
+                  }))}
+                />
+                <Segmented
+                  label="Resolution"
+                  value={renderScale}
+                  onChange={setRenderScale}
+                  mono
+                  options={RENDER_SCALES.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={statsOpen}
+                  aria-controls="warp-rush-stats"
+                  onClick={() => setStatsOpen((open) => !open)}
+                  className="ml-auto"
+                >
+                  <Icon name="gauge" size="sm" />
+                  Stats
+                </Button>
+              </div>
+            </section>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 backdrop-blur-2xl sm:px-4">
-            <div className="flex items-center gap-2 pr-1 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
-              <Move3D size={14} />
-              Controls
-            </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
-              Mouse / touch steer
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
-              WASD trim
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
-              Draft a ghost
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
-              Space restart
-            </span>
-          </div>
-
-          <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-[0_22px_90px_rgba(2,6,23,0.36)] backdrop-blur-2xl sm:p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
-                <Zap size={14} />
-                Load
-              </div>
-              {PRESET_ORDER.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setPreset(option)}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-bold transition-colors",
-                    preset === option
-                      ? "border-cyan-200 bg-cyan-300/20 text-white"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-300/35 hover:text-white",
-                  )}
-                >
-                  {PRESETS[option].label}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-fuchsia-200/78">
-                <Gauge size={14} />
-                Scale
-              </div>
-              {RENDER_SCALES.map((option) => (
-                <button
-                  key={option.label}
-                  type="button"
-                  onClick={() => setRenderScale(option.value)}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-bold transition-colors",
-                    renderScale === option.value
-                      ? "border-fuchsia-200 bg-fuchsia-300/18 text-white"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-fuchsia-300/35 hover:text-white",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-200">
-                {perfStats.fps} FPS
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-200">
-                {perfStats.frameMs}ms frame
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                {formatStat(perfStats.triangles)} tris
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                {formatStat(perfStats.drawCalls)} draws
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                {formatStat(perfStats.points)} points
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-slate-300">
-                DPR {perfStats.dpr}
-              </div>
-            </div>
-
-            <div className="mt-3 min-w-0 rounded-full border border-white/8 bg-black/25 px-3 py-2 text-ui-2xs text-slate-300">
-              <span className="uppercase tracking-[0.18em] text-slate-500">
-                Renderer
-              </span>
-              <span className="ml-2 inline-block max-w-full break-all align-middle text-slate-100">
-                {rendererLabel}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      ) : null}
 
       {status === "crashed" && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
-          <div className="max-w-md rounded-3xl border border-amber-300/30 bg-slate-950/86 p-6 text-center shadow-[0_24px_120px_rgba(2,6,23,0.8)]">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10 text-amber-200">
-              <AlertTriangle size={28} />
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-scrim px-6">
+          <div
+            role="group"
+            aria-label="Run over"
+            className="flex w-full max-w-sm flex-col items-center gap-4 rounded-xl border border-line bg-ply-3 p-6 text-center shadow-modal"
+          >
+            <div className="flex flex-col gap-1">
+              <h3 className="text-ui-lg font-semibold">You hit debris</h3>
+              <p className="text-ui-sm text-pretty text-ink-2">
+                The course is the same every run, so try a different line
+                through the tunnel.
+              </p>
             </div>
-            <h3 className="mt-4 text-3xl font-black text-white">Hull breach</h3>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
-              Breach confirmed. The race sim stays fixed-step across refresh
-              rates now, so acceleration changes should affect render cost, not
-              the course itself.
-            </p>
-            <div className="mt-5 flex items-center justify-center gap-6">
+            <dl className="grid w-full grid-cols-2 divide-x divide-line rounded-lg border border-line bg-ply-2 py-3">
               <div>
-                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
-                  Run
-                </div>
-                <div className="mt-1 text-3xl font-black text-cyan-200">
+                <dt className="text-ui-xs text-ink-3">This run</dt>
+                <dd className="font-mono text-ui-xl font-semibold tabular-nums">
                   {formatStat(score)}
-                </div>
+                </dd>
               </div>
               <div>
-                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
-                  Best
-                </div>
-                <div className="mt-1 text-3xl font-black text-fuchsia-200">
+                <dt className="text-ui-xs text-ink-3">Best</dt>
+                <dd className="font-mono text-ui-xl font-semibold tabular-nums">
                   {formatStat(bestScore)}
-                </div>
+                </dd>
               </div>
-              <div>
-                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
-                  Live FPS
-                </div>
-                <div className="mt-1 text-3xl font-black text-emerald-200">
-                  {perfStats.fps}
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => restartRef.current()}
-              className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/20 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-cyan-300/28"
-            >
-              <RotateCcw size={16} />
+            </dl>
+            <Button size="lg" onClick={() => restartRef.current()}>
+              <Icon name="reset" size="sm" />
               Restart run
-            </button>
+            </Button>
           </div>
         </div>
+      )}
+
+      {status === "booting" || status === "unsupported" ? (
+        <div className="absolute inset-0 z-20">
+          <WarpRushStatusScreen
+            kind={status}
+            onRetry={() => {
+              setStatus("booting");
+              setBootAttempt((attempt) => attempt + 1);
+            }}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One row of mutually exclusive choices: a ply-tint well (radius 8) holding
+ * 28px segments (radius 6, concentric at 2px padding). The chosen segment is
+ * tint-3; the rest are bare until hovered.
+ */
+function Segmented<T extends string | number>({
+  label,
+  value,
+  onChange,
+  options,
+  mono = false,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: Array<{ value: T; label: string }>;
+  /** The labels are numbers ("1.25x"): set them in the number face. */
+  mono?: boolean;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex items-center gap-2">
+      <span className="text-ui-xs text-ink-3">{label}</span>
+      <div className="flex rounded-md bg-tint-1 p-0.5">
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "h-7 rounded-sm px-2.5 outline-none",
+                mono ? "text-num-sm" : "text-ui-sm font-medium",
+                PRESS,
+                HIT,
+                selected
+                  ? "bg-tint-3 text-ink-1"
+                  : "text-ink-2 pointer-fine:hover:text-ink-1",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The stage before a frame renders (booting) or when WebGL is missing
+ * (unsupported): an EmptyState on the canvas ground. Booting is the pending
+ * (half-resolved, still) glyph; the failure names the problem and the one fix, never the
+ * renderer's raw error.
+ */
+export function WarpRushStatusScreen({
+  kind,
+  onRetry,
+}: {
+  kind: "booting" | "unsupported";
+  onRetry?: () => void;
+}) {
+  return (
+    <div
+      role={kind === "unsupported" ? "alert" : undefined}
+      className="flex h-full w-full items-center justify-center bg-ply-0"
+    >
+      {kind === "booting" ? (
+        <EmptyState
+          loading
+          title="Starting Warp Rush"
+          description="Setting up the 3D view for this device."
+        />
+      ) : (
+        <EmptyState
+          title="Warp Rush can't start"
+          description="This browser couldn't open a 3D canvas. Turn on graphics acceleration in your browser settings, then try again."
+          action={
+            onRetry ? (
+              <Button variant="secondary" onClick={onRetry}>
+                Try again
+              </Button>
+            ) : undefined
+          }
+        />
       )}
     </div>
   );

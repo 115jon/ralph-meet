@@ -2,19 +2,19 @@ import { IconButton } from "@/components/ui/IconButton";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
-import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { getAuthAssetUrl } from "@/lib/platform";
-import { cn } from "@/lib/utils";
-import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { LedLabel } from "@/components/ui/led";
+import type { ReactNode } from "react";
 import { QualityMonitor } from "./QualityMonitor";
+import { TileAvatar } from "./TileParts";
 
 function getFocusedItemLabel(
   item: { type?: string; isLocal?: boolean; name?: string } | null | undefined,
 ) {
   if (!item?.name) return "";
   if (item.type !== "screen") return item.name;
-  if (item.isLocal) return "Your Stream";
+  if (item.isLocal) return "Your stream";
   const ownerName = item.name.replace(/'s Stream$/, "");
   return `${ownerName}'s Stream`;
 }
@@ -27,13 +27,23 @@ interface VoiceHeaderProps {
   focusedWatchers?: StreamWatcherIdentity[];
   currentScreenQuality: string | null | undefined;
   sfu: any;
-  showTextChat: boolean;
-  onToggleTextChat: () => void;
+  showTextChat?: boolean;
+  /** Omit to hide the chat button (the /room page has its chat inline). */
+  onToggleTextChat?: () => void;
   onMenuClick?: () => void;
+  /** Title glyph; the channel glyph by default. */
+  titleIcon?: IconName;
+  /** Extra items after the connection label (room link, head count). */
+  meta?: ReactNode;
 }
 
 const EMPTY_FOCUSED_WATCHERS: StreamWatcherIdentity[] = [];
 
+/**
+ * The stage header: always a 48px bar above the stage (talk-tree-spec §3),
+ * so it never sits on top of a shared screen. When a tile is on stage, the
+ * bar names it ("Linus's Stream") with its quality readout and a Live word.
+ */
 export function VoiceHeader({
   channelName,
   connectionState,
@@ -42,175 +52,100 @@ export function VoiceHeader({
   focusedWatchers = EMPTY_FOCUSED_WATCHERS,
   currentScreenQuality,
   sfu,
-  showTextChat,
+  showTextChat = false,
   onToggleTextChat,
   onMenuClick,
+  titleIcon = "voiceChannel",
+  meta,
 }: VoiceHeaderProps) {
   const focusedLabel = getFocusedItemLabel(focusedItem);
 
   return (
-    <div
-      className={cn(
-        "absolute top-0 inset-x-0 h-24 flex items-start pt-4 justify-between px-4 md:px-6 z-10 transition-ui pointer-events-none",
-        focusedItem
-          ? "bg-gradient-to-b from-black/80 via-black/40 to-transparent"
-          : "bg-rm-bg-primary/20 h-16 items-center pt-0",
-      )}
+    <header
+      data-voice-header="bar"
+      className="relative z-20 box-content flex h-12 shrink-0 items-center gap-2 border-b border-line bg-ply-0 px-4 pt-[var(--safe-area-top,0px)]"
     >
-      <div
-        className={cn(
-          "flex min-w-0 flex-wrap items-center gap-2 md:gap-4 pointer-events-auto",
-          focusedItem && "drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]",
-        )}
-      >
-        {onMenuClick && (
-          <IconButton
-            icon={Menu}
-            size="sm"
-            className={cn(
-              "md:hidden",
-              focusedItem
-                ? "text-white/70 hover:text-white"
-                : "text-rm-text-muted hover:text-rm-text",
-            )}
-            onClick={onMenuClick}
-          />
-        )}
-        <div
-          className={cn(
-            "flex items-center gap-2",
-            focusedItem ? "text-white/80" : "text-rm-text-muted",
-          )}
-        >
-          <Volume2 size={18} />
-          <InlineEmojiText
-            text={channelName}
-            className={cn(
-              "text-ui-sm font-semibold",
-              focusedItem ? "text-white" : "text-rm-text",
-            )}
-          />
-        </div>
-        <div
-          className={cn(
-            "h-4 w-px",
-            focusedItem ? "bg-white/20" : "bg-rm-border",
-          )}
+      {onMenuClick && (
+        <IconButton
+          aria-label="Open sidebar"
+          icon="menu"
+          size={32}
+          variant="muted"
+          className="md:hidden"
+          onClick={onMenuClick}
         />
-        <div className="flex items-center gap-2">
-          <StreamingStatsPanel
-            connectionState={connectionState}
-            joined={joined}
-            emphasized={!!focusedItem}
-          />
-        </div>
-        {focusedItem && (
-          <>
-            <div
-              className={cn(
-                "w-px h-4 mx-1",
-                focusedItem ? "bg-white/20" : "bg-rm-border",
-              )}
-            />
-            <div
-              className={cn(
-                "flex min-w-0 items-center gap-2 backdrop-blur-md px-3 py-1.5 rounded-full border",
-                focusedItem
-                  ? "bg-black/40 border-white/10"
-                  : "bg-rm-bg-elevated/40 border-rm-border",
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <div
-                  className={cn(
-                    "w-10 h-10 rounded-full overflow-visible flex items-center justify-center relative",
-                    focusedItem ? "bg-white/10" : "bg-rm-bg-surface",
-                  )}
-                >
-                  {focusedItem.avatar ? (
-                    <AvatarImage
-                      src={getAuthAssetUrl(focusedItem.avatar)}
-                      alt=""
-                      display={focusedItem.avatarDisplay}
-                    />
-                  ) : (
-                    <span
-                      className={cn(
-                        "text-ui-2xs font-bold",
-                        focusedItem ? "text-white" : "text-rm-text",
-                      )}
-                    >
-                      {focusedItem.name[0]}
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    "truncate text-xs font-bold",
-                    focusedItem ? "text-white" : "text-rm-text/90",
-                  )}
-                >
-                  <InlineEmojiText text={focusedLabel} />
-                </span>
-              </div>
-              {focusedWatchers.length > 0 && (
-                <>
-                  <div
-                    className={cn(
-                      "h-5 w-px shrink-0",
-                      focusedItem ? "bg-white/10" : "bg-rm-border",
-                    )}
-                  />
-                  <StreamWatcherList
-                    watchers={focusedWatchers}
-                    variant="inline"
-                    className="max-w-[min(42vw,18rem)]"
-                  />
-                </>
-              )}
-            </div>
-          </>
-        )}
+      )}
+      <div className="flex min-w-0 shrink items-center gap-2">
+        <Icon name={titleIcon} size="lg" className="shrink-0 text-ink-3" />
+        <h2 className="min-w-0 truncate font-display [font-optical-sizing:auto] text-[18px] leading-6 font-extrabold tracking-[-0.02em] text-ink-1">
+          <InlineEmojiText text={channelName} />
+        </h2>
       </div>
-      <div
-        className={cn(
-          "flex items-center gap-3 pointer-events-auto",
-          focusedItem && "drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]",
-        )}
-      >
-        {focusedItem && focusedItem?.isStreaming && (
-          <div className="flex items-center gap-1.5 bg-primary/10 backdrop-blur-md px-2.5 py-1 rounded-md border border-primary/20 mr-2 group/hw">
-            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary tabular-nums">
-              <QualityMonitor
-                track={focusedItem.stream?.getVideoTracks()[0]}
-                signaledQuality={
-                  focusedItem.isLocal ? currentScreenQuality : null
-                }
-                sfu={sfu}
-                userId={focusedItem.userId}
-                type={focusedItem.type === "screen" ? "screen" : "cam"}
-              />
+      <div aria-hidden className="h-4 w-px shrink-0 bg-line-strong" />
+      <StreamingStatsPanel
+        connectionState={connectionState}
+        joined={joined}
+        className="min-w-0 shrink-0"
+      />
+      {meta}
+
+      {focusedItem ? (
+        <>
+          <div aria-hidden className="h-4 w-px shrink-0 bg-line-strong" />
+          <div
+            data-focused-label=""
+            className="flex min-w-0 items-center gap-2 text-ink-1"
+          >
+            <TileAvatar
+              name={focusedItem.name ?? ""}
+              avatar={focusedItem.avatar}
+              avatarDisplay={focusedItem.avatarDisplay}
+              sizeClassName="size-5"
+              initialClassName="text-ui-2xs"
+            />
+            <span className="min-w-0 truncate font-display [font-optical-sizing:auto] text-[14px] leading-5 font-bold">
+              <InlineEmojiText text={focusedLabel} />
             </span>
-            <div className="bg-destructive px-1 rounded-[2px] text-ui-2xs font-bold text-destructive-foreground uppercase animate-pulse">
-              LIVE
-            </div>
-          </div>
-        )}
-        {!showTextChat && (
-          <IconButton
-            icon={MessageSquare}
-            size="sm"
-            shape="circle"
-            tooltip="Chat"
-            className={cn(
-              focusedItem
-                ? "text-white/70 hover:text-white hover:bg-white/10"
-                : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+            {focusedItem.isStreaming && (
+              <>
+                <span className="shrink-0 text-num-xs text-ink-3">
+                  <QualityMonitor
+                    track={focusedItem.stream?.getVideoTracks?.()[0]}
+                    signaledQuality={
+                      focusedItem.isLocal ? currentScreenQuality : null
+                    }
+                    sfu={sfu}
+                    userId={focusedItem.userId}
+                    type={focusedItem.type === "screen" ? "screen" : "cam"}
+                  />
+                </span>
+                <LedLabel state="live" className="shrink-0">
+                  Live
+                </LedLabel>
+              </>
             )}
+            {focusedWatchers.length > 0 && (
+              <StreamWatcherList
+                watchers={focusedWatchers}
+                variant="inline"
+                className="max-w-[min(32vw,16rem)]"
+              />
+            )}
+          </div>
+        </>
+      ) : null}
+
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {!showTextChat && onToggleTextChat && (
+          <IconButton
+            icon="chat"
+            size={32}
+            variant="muted"
+            tooltip="Chat"
             onClick={onToggleTextChat}
           />
         )}
       </div>
-    </div>
+    </header>
   );
 }

@@ -4,7 +4,12 @@ import type { ListenTogetherStateSnapshot } from "@/lib/listen-together";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useListenTogetherPlaybackState } from "./listen-together-playback";
+import { useRef } from "react";
+import {
+  getListenTogetherProgressKey,
+  useListenTogetherClockNow,
+  useListenTogetherPlaybackState,
+} from "./listen-together-playback";
 
 function makeSnapshot(): ListenTogetherStateSnapshot {
   const currentEntry = {
@@ -57,7 +62,20 @@ function Consumer({
   return <output aria-label={label}>{playback.effectiveSeekValue}</output>;
 }
 
-describe("listen together playback clock", () => {
+/** A 1 Hz leaf: what the time labels use instead of the room clock. */
+function ClockLeaf({ onRender }: { onRender: () => void }) {
+  const playback = useListenTogetherPlaybackState("room-1");
+  const ref = useRef<HTMLOutputElement>(null);
+  const now = useListenTogetherClockNow(playback, ref);
+  onRender();
+  return (
+    <output ref={ref} aria-label="leaf">
+      {now}
+    </output>
+  );
+}
+
+describe("listen together playback", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
@@ -75,42 +93,18 @@ describe("listen together playback clock", () => {
     useListenTogetherStore.setState({ rooms: {} });
   });
 
-  it("uses one room-scoped timer for multiple playback consumers", () => {
+  it("runs no timer and holds a running room still between room updates", () => {
     const setIntervalSpy = vi.spyOn(window, "setInterval");
-
-    render(
-      <>
-        <Consumer label="first" />
-        <Consumer label="second" />
-      </>,
-    );
-
-    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
-    act(() => {
-      vi.advanceTimersByTime(1_000);
-    });
-    expect(screen.getByLabelText("first")).toHaveTextContent("1000");
-    expect(screen.getByLabelText("second")).toHaveTextContent("1000");
-  });
-
-  it("does not keep a room clock running while playback is paused", () => {
-    useListenTogetherStore.setState({
-      rooms: {
-        "room-1": {
-          snapshot: { ...makeSnapshot(), paused: true },
-          localVolume: 1,
-          error: null,
-        },
-      },
-    });
-    const setIntervalSpy = vi.spyOn(window, "setInterval");
-
-    render(<Consumer label="paused" />);
+    render(<Consumer label="view" />);
 
     expect(setIntervalSpy).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(screen.getByLabelText("view")).toHaveTextContent("0");
   });
 
-  it("keeps paused progress fixed while active consumers share one room clock", () => {
+  it("keeps paused progress fixed", () => {
     useListenTogetherStore.setState({
       rooms: {
         "room-1": {
@@ -127,44 +121,74 @@ describe("listen together playback clock", () => {
     });
     const setIntervalSpy = vi.spyOn(window, "setInterval");
 
-    render(
-      <>
-        <Consumer label="paused-first" />
-        <Consumer label="paused-second" />
-      </>,
-    );
+    render(<Consumer label="paused" />);
 
     expect(setIntervalSpy).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("paused-first")).toHaveTextContent("5000");
+    expect(screen.getByLabelText("paused")).toHaveTextContent("5000");
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
-    expect(screen.getByLabelText("paused-first")).toHaveTextContent("5000");
-    expect(screen.getByLabelText("paused-second")).toHaveTextContent("5000");
+    expect(screen.getByLabelText("paused")).toHaveTextContent("5000");
   });
 
-  it("cleans up room clocks and isolates timers by room", () => {
-    useListenTogetherStore.setState({
-      rooms: {
-        "room-1": { snapshot: makeSnapshot(), localVolume: 1, error: null },
-        "room-2": {
-          snapshot: { ...makeSnapshot(), roomSlug: "room-2" },
-          localVolume: 1,
-          error: null,
-        },
-      },
-    });
-    const setIntervalSpy = vi.spyOn(window, "setInterval");
-    const clearIntervalSpy = vi.spyOn(window, "clearInterval");
-    const { unmount } = render(
-      <>
-        <Consumer label="room-one" roomSlug="room-1" />
-        <Consumer label="room-two" roomSlug="room-2" />
-      </>,
-    );
+  it("ticks a leaf once a second while playing and stops while paused", () => {
+    const onRender = vi.fn();
+    render(<ClockLeaf onRender={onRender} />);
+    const rendersAtMount = onRender.mock.calls.length;
 
-    expect(setIntervalSpy).toHaveBeenCalledTimes(2);
-    unmount();
-    expect(clearIntervalSpy).toHaveBeenCalledTimes(2);
+    for (let second = 0; second < 3; second += 1) {
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+    }
+    expect(onRender.mock.calls.length - rendersAtMount).toBe(3);
+    expect(screen.getByLabelText("leaf")).toHaveTextContent("4000");
+
+    act(() => {
+      useListenTogetherStore.setState({
+        rooms: {
+          "room-1": {
+            snapshot: { ...makeSnapshot(), paused: true },
+            localVolume: 1,
+            error: null,
+          },
+        },
+      });
+    });
+    const rendersWhenPaused = onRender.mock.calls.length;
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(onRender.mock.calls.length).toBe(rendersWhenPaused);
+  });
+
+  it("keys the CSS progress on jumps, not on time passing", () => {
+    const snapshot = makeSnapshot();
+    const running = {
+      snapshot,
+      localPlayback: null,
+      durationMs: 180_000,
+    };
+    const key = getListenTogetherProgressKey(running);
+    expect(getListenTogetherProgressKey({ ...running })).toBe(key);
+    expect(
+      getListenTogetherProgressKey({
+        ...running,
+        snapshot: { ...snapshot, paused: true },
+      }),
+    ).not.toBe(key);
+    expect(
+      getListenTogetherProgressKey({
+        ...running,
+        localPlayback: {
+          paused: false,
+          positionMs: 30_000,
+          entryId: "entry-1",
+          snapshotRevision: 1,
+          source: "seek",
+          accepted: false,
+        },
+      }),
+    ).not.toBe(key);
   });
 });

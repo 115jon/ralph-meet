@@ -283,6 +283,21 @@ CREATE TABLE IF NOT EXISTS collectible_catalog_cache (
     synced_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS collectible_catalog_sync_status (
+    source TEXT PRIMARY KEY,
+    last_attempt_at TEXT,
+    last_success_at TEXT,
+    last_failure_at TEXT,
+    last_error TEXT,
+    last_outcome TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    item_count INTEGER NOT NULL DEFAULT 0,
+    category_count INTEGER NOT NULL DEFAULT 0,
+    counts_json TEXT,
+    last_trigger TEXT,
+    last_duration_ms INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS message_shares (
     id TEXT PRIMARY KEY,
     token TEXT NOT NULL UNIQUE,

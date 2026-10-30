@@ -1,30 +1,31 @@
-import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { AvatarImage } from "@/components/chat/AvatarImage";
-import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
-import { ButtonBase } from "@/components/ui/button-base";
+import {
+  ProfileActionNotices,
+  ProfileActionRow,
+  ProfileBlockConfirm,
+  ProfileCard,
+  ProfileRoleChips,
+  ProfileSection,
+  ProfileSections,
+  resolveProfileCardTheme,
+  useProfileActions,
+  type MutualFriend,
+  type MutualServer,
+} from "@/components/chat/ProfileCard";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
+import { Button } from "@/components/ui/button";
+import { ButtonBase } from "@/components/ui/button-base";
+import { Drawer, DrawerContent, DrawerHandle } from "@/components/ui/drawer";
+import { PRESS } from "@/components/ui/interaction";
 import { apiGet } from "@/lib/api-client";
+import { getDisplayName } from "@/lib/display-name";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
-import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { UserStatusDot } from "./UserStatusDot";
-import InlineEmojiText from "./InlineEmojiText";
+import { normalizeUserStatus, type UserStatus } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import {
-  ArrowLeft,
-  Ban,
-  Calendar,
-  MessageSquare,
-  Phone,
-  Settings,
-  UserMinus,
-  UserPlus,
-  Video,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
 
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
@@ -39,401 +40,36 @@ interface MobileProfileSheetProps {
   onKick?: (userId: string, username: string) => void;
 }
 
-type MutualFriendSummary = {
-  count: number;
-  items: Array<{ id: string; username: string; avatar_url?: string | null }>;
-};
-
-type MutualServerSummary = {
-  count: number;
-  items: Array<{ id: string; name: string; icon_url?: string | null }>;
-};
+type MutualSummary<T> = { count: number; items: T[] };
 
 interface MobileProfileResponse {
   user: User;
-  mutualFriends: MutualFriendSummary;
-  mutualServers: MutualServerSummary;
+  mutualFriends: MutualSummary<MutualFriend>;
+  mutualServers: MutualSummary<MutualServer>;
 }
 
 interface ProfileFetchState {
   userId: string;
   user: User | null;
-  mutualFriends: MutualFriendSummary;
-  mutualServers: MutualServerSummary;
+  mutualFriends: MutualSummary<MutualFriend>;
+  mutualServers: MutualSummary<MutualServer>;
 }
 
-const EMPTY_MUTUAL_FRIENDS: MutualFriendSummary = {
-  count: 0,
-  items: [],
-};
+/** Opens just short of full height (the chat peeks above); drag up for all. */
+const SNAP_POINTS = [0.92, 1];
 
-const EMPTY_MUTUAL_SERVERS: MutualServerSummary = {
-  count: 0,
-  items: [],
-};
+const EMPTY_MUTUALS = { count: 0, items: [] };
 
-function ProfileBanner({
-  bannerUrl,
-  bannerContentType,
-  onClose,
-  isMe,
-}: {
-  bannerUrl?: string | null;
-  bannerContentType?: string | null;
-  onClose: () => void;
-  isMe: boolean;
-}) {
-  return (
-    <div
-      className="relative h-[140px] shrink-0 overflow-hidden"
-      style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
-    >
-      <ProfileAssetLayer
-        url={bannerUrl}
-        contentType={bannerContentType}
-        alt="Profile banner"
-        className="opacity-95"
-      />
-      <div
-        className="absolute inset-0"
-        style={{ background: "var(--rm-profile-custom-banner-overlay)" }}
-      />
-      <div className="absolute inset-x-0 top-0 z-50 flex items-center justify-between p-3">
-        <ButtonBase
-          onClick={onClose}
-          aria-label="Close profile"
-          className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
-        >
-          <ArrowLeft size={20} />
-        </ButtonBase>
-        <div className="flex items-center gap-2">
-          {!isMe && (
-            <ButtonBase
-              aria-label="Add friend"
-              className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
-            >
-              <UserPlus size={18} />
-            </ButtonBase>
-          )}
-          <ButtonBase
-            aria-label="Profile settings"
-            className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
-          >
-            <Settings size={18} />
-          </ButtonBase>
-        </div>
-      </div>
-    </div>
-  );
-}
+const MOD_ROW = cn(
+  "-mx-2 flex min-h-11 items-center gap-3 rounded-md px-2 text-start text-ui-row font-medium text-danger-ink",
+  PRESS,
+);
 
-function ProfileHeader({
-  user,
-  isOnline,
-  mutualFriends,
-  mutualServers,
-  isMe,
-}: {
-  user: User;
-  isOnline: boolean;
-  mutualFriends: { count: number };
-  mutualServers: { count: number };
-  isMe: boolean;
-}) {
-  const displayName = user.display_name?.trim() || user.username;
-  const profileTheme = resolveProfileTheme(user);
-
-  return (
-    <>
-      <div className="px-5">
-        <div className="relative inline-block">
-          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-[var(--rm-profile-custom-button-bg)] text-3xl font-bold text-[color:var(--rm-profile-custom-button-text)] ring-[5px] ring-[color:var(--rm-profile-custom-card-border)]">
-            {user.avatar_url ? (
-              <AvatarImage
-                src={getAuthAssetUrl(user.avatar_url)}
-                alt={displayName}
-                display={user.avatar_display}
-              />
-            ) : (
-              displayName[0].toUpperCase()
-            )}
-          </div>
-          <div className="absolute bottom-0 right-0 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
-            <UserStatusDot
-              status={isOnline ? (user.status ?? "online") : "offline"}
-              className="h-6 w-6"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="px-5 mt-3">
-        <div className="text-[28px] font-semibold leading-tight">
-          <ProfileDisplayName
-            text={displayName}
-            displayNameStyle={user.display_name_style}
-            className="text-[color:var(--rm-profile-custom-text)]"
-            backgroundColor={profileTheme.backgroundColor}
-            readableFallbackColor={profileTheme.textColor}
-          />
-        </div>
-        <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] font-medium">
-          @{user.username.toLowerCase()}
-        </p>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-          {user.pronouns?.trim() ? <span>{user.pronouns.trim()}</span> : null}
-          <UserPlatformIndicators
-            userId={user.id}
-            platforms={user.presence_platforms}
-            status={user.status}
-            iconClassName="h-4 w-4"
-            color="var(--rm-profile-custom-muted)"
-            offlineColor="var(--rm-profile-custom-ghost)"
-          />
-        </div>
-
-        {user.custom_status && (
-          <p className="text-ui-sm text-[color:var(--rm-profile-custom-muted)] mt-1 italic">
-            {user.custom_status}
-          </p>
-        )}
-
-        {!isMe && (mutualFriends.count > 0 || mutualServers.count > 0) && (
-          <div className="flex items-center gap-2 mt-2 text-ui-sm text-[color:var(--rm-profile-custom-muted)] font-medium">
-            {mutualFriends.count > 0 && (
-              <span>
-                {mutualFriends.count} Mutual Friend
-                {mutualFriends.count === 1 ? "" : "s"}
-              </span>
-            )}
-            {mutualFriends.count > 0 && mutualServers.count > 0 && (
-              <span>·</span>
-            )}
-            {mutualServers.count > 0 && (
-              <span>
-                {mutualServers.count} Mutual Server
-                {mutualServers.count === 1 ? "" : "s"}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-function ProfileActions({
-  isMe,
-  handleMessage,
-  onOpenProfileEditor,
-}: {
-  isMe: boolean;
-  handleMessage: () => void;
-  onOpenProfileEditor: () => void;
-}) {
-  return (
-    <div className="px-5 mt-5">
-      {isMe ? (
-        <div className="space-y-2.5">
-          <ButtonBase
-            onClick={onOpenProfileEditor}
-            className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] hover:brightness-110 text-[color:var(--rm-profile-custom-button-text)] font-bold text-ui-base transition-[filter] flex items-center justify-center gap-2"
-          >
-            <Settings size={18} />
-            Edit Main Profile
-          </ButtonBase>
-          <ButtonBase className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-accent-muted)] hover:bg-[var(--rm-profile-custom-card-bg)] text-[color:var(--rm-profile-custom-text)] font-bold text-ui-base transition-colors flex items-center justify-center gap-2">
-            <Settings size={18} />
-            Edit Per-server Profile
-          </ButtonBase>
-        </div>
-      ) : (
-        <div className="flex items-center justify-center gap-8">
-          <ButtonBase
-            onClick={handleMessage}
-            className="flex flex-col items-center gap-2"
-          >
-            <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
-              <MessageSquare
-                size={24}
-                className="text-[color:var(--rm-profile-custom-text)]"
-              />
-            </div>
-            <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
-              Message
-            </span>
-          </ButtonBase>
-          <ButtonBase className="flex flex-col items-center gap-2">
-            <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
-              <Phone
-                size={24}
-                className="text-[color:var(--rm-profile-custom-text)]"
-              />
-            </div>
-            <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
-              Voice Call
-            </span>
-          </ButtonBase>
-          <ButtonBase className="flex flex-col items-center gap-2">
-            <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
-              <Video
-                size={24}
-                className="text-[color:var(--rm-profile-custom-text)]"
-              />
-            </div>
-            <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
-              Video Call
-            </span>
-          </ButtonBase>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ProfileCards({
-  user,
-  memberRoles,
-  profileReferenceDate,
-  hasModActions,
-  canManage,
-  canKick,
-  canBanPerm,
-  onBan,
-  onKick,
-  onClose,
-}: {
-  user: User;
-  memberRoles: Role[] | undefined;
-  profileReferenceDate: { label: string; value: string };
-  hasModActions: boolean;
-  canManage: boolean;
-  canKick: boolean;
-  canBanPerm: boolean;
-  onBan?: (userId: string, username: string) => void;
-  onKick?: (userId: string, username: string) => void;
-  onClose: () => void;
-}) {
-  const visibleMemberRoles =
-    memberRoles?.filter((role) => !role.is_default) ?? [];
-
-  return (
-    <div className="px-5 mt-6 space-y-3 pb-10">
-      {user.bio?.trim() && (
-        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-2">
-            Bio
-          </h3>
-          <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] leading-relaxed">
-            {user.bio.trim()}
-          </p>
-        </div>
-      )}
-
-      <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-        <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
-          {profileReferenceDate.label}
-        </h3>
-        <div className="flex items-center gap-3 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-          <div className="flex items-center gap-2">
-            <Calendar
-              size={16}
-              className="text-[color:var(--rm-profile-custom-muted)]"
-            />
-            <span>{profileReferenceDate.value}</span>
-          </div>
-        </div>
-      </div>
-
-      {visibleMemberRoles.length > 0 && (
-        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
-            Roles
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {visibleMemberRoles.map((role) => (
-              <div
-                key={role.id}
-                className="flex items-center gap-1.5 rounded-full bg-[var(--rm-profile-custom-card-bg)] pl-2 pr-3 py-1 border border-[color:var(--rm-profile-custom-card-border)] text-ui-xs font-medium"
-              >
-                <div
-                  className="h-3 w-3 rounded-full shrink-0"
-                  style={{
-                    backgroundColor: role.color || "#94a3b8",
-                  }}
-                />
-                <span className="text-[color:var(--rm-profile-custom-muted)]">
-                  <InlineEmojiText text={role.name} />
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {hasModActions && (
-        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
-            Moderator Actions
-          </h3>
-          <div className="space-y-0.5">
-            {canManage && (
-              <ButtonBase
-                disabled
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed"
-              >
-                <Settings
-                  size={22}
-                  className="text-[color:var(--rm-profile-custom-muted)] shrink-0"
-                />
-                <span className="text-ui-base font-medium text-[color:var(--rm-profile-custom-text)]">
-                  Manage
-                </span>
-              </ButtonBase>
-            )}
-            {canKick && onKick && (
-              <ButtonBase
-                onClick={() => {
-                  onKick(user.id, user.username);
-                  onClose();
-                }}
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
-              >
-                <UserMinus size={22} className="text-destructive shrink-0" />
-                <span className="text-ui-base font-medium text-destructive">
-                  Kick
-                </span>
-              </ButtonBase>
-            )}
-            {canBanPerm && onBan && (
-              <ButtonBase
-                onClick={() => {
-                  onBan(user.id, user.username);
-                  onClose();
-                }}
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
-              >
-                <Ban size={22} className="text-destructive shrink-0" />
-                <span className="text-ui-base font-medium text-destructive">
-                  Ban
-                </span>
-              </ButtonBase>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
-            Note (only visible to you)
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/**
+ * The phone profile: the shared ProfileCard at sheet size in a bottom
+ * drawer. The stock drawer handle sits on the card above the banner, never
+ * over the banner art.
+ */
 export default function MobileProfileSheet({
   open,
   user,
@@ -451,6 +87,7 @@ export default function MobileProfileSheet({
     })),
   );
   const { openDm, dispatch } = useChatActions();
+  const [snap, setSnap] = useState<number | string | null>(SNAP_POINTS[0]!);
   const [profileData, setProfileData] = useState<ProfileFetchState | null>(
     null,
   );
@@ -459,16 +96,19 @@ export default function MobileProfileSheet({
   const activeProfileData =
     profileData?.userId === user.id ? profileData : null;
   const resolvedUser = activeProfileData?.user ?? user;
-  const mutualFriends = !isMe
-    ? (activeProfileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS)
-    : EMPTY_MUTUAL_FRIENDS;
-  const mutualServers = !isMe
-    ? (activeProfileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS)
-    : EMPTY_MUTUAL_SERVERS;
-  const profileThemeStyle = resolveProfileTheme(resolvedUser).variables;
+  const displayName = getDisplayName(resolvedUser);
+  const theme = resolveProfileCardTheme(resolvedUser);
   const isOnline = onlineUsers.has(user.id);
+  const status: UserStatus = isOnline
+    ? normalizeUserStatus(resolvedUser.status ?? "online")
+    : "offline";
   const member = members.find((m) => m.user.id === user.id);
-  const memberRoles = roles || member?.roles;
+  const memberRoles = (roles || member?.roles)?.filter(
+    (role) => !role.is_default,
+  );
+  const hasReferenceDate = Boolean(
+    member?.joined_at || resolvedUser.created_at,
+  );
   const profileReferenceDate = resolveProfileReferenceDate({
     joinedAt: member?.joined_at,
     createdAt: resolvedUser.created_at ?? null,
@@ -477,10 +117,17 @@ export default function MobileProfileSheet({
   const myMember = members.find((m) => m.user.id === chatUser?.id);
   const myTotalPerms =
     myMember?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
-  const canKick = hasPermission(myTotalPerms, PERMISSIONS.KICK_MEMBERS);
-  const canBanPerm = hasPermission(myTotalPerms, PERMISSIONS.BAN_MEMBERS);
-  const canManage = hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER);
-  const hasModActions = !isMe && (canKick || canBanPerm || canManage);
+  const canKick =
+    !isMe && hasPermission(myTotalPerms, PERMISSIONS.KICK_MEMBERS);
+  const canBan = !isMe && hasPermission(myTotalPerms, PERMISSIONS.BAN_MEMBERS);
+
+  const actions = useProfileActions({
+    userId: user.id,
+    username: resolvedUser.username,
+    displayName,
+    isMe,
+    onMessageOpened: onClose,
+  });
 
   useEffect(() => {
     if (isMe || !user.id) return;
@@ -495,8 +142,8 @@ export default function MobileProfileSheet({
         setProfileData({
           userId: targetUserId,
           user: data.user ?? null,
-          mutualFriends: data.mutualFriends ?? EMPTY_MUTUAL_FRIENDS,
-          mutualServers: data.mutualServers ?? EMPTY_MUTUAL_SERVERS,
+          mutualFriends: data.mutualFriends ?? EMPTY_MUTUALS,
+          mutualServers: data.mutualServers ?? EMPTY_MUTUALS,
         });
       })
       .catch(console.error);
@@ -506,65 +153,148 @@ export default function MobileProfileSheet({
     };
   }, [user.id, isMe]);
 
-  const handleMessage = async () => {
+  // Same path as the member context menu's "Start a call".
+  const handleCall = async () => {
     const channelId = await openDm(user.id);
-    if (channelId) {
-      dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
-      onClose();
-    }
+    if (!channelId) return;
+    dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
+    window.dispatchEvent(
+      new CustomEvent("request-start-call", {
+        detail: {
+          userId: user.id,
+          displayName: resolvedUser.display_name ?? resolvedUser.username,
+          channelId,
+        },
+      }),
+    );
+    onClose();
   };
 
+  const modActions =
+    (canKick && onKick) || (canBan && onBan) ? (
+      <ProfileSection title="Moderator actions">
+        <div className="flex flex-col">
+          {canKick && onKick ? (
+            <ButtonBase
+              onClick={() => {
+                onKick(user.id, user.username);
+                onClose();
+              }}
+              className={MOD_ROW}
+            >
+              <Icon name="userRemove" size="md" className="shrink-0" />
+              Kick
+            </ButtonBase>
+          ) : null}
+          {canBan && onBan ? (
+            <ButtonBase
+              onClick={() => {
+                onBan(user.id, user.username);
+                onClose();
+              }}
+              className={MOD_ROW}
+            >
+              <Icon name="ban" size="md" className="shrink-0" />
+              Ban
+            </ButtonBase>
+          ) : null}
+        </div>
+      </ProfileSection>
+    ) : null;
+
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <DialogSurface
-          showCloseButton={false}
-          className={cn(
-            "fixed inset-0 z-50 flex flex-col animate-in slide-in-from-bottom duration-300",
-            "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom data-[state=closed]:fade-out",
-          )}
-          style={profileThemeStyle}
+    <Drawer
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+      snapPoints={SNAP_POINTS}
+      snapPoint={snap}
+      onSnapPointChange={setSnap}
+    >
+      <DrawerContent
+        aria-label={`${displayName}'s profile`}
+        showHandle={false}
+        className="h-dvh max-h-none overflow-hidden rounded-t-2xl border-0 bg-transparent pb-0"
+      >
+        <ProfileCard
+          size="sheet"
+          user={resolvedUser}
+          theme={theme}
+          name={displayName}
+          status={status}
+          className="h-full rounded-t-2xl"
+          surfaceClassName="inset-y-0"
+          // The stock handle, on the card above the banner (overlays §3b),
+          // and a close X: a drag or the scrim is not the only way out.
+          header={
+            <div className="relative shrink-0">
+              <DrawerHandle className="my-2" />
+              <IconButton
+                icon="close"
+                size={40}
+                shape="circle"
+                aria-label="Close profile"
+                onClick={onClose}
+                // 8px inside the banner's top-right corner (the handle row
+                // is 20px); the ply-3 disc keeps the glyph legible on any
+                // banner art.
+                className="absolute top-7 right-2 z-40 bg-ply-3 shadow-float"
+              />
+            </div>
+          }
+          scrollClassName="pb-[calc(var(--safe-area-bottom,0px)+8dvh)]"
+          nameAdornment={
+            <UserPlatformIndicators
+              userId={resolvedUser.id}
+              platforms={resolvedUser.presence_platforms}
+              status={resolvedUser.status}
+              iconSize="sm"
+              color="var(--ink-2)"
+              offlineColor="var(--ink-3)"
+            />
+          }
+          actions={
+            <ProfileActionRow
+              controller={actions}
+              size="sheet"
+              selfAction={
+                <Button
+                  size="lg"
+                  className="flex-1"
+                  onClick={onOpenProfileEditor}
+                >
+                  <Icon name="edit" size="sm" />
+                  Edit profile
+                </Button>
+              }
+              extra={
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => void handleCall()}
+                >
+                  <Icon name="call" size="sm" />
+                  Call
+                </Button>
+              }
+            />
+          }
         >
-          <div className="pointer-events-none absolute inset-x-0 top-2 z-50 flex justify-center">
-            <div className="h-1 w-10 rounded-full bg-[var(--rm-profile-custom-muted)]/45" />
-          </div>
-          <ProfileBanner
-            bannerUrl={resolvedUser.banner_url}
-            bannerContentType={resolvedUser.banner_content_type}
-            onClose={onClose}
-            isMe={isMe}
+          <ProfileActionNotices controller={actions} />
+          <ProfileSections
+            bio={resolvedUser.bio}
+            roles={
+              memberRoles && memberRoles.length > 0 ? (
+                <ProfileRoleChips roles={memberRoles} />
+              ) : null
+            }
+            mutualServers={isMe ? null : activeProfileData?.mutualServers}
+            mutualFriends={isMe ? null : activeProfileData?.mutualFriends}
+            memberSince={hasReferenceDate ? profileReferenceDate : null}
           />
-
-          <div className="flex-1 overflow-y-auto -mt-12 relative z-10">
-            <ProfileHeader
-              user={resolvedUser}
-              isOnline={isOnline}
-              mutualFriends={mutualFriends}
-              mutualServers={mutualServers}
-              isMe={isMe}
-            />
-
-            <ProfileActions
-              isMe={isMe}
-              handleMessage={handleMessage}
-              onOpenProfileEditor={onOpenProfileEditor}
-            />
-
-            <ProfileCards
-              user={resolvedUser}
-              memberRoles={memberRoles}
-              profileReferenceDate={profileReferenceDate}
-              hasModActions={hasModActions}
-              canManage={canManage}
-              canKick={canKick}
-              canBanPerm={canBanPerm}
-              onBan={onBan}
-              onKick={onKick}
-              onClose={onClose}
-            />
-          </div>
-        </DialogSurface>
-      </DialogPortal>
-    </Dialog>
+          {modActions}
+          <ProfileBlockConfirm controller={actions} />
+        </ProfileCard>
+      </DrawerContent>
+    </Drawer>
   );
 }

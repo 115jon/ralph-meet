@@ -41,7 +41,18 @@ import {
   type BackgroundTaskEnvelope,
 } from "./src/lib/background-tasks";
 import { retryR2Cleanup } from "./src/services/r2-cleanup.service";
-import { syncCollectiblesCatalog } from "./src/lib/collectibles-catalog";
+import {
+  COLLECTIBLES_SYNC_CRON,
+  CatalogFetchDeferredError,
+  syncCollectiblesCatalog,
+} from "./src/lib/collectibles-catalog";
+import {
+  runScheduledJobs,
+  selectScheduledJobs,
+} from "./src/lib/scheduled-jobs";
+
+/** wrangler.toml [triggers]: maintenance jobs run every 6h. */
+const MAINTENANCE_CRON = "0 */6 * * *";
 import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
@@ -113,7 +124,7 @@ function withDesktopCors(request: Request, response: Response): Response {
 
 function buildDocumentContentSecurityPolicy(authOrigin: string): string {
   return (
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: " +
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: " +
     authOrigin +
     " https://api.github.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https:"
   );
@@ -474,36 +485,64 @@ export default {
   },
 
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    ctx.waitUntil(
-      Promise.all([
-        syncYtDlpUpstream(true).catch((error) => {
-          console.error("yt-dlp upstream sync failed:", error);
-        }),
-        retryR2Cleanup(env.DB, env.BUCKET).catch((error) => {
-          console.error("R2 cleanup retry failed:", error);
-        }),
-        retryMessagePostprocessing(env).catch((error) => {
-          console.error("Message postprocessing retry failed:", error);
-        }),
-        syncCollectiblesCatalog(env.DB)
-          .then((catalog) => {
-            console.info("Collectibles catalog sync completed", {
-              source: catalog.source,
-              categories: catalog.categories.length,
-              items: catalog.items.length,
-              syncedAt: catalog.syncedAt,
-            });
-          })
-          .catch((error) => {
-            console.error("Collectibles catalog sync failed:", error);
-            throw error;
-          }),
-      ]).then(() => undefined),
-    );
+    const jobs = selectScheduledJobs(controller.cron, {
+      maintenance: {
+        crons: [MAINTENANCE_CRON],
+        jobs: [
+          {
+            name: "yt-dlp upstream sync",
+            run: () => syncYtDlpUpstream(true),
+          },
+          {
+            name: "R2 cleanup retry",
+            run: () => retryR2Cleanup(env.DB, env.BUCKET),
+          },
+        ],
+      },
+      // Embed retries back off from one minute, so a six-hourly sweep made
+      // them pointless. Delayed queue deliveries do the fast retries; this
+      // hourly sweep is the safety net.
+      postprocessing: {
+        crons: [MAINTENANCE_CRON, COLLECTIBLES_SYNC_CRON],
+        jobs: [
+          {
+            name: "Message postprocessing retry",
+            run: () => retryMessagePostprocessing(env),
+          },
+        ],
+      },
+      collectibles: {
+        crons: [COLLECTIBLES_SYNC_CRON],
+        jobs: [
+          {
+            name: "Collectibles catalog sync",
+            run: async () => {
+              // Upstream blocks Workers egress; an off-Cloudflare fetcher
+              // pushes to /api/collectibles/ingest. While it keeps up, a
+              // failed fetch here was already logged as a warning.
+              const catalog = await syncCollectiblesCatalog(env.DB, {
+                trigger: "cron",
+              }).catch((error: unknown) => {
+                if (error instanceof CatalogFetchDeferredError) return null;
+                throw error;
+              });
+              if (!catalog) return;
+              console.info("Collectibles catalog sync completed", {
+                categories: catalog.categories.length,
+                items: catalog.items.length,
+                outcome: catalog.sync?.lastOutcome,
+                syncedAt: catalog.syncedAt,
+              });
+            },
+          },
+        ],
+      },
+    });
+    await runScheduledJobs(jobs, (promise) => ctx.waitUntil(promise));
   },
 
   async queue(
@@ -516,6 +555,7 @@ export default {
       BUCKET: env.BUCKET,
       CACHE: env.CACHE,
       MEETING_ROOM: env.MEETING_ROOM,
+      BACKGROUND_TASKS: env.BACKGROUND_TASKS,
     });
   },
 };

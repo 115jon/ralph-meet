@@ -1,14 +1,19 @@
-import { useMounted } from "@/hooks/useMounted";
-import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent, PointerEvent } from "react";
-import { AudioWaveform, ChevronDown } from "lucide-react";
-
-import type { SFUClient } from "@/lib/sfu-client";
-import { getSoundboardServerKey } from "@/lib/voice/soundboard";
-import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
+import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { SFUClient } from "@/lib/sfu-client";
+import {
+  getSoundboardMasterVolume,
+  getSoundboardServerKey,
+  setSoundboardMasterVolume,
+} from "@/lib/voice/soundboard";
+import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
+import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import { SoundboardPlaybackRow } from "./ActiveSoundboardEffectList";
+import { FloatingSurface } from "./floating/FloatingSurface";
+import { RangeSlider } from "./floating/RangeSlider";
 
 interface FloatingSoundboardManagerProps {
   serverId?: string | null;
@@ -17,41 +22,68 @@ interface FloatingSoundboardManagerProps {
   sfu: SFUClient | null;
 }
 
+/**
+ * The soundboard's one master volume (the same setting as the picker's),
+ * applied live and saved a beat after the last change.
+ */
+function useMasterVolume(localUserId?: string | null) {
+  const stored = useSoundSettingsStore((state) =>
+    localUserId ? state.getSettings(localUserId).soundboardVolume : null,
+  );
+  const updateSettings = useSoundSettingsStore((state) => state.updateSettings);
+  const [draft, setDraft] = useState<number | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (localUserId && pending.current !== null) {
+        updateSettings({ soundboardVolume: pending.current }, localUserId);
+      }
+    },
+    [localUserId, updateSettings],
+  );
+
+  const volume =
+    draft ?? stored ?? Math.round(getSoundboardMasterVolume() * 100);
+  const setVolume = (next: number) => {
+    setDraft(next);
+    setSoundboardMasterVolume(next / 100);
+    pending.current = next;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      const value = pending.current;
+      pending.current = null;
+      if (localUserId && value !== null) {
+        updateSettings({ soundboardVolume: value }, localUserId);
+      }
+      setDraft(null);
+    }, 250);
+  };
+  return [volume, setVolume] as const;
+}
+
+/**
+ * Your sounds that are playing right now, as a short tracklist: name, who
+ * played it, running time, pause and stop; per-sound volume behind each
+ * row's expand. One master volume sits in the window header. Desktop: a
+ * resizable panel (top right by default, clear of the header). Phone: a pill
+ * naming how many play; tap for a sheet with the rows. Minimises to a
+ * bubble.
+ */
 export function FloatingSoundboardManager({
   serverId,
   serverKey: explicitServerKey,
   localUserId,
   sfu,
 }: FloatingSoundboardManagerProps) {
-  const mounted = useMounted();
   const activePlaybacks = useVoiceSoundboardStore(
     (state) => state.activePlaybacks,
   );
   const serverKey = explicitServerKey ?? getSoundboardServerKey(serverId);
-  const [collapsed, setCollapsed] = useState(false);
-  const [position, setPosition] = useState({ x: 16, y: 16 });
-
-  useEffect(() => {
-    if (mounted) {
-      // Hydration must start from a stable position before reading the viewport.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPosition({
-        x: Math.max(16, window.innerWidth - 360 - 16),
-        y: 16,
-      });
-    }
-  }, [mounted]);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  const dragStateRef = useRef<{
-    pointerId: number;
-    offsetX: number;
-    offsetY: number;
-    startX: number;
-    startY: number;
-    moved: boolean;
-  } | null>(null);
-  const suppressHandleClickRef = useRef(false);
+  const [masterVolume, setMasterVolume] = useMasterVolume(localUserId);
 
   const scopedPlaybacks = useMemo(
     () =>
@@ -65,177 +97,86 @@ export function FloatingSoundboardManager({
     [activePlaybacks, localUserId, serverKey],
   );
 
-  useEffect(() => {
-    const clampToViewport = () => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      setPosition((current) => ({
-        x: Math.min(
-          Math.max(12, current.x),
-          Math.max(12, window.innerWidth - (rect?.width ?? 360) - 12),
-        ),
-        y: Math.min(
-          Math.max(12, current.y),
-          Math.max(12, window.innerHeight - (rect?.height ?? 320) - 12),
-        ),
-      }));
-    };
+  if (scopedPlaybacks.length === 0) return null;
 
-    window.addEventListener("resize", clampToViewport);
-    return () => window.removeEventListener("resize", clampToViewport);
-  }, []);
+  const count = scopedPlaybacks.length;
+  const rows = (
+    <div className="flex flex-col gap-0.5">
+      {scopedPlaybacks.map((playback) => (
+        <SoundboardPlaybackRow
+          key={playback.playbackId}
+          playback={playback}
+          localUserId={localUserId}
+          serverKey={serverKey}
+          sfu={sfu}
+          variant="floating"
+        />
+      ))}
+    </div>
+  );
+  const master = (className?: string) => (
+    <div className={className}>
+      <Icon
+        name={masterVolume === 0 ? "speakerOff" : "voiceChannel"}
+        size="sm"
+        className="shrink-0 text-ink-3"
+      />
+      <RangeSlider
+        aria-label="Soundboard volume"
+        aria-valuetext={`${masterVolume} percent`}
+        value={masterVolume}
+        onValueChange={setMasterVolume}
+        className="min-w-0 flex-1"
+      />
+      <Num className="w-9 shrink-0 text-right text-ink-3">{masterVolume}%</Num>
+    </div>
+  );
 
-  useEffect(() => {
-    toggleRef.current?.focus({ preventScroll: true });
-  }, [collapsed]);
-
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    if (
-      !(event.target as HTMLElement).closest(
-        '[data-soundboard-drag-handle="true"]',
-      )
-    ) {
-      return;
-    }
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-      startX: event.clientX,
-      startY: event.clientY,
-      moved: false,
-    };
-  };
-
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    const hasMoved =
-      Math.abs(event.clientX - dragState.startX) > 4 ||
-      Math.abs(event.clientY - dragState.startY) > 4;
-    if (!hasMoved) return;
-
-    dragState.moved = true;
-    suppressHandleClickRef.current = true;
-    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    setPosition({
-      x: Math.min(
-        Math.max(12, event.clientX - dragState.offsetX),
-        Math.max(12, window.innerWidth - (rect?.width ?? 360) - 12),
-      ),
-      y: Math.min(
-        Math.max(12, event.clientY - dragState.offsetY),
-        Math.max(12, window.innerHeight - (rect?.height ?? 320) - 12),
-      ),
-    });
-  };
-
-  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (
-      !dragStateRef.current ||
-      dragStateRef.current.pointerId !== event.pointerId
-    ) {
-      return;
-    }
-
-    if (dragStateRef.current.moved) {
-      window.setTimeout(() => {
-        suppressHandleClickRef.current = false;
-      }, 0);
-    }
-    dragStateRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
-  };
-
-  const handleDragHandleClick = (event: MouseEvent<HTMLButtonElement>) => {
-    if (!suppressHandleClickRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-    suppressHandleClickRef.current = false;
-  };
-
-  if (!mounted || scopedPlaybacks.length === 0) {
-    return null;
-  }
-
-  return createPortal(
-    <TooltipProvider delayDuration={100}>
-      <aside
-        ref={containerRef}
-        data-testid="floating-soundboard-manager"
-        aria-label="Soundboard manager"
-        className="fixed z-40 w-[min(360px,calc(100vw-24px))] touch-none select-none"
-        style={{ left: position.x, top: position.y }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onLostPointerCapture={() => {
-          dragStateRef.current = null;
-        }}
-      >
-        {collapsed ? (
-          <button
-            ref={toggleRef}
-            type="button"
-            data-soundboard-drag-handle="true"
-            aria-label="Open soundboard manager"
-            aria-expanded="false"
-            aria-controls="soundboard-manager-panel"
-            onClick={() => setCollapsed(false)}
-            onClickCapture={handleDragHandleClick}
-            className="flex min-h-11 items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-floating/95 px-3 text-sm font-bold text-rm-text shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-xl transition-[background-color,color,transform] duration-200 hover:bg-rm-bg-hover hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
-          >
-            <AudioWaveform className="h-4 w-4 text-primary" />
-            Soundboard
-          </button>
-        ) : (
-          <div
-            id="soundboard-manager-panel"
-            className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating/95 text-rm-text shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-xl"
-          >
-            <button
-              ref={toggleRef}
-              type="button"
-              data-soundboard-drag-handle="true"
-              aria-expanded="true"
-              aria-controls="soundboard-manager-panel"
-              aria-label="Collapse soundboard manager"
-              onClick={() => setCollapsed(true)}
-              onClickCapture={handleDragHandleClick}
-              className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-rm-border/70 px-3 py-2.5 text-left transition-[background-color,color] duration-200 hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
-            >
-              <span className="flex min-w-0 items-center gap-2 text-sm font-bold">
-                <AudioWaveform className="h-4 w-4 shrink-0 text-primary" />
-                Soundboard
-              </span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-rm-text-muted" />
-            </button>
-            <div className="max-h-[min(360px,calc(100vh-112px))] space-y-2 overflow-y-auto p-2.5">
-              {scopedPlaybacks.map((playback) => (
-                <SoundboardPlaybackRow
-                  key={playback.playbackId}
-                  playback={playback}
-                  localUserId={localUserId}
-                  serverKey={serverKey}
-                  sfu={sfu}
-                  variant="floating"
-                />
-              ))}
-            </div>
+  return (
+    <TooltipProvider>
+      <FloatingSurface
+        id="soundboard"
+        label="Soundboard manager"
+        title="Soundboard"
+        testId="floating-soundboard-manager"
+        defaultCorner="top-right"
+        width={{ min: 280, max: 440, default: 340 }}
+        phoneWidth={220}
+        minimizeLabel="Collapse soundboard manager"
+        restoreLabel="Open soundboard manager"
+        headerActions={master("flex w-36 items-center gap-1.5 pr-1")}
+        bubble={
+          <>
+            <Icon name="soundboard" size="lg" />
+            <span className="badge-count absolute top-0.5 right-0.5">
+              {count}
+            </span>
+          </>
+        }
+        compact={
+          <div className="flex h-12 items-center gap-2.5 px-3">
+            <Icon name="soundboard" size="md" className="shrink-0 text-ink-2" />
+            <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-ink-1">
+              Soundboard
+            </span>
+            <span className="shrink-0 text-ui-xs text-ink-3">
+              <Num>{count}</Num> playing
+            </span>
           </div>
-        )}
-      </aside>
-    </TooltipProvider>,
-    document.body,
+        }
+        sheetTitle="Soundboard"
+        sheetDescription={`${count} ${count === 1 ? "sound" : "sounds"} playing`}
+        sheet={
+          <div className="flex flex-col gap-3">
+            {master("flex items-center gap-2 px-2")}
+            {rows}
+          </div>
+        }
+      >
+        <div className="max-h-[min(360px,calc(100dvh-160px))] overflow-y-auto overscroll-contain p-1.5">
+          {rows}
+        </div>
+      </FloatingSurface>
+    </TooltipProvider>
   );
 }

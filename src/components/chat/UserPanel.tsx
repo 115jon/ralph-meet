@@ -1,11 +1,20 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { useVoiceSessionStatus } from "@/components/voice/voice-session-status";
+import { useSpeakingAttr } from "@/hooks/useIsSpeaking";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
+import type { GridItem } from "@/components/voice/types";
+import type { SFUClient } from "@/lib/sfu-client";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DockButton } from "@/components/ui/dock-button";
+import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import {
   getCachedCollectiblesCatalog,
   subscribeCollectiblesCatalog,
@@ -15,6 +24,7 @@ import {
   type OpenProfileEditorEventDetail,
 } from "@/lib/profile-editor-events";
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { openSettings as openSettingsAt } from "@/components/chat/settings/settings-links";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type {
   ScreenShareOptions,
@@ -42,18 +52,22 @@ import {
   useState,
 } from "react";
 import { useShallow } from "zustand/shallow";
-import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import { UserDisplayName } from "./UserDisplayName";
 import { UserNameplateLayer } from "./UserNameplateLayer";
 import { getUserNameplatePresentation } from "./user-nameplate-presentation";
-import { UserStatusDot } from "./UserStatusDot";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import { normalizeUserStatus, type UserStatus } from "./UserStatusDot";
+import { PRESENCE_LED } from "@/components/ui/avatar";
+import { Led, LedLabel } from "@/components/ui/led";
 
 const EMPTY_QUALITIES: string[] = [];
-const EMPTY_GRID_ITEMS: any[] = [];
+const EMPTY_GRID_ITEMS: GridItem[] = [];
 const EMPTY_WATCHERS_BY_STREAMER: StreamWatchersByStreamer = {};
 const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
 const TAILWIND_SPACING_UNIT_PX = 4;
 const USER_PANEL_USERNAME_HIDE_WIDTH_PX = TAILWIND_SPACING_UNIT_PX * 56;
+// Below this the name column can't hold ~4 letters either (the column is the
+// sidebar width minus 210px; the identity also hides itself under 48px).
 const USER_PANEL_IDENTITY_HIDE_WIDTH_PX = TAILWIND_SPACING_UNIT_PX * 54;
 const VoiceDashboard = lazy(() =>
   import("@/components/chat/VoiceDashboard").then((mod) => ({
@@ -65,7 +79,6 @@ const AudioDeviceMenu = lazy(() =>
     default: mod.AudioDeviceMenu,
   })),
 );
-const SettingsModal = lazy(() => import("@/components/chat/SettingsModal"));
 const ProfileEditorModal = lazy(
   () => import("@/components/chat/ProfileEditorModal"),
 );
@@ -103,8 +116,8 @@ interface Props {
   hasCamera?: boolean;
   hasMicrophone?: boolean;
   onToggleCamera?: () => void;
-  sfu?: any;
-  gridItems?: any[];
+  sfu?: SFUClient | null;
+  gridItems?: GridItem[];
   watchersByStreamer?: StreamWatchersByStreamer;
   spatialAudioState?: SharedSpatialAudioState;
   onUpdateSpatialAudioState?: (state: SharedSpatialAudioState) => void;
@@ -114,25 +127,80 @@ interface Props {
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
   sidebarWidthPx?: number;
+  /**
+   * Override: whether the call's stage is on screen (the call strip then
+   * collapses to its status line). Derived from the active channel when
+   * omitted.
+   */
+  stageOnScreen?: boolean;
+  /** Override the strip's connection state (fixtures). */
+  connectionState?: string;
 }
+
+/**
+ * Device caret beside mic / deafen: a 10px-wide half of a split button, as
+ * tall as the 40px key. HIT still gives it a 44px target on touch.
+ */
+const CARET =
+  "inline-flex h-10 w-2.5 shrink-0 items-center justify-center rounded-[2px] outline-none [&_svg]:size-2.5";
 
 const statusLabels: Record<string, string> = {
   online: "Online",
   idle: "Idle",
-  dnd: "Do Not Disturb",
+  dnd: "Do not disturb",
   offline: "Invisible",
 };
+
+/**
+ * The status line under the name fits the name column (a container: the
+ * column is the sidebar width minus 210px of avatar, keys and padding). A
+ * word shows only when it fits whole, never with an ellipsis: the full word,
+ * else a short code (DND, INVIS), else no line at all (the avatar's presence
+ * LED still shows the state; the row's accessible name and tooltip always
+ * carry the full label). Breakpoints are the silkscreen word widths in the
+ * light themes (the wider tracking), plus a pixel.
+ */
+const STATUS_WORD: Record<
+  UserStatus,
+  { short?: string; full: string; shortAt?: string; line: string }
+> = {
+  online: { full: "@min-[53px]:inline", line: "@min-[53px]:block" },
+  idle: { full: "@min-[36px]:inline", line: "@min-[36px]:block" },
+  dnd: {
+    short: "DND",
+    full: "@min-[124px]:inline",
+    shortAt: "@min-[27px]:inline @min-[124px]:hidden",
+    line: "@min-[27px]:block",
+  },
+  offline: {
+    short: "Invis",
+    full: "@min-[80px]:inline",
+    shortAt: "@min-[44px]:inline @min-[80px]:hidden",
+    line: "@min-[44px]:block",
+  },
+};
+/** A custom status takes the line from 54px (the default 264px sidebar). */
+const CUSTOM_STATUS_SHOWN = "@min-[54px]:block";
+const CUSTOM_STATUS_REPLACES = "@min-[54px]:hidden";
 
 function CallDashboardSection({
   onOpenActivities,
   onOpenSoundboard,
+  stageOnScreen,
 }: {
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
+  stageOnScreen?: boolean;
 }) {
   const callStatus = useCallStore((s) => s.status);
   const callChannelId = useCallStore((s) => s.channelId);
   const remoteUser = useCallStore((s) => s.remoteUser);
+  const callStartedAt = useCallStore((s) => s.startedAt);
+  const callConnectionState = useCallVoiceStore((s) => s.connectionState);
+  const activeChannelId = useChatStore((s) => s.activeChannelId);
+  const isMobile = useIsMobile();
+  const collapsed =
+    !isMobile && (stageOnScreen ?? activeChannelId === callChannelId);
 
   const activeRemoteUser = useUserResolution(remoteUser?.id, remoteUser);
 
@@ -144,7 +212,6 @@ function CallDashboardSection({
   const currentScreenSource = useCallVoiceStore((s) => s.currentScreenSource);
   const isCameraActive = useCallVoiceStore((s) => s.isCameraActive);
   const hasCamera = useCallVoiceStore((s) => s.hasCamera);
-  const hasMicrophone = useCallVoiceStore((s) => s.hasMicrophone);
   const toggleCamera = useCallVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useCallVoiceStore((s) => s.toggleScreenShare);
   const onToggleStreamAudio = useCallVoiceStore((s) => s.onToggleStreamAudio);
@@ -176,9 +243,13 @@ function CallDashboardSection({
   return (
     <>
       <VoiceDashboard
+        kind="dm"
         serverName={
           activeRemoteUser.displayName || activeRemoteUser.username || "Call"
         }
+        connectionState={callConnectionState}
+        startedAt={callStartedAt}
+        collapsed={collapsed}
         onVoiceDisconnect={() => {
           playCallEnd();
           handleCallLeave?.();
@@ -198,7 +269,6 @@ function CallDashboardSection({
         onStreamQualityChange={(q) => toggleScreenShare?.({ quality: q })}
         isCameraActive={isCameraActive}
         hasCamera={hasCamera}
-        hasMicrophone={hasMicrophone}
         onToggleCamera={() => toggleCamera?.()}
         sfu={sfu}
         voiceChannelId={callChannelId}
@@ -268,16 +338,30 @@ export default function UserPanel({
   onOpenActivities,
   onOpenSoundboard,
   sidebarWidthPx,
+  stageOnScreen,
+  connectionState: connectionStateOverride,
 }: Props) {
   const { updateStatus } = useChatActions();
-  const speakingUsers = useChatStore((s) => s.speakingUsers);
+  const speakingAttr = useSpeakingAttr(user?.id);
+  const isMobile = useIsMobile();
+  const activeChannelId = useChatStore((s) => s.activeChannelId);
+  const channelStartedAt = useChatStore((s) =>
+    voiceChannelId ? s.voiceChannelStartedAt?.[voiceChannelId] : undefined,
+  );
+  const session = useVoiceSessionStatus(
+    useShallow((s) =>
+      s.channelId && s.channelId === voiceChannelId
+        ? {
+            connectionState: s.connectionState,
+            joinedAt: s.joinedAt,
+            retry: s.retry,
+          }
+        : { connectionState: null, joinedAt: null, retry: null },
+    ),
+  );
   const [collectiblesCatalog, setCollectiblesCatalog] = useState(() =>
     getCachedCollectiblesCatalog(),
   );
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<
-    "account" | "voice" | "shares" | "appearance"
-  >("account");
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const profileEditorTriggerRef = useRef<HTMLElement | null>(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -293,22 +377,42 @@ export default function UserPanel({
 
   const shouldRenderMenu = showMenu;
 
+  // The same settings row the voice session reads (useVoiceChannel keys it
+  // by the signed-in user), so the account row and the stage bar agree.
   const settings = useVoiceSettingsStore(
-    useShallow((s) => s.getSettings(user?.id)),
+    useShallow((s) => s.getSettings(voiceSettingsUserId ?? user?.id)),
   );
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
   const callActive = useCallStore((s) => s.status) === "active";
-  const hasVoiceDashboard = voiceConnected || callActive;
+  const channelStageOnScreen =
+    !isMobile &&
+    (stageOnScreen ?? (!!voiceChannelId && activeChannelId === voiceChannelId));
+  // Retry is leave-then-rejoin (useVoiceChannel has no in-place reconnect),
+  // run by the call's VoiceChannelView. The shell keeps that view mounted
+  // only while it is joined or on screen, and records the rejoined channel
+  // from the active one, so Retry from the strip first brings the stage on
+  // screen. Mute and deafen live in the settings store and survive it.
+  const sessionRetry = session.retry;
+  const stageShowing =
+    stageOnScreen ?? (!!voiceChannelId && activeChannelId === voiceChannelId);
+  const retryFromStrip = useMemo(
+    () =>
+      sessionRetry
+        ? () => {
+            if (!stageShowing) onVoiceNavigate?.();
+            sessionRetry();
+          }
+        : undefined,
+    [sessionRetry, stageShowing, onVoiceNavigate],
+  );
   const participantCapabilities = useMemo(() => {
     const vcMembers = voiceChannelId
       ? (useChatStore.getState().voiceChannelStates[voiceChannelId] ?? [])
       : [];
     return Object.fromEntries(
-      (gridItems ?? []).map((item: any) => {
-        const member = vcMembers.find(
-          (m: any) => m.clerk_user_id === item.userId,
-        );
+      (gridItems ?? []).map((item) => {
+        const member = vcMembers.find((m) => m.clerk_user_id === item.userId);
         return [
           item.userId,
           {
@@ -325,10 +429,8 @@ export default function UserPanel({
   );
 
   const openSettings = useCallback(
-    (tab: "account" | "voice" | "shares" | "appearance" = "account") => {
-      setSettingsInitialTab(tab);
-      setShowSettings(true);
-    },
+    (tab: "account" | "voice" | "shares" | "appearance" = "account") =>
+      openSettingsAt({ panel: tab }),
     [],
   );
 
@@ -344,19 +446,6 @@ export default function UserPanel({
     profileEditorTriggerRef.current = null;
     if (trigger?.isConnected) trigger.focus();
   }, [showProfileEditor]);
-
-  useEffect(() => {
-    const handleOpenShares = () => {
-      openSettings("shares");
-    };
-    window.addEventListener("open-shared-messages-settings", handleOpenShares);
-    return () => {
-      window.removeEventListener(
-        "open-shared-messages-settings",
-        handleOpenShares,
-      );
-    };
-  }, [openSettings]);
 
   useEffect(() => {
     const handleOpenProfileEditor = (event: Event) => {
@@ -398,474 +487,397 @@ export default function UserPanel({
   const userHandle = user.username || displayName;
   const currentStatusLabel = statusLabels[currentStatus] ?? "Online";
   const hasNameplate = nameplatePresentation.hasNameplate;
-  const nameplateTheme = nameplatePresentation.theme;
-  const nameplateDangerColor =
-    hasNameplate && nameplateTheme
-      ? nameplateTheme.isLightAccent
-        ? "#991B1B"
-        : "#FECACA"
+  const nameplateTheme = hasNameplate ? nameplatePresentation.theme : null;
+  const isMicMuted = settings.isMuted || !effectiveHasMic;
+  const presenceStatus = normalizeUserStatus(currentStatus);
+  const customStatus = user.custom_status?.trim() ?? "";
+  const statusWord = STATUS_WORD[presenceStatus];
+  const statusSummary = customStatus
+    ? `${currentStatusLabel}: ${customStatus}`
+    : currentStatusLabel;
+  /* The line under the name (STATUS_WORD): a custom status when one is set
+   * and the column has room (Geist, it is a sentence: it ellipsizes), else the
+   * state as an LED label that only shows whole words. Its own LED is dropped:
+   * the avatar's presence notch sits right beside it. */
+  const statusLine = (
+    <>
+      {customStatus ? (
+        <span
+          className={cn(
+            "hidden min-w-0 truncate font-sans leading-4 text-ink-2",
+            CUSTOM_STATUS_SHOWN,
+          )}
+          style={
+            nameplateTheme ? { color: nameplateTheme.buttonText } : undefined
+          }
+        >
+          <InlineEmojiText text={customStatus} />
+        </span>
+      ) : null}
+      <LedLabel
+        state={PRESENCE_LED[presenceStatus]}
+        led={false}
+        className={cn("max-w-full", customStatus && CUSTOM_STATUS_REPLACES)}
+        style={
+          nameplateTheme ? { color: nameplateTheme.buttonText } : undefined
+        }
+      >
+        <span className={cn("hidden", statusWord.full)}>
+          {currentStatusLabel}
+        </span>
+        {statusWord.short ? (
+          <span className={cn("hidden", statusWord.shortAt)}>
+            {statusWord.short}
+          </span>
+        ) : null}
+      </LedLabel>
+    </>
+  );
+  /* The line shows from the width its shortest content fits; below that the
+   * name sits alone, centred on the avatar. */
+  const statusLineShown = customStatus
+    ? cn(statusWord.line, "@min-[54px]:block")
+    : statusWord.line;
+
+  /* Over a nameplate image the controls take the nameplate's ink (computed
+   * per image for contrast); muted keeps the danger tint with an ink that
+   * reads on the nameplate's tone. */
+  const nameplateInk = (muted: boolean) =>
+    nameplateTheme
+      ? {
+          color: muted
+            ? nameplateTheme.isLightAccent
+              ? "var(--muted-state)"
+              : "color-mix(in oklab, var(--muted-state) 35%, white)"
+            : nameplateTheme.buttonText,
+        }
+      : undefined;
+  const caretStyle = (open: boolean) =>
+    nameplateTheme
+      ? {
+          color: open ? nameplateTheme.buttonText : nameplateTheme.buttonMuted,
+        }
       : undefined;
 
-  return (
-    <TooltipProvider delayDuration={0}>
-      <div className="mt-auto flex w-full shrink-0 flex-col relative overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated">
-        {/* VOICE CONNECTED dashboard (hidden when active call takes precedence) */}
-        {voiceConnected && !callActive && (
-          <div className="relative z-10">
-            <VoiceDashboard
-              serverName={serverName}
-              voiceChannelName={voiceChannelName}
-              onVoiceDisconnect={onVoiceDisconnect}
-              onVoiceNavigate={onVoiceNavigate}
-              isScreenSharing={isScreenSharing}
-              isStreamingAudio={isStreamingAudio}
-              screenQuality={screenQuality}
-              currentScreenSource={currentScreenSource}
-              availableQualities={availableQualities}
-              onShareScreen={() => setIsVcScreenModalOpen(true)}
-              onStopStreaming={onStopStreaming}
-              onToggleStreamAudio={onToggleStreamAudio}
-              onChangeStreamSource={onChangeStreamSource}
-              onStreamQualityChange={onStreamQualityChange}
-              isCameraActive={isCameraActive}
-              hasCamera={hasCamera}
-              hasMicrophone={hasMicrophone}
-              onToggleCamera={onToggleCamera}
-              sfu={sfu}
-              voiceChannelId={voiceChannelId}
-              gridItems={gridItems}
-              watchersByStreamer={watchersByStreamer}
-              spatialAudioState={spatialAudioState}
-              onUpdateSpatialAudioState={onUpdateSpatialAudioState}
-              voiceSettingsUserId={voiceSettingsUserId}
-              localUserId={user.id}
-              roomSlug={roomSlug}
-              voiceSessionId={voiceSessionId}
-              serverId={serverId}
-              participantCapabilities={participantCapabilities}
+  const toggleMic = () => {
+    if (!effectiveHasMic) return;
+    // In a call, route through the call's toggle (it plays the sounds).
+    const callToggle = useCallVoiceStore.getState().toggleMic;
+    if (callActive && callToggle) callToggle();
+    else setIsMuted(!settings.isMuted);
+  };
+  const toggleDeafen = () => {
+    const callToggle = useCallVoiceStore.getState().toggleDeafen;
+    if (callActive && callToggle) callToggle();
+    else setIsDeafened(!settings.isDeafened);
+  };
+
+  const micLabel = !effectiveHasMic
+    ? "No microphone detected"
+    : settings.isMuted
+      ? "Unmute"
+      : "Mute";
+  const deafenLabel = settings.isDeafened ? "Undeafen" : "Deafen";
+
+  const caret = (mode: "input" | "output") => {
+    const open = activeDeviceMenu === mode;
+    const label = mode === "input" ? "Input device" : "Output device";
+    return (
+      <div className="relative">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              ref={mode === "input" ? micCaretRef : headphoneCaretRef}
+              aria-label={label}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onClick={() => setActiveDeviceMenu(open ? null : mode)}
+              className={cn(
+                PRESS,
+                HIT,
+                CARET,
+                open
+                  ? "bg-tint-2 text-ink-1"
+                  : "text-ink-3 pointer-fine:hover:text-ink-1",
+              )}
+              style={caretStyle(open)}
+            >
+              <Icon name="chevronDown" size="xs" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">{label}</TooltipContent>
+        </Tooltip>
+        {open && (
+          <Suspense fallback={null}>
+            <AudioDeviceMenu
+              mode={mode}
+              anchorRef={mode === "input" ? micCaretRef : headphoneCaretRef}
+              onClose={() => setActiveDeviceMenu(null)}
               onOpenVoiceSettings={() => {
                 openSettings("voice");
               }}
-              onOpenActivities={onOpenActivities}
-              onOpenSoundboard={onOpenSoundboard}
-              showNoiseReductionShortcut
-            />
-            <UnifiedScreenShareModal
-              isOpen={isVcScreenModalOpen}
-              onClose={() => setIsVcScreenModalOpen(false)}
-              onStart={(options) => {
-                onStartScreenShare?.({
-                  ...options,
-                  changeSource: isScreenSharing,
-                });
-                setIsVcScreenModalOpen(false);
-              }}
-              availableQualities={availableQualities ?? SCREEN_SHARE_QUALITIES}
-            />
-          </div>
-        )}
-
-        {/* ACTIVE CALL dashboard (reuses VoiceDashboard) */}
-        <div className="relative z-10">
-          <CallDashboardSection
-            onOpenActivities={onOpenActivities}
-            onOpenSoundboard={onOpenSoundboard}
-          />
-        </div>
-
-        {/* User Info Bar */}
-        <div
-          className={cn(
-            "group/user-panel-row flex items-center gap-2 rounded-[12px] p-1.5 relative z-10 overflow-hidden",
-            hasVoiceDashboard && "rounded-t-none",
-            !showIdentity && "gap-1.5",
-            hasNameplate && "isolate",
-            hasVoiceDashboard && "border-t border-rm-border",
-          )}
-        >
-          {hasNameplate && (
-            <>
-              <UserNameplateLayer
-                user={user}
-                alt={`${displayName} nameplate`}
-                className="pointer-events-none z-0 opacity-[0.98]"
-              />
-            </>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                ref={setUserAvatarEl}
-                className={cn(
-                  "relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-[12px] border-0 bg-transparent p-1 text-left outline-none transition-colors duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:ring-2 focus-visible:ring-primary/70 active:scale-[0.98]",
-                  "hover:bg-black/20 focus-visible:bg-black/20",
-                  !showIdentity && "gap-1.5",
-                )}
-                onClick={() => setShowMenu((v) => !v)}
-                aria-label={`${displayName}, ${userHandle}, ${currentStatusLabel}. View user account`}
-              >
-                <div
-                  className={cn(
-                    "relative z-10 flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground transition-all opacity-90 group-hover/user-panel-row:opacity-100",
-                    speakingUsers[user.id] &&
-                      cn(
-                        "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2",
-                        hasNameplate
-                          ? "ring-offset-black"
-                          : "ring-offset-rm-bg-elevated",
-                      ),
-                  )}
-                >
-                  <div className="absolute inset-0 overflow-visible rounded-full flex items-center justify-center">
-                    {user.avatar_url ? (
-                      <AvatarImage
-                        src={getAuthAssetUrl(user.avatar_url)}
-                        alt={displayName}
-                        display={user.avatar_display}
-                      />
-                    ) : (
-                      getDisplayInitial(user)
-                    )}
-                  </div>
-                  <UserStatusDot
-                    status={currentStatus}
-                    className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors"
-                  />
-                </div>
-                {showIdentity && (
-                  <div className="relative min-w-0 flex-1 py-1">
-                    <UserDisplayName
-                      user={user}
-                      className="block truncate text-[13px] font-bold leading-tight text-rm-text-primary"
-                      minContrastRatio={hasNameplate ? 2.8 : undefined}
-                    />
-                    {showUsername ? (
-                      <div className="relative h-[14px] overflow-hidden text-[11px] leading-tight text-rm-text-muted">
-                        <span className="block truncate transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full motion-reduce:transition-none">
-                          {currentStatusLabel}
-                        </span>
-                        <span
-                          aria-hidden="true"
-                          className="absolute inset-x-0 top-full block truncate transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full motion-reduce:transition-none"
-                        >
-                          {userHandle}
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="truncate text-[11px] leading-tight text-rm-text-muted">
-                        {currentStatusLabel}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              sideOffset={12}
-              className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-            >
-              <p>View Profile</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <div className="relative z-10 flex items-center -mr-1">
-            {/* Mic Group */}
-            <div className="flex items-center">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => {
-                      if (effectiveHasMic) {
-                        // Route through callVoice.toggleMic when in a call (includes sound effects)
-                        const callToggle =
-                          useCallVoiceStore.getState().toggleMic;
-                        if (callActive && callToggle) {
-                          callToggle();
-                        } else {
-                          setIsMuted(!settings.isMuted);
-                        }
-                      }
-                    }}
-                    disabled={!effectiveHasMic}
-                    className={cn(
-                      "rounded-[10px] p-1.5 transition-all outline-none flex items-center justify-center group",
-                      settings.isMuted || !effectiveHasMic
-                        ? hasNameplate
-                          ? "text-red-300 hover:text-red-200"
-                          : "text-destructive hover:bg-rm-bg-hover"
-                        : hasNameplate
-                          ? "text-rm-text-primary/85 hover:text-rm-text-primary"
-                          : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
-                      !effectiveHasMic && "cursor-not-allowed",
-                    )}
-                    style={
-                      hasNameplate && nameplateTheme
-                        ? {
-                            color:
-                              settings.isMuted || !effectiveHasMic
-                                ? nameplateDangerColor
-                                : nameplateTheme.buttonText,
-                          }
-                        : undefined
-                    }
-                  >
-                    {settings.isMuted || !effectiveHasMic ? (
-                      <MicOff size={18} />
-                    ) : (
-                      <Mic size={18} className="group-hover:animate-wiggle" />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={12}
-                  className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                >
-                  <p>
-                    {!effectiveHasMic
-                      ? "No microphone detected"
-                      : settings.isMuted
-                        ? "Unmute"
-                        : "Mute"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-
-              <div className="relative">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      ref={micCaretRef}
-                      onClick={() =>
-                        setActiveDeviceMenu(
-                          activeDeviceMenu === "input" ? null : "input",
-                        )
-                      }
-                      className={cn(
-                        "rounded-[10px] p-0.5 transition-all outline-none mr-0.5 group",
-                        activeDeviceMenu === "input"
-                          ? hasNameplate
-                            ? "text-rm-text-primary"
-                            : "text-rm-text-muted bg-rm-bg-hover"
-                          : hasNameplate
-                            ? "text-rm-text-muted hover:text-rm-text-primary"
-                            : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text",
-                      )}
-                      style={
-                        hasNameplate && nameplateTheme
-                          ? {
-                              color:
-                                activeDeviceMenu === "input"
-                                  ? nameplateTheme.buttonText
-                                  : nameplateTheme.buttonMuted,
-                            }
-                          : undefined
-                      }
-                    >
-                      <ChevronDown size={12} strokeWidth={3} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={12}
-                    className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                  >
-                    <p>Input Settings</p>
-                  </TooltipContent>
-                </Tooltip>
-                {activeDeviceMenu === "input" && (
-                  <Suspense fallback={null}>
-                    <AudioDeviceMenu
-                      mode="input"
-                      anchorRef={micCaretRef}
-                      onClose={() => setActiveDeviceMenu(null)}
-                      onOpenVoiceSettings={() => {
-                        openSettings("voice");
-                      }}
-                    />
-                  </Suspense>
-                )}
-              </div>
-            </div>
-
-            {/* Headphones Group */}
-            <div className="flex items-center">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => {
-                      // Route through callVoice.toggleDeafen when in a call (includes sound effects)
-                      const callToggle =
-                        useCallVoiceStore.getState().toggleDeafen;
-                      if (callActive && callToggle) {
-                        callToggle();
-                      } else {
-                        setIsDeafened(!settings.isDeafened);
-                      }
-                    }}
-                    className={cn(
-                      "rounded-[10px] p-1.5 transition-all outline-none flex items-center justify-center group",
-                      settings.isDeafened
-                        ? hasNameplate
-                          ? "text-red-300 hover:text-red-200"
-                          : "text-destructive hover:bg-rm-bg-hover"
-                        : hasNameplate
-                          ? "text-rm-text-primary/85 hover:text-rm-text-primary"
-                          : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
-                    )}
-                    style={
-                      hasNameplate && nameplateTheme
-                        ? {
-                            color: settings.isDeafened
-                              ? nameplateDangerColor
-                              : nameplateTheme.buttonText,
-                          }
-                        : undefined
-                    }
-                  >
-                    <Headphones
-                      size={18}
-                      className="group-hover:animate-clack"
-                    />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={12}
-                  className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                >
-                  <p>{settings.isDeafened ? "Undeafen" : "Deafen"}</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <div className="relative">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      ref={headphoneCaretRef}
-                      onClick={() =>
-                        setActiveDeviceMenu(
-                          activeDeviceMenu === "output" ? null : "output",
-                        )
-                      }
-                      className={cn(
-                        "rounded-[10px] p-0.5 transition-all outline-none mr-0.5 group",
-                        activeDeviceMenu === "output"
-                          ? hasNameplate
-                            ? "text-rm-text-primary"
-                            : "text-rm-text-muted bg-rm-bg-hover"
-                          : hasNameplate
-                            ? "text-rm-text-muted hover:text-rm-text-primary"
-                            : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text",
-                      )}
-                      style={
-                        hasNameplate && nameplateTheme
-                          ? {
-                              color:
-                                activeDeviceMenu === "output"
-                                  ? nameplateTheme.buttonText
-                                  : nameplateTheme.buttonMuted,
-                            }
-                          : undefined
-                      }
-                    >
-                      <ChevronDown size={12} strokeWidth={3} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={12}
-                    className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                  >
-                    <p>Output Settings</p>
-                  </TooltipContent>
-                </Tooltip>
-                {activeDeviceMenu === "output" && (
-                  <Suspense fallback={null}>
-                    <AudioDeviceMenu
-                      mode="output"
-                      anchorRef={headphoneCaretRef}
-                      onClose={() => setActiveDeviceMenu(null)}
-                      onOpenVoiceSettings={() => {
-                        openSettings("voice");
-                      }}
-                    />
-                  </Suspense>
-                )}
-              </div>
-            </div>
-
-            {/* Settings */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => {
-                    openSettings("account");
-                  }}
-                  className={cn(
-                    "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
-                    hasNameplate
-                      ? "text-rm-text-primary/85 hover:text-rm-text-primary"
-                      : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
-                  )}
-                  style={
-                    hasNameplate && nameplateTheme
-                      ? {
-                          color: nameplateTheme.buttonText,
-                        }
-                      : undefined
-                  }
-                >
-                  <Settings
-                    size={18}
-                    className="transition-transform duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] group-hover:rotate-90"
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={12}
-                className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-              >
-                <p>User Settings</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-
-        {/* User Account Popover */}
-        {shouldRenderMenu && userAvatarEl && (
-          <Suspense fallback={null}>
-            <UserAccountPopover
-              user={user}
-              onClose={() => setShowMenu(false)}
-              updateStatus={updateStatus}
-              anchorEl={userAvatarEl}
-              onOpenProfileEditor={openProfileEditor}
-              isClosing={!showMenu}
             />
           </Suspense>
         )}
-        {/* Settings Modal */}
-        <Suspense fallback={null}>
-          <SettingsModal
-            open={showSettings}
-            initialTab={settingsInitialTab}
-            onClose={() => {
-              setShowSettings(false);
-              setSettingsInitialTab("account"); // reset for next open
+      </div>
+    );
+  };
+
+  return (
+    <div
+      data-account-panel=""
+      className="relative mt-auto flex w-full shrink-0 flex-col border-t border-line bg-ply-1"
+    >
+      {/* Call strip: only during a call, above the account row (an active
+          DM call takes precedence over a channel). */}
+      {voiceConnected && !callActive && (
+        <div className="relative z-10">
+          <VoiceDashboard
+            serverName={serverName}
+            voiceChannelName={voiceChannelName}
+            connectionState={
+              connectionStateOverride ?? session.connectionState ?? "connected"
+            }
+            startedAt={channelStartedAt ?? session.joinedAt}
+            onRetry={retryFromStrip}
+            collapsed={channelStageOnScreen}
+            onVoiceDisconnect={onVoiceDisconnect}
+            onVoiceNavigate={onVoiceNavigate}
+            isScreenSharing={isScreenSharing}
+            isStreamingAudio={isStreamingAudio}
+            screenQuality={screenQuality}
+            currentScreenSource={currentScreenSource}
+            availableQualities={availableQualities}
+            onShareScreen={() => setIsVcScreenModalOpen(true)}
+            onStopStreaming={onStopStreaming}
+            onToggleStreamAudio={onToggleStreamAudio}
+            onChangeStreamSource={onChangeStreamSource}
+            onStreamQualityChange={onStreamQualityChange}
+            isCameraActive={isCameraActive}
+            hasCamera={hasCamera}
+            onToggleCamera={onToggleCamera}
+            sfu={sfu}
+            voiceChannelId={voiceChannelId}
+            gridItems={gridItems}
+            watchersByStreamer={watchersByStreamer}
+            spatialAudioState={spatialAudioState}
+            onUpdateSpatialAudioState={onUpdateSpatialAudioState}
+            voiceSettingsUserId={voiceSettingsUserId}
+            localUserId={user.id}
+            roomSlug={roomSlug}
+            voiceSessionId={voiceSessionId}
+            serverId={serverId}
+            participantCapabilities={participantCapabilities}
+            onOpenVoiceSettings={() => {
+              openSettings("voice");
+            }}
+            onOpenActivities={onOpenActivities}
+            onOpenSoundboard={onOpenSoundboard}
+            showNoiseReductionShortcut
+          />
+          <UnifiedScreenShareModal
+            isOpen={isVcScreenModalOpen}
+            onClose={() => setIsVcScreenModalOpen(false)}
+            onStart={(options) => {
+              onStartScreenShare?.({
+                ...options,
+                changeSource: isScreenSharing,
+              });
+              setIsVcScreenModalOpen(false);
+            }}
+            availableQualities={availableQualities ?? SCREEN_SHARE_QUALITIES}
+          />
+        </div>
+      )}
+
+      {/* Active DM call strip (the same VoiceDashboard) */}
+      <div className="relative z-10">
+        <CallDashboardSection
+          onOpenActivities={onOpenActivities}
+          onOpenSoundboard={onOpenSoundboard}
+          stageOnScreen={stageOnScreen}
+        />
+      </div>
+
+      {/* Account row (spec §3 rule 1): identity, mic, deafen, settings. Always
+          here, before and during a call, for muscle memory. 64px: a 40px
+          square avatar, a Bricolage name over an LED status, 40px keys. */}
+      <div
+        className={cn(
+          "group/user-panel-row relative z-10 flex h-16 items-center gap-1 pr-1 pl-3",
+          hasNameplate && "isolate",
+        )}
+      >
+        {hasNameplate && (
+          <UserNameplateLayer
+            user={user}
+            alt={`${displayName} nameplate`}
+            className="pointer-events-none z-0 opacity-[0.98]"
+          />
+        )}
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              ref={setUserAvatarEl}
+              className={cn(
+                PRESS,
+                "relative z-10 flex h-12 min-w-0 flex-1 items-center gap-2 rounded-[2px] text-left outline-none focus-visible:outline-2 focus-visible:outline-focus",
+                hasNameplate ? "[--hover-o:0.16]" : "[--hover-o:0.06]",
+              )}
+              onClick={() => setShowMenu((v) => !v)}
+              aria-haspopup="dialog"
+              aria-expanded={showMenu}
+              aria-label={`${displayName}, ${userHandle}, ${statusSummary}. View user account`}
+            >
+              <span
+                {...speakingAttr}
+                className={cn(
+                  "rm-speak relative z-10 flex size-10 shrink-0 items-center justify-center bg-tint-3 font-display-tuned text-[18px] leading-none font-extrabold text-ink-1",
+                  // No clip: the presence notch hangs past the corner.
+                  avatarShape(user.avatar_url && user.avatar_display, {
+                    clip: false,
+                  }),
+                )}
+              >
+                <span className="absolute inset-0 flex items-center justify-center overflow-visible rounded-[inherit]">
+                  {user.avatar_url ? (
+                    <AvatarImage
+                      src={getAuthAssetUrl(user.avatar_url)}
+                      alt=""
+                      display={user.avatar_display}
+                    />
+                  ) : (
+                    getDisplayInitial(user)
+                  )}
+                </span>
+                {/* Presence: an LED in a square cut out of the panel ply. */}
+                <span
+                  aria-hidden="true"
+                  data-presence={presenceStatus}
+                  className="absolute -right-0.5 -bottom-0.5 z-20 flex size-3.5 items-center justify-center rounded-[2px] bg-ply-1"
+                >
+                  <Led state={PRESENCE_LED[presenceStatus]} size={8} />
+                </span>
+              </span>
+              {showIdentity && (
+                <span className="@container relative block min-w-0 flex-1">
+                  {/* The name only shows where ~4 letters and an ellipsis fit
+                   * (a 48px column, sidebar 258+); narrower, the row is the
+                   * avatar and keys, as at the 208px minimum. Never "J.". */}
+                  <span className="hidden @min-[48px]:block">
+                    <UserDisplayName
+                      user={user}
+                      className="block truncate font-display-tuned text-[15px] leading-5 font-bold text-ink-1"
+                      minContrastRatio={hasNameplate ? 2.8 : undefined}
+                    />
+                    {showUsername ? (
+                      /* Status, swapped for the handle while the row is hovered
+                       * or holds focus: a transform, --dur-3, ease-out. */
+                      <span
+                        className={cn(
+                          "relative hidden h-4 min-w-0 overflow-hidden text-ui-xs text-ink-3",
+                          statusLineShown,
+                        )}
+                      >
+                        <span className="flex h-4 min-w-0 items-center transition-transform duration-(--dur-3) ease-out pointer-fine:group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full">
+                          {statusLine}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-x-0 top-full block truncate leading-4 transition-transform duration-(--dur-3) ease-out pointer-fine:group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full"
+                        >
+                          {userHandle}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className={cn("hidden", statusLineShown)}>
+                        <span className="flex h-4 min-w-0 items-center text-ui-xs text-ink-3">
+                          {statusLine}
+                        </span>
+                      </span>
+                    )}
+                  </span>
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          {/* The full state (and custom status) the narrow line may drop. */}
+          <TooltipContent side="top">
+            View profile · <InlineEmojiText text={statusSummary} />
+          </TooltipContent>
+        </Tooltip>
+
+        <div className="relative z-10 flex shrink-0 items-center">
+          {/* Mic: a split button (toggle + input device caret) */}
+          <div className="flex items-center">
+            <DockButton
+              size={40}
+              quiet
+              state={isMicMuted ? "muted" : "rest"}
+              icon="mic"
+              tooltip={micLabel}
+              aria-pressed={isMicMuted}
+              disabled={!effectiveHasMic}
+              onClick={toggleMic}
+              className={cn(nameplateTheme && !isMicMuted && "bg-transparent")}
+              style={nameplateInk(isMicMuted)}
+            />
+            {caret("input")}
+          </div>
+
+          {/* Deafen: toggle + output device caret */}
+          <div className="flex items-center">
+            <DockButton
+              size={40}
+              quiet
+              state={settings.isDeafened ? "muted" : "rest"}
+              icon="deafen"
+              tooltip={deafenLabel}
+              aria-pressed={settings.isDeafened}
+              onClick={toggleDeafen}
+              className={cn(
+                nameplateTheme && !settings.isDeafened && "bg-transparent",
+              )}
+              style={nameplateInk(settings.isDeafened)}
+            />
+            {caret("output")}
+          </div>
+
+          <IconButton
+            icon="settings"
+            size={40}
+            variant="ghost"
+            tooltip="User settings"
+            style={nameplateInk(false)}
+            onClick={() => {
+              openSettings("account");
             }}
           />
-        </Suspense>
+        </div>
+      </div>
+
+      {/* User account popover */}
+      {shouldRenderMenu && userAvatarEl && (
         <Suspense fallback={null}>
-          <ProfileEditorModal
-            open={showProfileEditor}
-            onClose={() => setShowProfileEditor(false)}
+          <UserAccountPopover
+            user={user}
+            onClose={() => setShowMenu(false)}
+            updateStatus={updateStatus}
+            anchorEl={userAvatarEl}
+            onOpenProfileEditor={openProfileEditor}
+            isClosing={!showMenu}
           />
         </Suspense>
-      </div>
-    </TooltipProvider>
+      )}
+      <Suspense fallback={null}>
+        <ProfileEditorModal
+          open={showProfileEditor}
+          onClose={() => setShowProfileEditor(false)}
+        />
+      </Suspense>
+    </div>
   );
 }

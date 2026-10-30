@@ -1,3 +1,5 @@
+import { describeApiError } from "@/lib/api-errors";
+
 export const LISTEN_TOGETHER_IMPORT_LIMIT = 100;
 export const LISTEN_TOGETHER_RESOLVE_BATCH_SIZE = 20;
 export const LISTEN_TOGETHER_DRIFT_TOLERANCE_MS = 750;
@@ -384,4 +386,18 @@ export function getListenTogetherInputMode(
   const trimmed = input.trim();
   if (!trimmed) return "empty";
   return isListenTogetherResolvableUrl(trimmed) ? "resolve" : "search";
+}
+
+/**
+ * Screen copy for a Listen Together error. `PLAYBACK_*` errors are written on
+ * this client for people to read ("Unable to start playback here…"); every
+ * other code comes from the voice room in log wording ("Voice room
+ * mismatch"), so it goes through `describeApiError` like any failed call.
+ */
+export function describeListenTogetherError(
+  error: { code: string; message: string },
+  action: string,
+): string {
+  if (error.code.startsWith("PLAYBACK_")) return error.message;
+  return describeApiError(error, action);
 }

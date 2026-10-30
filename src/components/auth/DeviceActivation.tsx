@@ -8,6 +8,12 @@
  * moves to the new heading. Copy mirrors Kova's hosted /device page so the
  * two read as one product.
  *
+ * The review is the kit's C2 poster (DESIGN.md, Dialog): a silkscreen kicker
+ * ("Desktop sign-in · 4 min left"), a 40px Bricolage title ("Is this you?",
+ * the last word in the accent dither), a body naming the app and the account,
+ * the code in Martian 40px, a still dithered expiry bar, and a footer of 48px
+ * keys. The surrounding page layout is the public frame's.
+ *
  * Signed-out visitors are sent to /sign-in with a path-only, same-origin
  * `redirect_url` back here (see activateReturnPath).
  *
@@ -17,16 +23,21 @@
  * asks for a fresh code from the device (`?release=failed`).
  */
 
-import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { DialogFooter, DialogKicker } from "@/components/ui/dialog";
+import { DitherDots, DitherWord } from "@/components/ui/dither";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { HIT } from "@/components/ui/interaction";
+import { Skeleton } from "@/components/ui/skeleton";
 import { markAuthLogoutIntent } from "@/lib/desktop-auth";
 import {
   activateReturnPath,
   formatDeviceCode,
-  initials,
   isCompleteDeviceCode,
   prettyPlatform,
   releaseFailedPath,
-  spelledDeviceCode,
   switchAccountSignInUrl,
   waitPhrase,
 } from "@/lib/device-code-format";
@@ -46,8 +57,16 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type ReactNode,
 } from "react";
+import { spellUserCode, splitUserCode } from "./user-code";
+import {
+  ErrorNotice,
+  PublicActions,
+  PublicBody,
+  PublicTitle,
+  StatusTile,
+  type StatusTone,
+} from "./PublicFrame";
 
 type Outcome =
   | "denied"
@@ -115,8 +134,8 @@ export const OUTCOME_COPY: Record<Outcome, Copy> = {
     action: "retry",
   },
   mfa_required: {
-    title: "Two-factor sign-in needed",
-    body: "This account requires two-factor authentication before it can approve a device. Sign in again with your second factor, then enter the code.",
+    title: "Two-step verification needed",
+    body: "Your account needs two-step verification before it can approve a device. Sign in again with your second step, then enter the code.",
     action: "sign-in",
   },
   network: {
@@ -179,104 +198,122 @@ function uniqueParts(parts: Array<string | null | undefined>): string[] {
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
 
-const BTN =
-  "relative inline-flex h-11 w-full items-center justify-center gap-2.5 overflow-hidden rounded-[10px] px-4 text-[15px] font-medium leading-none text-[var(--rm-text-primary)] transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] [-webkit-tap-highlight-color:transparent] after:pointer-events-none after:absolute after:inset-0 after:bg-current after:opacity-0 after:transition-opacity after:duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:cursor-default active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100 [@media(hover:hover)_and_(pointer:fine)]:hover:enabled:after:opacity-[0.07]";
-const BTN_SECONDARY = `${BTN} border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] [@media(hover:hover)_and_(pointer:fine)]:hover:enabled:border-[var(--rm-text-ghost)] disabled:opacity-50`;
-const BTN_PRIMARY = `${BTN} bg-[var(--rm-accent)] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(0,0,0,0.3)] disabled:opacity-50`;
+/** Each outcome's status tile: a failure is danger; the rest are neutral. */
+const OUTCOME_TILE: Record<Outcome, { icon: IconName; tone: StatusTone }> = {
+  denied: { icon: "shieldX", tone: "neutral" },
+  expired: { icon: "timerOff", tone: "neutral" },
+  invalid: { icon: "alert", tone: "danger" },
+  used: { icon: "info", tone: "neutral" },
+  claimed: { icon: "lock", tone: "neutral" },
+  release_failed: { icon: "lock", tone: "neutral" },
+  rate_limited: { icon: "timer", tone: "neutral" },
+  mfa_required: { icon: "shield", tone: "accent" },
+  network: { icon: "offline", tone: "danger" },
+  unavailable: { icon: "alert", tone: "danger" },
+};
 
-function Button({
-  variant = "secondary",
-  busy,
-  children,
-  ...rest
-}: {
-  variant?: "primary" | "secondary";
-  busy?: boolean;
-  children: ReactNode;
-} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/** Review rows: label column 112, value column the rest, 12px rhythm. */
+const DETAIL_ROW =
+  "grid grid-cols-[112px_minmax(0,1fr)] gap-3 border-t border-line py-3";
+
+/**
+ * How long a device code lives, for the expiry bar. The SDK exposes only
+ * `expiresAt`, and the copy promises "a few minutes", so the bar measures the
+ * time left against this window (or against the time left, if that is longer).
+ */
+const CODE_WINDOW_MS = 10 * 60_000;
+
+/**
+ * "Now", refreshed when the whole-minute count of time left changes (and once
+ * at expiry). One timeout, aligned to the minute; no interval, no animation,
+ * so the kicker and the bar step down and the page is otherwise still.
+ */
+function useNowByMinute(expiresAt: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (expiresAt === null) return;
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      const current = Date.now();
+      setNow(current);
+      const left = expiresAt - current;
+      if (left <= 0) return;
+      id = setTimeout(tick, (left % 60_000) + 50);
+    };
+    tick();
+    return () => clearTimeout(id);
+  }, [expiresAt]);
+  return now;
+}
+
+/** "4 min left", "Under 1 min left", "Expired". */
+export function timeLeftLabel(msLeft: number): string {
+  if (msLeft <= 0) return "Expired";
+  const minutes = Math.floor(msLeft / 60_000);
+  return minutes < 1 ? "Under 1 min left" : `${minutes} min left`;
+}
+
+/** The poster's kicker: what this is, and how long the code has left. */
+function ApprovalKicker({ expiresAt }: { expiresAt: number | null }) {
+  const now = useNowByMinute(expiresAt);
   return (
-    <button
-      type="button"
-      {...rest}
-      aria-busy={busy || undefined}
-      className={`${variant === "primary" ? BTN_PRIMARY : BTN_SECONDARY} ${busy ? "[&>.label]:opacity-0" : ""}`}
-    >
-      <span className="label">{children}</span>
-      {busy ? (
+    <DialogKicker>
+      Desktop sign-in
+      {expiresAt === null ? null : ` · ${timeLeftLabel(expiresAt - now)}`}
+    </DialogKicker>
+  );
+}
+
+/** The review's poster details: the code, then how long it has. */
+function ApprovalCode({
+  userCode,
+  expiresAt,
+}: {
+  userCode: string;
+  expiresAt: number | null;
+}) {
+  const now = useNowByMinute(expiresAt);
+  const left = expiresAt === null ? null : expiresAt - now;
+  const fraction =
+    left === null
+      ? null
+      : Math.min(1, Math.max(0, left / Math.max(CODE_WINDOW_MS, left)));
+  const groups = splitUserCode(userCode);
+  return (
+    <>
+      <p className="mt-4">
+        <span className="sr-only">Code: {spellUserCode(userCode)}</span>
         <span
           aria-hidden="true"
-          className="absolute left-1/2 top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 animate-spin rounded-full border-2 border-white/35 border-t-white motion-reduce:animate-pulse"
-        />
+          data-testid="device-user-code"
+          className="block font-silk text-[32px] leading-none font-semibold tracking-[0.04em] text-ink-1 tabular-nums [font-stretch:100%] select-text min-[380px]:text-[40px]"
+        >
+          {groups.join("-")}
+        </span>
+      </p>
+      {fraction !== null && expiresAt !== null ? (
+        <div className="mt-4 flex items-center gap-3">
+          {/* A still dither, set once per render: its width is the time left,
+              measured on a faint track the length of the whole window. */}
+          <div className="h-2 min-w-0 flex-1 bg-tint-1">
+            <DitherDots
+              ink="accent"
+              coverage={0.5}
+              cell={2}
+              className="h-full"
+              style={{ width: `${Math.round(fraction * 100)}%` }}
+            />
+          </div>
+          <span className="silkscreen shrink-0 text-ink-3">
+            Expires{" "}
+            {new Date(expiresAt).toLocaleTimeString(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </span>
+        </div>
       ) : null}
-    </button>
-  );
-}
-
-function Heading({
-  children,
-  headingRef,
-}: {
-  children: ReactNode;
-  headingRef: React.RefObject<HTMLHeadingElement | null>;
-}) {
-  return (
-    <h1
-      ref={headingRef}
-      tabIndex={-1}
-      className="text-balance text-2xl font-semibold leading-tight tracking-[-0.02em] outline-none [overflow-wrap:anywhere]"
-    >
-      {children}
-    </h1>
-  );
-}
-
-function Sub({ children }: { children: ReactNode }) {
-  return (
-    <p className="mt-1 text-pretty text-[15px] text-[var(--rm-text-secondary)] [overflow-wrap:anywhere]">
-      {children}
-    </p>
-  );
-}
-
-function Logo() {
-  return (
-    <ThemeAwareSplashLogo
-      className="mb-[18px] block h-11 w-11 object-contain"
-      data-testid="activate-logo"
-    />
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      className="mb-4 block h-12 w-12"
-      viewBox="0 0 48 48"
-      width="48"
-      height="48"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle
-        cx="24"
-        cy="24"
-        r="22"
-        fill="none"
-        stroke="currentColor"
-        strokeOpacity="0.14"
-        strokeWidth="2"
-      />
-      <path
-        d="M15 24.5l6 6 12-13"
-        fill="none"
-        stroke="var(--rm-accent)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        pathLength="1"
-        className="activate-check-path"
-      />
-    </svg>
+    </>
   );
 }
 
@@ -334,6 +371,8 @@ export function DeviceActivation({
   const [lookupNonce, setLookupNonce] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const statusId = useId();
+  const codeInputId = useId();
+  const codeErrorId = useId();
   const [status, setStatus] = useState("");
 
   const returnPath = activateReturnPath(view.code);
@@ -355,7 +394,9 @@ export function DeviceActivation({
 
   // Look the code up (and claim it) once the session is usable.
   useEffect(() => {
-    if (view.kind !== "loading" || !isReady || !isSignedIn) return;
+    if (view.kind !== "loading" || !isReady || !isLoaded || !isSignedIn) {
+      return;
+    }
     let cancelled = false;
     void getDeviceRequest(view.code).then((result) => {
       if (cancelled) return;
@@ -386,6 +427,7 @@ export function DeviceActivation({
     view.kind,
     view.code,
     isReady,
+    isLoaded,
     isSignedIn,
     getDeviceRequest,
     goSignIn,
@@ -502,13 +544,22 @@ export function DeviceActivation({
     setLookupNonce((n) => n + 1);
   }
 
-  if (!showsSignedOut && (!isLoaded || !isSignedIn)) return null;
-
   const live = (
     <p className="sr-only" id={statusId} role="status" aria-live="polite">
       {status}
     </p>
   );
+
+  // Auth still loading, or signed out and about to be sent to sign-in: show
+  // the loading view instead of an empty column.
+  if (!showsSignedOut && (!isLoaded || !isSignedIn)) {
+    return (
+      <LoadingView
+        headingRef={headingRef}
+        code={complete ? formatted : undefined}
+      />
+    );
+  }
 
   if (view.kind === "enter") {
     const message =
@@ -521,19 +572,22 @@ export function DeviceActivation({
             : "";
     return (
       <div className="auth-enter">
-        <Logo />
-        <Heading headingRef={headingRef}>Connect a device</Heading>
-        <Sub>Enter the code shown on your device to sign in to Ralph Meet.</Sub>
+        <PublicTitle size="display" headingRef={headingRef}>
+          Connect a device
+        </PublicTitle>
+        <PublicBody size="lead">
+          Enter the code shown on your device to sign in to Ralph Meet.
+        </PublicBody>
         <form
-          className="mt-[18px] flex flex-col gap-2"
+          className="mt-8 flex flex-col gap-2"
           onSubmit={submitCode}
           noValidate
         >
-          <label htmlFor="device-code" className="sr-only">
+          <label htmlFor={codeInputId} className="sr-only">
             Device code
           </label>
-          <input
-            id="device-code"
+          <Input
+            id={codeInputId}
             name="code"
             type="text"
             defaultValue={view.code}
@@ -546,24 +600,26 @@ export function DeviceActivation({
             maxLength={24}
             required
             autoFocus
-            aria-describedby="code-error"
+            aria-describedby={codeErrorId}
             aria-invalid={message ? true : undefined}
             onChange={(e) => {
               const next = formatDeviceCode(e.target.value);
               if (next !== e.target.value) e.target.value = next;
             }}
-            className="h-11 w-full rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] px-3 text-center font-mono text-xl font-medium uppercase tracking-[0.12em] text-[var(--rm-text-primary)] tabular-nums outline-none transition-[border-color,box-shadow] duration-150 placeholder:tracking-[0.12em] placeholder:text-[var(--rm-text-muted)] focus:border-[var(--rm-accent)] focus:shadow-[0_0_0_3px_var(--rm-accent-dim)] aria-[invalid=true]:border-[var(--rm-status-dnd)]/70"
+            className="h-16 rounded-lg text-center font-mono text-ui-2xl font-semibold uppercase tracking-[0.12em] tabular-nums placeholder:tracking-[0.12em] placeholder:text-ink-3 md:text-ui-2xl"
           />
           <p
-            id="code-error"
+            id={codeErrorId}
             role="alert"
-            className="text-sm text-[var(--rm-status-dnd)] empty:hidden"
+            className="text-ui-sm text-danger-ink empty:hidden"
           >
             {message}
           </p>
-          <Button variant="primary" type="submit">
-            Continue
-          </Button>
+          <PublicActions className="mt-6">
+            <Button type="submit" size="lg">
+              Continue
+            </Button>
+          </PublicActions>
         </form>
         {live}
       </div>
@@ -572,15 +628,10 @@ export function DeviceActivation({
 
   if (view.kind === "loading") {
     return (
-      <div className="auth-enter">
-        <Logo />
-        <Heading headingRef={headingRef}>Checking your code</Heading>
-        <Sub>
-          <span className="font-mono tabular-nums">{view.code}</span>
-        </Sub>
-        <div className="mt-[18px] h-11 animate-pulse rounded-[10px] bg-[var(--rm-bg-hover)]" />
+      <>
+        <LoadingView headingRef={headingRef} code={view.code} />
         {live}
-      </div>
+      </>
     );
   }
 
@@ -596,6 +647,7 @@ export function DeviceActivation({
         ? host
         : undefined;
     const devicePrimary = main.join(" · ") || host || "";
+    const platform = prettyPlatform(request.device.platform);
     const place = uniqueParts([
       request.requester.city,
       request.requester.country,
@@ -604,117 +656,113 @@ export function DeviceActivation({
     const name = user?.name?.trim() || "";
     const email = user?.email ?? "";
     const displayName = name || email;
+    const parsedExpiry = request.expiresAt
+      ? Date.parse(request.expiresAt)
+      : Number.NaN;
+    const expiresAt = Number.isNaN(parsedExpiry) ? null : parsedExpiry;
     return (
       <div className="auth-enter">
-        <Logo />
-        <Heading headingRef={headingRef}>Sign in to Ralph Meet?</Heading>
-        <Sub>Make sure this matches the code on your device.</Sub>
-        <p className="mt-[18px] rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-secondary)] p-3 text-center font-mono text-[30px] font-medium leading-tight tracking-[0.08em] tabular-nums">
-          <span aria-hidden="true">{request.userCode}</span>
-          <span className="sr-only">
-            Code: {spelledDeviceCode(request.userCode)}
-          </span>
-        </p>
-        {devicePrimary || place || ip ? (
-          <dl className="mt-3.5 text-sm">
-            {devicePrimary ? (
-              <div className="grid grid-cols-1 gap-0.5 border-t border-[var(--rm-border)] py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:gap-3">
-                <dt className="text-[var(--rm-text-muted)]">Device</dt>
-                <dd className="min-w-0 text-[var(--rm-text-secondary)] [overflow-wrap:anywhere]">
-                  {devicePrimary}
-                  {hostname ? (
-                    <span className="block text-[13px] text-[var(--rm-text-muted)]">
-                      {hostname}
-                    </span>
-                  ) : null}
-                  <span className="mt-0.5 block text-xs italic text-[var(--rm-text-muted)]">
-                    Reported by the device
-                  </span>
-                </dd>
-              </div>
-            ) : null}
-            {place || ip ? (
-              <div className="grid grid-cols-1 gap-0.5 border-y border-[var(--rm-border)] py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:gap-3">
-                <dt className="text-[var(--rm-text-muted)]">Requested from</dt>
-                <dd className="min-w-0 [overflow-wrap:anywhere]">
-                  {place || ip}
-                  {place && ip ? (
-                    <span
-                      className="block truncate text-[13px] text-[var(--rm-text-muted)] tabular-nums"
-                      title={ip}
-                    >
-                      {ip}
-                    </span>
-                  ) : null}
-                </dd>
-              </div>
-            ) : null}
-          </dl>
-        ) : null}
-        <div className="mt-3.5 flex items-center gap-3 rounded-[10px] border border-[var(--rm-border)] bg-[var(--rm-bg-hover)] px-3 py-2.5">
-          <span
-            aria-hidden="true"
-            className="relative grid h-9 w-9 flex-none place-items-center overflow-hidden rounded-full bg-[var(--rm-bg-active)] text-[13px] font-semibold"
-          >
-            {initials(name, email)}
-            {user?.image ? (
-              <img
-                src={user.image}
-                alt=""
-                width={36}
-                height={36}
-                decoding="async"
-                referrerPolicy="no-referrer"
-                className="absolute inset-0 h-full w-full object-cover"
-                onError={(e) => e.currentTarget.remove()}
-              />
-            ) : null}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col leading-snug">
-            <span className="truncate font-medium">{displayName}</span>
-            {name ? (
-              <span className="truncate text-[13px] text-[var(--rm-text-muted)]">
-                {email}
-              </span>
-            ) : null}
-          </span>
-          <button
-            type="button"
-            onClick={switchAccount}
-            disabled={busy !== null}
-            className="-mr-1 min-h-11 flex-none rounded-lg px-1 text-sm text-[var(--rm-text-secondary)] underline decoration-[var(--rm-accent)]/60 underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rm-accent)] disabled:opacity-50 [@media(hover:hover)_and_(pointer:fine)]:hover:text-[var(--rm-text-primary)]"
-          >
-            Not you?<span className="sr-only"> Use another account</span>
-          </button>
-        </div>
-        <div className="mt-[18px] grid grid-cols-2 gap-2">
-          <Button
-            onClick={() => decide("deny", request)}
-            disabled={busy !== null}
-            busy={busy === "deny"}
-            id="deny-device"
-          >
-            Deny
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => decide("approve", request)}
-            disabled={busy !== null}
-            busy={busy === "approve"}
-            id="approve-device"
-          >
-            Approve
-          </Button>
-        </div>
-        <p
-          role="alert"
-          className="mt-3 text-sm text-[var(--rm-status-dnd)] empty:hidden"
+        <section
+          data-slot="approval-card"
+          className="rounded-[2px] border border-line-strong bg-ply-3 px-6 pt-5 pb-4 text-ink-1 [--plate-ground:var(--ply-3)]"
         >
-          {inlineError}
-        </p>
-        <p className="mt-3.5 text-pretty text-[13px] text-[var(--rm-text-muted)]">
-          Only approve if you started this sign-in yourself.
-        </p>
+          <ApprovalKicker expiresAt={expiresAt} />
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            className="mt-4 font-display [font-optical-sizing:auto] text-[40px] leading-[0.92] font-extrabold tracking-[-0.04em] text-balance text-ink-1 outline-none"
+          >
+            Is this <DitherWord cell={3}>you?</DitherWord>
+          </h1>
+          <p className="mt-4 text-ui-base text-pretty text-ink-2 [overflow-wrap:anywhere]">
+            Ralph Meet{platform ? ` for ${platform}` : ""} wants to sign in as{" "}
+            <span className="font-medium text-ink-1">{displayName}</span>.
+          </p>
+          <p className="mt-2 text-ui-base text-pretty text-ink-2">
+            Only approve if you started this sign-in yourself.
+          </p>
+          <ApprovalCode userCode={request.userCode} expiresAt={expiresAt} />
+          {devicePrimary || place || ip ? (
+            <dl className="mt-5 border-b border-line text-ui-sm">
+              {devicePrimary ? (
+                <div className={DETAIL_ROW}>
+                  <dt className="text-ink-3">Device</dt>
+                  <dd className="min-w-0 text-ink-1 [overflow-wrap:anywhere]">
+                    {devicePrimary}
+                    {hostname ? (
+                      <span className="block text-ink-2">{hostname}</span>
+                    ) : null}
+                    <span className="mt-0.5 block text-ui-xs text-ink-3">
+                      Reported by the device
+                    </span>
+                  </dd>
+                </div>
+              ) : null}
+              {place || ip ? (
+                <div className={DETAIL_ROW}>
+                  <dt className="text-ink-3">Requested from</dt>
+                  <dd className="min-w-0 text-ink-1 [overflow-wrap:anywhere]">
+                    {place || ip}
+                    {place && ip ? (
+                      <span
+                        className="block truncate font-mono text-num-sm text-ink-2"
+                        title={ip}
+                      >
+                        {ip}
+                      </span>
+                    ) : null}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+          <div className="mt-4 flex items-center gap-3 rounded-[2px] bg-tint-1 px-3 py-3">
+            <Avatar
+              aria-hidden="true"
+              name={displayName || "?"}
+              src={user?.image}
+              size={32}
+              ring="ply-3"
+            />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-ui-row font-medium text-ink-1">
+                {displayName}
+              </span>
+              {name ? (
+                <span className="truncate text-ui-sm text-ink-3">{email}</span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              onClick={switchAccount}
+              disabled={busy !== null}
+              className={`relative flex-none rounded-sm text-ui-sm font-medium text-ink-2 underline decoration-line-strong underline-offset-[3px] disabled:cursor-not-allowed disabled:opacity-45 pointer-fine:hover:text-ink-1 pointer-fine:hover:decoration-ink-2 ${HIT}`}
+            >
+              Not you?<span className="sr-only"> Use another account</span>
+            </button>
+          </div>
+          <DialogFooter className="mt-6 pt-0">
+            <Button
+              variant="secondary"
+              onClick={() => decide("deny", request)}
+              disabled={busy !== null && busy !== "deny"}
+              loading={busy === "deny"}
+              id="deny-device"
+            >
+              Deny
+            </Button>
+            <Button
+              onClick={() => decide("approve", request)}
+              disabled={busy !== null && busy !== "approve"}
+              loading={busy === "approve"}
+              id="approve-device"
+            >
+              <Icon name="check" size="sm" />
+              Approve sign-in
+            </Button>
+          </DialogFooter>
+          <ErrorNotice className="mt-3">{inlineError}</ErrorNotice>
+        </section>
         {live}
       </div>
     );
@@ -723,19 +771,25 @@ export function DeviceActivation({
   if (view.kind === "approved") {
     return (
       <div className="auth-enter">
-        <CheckIcon />
-        <Heading headingRef={headingRef}>
+        <StatusTile icon="check" tone="success" />
+        <PublicTitle headingRef={headingRef}>
           {view.deviceName
             ? `You're signed in on ${view.deviceName}`
             : "You're signed in"}
-        </Heading>
-        <Sub>You can close this tab and go back to the app.</Sub>
+        </PublicTitle>
+        <PublicBody>You can close this tab and go back to the app.</PublicBody>
+        <PublicActions>
+          <Button asChild variant="secondary" size="lg">
+            <a href="/chat">Open Ralph Meet here</a>
+          </Button>
+        </PublicActions>
         {live}
       </div>
     );
   }
 
   const copy = OUTCOME_COPY[view.outcome];
+  const tile = OUTCOME_TILE[view.outcome];
   const wait =
     view.outcome === "rate_limited"
       ? waitPhrase(view.retryAfterSeconds)
@@ -743,19 +797,20 @@ export function DeviceActivation({
   const body = wait ? `Wait ${wait} before trying this code again.` : copy.body;
   return (
     <div className="auth-enter">
-      <Logo />
-      <Heading headingRef={headingRef}>{copy.title}</Heading>
-      <Sub>{body}</Sub>
+      <StatusTile icon={tile.icon} tone={tile.tone} />
+      <PublicTitle headingRef={headingRef}>{copy.title}</PublicTitle>
+      <PublicBody>{body}</PublicBody>
       {copy.action === "enter" ? (
-        <a
-          href="/activate"
-          className={`${BTN_SECONDARY} mt-[18px] no-underline hover:no-underline`}
-        >
-          Enter a different code
-        </a>
+        <PublicActions>
+          <Button asChild variant="primary" size="lg">
+            <a href="/activate">Enter a different code</a>
+          </Button>
+        </PublicActions>
       ) : copy.action === "retry" ? (
-        <div className="mt-[18px]">
+        <PublicActions>
           <Button
+            variant="primary"
+            size="lg"
             onClick={() => {
               setView({ kind: "loading", code: view.code });
               setLookupNonce((n) => n + 1);
@@ -763,29 +818,66 @@ export function DeviceActivation({
           >
             Try again
           </Button>
-        </div>
+        </PublicActions>
       ) : copy.action === "sign-in" ? (
-        <div className="mt-[18px] flex flex-col gap-3">
-          <Button
-            onClick={switchAccount}
-            disabled={busy !== null}
-            busy={busy === "switch"}
-          >
-            Sign in again
-          </Button>
-          <p className="text-[13px] text-[var(--rm-text-muted)]">
-            Manage two-factor in your{" "}
+        <>
+          <PublicActions>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={switchAccount}
+              disabled={busy !== null && busy !== "switch"}
+              loading={busy === "switch"}
+            >
+              Sign in again
+            </Button>
+          </PublicActions>
+          <p className="mt-4 text-ui-sm text-ink-3">
+            Turn on two-step verification in your{" "}
             <a
               href={`${getKovaAuthUrl()}/settings`}
-              className="text-[var(--rm-text-secondary)] underline underline-offset-[3px]"
+              className="text-accent-ink underline underline-offset-[3px]"
             >
               account security settings
             </a>
             .
           </p>
-        </div>
+        </>
       ) : null}
       {live}
+    </div>
+  );
+}
+
+/**
+ * Auth loading or a code lookup in flight: the review's opening geometry
+ * (tile, title, body, code box) with static placeholders, so nothing jumps
+ * when it resolves.
+ */
+function LoadingView({
+  headingRef,
+  code,
+}: {
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  code?: string;
+}) {
+  return (
+    <div className="auth-enter" aria-busy="true">
+      <StatusTile busy tone="neutral" />
+      <PublicTitle headingRef={headingRef}>
+        {code ? "Checking your code" : "Connect a device"}
+      </PublicTitle>
+      <PublicBody>
+        {code ? (
+          <span className="font-mono tabular-nums">{code}</span>
+        ) : (
+          "Getting things ready…"
+        )}
+      </PublicBody>
+      <Skeleton className="mt-6 h-16 rounded-lg" />
+      <span className="sr-only" role="status">
+        Loading
+      </span>
     </div>
   );
 }

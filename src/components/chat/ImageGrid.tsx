@@ -9,7 +9,11 @@ import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStor
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import type { AvatarDisplay } from "@/lib/avatar-display";
-import { Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Icon } from "@/components/ui/icon";
+import { HIT } from "@/components/ui/interaction";
+import { Num } from "@/components/ui/num";
+import { getDirectMediaBox } from "./embed-layout";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { GifProviderBranding } from "./GifProviderBranding";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
@@ -18,32 +22,69 @@ import React from "react";
 
 interface DeleteButtonProps {
   id: string;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<unknown>;
 }
 
 const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
+  const [confirming, setConfirming] = React.useState(false);
   return (
-    <div className="absolute top-1 right-1 opacity-0 group-hover/att:opacity-100 transition-opacity z-20">
+    <div className="absolute top-1 right-1 pointer-fine:opacity-0 pointer-fine:group-hover/att:opacity-100 pointer-fine:group-focus-within/att:opacity-100 transition-opacity z-20">
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          if (window.confirm("Delete this attachment?")) {
-            onDelete(id);
-          }
+          setConfirming(true);
         }}
-        className="p-1.5 bg-black/50 hover:bg-rm-badge text-white/80 hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
-        aria-label="Delete image"
+        className={cn(
+          "relative flex size-7 items-center justify-center rounded-sm border border-line bg-ply-3 text-ink-1 shadow-float outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-danger-fill pointer-fine:hover:text-on-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+          HIT,
+        )}
+        aria-label="Delete attachment"
       >
-        <Trash2 size={14} />
+        <Icon name="trash" size="sm" />
       </button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Delete attachment"
+        description="This image will be removed from the message. This can't be undone."
+        confirmLabel="Delete attachment"
+        irreversible
+        errorAction="delete this attachment"
+        onConfirm={() => onDelete(id)}
+      />
     </div>
   );
 };
 
+/**
+ * Intrinsic size, when the upload or the server recorded one. Attachments do
+ * not carry it yet (see the handoff in the change log); when they do, the
+ * single image reserves its real box instead of reflowing on load.
+ */
+function getIntrinsicSize(
+  att: Attachment,
+): { width: number; height: number } | null {
+  const sized = att as Attachment & { width?: unknown; height?: unknown };
+  return typeof sized.width === "number" && typeof sized.height === "number"
+    ? { width: sized.width, height: sized.height }
+    : null;
+}
+
+/** "+3" over the last visible tile when more images are hidden. */
+function MoreOverlay({ count }: { count: number }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-scrim">
+      <span className="rounded-md bg-ply-3 px-2 py-1 text-ink-1">
+        <Num size="sm">+{count}</Num>
+      </span>
+    </div>
+  );
+}
+
 interface ImageGridProps {
   attachments: Attachment[];
-  onDelete?: (attachmentId: string) => void;
+  onDelete?: (attachmentId: string) => void | Promise<unknown>;
   username?: string;
   displayName?: string | null;
   avatarUrl?: string | null;
@@ -121,8 +162,10 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       disabled={!interactive}
       aria-label={att.filename ? `Open ${att.filename}` : "Open image"}
       className={cn(
-        "peer absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80",
-        interactive && "cursor-zoom-in",
+        // Hover is an ink tint over the image (colour at --dur-1), not a
+        // brightness filter; focus draws the ring inside the clipped tile.
+        "absolute inset-0 z-10 outline-none transition-colors duration-(--dur-1) ease-out focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+        interactive && "cursor-zoom-in pointer-fine:hover:bg-tint-1",
       )}
     />
   );
@@ -132,10 +175,11 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     idx: number,
     options: {
       frameClassName: string;
+      frameStyle?: React.CSSProperties;
       interactiveClassName?: string;
       imageClassName: string;
-      width: number;
-      height: number;
+      width?: number;
+      height?: number;
     },
   ) => {
     const url = getUrl(att);
@@ -148,6 +192,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
         attachmentId={att.id}
         blur={shouldBlur}
         className={options.frameClassName}
+        style={options.frameStyle}
       >
         {({ revealed }) => {
           const interactive = !shouldBlur || revealed;
@@ -170,12 +215,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                 width={options.width}
                 height={options.height}
                 decoding="async"
-                className={cn(
-                  options.imageClassName,
-                  "pointer-events-none",
-                  interactive &&
-                    "peer-hover:brightness-105 peer-focus-visible:brightness-105",
-                )}
+                className={cn(options.imageClassName, "pointer-events-none")}
               />
               {favorite && <GifFavoriteButton gif={favorite} />}
               <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
@@ -187,32 +227,44 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     );
   };
 
+  // One image fits the media box (640x400, never upscaled) at radius 12. With
+  // a known size the box is reserved up front; without one the image sizes
+  // itself (no fake 800x450 placeholder that reflows when it decodes).
   if (count === 1) {
     const att = attachments[0];
+    const size = getIntrinsicSize(att);
+    const box = size ? getDirectMediaBox(size.width, size.height) : null;
     return renderTile(att, 0, {
       frameClassName:
-        "w-fit min-h-[200px] rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-shadow",
-      imageClassName:
-        "max-w-full max-h-[450px] min-h-[200px] w-auto object-contain transition-[filter]",
-      width: 800,
-      height: 450,
+        "group/att relative w-fit max-w-full overflow-hidden rounded-xl border border-line bg-tint-1",
+      frameStyle: box
+        ? { width: `min(100%, ${box.width}px)`, aspectRatio: box.aspectRatio }
+        : undefined,
+      interactiveClassName: box ? "h-full w-full" : undefined,
+      imageClassName: box
+        ? "block h-full w-full object-contain"
+        : "block h-auto max-h-100 w-auto max-w-[min(100%,40rem)] object-contain",
+      width: size?.width,
+      height: size?.height,
     });
   }
 
-  // Multi-image container settings
+  // Multi-image grids sit at the standard embed width (520), radius 12.
   const containerClasses =
-    "grid gap-1 rounded-xl overflow-hidden max-w-[550px] border border-rm-border shadow-xl bg-rm-bg-elevated";
+    "grid max-w-130 gap-1 overflow-hidden rounded-xl border border-line bg-ply-2";
+  // Multi-image tiles fill their grid cell.
+  const fill = "h-full w-full";
 
   // 2 Images: Two vertical columns
   if (count === 2) {
     return (
-      <div className={cn(containerClasses, "grid-cols-2 h-[300px]")}>
+      <div className={cn(containerClasses, "grid-cols-2 aspect-video")}>
         {attachments.map((att, idx) =>
           renderTile(att, idx, {
             frameClassName:
-              "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
-            imageClassName:
-              "w-full h-full object-cover transition-[filter] duration-200",
+              "group/att relative h-full w-full overflow-hidden bg-tint-1",
+            interactiveClassName: fill,
+            imageClassName: "h-full w-full object-cover",
             width: 300,
             height: 300,
           }),
@@ -225,17 +277,17 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 3) {
     return (
       <div
-        className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[350px]")}
+        className={cn(containerClasses, "grid-cols-2 grid-rows-2 aspect-3/2")}
       >
         {[0, 1, 2].map((idx) => {
           const att = attachments[idx];
           return renderTile(att, idx, {
             frameClassName: cn(
-              "overflow-hidden group/att relative bg-[#0a0a0c]",
+              "group/att relative overflow-hidden bg-tint-1",
               idx === 0 && "row-span-2",
             ),
-            imageClassName:
-              "w-full h-full object-cover transition-[filter] duration-200",
+            interactiveClassName: fill,
+            imageClassName: "h-full w-full object-cover",
             width: idx === 0 ? 350 : 250,
             height: idx === 0 ? 350 : 175,
           });
@@ -248,14 +300,14 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 4) {
     return (
       <div
-        className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[400px]")}
+        className={cn(containerClasses, "grid-cols-2 grid-rows-2 aspect-4/3")}
       >
         {attachments.map((att, idx) =>
           renderTile(att, idx, {
             frameClassName:
-              "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
-            imageClassName:
-              "w-full h-full object-cover transition-[filter] duration-200",
+              "group/att relative h-full w-full overflow-hidden bg-tint-1",
+            interactiveClassName: fill,
+            imageClassName: "h-full w-full object-cover",
             width: 250,
             height: 200,
           }),
@@ -271,11 +323,11 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
         {attachments.map((att, idx) =>
           renderTile(att, idx, {
             frameClassName: cn(
-              "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
+              "group/att relative h-full w-full overflow-hidden bg-tint-1",
               idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square",
             ),
-            imageClassName:
-              "w-full h-full object-cover transition-[filter] duration-200",
+            interactiveClassName: fill,
+            imageClassName: "h-full w-full object-cover",
             width: idx < 2 ? 300 : 200,
             height: idx < 2 ? 170 : 200,
           }),
@@ -300,8 +352,8 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
             attachmentId={att.id}
             blur={shouldBlurSensitiveAttachment(att, contentFilter)}
             className={cn(
-              "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
-              isFirst ? "col-span-3 h-[250px]" : "col-span-1 aspect-square",
+              "group/att relative h-full w-full overflow-hidden bg-tint-1",
+              isFirst ? "col-span-3 aspect-2/1" : "col-span-1 aspect-square",
             )}
           >
             {({ revealed }) => {
@@ -326,21 +378,13 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                     width={isFirst ? 550 : 180}
                     height={isFirst ? 250 : 180}
                     decoding="async"
-                    className={cn(
-                      "w-full h-full object-cover transition-[filter] duration-200 pointer-events-none",
-                      interactive &&
-                        "peer-hover:brightness-105 peer-focus-visible:brightness-105",
-                    )}
+                    className="pointer-events-none h-full w-full object-cover"
                   />
                   {favorite && <GifFavoriteButton gif={favorite} />}
                   <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
                   {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
                   {isLastVisible && hasMore && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
-                      <span className="text-2xl font-semibold text-white">
-                        +{count - 10}
-                      </span>
-                    </div>
+                    <MoreOverlay count={count - 10} />
                   )}
                 </div>
               );

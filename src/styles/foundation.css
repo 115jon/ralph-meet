@@ -1,0 +1,346 @@
+/* ============================================================
+   Talk Tree foundation: browser surfaces, the signature primitives' CSS
+   (LED, speaking ring, tree guides) and small utilities.
+   React wrappers live in src/components/ui (Led, TreeBranch/TreeLeaf,
+   Num, Avatar, Skeleton).
+   ============================================================ */
+
+/* ---------- Browser surfaces (spec §1h) ---------- */
+::selection {
+  background: var(--selection);
+}
+
+html {
+  caret-color: var(--accent-ink);
+  text-underline-offset: 3px;
+  accent-color: var(--accent-ink);
+}
+
+/* 8px scrollbars, no track, thumb tint-2 (tint-3 on hover). Chromium/CEF
+   use the -webkit pseudo-elements; setting `scrollbar-color` would disable
+   them, so the standard properties are only a fallback for other engines. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--tint-2);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--tint-3);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--tint-2) transparent;
+  }
+}
+
+/* ---------- LED (spec §5a) ----------
+   Off: a dot in --line-strong. On: filled in its colour with a halo painted
+   once on ::after. Only opacity transitions: 60ms on, 220ms off.
+   data-follow="speaking" lights a talk LED only while it or an ancestor has
+   [data-speaking] (set by useSpeakingAttr on the leaf). */
+.rm-led {
+  --led-size: 6px;
+  --led-color: var(--talk);
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: var(--led-size);
+  height: var(--led-size);
+  border-radius: 9999px;
+  background: var(--line-strong);
+}
+.rm-led[data-size="8"] {
+  --led-size: 8px;
+}
+.rm-led[data-state="live"] {
+  --led-color: var(--live);
+}
+.rm-led[data-state="muted"] {
+  --led-color: var(--muted-state);
+}
+.rm-led[data-state="idle"] {
+  --led-color: var(--idle);
+}
+.rm-led::before,
+.rm-led::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-speak-off) var(--ease-out);
+}
+.rm-led::before {
+  background: var(--led-color);
+}
+.rm-led::after {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--led-color) 22%, transparent),
+    0 0 8px color-mix(in srgb, var(--led-color) 45%, transparent);
+}
+.rm-led[data-lit]::before,
+.rm-led[data-lit]::after,
+[data-speaking] .rm-led[data-follow="speaking"]::before,
+[data-speaking] .rm-led[data-follow="speaking"]::after,
+.rm-led[data-follow="speaking"][data-speaking]::before,
+.rm-led[data-follow="speaking"][data-speaking]::after {
+  opacity: 1;
+  transition-duration: var(--dur-speak-on);
+}
+
+/* ---------- Speaking ring (spec §5b) ----------
+   A ::after ring on avatars and tiles; only its opacity changes. */
+.rm-speak {
+  position: relative;
+}
+.rm-speak::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--talk);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-speak-off) var(--ease-out);
+}
+.rm-speak[data-speaking]::after,
+[data-speaking] > .rm-speak::after {
+  opacity: 1;
+  transition-duration: var(--dur-speak-on);
+}
+
+/* ---------- Tree guides (spec §5c) ----------
+   Each .rm-tree-item draws its own segments, so nothing measures:
+     up    row top -> row middle
+     tick  8px from the guide to the node
+     down  row middle -> item bottom (non-last items only; it also runs past
+           any nested children so the trunk continues)
+   --tree-guide-x is the trunk's x inside the item, --tree-row-h the height
+   of the item's own row (the item may be taller when it holds children).
+   The lit path: an item that is (or contains) [data-path-end] draws up and
+   tick in --path; every earlier sibling draws up and down in --path. */
+.rm-tree-item {
+  --rm-tree-gx: var(--tree-guide-x, 16px);
+  --rm-tree-rh: var(--tree-row-h, 24px);
+  --rm-tree-tick: var(--tree-tick, 8px);
+  position: relative;
+}
+.rm-tree-guide {
+  position: absolute;
+  pointer-events: none;
+  background: var(--guide);
+}
+.rm-tree-guide[data-seg="up"] {
+  left: var(--rm-tree-gx);
+  top: 0;
+  width: 1px;
+  height: calc(var(--rm-tree-rh) / 2);
+  transform-origin: top;
+}
+.rm-tree-guide[data-seg="down"] {
+  left: var(--rm-tree-gx);
+  top: calc(var(--rm-tree-rh) / 2);
+  bottom: 0;
+  width: 1px;
+  transform-origin: top;
+}
+.rm-tree-guide[data-seg="tick"] {
+  left: var(--rm-tree-gx);
+  top: calc(var(--rm-tree-rh) / 2);
+  width: var(--rm-tree-tick);
+  height: 1px;
+  transform-origin: left;
+}
+/* The first child's trunk reaches up to the header's glyph (--tree-stem). */
+.rm-tree-item:first-child > .rm-tree-guide[data-seg="up"] {
+  top: calc(var(--tree-stem, 0px) * -1);
+  height: calc(var(--rm-tree-rh) / 2 + var(--tree-stem, 0px));
+}
+.rm-tree-item:last-child > .rm-tree-guide[data-seg="down"],
+.rm-tree-item[data-last] > .rm-tree-guide[data-seg="down"] {
+  display: none;
+}
+.rm-tree-item:is([data-path-end], :has([data-path-end]))
+  > .rm-tree-guide:is([data-seg="up"], [data-seg="tick"]),
+.rm-tree-item:has(
+    ~ .rm-tree-item[data-path-end],
+    ~ .rm-tree-item [data-path-end]
+  )
+  > .rm-tree-guide:is([data-seg="up"], [data-seg="down"]) {
+  background: var(--path);
+}
+/* The path ends on you: your node's unlit dot fills in --path. A lit LED
+   (talk, while you speak) paints over it in its own colour, so speaking still
+   reads; the guide stays on the path either way. */
+.rm-tree-item[data-path-end]
+  > [data-slot="tree-row"]
+  > [data-slot="tree-node"]
+  .rm-led {
+  background: var(--path);
+}
+
+/* Join: the row fades down 4px, its segments draw from their origin.
+   Only under [data-animate-enter] (set after first paint). */
+[data-animate-enter] .rm-tree-item {
+  transition:
+    opacity var(--dur-3) var(--ease-out),
+    translate var(--dur-3) var(--ease-out);
+}
+[data-animate-enter] .rm-tree-item > .rm-tree-guide {
+  transition: scale 160ms var(--ease-out) 40ms;
+}
+@starting-style {
+  [data-animate-enter] .rm-tree-item {
+    opacity: 0;
+    translate: 0 calc(var(--motion-shift) * -1);
+  }
+  [data-animate-enter] .rm-tree-item > .rm-tree-guide[data-seg="tick"] {
+    scale: 0 1;
+  }
+  [data-animate-enter]
+    .rm-tree-item
+    > .rm-tree-guide:is([data-seg="up"], [data-seg="down"]) {
+    scale: 1 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-animate-enter] .rm-tree-item > .rm-tree-guide {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-spinner {
+    animation-duration: 1.6s;
+  }
+}
+
+/* ---------- Skeleton: static, no pulse ----------
+   In the components layer so `rounded-*` (and any bg-*) utilities win. */
+@layer components {
+  .rm-skeleton {
+    background: var(--tint-1);
+    border-radius: 6px;
+  }
+}
+
+/* ---------- Drawer: will-change only while moving ---------- */
+[data-rm-drawer]:is(
+  [data-starting-style],
+  [data-ending-style],
+  [data-swiping]
+) {
+  will-change: transform;
+}
+
+/* ---------- Toaster: sonner's 400ms height/transform tween replaced ----------
+   Transform and opacity only, 200ms ease-out; height snaps. */
+.rm-toaster [data-sonner-toast] {
+  transition:
+    transform var(--dur-3) var(--ease-out),
+    opacity var(--dur-3) var(--ease-out) !important;
+}
+.rm-toaster [data-sonner-toast][data-removed="true"] {
+  transition-duration: var(--dur-3-exit) !important;
+}
+
+/* ---------- Dither (components/ui/dither.tsx) ----------
+   Still masks only: a key's trailing cap, the fader range, a title rule, a
+   toast's time-left bar. Decorative, so they leave under forced colours
+   (where a forced background would turn the mask into a solid block). */
+.rm-dither {
+  pointer-events: none;
+  print-color-adjust: exact;
+}
+@media (forced-colors: active) {
+  .rm-dither,
+  [data-dither] {
+    display: none !important;
+  }
+}
+
+/* ---------- Notched key (ui/button.tsx, C2) ----------
+   The cut corner is painted by the fill, not clip-path, so the focus ring
+   (an outline on the button's own box) is never clipped. A 10px cut on the
+   leading-top-right corner; the hover/press overlay takes the same cut. */
+.rm-notch {
+  --notch: 7.07px;
+  background-color: transparent;
+  background-image: linear-gradient(
+    225deg,
+    transparent var(--notch),
+    var(--key-fill) var(--notch)
+  );
+}
+.rm-notch::after {
+  mask-image: linear-gradient(
+    225deg,
+    transparent var(--notch),
+    #000 var(--notch)
+  );
+}
+@media (forced-colors: active) {
+  .rm-notch {
+    background-image: none;
+    border: 1px solid ButtonText;
+  }
+}
+
+/* ---------- Toast time left (ui/toast.tsx) ----------
+   A still dithered bar that steps down once a second (clip only; paint, not
+   layout), never a smooth tween and never a loop. */
+@keyframes rm-toast-time {
+  from {
+    clip-path: inset(0 0 0 0);
+  }
+  to {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+.rm-toast-time {
+  animation: rm-toast-time var(--toast-duration, 4000ms)
+    steps(var(--toast-steps, 4), end) forwards;
+}
+[data-sonner-toaster]:hover .rm-toast-time,
+.group\/toast:focus-within .rm-toast-time {
+  animation-play-state: paused;
+}
+
+/* A menu toggle row's LED lights while its row is checked. */
+[data-checked] > .rm-led[data-toggle]::before,
+[data-checked] > .rm-led[data-toggle]::after,
+[aria-checked="true"] > .rm-led[data-toggle]::before,
+[aria-checked="true"] > .rm-led[data-toggle]::after {
+  opacity: 1;
+  transition-duration: var(--dur-speak-on);
+}
+
+/* Forced colours (Windows High Contrast) would repaint the dot's background
+   to Canvas and drop the halo, so every LED vanished. Opt the light out and
+   draw it in the row's own (already forced) text colour instead: unlit is a
+   hollow 1px ring, lit fills solid. currentColor follows the row, so a
+   highlighted menu row's LED reads in HighlightText. */
+@media (forced-colors: active) {
+  .rm-led {
+    forced-color-adjust: none;
+    background: transparent !important;
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
+  .rm-led::before {
+    background: currentColor;
+  }
+  .rm-led::after {
+    box-shadow: none;
+  }
+}

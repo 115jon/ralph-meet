@@ -1,17 +1,13 @@
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
-import { Monitor, MonitorX, Share2 } from "lucide-react";
-import React from "react";
-import { Divider, MenuItem, SubMenuItem } from "./ContextMenuItems";
+import { Icon } from "@/components/ui/icon";
+import { divider, type StreamMenuEntry } from "./ContextMenuItems";
 
-interface LocalMenuProps {
+export interface LocalMenuOptions {
   isStreaming?: boolean;
   onToggleScreenShare?: (options?: ScreenShareOptions) => void;
   onClose: () => void;
   onChangeSource?: () => void;
-  activeSubmenu: string | null;
-  handleMouseEnterRoot: (label: string | null) => void;
-  clearSubmenu: () => void;
   availableQualities: string[];
   currentScreenQuality?: string;
   currentScreenSource?: ScreenShareSourceState | null;
@@ -23,25 +19,24 @@ interface LocalMenuProps {
   onToggleMute?: () => void;
   isDeafened?: boolean;
   onToggleDeafen?: () => void;
-  isModerator: boolean;
-  voiceChannels: any[];
-  handleMove: (channelId: string) => void;
-  handleServerMute: () => void;
-  handleServerDeafen: () => void;
   handleCopyId: () => void;
   showDisconnect?: boolean;
   alwaysShowStreamPreview?: boolean;
   onToggleAlwaysShowStreamPreview?: () => void;
 }
 
-export const LocalMenu: React.FC<LocalMenuProps> = ({
+const ID_BADGE = (
+  <span className="rounded-xs bg-tint-2 px-1 text-ui-2xs font-semibold text-ink-3">
+    ID
+  </span>
+);
+
+/** Entries for the menu on your own tile or voice row. */
+export function buildLocalMenu({
   isStreaming,
   onToggleScreenShare,
   onClose,
   onChangeSource,
-  activeSubmenu,
-  handleMouseEnterRoot,
-  clearSubmenu,
   availableQualities,
   currentScreenQuality,
   currentScreenSource,
@@ -53,210 +48,126 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
   onToggleMute,
   isDeafened,
   onToggleDeafen,
-  isModerator,
-  voiceChannels,
-  handleMove,
-  handleServerMute,
-  handleServerDeafen,
   handleCopyId,
   showDisconnect = true,
   alwaysShowStreamPreview,
   onToggleAlwaysShowStreamPreview,
-}) => {
+}: LocalMenuOptions): StreamMenuEntry[] {
+  const disconnect: StreamMenuEntry = {
+    type: "item",
+    key: "disconnect",
+    label: "Leave call",
+    danger: true,
+    onSelect: () => {
+      onLeave?.();
+      onClose();
+    },
+  };
+
   if (isStreaming) {
-    return (
-      <>
-        <MenuItem
-          label="Stop Streaming"
-          danger
-          onMouseEnter={clearSubmenu}
-          onClick={() => {
-            onToggleScreenShare?.();
+    return [
+      {
+        type: "item",
+        key: "stop-streaming",
+        label: "Stop streaming",
+        danger: true,
+        onSelect: () => {
+          onToggleScreenShare?.();
+          onClose();
+        },
+        trailing: <Icon name="streamOff" size="sm" />,
+      },
+      {
+        type: "item",
+        key: "change-stream",
+        label: "Change stream",
+        onSelect: () => {
+          onChangeSource?.();
+          onClose();
+        },
+        trailing: <Icon name="screenShare" size="sm" />,
+      },
+      {
+        type: "submenu",
+        key: "stream-quality",
+        label: "Stream quality",
+        entries: availableQualities.map((q) => ({
+          type: "item",
+          key: q,
+          label: q.replace("p", "p "),
+          checked: currentScreenQuality === q,
+          onSelect: () => {
+            onToggleScreenShare?.({
+              quality: q,
+              withAudio: !!isStreamingAudio,
+              sourceId: currentScreenSource?.sourceId ?? undefined,
+              captureId: currentScreenSource?.captureId ?? undefined,
+              sourceName: currentScreenSource?.sourceName ?? undefined,
+              sourceKind: currentScreenSource?.sourceKind ?? undefined,
+            });
             onClose();
-          }}
-          rightElement={<MonitorX size={18} className="text-destructive" />}
-        />
-        <MenuItem
-          label="Change Stream"
-          onMouseEnter={clearSubmenu}
-          onClick={() => {
-            onChangeSource?.();
-            onClose();
-          }}
-          rightElement={<Share2 size={18} className="text-[#dbdee1]/40" />}
-        />
-
-        <SubMenuItem
-          label="Stream Quality"
-          active={activeSubmenu === "Stream Quality"}
-          onMouseEnter={() => handleMouseEnterRoot("Stream Quality")}
-          onArrowLeft={clearSubmenu}
-          submenu={availableQualities.map((q) => (
-            <MenuItem
-              key={q}
-              label={q.replace("p", "p ")}
-              checked={currentScreenQuality === q}
-              onClick={() => {
-                onToggleScreenShare?.({
-                  quality: q,
-                  withAudio: !!isStreamingAudio,
-                  sourceId: currentScreenSource?.sourceId ?? undefined,
-                  captureId: currentScreenSource?.captureId ?? undefined,
-                  sourceName: currentScreenSource?.sourceName ?? undefined,
-                  sourceKind: currentScreenSource?.sourceKind ?? undefined,
-                });
-                onClose();
-              }}
-            />
-          ))}
-        />
-
-        <MenuItem
-          label="Share Stream Audio"
-          checked={!!isStreamingAudio}
-          onMouseEnter={clearSubmenu}
-          onClick={() => {
-            onToggleStreamAudio?.();
-            onClose();
-          }}
-        />
-
-        {onToggleAlwaysShowStreamPreview && (
-          <>
-            <Divider />
-            <MenuItem
-              label="Always Show Stream Preview"
-              checked={!!alwaysShowStreamPreview}
-              onMouseEnter={clearSubmenu}
-              onClick={() => {
+          },
+        })),
+      },
+      {
+        type: "item",
+        key: "share-stream-audio",
+        label: "Share stream audio",
+        checked: !!isStreamingAudio,
+        onSelect: () => {
+          onToggleStreamAudio?.();
+          onClose();
+        },
+      },
+      ...(onToggleAlwaysShowStreamPreview
+        ? [
+            divider("preview"),
+            {
+              type: "item" as const,
+              key: "always-show-preview",
+              label: "Always show stream preview",
+              checked: !!alwaysShowStreamPreview,
+              onSelect: () => {
                 onToggleAlwaysShowStreamPreview?.();
                 onClose();
-              }}
-              rightElement={<Monitor size={16} className="text-[#dbdee1]/40" />}
-            />
-          </>
-        )}
-
-        {showDisconnect && (
-          <>
-            <Divider />
-            <MenuItem
-              label="Disconnect"
-              danger
-              onMouseEnter={clearSubmenu}
-              onClick={() => {
-                onLeave?.();
-                onClose();
-              }}
-            />
-          </>
-        )}
-      </>
-    );
+              },
+            },
+          ]
+        : []),
+      ...(showDisconnect ? [divider("disconnect"), disconnect] : []),
+    ];
   }
 
-  return (
-    <>
-      <MenuItem
-        label="Profile"
-        onMouseEnter={clearSubmenu}
-        onClick={handleProfile}
-      />
-      <Divider />
-      <MenuItem
-        label="Mute"
-        checked={!!isMuted}
-        onMouseEnter={clearSubmenu}
-        onClick={onToggleMute}
-      />
-      <MenuItem
-        label="Deafen"
-        checked={!!isDeafened}
-        onMouseEnter={clearSubmenu}
-        onClick={onToggleDeafen}
-      />
-
-      <SubMenuItem
-        label="Apps"
-        active={activeSubmenu === "Apps"}
-        onMouseEnter={() => handleMouseEnterRoot("Apps")}
-        onArrowLeft={clearSubmenu}
-        submenu={<MenuItem label="No Apps Installed" disabled />}
-      />
-
-      <Divider />
-
-      {isModerator && (
-        <>
-          <SubMenuItem
-            label="Move to"
-            active={activeSubmenu === "Move to"}
-            onMouseEnter={() => handleMouseEnterRoot("Move to")}
-            onArrowLeft={clearSubmenu}
-            submenu={voiceChannels.map((ch) => (
-              <MenuItem
-                key={ch.id}
-                label={ch.name}
-                onClick={() => handleMove(ch.id)}
-              />
-            ))}
-          />
-          <Divider />
-        </>
-      )}
-
-      <MenuItem
-        label="Show Non-Video Participants"
-        onMouseEnter={clearSubmenu}
-        checked={true}
-        onClick={onClose}
-      />
-
-      <Divider />
-
-      {isModerator && (
-        <>
-          <MenuItem
-            label="Server Mute"
-            danger
-            onMouseEnter={clearSubmenu}
-            onClick={handleServerMute}
-          />
-          <MenuItem
-            label="Server Deafen"
-            danger
-            onMouseEnter={clearSubmenu}
-            onClick={handleServerDeafen}
-          />
-          <Divider />
-        </>
-      )}
-
-      {showDisconnect && (
-        <>
-          <MenuItem
-            label="Disconnect"
-            danger
-            onMouseEnter={clearSubmenu}
-            onClick={() => {
-              onLeave?.();
-              onClose();
-            }}
-          />
-          <Divider />
-        </>
-      )}
-
-      <MenuItem
-        label="Copy User ID"
-        onMouseEnter={clearSubmenu}
-        onClick={handleCopyId}
-        rightElement={
-          <span className="text-ui-2xs bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">
-            ID
-          </span>
-        }
-      />
-    </>
-  );
-};
+  return [
+    {
+      type: "item",
+      key: "profile",
+      label: "Profile",
+      onSelect: handleProfile,
+    },
+    divider("profile"),
+    {
+      type: "item",
+      key: "mute",
+      label: "Mute",
+      checked: !!isMuted,
+      onSelect: onToggleMute,
+    },
+    {
+      type: "item",
+      key: "deafen",
+      label: "Deafen",
+      checked: !!isDeafened,
+      onSelect: onToggleDeafen,
+    },
+    divider("deafen"),
+    ...(showDisconnect ? [disconnect, divider("disconnect")] : []),
+    {
+      type: "item",
+      key: "copy-id",
+      label: "Copy user ID",
+      onSelect: handleCopyId,
+      trailing: ID_BADGE,
+    },
+  ];
+}

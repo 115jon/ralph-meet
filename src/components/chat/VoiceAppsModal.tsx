@@ -1,14 +1,23 @@
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { type ActivityType, useActivityStore } from "@/stores/useActivityStore";
-import { ChevronLeft, Gamepad2, X } from "lucide-react";
-import { useMemo, useState } from "react";
-
-type Tab = "menu" | "activities";
+import { DISABLED, PRESS } from "@/components/ui/interaction";
+import { type ReactNode, useMemo } from "react";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 
 interface VoiceAppsModalProps {
   isOpen: boolean;
-  initialTab: Tab;
+  /**
+   * Which list the caller wants. There is one list now ("Activities"), so
+   * this is accepted for the callers that still pass their mode and ignored.
+   */
+  initialTab?: "menu" | "activities";
   onClose: () => void;
   sfu: SFUClient | null;
   serverId?: string | null;
@@ -17,184 +26,163 @@ interface VoiceAppsModalProps {
   gridItems: Array<{ userId: string; name: string; isLocal?: boolean }>;
 }
 
-function WordleLogo() {
+/**
+ * One activity: the whole cell is the button (ply-2, 1px line, radius 10, an
+ * ink overlay on hover, the global focus ring). PRESS draws the overlay, so
+ * hover is the tint-1 ink at 6% rather than a colour.
+ */
+const CARD = cn(
+  "flex w-full flex-col items-start gap-3 rounded-lg border border-line bg-ply-2 p-3 text-left text-ink-1 outline-none",
+  PRESS,
+  DISABLED,
+  "[--hover-o:0.06] [--press-o:0.1]",
+);
+
+/** The preview well both cards share: ply-1 so the art sits one step down from the card. */
+const ART =
+  "h-20 w-full overflow-hidden rounded-md border border-line bg-ply-1";
+
+type Tile = "correct" | "present" | "absent";
+
+/** Three guesses of a five-letter board, drawn from the LED tokens. */
+const WORDLE_ROWS: Tile[][] = [
+  ["absent", "present", "absent", "absent", "absent"],
+  ["correct", "correct", "absent", "present", "absent"],
+  ["correct", "correct", "correct", "correct", "correct"],
+];
+
+const TILE_FILL: Record<Tile, string> = {
+  correct: "bg-talk",
+  present: "bg-idle",
+  absent: "bg-tint-3",
+};
+
+function WordleArt() {
   return (
-    <div className="grid h-11 w-11 grid-cols-3 gap-[2px] rounded-sm bg-white p-[3px] shadow-sm">
-      {Array.from({ length: 9 }).map((_, index) => (
-        <div
-          key={index}
-          className={cn(
-            "rounded-[1px] border border-black/80",
-            index >= 6
-              ? "bg-[#6aaa64]"
-              : index === 3 || index === 4
-                ? "bg-[#c9b458]"
-                : "bg-white",
-          )}
-        />
-      ))}
+    <div aria-hidden="true" className={cn(ART, "grid place-items-center")}>
+      <div className="grid grid-cols-5 gap-0.5">
+        {WORDLE_ROWS.flat().map((tile, index) => (
+          <div
+            key={index}
+            className={cn("size-3.5 rounded-xs", TILE_FILL[tile])}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-function WarpRushLogo() {
+/** The tunnel: three rings receding, two speed lines and the ship's bar. */
+function WarpRushArt() {
   return (
-    <div className="relative h-11 w-11 overflow-hidden rounded-xl border border-cyan-300/40 bg-[radial-gradient(circle_at_top,#34d399_0%,#0f172a_45%,#020617_100%)] shadow-[0_0_28px_rgba(56,189,248,0.28)]">
-      <div className="absolute inset-x-2 top-2 h-[2px] rotate-[-14deg] bg-cyan-200/90 shadow-[0_0_10px_rgba(34,211,238,0.95)]" />
-      <div className="absolute inset-x-3 top-4 h-[2px] rotate-[-14deg] bg-sky-400/80 shadow-[0_0_12px_rgba(56,189,248,0.9)]" />
-      <div className="absolute bottom-2 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full border border-cyan-300/50 bg-cyan-400/10" />
-      <div className="absolute bottom-3 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full border border-cyan-200/70" />
-      <div className="absolute inset-x-4 bottom-2 h-[2px] rounded-full bg-amber-300/80 shadow-[0_0_14px_rgba(251,191,36,0.9)]" />
+    <div aria-hidden="true" className={cn(ART, "relative bg-ply-0")}>
+      <div className="absolute top-1/2 left-1/2 size-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-live/25" />
+      <div className="absolute top-1/2 left-1/2 size-11 -translate-x-1/2 -translate-y-1/2 rounded-full border border-live/50" />
+      <div className="absolute top-1/2 left-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-live" />
+      <div className="absolute top-3 left-5 h-0.5 w-8 -rotate-12 rounded-full bg-live/60" />
+      <div className="absolute right-5 bottom-4 h-0.5 w-10 -rotate-12 rounded-full bg-live/40" />
+      <div className="absolute bottom-3 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-idle" />
     </div>
   );
+}
+
+const ACTIVITIES: Array<{
+  id: ActivityType;
+  title: string;
+  description: string;
+  art: ReactNode;
+}> = [
+  {
+    id: "wordle",
+    title: "Daily Word",
+    description:
+      "One shared puzzle a day. Everyone in the call sees how the others are doing.",
+    art: <WordleArt />,
+  },
+  {
+    id: "warp-rush",
+    title: "Warp Rush",
+    description:
+      "Fly the same tunnel as everyone in the call and see who scores highest.",
+    art: <WarpRushArt />,
+  },
+];
+
+/** The presence record an activity start broadcasts; the clock read lives outside render. */
+function createPresence(
+  userId: string,
+  channelId: string,
+  activity: ActivityType,
+) {
+  return { userId, channelId, activity, startedAt: Date.now() };
 }
 
 export function VoiceAppsModal({
   isOpen,
-  initialTab,
   onClose,
   sfu,
   channelId,
   localUserId,
   gridItems,
 }: VoiceAppsModalProps) {
-  const [tab, setTab] = useState<Tab>(initialTab);
   const setUserActivity = useActivityStore((s) => s.setUserActivity);
+  const canStart = !!localUserId && !!channelId;
 
-  const participants = useMemo(() => {
-    const byId = new Map<string, { userId: string; name: string }>();
-    for (const item of gridItems) {
-      if (item.userId)
-        byId.set(item.userId, { userId: item.userId, name: item.name });
-    }
-    return [...byId.values()];
+  const participantCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of gridItems) if (item.userId) ids.add(item.userId);
+    return ids.size;
   }, [gridItems]);
-
-  const handleClose = () => {
-    setTab(initialTab);
-    onClose();
-  };
 
   const startActivity = (activity: ActivityType) => {
     if (!localUserId || !channelId) return;
-    const presence = {
-      userId: localUserId,
-      channelId,
-      activity,
-      startedAt: Date.now(),
-    };
+    const presence = createPresence(localUserId, channelId, activity);
     setUserActivity(presence);
     sfu?.voiceGW.sendAppEvent({ type: "activity.start", ...presence });
-    handleClose();
+    onClose();
   };
 
-  if (!isOpen) return null;
+  const description = !canStart
+    ? "Join a voice channel to start one."
+    : participantCount > 1
+      ? `Starts for all ${participantCount} people in this call.`
+      : "Starts for everyone in this call.";
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm duration-200",
-        "animate-in fade-in",
-      )}
+    <ResponsiveDialog
+      open={isOpen}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      <div
-        className={cn(
-          "flex min-h-0 h-[85vh] sm:h-[600px] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-2xl duration-200",
-          "animate-in zoom-in-95",
-        )}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-4 py-3 bg-rm-bg-surface/50 backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            {tab !== "menu" && (
-              <button
-                onClick={() => setTab("menu")}
-                className="rounded-md p-1 -ml-1 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
-              >
-                <ChevronLeft size={20} />
-              </button>
-            )}
-            <h2 className="text-sm font-bold text-rm-text">
-              {tab === "menu" ? "Voice Apps" : "Activities"}
-            </h2>
-          </div>
-          <button
-            onClick={handleClose}
-            className="rounded-md p-1.5 -mr-1.5 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
+      <ResponsiveDialogContent dialogClassName="max-h-[min(560px,calc(100dvh-2rem))] overflow-y-auto md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Activities</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            {description}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {tab === "menu" && (
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                onClick={() => setTab("activities")}
-                className="flex flex-col items-start gap-2 rounded-xl border border-rm-border bg-rm-bg-surface p-4 text-left transition-ui hover:bg-rm-bg-hover hover:border-primary/50 group"
-              >
-                <div className="rounded-lg bg-primary/10 p-2 text-primary transition-transform">
-                  <Gamepad2 size={24} />
-                </div>
-                <div>
-                  <div className="font-bold text-rm-text">Activities</div>
-                  <div className="mt-1 text-xs text-rm-text-muted leading-relaxed">
-                    Play games, watch videos, and hang out with friends in the
-                    voice channel.
-                  </div>
-                </div>
-              </button>
-            </div>
-          )}
-
-          {tab === "activities" && (
-            <div className="p-4">
-              <button
-                onClick={() => startActivity("wordle")}
-                className="flex w-full items-center gap-4 rounded-lg border border-rm-border bg-rm-bg-surface p-4 text-left hover:bg-rm-bg-hover"
-              >
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white">
-                  <WordleLogo />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-rm-text">
-                    Daily Wordle
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-rm-text-muted">
-                    Play the shared daily puzzle in the voice stage with group
-                    progress and streaks.
-                  </div>
-                </div>
-              </button>
-              <button
-                onClick={() => startActivity("warp-rush")}
-                className="mt-3 flex w-full items-center gap-4 rounded-lg border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.16),rgba(15,23,42,0.9))] p-4 text-left hover:border-cyan-300/40 hover:bg-[linear-gradient(135deg,rgba(8,145,178,0.18),rgba(15,23,42,0.98))]"
-              >
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-950/80">
-                  <WarpRushLogo />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-rm-text">
-                    Warp Rush 3D
-                    <span className="rounded-full border border-cyan-300/40 bg-cyan-400/10 px-2 py-0.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-cyan-100">
-                      GPU Stress
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-rm-text-muted">
-                    A hardware-acceleration workout with instanced debris,
-                    bloom, live FPS telemetry, and a shared voice-session
-                    leaderboard.
-                  </div>
-                </div>
-              </button>
-              {participants.length > 1 && (
-                <div className="mt-3 text-xs text-rm-text-muted">
-                  {participants.length} people are in this voice session.
-                </div>
-              )}
-            </div>
-          )}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {ACTIVITIES.map((activity) => (
+            <button
+              key={activity.id}
+              type="button"
+              disabled={!canStart}
+              onClick={() => startActivity(activity.id)}
+              className={CARD}
+            >
+              {activity.art}
+              <span className="min-w-0">
+                <span className="block text-ui-row font-semibold">
+                  {activity.title}
+                </span>
+                <span className="mt-0.5 block text-ui-sm text-pretty text-ink-2">
+                  {activity.description}
+                </span>
+              </span>
+            </button>
+          ))}
         </div>
-      </div>
-    </div>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

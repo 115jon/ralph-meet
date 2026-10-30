@@ -1,11 +1,21 @@
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { RadioList, RowError } from "@/components/chat/settings/primitives";
+import { describeApiError } from "@/lib/api-errors";
 import type { Message } from "@/lib/types";
 import { isPlayableVideo } from "@/lib/media";
-import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
-import { cn } from "@/lib/utils";
-import { Check, Copy, ExternalLink, Loader2, Share2, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import ShareSnapshotPreview from "./ShareSnapshotPreview";
+import { lastInputWasKeyboard } from "@/components/ui/dialog-stack";
+import { Icon } from "@/components/ui/icon";
+import { useEffect, useId, useState } from "react";
+import { MessagePreviewCard } from "./MessagePreviewCard";
 
 type ShareExpiry = "7d" | "30d" | "90d" | "never";
 
@@ -24,6 +34,12 @@ const expiryOptions: Array<{ value: ShareExpiry; label: string }> = [
   { value: "never", label: "Never" },
 ];
 
+function focusSurfaceUnlessKeyboard(event: Event) {
+  if (lastInputWasKeyboard()) return;
+  event.preventDefault();
+  (event.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
+}
+
 export default function MessageShareModal({
   open,
   message,
@@ -36,10 +52,10 @@ export default function MessageShareModal({
   const [creating, setCreating] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [error, setError] = useState<string | null>(null);
+  const expiryLabelId = useId();
+  const expiryName = useId();
+  const shareUrlId = useId();
 
-  const avatarUrl = message.author?.avatar_url
-    ? getAuthAssetUrl(message.author.avatar_url)
-    : null;
   const omittedAttachmentCount = (message.attachments ?? []).filter(
     (attachment) =>
       !attachment.content_type?.startsWith("image/") &&
@@ -62,8 +78,8 @@ export default function MessageShareModal({
         () => setCopyState("copied"),
         () => setCopyState("idle"),
       );
-    } catch (err: any) {
-      setError(err?.message || "This message cannot be shared publicly.");
+    } catch (err) {
+      setError(describeApiError(err, "share this message"));
     } finally {
       setCreating(false);
     }
@@ -76,196 +92,131 @@ export default function MessageShareModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <div
-          data-state={open ? "open" : "closed"}
-          className={cn(
-            "fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm transition-opacity duration-200 md:items-center md:p-6",
-            "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
-          )}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              onClose();
-            }
-          }}
-          role="presentation"
-        >
-          <DialogSurface
-            showCloseButton={false}
-            className={cn(
-              "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
-              "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
-            )}
-            aria-labelledby="message-share-title"
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent
+        size="md"
+        placement="top"
+        dialogClassName="flex flex-col"
+        // Keyboard opens land on the first expiry option. A pointer open
+        // lands on the surface, so no ring shows on an option nobody chose.
+        onOpenAutoFocus={focusSurfaceUnlessKeyboard}
+      >
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Share message</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Creates a public snapshot link
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain md:-mx-5 md:px-5">
+          <div
+            inert
+            aria-hidden="true"
+            className="pointer-events-none select-none"
           >
-            <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-5 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Share2 className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2
-                    id="message-share-title"
-                    className="text-base font-bold text-rm-text"
-                  >
-                    Share Message
-                  </h2>
-                  <p className="text-xs text-rm-text-muted">
-                    Creates a public snapshot link
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 custom-scrollbar">
-              <div>
-                <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted">
-                  Snapshot Preview
+            <MessagePreviewCard message={message}>
+              {omittedAttachmentCount > 0 ? (
+                <p className="mt-2 text-ui-xs text-pretty text-ink-3">
+                  {omittedAttachmentCount === 1
+                    ? "1 file isn't included in the public link."
+                    : `${omittedAttachmentCount} files aren't included in the public link.`}
                 </p>
-                <ShareSnapshotPreview
-                  content={message.content}
-                  author={{
-                    username: message.author?.username ?? "Unknown",
-                    display_name: message.author?.display_name ?? null,
-                    avatar_url: message.author?.avatar_url ?? null,
-                    avatar_display: message.author?.avatar_display ?? null,
-                  }}
-                  createdAt={message.created_at}
-                  attachments={message.attachments ?? []}
-                  omittedAttachmentCount={omittedAttachmentCount}
-                  embeds={message.embeds ?? []}
-                  reactions={
-                    message.reactions?.map((reaction) => ({
-                      emoji: reaction.emoji,
-                      count: reaction.count,
-                    })) ?? []
-                  }
-                  replyCount={message.reply_count ?? 0}
-                  avatarUrl={avatarUrl}
-                  mediaUrlForAttachment={(attachment) =>
-                    getMediaUrl(attachment.url || `/api/${attachment.file_key}`)
-                  }
-                  compact
-                  previewMedia
-                />
-              </div>
+              ) : null}
+            </MessagePreviewCard>
+          </div>
 
-              {!shareUrl && (
-                <div>
-                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted">
-                    Link Expiry
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {expiryOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setExpires(option.value)}
-                        className={cn(
-                          "rounded-lg border px-3 py-2 text-sm font-bold transition",
-                          expires === option.value
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-rm-border bg-rm-bg-surface text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {error && (
-                <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
-              {shareUrl && (
-                <div className="space-y-3">
-                  <label
-                    htmlFor="message-share-url"
-                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
-                  >
-                    Public Link
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="message-share-url"
-                      value={shareUrl}
-                      readOnly
-                      className="min-w-0 flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none"
-                      onFocus={(event) => event.target.select()}
-                    />
-                    <button
-                      onClick={copyLink}
-                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110"
-                    >
-                      {copyState === "copied" ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                      {copyState === "copied" ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-rm-border px-5 py-4">
-              <button
-                onClick={onClose}
-                className="rounded-lg px-4 py-2 text-sm font-bold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+          {!shareUrl && (
+            <div>
+              <p
+                id={expiryLabelId}
+                className="mb-2 text-ui-sm font-medium text-ink-1"
               >
-                Close
-              </button>
-              {shareUrl ? (
-                <>
-                  {onManageShares && (
-                    <button
-                      onClick={onManageShares}
-                      className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-4 py-2 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
-                    >
-                      Manage Shares
-                    </button>
-                  )}
-                  <a
-                    href={shareUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-4 py-2 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Open
-                  </a>
-                </>
-              ) : (
-                <button
-                  onClick={createShare}
-                  disabled={creating}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
-                >
-                  {creating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Share2 className="h-4 w-4" />
-                  )}
-                  {creating ? "Creating..." : "Create Link"}
-                </button>
-              )}
+                Link expiry
+              </p>
+              <RadioList
+                ids={{ labelId: expiryLabelId }}
+                name={expiryName}
+                value={expires}
+                options={expiryOptions}
+                onChange={setExpires}
+                disabled={creating}
+              />
+              {error && <RowError>{error}</RowError>}
             </div>
-          </DialogSurface>
+          )}
+
+          {shareUrl && (
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor={shareUrlId}
+                className="text-ui-sm font-medium text-ink-1"
+              >
+                Public link
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id={shareUrlId}
+                  value={shareUrl}
+                  readOnly
+                  className="flex-1"
+                  onFocus={(event) => event.target.select()}
+                />
+                <Button variant="secondary" onClick={copyLink}>
+                  {copyState === "copied" ? (
+                    <Icon name="check" size="sm" />
+                  ) : (
+                    <Icon name="copy" size="sm" />
+                  )}
+                  {copyState === "copied" ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
-      </DialogPortal>
-    </Dialog>
+
+        <ResponsiveDialogFooter>
+          {shareUrl ? (
+            <>
+              {onManageShares && (
+                <Button
+                  variant="ghost"
+                  onClick={onManageShares}
+                  className="md:mr-auto"
+                >
+                  Manage shares
+                </Button>
+              )}
+              <Button asChild variant="secondary">
+                <a href={shareUrl} target="_blank" rel="noreferrer">
+                  <Icon name="externalLink" size="sm" />
+                  Open
+                </a>
+              </Button>
+              <Button variant="primary" onClick={onClose}>
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={createShare}
+                disabled={creating}
+                loading={creating}
+              >
+                <Icon name="share" size="sm" />
+                Create link
+              </Button>
+            </>
+          )}
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

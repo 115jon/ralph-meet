@@ -1,8 +1,23 @@
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&display=swap");
+/* Fonts (self-hosted; the latin subsets are preloaded from the document head
+   in routes/__root.tsx):
+     Geist                body: messages, rows, descriptions, inputs
+     Bricolage Grotesque  display: titles, headings, author names, control
+                          labels (600-800, optical sizing on)
+     Martian Mono         silkscreen: 11px uppercase labels, kickers,
+                          readouts, kbd, counts, codes (wdth axis)
+     Geist Mono           code only (inline code, code blocks) */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/bricolage-grotesque/opsz.css";
+@import "@fontsource-variable/martian-mono/wdth.css";
 @import "./display-name-fonts.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Talk Tree foundation (docs: .impeccable/decision/foundation-api.md) */
+@import "./styles/tokens.css";
+@import "./styles/motion.css";
+@import "./styles/foundation.css";
 
 @custom-variant dark (&:is(.dark *, .miku-dark *, .spiderman-dark *));
 
@@ -11,38 +26,57 @@
   --animate-clack: clack 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
   --animate-ring-ping: ring-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 
-  /* Landing page fonts */
-  --font-family-display: "Instrument Serif", serif;
-  --font-family-body:
-    "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Faces (DESIGN.md, Typography). Body is Geist; display is Bricolage;
+     the silkscreen (labels, readouts, counts, kbd) is Martian Mono; Geist
+     Mono stays for code. `font-mono` is code. */
+  --font-sans:
+    "Geist Variable", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    sans-serif;
+  --font-ui:
+    "Geist Variable", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    sans-serif;
+  --font-display:
+    "Bricolage Grotesque Variable", "Geist Variable",
+    "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-silk:
+    "Martian Mono Variable", "Geist Mono Variable", "Cascadia Mono", Consolas,
+    ui-monospace, monospace;
+  --font-mono:
+    "Geist Mono Variable", "Cascadia Mono", Consolas, ui-monospace, monospace;
 
-  /* App faces: `font-ui` / `font-display` utilities */
-  --font-ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
-
-  /* UI type scale (size / line-height). Nothing in the app sits below 11px. */
+  /* UI type scale. Nothing in the app sits below 11px. Geist runs 400-600;
+     Bricolage (font-display) runs 600-800. `text-ui-2xs` is the silkscreen
+     size: use the `silkscreen` utility, which also sets the face. */
   --text-ui-2xs: 11px;
   --text-ui-2xs--line-height: 14px;
+  --text-ui-2xs--font-weight: 600;
+  --text-ui-2xs--letter-spacing: 0.06em;
   --text-ui-xs: 12px;
   --text-ui-xs--line-height: 16px;
   --text-ui-sm: 13px;
   --text-ui-sm--line-height: 18px;
+  --text-ui-row: 14px;
+  --text-ui-row--line-height: 20px;
   --text-ui-base: 15px;
-  --text-ui-base--line-height: 1.375;
+  --text-ui-base--line-height: 22px;
   --text-ui-md: 16px;
-  --text-ui-md--line-height: 22px;
+  --text-ui-md--line-height: 24px;
   --text-ui-lg: 18px;
   --text-ui-lg--line-height: 24px;
   --text-ui-xl: 22px;
   --text-ui-xl--line-height: 28px;
+  --text-ui-xl--letter-spacing: -0.01em;
   --text-ui-2xl: 28px;
   --text-ui-2xl--line-height: 32px;
-  --text-display: 36px;
-  --text-display--line-height: 1.05;
-  --text-display--letter-spacing: -0.01em;
+  --text-ui-2xl--letter-spacing: -0.015em;
+  --text-display: 40px;
+  --text-display--line-height: 44px;
+  --text-display--letter-spacing: -0.025em;
+  --text-display--font-weight: 600;
+  /* Legacy marketing step; prefer text-display. */
   --text-display-lg: 44px;
-  --text-display-lg--line-height: 1.02;
-  --text-display-lg--letter-spacing: -0.015em;
+  --text-display-lg--line-height: 48px;
+  --text-display-lg--letter-spacing: -0.025em;
 
   @keyframes wiggle {
     0%,
@@ -95,715 +129,111 @@
   }
 }
 
-@layer utilities {
-  .scrollbar-none {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .scrollbar-none::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-@keyframes rm-display-name-gradient {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-@keyframes rm-display-name-neon {
-  0%,
-  100% {
-    filter: brightness(1) saturate(1);
-    opacity: 0.96;
-  }
-
-  50% {
-    filter: brightness(1.08) saturate(1.08);
-    opacity: 1;
-  }
-}
-
-@keyframes rm-display-name-pop {
-  0%,
-  100% {
-    translate: 0 0;
-  }
-
-  45% {
-    translate: 0 -0.04em;
-  }
-
-  70% {
-    translate: 0 0.01em;
-  }
-}
-
-/* Force embedded videos to use our custom controls instead of Chromium/WebKit's UI. */
-.rm-custom-video::-webkit-media-controls,
-.rm-custom-video::-webkit-media-controls-enclosure,
-.rm-custom-video::-webkit-media-controls-panel,
-.rm-custom-video::-webkit-media-controls-overlay-play-button,
-.rm-custom-video::-webkit-media-controls-start-playback-button {
-  display: none !important;
-  -webkit-appearance: none;
-}
-
-/* ============================================================
-   Ralph Meet - Design System
-   Ultra-dark, Discord-inspired with indigo/purple accents
-   Ported from the Ralph Wiggum chat app
-   ============================================================ */
-
-:root {
-  --radius: 0.625rem;
-
-  /* Landing page fonts */
-  --font-display: "Instrument Serif", serif;
-  --font-body:
-    "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-
-  /* shadcn semantic tokens (dark by default) */
-  --background: oklch(0.07 0.01 270);
-  --foreground: oklch(0.98 0 0);
-
-  --card: oklch(0.11 0.012 270);
-  --card-foreground: oklch(0.98 0 0);
-
-  --popover: oklch(0.06 0.01 270);
-  --popover-foreground: oklch(0.98 0 0);
-
-  --primary: oklch(0.62 0.21 260);
-  --primary-foreground: oklch(0.98 0 0);
-
-  --secondary: oklch(0.18 0.014 270);
-  --secondary-foreground: oklch(0.92 0.004 286);
-
-  --muted: oklch(0.18 0.012 270);
-  --muted-foreground: oklch(0.65 0.015 270);
-
-  --accent: oklch(0.18 0.014 270);
-  --accent-foreground: oklch(0.92 0.004 286);
-
-  --destructive: oklch(0.65 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-
-  --warning: oklch(0.8 0.17 70);
-  --warning-foreground: oklch(0.2 0.01 270);
-
-  --border: oklch(1 0 0 / 5%);
-  --input: oklch(1 0 0 / 5%);
-  --ring: oklch(0.62 0.21 260);
-
-  /* Chart colors */
-  --chart-1: oklch(0.62 0.21 260);
-  --chart-2: oklch(0.7 0.17 162);
-  --chart-3: oklch(0.77 0.19 70);
-  --chart-4: oklch(0.63 0.27 304);
-  --chart-5: oklch(0.65 0.25 16);
-
-  /* Sidebar tokens */
-  --sidebar: oklch(0.04 0.008 270);
-  --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.62 0.21 260);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.16 0.014 270);
-  --sidebar-accent-foreground: oklch(0.92 0.004 286);
-  --sidebar-border: oklch(1 0 0 / 5%);
-  --sidebar-ring: oklch(0.62 0.21 260);
-
-  --rm-bg-primary: #070709;
-  --rm-bg-secondary: #000000;
-  --rm-bg-sidebar: #070709;
-  --rm-bg-surface: #070709;
-  --rm-bg-elevated: #18181b;
-  --rm-bg-floating: #000000;
-
-  --rm-accent: #5865f2;
-  --rm-accent-hover: #4752c4;
-  --rm-accent-dim: rgba(88, 101, 242, 0.12);
-
-  --rm-sidebar: #070709;
-  --rm-server-bar: #000000;
-
-  --rm-channel-hover: rgba(255, 255, 255, 0.04);
-  --rm-channel-active: rgba(255, 255, 255, 0.08);
-
-  --rm-border: rgba(255, 255, 255, 0.06);
-  --rm-bg-hover: rgba(255, 255, 255, 0.04);
-  --rm-bg-active: rgba(255, 255, 255, 0.08);
-  --rm-role-mod: #22c55e;
-
-  --rm-status-online: #22c55e;
-  --rm-status-idle: #f59e0b;
-  --rm-status-dnd: #ef4444;
-  --rm-status-offline: #6b7280;
-
-  --rm-glow: rgba(99, 102, 241, 0.12);
-
-  /* Structure */
-  --rm-border-strong: rgba(255, 255, 255, 0.14);
-  --rm-scrim: rgba(0, 0, 0, 0.6);
-  --rm-focus: var(--rm-accent);
-  --rm-selection: color-mix(in srgb, var(--rm-accent) 32%, transparent);
-
-  /* Server rail tile at rest (must differ from --rm-server-bar) */
-  --rm-rail-item: var(--rm-bg-elevated);
-
-  /* Semantic colour */
-  --rm-badge: #f23f43;
-  --rm-success: #23a559;
-
-  /* Elevation: an offset shadow plus a soft long shadow, alpha per theme */
-  --rm-shadow-rgb: 0 0 0;
-  --rm-shadow-1:
-    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.24),
-    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.32);
-  --rm-shadow-2:
-    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.24),
-    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.44);
-  --rm-shadow-3:
-    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.26),
-    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.55);
-
-  /* Motion */
-  --rm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --rm-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --rm-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --rm-dur-1: 120ms;
-  --rm-dur-2: 180ms;
-  --rm-dur-3: 240ms;
-  --rm-dur-4: 320ms;
-
-  /* Chrome sizes */
-  --rm-size-header: 48px;
-  --rm-size-rail: 72px;
-  --rm-size-row: 32px;
-
-  /* RALPH SEMANTIC TEXT */
-  --rm-text-primary: oklch(0.98 0 0);
-  --rm-text-secondary: oklch(0.98 0 0 / 70%);
-  --rm-text-muted: oklch(0.98 0 0 / 40%);
-  --rm-text-ghost: oklch(0.98 0 0 / 20%);
-  --rm-profile-banner-fallback: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--rm-accent) 44%, var(--rm-bg-surface)),
-    color-mix(in srgb, var(--rm-accent) 20%, var(--rm-bg-elevated)) 58%,
-    color-mix(in srgb, var(--rm-bg-secondary) 82%, black 18%)
+/* Motion curves (spec §6): `ease-out`, `ease-in-out`, `ease-drawer`,
+   `ease-spring` utilities and CSS variables. Static so the variables exist
+   even when no utility uses them (motion.css reads them). */
+@theme static {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* critically damped spring (no overshoot), for panels and drag release */
+  --ease-spring: linear(
+    0,
+    0.13 4.5%,
+    0.43 11%,
+    0.7 19%,
+    0.86 27%,
+    0.95 37%,
+    0.985 49%,
+    0.997 63%,
+    1
   );
-  --rm-profile-banner-overlay:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.34)),
-    linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.18),
-      transparent 55%,
-      rgba(0, 0, 0, 0.28)
-    );
-  --rm-profile-surface-overlay:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.05), transparent 32%),
-    linear-gradient(
-      180deg,
-      rgba(6, 7, 10, 0.02),
-      rgba(6, 7, 10, 0.1) 44%,
-      rgba(6, 7, 10, 0.22)
-    );
-  --rm-profile-surface-overlay-strong:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 30%),
-    linear-gradient(
-      180deg,
-      rgba(6, 7, 10, 0.03),
-      rgba(6, 7, 10, 0.12) 44%,
-      rgba(6, 7, 10, 0.32)
-    );
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.light {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.2 0.01 270);
-
-  --card: oklch(0.98 0 0);
-  --card-foreground: oklch(0.2 0.01 270);
-
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.01 270);
-
-  --secondary: oklch(0.92 0.004 286);
-  --secondary-foreground: oklch(0.2 0.01 270);
-
-  --muted: oklch(0.92 0.004 286);
-  --muted-foreground: oklch(0.4 0.01 270);
-
-  --accent: oklch(0.92 0.004 286);
-  --accent-foreground: oklch(0.2 0.01 270);
-
-  --border: oklch(0 0 0 / 10%);
-  --input: oklch(0 0 0 / 5%);
-
-  /* Sidebar tokens */
-  --sidebar: #f2f3f5;
-  --sidebar-foreground: #060607;
-  --sidebar-accent: #e3e5e8;
-  --sidebar-accent-foreground: #060607;
-  --sidebar-border: rgba(0, 0, 0, 0.08);
-
-  /* Ralph Meet custom tokens */
-  --rm-bg-primary: #f2f3f5;
-  --rm-bg-secondary: #e3e5e8;
-  --rm-bg-sidebar: #e3e5e8;
-  --rm-bg-surface: #ffffff;
-  --rm-bg-elevated: #e3e5e8;
-  --rm-bg-floating: #e3e5e8;
-
-  --rm-status-offline: #80848e;
-
-  --rm-sidebar: #f2f3f5;
-  --rm-server-bar: #e3e5e8;
-  --rm-border: rgba(0, 0, 0, 0.08);
-  --rm-border-strong: rgba(0, 0, 0, 0.18);
-  --rm-rail-item: var(--rm-bg-surface);
-  --rm-bg-hover: rgba(0, 0, 0, 0.04);
-  --rm-bg-active: rgba(0, 0, 0, 0.08);
-  --rm-scrim: rgba(0, 0, 0, 0.4);
-  --rm-badge: #da373c;
-  --rm-success: #1a8f4c;
-  --rm-shadow-1:
-    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.08),
-    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.1);
-  --rm-shadow-2:
-    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.08),
-    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.16);
-  --rm-shadow-3:
-    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.1),
-    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.24);
-
-  /* RALPH SEMANTIC TEXT (Light Mode) */
-  --rm-text-primary: #060607;
-  --rm-text-secondary: #4e5058;
-  --rm-text-muted: #80848e;
-  --rm-text-ghost: rgba(0, 0, 0, 0.2);
-
-  --rm-accent: #5865f2;
-  --rm-accent-hover: #4752c4;
-  --rm-accent-dim: rgba(88, 101, 242, 0.1);
-  --rm-glow: rgba(88, 101, 242, 0.25);
-
-  --destructive: oklch(0.52 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.8 0.17 70);
-  --warning-foreground: oklch(0.2 0.01 270);
-
-  /* RALPH SEMANTIC TEXT (LIGHT) */
-  --rm-text-primary: #060607;
-  --rm-text-secondary: #2e3338;
-  --rm-text-muted: #4e5058;
-  --rm-text-ghost: #5c5e66;
-}
-
-:is(.light, .miku-light, .spiderman-light) .theme-aware-splash-logo {
-  filter: brightness(0);
-}
-
-.miku-light {
-  --radius: 0.625rem;
-
-  /* shadcn semantic tokens (Miku Light) */
-  --background: oklch(0.98 0.015 170);
-  --foreground: #1b2240;
-
-  --card: #ffffff;
-  --card-foreground: #1b2240;
-
-  --popover: #ffffff;
-  --popover-foreground: #1b2240;
-
-  --primary: #00a399;
-  --primary-foreground: #ffffff;
-
-  --secondary: #e1f3f0;
-  --secondary-foreground: #1b2240;
-
-  --muted: #e1f3f0;
-  --muted-foreground: #3d4766;
-
-  --accent: #e1f3f0;
-  --accent-foreground: #00a399;
-
-  --destructive: oklch(0.52 0.18 25);
-  --destructive-foreground: #ffffff;
-
-  --warning: oklch(0.75 0.15 70);
-  --warning-foreground: #1b2240;
-
-  --border: #c0e7e1;
-  --input: #c0e7e1;
-  --ring: #39c5bb;
-
-  /* Ralph Meet custom tokens */
-  --rm-bg-primary: #f3faf9;
-  --rm-bg-secondary: #e1f3f0;
-  --rm-bg-sidebar: #e1f3f0;
-  --rm-bg-surface: #ffffff;
-  --rm-bg-elevated: #ffffff;
-  --rm-bg-floating: #d3ede8;
-
-  --rm-sidebar: #e1f3f0;
-  --rm-server-bar: #d3ede8;
-  --rm-border: #c0e7e1;
-  --rm-border-strong: rgba(0, 163, 153, 0.45);
-  --rm-bg-hover: rgba(57, 197, 187, 0.08);
-  --rm-bg-active: rgba(57, 197, 187, 0.15);
-  --rm-scrim: rgba(27, 34, 64, 0.4);
-  --rm-badge: #da373c;
-  --rm-success: #1a8f4c;
-  --rm-shadow-rgb: 27 34 64;
-  --rm-shadow-1:
-    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.08),
-    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.1);
-  --rm-shadow-2:
-    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.08),
-    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.16);
-  --rm-shadow-3:
-    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.1),
-    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.24);
-
-  --rm-status-offline: #606f99;
-
-  /* RALPH SEMANTIC TEXT (Miku Light) */
-  --rm-text-primary: #1b2240;
-  --rm-text-secondary: #3d4766;
-  --rm-text-muted: #606f99;
-  --rm-text-ghost: #91a1cc;
-
-  --rm-accent: #00a399;
-  --rm-accent-hover: #00857d;
-  --rm-accent-dim: rgba(0, 163, 153, 0.08);
-  --rm-glow: rgba(57, 197, 187, 0.2);
-
-  --rm-theme-active-gradient: linear-gradient(
-    135deg,
-    rgba(57, 197, 187, 0.22) 0%,
-    rgba(248, 114, 165, 0.2) 100%
-  );
-  --rm-theme-active-fg: #1b2240;
-  --rm-theme-active-border: rgba(57, 197, 187, 0.16);
-  --rm-theme-banner-gradient: linear-gradient(
-    135deg,
-    rgba(57, 197, 187, 0.16) 0%,
-    rgba(248, 114, 165, 0.16) 52%,
-    rgba(255, 255, 255, 0.98) 100%
-  );
-  --rm-theme-banner-title: #1b2240;
-  --rm-theme-banner-muted: rgba(27, 34, 64, 0.65);
-  --rm-theme-banner-icon: #1b2240;
-  --rm-theme-section-label: #00a399;
-  --rm-theme-input-bg: #ffffff;
-  --rm-theme-input-border: rgba(57, 197, 187, 0.25);
-  --rm-theme-input-focus: rgba(57, 197, 187, 0.72);
-  --rm-theme-input-glow: rgba(57, 197, 187, 0.22);
-}
-
-.miku-dark {
-  --radius: 0.625rem;
-
-  /* shadcn semantic tokens (Miku Dark) */
-  --background: #0c0b14;
-  --foreground: #ffffff;
-
-  --card: #131122;
-  --card-foreground: #ffffff;
-
-  --popover: #0f0e1a;
-  --popover-foreground: #ffffff;
-
-  --primary: #39c5bb;
-  --primary-foreground: #0c0b14;
-
-  --secondary: #1b192e;
-  --secondary-foreground: #ffffff;
-
-  --muted: #1b192e;
-  --muted-foreground: #7c83a0;
-
-  --accent: #1b192e;
-  --accent-foreground: #39c5bb;
-
-  --destructive: oklch(0.65 0.2 25);
-  --destructive-foreground: #ffffff;
-
-  --warning: oklch(0.8 0.17 70);
-  --warning-foreground: #0c0b14;
-
-  --border: #23213a;
-  --input: #23213a;
-  --ring: #39c5bb;
-
-  /* Ralph Meet custom tokens */
-  --rm-bg-primary: #0c0b14;
-  --rm-bg-secondary: #0f0e1a;
-  --rm-bg-sidebar: #0f0e1a;
-  --rm-bg-surface: #131122;
-  --rm-bg-elevated: #1b192e;
-  --rm-bg-floating: #07060d;
-
-  --rm-sidebar: #0f0e1a;
-  --rm-server-bar: #07060d;
-  --rm-border: #23213a;
-  --rm-border-strong: rgba(57, 197, 187, 0.4);
-  --rm-bg-hover: rgba(57, 197, 187, 0.06);
-  --rm-bg-active: rgba(57, 197, 187, 0.12);
-
-  --rm-status-offline: #7c83a0;
-
-  /* RALPH SEMANTIC TEXT (Miku Dark) */
-  --rm-text-primary: #ffffff;
-  --rm-text-secondary: #b2b8d0;
-  --rm-text-muted: #7c83a0;
-  --rm-text-ghost: #494f6a;
-
-  --rm-accent: #39c5bb;
-  --rm-accent-hover: #5ae0d6;
-  --rm-accent-dim: rgba(57, 197, 187, 0.12);
-  --rm-glow: rgba(57, 197, 187, 0.15);
-
-  --rm-theme-active-gradient: linear-gradient(
-    135deg,
-    rgba(57, 197, 187, 0.28) 0%,
-    rgba(248, 114, 165, 0.18) 100%
-  );
-  --rm-theme-active-fg: #ffffff;
-  --rm-theme-active-border: rgba(57, 197, 187, 0.2);
-  --rm-theme-banner-gradient: linear-gradient(
-    135deg,
-    rgba(57, 197, 187, 0.2) 0%,
-    rgba(248, 114, 165, 0.14) 48%,
-    rgba(12, 11, 20, 0.92) 100%
-  );
-  --rm-theme-banner-title: #ffffff;
-  --rm-theme-banner-muted: rgba(255, 255, 255, 0.7);
-  --rm-theme-banner-icon: rgba(255, 255, 255, 0.82);
-  --rm-theme-section-label: #39c5bb;
-  --rm-theme-input-bg: #131122;
-  --rm-theme-input-border: rgba(57, 197, 187, 0.2);
-  --rm-theme-input-focus: rgba(57, 197, 187, 0.68);
-  --rm-theme-input-glow: rgba(57, 197, 187, 0.26);
-}
-
-.spiderman-light {
-  --radius: 0.625rem;
-
-  /* shadcn semantic tokens (Spiderman Light) */
-  --background: #f8f9fc;
-  --foreground: #0f172a;
-
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-
-  --primary: #e50914;
-  --primary-foreground: #ffffff;
-
-  --secondary: #f1f3f9;
-  --secondary-foreground: #0f172a;
-
-  --muted: #f1f3f9;
-  --muted-foreground: #475569;
-
-  --accent: #f1f3f9;
-  --accent-foreground: #e50914;
-
-  --destructive: oklch(0.52 0.18 25);
-  --destructive-foreground: #ffffff;
-
-  --warning: oklch(0.75 0.15 70);
-  --warning-foreground: #0f172a;
-
-  --border: rgba(15, 23, 42, 0.08);
-  --input: rgba(15, 23, 42, 0.08);
-  --ring: #e50914;
-
-  /* Ralph Meet custom tokens */
-  --rm-bg-primary: #f8f9fc;
-  --rm-bg-secondary: #f1f3f9;
-  --rm-bg-sidebar: #f1f3f9;
-  --rm-bg-surface: #ffffff;
-  --rm-bg-elevated: #ffffff;
-  --rm-bg-floating: #e8ebf3;
-
-  --rm-sidebar: #f1f3f9;
-  --rm-server-bar: #e8ebf3;
-  --rm-border: rgba(15, 23, 42, 0.08);
-  --rm-border-strong: rgba(15, 23, 42, 0.2);
-  --rm-bg-hover: rgba(15, 23, 42, 0.04);
-  --rm-bg-active: rgba(229, 9, 20, 0.08);
-  --rm-scrim: rgba(15, 23, 42, 0.4);
-  --rm-badge: #da373c;
-  --rm-success: #1a8f4c;
-  --rm-shadow-rgb: 15 23 42;
-  --rm-shadow-1:
-    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.08),
-    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.1);
-  --rm-shadow-2:
-    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.08),
-    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.16);
-  --rm-shadow-3:
-    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.1),
-    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.24);
-
-  --rm-status-offline: #64748b;
-
-  /* RALPH SEMANTIC TEXT (Spiderman Light) */
-  --rm-text-primary: #0f172a;
-  --rm-text-secondary: #475569;
-  --rm-text-muted: #64748b;
-  --rm-text-ghost: #94a3b8;
-
-  --rm-accent: #e50914;
-  --rm-accent-hover: #1d4ed8;
-  --rm-accent-dim: rgba(229, 9, 20, 0.05);
-  --rm-glow: rgba(229, 9, 20, 0.1);
-
-  --rm-theme-active-gradient: linear-gradient(
-    135deg,
-    rgba(229, 9, 20, 0.18) 0%,
-    rgba(26, 115, 232, 0.12) 100%
-  );
-  --rm-theme-active-fg: #0f172a;
-  --rm-theme-active-border: rgba(229, 9, 20, 0.16);
-  --rm-theme-banner-gradient: linear-gradient(
-    135deg,
-    rgba(229, 9, 20, 0.18) 0%,
-    rgba(26, 115, 232, 0.12) 48%,
-    rgba(255, 255, 255, 0.98) 100%
-  );
-  --rm-theme-banner-title: #0f172a;
-  --rm-theme-banner-muted: rgba(15, 23, 42, 0.68);
-  --rm-theme-banner-icon: #0f172a;
-  --rm-theme-section-label: #e50914;
-  --rm-theme-input-bg: #ffffff;
-  --rm-theme-input-border: rgba(229, 9, 20, 0.22);
-  --rm-theme-input-focus: rgba(229, 9, 20, 0.72);
-  --rm-theme-input-glow: rgba(229, 9, 20, 0.2);
-}
-
-.spiderman-dark {
-  --radius: 0.625rem;
-
-  /* shadcn semantic tokens (Spiderman Dark) */
-  --background: #020208;
-  --foreground: #ffffff;
-
-  --card: #050510;
-  --card-foreground: #ffffff;
-
-  --popover: #050510;
-  --popover-foreground: #ffffff;
-
-  --primary: #e50914;
-  --primary-foreground: #ffffff;
-
-  --secondary: #03030b;
-  --secondary-foreground: #ffffff;
-
-  --muted: #03030b;
-  --muted-foreground: #8e94a5;
-
-  --accent: #03030b;
-  --accent-foreground: #e50914;
-
-  --destructive: oklch(0.65 0.2 25);
-  --destructive-foreground: #ffffff;
-
-  --warning: oklch(0.8 0.17 70);
-  --warning-foreground: #020208;
-
-  --border: rgba(26, 115, 232, 0.25);
-  --input: rgba(26, 115, 232, 0.25);
-  --ring: #e50914;
-
-  /* Ralph Meet custom tokens */
-  --rm-bg-primary: #020208;
-  --rm-bg-secondary: #03030b;
-  --rm-bg-sidebar: #03030b;
-  --rm-bg-surface: #050510;
-  --rm-bg-elevated: #0d0d22;
-  --rm-bg-floating: #000000;
-
-  --rm-sidebar: #03030b;
-  --rm-server-bar: #000000;
-  --rm-border: rgba(26, 115, 232, 0.25);
-  --rm-border-strong: rgba(26, 115, 232, 0.5);
-  --rm-bg-hover: rgba(26, 115, 232, 0.15);
-  --rm-bg-active: rgba(229, 9, 20, 0.3);
-
-  --rm-status-offline: #8e94a5;
-
-  /* RALPH SEMANTIC TEXT (Spiderman Dark) */
-  --rm-text-primary: #ffffff;
-  --rm-text-secondary: #cdd2e0;
-  --rm-text-muted: #8e94a5;
-  --rm-text-ghost: #4b5066;
-
-  --rm-accent: #e50914;
-  --rm-accent-hover: #1a20fc;
-  --rm-accent-dim: rgba(229, 9, 20, 0.15);
-  --rm-glow: rgba(229, 9, 20, 0.25);
-
-  --rm-theme-active-gradient: linear-gradient(
-    135deg,
-    rgba(229, 9, 20, 0.28) 0%,
-    rgba(26, 115, 232, 0.16) 100%
-  );
-  --rm-theme-active-fg: #ffffff;
-  --rm-theme-active-border: rgba(229, 9, 20, 0.2);
-  --rm-theme-banner-gradient: linear-gradient(
-    135deg,
-    rgba(229, 9, 20, 0.22) 0%,
-    rgba(26, 115, 232, 0.16) 48%,
-    rgba(2, 2, 8, 0.92) 100%
-  );
-  --rm-theme-banner-title: #ffffff;
-  --rm-theme-banner-muted: rgba(255, 255, 255, 0.72);
-  --rm-theme-banner-icon: rgba(255, 255, 255, 0.82);
-  --rm-theme-section-label: #e50914;
-  --rm-theme-input-bg: #0d0d22;
-  --rm-theme-input-border: rgba(26, 115, 232, 0.24);
-  --rm-theme-input-focus: rgba(229, 9, 20, 0.72);
-  --rm-theme-input-glow: rgba(229, 9, 20, 0.24);
-}
-
-/* @theme for Tailwind v4 */
+/* Role utilities (layer 2) and the legacy rm-* / shadcn names. */
 @theme inline {
-  /* Radius scale: controls/rows md, cards/menus lg, dialogs xl, sheets 2xl */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 20px;
-  --radius-3xl: 24px;
+  /* Radius (DESIGN.md, Shapes): the panel is squared. Every step is a 2px
+     key corner except the phone sheet top (4). `rounded-full` stays for
+     LEDs and the rare pill. `rounded-avatar` is the avatar corner. */
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 4px;
+  --radius-3xl: 4px;
+  --radius-avatar: 2px;
 
-  /* Elevation ramp: existing shadow-* classes resolve to the three tokens */
-  --shadow-xs: var(--rm-shadow-1);
-  --shadow-sm: var(--rm-shadow-1);
-  --shadow-md: var(--rm-shadow-1);
-  --shadow-lg: var(--rm-shadow-2);
-  --shadow-xl: var(--rm-shadow-2);
-  --shadow-2xl: var(--rm-shadow-3);
+  /* Elevation: `shadow-float` on ply-3 floats, `shadow-modal` on dialogs
+     and drawers. The legacy shadow-* steps resolve onto the same two. */
+  --shadow-float: var(--shadow-2);
+  --shadow-modal: var(--shadow-3);
+  --shadow-xs: var(--shadow-1);
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-2);
+  --shadow-xl: var(--shadow-2);
+  --shadow-2xl: var(--shadow-3);
 
-  /* Motion: the built-in curves are too weak for UI; remap them */
-  --ease-out: var(--rm-ease-out);
-  --ease-in-out: var(--rm-ease-in-out);
-  --ease-drawer: var(--rm-ease-drawer);
-  --default-transition-duration: 160ms;
-  --default-transition-timing-function: var(--rm-ease-out);
+  /* Plies, ink, tints, lines */
+  --color-ply-0: var(--ply-0);
+  --color-ply-1: var(--ply-1);
+  --color-ply-2: var(--ply-2);
+  --color-ply-3: var(--ply-3);
+  --color-ply-4: var(--ply-4);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-off: var(--ink-off);
+  --color-tint-1: var(--tint-1);
+  --color-tint-2: var(--tint-2);
+  --color-tint-3: var(--tint-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-line-field: var(--line-field);
+  --color-guide: var(--guide);
+  --color-path: var(--path);
+  --color-focus: var(--focus);
+
+  /* Primary, accent, brand */
+  --color-primary-fill: var(--primary-fill);
+  --color-on-primary: var(--on-primary);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-tint: var(--accent-tint);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-ink: var(--brand-ink);
+
+  /* LEDs and state */
+  --color-talk: var(--talk);
+  --color-on-talk: var(--on-talk);
+  --color-talk-tint: var(--talk-tint);
+  --color-live: var(--live);
+  --color-live-ink: var(--live-ink);
+  --color-live-tint: var(--live-tint);
+  --color-danger-fill: var(--danger-fill);
+  --color-on-danger: var(--on-danger);
+  --color-danger-ink: var(--danger-ink);
+  --color-danger-tint: var(--danger-tint);
+  --color-muted-state: var(--muted-state);
+  --color-muted-state-tint: var(--muted-state-tint);
+  --color-idle: var(--idle);
+  --color-warning-ink: var(--warning-ink);
+  --color-warning-tint: var(--warning-tint);
+  --color-success-ink: var(--success-ink);
+  --color-success-tint: var(--success-tint);
+  --color-status-online: var(--status-online);
+  --color-status-idle: var(--status-idle);
+  --color-status-dnd: var(--status-dnd);
+  --color-status-offline: var(--status-offline);
+  --color-badge: var(--badge);
+  --color-on-badge: var(--on-badge);
+  --color-scrim: var(--scrim);
+  --color-scrim-stacked: var(--scrim-stacked);
+
+  /* shadcn layer (aliases of the roles, see tokens.css) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -839,7 +269,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Ralph System colors */
+  /* Legacy rm-* utilities (aliases of the roles, see tokens.css) */
   --color-rm-bg-primary: var(--rm-bg-primary);
   --color-rm-bg-secondary: var(--rm-bg-secondary);
   --color-rm-bg-sidebar: var(--rm-bg-sidebar);
@@ -850,54 +280,212 @@
   --color-rm-accent-hover: var(--rm-accent-hover);
   --color-rm-accent-dim: var(--rm-accent-dim);
   --color-rm-glow: var(--rm-glow);
-
   --color-rm-sidebar: var(--rm-sidebar);
   --color-rm-server-bar: var(--rm-server-bar);
   --color-rm-border: var(--rm-border);
   --color-rm-bg-hover: var(--rm-bg-hover);
   --color-rm-bg-active: var(--rm-bg-active);
-
   --color-rm-text: var(--rm-text-primary);
+  --color-rm-text-primary: var(--rm-text-primary);
   --color-rm-text-secondary: var(--rm-text-secondary);
   --color-rm-text-muted: var(--rm-text-muted);
   --color-rm-text-ghost: var(--rm-text-ghost);
-
   --color-rm-border-strong: var(--rm-border-strong);
   --color-rm-scrim: var(--rm-scrim);
   --color-rm-focus: var(--rm-focus);
   --color-rm-badge: var(--rm-badge);
   --color-rm-rail-item: var(--rm-rail-item);
   --color-rm-success: var(--rm-success);
+  --color-rm-on-success: var(--rm-on-success);
+  --color-rm-status-online: var(--rm-status-online);
+  --color-rm-status-idle: var(--rm-status-idle);
+  --color-rm-status-dnd: var(--rm-status-dnd);
+  --color-rm-status-offline: var(--rm-status-offline);
+  --color-rm-favourite: var(--rm-favourite);
+  --color-rm-accent-solid: var(--rm-accent-solid);
+  --color-rm-on-accent: var(--rm-on-accent);
+  --color-rm-accent-ink: var(--rm-accent-ink);
+  --color-rm-accent-tint: var(--rm-accent-tint);
+  --color-rm-danger: var(--rm-danger);
+  --color-rm-on-danger: var(--rm-on-danger);
+  --color-rm-danger-ink: var(--rm-danger-ink);
+  --color-rm-danger-tint: var(--rm-danger-tint);
+  --color-rm-success-ink: var(--rm-success-ink);
+  --color-rm-warning-ink: var(--rm-warning-ink);
+  --color-rm-success-tint: var(--rm-success-tint);
+  --color-rm-warning-tint: var(--rm-warning-tint);
+  --color-rm-field-edge: var(--rm-field-edge);
+  --color-rm-tint-1: var(--rm-tint-1);
+  --color-rm-tint-2: var(--rm-tint-2);
+  --color-rm-tint-3: var(--rm-tint-3);
+  --color-rm-activity-wordle-correct: var(--rm-activity-wordle-correct);
+  --color-rm-activity-wordle-present: var(--rm-activity-wordle-present);
+  --color-rm-activity-wordle-absent: var(--rm-activity-wordle-absent);
+  --color-rm-activity-wordle-tile: var(--rm-activity-wordle-tile);
+  --color-rm-activity-wordle-key: var(--rm-activity-wordle-key);
+  --color-rm-activity-wordle-ink: var(--rm-activity-wordle-ink);
+  --color-rm-activity-warp-bg: var(--rm-activity-warp-bg);
+  --color-rm-activity-warp-ink: var(--rm-activity-warp-ink);
+  --color-rm-activity-warp-ink-muted: var(--rm-activity-warp-ink-muted);
+  --color-rm-activity-warp-ink-dim: var(--rm-activity-warp-ink-dim);
+  --color-rm-activity-warp-cyan: var(--rm-activity-warp-cyan);
+  --color-rm-activity-warp-magenta: var(--rm-activity-warp-magenta);
+  --color-rm-activity-warp-amber: var(--rm-activity-warp-amber);
+  --color-rm-activity-warp-green: var(--rm-activity-warp-green);
 }
 
-/* Shared transition for interactive chrome. Replaces `transition-all`: names
-   the properties that change on hover/press and uses the house curve.
-   outline-color is deliberately absent: keyboard focus must appear at once. */
+/* ---------- Utilities ---------- */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Numbers: Martian Mono at normal width, tabular. Every live number uses one
+   of these (or <Num>). */
+@utility text-num-xs {
+  font-family: var(--font-silk);
+  font-stretch: 100%;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+@utility text-num-sm {
+  font-family: var(--font-silk);
+  font-stretch: 100%;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* Silkscreen: the panel's own printing. Martian Mono 11/14 uppercase for
+   branch and group labels, kickers, legends, status words and readout
+   labels. Condensed (wdth 90, 500) on dark grounds, where light-on-dark
+   gains apparent weight; widened (wdth 100, 600, 0.10em) on light grounds,
+   where the condensed cut was hard to read. */
+@utility silkscreen {
+  font-family: var(--font-silk);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  font-stretch: 90%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  :is(.light, .miku-light, .spiderman-light) & {
+    font-weight: 600;
+    font-stretch: 100%;
+    letter-spacing: 0.1em;
+  }
+}
+
+/* Display: Bricolage with optical sizing and kerning on. Pair with a size
+   and a 600-800 weight. */
+@utility font-display-tuned {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-kerning: normal;
+}
+
+/* Control label: Bricolage 600 at 15px (buttons, segmented cells). */
+@utility text-control {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+/* Shared transition for interactive chrome: names the properties that
+   change on hover/press. outline-color is absent: focus appears at once. */
 @utility transition-ui {
   transition-property:
     color, background-color, border-color, text-decoration-color, fill, stroke,
-    opacity, box-shadow, transform, translate, scale, rotate, border-radius;
-  transition-timing-function: var(--rm-ease-out);
-  transition-duration: var(--rm-dur-2);
+    opacity, transform, translate, scale, rotate;
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--dur-1);
 }
 
-/* Count badge: the one unread/mention treatment (rail, sidebar rows, DMs,
-   friends, inbox). Position and rings are added at the call site. */
+/* Count badge: the square count chip, the one unread/mention treatment.
+   Mentions and unread DMs only, never pins or totals. Position and ring are added at the call site
+   (or use <CountBadge>). */
 @utility badge-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
-  min-width: 16px;
+  height: 18px;
+  min-width: 18px;
   padding-inline: 4px;
-  border-radius: 9999px;
-  background-color: var(--rm-badge);
-  color: #fff;
+  border-radius: 2px;
+  background-color: var(--badge);
+  color: var(--on-badge);
+  font-family: var(--font-silk);
+  font-stretch: 100%;
   font-size: 11px;
   line-height: 1;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Force embedded videos to use our custom controls instead of Chromium/WebKit's UI. */
+.rm-custom-video::-webkit-media-controls,
+.rm-custom-video::-webkit-media-controls-enclosure,
+.rm-custom-video::-webkit-media-controls-panel,
+.rm-custom-video::-webkit-media-controls-overlay-play-button,
+.rm-custom-video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+
+/* Name effects (ProfileDisplayName). Gradient and neon play on a stacked
+   copy of the name that only fades (getDisplayNameEffectOverlayStyle), so
+   the compositor runs them; nothing repaints per frame. */
+@keyframes rm-display-name-gradient {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes rm-display-name-neon {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes rm-display-name-pop {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+
+  45% {
+    translate: 0 -0.04em;
+  }
+
+  70% {
+    translate: 0 0.01em;
+  }
+}
+
+:is(.light, .miku-light, .spiderman-light) .theme-aware-splash-logo {
+  filter: brightness(0);
 }
 
 /* Base layer */
@@ -906,86 +494,63 @@
     @apply border-border outline-ring/50;
   }
 
+  input[type="range"] {
+    accent-color: var(--accent-ink);
+  }
+
   html,
   body {
     height: 100%;
-    font-family:
-      var(--font-sans),
-      "Inter",
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      Roboto,
-      sans-serif;
+    font-family: var(--font-ui);
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: var(--rm-bg-primary);
-    color: var(--foreground);
+    background: var(--ply-0);
+    color: var(--ink-1);
   }
 
   #root {
     height: 100%;
   }
 
-  /* Custom scrollbar — Discord style */
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
+  /*
+   * Safe-area insets for the web build (parity with mobile/index.html). The
+   * Tauri shells overwrite these inline on <html> with native values.
+   * Components read var(--safe-area-*, 0px).
+   */
+  :root {
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
   }
 
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--rm-text-ghost);
-    border-radius: 4px;
-  }
-
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: var(--rm-text-muted);
-  }
-
-  /* Default scrollbar — very thin */
-  ::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: var(--rm-text-ghost);
-    border-radius: 2px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--rm-text-muted);
-  }
-
-  * {
-    scrollbar-color: var(--rm-text-ghost) transparent;
+  /* Follow the dynamic viewport (browser toolbars, keyboard) on phones. */
+  @supports (height: 100dvh) {
+    html,
+    body {
+      height: 100dvh;
+    }
   }
 
   /* tw-animate defaults: house curve, menu-speed enters, faster exits.
      Explicit duration-* / ease-* utilities still win. */
   :where(.animate-in) {
-    --tw-ease: var(--rm-ease-out);
-    --tw-duration: var(--rm-dur-2);
+    --tw-ease: var(--ease-out);
+    --tw-duration: var(--dur-2);
   }
 
   :where(.animate-out) {
-    --tw-ease: var(--rm-ease-out);
-    --tw-duration: var(--rm-dur-1);
+    --tw-ease: var(--ease-out);
+    --tw-duration: var(--dur-2-exit);
   }
 
-  ::selection {
-    background: var(--rm-selection);
-  }
-
+  /* Links are accent ink (>= 4.5:1 on every ply). Also colours unstyled SDK
+     links such as Kova's "Forgot password?". */
   a {
-    color: var(--rm-accent-hover);
+    color: var(--accent-ink);
     text-decoration: none;
+    text-underline-offset: 3px;
   }
 
   a:hover {
@@ -1004,12 +569,10 @@
 
 /* ============================================================
    Focus. Unlayered so it beats `outline-none` utilities: every keyboard-
-   reachable control gets the same 2px accent ring. Elements that draw a
-   Tailwind ring have it suppressed to avoid a double ring; text fields keep
-   their own inset treatment.
+   reachable control gets the same 2px --focus ring, offset 2 (fields 0).
    ============================================================ */
 :focus-visible {
-  outline: 2px solid var(--rm-focus);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   --tw-ring-shadow: 0 0 #0000;
 }
@@ -1018,80 +581,119 @@
   outline-offset: 0;
 }
 
-.rm-composer textarea:focus-visible {
+/* Programmatic focus targets (a settings row a search result landed on) are
+   not keyboard stops; they take focus for screen readers only. */
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+.rm-composer textarea:focus-visible,
+.rm-search-input:focus-visible {
   outline: none;
 }
 
 /* Role colours are picked against the dark ground. In the light themes,
-   darken them toward black so names keep >=4.5:1 on the light sidebars. */
+   clamp lightness and chroma in OKLCH and keep the hue, so a green role stays
+   green. L <= .49 keeps >= 4.7:1 on every light ply for every hue (.52 let
+   cyan and green fall to 4.2:1 on ply-0). The mix toward black is the
+   fallback where relative colour is unsupported. */
 :is(.light, .miku-light, .spiderman-light) .rm-role-name {
   color: color-mix(in oklab, var(--rm-role-color) 55%, black) !important;
 }
 
-/* ============================================================
-   Reduced motion: keep fades, drop movement, stop the decorative loops.
-   ============================================================ */
+@supports (color: oklch(from red l c h)) {
+  :is(.light, .miku-light, .spiderman-light) .rm-role-name {
+    color: oklch(
+      from var(--rm-role-color) min(l, 0.49) min(c, 0.16) h
+    ) !important;
+  }
+}
+
+/* Legacy transition utilities keep their colours under reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  :where(.animate-in, .animate-out) {
-    --tw-enter-translate-x: 0;
-    --tw-enter-translate-y: 0;
-    --tw-enter-scale: 1;
-    --tw-enter-rotate: 0;
-    --tw-exit-translate-x: 0;
-    --tw-exit-translate-y: 0;
-    --tw-exit-scale: 1;
-    --tw-exit-rotate: 0;
-    --tw-duration: var(--rm-dur-1);
-  }
-
-  .rm-breathe,
-  .animate-pulse,
-  .animate-wiggle,
-  .animate-clack {
-    animation: none !important;
-  }
-
   .transition-ui,
   .transition-transform {
-    transition-property:
-      color, background-color, border-color, opacity, box-shadow;
+    transition-property: color, background-color, border-color, opacity;
+  }
+}
+
+/* ============================================================
+   Settings dialog. Panels swap with a short fade (nothing travels on
+   desktop); the mobile list pushes into a page with a short slide so the
+   hierarchy reads. Transform and opacity only, under 240ms.
+   ============================================================ */
+@keyframes rm-settings-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rm-settings-push {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes rm-settings-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.rm-settings-push-in {
+  animation: rm-settings-push 220ms var(--rm-ease-drawer);
+}
+.rm-settings-confirm-in {
+  animation: rm-settings-drop 160ms var(--rm-ease-out);
+}
+
+/* A search result or deep link lands here: a held tint, cleared on the
+   next interaction rather than by a timer. */
+.rm-settings-target {
+  position: relative;
+}
+.rm-settings-target::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--rm-accent-tint);
+  opacity: 0;
+  transition: opacity var(--rm-dur-3) var(--rm-ease-out);
+}
+.rm-settings-target[data-target]::before {
+  opacity: 1;
+}
+.rm-settings-target > * {
+  position: relative;
+}
+
+.rm-settings-range {
+  height: 20px;
+  accent-color: var(--rm-accent-ink);
+  cursor: pointer;
+}
+@media (pointer: coarse) {
+  .rm-settings-range {
+    height: 44px;
+  }
+}
+.rm-settings-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-settings-push-in,
+  .rm-settings-confirm-in {
+    animation: rm-settings-fade var(--rm-dur-1) var(--rm-ease-out);
   }
 }
 
 /* ============================================================
    Loading screens (splash, connection overlay)
    ============================================================ */
-@keyframes rm-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.96;
-  }
-
-  50% {
-    transform: scale(1.04);
-    opacity: 1;
-  }
-}
-
-@keyframes rm-loading-bar {
-  0% {
-    transform: translateX(-100%);
-  }
-
-  100% {
-    transform: translateX(250%);
-  }
-}
-
-.rm-breathe {
-  animation: rm-breathe 3.2s var(--rm-ease-in-out) infinite;
-}
-
-.rm-loading-bar {
-  animation: rm-loading-bar 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-
 /* Connection overlay exit: hold "Connected!" briefly, then fade. The 1.2s
    total matches the unmount timer in ConnectionOverlay. */
 @keyframes rm-loading-exit {
@@ -1245,240 +847,58 @@
   animation: reaction-rain 2.8s linear forwards;
 }
 
-@keyframes reaction-bounce {
+/* "bounce" reactions land (spec §6): a 220ms exponential ease-out entrance
+   (opacity, 8px of travel, scale .96 -> 1, no overshoot), a hold, then a
+   150ms exit, faster than the entrance. 2.4s in all: 220ms is 9.17%, the exit
+   starts at 2250ms (93.75%). Reduced motion keeps opacity only. */
+@keyframes reaction-land {
   0% {
-    transform: translateY(-70px) rotate(0deg);
     opacity: 0;
-    animation-timing-function: ease-in;
+    transform: translateY(-8px) scale(0.96) rotate(var(--rot, 0deg));
+    animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
   }
-  15% {
+  9.17% {
     opacity: 1;
+    transform: translateY(0) scale(1) rotate(var(--rot, 0deg));
   }
-  35% {
-    transform: translateY(calc(100% - 64px)) scaleY(0.7) scaleX(1.3)
-      rotate(var(--rot, 0deg));
-    animation-timing-function: ease-out;
-  }
-  50% {
-    transform: translateY(calc(40%)) scaleY(1) scaleX(1)
-      rotate(calc(var(--rot, 0deg) * 1.5));
-    animation-timing-function: ease-in;
-  }
-  65% {
-    transform: translateY(calc(100% - 64px)) scaleY(0.8) scaleX(1.2)
-      rotate(calc(var(--rot, 0deg) * 2));
-    animation-timing-function: ease-out;
-  }
-  75% {
-    transform: translateY(calc(70%)) scaleY(1) scaleX(1)
-      rotate(calc(var(--rot, 0deg) * 2.5));
-    animation-timing-function: ease-in;
-  }
-  88% {
-    transform: translateY(calc(100% - 64px)) scaleY(0.95) scaleX(1.05)
-      rotate(calc(var(--rot, 0deg) * 3));
+  93.75% {
     opacity: 1;
+    transform: translateY(0) scale(1) rotate(var(--rot, 0deg));
+    animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
   }
   100% {
-    transform: translateY(calc(100% - 64px)) scaleY(1) scaleX(1)
-      rotate(calc(var(--rot, 0deg) * 3));
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98) rotate(var(--rot, 0deg));
+  }
+}
+
+@keyframes reaction-land-fade {
+  0% {
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  9.17% {
+    opacity: 1;
+  }
+  93.75% {
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  100% {
     opacity: 0;
   }
 }
 
-.animate-reaction-bounce {
-  animation: reaction-bounce 3.2s forwards;
+.animate-reaction-land {
+  /* The -translate-x-1/2 centring lives in `translate`, the motion in
+     `transform`, so the two compose. */
+  animation: reaction-land 2.4s linear forwards;
 }
 
-/* ============================================================
-   Lightweight Custom Theme Overrides
-   ============================================================ */
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  [data-app-layout="true"] {
-  background-image: none !important;
-}
-
-@media (min-width: 768px) {
-  :is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-    [data-app-layout="true"]
-    > div.flex.flex-1 {
-    gap: 10px !important;
-    padding: 10px !important;
-    background: transparent !important;
+@media (prefers-reduced-motion: reduce) {
+  .animate-reaction-land {
+    animation-name: reaction-land-fade;
   }
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark) .bg-rm-sidebar,
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .bg-rm-bg-floating,
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .chat-main-content,
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  [data-testid="members-list"],
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .chat-main-content
-  [class*="chat-messages"],
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark) .chat-messages {
-  background-image: none !important;
-  box-shadow: none !important;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .chat-main-content
-  [class*="chat-messages"],
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark) .chat-messages,
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .bg-rm-bg-elevated.rounded-xl {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  [role="button"].bg-rm-bg-active,
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  a.bg-rm-bg-active {
-  background: var(--rm-theme-active-gradient) !important;
-  color: var(--rm-theme-active-fg) !important;
-  border: 1px solid var(--rm-theme-active-border);
-  font-weight: 700;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .server-banner-box {
-  background: var(--rm-theme-banner-gradient);
-  background-image: none !important;
-  border-bottom-color: var(--rm-theme-active-border) !important;
-  height: 120px;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .server-banner-content {
-  color: var(--rm-theme-banner-title) !important;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .server-banner-content
-  h1 {
-  color: var(--rm-theme-banner-title) !important;
-  letter-spacing: 0.03em !important;
-  text-shadow: none !important;
-  transform: none !important;
-  filter: none !important;
-  font-family: inherit !important;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .server-banner-content
-  .text-white\/50 {
-  color: var(--rm-theme-banner-muted) !important;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .server-banner-box
-  svg {
-  color: var(--rm-theme-banner-icon) !important;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  [data-testid="members-list"]
-  span.uppercase,
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .bg-rm-sidebar
-  span.uppercase {
-  color: var(--rm-theme-section-label) !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.06em !important;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .bg-rm-bg-elevated.rounded-xl {
-  border: 1px solid var(--rm-theme-input-border) !important;
-  background-color: var(--rm-theme-input-bg) !important;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-:is(.miku-light, .miku-dark, .spiderman-light, .spiderman-dark)
-  .bg-rm-bg-elevated.rounded-xl:focus-within {
-  border-color: var(--rm-theme-input-focus) !important;
-  box-shadow: 0 0 0 3px var(--rm-theme-input-glow) !important;
-}
-
-.miku-light [data-testid="members-list"]::before,
-.miku-dark [data-testid="members-list"]::before,
-.spiderman-light [data-testid="members-list"]::before,
-.spiderman-dark [data-testid="members-list"]::before,
-.spiderman-light .bg-rm-sidebar::before,
-.spiderman-dark .bg-rm-sidebar::before,
-.spiderman-light .bg-rm-sidebar::after,
-.spiderman-dark .bg-rm-sidebar::after,
-.spiderman-light .chat-main-content::before,
-.spiderman-dark .chat-main-content::before,
-.spiderman-light .chat-main-content::after,
-.spiderman-dark .chat-main-content::after,
-.spiderman-light .chat-main-content [class*="border-b"]::before,
-.spiderman-dark .chat-main-content [class*="border-b"]::before,
-.spiderman-light .chat-messages::after,
-.spiderman-dark .chat-messages::after {
-  content: none !important;
-}
-
-/* Custom styles for Emoji/Gif/Soundboard Pickers and Modals */
-.picker-panel {
-  background-color: var(--rm-bg-floating) !important;
-  border-color: var(--rm-border) !important;
-}
-
-.picker-header {
-  border-bottom-color: var(--rm-border) !important;
-  background-color: var(--rm-bg-surface) !important;
-  background-image:
-    radial-gradient(circle at top left, var(--rm-accent-dim), transparent 35%),
-    radial-gradient(
-      circle at top right,
-      rgba(229, 9, 20, 0.08),
-      transparent 30%
-    ) !important;
-}
-
-.picker-search-input {
-  background-color: var(--rm-bg-hover) !important;
-  border-color: var(--rm-border) !important;
-  color: var(--rm-text-primary) !important;
-}
-
-.picker-search-input:focus {
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 3px var(--rm-glow) !important;
-}
-
-.picker-pill {
-  background-color: var(--rm-bg-hover) !important;
-  border-color: var(--rm-border) !important;
-  color: var(--rm-text-primary) !important;
-}
-
-.picker-pill:hover {
-  background-color: var(--rm-bg-active) !important;
-}
-
-/* Custom themed scrollbars for Spider-Man */
-.spiderman-dark ::-webkit-scrollbar-thumb {
-  background-color: rgba(229, 9, 20, 0.5) !important;
-  border-radius: 4px !important;
-}
-.spiderman-dark ::-webkit-scrollbar-thumb:hover {
-  background-color: #e50914 !important;
-}
-
-.spiderman-light ::-webkit-scrollbar-thumb {
-  background-color: rgba(229, 9, 20, 0.3) !important;
-  border-radius: 4px !important;
-}
-.spiderman-light ::-webkit-scrollbar-thumb:hover {
-  background-color: #e50914 !important;
 }
 
 /* Ensure selected custom emoji/native text remains visually clean under selection highlights */
@@ -1515,22 +935,6 @@
 /* ============================================================
    Auth pages: split layout art panel (sign-in, sign-up, /activate)
    ============================================================ */
-.auth-art-canvas {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 1;
-  transform: translate(-50%, -50%);
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  opacity: 0;
-  transition: opacity 700ms ease;
-}
-
-.auth-art[data-live="true"] .auth-art-canvas {
-  opacity: 1;
-}
-
 .auth-enter {
   animation: auth-enter 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
@@ -1564,10 +968,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-art-canvas {
-    transition: none;
-  }
-
   @keyframes auth-enter {
     from {
       opacity: 0;
@@ -1583,23 +983,173 @@
   }
 }
 
-/* Kova SDK card inside the split layout: theme tokens + a compact rhythm that
-   fits 1216×644. Providers become an icon row (labels stay for assistive tech). */
+/*
+ * Kova SDK bridge (@kova/react inside AuthSplitLayout), the C access poster.
+ * The SDK styles itself from --ra-* variables plus a few hard-coded values;
+ * this block maps every variable onto the role tokens and draws what inline
+ * appearance styles can't: the dithered rule under the title, the legend-
+ * plate label ground, the notched Continue key with its still dithered cap,
+ * and the key hovers. Dither here is decorative and still (pseudo-elements,
+ * no text on them) and hidden under forced colours. Providers become an icon
+ * row (labels stay for assistive tech).
+ */
 .auth-split [data-ra-root] {
-  --ra-color-primary: var(--rm-accent);
-  --ra-color-primary-hover: var(--rm-accent-hover);
-  --ra-color-background: var(--rm-bg-primary);
-  --ra-color-surface: var(--rm-bg-primary);
-  --ra-color-surface-raised: var(--rm-bg-hover);
-  --ra-color-text: var(--rm-text-primary);
-  --ra-color-text-secondary: var(--rm-text-secondary);
-  --ra-color-text-tertiary: var(--rm-text-muted);
-  --ra-color-border: var(--rm-border);
-  --ra-color-border-strong: var(--rm-text-ghost);
+  --ra-color-primary: var(--primary-fill);
+  --ra-color-primary-hover: color-mix(
+    in oklab,
+    var(--primary-fill) 88%,
+    var(--on-primary)
+  );
+  --ra-color-bg: var(--ply-0);
+  --ra-color-surface: var(--ply-0);
+  --ra-color-surface-raised: var(--tint-1);
+  --ra-color-text: var(--ink-1);
+  --ra-color-text-secondary: var(--ink-2);
+  --ra-color-text-tertiary: var(--ink-3);
+  --ra-color-border: var(--line);
+  --ra-color-border-strong: var(--line-strong);
+  --ra-color-error: var(--danger-ink);
+  --ra-color-success: var(--success-ink);
+  --ra-color-warning: var(--warning-ink);
   --ra-shadow: none;
-  --ra-radius: 10px;
-  --ra-radius-sm: 10px;
-  --ra-font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ra-radius: 2px;
+  --ra-radius-sm: 2px;
+  --ra-font: var(--font-ui);
+  --ra-font-size: 15px;
+  --ra-dither-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 0h1v1H2zM1 1h1v1H1zM3 1h1v1H3zM0 2h1v1H0zM2 2h1v1H2zM1 3h1v1H1zM3 3h1v1H3z'/%3E%3C/svg%3E");
+  --ra-dither-rule: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27220%27%20height%3D%274%27%20viewBox%3D%270%200%20220%204%27%20preserveAspectRatio%3D%27none%27%20shape-rendering%3D%27crispEdges%27%3E%3Cpath%20d%3D%27M0%200h47v1h-47zM48%200h3v1h-3zM52%200h3v1h-3zM56%200h3v1h-3zM60%200h3v1h-3zM64%200h3v1h-3zM68%200h1v1h-1zM70%200h1v1h-1zM72%200h1v1h-1zM74%200h1v1h-1zM76%200h1v1h-1zM78%200h1v1h-1zM80%200h1v1h-1zM82%200h1v1h-1zM84%200h1v1h-1zM86%200h1v1h-1zM88%200h1v1h-1zM90%200h1v1h-1zM92%200h1v1h-1zM94%200h1v1h-1zM96%200h1v1h-1zM98%200h1v1h-1zM100%200h1v1h-1zM102%200h1v1h-1zM104%200h1v1h-1zM106%200h1v1h-1zM108%200h1v1h-1zM110%200h1v1h-1zM112%200h1v1h-1zM114%200h1v1h-1zM116%200h1v1h-1zM118%200h1v1h-1zM120%200h1v1h-1zM122%200h1v1h-1zM124%200h1v1h-1zM126%200h1v1h-1zM128%200h1v1h-1zM130%200h1v1h-1zM132%200h1v1h-1zM134%200h1v1h-1zM136%200h1v1h-1zM138%200h1v1h-1zM140%200h1v1h-1zM142%200h1v1h-1zM144%200h1v1h-1zM146%200h1v1h-1zM148%200h1v1h-1zM150%200h1v1h-1zM152%200h1v1h-1zM154%200h1v1h-1zM156%200h1v1h-1zM160%200h1v1h-1zM164%200h1v1h-1zM168%200h1v1h-1zM172%200h1v1h-1zM176%200h1v1h-1zM180%200h1v1h-1zM184%200h1v1h-1zM188%200h1v1h-1zM192%200h1v1h-1zM196%200h1v1h-1zM200%200h1v1h-1zM208%200h1v1h-1zM216%200h1v1h-1zM0%201h30v1h-30zM31%201h3v1h-3zM35%201h3v1h-3zM39%201h3v1h-3zM43%201h1v1h-1zM45%201h1v1h-1zM47%201h1v1h-1zM49%201h1v1h-1zM51%201h1v1h-1zM53%201h1v1h-1zM55%201h1v1h-1zM57%201h1v1h-1zM59%201h1v1h-1zM61%201h1v1h-1zM63%201h1v1h-1zM65%201h1v1h-1zM67%201h1v1h-1zM69%201h1v1h-1zM71%201h1v1h-1zM73%201h1v1h-1zM75%201h1v1h-1zM77%201h1v1h-1zM79%201h1v1h-1zM81%201h1v1h-1zM83%201h1v1h-1zM85%201h1v1h-1zM87%201h1v1h-1zM89%201h1v1h-1zM91%201h1v1h-1zM93%201h1v1h-1zM95%201h1v1h-1zM97%201h1v1h-1zM99%201h1v1h-1zM101%201h1v1h-1zM103%201h1v1h-1zM105%201h1v1h-1zM107%201h1v1h-1zM109%201h1v1h-1zM113%201h1v1h-1zM117%201h1v1h-1zM121%201h1v1h-1zM125%201h1v1h-1zM129%201h1v1h-1zM0%202h53v1h-53zM54%202h3v1h-3zM58%202h3v1h-3zM62%202h3v1h-3zM66%202h3v1h-3zM70%202h3v1h-3zM74%202h3v1h-3zM78%202h1v1h-1zM80%202h1v1h-1zM82%202h1v1h-1zM84%202h1v1h-1zM86%202h1v1h-1zM88%202h1v1h-1zM90%202h1v1h-1zM92%202h1v1h-1zM94%202h1v1h-1zM96%202h1v1h-1zM98%202h1v1h-1zM100%202h1v1h-1zM102%202h1v1h-1zM104%202h1v1h-1zM106%202h1v1h-1zM108%202h1v1h-1zM110%202h1v1h-1zM112%202h1v1h-1zM114%202h1v1h-1zM116%202h1v1h-1zM118%202h1v1h-1zM120%202h1v1h-1zM122%202h1v1h-1zM124%202h1v1h-1zM126%202h1v1h-1zM128%202h1v1h-1zM130%202h1v1h-1zM132%202h1v1h-1zM134%202h1v1h-1zM136%202h1v1h-1zM138%202h1v1h-1zM140%202h1v1h-1zM142%202h1v1h-1zM144%202h1v1h-1zM146%202h1v1h-1zM150%202h1v1h-1zM154%202h1v1h-1zM158%202h1v1h-1zM162%202h1v1h-1zM166%202h1v1h-1zM170%202h1v1h-1zM174%202h1v1h-1zM178%202h1v1h-1zM186%202h1v1h-1zM0%203h4v1h-4zM5%203h3v1h-3zM9%203h3v1h-3zM13%203h3v1h-3zM17%203h3v1h-3zM21%203h1v1h-1zM23%203h1v1h-1zM25%203h1v1h-1zM27%203h1v1h-1zM29%203h1v1h-1zM31%203h1v1h-1zM33%203h1v1h-1zM35%203h1v1h-1zM37%203h1v1h-1zM39%203h1v1h-1zM41%203h1v1h-1zM43%203h1v1h-1zM45%203h1v1h-1zM47%203h1v1h-1zM49%203h1v1h-1zM51%203h1v1h-1zM53%203h1v1h-1zM55%203h1v1h-1zM57%203h1v1h-1zM59%203h1v1h-1zM61%203h1v1h-1zM63%203h1v1h-1zM65%203h1v1h-1zM67%203h1v1h-1zM69%203h1v1h-1zM71%203h1v1h-1zM73%203h1v1h-1zM75%203h1v1h-1zM77%203h1v1h-1zM79%203h1v1h-1zM81%203h1v1h-1zM83%203h1v1h-1zM87%203h1v1h-1zM91%203h1v1h-1zM95%203h1v1h-1zM99%203h1v1h-1zM103%203h1v1h-1zM107%203h1v1h-1z%27%2F%3E%3C%2Fsvg%3E");
+}
+
+/* Phones: 16px text so iOS does not zoom into the fields (4.6). */
+@media (max-width: 767px) {
+  .auth-split [data-ra-root] {
+    --ra-font-size: 16px;
+  }
+}
+
+/* The poster's lip: a still dithered accent rule under the title that runs
+   out from the leading edge (DitherRule's look, in CSS). */
+.auth-split [data-ra-element="cardHeader"] {
+  position: relative;
+}
+.auth-split [data-ra-element="cardTitle"]::after {
+  content: "";
+  display: block;
+  height: 8px;
+  margin-top: 24px;
+  background-color: var(--accent-ink);
+  mask: var(--ra-dither-rule) 0 0 / 100% 100% no-repeat;
+  -webkit-mask: var(--ra-dither-rule) 0 0 / 100% 100% no-repeat;
+}
+
+/* Legend-plate fields: the label is printed across the field's top edge on
+   a backing of the page ground. Fields draw a 3:1 edge. */
+.auth-split [data-ra-element="formFieldLabel"] {
+  background: var(--ply-0);
+}
+.auth-split
+  [data-ra-element="formField"]:focus-within
+  [data-ra-element="formFieldLabel"] {
+  color: var(--ink-1);
+}
+.auth-split [data-ra-element="formFieldInput"] {
+  border-color: var(--line-field);
+  transition: border-color var(--dur-1) ease-out;
+}
+@media (pointer: fine) {
+  .auth-split [data-ra-element="formFieldInput"]:hover {
+    border-color: var(--ink-2);
+  }
+}
+.auth-split [data-ra-element="formFieldInput"]:focus {
+  border-color: var(--ink-1);
+  box-shadow: none;
+  outline: 1px solid var(--ink-1);
+  outline-offset: 0;
+}
+.auth-split [data-ra-element="formFieldInput"][aria-invalid="true"] {
+  border-color: var(--danger-ink);
+}
+
+/* Continue is the page's one primary: the C2 notched key (the cut painted by
+   the fill, as .rm-notch, so the focus ring stays whole) with a still
+   dithered cap after the label. */
+.auth-split [data-ra-element="formSubmitButton"] {
+  color: var(--on-primary);
+  background-color: transparent !important;
+  background-image: linear-gradient(
+    225deg,
+    transparent 7.07px,
+    var(--primary-fill) 7.07px
+  );
+  transition: transform 100ms ease-out;
+}
+@media (pointer: fine) {
+  .auth-split [data-ra-element="formSubmitButton"]:hover:not(:disabled) {
+    background-image: linear-gradient(
+      225deg,
+      transparent 7.07px,
+      color-mix(in oklab, var(--primary-fill) 88%, var(--on-primary)) 7.07px
+    );
+  }
+}
+.auth-split [data-ra-element="formSubmitButton"]:active:not(:disabled) {
+  transform: scale(0.97);
+}
+/* The cap stays while disabled (so the key's width holds); the button's own
+   disabled treatment dims it with the label. */
+.auth-split [data-ra-element="formSubmitButton"]::after {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 24px;
+  margin-left: 4px;
+  background-color: var(--on-primary);
+  mask-image: var(--ra-dither-tile);
+  mask-size: 8px 8px;
+  -webkit-mask-image: var(--ra-dither-tile);
+  -webkit-mask-size: 8px 8px;
+}
+@media (forced-colors: active) {
+  .auth-split [data-ra-element="cardTitle"]::after,
+  .auth-split [data-ra-element="formSubmitButton"]::after {
+    display: none;
+  }
+  .auth-split [data-ra-element="formSubmitButton"] {
+    background-image: none;
+    border: 1px solid ButtonText;
+  }
+}
+
+/* Secondary keys: a 2px line-strong edge, an ink tint on hover. */
+.auth-split [data-ra-element="socialButton"] {
+  border-color: var(--line-strong);
+  background: transparent;
+}
+@media (pointer: fine) {
+  .auth-split [data-ra-element="socialButton"]:hover {
+    background: var(--tint-1);
+  }
+}
+
+.auth-split [data-ra-root] a {
+  color: var(--accent-ink);
+  text-decoration-color: var(--line-strong);
+}
+
+/* 44px targets on touch for the SDK's links, tabs and footer buttons (9.1). */
+@media (pointer: coarse) {
+  .auth-split [data-ra-root] a,
+  .auth-split [data-ra-element="tab"],
+  .auth-split [data-ra-element="cardFooter"] button {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .auth-split [data-ra-element="tab"] {
+    justify-content: center;
+  }
 }
 
 .auth-split [data-ra-element="socialButtonsRoot"] {
@@ -1607,7 +1157,7 @@
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 20px;
 }
 
 .auth-split [data-ra-element="socialButton"] {
@@ -1624,17 +1174,111 @@
 }
 
 .auth-split [data-ra-element="dividerRow"] {
-  margin: 14px 0;
+  margin: 20px 0;
 }
 
 .auth-split [data-ra-element="tabsRoot"] {
-  margin-bottom: 14px;
+  margin-bottom: 24px;
 }
 
 .auth-split [data-ra-element="formField"] {
-  margin-bottom: 12px;
+  margin-bottom: 20px;
 }
 
-.auth-split [data-ra-element="cardFooter"] {
-  text-align: center;
+/*
+ * Drawer motion (Base UI Drawer, ui/drawer.tsx). Transform and opacity only,
+ * on the iOS drawer curve, under 300ms. Base UI drives the drag through
+ * --drawer-swipe-movement-* and, on release, sets --drawer-swipe-strength
+ * (0.1-1) from the flick velocity, so a fast flick finishes faster than a
+ * slow drag: the exit carries the finger's momentum instead of a fixed tween.
+ * Reduced motion drops the slide and keeps a short fade.
+ */
+[data-rm-drawer] {
+  transition:
+    transform 280ms var(--rm-ease-drawer),
+    opacity 200ms var(--rm-ease-out);
+}
+
+[data-rm-drawer][data-swipe-direction="down"],
+[data-rm-drawer][data-swipe-direction="up"] {
+  transform: translate3d(
+    0,
+    calc(
+      var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px)
+    ),
+    0
+  );
+}
+
+[data-rm-drawer][data-swipe-direction="left"],
+[data-rm-drawer][data-swipe-direction="right"] {
+  transform: translate3d(var(--drawer-swipe-movement-x, 0px), 0, 0);
+}
+
+[data-rm-drawer][data-swipe-direction="down"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(0, calc(100% + 2px), 0);
+}
+
+[data-rm-drawer][data-swipe-direction="up"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(0, calc(-100% - 2px), 0);
+}
+
+[data-rm-drawer][data-swipe-direction="left"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(calc(-100% - 2px), 0, 0);
+}
+
+[data-rm-drawer][data-swipe-direction="right"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(calc(100% + 2px), 0, 0);
+}
+
+[data-rm-drawer-overlay] {
+  opacity: calc(1 - var(--drawer-swipe-progress, 0));
+  transition: opacity 280ms var(--rm-ease-out);
+}
+
+/* Snap-point sheets keep a full scrim at every resting point. */
+[data-rm-drawer-overlay][data-rm-snap] {
+  opacity: 1;
+}
+
+[data-rm-drawer-overlay]:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+
+/* Exit: 240ms for a button/Escape/back close, shorter the harder the flick. */
+[data-rm-drawer][data-ending-style],
+[data-rm-drawer-overlay][data-ending-style] {
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 240ms);
+}
+
+/* Follow the finger; the release transition wins once data-ending-style lands. */
+[data-rm-drawer][data-swiping]:not([data-ending-style]),
+[data-rm-drawer-overlay][data-swiping]:not([data-ending-style]) {
+  transition-duration: 0ms;
+}
+
+[data-rm-drawer][data-swiping] {
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-rm-drawer][data-swipe-direction]:is(
+      [data-starting-style],
+      [data-ending-style]
+    ) {
+    transform: none;
+    opacity: 0;
+  }
 }

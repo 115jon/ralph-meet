@@ -4,20 +4,25 @@ import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Label badges are tints, never solid fills: h-5, 2px corners, text-ui-xs
+ * 500. A status word is an `LedLabel` (ui/led), not a badge. The solid red
+ * square count chip is `CountBadge` below, for mentions and unread DMs only.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center justify-center rounded-full border border-transparent px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
+  "inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-sm border border-transparent px-1.5 text-ui-xs font-medium [&>svg]:pointer-events-none [&>svg]:size-3 aria-invalid:border-danger-ink",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
-        outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+        default: "bg-accent-tint text-accent-ink",
+        secondary: "bg-tint-2 text-ink-1",
+        destructive: "bg-danger-tint text-danger-ink",
+        live: "bg-live-tint text-live-ink",
+        talk: "bg-talk-tint text-success-ink",
+        warning: "bg-warning-tint text-warning-ink",
+        outline: "border-line-strong text-ink-1",
+        ghost: "text-ink-2",
+        link: "text-accent-ink underline-offset-[3px] [a&]:pointer-fine:hover:underline",
       },
     },
     defaultVariants: {
@@ -45,4 +50,40 @@ function Badge({
   );
 }
 
-export { Badge, badgeVariants };
+/**
+ * C1 square count chip (DESIGN.md, Badge · LED): min 18x18, 2px corners,
+ * --badge, Martian 11 600. Counts above `max` read "max+". Pass `ring` to cut it out
+ * of the ply it overlaps (rail tiles, avatars).
+ */
+function CountBadge({
+  count,
+  max = 99,
+  ring,
+  className,
+  ...props
+}: Omit<React.ComponentProps<"span">, "children"> & {
+  count: number;
+  max?: number;
+  ring?: "ply-0" | "ply-1" | "ply-2" | "ply-3";
+}) {
+  if (count <= 0) return null;
+  const label = count > max ? `${max}+` : String(count);
+  return (
+    <span
+      data-slot="count-badge"
+      className={cn(
+        "badge-count",
+        ring === "ply-0" && "ring-2 ring-ply-0",
+        ring === "ply-1" && "ring-2 ring-ply-1",
+        ring === "ply-2" && "ring-2 ring-ply-2",
+        ring === "ply-3" && "ring-2 ring-ply-3",
+        className,
+      )}
+      {...props}
+    >
+      {label}
+    </span>
+  );
+}
+
+export { Badge, badgeVariants, CountBadge };

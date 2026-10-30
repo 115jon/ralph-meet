@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import { Num } from "@/components/ui/num";
 
 const MAX_VISIBLE_AVATARS = 4;
 const MAX_VISIBLE_NAMES = 2;
@@ -44,7 +45,7 @@ export function StreamWatcherList({
         "min-w-0",
         isInline
           ? "flex min-w-0 items-center gap-2"
-          : "flex max-w-full items-center gap-2 rounded-2xl border border-rm-border/80 bg-rm-bg-primary/72 px-2.5 py-1.5 shadow-xl backdrop-blur-md",
+          : "flex max-w-full items-center gap-2 rounded-lg border border-line-strong bg-ply-3 px-2.5 py-1.5 shadow-float",
         className,
       )}
     >
@@ -58,8 +59,8 @@ export function StreamWatcherList({
           <div
             key={watcher.userId}
             className={cn(
-              "overflow-visible rounded-full border bg-rm-bg-surface",
-              isInline ? "h-6 w-6 border-white/20" : "h-6 w-6 border-rm-border",
+              "size-6 overflow-visible rounded-avatar bg-ply-2",
+              isInline ? "border border-white/20" : "ring-2 ring-ply-3",
             )}
             title={watcher.name}
           >
@@ -70,7 +71,7 @@ export function StreamWatcherList({
                 display={watcher.avatarDisplay}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-rm-text">
+              <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-tint-3 font-display text-[11px] leading-none font-extrabold text-ink-1">
                 {watcher.name[0]?.toUpperCase() ?? "?"}
               </div>
             )}
@@ -79,30 +80,30 @@ export function StreamWatcherList({
         {overflowCount > 0 && (
           <div
             className={cn(
-              "flex items-center justify-center rounded-full border text-ui-2xs font-bold",
+              "flex size-6 items-center justify-center rounded-avatar",
               isInline
-                ? "h-6 w-6 border-white/20 bg-white/10 text-white"
-                : "h-6 w-6 border-rm-border bg-rm-bg-elevated text-rm-text",
+                ? "border border-white/20 bg-white/10 text-white"
+                : "bg-ply-4 text-ink-1 ring-2 ring-ply-3",
             )}
             title={`${overflowCount} more viewers`}
           >
-            +{overflowCount}
+            <Num>+{overflowCount}</Num>
           </div>
         )}
       </div>
       <div className="min-w-0">
         <div
           className={cn(
-            "font-bold uppercase tracking-[0.18em]",
-            isInline ? "text-ui-2xs text-white/55" : "text-ui-2xs text-primary",
+            "text-ui-xs font-semibold",
+            isInline ? "text-white/70" : "text-ink-1",
           )}
         >
           {viewerLabel}
         </div>
         <div
           className={cn(
-            "truncate font-semibold",
-            isInline ? "text-ui-2xs text-white" : "text-ui-2xs text-rm-text",
+            "truncate text-ui-xs font-medium",
+            isInline ? "text-white" : "text-ink-2",
           )}
         >
           <InlineEmojiText text={namesLabel} />

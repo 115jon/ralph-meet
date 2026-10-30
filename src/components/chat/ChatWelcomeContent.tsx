@@ -1,9 +1,10 @@
-import { DitherField } from "@/components/ui/DitherField";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { memo, useMemo } from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Hash } from "./Icons";
+import { avatarShape } from "@/components/ui/avatar-shape";
+import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 export const ChatWelcomeContent = memo(function ChatWelcomeContent({
@@ -24,84 +25,61 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
 
   if (!channelId) return null;
 
+  const dmName =
+    dmRecipient?.display_name ?? dmRecipient?.username ?? channelName;
+
+  // The start of a conversation: one glyph or avatar, the name at 18/600 and
+  // one plain line. No pep talk; the seam below hands over to the messages.
   return (
-    <div className="flex flex-col items-start px-4 pt-2 text-left">
+    <div className="flex flex-col items-start gap-1 px-4 pt-2 text-left">
       {isDM ? (
         <>
-          <div className="mb-5 flex overflow-hidden rounded-full ring-1 ring-rm-border shadow-md">
+          <div
+            className={cn(
+              "mb-2 flex size-14",
+              avatarShape(
+                dmRecipient?.avatar_url && dmRecipient.avatar_display,
+              ),
+            )}
+          >
             {dmRecipient?.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(dmRecipient.avatar_url)}
                 alt=""
                 display={dmRecipient.avatar_display}
-                className="h-20 w-20"
+                className="size-14"
               />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center bg-rm-accent text-ui-2xl font-semibold text-primary-foreground">
+              <div className="flex size-full items-center justify-center bg-tint-3 font-display text-ui-xl font-extrabold text-ink-1">
                 {channelName?.[0]?.toUpperCase() ?? "?"}
               </div>
             )}
           </div>
-          <h1 className="mb-0 font-display text-display text-rm-text-primary text-balance">
-            <InlineEmojiText
-              text={
-                dmRecipient?.display_name ??
-                dmRecipient?.username ??
-                channelName
-              }
-            />
+          <h1 className="font-display-tuned text-ui-lg font-extrabold tracking-[-0.01em] text-balance text-ink-1">
+            <InlineEmojiText text={dmName} />
           </h1>
-          <h2 className="mb-3 text-ui-md font-medium text-rm-text-muted">
+          <p className="text-ui-sm text-ink-3">
             @{dmRecipient?.username ?? channelName.toLowerCase()}
-          </h2>
-          <p className="max-w-[60ch] text-ui-base text-rm-text-muted text-pretty">
-            This is the absolute beginning of your direct message history with{" "}
-            <span className="font-semibold text-rm-text-secondary">
-              <InlineEmojiText
-                text={
-                  dmRecipient?.display_name ??
-                  dmRecipient?.username ??
-                  channelName
-                }
-              />
-            </span>
-            . Be kind, be bold, and let the conversation flow.
           </p>
-          <div className="mt-5 flex gap-2">
-            <button
-              type="button"
-              className="h-8 rounded-md border border-rm-border bg-rm-bg-elevated px-3 text-ui-sm font-medium text-rm-text transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
-            >
-              View Profile
-            </button>
-            <button
-              type="button"
-              className="h-8 rounded-md border border-destructive/30 bg-destructive/10 px-3 text-ui-sm font-medium text-destructive transition-ui hover:bg-destructive/15 enabled:active:scale-[0.96]"
-            >
-              Block User
-            </button>
-          </div>
+          <p className="mt-2 max-w-[72ch] text-ui-sm text-pretty text-ink-2">
+            This is the start of your conversation with{" "}
+            <InlineEmojiText text={dmName} />.
+          </p>
         </>
       ) : (
         <>
-          <div className="relative mb-5 flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-rm-border shadow-sm">
-            <DitherField cell={4} intensity={0.6} seed={11} />
-            <Hash
-              className="relative z-10 h-9 w-9 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
-              strokeWidth={2.25}
-            />
+          <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-tint-1 text-ink-2">
+            <Icon name="textChannel" size="lg" />
           </div>
-          <h3 className="mb-2 font-display text-display text-rm-text-primary text-balance">
-            <InlineEmojiText text={`Welcome to #${channelName}`} />
+          <h3 className="font-display-tuned text-ui-lg font-extrabold tracking-[-0.01em] text-balance text-ink-1">
+            <InlineEmojiText text={`#${channelName}`} />
           </h3>
-          <p className="max-w-[60ch] text-ui-base text-rm-text-muted text-pretty">
-            <InlineEmojiText
-              text={`This is the absolute beginning of the #${channelName} channel. Start a conversation, forge new paths, and let your frequencies align.`}
-            />
+          <p className="max-w-[72ch] text-ui-sm text-pretty text-ink-2">
+            <InlineEmojiText text={`This is the start of #${channelName}.`} />
           </p>
         </>
       )}
-      <div className="mt-6 h-px w-full bg-gradient-to-r from-rm-border to-transparent" />
+      <div aria-hidden className="mt-5 h-px w-full bg-line" />
     </div>
   );
 });

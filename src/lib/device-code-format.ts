@@ -42,6 +42,27 @@ export function activateReturnPath(code: string): string {
 }
 
 /**
+ * Reverse of activateReturnPath, for sign-in: `null` when the return target
+ * is not /activate, otherwise the waiting device's code ("" if it has none).
+ */
+export function deviceCodeFromReturnPath(
+  returnPath: string | null | undefined,
+): string | null {
+  if (!returnPath) return null;
+  let url: URL;
+  try {
+    url = new URL(returnPath, "http://local.invalid");
+  } catch {
+    return null;
+  }
+  if (url.origin !== "http://local.invalid" || url.pathname !== "/activate") {
+    return null;
+  }
+  const code = formatDeviceCode(url.searchParams.get("code"));
+  return isCompleteDeviceCode(code) ? code : "";
+}
+
+/**
  * Where "Not you?" sends the browser after signing out:
  * "/sign-in?redirect_url=%2Factivate%3Fcode%3DXXXX-XXXX". It is passed to the
  * SDK's signOut as the callback so its afterSignOutUrl ("/sign-in", no query)

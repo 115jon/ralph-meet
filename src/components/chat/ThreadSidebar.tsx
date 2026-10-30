@@ -1,7 +1,12 @@
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
+import { describeApiError } from "@/lib/api-errors";
+import { SidePanel, type SidePanelMode } from "@/components/ui/side-panel";
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { Message } from "@/lib/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, X } from "./Icons";
 import MessageItem from "./MessageItem";
 
 interface Props {
@@ -16,23 +21,10 @@ interface Props {
   onJump: (messageId: string) => void;
   onBan?: (userId: string, username: string) => void;
   onClose: () => void;
-}
-
-function _formatDate(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  const time = d.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  if (d.toDateString() === today.toDateString()) return `Today at ${time}`;
-  if (d.toDateString() === yesterday.toDateString())
-    return `Yesterday at ${time}`;
-  return `${d.toLocaleDateString([], { month: "2-digit", day: "2-digit", year: "numeric" })} ${time}`;
+  /** False while the panel animates out (the host keeps it mounted). */
+  open?: boolean;
+  /** Force one panel form (fixtures, tests). */
+  forceMode?: SidePanelMode;
 }
 
 export default function ThreadSidebar({
@@ -47,6 +39,8 @@ export default function ThreadSidebar({
   onJump,
   onBan,
   onClose,
+  open = true,
+  forceMode,
 }: Props) {
   const [root, setRoot] = useState<Message | null>(null);
   const [replies, setReplies] = useState<Message[]>([]);
@@ -65,7 +59,7 @@ export default function ThreadSidebar({
         setRoot(data.root);
         setReplies(data.replies);
       } catch (err: any) {
-        if (!silent) setError(err.message || "Failed to load thread");
+        if (!silent) setError(describeApiError(err, "load this thread"));
       } finally {
         if (!silent) setLoading(false);
       }
@@ -164,44 +158,53 @@ export default function ThreadSidebar({
   );
 
   return (
-    <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:border-l-0 max-md:shadow-2xl">
-      {/* Header */}
-      <div
-        className="flex min-h-12 items-center justify-between border-b border-rm-border px-4"
-        style={{
-          paddingTop: "var(--safe-area-top, 0px)",
-          minHeight: "calc(48px + var(--safe-area-top, 0px))",
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-bold text-rm-text">Thread</h2>
-          <span className="text-xs text-rm-text-muted">
-            {replies.length} {replies.length === 1 ? "reply" : "replies"}
+    <SidePanel
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Thread"
+      titleAdornment={
+        loading || error ? null : (
+          <span className="shrink-0 text-ui-xs text-ink-3">
+            <Num>{replies.length}</Num>{" "}
+            {replies.length === 1 ? "reply" : "replies"}
           </span>
-        </div>
-        <button
-          onClick={onClose}
-          className="rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text outline-none"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
+        )
+      }
+      forceMode={forceMode}
+    >
       {/* Thread body */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {loading ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-rm-text-muted" />
-          </div>
+          <EmptyState
+            size="sm"
+            loading
+            className="h-full"
+            title="Loading thread"
+          />
         ) : error ? (
-          <div className="flex h-full items-center justify-center text-sm text-destructive">
-            {error}
+          <div className="flex flex-col items-start gap-3 p-4">
+            <p
+              role="alert"
+              className="flex w-full items-start gap-2 rounded-md bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink"
+            >
+              <Icon name="warning" size="sm" className="mt-px shrink-0" />
+              <span className="min-w-0">{error}</span>
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void fetchThread()}
+            >
+              Try again
+            </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-1 pb-4">
-            {/* Root message */}
+          <div className="flex flex-col pb-4">
+            {/* Root message: the thread's trunk, on the panel ply with a seam below */}
             {root && (
-              <div className="rounded-xl border border-rm-border bg-rm-bg-surface py-2 mb-2">
+              <div className="border-b border-line py-3">
                 <MessageItem
                   id={`thread-root-${root.id}`}
                   message={root}
@@ -219,16 +222,17 @@ export default function ThreadSidebar({
               </div>
             )}
 
-            {/* Divider */}
-            {replies.length > 0 && (
-              <div className="my-2 flex items-center gap-2 px-2">
-                <div className="h-px flex-1 bg-rm-border" />
-                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-                  {replies.length} {replies.length === 1 ? "Reply" : "Replies"}
-                </span>
-                <div className="h-px flex-1 bg-rm-border" />
-              </div>
-            )}
+            {/* Replies label */}
+            {replies.length > 0 ? (
+              <p className="px-4 pt-3 pb-1 text-ui-xs text-ink-3">
+                <Num>{replies.length}</Num>{" "}
+                {replies.length === 1 ? "reply" : "replies"}
+              </p>
+            ) : root ? (
+              <p className="px-4 py-6 text-center text-ui-sm text-ink-3">
+                No replies yet. Start the thread below.
+              </p>
+            ) : null}
 
             {/* Replies */}
             {replies.map((reply, idx) => {
@@ -270,7 +274,7 @@ export default function ThreadSidebar({
 
       {/* Reply input */}
       <ThreadReplyInput onSend={handleSendReply} />
-    </div>
+    </SidePanel>
   );
 }
 
@@ -292,11 +296,8 @@ function ThreadReplyInput({
   };
 
   return (
-    <div
-      className="border-t border-rm-border px-3 pt-2.5"
-      style={{ paddingBottom: "max(10px, var(--safe-area-bottom, 0px))" }}
-    >
-      <div className="flex items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/20 transition-ui">
+    <div className="shrink-0 border-t border-line px-3 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))]">
+      <div className="flex min-h-11 items-center gap-2 rounded-lg border border-line bg-ply-2 py-1.5 pr-1.5 pl-3 transition-colors duration-(--dur-1) focus-within:border-line-strong">
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -308,15 +309,16 @@ function ThreadReplyInput({
             }
           }}
           placeholder="Reply to thread…"
-          className="flex-1 bg-transparent text-sm text-rm-text outline-none placeholder:text-rm-text-muted/30"
+          className="min-w-0 flex-1 bg-transparent text-ui-base text-ink-1 outline-none placeholder:text-ink-3 max-md:text-ui-md"
         />
-        <button
+        <Button
+          size="sm"
           onClick={handleSubmit}
-          disabled={!value.trim() || sending}
-          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground transition-ui hover:brightness-110 disabled:opacity-30"
+          disabled={!value.trim()}
+          loading={sending}
         >
-          {sending ? "…" : "Send"}
-        </button>
+          Send
+        </Button>
       </div>
     </div>
   );

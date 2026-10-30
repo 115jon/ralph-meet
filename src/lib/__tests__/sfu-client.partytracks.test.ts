@@ -590,18 +590,27 @@ describe("SFUClient PartyTracks facade", () => {
       createPartyTracksTransport: vi.fn(() => transport),
     });
     vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
-    const startInboundSentinel = vi
-      .spyOn(client.audioSentinel, "start")
+    const startStatsHub = vi
+      .spyOn(client.statsHub, "start")
       .mockImplementation(() => {});
-    const startOutboundSentinel = vi
-      .spyOn(client.outboundAudioSentinel, "start")
-      .mockImplementation(() => {});
-    const startTrackStats = vi
-      .spyOn(client.stats, "startStatsMonitoring")
-      .mockImplementation(() => {});
-    const startConnectionStats = vi
-      .spyOn(client.stats, "startConnectionStatsMonitoring")
-      .mockImplementation(() => {});
+    const resetInboundSentinel = vi.spyOn(
+      client.audioSentinel,
+      "resetMonitoring",
+    );
+    const resetOutboundSentinel = vi.spyOn(
+      client.outboundAudioSentinel,
+      "resetMonitoring",
+    );
+    const beginConnectionStats = vi.spyOn(
+      client.stats,
+      "beginConnectionStatsSession",
+    );
+    // The sentinels no longer own timers: the hub is the only poller.
+    const startInboundSentinel = vi.spyOn(client.audioSentinel, "start");
+    const startOutboundSentinel = vi.spyOn(
+      client.outboundAudioSentinel,
+      "start",
+    );
     client.roomGW.emit("media-ready", {
       participantId: "local-participant",
       voiceToken: "voice-token",
@@ -612,11 +621,53 @@ describe("SFUClient PartyTracks facade", () => {
       new MockRTCPeerConnection() as unknown as RTCPeerConnection,
     );
 
-    expect(startInboundSentinel).toHaveBeenCalledOnce();
-    expect(startOutboundSentinel).toHaveBeenCalledOnce();
-    expect(startTrackStats).toHaveBeenCalledOnce();
-    expect(startConnectionStats).toHaveBeenCalledOnce();
+    expect(startStatsHub).toHaveBeenCalledOnce();
+    expect(resetInboundSentinel).toHaveBeenCalled();
+    expect(resetOutboundSentinel).toHaveBeenCalled();
+    expect(beginConnectionStats).toHaveBeenCalledOnce();
+    expect(startInboundSentinel).not.toHaveBeenCalled();
+    expect(startOutboundSentinel).not.toHaveBeenCalled();
     client.disconnect("component-unmount");
+  });
+
+  it("fans one stats snapshot out to every consumer per hub tick", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = new TestPartyTracksTransport();
+      const client = new SFUClient("test-room", {
+        createPartyTracksTransport: vi.fn(() => transport),
+      });
+      vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+      const pc = new MockRTCPeerConnection() as unknown as RTCPeerConnection;
+      const getStats = vi.fn(
+        async () => new Map() as unknown as RTCStatsReport,
+      );
+      (pc as unknown as { getStats: typeof getStats }).getStats = getStats;
+      const trackStats = vi.spyOn(client.stats, "ingestTrackStats");
+      const connectionStats = vi.spyOn(client.stats, "ingestConnectionStats");
+      const inbound = vi.spyOn(client.audioSentinel, "ingest");
+      const outbound = vi.spyOn(client.outboundAudioSentinel, "ingest");
+      client.roomGW.emit("media-ready", {
+        participantId: "local-participant",
+        voiceToken: "voice-token",
+        iceServers: [{ urls: ["stun:example.test"] }],
+      });
+      transport.peerConnection$.next(pc);
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getStats).toHaveBeenCalledTimes(1);
+      // 10 s at the healthy 2 s cadence: five more walks, not twenty.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(getStats).toHaveBeenCalledTimes(6);
+      for (const consumer of [trackStats, connectionStats, inbound, outbound]) {
+        expect(consumer).toHaveBeenCalledTimes(6);
+      }
+      client.disconnect("component-unmount");
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(getStats).toHaveBeenCalledTimes(6);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails closed when browser publication has no PartyTracks media session", async () => {

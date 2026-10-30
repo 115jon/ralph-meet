@@ -1,11 +1,10 @@
 "use client";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { CALL_ACCEPT } from "@/components/ui/dock";
+import { TileAvatar } from "@/components/voice/TileParts";
+import { TILE_SURFACE, useTileTintStyle } from "@/components/voice/tile-utils";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -15,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUserResolution } from "@/hooks/useUserResolution";
-import { getAuthAssetUrl } from "@/lib/platform";
 import { resumeSoundContext } from "@/lib/sounds";
 import {
   disposePrewarmedAudioContext,
@@ -23,14 +21,19 @@ import {
 } from "@/lib/voice/audio-pipeline";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
-import { Phone, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { AvatarImage } from "./AvatarImage";
+import { Icon } from "@/components/ui/icon";
+import { LedLabel } from "@/components/ui/led";
+import { useEffect, useRef, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
 
 /**
- * Simple centered popup shown to the callee when receiving an incoming call.
- * No overlay or blur — just a floating card with caller info and two buttons.
+ * The incoming call card (talk-tree-spec §8 Voice): a 320px float at the
+ * top-right, no scrim, so whatever you were doing stays readable. The caller
+ * is drawn as a call tile (their colour, square avatar and the ringing ring,
+ * the one loop allowed in a call, unmounted when ringing ends), named in
+ * Bricolage with a Ringing LED word. Keys are 48: Decline is the solid
+ * danger fill, Accept the talk-green key. Focus lands on Accept; Escape
+ * declines.
  */
 export function IncomingCallModal() {
   const {
@@ -52,6 +55,10 @@ export function IncomingCallModal() {
     renderedCall?.remoteUser.id ?? remoteUser?.id,
     renderedCall?.remoteUser ?? remoteUser,
   );
+  const tintStyle = useTileTintStyle(
+    renderedCall?.remoteUser.id ?? remoteUser?.id,
+  );
+  const acceptRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (status === "ringing_incoming" && remoteUser && callId) {
@@ -100,10 +107,6 @@ export function IncomingCallModal() {
     gateway?.sendCallDecline(activeCall.callId);
   };
 
-  const avatarSrc = activeCaller.avatarUrl
-    ? getAuthAssetUrl(activeCaller.avatarUrl)
-    : undefined;
-
   return (
     <Dialog
       open={dialogOpen}
@@ -114,65 +117,63 @@ export function IncomingCallModal() {
         <DialogSurface
           showCloseButton={false}
           forceMount
-          className="fixed inset-0 z-50 flex items-center justify-center bg-transparent p-4 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
+          onOpenAutoFocus={(event) => {
+            // Enter answers, not declines: focus lands on Accept.
+            event.preventDefault();
+            acceptRef.current?.focus();
+          }}
+          className="pointer-events-none fixed inset-0 z-100 flex items-start justify-end bg-transparent px-4 pt-[max(1rem,var(--safe-area-top,0px))] pb-[max(1rem,var(--safe-area-bottom,0px))] transition-opacity duration-(--dur-3) data-[state=closed]:opacity-0"
         >
           <div
             data-state={dialogOpen ? "open" : "closed"}
-            className="pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+            data-incoming-call=""
+            style={tintStyle}
+            className="pointer-events-auto w-80 max-w-full overflow-hidden rounded-[2px] border border-line-strong border-t-2 border-t-ink-1 bg-ply-3 shadow-modal animate-in fade-in slide-in-from-top-2 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out"
           >
-            {/* Avatar with theme-aware pulsing outline */}
-            <div className="relative mb-4">
-              <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-visible bg-rm-bg-surface">
-                {avatarSrc ? (
-                  <AvatarImage
-                    src={avatarSrc}
-                    alt={activeCaller.displayName}
-                    display={activeCaller.avatarDisplay}
-                  />
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-rm-text-muted">
-                    {activeCaller.displayName[0]?.toUpperCase()}
-                  </div>
-                )}
+            {/* The caller as a tile: their colour, their avatar, the ring. */}
+            <div
+              className={cn(
+                "flex items-center gap-3 border-b border-line p-4",
+                TILE_SURFACE,
+              )}
+            >
+              <TileAvatar
+                name={activeCaller.displayName}
+                avatar={activeCaller.avatarUrl}
+                avatarDisplay={activeCaller.avatarDisplay}
+                sizeClassName="size-10"
+                initialClassName="text-ui-md"
+                ringing={dialogOpen}
+              />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="truncate text-[18px] leading-6 font-extrabold tracking-[-0.02em] text-ink-1">
+                  <InlineEmojiText text={activeCaller.displayName} />
+                </DialogTitle>
+                <DialogDescription className="mt-0.5 flex text-[11px] leading-[14px]">
+                  <LedLabel state="idle">Incoming voice call</LedLabel>
+                </DialogDescription>
               </div>
             </div>
 
-            {/* Caller info */}
-            <DialogTitle className="text-sm font-bold text-rm-text">
-              <InlineEmojiText text={activeCaller.displayName} />
-            </DialogTitle>
-            <DialogDescription className="text-xs text-rm-text-muted mt-0.5 mb-5">
-              Incoming Call...
-            </DialogDescription>
-
-            {/* Buttons */}
-            <div className="flex items-center gap-3">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DialogClose asChild>
-                      <button className="flex h-10 w-16 items-center justify-center rounded-md bg-destructive hover:bg-destructive/90 text-white transition-colors">
-                        <X className="h-5 w-5" />
-                      </button>
-                    </DialogClose>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Dismiss</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={handleAccept}
-                      className="flex h-10 w-16 items-center justify-center rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-                    >
-                      <Phone className="h-5 w-5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Join Call</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            <div className="flex items-center gap-2 p-3">
+              <DialogClose asChild>
+                <Button variant="danger" size="lg" className="flex-1">
+                  <Icon name="disconnect" size="sm" />
+                  Decline
+                </Button>
+              </DialogClose>
+              <Button
+                ref={acceptRef}
+                size="lg"
+                // The talk-green key is a solid C1 key: the notch cap is the
+                // primary's, and it paints the fill through --key-fill.
+                notch={false}
+                onClick={handleAccept}
+                className={cn("flex-1", CALL_ACCEPT)}
+              >
+                <Icon name="call" state="active" size="sm" />
+                Accept
+              </Button>
             </div>
           </div>
         </DialogSurface>

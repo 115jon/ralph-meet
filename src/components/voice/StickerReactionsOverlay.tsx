@@ -19,6 +19,8 @@ interface StickerItem {
   contentType: string;
   className: string;
   style: React.CSSProperties;
+  /** Reduced motion: no travel, an opacity fade in place (10.5). */
+  fade?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -30,6 +32,23 @@ interface StickerItem {
  * animation finishes.  Must be >= the longest keyframe duration in global CSS.
  */
 const CLEANUP_DELAY_MS = 4000;
+
+/** Reduced-motion stand-in for the travel keyframes: fade in, hold, fade out. */
+const FADE_KEYFRAMES: Keyframe[] = [
+  { opacity: 0 },
+  { opacity: 1, offset: 0.15 },
+  { opacity: 1, offset: 0.85 },
+  { opacity: 0 },
+];
+const FADE_DURATION_MS = 2200;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -73,7 +92,19 @@ export function StickerReactionsOverlay({
         typeof event.displayMode === "string" ? event.displayMode : "single";
       const newItems: StickerItem[] = [];
 
-      if (displayMode === "single") {
+      if (prefersReducedMotion()) {
+        // One sticker that fades in place, whatever the mode: bursts, rain
+        // and bounces are all travel.
+        newItems.push({
+          id: crypto.randomUUID(),
+          url: stickerUrl,
+          contentType,
+          className:
+            "absolute bottom-4 w-16 h-16 -translate-x-1/2 pointer-events-none object-contain opacity-0",
+          style: { left: `${(Math.random() * 60 + 20).toFixed(1)}%` },
+          fade: true,
+        });
+      } else if (displayMode === "single") {
         const id = crypto.randomUUID();
         const rot = (Math.random() * 40 - 20).toFixed(1);
         const left = (Math.random() * 60 + 20).toFixed(1);
@@ -134,15 +165,17 @@ export function StickerReactionsOverlay({
           });
         }
       } else if (displayMode === "bounce") {
+        // "bounce" is the wire name; it lands rather than bounces (spec §6:
+        // no overshoot). A short ease-out entrance, a hold, a faster exit.
         const id = crypto.randomUUID();
         const left = (Math.random() * 60 + 20).toFixed(1);
-        const rot = (Math.random() * 60 - 30).toFixed(1);
+        const rot = (Math.random() * 16 - 8).toFixed(1);
         newItems.push({
           id,
           url: stickerUrl,
           contentType,
           className:
-            "animate-reaction-bounce absolute top-0 w-16 h-16 pointer-events-none object-contain z-50",
+            "animate-reaction-land absolute top-1/4 w-16 h-16 -translate-x-1/2 pointer-events-none object-contain z-50",
           style: {
             left: `${left}%`,
             "--rot": `${rot}deg`,
@@ -182,6 +215,8 @@ function ReactionMedia({ item }: { item: StickerItem }) {
   const isVideo = item.contentType === "video/mp4";
   const src = getVoiceReactionMediaUrl(item.url, item.contentType);
 
+  const fadeRef = useRef<HTMLElement | null>(null);
+
   // Auto-play as soon as the element mounts
   useEffect(() => {
     const el = videoRef.current;
@@ -191,10 +226,24 @@ function ReactionMedia({ item }: { item: StickerItem }) {
     });
   }, []);
 
+  useEffect(() => {
+    const el = fadeRef.current;
+    if (!item.fade || !el || typeof el.animate !== "function") return;
+    const animation = el.animate(FADE_KEYFRAMES, {
+      duration: FADE_DURATION_MS,
+      easing: "ease-out",
+      fill: "forwards",
+    });
+    return () => animation.cancel();
+  }, [item.fade]);
+
   if (isVideo) {
     return (
       <video
-        ref={videoRef}
+        ref={(el) => {
+          videoRef.current = el;
+          fadeRef.current = el;
+        }}
         src={src}
         className={item.className}
         style={item.style}
@@ -214,6 +263,9 @@ function ReactionMedia({ item }: { item: StickerItem }) {
 
   return (
     <img
+      ref={(el) => {
+        fadeRef.current = el;
+      }}
       src={src}
       alt="Reaction"
       className={item.className}

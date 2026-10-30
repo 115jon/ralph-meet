@@ -21,20 +21,12 @@ vi.mock("../SettingsAccountTab", () => ({
   default: () => <div>Profile settings</div>,
 }));
 
-function assertContentIsInsideWrapper(markup: string, wrapperClass: string) {
-  const wrapperStart = markup.indexOf(`class="${wrapperClass}`);
-  expect(wrapperStart).toBeGreaterThanOrEqual(0);
-  expect(
-    markup.slice(wrapperStart).indexOf('data-slot="dialog-surface"'),
-  ).toBeGreaterThan(0);
-}
-
 describe("modal portal positioning", () => {
   afterEach(() => {
     cleanup();
   });
 
-  it("keeps avatar picker content inside its fixed layer", () => {
+  it("renders the avatar picker as a top-anchored form-width dialog", () => {
     render(
       <AvatarPickerModal
         open
@@ -43,25 +35,29 @@ describe("modal portal positioning", () => {
         onUpload={() => {}}
       />,
     );
-    const markup = document.body.innerHTML;
-
-    assertContentIsInsideWrapper(
-      markup,
-      "fixed inset-0 z-60 flex items-center justify-center overflow-y-auto p-4",
-    );
+    const surface = document.body.querySelector('[data-slot="dialog-content"]');
+    // Stacking over settings is automatic (data-stacked), not a class.
+    expect(surface?.getAttribute("data-size")).toBe("md");
+    expect(surface?.getAttribute("data-placement")).toBe("top");
+    expect(
+      document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
+    ).toContain("bg-scrim");
   });
 
   it("keeps profile editor content inside its fixed layer", () => {
     render(<ProfileEditorModal open onClose={() => {}} />);
-    const markup = document.body.innerHTML;
+    const surface = document.body.querySelector('[data-slot="dialog-surface"]');
 
-    assertContentIsInsideWrapper(
-      markup,
-      "fixed inset-0 z-50 flex items-center justify-center bg-black/56",
-    );
+    // One frame: full-screen fixed layer on phones, workbench size above md.
+    expect(surface?.className).toContain("fixed inset-0");
+    expect(surface?.className).toContain("z-50");
+    expect(surface).toHaveTextContent("Profile settings");
+    expect(
+      document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
+    ).toContain("bg-scrim");
   });
 
-  it("keeps upload sound content inside its fixed layer", () => {
+  it("renders upload sound as a form-width dialog over the shared scrim", () => {
     render(
       <UploadSoundModal
         open
@@ -70,11 +66,11 @@ describe("modal portal positioning", () => {
         isUploading={false}
       />,
     );
-    const markup = document.body.innerHTML;
-
-    assertContentIsInsideWrapper(
-      markup,
-      "fixed inset-0 z-50 flex items-center justify-center bg-black/50",
-    );
+    const surface = document.body.querySelector('[data-slot="dialog-content"]');
+    expect(surface).not.toBeNull();
+    expect(surface?.className).toContain("md:max-w-md");
+    expect(
+      document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
+    ).toContain("bg-scrim");
   });
 });

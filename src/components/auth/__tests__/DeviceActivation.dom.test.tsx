@@ -55,6 +55,7 @@ import {
   DeviceActivation,
   OUTCOME_COPY,
   outcomeForError,
+  timeLeftLabel,
 } from "../DeviceActivation";
 
 const REQUEST = {
@@ -90,13 +91,38 @@ afterEach(() => vi.clearAllMocks());
 describe("DeviceActivation", () => {
   it("sends signed-out visitors to sign-in with a path-only return", () => {
     mocks.auth.isSignedIn = false;
-    const { container } = render(<DeviceActivation initialCode="abcd-efgh" />);
-    expect(container).toBeEmptyDOMElement();
+    render(<DeviceActivation initialCode="abcd-efgh" />);
+    // The loading view holds the column while the redirect happens.
+    expect(
+      screen.getByRole("heading", { name: "Checking your code" }),
+    ).toBeInTheDocument();
     expect(mocks.navigate).toHaveBeenCalledWith({
       to: "/sign-in",
       search: { redirect_url: "/activate?code=ABCD-EFGH" },
       replace: true,
     });
+  });
+
+  it("shows the loading view, not an empty column, while auth loads", () => {
+    mocks.auth.isLoaded = false;
+    const { container } = render(<DeviceActivation initialCode="abcd-efgh" />);
+    expect(container).not.toBeEmptyDOMElement();
+    expect(
+      screen.getByRole("heading", { name: "Checking your code" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ABCD-EFGH")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading");
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.getDeviceRequest).not.toHaveBeenCalled();
+  });
+
+  it("shows the loading view without a code while auth loads", () => {
+    mocks.auth.isLoaded = false;
+    render(<DeviceActivation />);
+    expect(
+      screen.getByRole("heading", { name: "Connect a device" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Device code")).not.toBeInTheDocument();
   });
 
   it("shows the entry form without a code and formats as you type", () => {
@@ -128,7 +154,7 @@ describe("DeviceActivation", () => {
       status: "approved",
     });
     render(<DeviceActivation initialCode="abcd-efgh" />);
-    await screen.findByRole("heading", { name: "Sign in to Ralph Meet?" });
+    await screen.findByRole("heading", { name: "Is this you?" });
     expect(mocks.getDeviceRequest).toHaveBeenCalledWith("ABCD-EFGH");
     expect(screen.getByText("Code: A B C D, E F G H")).toBeInTheDocument();
     expect(
@@ -138,16 +164,27 @@ describe("DeviceActivation", () => {
     expect(screen.getByText("Reported by the device")).toBeInTheDocument();
     expect(screen.getByText("Nashville, US")).toBeInTheDocument();
     expect(screen.getByTitle("203.0.113.7")).toBeInTheDocument();
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    // The poster body names the app and the account; the account row repeats
+    // the name beside its email and the "Not you?" switch.
+    expect(
+      screen.getByText(/Ralph Meet for Windows wants to sign in as/),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Ada Lovelace")).toHaveLength(2);
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
     expect(
       screen.getByText("Only approve if you started this sign-in yourself."),
     ).toBeInTheDocument();
+    // The code is printed once, in Martian.
+    expect(screen.getByTestId("device-user-code")).toHaveTextContent(
+      "ABCD-EFGH",
+    );
     // Deny sits left of Approve.
     const buttons = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(buttons.indexOf("Deny")).toBeLessThan(buttons.indexOf("Approve"));
+    expect(buttons.indexOf("Deny")).toBeLessThan(
+      buttons.indexOf("Approve sign-in"),
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve sign-in" }));
     const heading = await screen.findByRole("heading", {
       name: "You're signed in on Ralph Meet Desktop",
     });
@@ -159,6 +196,42 @@ describe("DeviceActivation", () => {
       "You're signed in on Ralph Meet Desktop",
     );
     await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
+  it("shows no expiry when the request carries none", async () => {
+    mocks.getDeviceRequest.mockResolvedValue({ ok: true, request: REQUEST });
+    render(<DeviceActivation initialCode="ABCD-EFGH" />);
+    await screen.findByRole("heading", { name: "Is this you?" });
+    expect(screen.getByText("Desktop sign-in")).toBeInTheDocument();
+    expect(screen.queryByText(/min left/)).not.toBeInTheDocument();
+    // Only the Approve key's cap is dithered; there is no expiry bar.
+    const bars = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-dither]"),
+    ).filter((el) => el.style.width);
+    expect(bars).toHaveLength(0);
+  });
+
+  it("prints the time left in the kicker and a still expiry bar", async () => {
+    mocks.getDeviceRequest.mockResolvedValue({
+      ok: true,
+      request: {
+        ...REQUEST,
+        expiresAt: new Date(Date.now() + 4 * 60_000 + 12_000).toISOString(),
+      },
+    });
+    render(<DeviceActivation initialCode="ABCD-EFGH" />);
+    await screen.findByRole("heading", { name: "Is this you?" });
+    expect(
+      screen.getByText("Desktop sign-in · 4 min left"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Expires /)).toBeInTheDocument();
+    // The one dither under the code: aria-hidden, width = the time left.
+    const bars = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-dither]"),
+    ).filter((el) => el.style.width);
+    expect(bars).toHaveLength(1);
+    expect(bars[0]!.getAttribute("aria-hidden")).toBe("true");
+    expect(bars[0]!.style.width).toBe("42%");
   });
 
   it("denies", async () => {
@@ -180,7 +253,7 @@ describe("DeviceActivation", () => {
     ["access_denied", "Code in use", "Enter a different code"],
     ["network_error", "Couldn't reach the server", "Try again"],
     ["server_error", "Something went wrong", "Try again"],
-    ["mfa_required", "Two-factor sign-in needed", "Sign in again"],
+    ["mfa_required", "Two-step verification needed", "Sign in again"],
   ])("maps %s to its outcome", async (error, title, action) => {
     mocks.getDeviceRequest.mockResolvedValue({
       ok: false,
@@ -216,7 +289,9 @@ describe("DeviceActivation", () => {
       message: "x",
     });
     render(<DeviceActivation initialCode="ABCD-EFGH" />);
-    await screen.findByRole("heading", { name: "Two-factor sign-in needed" });
+    await screen.findByRole("heading", {
+      name: "Two-step verification needed",
+    });
     expect(
       screen.getByRole("link", { name: "account security settings" }),
     ).toHaveAttribute("href", "https://auth.test/settings");
@@ -234,7 +309,7 @@ describe("DeviceActivation", () => {
     render(<DeviceActivation initialCode="ABCD-EFGH" />);
     await screen.findByRole("heading", { name: "Couldn't reach the server" });
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await screen.findByRole("heading", { name: "Sign in to Ralph Meet?" });
+    await screen.findByRole("heading", { name: "Is this you?" });
     expect(mocks.getDeviceRequest).toHaveBeenCalledTimes(2);
   });
 
@@ -247,8 +322,8 @@ describe("DeviceActivation", () => {
       message: "x",
     });
     render(<DeviceActivation initialCode="ABCD-EFGH" />);
-    await screen.findByRole("button", { name: "Approve" });
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await screen.findByRole("button", { name: "Approve sign-in" });
+    fireEvent.click(screen.getByRole("button", { name: "Approve sign-in" }));
     await waitFor(() =>
       expect(
         screen.getByText(
@@ -257,9 +332,11 @@ describe("DeviceActivation", () => {
       ).toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("heading", { name: "Sign in to Ralph Meet?" }),
+      screen.getByRole("heading", { name: "Is this you?" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Approve sign-in" }),
+    ).toBeEnabled();
   });
 
   describe("'Not you?'", () => {
@@ -402,6 +479,13 @@ describe("DeviceActivation", () => {
       expect(mocks.releaseDeviceRequest).not.toHaveBeenCalled();
       expect(mocks.signOut).toHaveBeenCalledWith(SIGN_IN_BACK_HERE);
     });
+  });
+
+  it("words the time left", () => {
+    expect(timeLeftLabel(4 * 60_000 + 12_000)).toBe("4 min left");
+    expect(timeLeftLabel(59_000)).toBe("Under 1 min left");
+    expect(timeLeftLabel(0)).toBe("Expired");
+    expect(timeLeftLabel(-5)).toBe("Expired");
   });
 
   it("treats a lost session as a sign-in, never as an error page", () => {

@@ -28,10 +28,11 @@ rustls = { version = "0.23", features = ["ring"] }
 # Points to the feat/cef branch which adds `tauri-runtime-cef`.
 # The "cef" feature swaps WebView2/WKWebView for a full Chromium engine,
 # giving us native getDisplayMedia, consistent WebRTC, and full DevTools.
+# No "devtools" feature: Tauri enables the inspector in debug builds on its own;
+# release builds ship without it (memory when opened, and attack surface).
 tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef", features = [
     "tray-icon",
     "cef",
-    "devtools",
 ] }
 
 # ── Tauri plugins (CEF-compatible branch) ────────────────────────────────

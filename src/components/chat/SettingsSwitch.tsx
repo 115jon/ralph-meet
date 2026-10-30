@@ -1,34 +1,36 @@
-import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
+/**
+ * On/off switch for settings rows: the foundation `Switch` (30x18 track,
+ * 14px thumb, primary-fill track when on; transform and opacity only).
+ * `role="switch"` with `aria-checked`, named by the setting it controls:
+ * pass `labelledBy` (the row's visible title id) or `ariaLabel`.
+ */
 export function SettingsSwitch({
   checked,
   onChange,
-  ariaLabel = "Toggle setting",
+  ariaLabel,
+  labelledBy,
+  describedBy,
+  disabled,
 }: {
   checked: boolean;
   onChange: () => void;
   ariaLabel?: string;
+  /** id of the visible label; preferred over ariaLabel when present */
+  labelledBy?: string;
+  /** id of the supporting description */
+  describedBy?: string;
+  disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onChange}
-      aria-label={ariaLabel}
-      aria-pressed={checked}
-      className={cn(
-        "relative h-7 w-12 shrink-0 rounded-full border border-transparent transition-[background-color,border-color] duration-150 ease-out enabled:active:scale-[0.98]",
-        checked
-          ? "bg-primary"
-          : "bg-rm-bg-active border-rm-border hover:bg-rm-text-ghost/40",
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute left-0.5 top-0.5 h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform duration-150 ease-out",
-          checked ? "translate-x-5" : "translate-x-0",
-        )}
-      />
-    </button>
+    <Switch
+      checked={checked}
+      onCheckedChange={() => onChange()}
+      aria-label={labelledBy ? undefined : (ariaLabel ?? "Toggle setting")}
+      aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
+      disabled={disabled}
+    />
   );
 }

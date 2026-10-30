@@ -1,9 +1,20 @@
 import { useId, useState, useRef, Suspense, lazy } from "react";
-import { Upload, X, Smile, Loader2 } from "lucide-react";
-import { cn as _cn } from "@/lib/utils";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { FIELD as INPUT_FIELD, Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Num } from "@/components/ui/num";
+import { cn } from "@/lib/utils";
 
 import EmojiToken from "./EmojiToken";
+import { RangeSlider } from "./floating/RangeSlider";
 
 const EmojiPicker = lazy(() => import("@/components/chat/EmojiPicker"));
 
@@ -48,7 +59,6 @@ export function UploadSoundModal({
   const soundNameInputId = useId();
   const emojiButtonId = useId();
   const soundVolumeInputId = useId();
-  const titleId = useId();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -73,181 +83,166 @@ export function UploadSoundModal({
 
   const isEditMode = !!editSound;
 
-  return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <div
-          data-state={open ? "open" : "closed"}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
-        >
-          <DialogSurface
-            showCloseButton={false}
-            className="w-[480px] max-w-[90vw] rounded-2xl border border-rm-border bg-rm-bg-surface shadow-2xl p-6 relative animate-in fade-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+  // Field anatomy: label above, gap-2, the Input edge at 32px (40 on
+  // phones) for the file and emoji pickers too.
+  const FIELD = cn(
+    INPUT_FIELD,
+    "flex h-8 items-center text-ui-row max-md:h-10 max-md:text-ui-md",
+  );
+  const required = (
+    <span aria-hidden className="text-danger-ink">
+      *
+    </span>
+  );
+
+  const fields = (
+    <div className="flex flex-col gap-5">
+      {/* File Input */}
+      {!isEditMode && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={fileInputId}>File {required}</Label>
+          {/* The visible field wraps the (visually hidden) file input, so
+              a click opens the picker and keyboard focus rings the field. */}
+          <label
+            className={cn(
+              FIELD,
+              "cursor-pointer justify-between gap-2 py-0.5 pr-0.5 pl-2.5 has-[input:focus-visible]:border-focus has-[input:focus-visible]:outline-1 has-[input:focus-visible]:outline-offset-0 has-[input:focus-visible]:outline-focus pointer-fine:hover:border-line-strong",
+            )}
           >
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute top-5 right-5 text-rm-text-muted hover:text-rm-text transition-colors"
-              aria-label={
-                isEditMode
-                  ? "Close edit sound modal"
-                  : "Close upload sound modal"
-              }
-            >
-              <X size={20} />
-            </button>
-
-            <h2 id={titleId} className="text-xl font-bold text-rm-text mb-6">
-              {isEditMode ? "Edit Sound" : "Upload a Sound"}
-            </h2>
-
-            <div className="space-y-5">
-              {/* File Input */}
-              {!isEditMode && (
-                <div>
-                  <label
-                    htmlFor={fileInputId}
-                    className="block text-ui-sm font-bold text-rm-text mb-2"
-                  >
-                    File <span className="text-destructive">*</span>
-                  </label>
-                  <label
-                    htmlFor={fileInputId}
-                    className="flex items-center justify-between border border-rm-border bg-rm-bg-hover rounded-xl p-1 pl-3 cursor-pointer hover:border-primary/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 text-rm-text-muted truncate pr-2">
-                      <Upload size={16} />
-                      <span className="text-sm truncate">
-                        {file ? file.name : "Choose a file"}
-                      </span>
-                    </div>
-                    <span className="bg-rm-bg-active hover:bg-rm-bg-floating text-rm-text text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 border border-rm-border">
-                      Browse
-                    </span>
-                  </label>
-                  <input
-                    id={fileInputId}
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                  />
-                </div>
+            <input
+              id={fileInputId}
+              type="file"
+              accept="audio/*"
+              required
+              className="sr-only"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+            />
+            <span
+              className={cn(
+                "flex min-w-0 items-center gap-2",
+                file ? "text-ink-1" : "text-ink-3",
               )}
-
-              <div className="flex gap-4">
-                {/* Sound Name */}
-                <div className="flex-1">
-                  <label
-                    htmlFor={soundNameInputId}
-                    className="block text-ui-sm font-bold text-rm-text mb-2"
-                  >
-                    Sound Name <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    id={soundNameInputId}
-                    type="text"
-                    value={soundName}
-                    onChange={(e) => setSoundName(e.target.value)}
-                    placeholder="Sound Name"
-                    className="w-full h-11 bg-rm-bg-hover border border-rm-border rounded-xl px-4 text-sm text-rm-text outline-none focus:border-primary/50 transition-colors"
-                  />
-                </div>
-
-                {/* Related Emoji */}
-                <div className="w-[160px] relative">
-                  <label
-                    htmlFor={emojiButtonId}
-                    className="block text-ui-sm font-bold text-rm-text mb-2"
-                  >
-                    Related Emoji
-                  </label>
-                  <button
-                    ref={emojiBtnRef}
-                    id={emojiButtonId}
-                    type="button"
-                    onClick={() => setIsEmojiPickerOpen(true)}
-                    className="w-full h-11 flex items-center justify-center gap-2 bg-rm-bg-hover border border-rm-border rounded-xl px-3 text-sm text-rm-text-muted hover:border-primary/50 transition-colors"
-                    aria-haspopup="dialog"
-                    aria-expanded={isEmojiPickerOpen}
-                  >
-                    {relatedEmoji ? (
-                      <EmojiToken
-                        value={relatedEmoji}
-                        className="h-6 w-6 object-contain block"
-                        fallbackClassName="text-xl leading-none block"
-                      />
-                    ) : (
-                      <>
-                        <Smile size={18} />
-                        <span>Click to select</span>
-                      </>
-                    )}
-                  </button>
-
-                  <Suspense fallback={null}>
-                    <EmojiPicker
-                      open={isEmojiPickerOpen}
-                      placement="bottom-end"
-                      onClose={() => setIsEmojiPickerOpen(false)}
-                      onSelect={(emoji) => {
-                        setRelatedEmoji(emoji);
-                        setIsEmojiPickerOpen(false);
-                      }}
-                      markerRef={emojiBtnRef}
-                    />
-                  </Suspense>
-                </div>
-              </div>
-
-              {/* Sound Volume */}
-              <div>
-                <label
-                  htmlFor={soundVolumeInputId}
-                  className="block text-ui-sm font-bold text-rm-text mb-2"
-                >
-                  Sound Volume
-                </label>
-                <div className="flex items-center h-10">
-                  <input
-                    id={soundVolumeInputId}
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={Math.round(soundVolume * 100)}
-                    onChange={(e) =>
-                      setSoundVolume(Number(e.target.value) / 100)
-                    }
-                    className="w-full accent-primary h-1.5 bg-rm-border rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
-                    aria-valuetext={`${Math.round(soundVolume * 100)}%`}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Footer actions */}
-            <div className="flex gap-3 mt-8">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl border border-rm-border bg-rm-bg-hover hover:bg-rm-bg-active text-rm-text font-bold text-sm transition-colors"
-              >
-                Never mind
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={(!file && !isEditMode) || !soundName || isUploading}
-                className="flex-1 py-2.5 rounded-xl bg-primary hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold text-sm transition-ui flex items-center justify-center gap-2"
-              >
-                {isUploading && <Loader2 size={16} className="animate-spin" />}
-                {isEditMode ? "Save" : "Upload"}
-              </button>
-            </div>
-          </DialogSurface>
+            >
+              <Icon name="upload" size="sm" className="shrink-0" />
+              <span className="truncate">
+                {file ? file.name : "Choose an audio file"}
+              </span>
+            </span>
+            <span
+              aria-hidden
+              className="flex h-6 shrink-0 items-center rounded-sm bg-tint-2 px-2 text-ui-sm font-medium text-ink-1 max-md:h-8"
+            >
+              Browse
+            </span>
+          </label>
         </div>
-      </DialogPortal>
-    </Dialog>
+      )}
+
+      <div className="flex gap-4 max-md:flex-col">
+        {/* Sound name */}
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <Label htmlFor={soundNameInputId}>Sound name {required}</Label>
+          <Input
+            id={soundNameInputId}
+            type="text"
+            required
+            value={soundName}
+            onChange={(e) => setSoundName(e.target.value)}
+            placeholder="Sound name"
+            className="max-md:h-10"
+          />
+        </div>
+
+        {/* Related emoji */}
+        <div className="relative flex flex-col gap-2 md:w-40">
+          <Label htmlFor={emojiButtonId}>Related emoji</Label>
+          <button
+            ref={emojiBtnRef}
+            id={emojiButtonId}
+            type="button"
+            onClick={() => setIsEmojiPickerOpen(true)}
+            className={cn(
+              FIELD,
+              "justify-center gap-2 px-2.5 text-ink-3 focus-visible:border-focus pointer-fine:hover:border-line-strong",
+            )}
+            aria-haspopup="dialog"
+            aria-expanded={isEmojiPickerOpen}
+          >
+            {relatedEmoji ? (
+              <EmojiToken
+                value={relatedEmoji}
+                className="block size-5 object-contain"
+                fallbackClassName="block text-ui-lg leading-none"
+              />
+            ) : (
+              <>
+                <Icon name="emoji" size="sm" />
+                <span>Choose emoji</span>
+              </>
+            )}
+          </button>
+
+          <Suspense fallback={null}>
+            <EmojiPicker
+              open={isEmojiPickerOpen}
+              placement="bottom-end"
+              onClose={() => setIsEmojiPickerOpen(false)}
+              onSelect={(emoji) => {
+                setRelatedEmoji(emoji);
+                setIsEmojiPickerOpen(false);
+              }}
+              markerRef={emojiBtnRef}
+            />
+          </Suspense>
+        </div>
+      </div>
+
+      {/* Sound volume: the value reads beside the label, in Num. */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <Label htmlFor={soundVolumeInputId}>Sound volume</Label>
+          <Num size="sm" className="text-ink-2" aria-hidden>
+            {Math.round(soundVolume * 100)}%
+          </Num>
+        </div>
+        <RangeSlider
+          id={soundVolumeInputId}
+          value={Math.round(soundVolume * 100)}
+          onValueChange={(value) => setSoundVolume(value / 100)}
+          aria-valuetext={`${Math.round(soundVolume * 100)}%`}
+          className="h-8"
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent className="md:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
+            {isEditMode ? "Edit sound" : "Upload a sound"}
+          </ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
+        {fields}
+        <ResponsiveDialogFooter>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={(!file && !isEditMode) || !soundName || isUploading}
+            loading={isUploading}
+          >
+            {isEditMode ? "Save" : "Upload"}
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

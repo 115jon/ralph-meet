@@ -1,5 +1,7 @@
+import { NotFoundPage, RouteErrorPage } from "@/components/PageState";
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import {
@@ -22,6 +24,10 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { clog } from "@/lib/console-logger";
 import appCss from "../styles.css?url";
+import { AppActiveRoot } from "@/hooks/useAppActive";
+import geistFont from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
+import bricolageFont from "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-opsz-normal.woff2?url";
+import martianFont from "@fontsource-variable/martian-mono/files/martian-mono-latin-wdth-normal.woff2?url";
 
 const authLog = clog("DesktopAuth");
 const deepLinkLog = clog("DesktopDeepLinkBridge");
@@ -34,35 +40,55 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       {
         name: "viewport",
-        content: "width=device-width, initial-scale=1",
+        // viewport-fit=cover makes env(safe-area-inset-*) non-zero (notch,
+        // home indicator); resizes-content shrinks the layout for the
+        // on-screen keyboard so the composer stays above it.
+        content:
+          "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
       },
-      { title: "Ralph Meet — Real-Time Video Conferencing" },
+      { title: "Ralph Meet: voice, chat and video rooms" },
       {
         name: "description",
         content:
-          "Real-time video, audio & screen sharing powered by Cloudflare Realtime SFU",
+          "Voice, chat, video and screen share for the people you talk to every day. Start a room, send the link, they're in.",
       },
     ],
     links: [
       { rel: "icon", href: faviconHref },
-      { rel: "stylesheet", href: appCss },
+      // Self-hosted faces (styles.css imports the @font-face rules); the
+      // latin subsets of the faces on first paint are preloaded so text doesn't
+      // swap (Geist Mono is code only and loads on demand).
       {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Figtree:wght@300..900&display=swap",
+        rel: "preload",
+        href: geistFont,
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
       },
+      // Display (titles, names, control labels) and silkscreen (labels,
+      // readouts, counts) are on first paint of every surface too.
+      {
+        rel: "preload",
+        href: bricolageFont,
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "preload",
+        href: martianFont,
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
+      { rel: "stylesheet", href: appCss },
     ],
   }),
   component: RootComponent,
   pendingComponent: SplashScreen,
   shellComponent: RootDocument,
-  notFoundComponent: () => (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-2">404</h1>
-        <p className="text-[var(--rm-text-secondary)]">Page not found</p>
-      </div>
-    </div>
-  ),
+  errorComponent: RouteErrorPage,
+  notFoundComponent: NotFoundPage,
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
@@ -72,7 +98,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     // permanently dropping events in WebView2. Return a simple div wrapper instead.
     return (
       <div
-        className="h-full w-full bg-[var(--rm-bg-primary)] antialiased font-[Figtree,sans-serif]"
+        className="h-full w-full bg-ply-0 text-ink-1 antialiased font-ui"
         data-gramm="false"
         data-gramm_editor="false"
         data-enable-grammarly="false"
@@ -89,7 +115,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body
-        className="bg-rm-bg-primary antialiased font-[Figtree,sans-serif]"
+        className="bg-ply-0 text-ink-1 antialiased font-ui"
         data-gramm="false"
         data-gramm_editor="false"
         data-enable-grammarly="false"
@@ -119,8 +145,10 @@ function RootComponent() {
 
   const content = (
     <ThemeProvider>
-      <TooltipProvider delayDuration={200}>
+      <AppActiveRoot />
+      <TooltipProvider>
         <Outlet />
+        <Toaster />
       </TooltipProvider>
     </ThemeProvider>
   );

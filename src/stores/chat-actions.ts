@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api-client";
 import { getUnreadChannelState } from "@/lib/desktop-notifications";
 import { syncDesktopNotificationState } from "@/lib/desktop-native-sync";
@@ -201,6 +202,70 @@ function normalizeTimestamp(value: string): string {
   return trimmed;
 }
 
+// ── Failed sends ─────────────────────────────────────────────────────────
+// A tiny registry beside the store: the optimistic row stays `pending` in
+// the message list, and rows read their failed state from here by nonce.
+// No reducer or Message type change, so nothing else has to know about it.
+
+export interface FailedSend {
+  nonce: string;
+  channelId: string;
+  /** The optimistic row's id (`pending-<nonce>`). */
+  messageId: string;
+  content: string;
+  /** True while a retry is in flight. */
+  retrying: boolean;
+  /** Re-post with the same nonce; the server echo replaces the row. */
+  retry: () => Promise<void>;
+  /** Drop the row and forget the failure. */
+  discard: () => void;
+}
+
+/**
+ * Deleting a failed send puts its text back in the composer (when the
+ * composer for that channel is empty). Detail: `{ channelId, content }`.
+ */
+export const COMPOSER_RESTORE_EVENT = "rm:composer-restore";
+
+const failedSends = new Map<string, FailedSend>();
+const failedSendListeners = new Set<() => void>();
+
+function notifyFailedSends() {
+  for (const listener of failedSendListeners) listener();
+}
+
+function setFailedSend(nonce: string, entry: FailedSend) {
+  failedSends.set(nonce, entry);
+  notifyFailedSends();
+}
+
+function clearFailedSend(nonce: string) {
+  if (failedSends.delete(nonce)) notifyFailedSends();
+}
+
+function subscribeFailedSends(listener: () => void) {
+  failedSendListeners.add(listener);
+  return () => {
+    failedSendListeners.delete(listener);
+  };
+}
+
+/** The failed-send entry for an optimistic row's nonce, if its send failed. */
+export function useFailedSend(
+  nonce: string | undefined,
+): FailedSend | undefined {
+  return useSyncExternalStore(
+    subscribeFailedSends,
+    () => (nonce ? failedSends.get(nonce) : undefined),
+    () => undefined,
+  );
+}
+
+/** Test/fixture hook: mark an optimistic row as failed without a network call. */
+export function registerFailedSendForFixture(entry: FailedSend) {
+  setFailedSend(entry.nonce, entry);
+}
+
 export function createChatActions(
   get: () => ChatState,
   dispatch: (action: ChatAction) => void,
@@ -291,16 +356,48 @@ export function createChatActions(
     dispatch({ type: "APPEND_MESSAGE", message: optimisticMsg });
     dispatch({ type: "CLEAR_TYPING", channelId, userId: user?.id ?? "" });
 
-    try {
-      await apiPost(`/api/channels/${channelId}/messages`, {
+    const pendingId = `pending-${nonce}`;
+    const post = () =>
+      apiPost(`/api/channels/${channelId}/messages`, {
         content,
         reply_to_id: replyToId,
         nonce,
         attachment_ids: attachmentIds,
         nsfw_attachment_ids: nsfwAttachmentIds,
       });
+
+    // A failed send stays in the list as "Not sent" with Retry and Delete
+    // (the optimistic row keeps `pending: true`; the registry below marks it
+    // failed). Retry re-posts with the same nonce, so the server echo still
+    // replaces the optimistic row.
+    const markFailed = () =>
+      setFailedSend(nonce, {
+        nonce,
+        channelId,
+        messageId: pendingId,
+        content,
+        retrying: false,
+        retry: async () => {
+          const entry = failedSends.get(nonce);
+          if (!entry || entry.retrying) return;
+          setFailedSend(nonce, { ...entry, retrying: true });
+          try {
+            await post();
+            clearFailedSend(nonce);
+          } catch {
+            markFailed();
+          }
+        },
+        discard: () => {
+          clearFailedSend(nonce);
+          dispatch({ type: "DELETE_MESSAGE", id: pendingId });
+        },
+      });
+
+    try {
+      await post();
     } catch {
-      dispatch({ type: "DELETE_MESSAGE", id: `pending-${nonce}` });
+      markFailed();
     }
   };
 

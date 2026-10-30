@@ -95,11 +95,13 @@ export function setStoredKovaAuthSessionToken(token: string) {
   const currentKey = kovaSessionStorageKey();
   if (!currentKey) return;
 
-  if (localStorage.getItem(currentKey) === token) {
-    return;
+  // Announce even when the slot already holds this token: the Kova SDK
+  // writes its pk-scoped key itself before reporting the token, and that
+  // write emits nothing, so this event is what tells listeners it landed.
+  if (localStorage.getItem(currentKey) !== token) {
+    localStorage.setItem(currentKey, token);
+    removeOtherSessionTokens(currentKey);
   }
-  localStorage.setItem(currentKey, token);
-  removeOtherSessionTokens(currentKey);
   notifyDesktopTokenChanged(token);
 }
 
@@ -204,12 +206,17 @@ export function clearDesktopAuthSession() {
  * so a pk change can't orphan the session. (The SDK writes its pk-scoped key
  * before reporting the token, so checking the handoff token here would always
  * find it and skip the desktop key.) On the web, only fill an empty slot.
+ *
+ * Always announces the token, filled slot or not: the SDK's own pk-scoped
+ * write emits no event, and this call (from `onSessionTokenChange` or the
+ * token sync) is how listeners such as the chat page's auth gate learn of it.
  */
 export function rememberKovaSessionToken(token: string) {
   const missing = isTauriRuntime()
     ? !getDesktopToken()
     : !getDesktopAuthHandoffToken();
   if (missing) setDesktopAuthSession(token);
+  else notifyDesktopTokenChanged(token);
 }
 
 /** KovaAuthProvider's onSessionTokenChange, minus the React state. */

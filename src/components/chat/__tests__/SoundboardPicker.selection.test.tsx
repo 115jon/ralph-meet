@@ -168,10 +168,10 @@ describe("SoundboardPicker selection mode", () => {
       expect(
         screen.queryByRole("button", { name: "Play Local favorite" }),
       ).toBeNull();
-      expect(screen.queryByRole("button", { name: "Add Sound" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add sound" })).toBeNull();
       expect(screen.queryByText("Discover")).toBeNull();
       expect(
-        screen.queryByRole("button", { name: "Custom Sounds" }),
+        screen.queryByRole("button", { name: "Custom sounds" }),
       ).toBeNull();
     });
   });
@@ -269,7 +269,7 @@ describe("SoundboardPicker selection mode", () => {
       ).toBeVisible();
       expect(screen.queryByPlaceholderText("Search MyInstants...")).toBeNull();
       expect(
-        screen.queryByPlaceholderText("Search Radio Stations..."),
+        screen.queryByPlaceholderText("Search radio Stations..."),
       ).toBeNull();
       expect(screen.queryByText("Discover")).toBeNull();
       expect(screen.queryByText("Radio")).toBeNull();
@@ -594,7 +594,7 @@ describe("SoundboardPicker selection mode", () => {
     mocks.apiGet.mockResolvedValue({ favorites: [] });
 
     render(<SoundboardPicker onClose={vi.fn()} sfu={null} />);
-    expect(screen.queryByRole("button", { name: "Add Sound" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add sound" })).toBeNull();
     expect(localStorage.getItem("voice-soundboard:dm-call")).toBeNull();
   });
 
@@ -605,7 +605,7 @@ describe("SoundboardPicker selection mode", () => {
 
     render(<SoundboardPicker onClose={vi.fn()} sfu={null} />);
 
-    expect(screen.queryByRole("button", { name: "Add Sound" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add sound" })).toBeNull();
     expect(readAsDataURL).not.toHaveBeenCalled();
     expect(localStorage.getItem("voice-soundboard:dm-call")).toBeNull();
   });
@@ -630,9 +630,9 @@ describe("SoundboardPicker selection mode", () => {
     expect(screen.queryByText("Discover")).toBeNull();
     expect(screen.queryByText("Favorites")).toBeNull();
     expect(screen.queryByText("Now Playing")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Custom Sounds" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Custom sounds" })).toBeNull();
     expect(
-      screen.getAllByRole("button", { name: "Ralph Sounds" })[0],
+      screen.getAllByRole("button", { name: "Ralph sounds" })[0],
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Jump to Alpha server sounds" }),
@@ -642,10 +642,13 @@ describe("SoundboardPicker selection mode", () => {
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Server clip")).toBeVisible());
     const picker = screen.getByRole("dialog", { name: "Soundboard picker" });
-    expect(picker).toHaveStyle({ zIndex: "1100" });
+    expect(picker).toHaveClass("z-60");
     expect(picker).not.toHaveClass("inset-0");
     expect(picker).not.toHaveClass("bottom-[calc(100%+10px)]");
-    expect(picker).toHaveClass("sm:w-[min(440px,calc(100vw-24px))]");
+    expect(picker).toHaveClass("w-[min(420px,calc(100vw-24px))]");
+    // The shared picker recipe (PickerSurface), not a per-picker one.
+    expect(picker).toHaveClass("rounded-[2px]", "shadow-float");
+    expect(picker).not.toHaveClass("rounded-3xl");
     expect(document.querySelector('div[aria-hidden="true"]')).toBeNull();
   });
 
@@ -663,10 +666,10 @@ describe("SoundboardPicker selection mode", () => {
       await screen.findByRole("button", { name: /add sound/i }),
     ).toBeVisible();
     expect(
-      screen.getByRole("slider", { name: "Soundboard Volume" }),
+      screen.getByRole("slider", { name: "Soundboard volume" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Now Playing")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Server Sounds" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Server sounds" })).toBeNull();
   });
 
   it("defers favorites and server soundboard fetches from the direct listen view", async () => {
@@ -776,14 +779,13 @@ describe("SoundboardPicker selection mode", () => {
     const playButton = await screen.findByRole("button", {
       name: "Play Server clip",
     });
-    const deleteButton =
-      playButton.parentElement?.querySelector(
-        "svg.lucide-trash-2",
-      )?.parentElement;
+    const deleteButton = playButton.parentElement?.querySelector(
+      "svg[data-icon='trash']",
+    )?.parentElement;
     expect(deleteButton).not.toBeNull();
     fireEvent.click(deleteButton as HTMLElement);
 
-    const dialog = screen.getByRole("dialog", { name: "Delete Sound" });
+    const dialog = screen.getByRole("dialog", { name: "Delete sound" });
     expect(dialog.querySelector("button button")).toBeNull();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
@@ -804,7 +806,7 @@ describe("SoundboardPicker selection mode", () => {
       name: "Play Server clip",
     });
     const deleteButton = playButton.parentElement?.querySelector(
-      "svg.lucide-trash-2",
+      "svg[data-icon='trash']",
     )?.parentElement as HTMLButtonElement | null;
     expect(deleteButton).not.toBeNull();
     deleteButton?.focus();
@@ -815,7 +817,7 @@ describe("SoundboardPicker selection mode", () => {
     fireEvent.keyDown(cancelButton, { key: "Escape" });
 
     expect(
-      screen.queryByRole("dialog", { name: "Delete Sound" }),
+      screen.queryByRole("dialog", { name: "Delete sound" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: "Soundboard picker" }),

@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,10 +55,10 @@ describe("WordleActivityStage reveal lifecycle", () => {
     );
 
     const dialog = await screen.findByRole("dialog", {
-      name: "How To Play",
+      name: "How to play",
     });
-    expect(dialog).toHaveTextContent("Guess the Wordle in 6 tries.");
-    fireEvent.click(screen.getByRole("button", { name: "Close how to play" }));
+    expect(dialog).toHaveTextContent("Guess the word in 6 tries.");
+    fireEvent.click(screen.getByRole("button", { name: "Start playing" }));
     expect(localStorage.getItem("voice-wordle:how-to-play-seen")).toBe("true");
 
     unmount();
@@ -70,7 +71,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
     expect(
-      screen.queryByRole("dialog", { name: "How To Play" }),
+      screen.queryByRole("dialog", { name: "How to play" }),
     ).not.toBeInTheDocument();
   });
 
@@ -108,7 +109,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByRole("button", { name: "Open hints" });
     for (const letter of "crane") {
       fireEvent.click(screen.getByRole("button", { name: letter }));
     }
@@ -129,7 +130,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
     expect(
       screen.queryByRole("button", { name: /invite/i }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Channel Stats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Channel stats" }));
     expect(
       screen.queryByRole("button", { name: /share/i }),
     ).not.toBeInTheDocument();
@@ -154,7 +155,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByRole("button", { name: "Open hints" });
     for (const letter of "zzzzz") {
       fireEvent.click(screen.getByRole("button", { name: letter }));
     }
@@ -203,7 +204,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByRole("button", { name: "Open hints" });
     for (const letter of "zzzzz") {
       fireEvent.click(screen.getByRole("button", { name: letter }));
     }
@@ -228,7 +229,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByRole("button", { name: "Open hints" });
     for (const letter of "crane") {
       fireEvent.click(screen.getByRole("button", { name: letter }));
     }
@@ -289,7 +290,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByRole("button", { name: "Open hints" });
     await act(async () => {
       listeners[0]?.({
         type: "wordle.progress",
@@ -368,7 +369,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByRole("button", { name: "Open hints" });
     expect(
       screen.getByRole("img", { name: /Row 1, column 1: empty/i }),
     ).toBeInTheDocument();
@@ -396,10 +397,14 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByText("Solved in 1");
     await waitFor(() =>
       expect(screen.getByText("Solved in 1")).toBeInTheDocument(),
     );
+    // The result page shows the board as one picture; the letters are on the
+    // board itself, so open it to check the filtered fallback landed in row 1.
+    fireEvent.click(screen.getByRole("button", { name: "Channel stats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to puzzle" }));
     expect(
       screen.getByRole("img", { name: /Row 1, column 1: c/i }),
     ).toBeInTheDocument();
@@ -432,7 +437,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
       />,
     );
 
-    await screen.findByText("The New York Times");
+    await screen.findByRole("button", { name: "Open hints" });
     await act(async () => {
       listeners[0]?.({
         type: "wordle.progress",
@@ -564,7 +569,7 @@ describe("WordleActivityStage reveal lifecycle", () => {
     expect(hintsButton).toHaveFocus();
 
     const settingsButton = screen.getByRole("button", {
-      name: "Open Wordle settings",
+      name: "Open settings",
     });
     settingsButton.focus();
     fireEvent.click(settingsButton);
@@ -573,5 +578,95 @@ describe("WordleActivityStage reveal lifecycle", () => {
     ).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(settingsButton).toHaveFocus();
+  });
+
+  it("persists the how-to-play dismissal from the dialog close button too", async () => {
+    localStorage.clear();
+
+    render(
+      <WordleActivityStage
+        sfu={null}
+        channelId="channel-1"
+        localUserId="user-1"
+        participants={[{ userId: "user-1", name: "Ada" }]}
+      />,
+    );
+
+    await screen.findByRole("dialog", { name: "How to play" });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(localStorage.getItem("voice-wordle:how-to-play-seen")).toBe("true");
+  });
+
+  it("is named Daily Word, with no New York Times branding", async () => {
+    render(
+      <WordleActivityStage
+        sfu={null}
+        channelId="channel-1"
+        localUserId="user-1"
+        participants={[{ userId: "user-1", name: "Ada" }]}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Open hints" });
+    expect(
+      screen.getByRole("heading", { name: "Daily Word" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/New York Times/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/wordle/i)).not.toBeInTheDocument();
+  });
+
+  it("lists the other players in the group rail with a meta line each", async () => {
+    const listeners: Array<(event: Record<string, unknown>) => void> = [];
+    const sfu = {
+      on: vi.fn(
+        (
+          _eventName: string,
+          listener: (event: Record<string, unknown>) => void,
+        ) => {
+          listeners.push(listener);
+          return () => undefined;
+        },
+      ),
+      voiceGW: { sendAppEvent: vi.fn() },
+    } as unknown as Parameters<typeof WordleActivityStage>[0]["sfu"];
+
+    render(
+      <WordleActivityStage
+        sfu={sfu}
+        channelId="channel-1"
+        localUserId="user-1"
+        participants={[
+          { userId: "user-1", name: "Ada" },
+          { userId: "user-2", name: "Bea" },
+          { userId: "user-3", name: "Cy" },
+        ]}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Open hints" });
+    const rail = screen.getByRole("complementary", { name: "Other players" });
+    expect(rail).toHaveTextContent("Bea");
+    expect(rail).toHaveTextContent("Not started");
+    expect(rail).not.toHaveTextContent("Ada");
+
+    await act(async () => {
+      listeners[0]?.({
+        type: "wordle.progress",
+        channel_id: "channel-1",
+        puzzle_date: getNewYorkDateKey(new Date()),
+        progress: {
+          userId: "user-2",
+          name: "Bea",
+          guesses: ["adieu", "slate", "crane"],
+          streak: 1,
+          finished: true,
+          missed: false,
+        },
+      });
+    });
+    expect(rail).toHaveTextContent("Solved in 3");
+    expect(
+      within(rail).getByRole("img", { name: "Bea: Solved in 3" }),
+    ).toBeInTheDocument();
   });
 });

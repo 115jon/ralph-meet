@@ -1,7 +1,13 @@
 import { clog } from "@/lib/console-logger";
 import { cn } from "@/lib/utils";
-import { AlertCircle } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
+import { useAppActive } from "@/hooks/useAppActive";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  DIRECT_MEDIA_MAX_HEIGHT,
+  DIRECT_MEDIA_MAX_WIDTH,
+} from "./embed-layout";
 import { GifProviderBranding } from "./GifProviderBranding";
 import { useVideoPlayer } from "./useVideoPlayer";
 import {
@@ -86,6 +92,8 @@ interface VideoAttachmentSurfaceProps {
   brandingKey?: string | null;
   showDownload: boolean;
   onSurfaceClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Intrinsic size from the poster or the video metadata. */
+  onMediaDimensions?: (width: number, height: number) => void;
   onVideoError: () => void;
   onVideoCanPlay: () => void;
   onPlay?: React.ReactEventHandler<HTMLVideoElement>;
@@ -121,6 +129,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
   brandingKey,
   showDownload,
   onSurfaceClick,
+  onMediaDimensions,
   onVideoError,
   onVideoCanPlay,
   onPlay,
@@ -153,6 +162,12 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
       playsInline
       onError={onVideoError}
       onCanPlay={onVideoCanPlay}
+      onLoadedMetadata={(event) => {
+        const { videoWidth, videoHeight } = event.currentTarget;
+        if (videoWidth && videoHeight) {
+          onMediaDimensions?.(videoWidth, videoHeight);
+        }
+      }}
       onPlay={onPlay}
       onPause={onPause}
       onEnded={onEnded}
@@ -187,14 +202,20 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
       )}
       style={posterOverlayStyle}
       draggable={false}
+      onLoad={(event) => {
+        const { naturalWidth, naturalHeight } = event.currentTarget;
+        if (naturalWidth && naturalHeight) {
+          onMediaDimensions?.(naturalWidth, naturalHeight);
+        }
+      }}
       {...(referrerPolicy ? { referrerPolicy } : {})}
     />
   ) : null;
 
   const durationBadge =
     shouldShowDurationBadge && durationBadgeLabel ? (
-      <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-ui-xs leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
-        {durationBadgeLabel}
+      <div className="absolute bottom-2 left-2 z-20 rounded-sm bg-ply-3 px-1.5 py-0.5 text-ink-1">
+        <Num>{durationBadgeLabel}</Num>
       </div>
     ) : null;
 
@@ -203,7 +224,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
       <button
         type="button"
         className={cn(
-          "relative appearance-none border-0 p-0 text-left",
+          "group/media relative appearance-none border-0 p-0 text-left outline-none",
           surfaceClassName,
           "cursor-pointer",
           isViewer || isFullscreen
@@ -268,13 +289,13 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
       {posterOverlay}
 
       {mediaError && !showPosterFallback ? (
-        <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
-          <AlertCircle className="h-8 w-8 text-amber-300" />
-          <div>
-            <p className="text-sm font-bold">
+        <div className="absolute inset-0 z-20 flex min-h-40 flex-col items-center justify-center gap-3 bg-ply-2 p-5 text-center">
+          <Icon name="alert" size="2xl" className="text-ink-3" />
+          <div className="flex flex-col gap-1">
+            <p className="text-ui-sm font-semibold text-ink-1">
               This video cannot be played here
             </p>
-            <p className="mt-1 max-w-[320px] text-xs leading-5 text-white/70">
+            <p className="max-w-80 text-ui-xs text-pretty text-ink-2">
               The desktop video engine may not support this file&apos;s codec.
             </p>
           </div>
@@ -283,8 +304,9 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
               href={src}
               download={filename}
               onClick={(event) => event.stopPropagation()}
-              className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-tint-1 px-3 text-ui-sm font-medium text-ink-1 outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
+              <Icon name="download" size="sm" />
               Download video
             </a>
           )}
@@ -300,8 +322,8 @@ VideoAttachmentSurface.displayName = "VideoAttachmentSurface";
 const VideoAttachment = memo(function VideoAttachment({
   src,
   filename,
-  maxWidth = 550,
-  maxHeight = 450,
+  maxWidth = DIRECT_MEDIA_MAX_WIDTH,
+  maxHeight = DIRECT_MEDIA_MAX_HEIGHT,
   aspectRatio,
   poster,
   preload,
@@ -323,6 +345,18 @@ const VideoAttachment = memo(function VideoAttachment({
   const isViewer = variant === "viewer";
   const isAnimated = playbackMode === "animated";
   const [mediaError, setMediaError] = useState(false);
+  // Embeds stored without sizes (direct links whose header could not be read,
+  // older X/TikTok rows) used to leave the play overlay in the browser's
+  // default 300x150 video box under a full-size poster. Measure instead.
+  const [measuredAspectRatio, setMeasuredAspectRatio] = useState<
+    number | undefined
+  >(undefined);
+  const handleMediaDimensions = useCallback((width: number, height: number) => {
+    const next = width / height;
+    setMeasuredAspectRatio((current) =>
+      current && Math.abs(current - next) < 0.01 ? current : next,
+    );
+  }, []);
   const activePlaybackRef = useRef(false);
   const onPlayRef = useRef(onPlay);
   const onStopRef = useRef(onStop);
@@ -365,6 +399,28 @@ const VideoAttachment = memo(function VideoAttachment({
 
   useEffect(() => releasePlayback, [releasePlayback]);
 
+  // A muted looping clip (an animated image) must not keep decoding while
+  // the app is hidden or behind a game (spec §5f). Pause it and pick it up
+  // again on return. Videos the user started with sound keep playing.
+  const appActive = useAppActive();
+  const pausedForInactiveRef = useRef(false);
+  useEffect(() => {
+    if (!isAnimated) return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (!appActive) {
+      if (!video.paused) {
+        pausedForInactiveRef.current = true;
+        video.pause();
+      }
+      return;
+    }
+    if (pausedForInactiveRef.current) {
+      pausedForInactiveRef.current = false;
+      void video.play().catch(() => {});
+    }
+  }, [appActive, isAnimated, videoRef]);
+
   const {
     playing,
     ended,
@@ -382,7 +438,7 @@ const VideoAttachment = memo(function VideoAttachment({
   const resolvedAspectRatio =
     Number.isFinite(aspectRatio) && aspectRatio && aspectRatio > 0
       ? aspectRatio
-      : undefined;
+      : measuredAspectRatio;
   const constrainedWidth = resolvedAspectRatio
     ? Math.min(maxWidth, maxHeight * resolvedAspectRatio)
     : maxWidth;
@@ -459,12 +515,12 @@ const VideoAttachment = memo(function VideoAttachment({
       className={cn(
         "relative select-none group/video",
         isViewer
-          ? "inline-flex flex-col max-w-full max-h-[60vh] md:max-h-[75vh]"
+          ? "inline-flex flex-col max-w-full max-h-[60dvh] md:max-h-[75dvh]"
           : embeddedChrome
-            ? "w-fit max-w-full rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg"
+            ? "w-fit max-w-full overflow-hidden rounded-xl border border-line bg-ply-2"
             : "w-fit max-w-full overflow-visible border-none bg-transparent shadow-none",
         isFullscreen &&
-          "fixed! inset-0! z-50! w-screen! h-screen! max-w-none! max-h-none! rounded-none! border-none! bg-black",
+          "fixed! inset-0! z-50! w-full! h-dvh! max-w-none! max-h-none! rounded-none! border-none! bg-black",
       )}
       style={
         isViewer || isFullscreen
@@ -484,7 +540,8 @@ const VideoAttachment = memo(function VideoAttachment({
       onMouseMove={handleContainerMouseMove}
     >
       {/* Download button - top-right floating (hidden in viewer/ImageViewerModal) */}
-      {!isViewer && showDownload && (
+      {/* The unplayable state carries its own Download button. */}
+      {!isViewer && showDownload && !mediaError && (
         <VideoDownloadButton
           src={src}
           filename={filename}
@@ -521,6 +578,9 @@ const VideoAttachment = memo(function VideoAttachment({
         brandingKey={brandingKey}
         showDownload={showDownload}
         onSurfaceClick={handleSurfaceClick}
+        onMediaDimensions={
+          aspectRatio && aspectRatio > 0 ? undefined : handleMediaDimensions
+        }
         onVideoError={handleVideoError}
         onVideoCanPlay={handleVideoCanPlay}
         onPlay={handleVideoPlay}

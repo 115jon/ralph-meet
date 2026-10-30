@@ -33,7 +33,7 @@ export default function InlineEmoji({
   const resolvedImageUrl = imageUrl ?? "";
   const shouldRenderImage = resolvedImageUrl.length > 0 && !imageFailed;
   const emojiSize =
-    size === "large" ? "2rem" : size === "reaction" ? "1.5rem" : "1.35em";
+    size === "large" ? "2rem" : size === "reaction" ? "1rem" : "1.35em";
 
   if (selectable) {
     return (

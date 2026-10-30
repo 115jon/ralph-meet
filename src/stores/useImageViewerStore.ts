@@ -28,22 +28,48 @@ interface ImageViewerState {
   };
 }
 
-export const useImageViewerStore = create<ImageViewerState>((set) => ({
+/**
+ * `close()` flips `isOpen` at once but keeps the images, context and index
+ * for this long, so the viewer fades out showing what it was showing instead
+ * of vanishing (the exit runs 150ms). A reopen inside the window cancels the
+ * pending clear, so the new images are never wiped.
+ */
+export const IMAGE_VIEWER_EXIT_MS = 200;
+
+let clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelPendingClear() {
+  if (clearTimer === null) return;
+  clearTimeout(clearTimer);
+  clearTimer = null;
+}
+
+export const useImageViewerStore = create<ImageViewerState>((set, get) => ({
   isOpen: false,
   initialIndex: 0,
   images: [],
   context: undefined,
   actions: {
-    open: (images, initialIndex = 0, context) =>
-      set({ isOpen: true, images, initialIndex, context }),
+    open: (images, initialIndex = 0, context) => {
+      cancelPendingClear();
+      set({ isOpen: true, images, initialIndex, context });
+    },
     updateImage: (id, image) =>
       set((state) => ({
         images: state.images.map((current) =>
           current.id === id ? image : current,
         ),
       })),
-    close: () =>
-      set({ isOpen: false, images: [], initialIndex: 0, context: undefined }),
+    close: () => {
+      cancelPendingClear();
+      set({ isOpen: false });
+      clearTimer = setTimeout(() => {
+        clearTimer = null;
+        // A reopen cancels this timer; the check also covers a direct setState.
+        if (get().isOpen) return;
+        set({ images: [], initialIndex: 0, context: undefined });
+      }, IMAGE_VIEWER_EXIT_MS);
+    },
   },
 }));
 

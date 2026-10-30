@@ -1,230 +1,311 @@
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
-import { getAuthAssetUrl } from "@/lib/platform";
+/**
+ * Server settings → Audit log. The page heading is the workbench header, so
+ * every state (loading, empty, error, list) keeps it; this body only swaps
+ * what sits under it.
+ *
+ * Entries read as sentences ("Jon updated role Moderator") with targets by
+ * name; the ID sits in a tooltip, permission changes are a diff list, and
+ * nothing shows a raw ID or bitfield (overlays audit flow 13).
+ */
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { apiGet } from "@/lib/api-client";
-import type { ServerAuditLog } from "@/lib/types";
+import { describeApiError } from "@/lib/api-errors";
 import { useClientDateFormatter } from "@/lib/client-date-format";
-import { useEffect, useReducer } from "react";
-import { AvatarImage } from "./AvatarImage";
-import { Loader2 } from "./Icons";
+import { getDisplayName } from "@/lib/display-name";
+import { getAuthAssetUrl } from "@/lib/platform";
+import type { Role, ServerAuditLog, User } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chat-store";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
+import { SettingsCard } from "./settings/primitives";
+import {
+  describeAudit,
+  previousRoleStates,
+  type RoleState,
+  type AuditDetail,
+  type AuditLookup,
+  type AuditTarget,
+} from "./server-settings/audit-format";
+import {
+  LoadError,
+  PageState,
+  RowAvatar,
+  SkeletonRows,
+} from "./server-settings/states";
 
 interface AuditLogTabProps {
   serverId: string;
 }
 
-interface State {
-  logs: ServerAuditLog[];
-  loading: boolean;
-  error: string | null;
+type MemberRow = { user_id?: string; user?: Partial<User> | null };
+type BanRow = { user_id: string; username?: string };
+
+function TargetName({ target }: { target: AuditTarget }) {
+  const text = target.code ? (
+    <span className="font-mono text-ui-sm">{target.label}</span>
+  ) : (
+    <InlineEmojiText text={target.label} />
+  );
+  const className = cn(target.named ? "font-medium text-ink-1" : "text-ink-2");
+  if (!target.id) return <span className={className}>{text}</span>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className={cn(
+            className,
+            "rounded-xs underline decoration-line-strong decoration-dotted underline-offset-[3px] outline-offset-2",
+          )}
+        >
+          {text}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        ID <span className="font-mono">{target.id}</span>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
-type Action =
-  | { type: "FETCH_START" }
-  | { type: "FETCH_SUCCESS"; payload: ServerAuditLog[] }
-  | { type: "FETCH_ERROR"; payload: string };
+function Details({ details }: { details: AuditDetail[] }) {
+  if (details.length === 0) return null;
+  return (
+    <ul className="mt-1.5 flex flex-col gap-0.5 text-ui-sm text-ink-2">
+      {details.map((detail, index) => {
+        if (detail.type === "perm") {
+          return (
+            <li key={index} className="flex items-baseline gap-1.5">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "w-3 shrink-0 text-center font-medium",
+                  detail.sign === "+" ? "text-success-ink" : "text-danger-ink",
+                )}
+              >
+                {detail.sign}
+              </span>
+              <span className="sr-only">
+                {detail.sign === "+" ? "Allowed " : "Removed "}
+              </span>
+              <span>{detail.name}</span>
+            </li>
+          );
+        }
+        if (detail.type === "list") {
+          return (
+            <li key={index} className="text-pretty">
+              {detail.label}: {detail.items.join(", ")}
+            </li>
+          );
+        }
+        return (
+          <li key={index} className="text-pretty break-words">
+            <InlineEmojiText text={detail.text} />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "FETCH_START":
-      return { ...state, loading: true, error: null };
-    case "FETCH_SUCCESS":
-      return { ...state, loading: false, logs: action.payload };
-    case "FETCH_ERROR":
-      return { ...state, loading: false, error: action.payload };
-    default:
-      return state;
-  }
+function AuditRow({
+  log,
+  lookup,
+  previousRole,
+}: {
+  log: ServerAuditLog;
+  lookup: AuditLookup;
+  previousRole?: RoleState;
+}) {
+  const formatDate = useClientDateFormatter();
+  const actor = getDisplayName(log.actor);
+  const entry = describeAudit(log, lookup, previousRole);
+  return (
+    <li className="flex gap-3 px-4 py-3">
+      <RowAvatar
+        src={
+          log.actor?.avatar_url ? getAuthAssetUrl(log.actor.avatar_url) : null
+        }
+        name={actor}
+        size={24}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-pretty text-ui-sm text-ink-2">
+          <span className="font-medium text-ink-1">
+            <InlineEmojiText text={actor} />
+          </span>{" "}
+          {entry.verb}
+          {entry.target ? (
+            <>
+              {" "}
+              <TargetName target={entry.target} />
+            </>
+          ) : null}
+        </p>
+        <Details details={entry.details} />
+        {log.reason ? (
+          <p className="mt-1.5 text-pretty text-ui-sm text-ink-2">
+            Reason: <InlineEmojiText text={log.reason} />
+          </p>
+        ) : null}
+        <p className="mt-1 text-ui-xs text-ink-3">
+          <time dateTime={log.created_at}>
+            {formatDate(log.created_at, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </time>
+        </p>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Names for the targets: roles, members and bans from the API (each one
+ * optional; a moderator may not read all of them) plus the channels the
+ * client already holds.
+ */
+function useAuditLookup(serverId: string): AuditLookup {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [bans, setBans] = useState<BanRow[]>([]);
+  const storeMembers = useChatStore((s) => s.membersByServerId[serverId]);
+  const channelsByServer = useChatStore((s) => s.channelsByServerId[serverId]);
+  const allChannels = useChatStore((s) => s.channels);
+
+  useEffect(() => {
+    let current = true;
+    const quiet = <T,>(url: string, set: (value: T) => void) =>
+      apiGet<T>(url)
+        .then((value) => {
+          if (current && Array.isArray(value)) set(value);
+        })
+        .catch(() => {});
+    void quiet<Role[]>(`/api/servers/${serverId}/roles`, setRoles);
+    void quiet<MemberRow[]>(`/api/servers/${serverId}/members`, setMembers);
+    void quiet<BanRow[]>(`/api/servers/${serverId}/bans`, setBans);
+    return () => {
+      current = false;
+    };
+  }, [serverId]);
+
+  return useMemo(() => {
+    const memberNames = new Map<string, string>();
+    for (const ban of bans) {
+      if (ban.username) memberNames.set(ban.user_id, ban.username);
+    }
+    for (const row of members) {
+      const id = row.user?.id ?? row.user_id;
+      if (id && row.user) memberNames.set(id, getDisplayName(row.user as User));
+    }
+    for (const member of storeMembers ?? []) {
+      memberNames.set(member.user.id, getDisplayName(member.user));
+    }
+    const channels = new Map<string, { name: string; voice: boolean }>();
+    for (const channel of [
+      ...allChannels.filter((c) => c.server_id === serverId),
+      ...(channelsByServer ?? []),
+    ]) {
+      channels.set(channel.id, {
+        name: channel.name,
+        voice: channel.channel_type === "voice",
+      });
+    }
+    return {
+      roles: new Map(roles.map((role) => [role.id, role.name])),
+      members: memberNames,
+      channels,
+    };
+  }, [
+    allChannels,
+    bans,
+    channelsByServer,
+    members,
+    roles,
+    serverId,
+    storeMembers,
+  ]);
 }
 
 export default function AuditLogTab({ serverId }: AuditLogTabProps) {
-  const [state, dispatch] = useReducer(reducer, {
-    logs: [],
-    loading: true,
-    error: null,
-  });
-  const formatDate = useClientDateFormatter();
+  const [logs, setLogs] = useState<ServerAuditLog[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const lookup = useAuditLookup(serverId);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function fetchLogs() {
-      dispatch({ type: "FETCH_START" });
+  const load = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      setLoading(true);
+      setError(null);
       try {
         const data = await apiGet<ServerAuditLog[]>(
           `/api/servers/${serverId}/audit-logs`,
         );
-
-        if (mounted) {
-          dispatch({ type: "FETCH_SUCCESS", payload: data });
-        }
-      } catch (err: any) {
-        if (mounted) {
-          dispatch({
-            type: "FETCH_ERROR",
-            payload: err.message || "An error occurred",
-          });
-        }
+        if (isCurrent()) setLogs(data);
+      } catch (err) {
+        if (isCurrent()) setError(describeApiError(err, "load the audit log"));
+      } finally {
+        if (isCurrent()) setLoading(false);
       }
-    }
+    },
+    [serverId],
+  );
 
-    fetchLogs();
+  useEffect(() => {
+    let current = true;
+    void load(() => current);
     return () => {
-      mounted = false;
+      current = false;
     };
-  }, [serverId]);
+  }, [load]);
 
-  const formatActionType = (type: string) => {
-    return type
-      .split("_")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
-  };
+  const previous = useMemo(() => previousRoleStates(logs ?? []), [logs]);
 
-  const formatChanges = (changes: any) => {
-    if (!changes) return null;
-
-    return Object.entries(changes).map(([key, value]) => {
-      let displayValue = String(value);
-      if (typeof value === "object") {
-        displayValue = JSON.stringify(value);
-      }
-      if (value === null || value === undefined || value === "") {
-        displayValue = "None / Removed";
-      }
-
-      return (
-        <div key={key} className="text-xs text-rm-text-muted mt-1 flex gap-2">
-          <span className="font-semibold text-rm-text-secondary">{key}:</span>
-          <span className="truncate max-w-[200px]" title={displayValue}>
-            {displayValue}
-          </span>
-        </div>
-      );
-    });
-  };
-
-  if (state.loading) {
+  if (error) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted">
-        <Loader2 className="h-8 w-8 animate-spin mb-4" />
-        <p>Loading audit logs...</p>
-      </div>
+      <LoadError
+        title="Audit log didn't load"
+        message={error}
+        retrying={loading}
+        onRetry={() => void load()}
+      />
     );
   }
-
-  if (state.error) {
+  if (!logs) return <SkeletonRows label="Loading the audit log" />;
+  if (logs.length === 0) {
     return (
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-        {state.error}
-      </div>
+      <PageState title="No activity yet">
+        Changes to roles, channels, invites and bans show here as they happen.
+      </PageState>
     );
   }
-
-  if (state.logs.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted text-center space-y-2">
-        <div className="h-12 w-12 rounded-full bg-rm-bg-hover flex items-center justify-center mb-2">
-          <span className="text-xl">📋</span>
-        </div>
-        <h3 className="text-rm-text font-semibold">No recent activity</h3>
-        <p className="text-sm">There are no audit logs for this server yet.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="animate-in fade-in duration-150 w-full pb-8">
-      <h2
-        id="server-settings-title"
-        className="mb-6 text-xl font-bold text-rm-text"
+    <TooltipProvider>
+      <SettingsCard
+        title="Recent activity"
+        description="Administrative actions taken in this server."
       >
-        Audit Log
-      </h2>
-
-      <p className="text-sm text-rm-text-muted mb-6">
-        A record of recent administrative actions taken in this server.
-      </p>
-
-      <div className="space-y-4 max-w-2xl relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-rm-border before:to-transparent">
-        {state.logs.map((log) =>
-          (() => {
-            const actorDisplayName = getDisplayName(log.actor);
-            return (
-              <div
-                key={log.id}
-                className="relative flex items-start gap-4 group"
-              >
-                {/* Icon/Timeline Dot */}
-                <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-rm-bg-primary bg-rm-bg-surface text-rm-text-muted shadow shrink-0 overflow-hidden relative z-10">
-                  {log.actor?.avatar_url ? (
-                    <AvatarImage
-                      src={getAuthAssetUrl(log.actor.avatar_url)}
-                      alt="Avatar"
-                      display={log.actor.avatar_display}
-                    />
-                  ) : (
-                    <span className="text-xs font-bold">
-                      {getDisplayInitial(log.actor)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Card Content */}
-                <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-ui hover:border-primary/30">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex gap-2 items-center">
-                      <span className="font-semibold text-sm text-rm-text">
-                        <InlineEmojiText text={actorDisplayName} />
-                      </span>
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
-                        {formatActionType(log.action_type)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-xs text-rm-text-muted mb-3 flex items-center gap-2">
-                    <span>
-                      {formatDate(log.created_at, {
-                        year: "numeric",
-                        month: "numeric",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "numeric",
-                        second: "numeric",
-                      })}
-                    </span>
-                    {log.target_id && (
-                      <>
-                        <span>•</span>
-                        <span className="font-mono bg-rm-bg-hover px-1.5 py-0.5 rounded text-ui-2xs">
-                          Target: {log.target_id}
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  {log.reason && (
-                    <div className="mt-2 text-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
-                      <InlineEmojiText text={`"${log.reason}"`} />
-                    </div>
-                  )}
-
-                  {log.changes && Object.keys(log.changes).length > 0 && (
-                    <div className="mt-3 bg-rm-bg-hover/50 rounded-lg p-3 border border-rm-border/50">
-                      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1 block">
-                        Changes
-                      </span>
-                      <div className="space-y-1">
-                        {formatChanges(log.changes)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })(),
-        )}
-      </div>
-    </div>
+        {logs.map((log) => (
+          <AuditRow
+            key={log.id}
+            log={log}
+            lookup={lookup}
+            previousRole={previous.get(log.id)}
+          />
+        ))}
+      </SettingsCard>
+    </TooltipProvider>
   );
 }

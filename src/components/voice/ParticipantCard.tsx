@@ -1,25 +1,37 @@
+import { useLongPressMenu } from "@/hooks/useLongPress";
+import { useSpeakingAttr } from "@/hooks/useIsSpeaking";
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
-import { extractDominantColor } from "@/lib/color-utils";
-import { getAuthAssetUrl } from "@/lib/platform";
+import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Phone } from "lucide-react";
-import React, { lazy, Suspense, useEffect, useState } from "react";
-import { AvatarImage } from "@/components/chat/AvatarImage";
-import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import { Icon } from "@/components/ui/icon";
+import { LedLabel } from "@/components/ui/led";
 import {
-  Camera,
-  ChevronDown,
-  Headphones,
-  MicOff,
-  Monitor,
-  MoreHorizontal,
-} from "../chat/Icons";
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { QualityMonitor } from "./QualityMonitor";
 import { StreamWatcherList } from "./StreamWatcherList";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
+import { TileAvatar, TileNameplate } from "./TileParts";
+import {
+  cardPropsEqual,
+  ROW_TILE_AVATAR_BOX,
+  ROW_TILE_AVATAR_SIZE,
+  streamOwnerName,
+  tileDisplayName,
+  TILE_SURFACE,
+  useTileTintStyle,
+} from "./tile-utils";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({
@@ -27,59 +39,63 @@ const StreamContextMenu = lazy(() =>
   })),
 );
 
-interface ParticipantCardProps {
+export interface ParticipantCardProps {
   item: GridItem;
   isFocused: boolean;
   isTray: boolean;
+  /** A tile in the DM call's row (always 16:9; see ROW_TILE_AVATAR_SIZE). */
+  row?: boolean;
   globalDeafened: boolean;
   onClick: () => void;
   voiceActions?: VoiceActions;
   watchedStreams: Record<string, boolean>;
   streamThumbnails: Record<string, string>;
   suppressVideo?: boolean;
+  /** Entrance order on join (spec §6: 30ms stagger, capped at 6 tiles). */
+  enterIndex?: number;
+  className?: string;
 }
 
-export const ParticipantCard: React.FC<ParticipantCardProps> = ({
+/**
+ * One person (or one stream) in the call (talk-tree-spec §8 Voice). The
+ * outer box carries `.rm-speak` and this person's `data-speaking` from
+ * useSpeakingAttr, so a speaking flip re-renders this leaf only; the card is
+ * memoised and ignores `item.isSpeaking` for the same reason.
+ */
+function ParticipantCardImpl({
   item,
   isFocused,
   isTray,
+  row = false,
   globalDeafened: _globalDeafened,
   onClick,
   voiceActions,
   watchedStreams,
   streamThumbnails,
   suppressVideo = false,
-}) => {
+  enterIndex,
+  className,
+}: ParticipantCardProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
     isMini?: boolean;
   } | null>(null);
-  const shouldRenderStreamMenu = contextMenu != null;
-  const renderedContextMenu = contextMenu;
-  const [dominantColor, setDominantColor] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!item.avatar) return;
-
-    let isActive = true;
-    extractDominantColor(getAuthAssetUrl(item.avatar)).then(
-      (color: string | null) => {
-        if (isActive) {
-          setDominantColor(color);
-        }
-      },
-    );
-
-    return () => {
-      isActive = false;
-    };
-  }, [item.avatar]);
-
-  const resolvedDominantColor = item.avatar ? dominantColor : null;
+  const tileLongPress = useLongPressMenu((e) =>
+    setContextMenu({ x: e.clientX, y: e.clientY, isMini: false }),
+  );
+  // The card is memoised without comparing onClick, so call the latest one.
+  const onClickRef = useRef(onClick);
+  useLayoutEffect(() => {
+    onClickRef.current = onClick;
+  });
+  const handleClick = useCallback(() => onClickRef.current(), []);
 
   const isScreen = item.type === "screen";
   const isCamera = item.type === "camera";
+  const speakingAttr = useSpeakingAttr(isScreen ? null : item.userId);
+  const tintStyle = useTileTintStyle(item.userId);
+
   const isPreviewHidden =
     isScreen && item.isLocal && !!voiceActions?.isPreviewHidden;
   const isEffectivelyWatchingStream =
@@ -87,16 +103,10 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   const streamWatchers = isScreen
     ? (voiceActions?.watchersByStreamer?.[item.userId] ?? [])
     : [];
-  const streamDisplayName = isScreen
-    ? item.isLocal
-      ? "You"
-      : item.name.replace(/(?:'s|') Stream$/, "")
-    : item.isLocal
-      ? "You"
-      : item.name;
+  const ownerName = streamOwnerName(item);
+  const displayName = tileDisplayName(item);
   const shouldShowWatchers =
     !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
-  // When preview is hidden the stream is null; we still want to show video for other cases.
   const shouldRenderVideo = !!item.stream && !suppressVideo && !isPreviewHidden;
   const shouldShowWatchPrompt =
     isScreen && !item.isLocal && !isEffectivelyWatchingStream;
@@ -106,252 +116,201 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     !!streamThumbnails[item.userId] &&
     !shouldShowWatchPrompt &&
     !isPreviewHidden;
-  const shouldShowFocusedStreamOverlay =
-    isScreen && isTray && isFocused && shouldRenderThumbnailPoster;
   const isLoadingStream =
     (isCamera || isScreen) &&
     !item.stream &&
     !shouldShowWatchPrompt &&
-    !isPreviewHidden;
+    !isPreviewHidden &&
+    !shouldRenderThumbnailPoster;
+  const showsMedia =
+    ((isCamera || isScreen) && shouldRenderVideo) ||
+    shouldRenderThumbnailPoster;
+  const showAvatar =
+    !showsMedia &&
+    !shouldShowWatchPrompt &&
+    !isPreviewHidden &&
+    !isLoadingStream;
+
+  const enterDelay =
+    enterIndex === undefined ? undefined : `${Math.min(enterIndex, 5) * 30}ms`;
 
   return (
     <>
       <div
+        {...speakingAttr}
+        data-tile=""
+        data-tile-kind={item.type}
         className={cn(
-          "relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
-          isFocused && "ring-2 ring-rm-text/20 z-50",
-          item.isSpeaking &&
-            "ring-2 ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)] z-20",
-          item.isRinging &&
-            "ring-2 ring-primary/50 shadow-[0_6px_18px_-6px_var(--rm-glow)] animate-pulse z-20",
-          !isFocused &&
-            !item.isSpeaking &&
-            !item.isRinging &&
-            "ring-1 ring-rm-border hover:ring-rm-border-strong",
+          // Outer box: the speaking ring (::after, inset -2px) and the join
+          // entrance. The inner box clips media, so the ring lives out here.
+          "rm-speak relative aspect-video h-full w-full rounded-lg",
+          enterIndex !== undefined &&
+            "transition-[opacity,scale] duration-(--dur-3) ease-out starting:scale-(--motion-scale-in) starting:opacity-0",
+          className,
         )}
+        style={enterDelay ? { transitionDelay: enterDelay } : undefined}
       >
-        <button
-          type="button"
-          onClick={onClick}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setContextMenu({ x: e.clientX, y: e.clientY, isMini: false });
-          }}
-          aria-label={`Open participant tile for ${item.name}`}
-          className="absolute inset-0 z-10 rounded-xl outline-none"
-        />
-        <StickerReactionsOverlay
-          sfu={voiceActions?.sfu}
-          senderUserId={item.userId}
-        />
-
-        {/* Selected Overlay */}
-        {isFocused && (
-          <div className="absolute inset-0 z-10 bg-black/40 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in duration-300" />
-        )}
-
-        {/* Background Effect */}
-        {item.avatar && (
-          <div
-            className="pointer-events-none absolute inset-0 z-0 transition-colors duration-200"
-            style={{
-              backgroundColor:
-                (isCamera || isScreen) && shouldRenderVideo
-                  ? "black"
-                  : resolvedDominantColor || undefined,
+        <div
+          style={tintStyle}
+          className={cn(
+            "@container group isolate relative h-full w-full cursor-pointer overflow-hidden rounded-lg border",
+            TILE_SURFACE,
+            isFocused
+              ? "border-accent-ink"
+              : "border-line pointer-fine:hover:border-line-strong",
+          )}
+        >
+          <button
+            type="button"
+            onClick={handleClick}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY, isMini: false });
             }}
+            {...tileLongPress}
+            aria-label={`Open participant tile for ${item.name}`}
+            aria-pressed={isTray ? isFocused : undefined}
+            className="absolute inset-0 z-0 rounded-lg outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
           />
-        )}
+          <StickerReactionsOverlay
+            sfu={voiceActions?.sfu}
+            senderUserId={item.userId}
+          />
 
-        {/* Video Layer */}
-        {shouldRenderVideo && (
-          <div
-            className={cn(
-              "pointer-events-none absolute inset-0 z-10 transition-opacity duration-200",
-              !(isCamera || isScreen) && "opacity-0",
-            )}
-          >
-            <VideoPlayer
-              stream={item.stream}
-              label={item.name}
-              muted={true} // Audio is handled by SFUClient AudioContext
-              isLocal={item.isLocal && item.type === "camera"}
-              className={cn(
-                "w-full h-full transition-ui",
-                isScreen ? "object-contain" : "object-cover",
-                shouldShowWatchPrompt && "opacity-0",
-              )}
-            />
-            {/* Dark gradient for labels */}
-            <div className="absolute inset-0 bg-linear-to-t from-black/20 via-transparent to-transparent opacity-100 group-hover:opacity-40 transition-opacity" />
-          </div>
-        )}
+          {shouldRenderVideo && (isCamera || isScreen) && (
+            <div className="pointer-events-none absolute inset-0 z-10 bg-black">
+              <VideoPlayer
+                stream={item.stream}
+                label={item.name}
+                muted={true} // Audio is handled by SFUClient AudioContext
+                isLocal={item.isLocal && item.type === "camera"}
+                className={cn(
+                  "h-full w-full",
+                  isScreen ? "object-contain" : "object-cover",
+                )}
+              />
+            </div>
+          )}
 
-        {shouldRenderThumbnailPoster && (
-          <div className="pointer-events-none absolute inset-0 z-10">
-            <img
-              src={streamThumbnails[item.userId]}
-              alt={`${item.name} stream thumbnail`}
-              className="h-full w-full object-cover transition-opacity duration-200"
-            />
-            <div className="absolute inset-0 bg-linear-to-t from-black/30 via-black/5 to-transparent" />
-          </div>
-        )}
-
-        {shouldShowFocusedStreamOverlay && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 pointer-events-none animate-in fade-in duration-300">
-            <Monitor size={32} className="text-white" fill="currentColor" />
-          </div>
-        )}
-
-        {/* Preview Paused Placeholder (local screen share hidden for performance) */}
-        {isPreviewHidden && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 backdrop-blur-sm">
-            <EyeOff size={22} className="text-white/50" />
-            <span className="text-ui-2xs font-semibold text-white/60 uppercase tracking-[0.08em]">
-              Preview paused
-            </span>
-          </div>
-        )}
-
-        {/* Loading State */}
-        {isLoadingStream && <StreamLoadingIndicator />}
-
-        {/* Watch Stream Prompt / Thumbnail Overlay */}
-        {shouldShowWatchPrompt && (
-          <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-2 text-center overflow-hidden">
-            {streamThumbnails[item.userId] && (
+          {shouldRenderThumbnailPoster && (
+            <div className="pointer-events-none absolute inset-0 z-10 bg-black">
               <img
                 src={streamThumbnails[item.userId]}
-                className="absolute inset-0 w-full h-full object-cover blur-sm opacity-60 scale-105 pointer-events-none"
-                alt="Stream Preview"
+                alt={`${item.name} stream thumbnail`}
+                className="h-full w-full object-cover"
               />
-            )}
-            <div className="relative z-10 flex flex-col items-center justify-center p-1 sm:p-2 w-full h-full overflow-hidden">
-              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg backdrop-blur-md flex items-center justify-center transition-transform duration-200">
-                <Monitor
-                  className="w-3 h-3 sm:w-4 sm:h-4 text-rm-text-muted shrink-0"
-                  strokeWidth={2}
+            </div>
+          )}
+
+          {/* Local share with its preview paused to save resources. */}
+          {isPreviewHidden && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2">
+              <Icon name="eyeOff" size="lg" className="text-ink-3" />
+              <span className="text-ui-xs font-medium text-ink-2">
+                Preview paused
+              </span>
+            </div>
+          )}
+
+          {isLoadingStream && (
+            <StreamLoadingIndicator
+              name={ownerName}
+              className="bg-transparent"
+            />
+          )}
+
+          {/* An unwatched remote share: a still of it under a scrim, Watch. */}
+          {shouldShowWatchPrompt && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 overflow-hidden p-2 text-center">
+              {streamThumbnails[item.userId] && (
+                <img
+                  src={streamThumbnails[item.userId]}
+                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                  alt=""
                 />
-              </div>
-
-              <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 sm:mt-2">
-                <h3 className="text-ui-2xs sm:text-ui-2xs font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
-                  <InlineEmojiText text={`${streamDisplayName}'s Stream`} />
-                </h3>
-              </div>
-
-              <button
+              )}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-ply-2/85"
+              />
+              <span className="relative flex size-8 shrink-0 items-center justify-center rounded-md bg-live-tint text-live-ink">
+                <Icon name="screenShare" state="active" size="sm" />
+              </span>
+              <p className="relative w-full truncate px-1 text-ui-xs font-medium text-ink-1">
+                <InlineEmojiText text={`${ownerName} is sharing`} />
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={(e) => {
                   e.stopPropagation();
                   voiceActions?.onToggleWatch?.(item.userId);
                 }}
-                className="shrink-0 mt-1 sm:mt-2 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md text-ui-2xs sm:text-ui-2xs font-semibold uppercase tracking-[0.08em] transition-ui shadow-xl shadow-primary/20 active:scale-[0.96] hover:shadow-[0_6px_18px_-6px_var(--rm-glow)] max-w-full truncate"
+                className="relative max-w-full truncate"
               >
-                Watch Stream
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Full-size Avatar (Only if not showing video, prompt, or paused-preview placeholder) */}
-        {!((isCamera || isScreen) && shouldRenderVideo) &&
-          !shouldShowWatchPrompt &&
-          !isPreviewHidden &&
-          !shouldRenderThumbnailPoster && (
-            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4">
-              {item.avatar ? (
-                <div className="h-20 w-20 overflow-visible rounded-full shadow-lg sm:h-28 sm:w-28">
-                  <AvatarImage
-                    src={getAuthAssetUrl(item.avatar)}
-                    alt={item.name}
-                    display={item.avatarDisplay}
-                  />
-                </div>
-              ) : (
-                <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full shadow-lg">
-                  <span className="text-3xl sm:text-5xl font-bold text-white">
-                    {item.name[0]?.toUpperCase()}
-                  </span>
-                </div>
-              )}
-
-              {/* Type Overlay Icon */}
-              {isTray && isFocused && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/70 animate-in fade-in duration-300">
-                  {isScreen ? (
-                    <Monitor
-                      size={32}
-                      className="text-white"
-                      fill="currentColor"
-                    />
-                  ) : isCamera ? (
-                    <Camera
-                      size={32}
-                      className="text-white"
-                      fill="currentColor"
-                    />
-                  ) : (
-                    <Phone
-                      size={32}
-                      className="text-white"
-                      fill="currentColor"
-                    />
-                  )}
-                </div>
-              )}
+                Watch stream
+              </Button>
             </div>
           )}
 
-        {/* Ringing Overlay Label */}
-        {item.isRinging && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 pointer-events-none">
-            <span className="bg-rm-bg-surface/80 backdrop-blur rounded-full px-3 py-1 text-xs font-bold text-rm-text animate-pulse shadow-xl">
-              Calling...
-            </span>
-          </div>
-        )}
-
-        {shouldShowWatchers && (
-          <div className="pointer-events-none absolute right-2 top-2 z-40 max-w-[75%]">
-            <StreamWatcherList watchers={streamWatchers} />
-          </div>
-        )}
-
-        {/* Status Indicators & Labels */}
-        <div className="pointer-events-none absolute bottom-2 left-2 z-30 flex items-center gap-2">
-          {isScreen ? (
-            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border shadow-lg">
-              <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[120px]">
-                <InlineEmojiText text={streamDisplayName} />
-              </span>
+          {showAvatar && (
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0 z-10 flex justify-center",
+                // A tray tile is short: the avatar sits high so the nameplate
+                // under it never overlaps the square.
+                isTray
+                  ? "items-start pt-2"
+                  : row
+                    ? ROW_TILE_AVATAR_BOX
+                    : "items-center p-4",
+              )}
+            >
+              <TileAvatar
+                name={item.name}
+                avatar={item.avatar}
+                avatarDisplay={item.avatarDisplay}
+                ringing={!!item.isRinging}
+                sizeClassName={
+                  isTray ? "size-10" : row ? ROW_TILE_AVATAR_SIZE : undefined
+                }
+                initialClassName={isTray ? "text-ui-md" : undefined}
+              />
             </div>
-          ) : (
-            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border flex items-center gap-2 shadow-lg">
-              <div className="flex items-center gap-1">
-                {item.isDeafened && (
-                  <Headphones
-                    size={10}
-                    className="text-rm-text-muted shrink-0"
-                  />
-                )}
-                {item.isMuted && (
-                  <MicOff
-                    size={10}
-                    className={
-                      item.serverMute
-                        ? "text-destructive shrink-0"
-                        : "text-rm-text-muted shrink-0"
-                    }
-                  />
-                )}
-              </div>
+          )}
 
-              <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[100px]">
-                <InlineEmojiText text={streamDisplayName} />
-              </span>
-              {isCamera && (
-                <span className="bg-rm-bg-surface/60 px-1.5 rounded-xs text-ui-2xs font-bold text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
+          {shouldShowWatchers && (
+            <div className="pointer-events-none absolute top-2 right-2 z-10 max-w-[75%]">
+              <StreamWatcherList watchers={streamWatchers} />
+            </div>
+          )}
+
+          <TileNameplate
+            name={isScreen ? ownerName : displayName}
+            overMedia={showsMedia}
+            state={
+              isScreen
+                ? undefined
+                : {
+                    isMuted: item.isMuted,
+                    isDeafened: item.isDeafened,
+                    serverMute: item.serverMute,
+                  }
+            }
+            kindIcon={isScreen ? "screenShare" : undefined}
+            kindLabel={isScreen ? "Screen" : undefined}
+            meta={
+              item.isRinging ? (
+                <LedLabel state="idle" size={6} className="shrink-0">
+                  Ringing
+                </LedLabel>
+              ) : isCamera && !isTray ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-xs px-1 text-num-xs",
+                    showsMedia ? "bg-white/15" : "bg-tint-2 text-ink-2",
+                  )}
+                >
                   <QualityMonitor
                     track={item.stream?.getVideoTracks()[0]}
                     signaledQuality={null}
@@ -360,79 +319,80 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                     type="cam"
                   />
                 </span>
-              )}
+              ) : null
+            }
+            className={cn(
+              "absolute bottom-2 left-2 z-10",
+              isTray && "bottom-1 left-1",
+            )}
+          />
+
+          {/* Local share: pause / resume its preview. */}
+          {isScreen && item.isLocal && voiceActions?.togglePreviewHidden && (
+            <div
+              data-preview-toggle="true"
+              className={cn("absolute top-2 left-2 z-10", REVEAL)}
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  voiceActions.togglePreviewHidden?.();
+                }}
+                title={
+                  isPreviewHidden
+                    ? "Resume preview"
+                    : "Pause preview (saves resources)"
+                }
+                aria-label={
+                  isPreviewHidden ? "Resume preview" : "Pause preview"
+                }
+                className={cn(
+                  PRESS,
+                  HIT,
+                  "flex h-6 items-center gap-1.5 rounded-sm bg-black/60 px-2 text-ui-xs font-medium text-white outline-none focus-visible:outline-2 focus-visible:outline-focus",
+                )}
+              >
+                {isPreviewHidden ? (
+                  <>
+                    <Icon name="eye" size="xs" /> <span>Resume</span>
+                  </>
+                ) : (
+                  <>
+                    <Icon name="eyeOff" size="xs" /> <span>Pause</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {!isTray && (
+            <div className={cn("absolute right-2 bottom-2 z-10", REVEAL)}>
+              <IconButton
+                aria-label={`More options for ${item.name}`}
+                icon="more"
+                size={24}
+                variant="plain"
+                className="bg-black/60 text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setContextMenu({ x: e.clientX, y: e.clientY, isMini: true });
+                }}
+              />
             </div>
           )}
         </div>
-
-        {/* Hide/Show Preview toggle — only on local screen tile */}
-        {isScreen && item.isLocal && voiceActions?.togglePreviewHidden && (
-          <div
-            data-preview-toggle="true"
-            className="pointer-events-none absolute top-2 left-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-          >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                voiceActions.togglePreviewHidden?.();
-              }}
-              title={
-                isPreviewHidden
-                  ? "Resume preview"
-                  : "Pause preview (saves resources)"
-              }
-              aria-label={isPreviewHidden ? "Resume preview" : "Pause preview"}
-              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-primary/70 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted shadow-lg backdrop-blur-md transition-colors hover:text-rm-text active:scale-[0.96]"
-            >
-              {isPreviewHidden ? (
-                <>
-                  <Eye size={11} /> <span>Resume</span>
-                </>
-              ) : (
-                <>
-                  <EyeOff size={11} /> <span>Pause</span>
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* Right status (Ellipsis Bottom Right) */}
-        {!isTray && (
-          <div className="pointer-events-none absolute bottom-2 right-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-            <IconButton
-              icon={MoreHorizontal}
-              size="xs"
-              className="bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border shadow-xl active:scale-[0.96]"
-              onClick={(e) => {
-                e.stopPropagation();
-                setContextMenu({ x: e.clientX, y: e.clientY, isMini: true });
-              }}
-            />
-          </div>
-        )}
-        {isTray && (
-          <div className="pointer-events-none absolute top-2 right-2 z-30 opacity-0 transition-opacity group-hover:opacity-100">
-            <div className="bg-rm-bg-primary/60 backdrop-blur-md p-1 rounded-lg border border-rm-border">
-              <ChevronDown size={10} className="text-rm-text-muted" />
-            </div>
-          </div>
-        )}
-
-        {/* Hover Overlay */}
-        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none" />
       </div>
 
-      {shouldRenderStreamMenu && renderedContextMenu && (
+      {contextMenu && (
         <Suspense fallback={null}>
           <StreamContextMenu
-            x={renderedContextMenu.x}
-            y={renderedContextMenu.y}
+            x={contextMenu.x}
+            y={contextMenu.y}
             userId={item.userId}
             isStreaming={isScreen}
             onClose={() => setContextMenu(null)}
-            isClosing={!contextMenu}
+            isClosing={false}
             {...voiceActions}
             watchedStreams={watchedStreams}
             currentScreenSource={voiceActions?.currentScreenSource}
@@ -441,4 +401,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
       )}
     </>
   );
-};
+}
+
+export const ParticipantCard = memo(ParticipantCardImpl, cardPropsEqual);
+ParticipantCard.displayName = "ParticipantCard";

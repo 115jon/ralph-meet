@@ -3,11 +3,14 @@ import {
   getProfileEffectLayers,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
-import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
-import { getProfileFrameLayers } from "@/lib/profile-frame";
 import {
   getProfileEffectFallbackAsset,
+  getProfileEffectPassDeadlineMs,
+  getProfileEffectPassLayers,
   getProfileEffectPlaybackSnapshot,
+  isProfileEffectPassComplete,
+  shouldReplayProfileEffect,
+  type ProfileEffectPlaybackMode,
 } from "@/lib/profile-effect-playback";
 import { cn } from "@/lib/utils";
 import {
@@ -26,7 +29,10 @@ interface ProfileCollectiblesLayerProps {
   fit?: "contain" | "cover";
   blendMode?: "normal" | "screen";
   playAnimation?: boolean;
-  renderFrame?: boolean;
+  /** `once` (default): one pass per open, then the still frame. `loop`: shop stages. */
+  playback?: ProfileEffectPlaybackMode;
+  /** Change it to ask for one more pass (honoured once the last one ended). */
+  replayKey?: number;
 }
 
 type MediaKind = "image" | "video";
@@ -241,6 +247,7 @@ function EffectMedia({
   preferredKind,
   activeOffsetMs = 0,
   loop = false,
+  onEnded,
 }: {
   src: string;
   fit: "contain" | "cover";
@@ -249,6 +256,8 @@ function EffectMedia({
   preferredKind: MediaKind;
   activeOffsetMs?: number;
   loop?: boolean;
+  /** The media played to its end (videos only; images never end). */
+  onEnded?: () => void;
 }) {
   const guessedKind = useMemo(
     () => inferMediaKind(src, preferredKind),
@@ -276,7 +285,10 @@ function EffectMedia({
         activeOffsetMs={activeOffsetMs}
         loop={loop}
         onFallbackToImage={handleMediaError}
-        onEnded={() => setHasEnded(true)}
+        onEnded={() => {
+          setHasEnded(true);
+          onEnded?.();
+        }}
       />
     );
   }
@@ -317,6 +329,23 @@ function buildTimelineKey(display?: AvatarDisplay | string | null) {
   ].join("|");
 }
 
+const NO_ENDED_LAYERS: ReadonlySet<number> = new Set();
+
+function nowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+/**
+ * The profile effect over a profile surface.
+ *
+ * `playback="once"` (the default, every profile surface) plays one pass when
+ * the surface mounts or the equipped effect changes, then rests on the
+ * effect's still frame. Re-renders, status changes and field edits never
+ * restart it: the pass is keyed by the effect's timeline, not by `display`'s
+ * identity. A changed `replayKey` asks for one more pass, honoured only once
+ * the current pass has finished. `playback="loop"` (shop and picker stages)
+ * keeps the authored loop running. Reduced motion shows the still frame.
+ */
 export function ProfileCollectiblesLayer({
   display,
   className,
@@ -324,7 +353,8 @@ export function ProfileCollectiblesLayer({
   fit = "contain",
   blendMode = "normal",
   playAnimation = true,
-  renderFrame = true,
+  playback = "once",
+  replayKey = 0,
 }: ProfileCollectiblesLayerProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const effect = useMemo(() => getProfileEffect(display), [display]);
@@ -332,14 +362,21 @@ export function ProfileCollectiblesLayer({
     () => getProfileEffectLayers(display),
     [display],
   );
+  const passLayers = useMemo(
+    () => getProfileEffectPassLayers(effectLayers, playback),
+    [effectLayers, playback],
+  );
   const timelineKey = useMemo(() => buildTimelineKey(display), [display]);
   const timelineStartRef = useRef(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [playbackSeed, setPlaybackSeed] = useState(0);
+  const [passId, setPassId] = useState(0);
+  const [endedLayers, setEndedLayers] =
+    useState<ReadonlySet<number>>(NO_ENDED_LAYERS);
 
-  const shouldAnimateLayers =
-    playAnimation && !prefersReducedMotion && effectLayers.length > 0;
-  const fallbackAsset = useMemo(
+  const canAnimate = playAnimation && !prefersReducedMotion;
+  const hasLayers = passLayers.length > 0;
+  const animatedFallback = useMemo(
     () =>
       getProfileEffectFallbackAsset(effect, {
         playAnimation,
@@ -347,67 +384,94 @@ export function ProfileCollectiblesLayer({
       }),
     [effect, playAnimation, prefersReducedMotion],
   );
+  const stillAsset = useMemo(
+    () => getProfileEffectFallbackAsset(effect, { playAnimation: false }),
+    [effect],
+  );
+  // Without authored layers the fallback media is the pass: one untimed
+  // layer that ends when the video does (or at the cap).
+  const fallbackPassLayers = useMemo(
+    () => (animatedFallback.src ? [{ src: animatedFallback.src }] : []),
+    [animatedFallback.src],
+  );
+  const timelineLayers = hasLayers ? passLayers : fallbackPassLayers;
+  const passComplete =
+    playback === "once" &&
+    canAnimate &&
+    isProfileEffectPassComplete(timelineLayers, elapsedMs, endedLayers);
+  const clockRunning = canAnimate && timelineLayers.length > 0 && !passComplete;
+
   const playbackSnapshot = useMemo(
     () =>
-      shouldAnimateLayers
-        ? getProfileEffectPlaybackSnapshot(
-            effectLayers,
-            elapsedMs,
-            playbackSeed,
-          )
+      canAnimate && hasLayers
+        ? getProfileEffectPlaybackSnapshot(passLayers, elapsedMs, playbackSeed)
         : { activeLayers: [], renderedLayers: [], nextTransitionMs: null },
-    [effectLayers, elapsedMs, playbackSeed, shouldAnimateLayers],
+    [canAnimate, hasLayers, passLayers, elapsedMs, playbackSeed],
+  );
+  const passDeadlineMs = useMemo(
+    () => getProfileEffectPassDeadlineMs(timelineLayers),
+    [timelineLayers],
   );
 
+  // Start a pass: on mount, when the equipped effect changes, when motion is
+  // allowed again, and on an honoured replay (passId).
   useEffect(() => {
-    if (!shouldAnimateLayers) {
+    if (!canAnimate) {
       startTransition(() => {
         setElapsedMs(0);
         setPlaybackSeed(0);
+        setEndedLayers(NO_ENDED_LAYERS);
       });
       return;
     }
 
-    const now =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now = nowMs();
     timelineStartRef.current = now;
     startTransition(() => {
       setPlaybackSeed(Math.max(1, Math.round(now * 1000)));
       setElapsedMs(0);
+      setEndedLayers(NO_ENDED_LAYERS);
     });
-  }, [shouldAnimateLayers, timelineKey]);
+  }, [canAnimate, timelineKey, passId]);
 
+  // Replay requests: one more pass, only after the current one finished.
+  const lastReplayKeyRef = useRef(replayKey);
   useEffect(() => {
-    if (!shouldAnimateLayers) return;
-    if (playbackSnapshot.nextTransitionMs == null) return;
+    if (replayKey === lastReplayKeyRef.current) return;
+    lastReplayKeyRef.current = replayKey;
+    if (shouldReplayProfileEffect({ mode: playback, passComplete, canAnimate }))
+      startTransition(() => setPassId((id) => id + 1));
+  }, [replayKey, playback, passComplete, canAnimate]);
 
-    const now =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    const currentElapsedMs = Math.max(0, now - timelineStartRef.current);
-    const delayMs = Math.max(
-      16,
-      Math.ceil(playbackSnapshot.nextTransitionMs - currentElapsedMs),
-    );
+  // Wake at the next layer transition; a `once` pass also wakes at its
+  // deadline so it always comes to rest.
+  const nextLayerWakeMs =
+    playbackSnapshot.nextTransitionMs ?? Number.POSITIVE_INFINITY;
+  const nextWakeMs =
+    playback === "once" && passDeadlineMs > elapsedMs
+      ? Math.min(nextLayerWakeMs, passDeadlineMs)
+      : nextLayerWakeMs;
+  useEffect(() => {
+    if (!clockRunning || !Number.isFinite(nextWakeMs)) return;
+
+    const currentElapsedMs = Math.max(0, nowMs() - timelineStartRef.current);
+    const delayMs = Math.max(16, Math.ceil(nextWakeMs - currentElapsedMs));
 
     const timer = window.setTimeout(() => {
-      const tickNow =
-        typeof performance !== "undefined" ? performance.now() : Date.now();
       startTransition(() =>
-        setElapsedMs(Math.max(0, tickNow - timelineStartRef.current)),
+        setElapsedMs(Math.max(0, nowMs() - timelineStartRef.current)),
       );
     }, delayMs);
 
     return () => window.clearTimeout(timer);
-  }, [playbackSnapshot.nextTransitionMs, shouldAnimateLayers]);
+  }, [clockRunning, nextWakeMs]);
 
   useEffect(() => {
-    if (!shouldAnimateLayers || typeof document === "undefined") return;
+    if (!clockRunning || typeof document === "undefined") return;
 
     const sync = () => {
-      const now =
-        typeof performance !== "undefined" ? performance.now() : Date.now();
       startTransition(() =>
-        setElapsedMs(Math.max(0, now - timelineStartRef.current)),
+        setElapsedMs(Math.max(0, nowMs() - timelineStartRef.current)),
       );
     };
 
@@ -417,15 +481,19 @@ export function ProfileCollectiblesLayer({
       document.removeEventListener("visibilitychange", sync);
       window.removeEventListener("focus", sync);
     };
-  }, [shouldAnimateLayers]);
+  }, [clockRunning]);
 
-  const hasFrame =
-    renderFrame &&
-    Boolean(
-      getProfileFrameLayers(display, "back").length ||
-      getProfileFrameLayers(display, "front").length,
-    );
-  if (!fallbackAsset.src && !effectLayers.length && !hasFrame) return null;
+  const markEnded = (index: number) =>
+    setEndedLayers((current) => {
+      if (current.has(index)) return current;
+      const next = new Set(current);
+      next.add(index);
+      return next;
+    });
+
+  if (!animatedFallback.src && !effectLayers.length) return null;
+
+  const resting = playback === "once" && passComplete;
 
   return (
     <div
@@ -434,32 +502,43 @@ export function ProfileCollectiblesLayer({
         className,
       )}
       aria-hidden="true"
+      data-effect-playback={
+        !canAnimate ? "still" : resting ? "rest" : "playing"
+      }
     >
-      {renderFrame ? (
-        <ProfileFrameLayer
-          display={display}
-          order="back"
-          className="z-0 opacity-80"
-        />
-      ) : null}
       <div className="pointer-events-none absolute inset-0 z-10">
-        {!shouldAnimateLayers && fallbackAsset.src ? (
+        {resting && stillAsset.src ? (
+          // The pass is over: settle on the still frame with a short fade.
+          <div className="absolute inset-0 transition-opacity duration-(--dur-3) ease-out starting:opacity-0">
+            <EffectMedia
+              key={`rest:${stillAsset.kind}:${stillAsset.src}`}
+              src={stillAsset.src}
+              fit={fit}
+              active={false}
+              preferredKind={stillAsset.kind}
+              style={buildLayerMediaStyle(fit, effectOpacity, blendMode)}
+            />
+          </div>
+        ) : null}
+
+        {!resting && (!canAnimate || !hasLayers) && animatedFallback.src ? (
           <EffectMedia
-            key={`fallback:${fallbackAsset.kind}:${fallbackAsset.src}`}
-            src={fallbackAsset.src}
+            key={`fallback:${animatedFallback.kind}:${animatedFallback.src}:${passId}`}
+            src={animatedFallback.src}
             fit={fit}
-            active={playAnimation && !prefersReducedMotion}
-            preferredKind={fallbackAsset.kind}
+            active={canAnimate}
+            preferredKind={animatedFallback.kind}
             loop={
-              playAnimation &&
-              !prefersReducedMotion &&
-              fallbackAsset.kind === "video"
+              canAnimate &&
+              playback === "loop" &&
+              animatedFallback.kind === "video"
             }
+            onEnded={() => markEnded(0)}
             style={buildLayerMediaStyle(fit, effectOpacity, blendMode)}
           />
         ) : null}
 
-        {shouldAnimateLayers
+        {!resting && canAnimate && hasLayers
           ? playbackSnapshot.renderedLayers.map((state) => (
               <EffectMedia
                 key={`${state.renderKey}:${state.active ? "active" : "idle"}`}
@@ -472,6 +551,7 @@ export function ProfileCollectiblesLayer({
                   state.layer.loop === true &&
                   (state.layer.loopDelay ?? 0) === 0
                 }
+                onEnded={() => markEnded(state.renderIndex)}
                 style={{
                   ...buildLayerMediaStyle(
                     fit,
@@ -486,9 +566,6 @@ export function ProfileCollectiblesLayer({
             ))
           : null}
       </div>
-      {renderFrame ? (
-        <ProfileFrameLayer display={display} order="front" className="z-20" />
-      ) : null}
     </div>
   );
 }

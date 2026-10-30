@@ -1,636 +1,508 @@
-import { getAuthAssetUrl } from "@/lib/platform";
-import { apiDelete, apiGet, apiPut } from "@/lib/api-client";
-import { PERMISSIONS } from "@/lib/permissions";
-import type { Role, User } from "@/lib/types";
-import { cn } from "@/lib/utils";
-import { Check, Loader2, Plus, Slash, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { AvatarImage } from "./AvatarImage";
-import InlineEmojiText from "./InlineEmojiText";
-import { ButtonBase } from "@/components/ui/button-base";
+/**
+ * Channel permission overrides (design-audit ST-03, ST-16, ST-17, ST-42).
+ *
+ *   split (lg+)   the overrides list beside the editor for the selected one
+ *   stacked       the list, then the editor as a pushed page; the settings
+ *                 workbench draws the back button (ChannelSettingsModal)
+ *
+ * Data and drafts live in `usePermissionOverrides`, owned by the modal so its
+ * footer can save and its header can title the pushed page.
+ */
 
-interface Override {
-  id?: string;
-  target_id: string;
-  target_type: "role" | "user";
-  allow: number;
-  deny: number;
-  name?: string;
-  color?: string | null;
-  avatar_url?: string | null;
-  avatar_display?: User["avatar_display"];
-}
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { describeApiError } from "@/lib/api-errors";
+import { Icon } from "@/components/ui/icon";
+import { PRESS } from "@/components/ui/interaction";
+import { getAuthAssetUrl } from "@/lib/platform";
+import { cn } from "@/lib/utils";
+import { useRef, useState, type ReactNode } from "react";
+import { AvatarImage } from "./AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
+import InlineEmojiText from "./InlineEmojiText";
+import { LoadError, SkeletonRows } from "./server-settings/states";
+import {
+  TEXT_PERMISSIONS,
+  VOICE_PERMISSIONS,
+  triStateOf,
+  type PermissionModel,
+  type PermissionOverride,
+} from "./channel-settings/permission-model";
+import { PermissionTriState } from "./channel-settings/PermissionTriState";
+import {
+  ConfirmStrip,
+  SettingsCard,
+  SettingsRow,
+  useConfirm,
+} from "./settings/primitives";
 
 interface ChannelPermissionsTabProps {
-  serverId: string;
-  channelId: string;
+  model: PermissionModel;
   isVoice: boolean;
+  /** "#general" or the voice channel's name, for copy. */
+  channelLabel: string;
+  selectedId: string | null;
+  onSelect: (targetId: string | null) => void;
+  /** List and editor side by side. */
+  split: boolean;
 }
 
-const TEXT_PERMISSIONS = [
-  {
-    mask: PERMISSIONS.VIEW_CHANNELS,
-    name: "View Channel",
-    desc: "Allows members to view and read messages in this channel",
-  },
-  {
-    mask: PERMISSIONS.MANAGE_CHANNELS,
-    name: "Manage Channel",
-    desc: "Allows members to change the channels name or delete it",
-  },
-  {
-    mask: PERMISSIONS.MANAGE_MESSAGES,
-    name: "Manage Messages",
-    desc: "Allows members to delete messages by other users or pin any message",
-  },
-  {
-    mask: PERMISSIONS.SEND_MESSAGES,
-    name: "Send Messages",
-    desc: "Allows members to send text messages",
-  },
-  {
-    mask: PERMISSIONS.ADD_REACTIONS,
-    name: "Add Reactions",
-    desc: "Allows members to add new emoji reactions to a message",
-  },
-  {
-    mask: PERMISSIONS.ATTACH_FILES,
-    name: "Attach Files",
-    desc: "Allows members to upload files",
-  },
-];
+/* ------------------------------------------------------------------ */
+/* Identity marks                                                       */
+/* ------------------------------------------------------------------ */
 
-const VOICE_PERMISSIONS = [
-  {
-    mask: PERMISSIONS.VIEW_CHANNELS,
-    name: "View Channel",
-    desc: "Allows members to see the voice channel",
-  },
-  {
-    mask: PERMISSIONS.MANAGE_CHANNELS,
-    name: "Manage Channel",
-    desc: "Allows members to change the channels name or delete it",
-  },
-  {
-    mask: PERMISSIONS.CONNECT,
-    name: "Connect",
-    desc: "Allows members to join this voice channel",
-  },
-  {
-    mask: PERMISSIONS.SPEAK,
-    name: "Speak",
-    desc: "Allows members to talk in this voice channel",
-  },
-  {
-    mask: PERMISSIONS.VIDEO,
-    name: "Video",
-    desc: "Allows members to share their screen or camera",
-  },
-  {
-    mask: PERMISSIONS.MUTE_MEMBERS,
-    name: "Mute Members",
-    desc: "Allows members to mute other users in this voice channel",
-  },
-];
-
-function PermissionsSidebar({
-  isAddingTarget,
-  setIsAddingTarget,
-  availableRoles,
-  availableMembers,
-  handleAddOverride,
-  overrides,
-  roles,
-  selectedTargetId,
-  setSelectedTargetId,
-  handleDeleteOverride,
+/** Role colour dot. The colour is the role's own (data); none = muted ink. */
+function RoleDot({
+  color,
+  className,
 }: {
-  isAddingTarget: boolean;
-  setIsAddingTarget: (val: boolean) => void;
-  availableRoles: Role[];
-  availableMembers: any[];
-  handleAddOverride: (
-    target_id: string,
-    target_type: "role" | "user",
-    name: string,
-    color?: string | null,
-    avatar_url?: string | null,
-    avatar_display?: User["avatar_display"],
-  ) => void;
-  overrides: Override[];
-  roles: Role[];
-  selectedTargetId: string | null;
-  setSelectedTargetId: (id: string | null) => void;
-  handleDeleteOverride: (id: string) => void;
+  color?: string | null;
+  className?: string;
 }) {
   return (
-    <div className="flex min-h-0 w-56 flex-col bg-rm-bg-secondary border-r border-rm-border relative z-10">
-      <div className="p-3 border-b border-rm-border flex justify-between items-center">
-        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-          Roles/Members
-        </span>
-        <ButtonBase
-          onClick={() => setIsAddingTarget(!isAddingTarget)}
-          className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10"
+    <span
+      aria-hidden="true"
+      className={cn(
+        "size-3 shrink-0 rounded-full",
+        !color && "bg-ink-3",
+        className,
+      )}
+      style={color ? { backgroundColor: color } : undefined}
+    />
+  );
+}
+
+/** Keeps the person's avatar framing (AvatarImage reads `display`). */
+function MemberAvatar({
+  name,
+  avatarUrl,
+  display,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  display?: PermissionOverride["avatar_display"];
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-6 shrink-0 items-center justify-center bg-tint-3 font-display text-[11px] font-extrabold text-ink-1",
+        avatarShape(avatarUrl && display),
+      )}
+    >
+      {avatarUrl ? (
+        <AvatarImage
+          src={getAuthAssetUrl(avatarUrl)}
+          alt=""
+          display={display}
+        />
+      ) : (
+        (name[0] ?? "?").toUpperCase()
+      )}
+    </span>
+  );
+}
+
+function OverrideMark({ override }: { override: PermissionOverride }) {
+  return override.target_type === "role" ? (
+    <span className="flex size-6 shrink-0 items-center justify-center">
+      <RoleDot color={override.color} />
+    </span>
+  ) : (
+    <MemberAvatar
+      name={override.name}
+      avatarUrl={override.avatar_url}
+      display={override.avatar_display}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* List                                                                 */
+/* ------------------------------------------------------------------ */
+
+const ROW =
+  "flex w-full items-center gap-2.5 rounded-sm px-2 text-left outline-offset-[-2px] transition-colors duration-(--dur-1) ease-out min-h-12 md:min-h-10";
+
+function OverrideList({
+  model,
+  selectedId,
+  onSelect,
+  split,
+  channelLabel,
+}: {
+  model: PermissionModel;
+  selectedId: string | null;
+  onSelect: (targetId: string) => void;
+  split: boolean;
+  channelLabel: string;
+}) {
+  const [adding, setAdding] = useState(false);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const { availableRoles, availableMembers } = model;
+
+  const closePicker = () => {
+    setAdding(false);
+    requestAnimationFrame(() => addRef.current?.focus());
+  };
+
+  return (
+    <SettingsCard
+      title={
+        adding ? "Add an override" : split ? "Overrides" : "Roles and members"
+      }
+      description={
+        adding
+          ? `Pick a role or member to change what they can do in ${channelLabel}.`
+          : undefined
+      }
+      actions={
+        <Button
+          ref={addRef}
+          type="button"
+          variant={adding ? "ghost" : "secondary"}
+          size="sm"
+          aria-expanded={adding}
+          onClick={() => (adding ? closePicker() : setAdding(true))}
         >
-          {isAddingTarget ? (
-            <X className="h-4 w-4" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
-        </ButtonBase>
-      </div>
-
-      {isAddingTarget ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
-          {availableRoles.length > 0 && (
-            <div>
-              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-2 text-rm-text-muted">
-                Roles
-              </span>
-              <div className="space-y-1 mt-1">
+          {adding ? null : <Icon name="add" size="sm" />}
+          {adding ? "Cancel" : "Add"}
+        </Button>
+      }
+    >
+      <li className="px-2 pb-2 pt-2">
+        {adding ? (
+          <div className="flex flex-col gap-3">
+            {availableRoles.length > 0 ? (
+              <PickerGroup title="Roles">
                 {availableRoles.map((role) => (
-                  <ButtonBase
-                    key={role.id}
-                    onClick={() =>
-                      handleAddOverride(
-                        role.id,
-                        "role",
-                        role.name,
-                        role.color || undefined,
-                      )
-                    }
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
-                  >
-                    <div
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: role.color || "#94a3b8" }}
-                    />
-                    <InlineEmojiText text={role.name} className="truncate" />
-                  </ButtonBase>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {availableMembers.length > 0 && (
-            <div>
-              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-2 text-rm-text-muted">
-                Members
-              </span>
-              <div className="space-y-1 mt-1">
-                {availableMembers.map((m) => {
-                  const displayName =
-                    m.user.display_name?.trim() || m.user.username;
-                  return (
-                    <ButtonBase
-                      key={m.user.id}
-                      onClick={() =>
-                        handleAddOverride(
-                          m.user.id,
-                          "user",
-                          displayName,
-                          undefined,
-                          m.user.avatar_url,
-                          m.user.avatar_display,
-                        )
-                      }
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
+                  <li key={role.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        model.addOverride({ id: role.id, type: "role" });
+                        setAdding(false);
+                        onSelect(role.id);
+                      }}
+                      className={cn(
+                        ROW,
+                        PRESS,
+                        "text-ui-md text-ink-1 md:text-ui-sm pointer-fine:hover:bg-tint-1",
+                      )}
                     >
-                      <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center shrink-0">
-                        {m.user.avatar_url ? (
-                          <AvatarImage
-                            src={getAuthAssetUrl(m.user.avatar_url)}
-                            alt=""
-                            display={m.user.avatar_display}
-                          />
-                        ) : (
-                          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
-                            {displayName[0]}
-                          </span>
-                        )}
-                      </div>
+                      <span className="flex size-6 shrink-0 items-center justify-center">
+                        <RoleDot color={role.color} />
+                      </span>
                       <InlineEmojiText
-                        text={displayName}
-                        className="truncate"
+                        text={role.name}
+                        className="min-w-0 flex-1 truncate"
                       />
-                    </ButtonBase>
+                    </button>
+                  </li>
+                ))}
+              </PickerGroup>
+            ) : null}
+            {availableMembers.length > 0 ? (
+              <PickerGroup title="Members">
+                {availableMembers.map((member) => {
+                  const name =
+                    member.user.display_name?.trim() || member.user.username;
+                  return (
+                    <li key={member.user.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          model.addOverride({
+                            id: member.user.id,
+                            type: "user",
+                          });
+                          setAdding(false);
+                          onSelect(member.user.id);
+                        }}
+                        className={cn(
+                          ROW,
+                          PRESS,
+                          "text-ui-md text-ink-1 md:text-ui-sm pointer-fine:hover:bg-tint-1",
+                        )}
+                      >
+                        <MemberAvatar
+                          name={name}
+                          avatarUrl={member.user.avatar_url}
+                          display={member.user.avatar_display}
+                        />
+                        <InlineEmojiText
+                          text={name}
+                          className="min-w-0 flex-1 truncate"
+                        />
+                      </button>
+                    </li>
                   );
                 })}
-              </div>
-            </div>
-          )}
-          {availableRoles.length === 0 && availableMembers.length === 0 && (
-            <p className="p-2 text-xs text-rm-text-muted text-center">
-              Everyone is added.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1">
-          {overrides.map((o) => {
-            const roleInfo = roles.find((r) => r.id === o.target_id);
-            const isDefault = roleInfo?.is_default;
-
-            return (
-              <ButtonBase
-                key={o.target_id}
-                onClick={() => setSelectedTargetId(o.target_id)}
-                className={cn(
-                  "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors group",
-                  selectedTargetId === o.target_id
-                    ? "bg-primary/20 text-primary"
-                    : "hover:bg-rm-bg-hover text-rm-text",
-                )}
-              >
-                {o.target_type === "role" ? (
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: o.color || "#94a3b8" }}
-                  />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center -ml-1 shrink-0">
-                    {o.avatar_url ? (
-                      <AvatarImage
-                        src={getAuthAssetUrl(o.avatar_url)}
-                        alt=""
-                        display={o.avatar_display}
-                      />
-                    ) : (
-                      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
-                        {(o.name || "?")[0]}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <InlineEmojiText
-                  text={o.name ?? ""}
-                  className="truncate flex-1"
-                />
-                {!isDefault && (
-                  <Trash2
-                    className="h-3 w-3 opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteOverride(o.target_id);
-                    }}
-                  />
-                )}
-              </ButtonBase>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PermissionsEditor({
-  selectedOverride,
-  savingTarget,
-  permissionList,
-  handleUpdatePermission,
-}: {
-  selectedOverride: Override | undefined;
-  savingTarget: string | null;
-  permissionList: { mask: number; name: string; desc: string }[];
-  handleUpdatePermission: (
-    mask: number,
-    action: "allow" | "deny" | "inherit",
-  ) => void;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col bg-rm-bg-primary overflow-hidden relative">
-      {selectedOverride ? (
-        <>
-          <div className="p-5 border-b border-rm-border flex items-center gap-3">
-            <span className="font-bold text-lg text-rm-text flex items-center gap-2">
-              {selectedOverride.target_type === "role" ? (
-                <div
-                  className="w-4 h-4 rounded-full inline-block"
-                  style={{
-                    backgroundColor: selectedOverride.color || "#94a3b8",
-                  }}
-                />
-              ) : null}
-              <InlineEmojiText text={selectedOverride.name ?? ""} />
-            </span>
-            {savingTarget === selectedOverride.target_id && (
-              <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />
-            )}
+              </PickerGroup>
+            ) : null}
+            {availableRoles.length === 0 && availableMembers.length === 0 ? (
+              <p className="px-2 py-3 text-ui-sm text-ink-2">
+                Every role and member already has an override here.
+              </p>
+            ) : null}
           </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-3 relative z-0">
-            {permissionList.map((perm) => {
-              const isAllowed =
-                (selectedOverride.allow & perm.mask) === perm.mask;
-              const isDenied =
-                (selectedOverride.deny & perm.mask) === perm.mask;
-              const isInherit = !isAllowed && !isDenied;
-
+        ) : (
+          <ul className="flex flex-col gap-px">
+            {model.overrides.map((o) => {
+              const current = selectedId === o.target_id;
+              const dirty = model.isDirty(o);
               return (
-                <div
-                  key={perm.mask}
-                  className="flex items-center justify-between pb-4 border-b border-rm-border/30 last:border-0 hover:bg-rm-white/5 rounded px-2 -mx-2 transition-colors"
-                >
-                  <div className="max-w-[70%]">
-                    <div className="text-sm font-semibold text-rm-text">
-                      {perm.name}
-                    </div>
-                    <div className="text-xs text-rm-text-secondary mt-1">
-                      {perm.desc}
-                    </div>
-                  </div>
-
-                  <div className="flex bg-rm-bg-elevated rounded-lg p-1 gap-1 border border-rm-border/50 shadow-inner">
-                    <ButtonBase
-                      onClick={() => handleUpdatePermission(perm.mask, "deny")}
-                      className={cn(
-                        "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
-                        isDenied
-                          ? "bg-destructive text-white"
-                          : "hover:bg-rm-white/10 text-rm-text-muted",
-                      )}
-                    >
-                      <X className="h-4 w-4" />
-                    </ButtonBase>
-                    <ButtonBase
-                      onClick={() =>
-                        handleUpdatePermission(perm.mask, "inherit")
-                      }
-                      className={cn(
-                        "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
-                        isInherit
-                          ? "bg-slate-500 text-white border border-rm-border"
-                          : "hover:bg-rm-white/10 text-rm-text-muted",
-                      )}
-                    >
-                      <Slash className="h-4 w-4" />
-                    </ButtonBase>
-                    <ButtonBase
-                      onClick={() => handleUpdatePermission(perm.mask, "allow")}
-                      className={cn(
-                        "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
-                        isAllowed
-                          ? "bg-green-500 text-white"
-                          : "hover:bg-rm-white/10 text-rm-text-muted",
-                      )}
-                    >
-                      <Check className="h-4 w-4" />
-                    </ButtonBase>
-                  </div>
-                </div>
+                <li key={o.target_id}>
+                  <button
+                    type="button"
+                    aria-current={current && split ? "true" : undefined}
+                    onClick={() => onSelect(o.target_id)}
+                    className={cn(
+                      ROW,
+                      PRESS,
+                      current && split
+                        ? "bg-tint-2 font-semibold text-ink-1"
+                        : "font-medium text-ink-1 pointer-fine:hover:bg-tint-1",
+                      "text-ui-md md:text-ui-sm",
+                    )}
+                  >
+                    <OverrideMark override={o} />
+                    <span className="min-w-0 flex-1">
+                      <InlineEmojiText
+                        text={o.name}
+                        className="block truncate"
+                      />
+                      <span className="block text-ui-xs font-normal text-ink-3">
+                        {o.target_type === "role" ? "Role" : "Member"}
+                        {dirty ? " · Unsaved" : ""}
+                      </span>
+                    </span>
+                    {!split ? (
+                      <Icon
+                        name="chevronRight"
+                        size="xs"
+                        className="shrink-0 text-ink-3"
+                      />
+                    ) : null}
+                  </button>
+                </li>
               );
             })}
-          </div>
-        </>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-rm-text-muted">
-          Select a role or member to edit overrides
-        </div>
-      )}
+          </ul>
+        )}
+      </li>
+    </SettingsCard>
+  );
+}
+
+function PickerGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <h5 className="px-2 pb-1 text-ui-xs font-medium text-ink-3">{title}</h5>
+      <ul className="flex flex-col gap-px">{children}</ul>
     </div>
   );
 }
 
-export default function ChannelPermissionsTab({
-  serverId,
-  channelId,
+/* ------------------------------------------------------------------ */
+/* Editor                                                               */
+/* ------------------------------------------------------------------ */
+
+function OverrideEditor({
+  model,
+  override,
   isVoice,
-}: ChannelPermissionsTabProps) {
-  const [state, setState] = useState({
-    loading: true,
-    overrides: [] as Override[],
-    roles: [] as Role[],
-    members: [] as any[],
-    selectedTargetId: null as string | null,
-    isAddingTarget: false,
-    savingTarget: null as string | null,
-  });
+  channelLabel,
+  onRemoved,
+}: {
+  model: PermissionModel;
+  override: PermissionOverride;
+  isVoice: boolean;
+  channelLabel: string;
+  onRemoved: () => void;
+}) {
+  const { armed, arm, cancel, done, triggerRef } = useConfirm();
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const permissions = isVoice ? VOICE_PERMISSIONS : TEXT_PERMISSIONS;
+  const isRole = override.target_type === "role";
 
-  const permissionList = isVoice ? VOICE_PERMISSIONS : TEXT_PERMISSIONS;
-
-  const fetchData = useCallback(async () => {
+  const remove = async () => {
+    setRemoving(true);
+    setRemoveError(null);
     try {
-      setState((prev) => ({ ...prev, loading: true }));
-      const [overridesData, rolesData, membersData] = await Promise.all([
-        apiGet<Override[]>(`/api/channels/${channelId}/permissions`),
-        apiGet<Role[]>(`/api/servers/${serverId}/roles`),
-        apiGet<any[]>(`/api/servers/${serverId}/members`),
-      ]);
+      await model.removeOverride(override.target_id);
+      done();
+      onRemoved();
+    } catch (err) {
+      setRemoveError(describeApiError(err, "remove this override"));
+    } finally {
+      setRemoving(false);
+    }
+  };
 
-      const enhancedOverrides = overridesData.map((o) => {
-        if (o.target_type === "role") {
-          const role = rolesData.find((r) => r.id === o.target_id);
-          return {
-            ...o,
-            name: role?.name || "Unknown Role",
-            color: role?.color,
-          };
-        } else {
-          const member = membersData.find((m) => m.user.id === o.target_id);
-          const displayName =
-            member?.user?.display_name?.trim() || member?.user?.username;
-          return {
-            ...o,
-            name: displayName || "Unknown User",
-            avatar_url: member?.user?.avatar_url,
-            avatar_display: member?.user?.avatar_display,
-          };
-        }
-      });
-
-      const everyoneRole = rolesData.find((r) => r.is_default);
-      if (
-        everyoneRole &&
-        !enhancedOverrides.find((o) => o.target_id === everyoneRole.id)
-      ) {
-        enhancedOverrides.unshift({
-          target_id: everyoneRole.id,
-          target_type: "role",
-          allow: 0,
-          deny: 0,
-          name: "@everyone",
-          color: everyoneRole.color,
-        });
+  return (
+    <SettingsCard
+      title={
+        <span className="flex min-w-0 items-center gap-2">
+          <OverrideMark override={override} />
+          <InlineEmojiText text={override.name} className="min-w-0 truncate" />
+        </span>
       }
-
-      setState((prev) => ({
-        ...prev,
-        roles: rolesData,
-        members: membersData,
-        overrides: enhancedOverrides,
-        selectedTargetId:
-          enhancedOverrides.length > 0 && !prev.selectedTargetId
-            ? everyoneRole?.id || enhancedOverrides[0].target_id
-            : prev.selectedTargetId,
-      }));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
-    }
-  }, [channelId, serverId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const selectedOverride = state.overrides.find(
-    (o) => o.target_id === state.selectedTargetId,
+      description={
+        isRole
+          ? `Inherit keeps what ${override.name} gets from its server role settings. Deny and Allow replace it in ${channelLabel}.`
+          : `Inherit keeps what ${override.name} gets from their roles. Deny and Allow replace it in ${channelLabel}.`
+      }
+      actions={
+        override.isDefault ? null : (
+          <Button
+            ref={triggerRef}
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setRemoveError(null);
+              arm();
+            }}
+            disabled={armed}
+          >
+            <Icon name="trash" size="sm" />
+            Remove
+          </Button>
+        )
+      }
+    >
+      {armed ? (
+        <li className="px-4 pb-3">
+          <ConfirmStrip
+            consequence={`${override.name} goes back to ${
+              isRole ? "its server role" : "their role"
+            } permissions in ${channelLabel}.`}
+            confirmLabel="Remove override"
+            onConfirm={remove}
+            onCancel={cancel}
+            busy={removing}
+            error={removeError}
+          />
+        </li>
+      ) : null}
+      {permissions.map((perm) => (
+        <SettingsRow
+          key={perm.mask}
+          id={`perm-${override.target_id}-${perm.mask}`}
+          label={perm.name}
+          description={perm.desc}
+          layout="stack"
+        >
+          {({ labelId, descId }) => (
+            <PermissionTriState
+              name={`perm-${override.target_id}-${perm.mask}`}
+              labelId={labelId}
+              descId={descId}
+              value={triStateOf(override, perm.mask)}
+              disabled={model.saving}
+              onChange={(value) =>
+                model.setPermission(override.target_id, perm.mask, value)
+              }
+            />
+          )}
+        </SettingsRow>
+      ))}
+    </SettingsCard>
   );
+}
 
-  const handleUpdatePermission = async (
-    mask: number,
-    action: "allow" | "deny" | "inherit",
-  ) => {
-    if (!selectedOverride) return;
+/* ------------------------------------------------------------------ */
+/* States                                                               */
+/* ------------------------------------------------------------------ */
 
-    setState((prev) => ({ ...prev, savingTarget: selectedOverride.target_id }));
-
-    let newAllow = selectedOverride.allow;
-    let newDeny = selectedOverride.deny;
-
-    if (action === "allow") {
-      newAllow |= mask;
-      newDeny &= ~mask;
-    } else if (action === "deny") {
-      newDeny |= mask;
-      newAllow &= ~mask;
-    } else {
-      newAllow &= ~mask;
-      newDeny &= ~mask;
-    }
-
-    try {
-      await apiPut(
-        `/api/channels/${channelId}/permissions/${selectedOverride.target_id}`,
-        {
-          target_type: selectedOverride.target_type,
-          allow: newAllow,
-          deny: newDeny,
-        },
-      );
-
-      setState((prev) => ({
-        ...prev,
-        overrides: prev.overrides.map((o) =>
-          o.target_id === selectedOverride.target_id
-            ? { ...o, allow: newAllow, deny: newDeny }
-            : o,
-        ),
-      }));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setState((prev) => ({ ...prev, savingTarget: null }));
-    }
-  };
-
-  const handleDeleteOverride = async (targetId: string) => {
-    if (
-      !confirm("Are you sure you want to remove permissions for this target?")
-    )
-      return;
-
-    setState((prev) => ({ ...prev, savingTarget: targetId }));
-    try {
-      await apiDelete(`/api/channels/${channelId}/permissions/${targetId}`);
-      setState((prev) => {
-        const nextOverrides = prev.overrides.filter(
-          (o) => o.target_id !== targetId,
-        );
-        return {
-          ...prev,
-          overrides: nextOverrides,
-          selectedTargetId:
-            prev.selectedTargetId === targetId
-              ? nextOverrides[0]?.target_id || null
-              : prev.selectedTargetId,
-        };
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setState((prev) => ({ ...prev, savingTarget: null }));
-    }
-  };
-
-  const handleAddOverride = (
-    target_id: string,
-    target_type: "role" | "user",
-    name: string,
-    color?: string | null,
-    avatar_url?: string | null,
-    avatar_display?: User["avatar_display"],
-  ) => {
-    if (state.overrides.some((o) => o.target_id === target_id)) {
-      setState((prev) => ({
-        ...prev,
-        selectedTargetId: target_id,
-        isAddingTarget: false,
-      }));
-      return;
-    }
-
-    const newOverride: Override = {
-      target_id,
-      target_type,
-      allow: 0,
-      deny: 0,
-      name,
-      color,
-      avatar_url,
-      avatar_display,
-    };
-
-    setState((prev) => ({
-      ...prev,
-      overrides: [...prev.overrides, newOverride],
-      selectedTargetId: target_id,
-      isAddingTarget: false,
-    }));
-  };
-
-  const availableRoles = state.roles.filter(
-    (r) => !r.is_default && !state.overrides.some((o) => o.target_id === r.id),
+function EmptyEditor({ channelLabel }: { channelLabel: string }) {
+  return (
+    <EmptyState
+      size="sm"
+      title="Pick a role or member"
+      description={
+        <>
+          Choose one from the list to change what they can do in{" "}
+          <InlineEmojiText text={channelLabel} />, or add a new override.
+        </>
+      }
+      className="justify-start pt-7"
+    />
   );
-  const availableMembers = state.members.filter(
-    (m) => !state.overrides.some((o) => o.target_id === m.user.id),
-  );
+}
 
-  if (state.loading) {
+/* ------------------------------------------------------------------ */
+/* Page                                                                 */
+/* ------------------------------------------------------------------ */
+
+export default function ChannelPermissionsTab({
+  model,
+  isVoice,
+  channelLabel,
+  selectedId,
+  onSelect,
+  split,
+}: ChannelPermissionsTabProps) {
+  if (model.status === "error") {
     return (
-      <div className="flex justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" />
-      </div>
+      <LoadError
+        title="Permissions didn't load"
+        message={model.loadError ?? "Unable to load the permissions."}
+        onRetry={() => void model.reload()}
+      />
     );
   }
 
+  if (model.status !== "ready") {
+    return (
+      <SkeletonRows
+        label="Loading permissions"
+        rows={3}
+        avatar={false}
+        rowClass="h-10"
+      />
+    );
+  }
+
+  const selected =
+    model.overrides.find((o) => o.target_id === selectedId) ?? null;
+
+  const list = (
+    <OverrideList
+      model={model}
+      selectedId={selected?.target_id ?? null}
+      onSelect={onSelect}
+      split={split}
+      channelLabel={channelLabel}
+    />
+  );
+  const editor = selected ? (
+    <OverrideEditor
+      key={selected.target_id}
+      model={model}
+      override={selected}
+      isVoice={isVoice}
+      channelLabel={channelLabel}
+      onRemoved={() => onSelect(null)}
+    />
+  ) : null;
+
+  if (!split) return editor ?? list;
+
   return (
-    <div className="flex max-h-[500px] h-[500px] border border-rm-border rounded-xl overflow-hidden bg-rm-bg-surface">
-      <PermissionsSidebar
-        isAddingTarget={state.isAddingTarget}
-        setIsAddingTarget={(val) =>
-          setState((prev) => ({ ...prev, isAddingTarget: val }))
-        }
-        availableRoles={availableRoles}
-        availableMembers={availableMembers}
-        handleAddOverride={handleAddOverride}
-        overrides={state.overrides}
-        roles={state.roles}
-        selectedTargetId={state.selectedTargetId}
-        setSelectedTargetId={(id) =>
-          setState((prev) => ({ ...prev, selectedTargetId: id }))
-        }
-        handleDeleteOverride={handleDeleteOverride}
-      />
-      <PermissionsEditor
-        selectedOverride={selectedOverride}
-        savingTarget={state.savingTarget}
-        permissionList={permissionList}
-        handleUpdatePermission={handleUpdatePermission}
-      />
+    <div className="grid grid-cols-[240px_minmax(0,1fr)] items-start gap-4">
+      <div className="sticky top-0">{list}</div>
+      <div className="min-w-0">
+        {editor ?? <EmptyEditor channelLabel={channelLabel} />}
+      </div>
     </div>
   );
 }

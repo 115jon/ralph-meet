@@ -1,66 +1,23 @@
 /**
- * Splash/loading screen for the desktop app.
- *
- * The brand's loading image: the dithered field from the sign-in pages behind
- * the logo, a thin accent progress line and rotating tip messages.
+ * The splash for route loads, sign-in and the desktop app: the cold-load
+ * screen (ColdLoad) held at its first step, so when the chat's connection
+ * overlay takes over, the mark and the status line are already where they
+ * stay (same component, same size, same place) and nothing flashes. The
+ * mark is still at step 0; nothing loops. If it is still up after 10 s it
+ * says so and offers Reload.
  */
 
-import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { useEffect, useReducer } from "react";
-
-const LOADING_TIPS = [
-  "Warming up the servers...",
-  "Connecting you to the conversation...",
-  "Getting everything ready...",
-  "Almost there...",
-  "Loading your messages...",
-  "Preparing your workspace...",
-  "Syncing your channels...",
-  "Polishing the pixels...",
-  "Tuning the microphones...",
-  "Rounding up the bytes...",
-];
+import { ColdLoadScreen } from "@/components/chat/ColdLoad";
+import { LOADER_SETTLE_MS, useElapsed } from "@/components/ui/LoadingScreen";
 
 export function SplashScreen() {
-  const [tipData, dispatch] = useReducer(
-    (
-      state: { index: number; visible: boolean },
-      action: "FADE_OUT" | "FADE_IN_NEXT",
-    ) => {
-      switch (action) {
-        case "FADE_OUT":
-          return { ...state, visible: false };
-        case "FADE_IN_NEXT":
-          return {
-            index: (state.index + 1) % LOADING_TIPS.length,
-            visible: true,
-          };
-        default:
-          return state;
-      }
-    },
-    { index: 0, visible: true },
-  );
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      dispatch("FADE_OUT");
-      setTimeout(() => {
-        dispatch("FADE_IN_NEXT");
-      }, 400);
-    }, 3500);
-    return () => clearInterval(interval);
-  }, []);
-
+  const slow = useElapsed(LOADER_SETTLE_MS);
   return (
-    <LoadingScreen className="h-full w-full">
-      <p
-        className={`text-ui-sm text-rm-text-muted transition-opacity duration-300 ${
-          tipData.visible ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        {LOADING_TIPS[tipData.index]}
-      </p>
-    </LoadingScreen>
+    <ColdLoadScreen
+      step={0}
+      error={slow ? "slow" : null}
+      onReload={() => window.location.reload()}
+      className="h-full min-h-dvh w-full"
+    />
   );
 }

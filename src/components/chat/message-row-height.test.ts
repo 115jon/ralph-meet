@@ -16,7 +16,7 @@ function message(overrides: Partial<Message> = {}): Message {
 
 describe("estimateMessageRowHeight", () => {
   it("keeps compact text rows short", () => {
-    expect(estimateMessageRowHeight(message(), false, false)).toBe(28);
+    expect(estimateMessageRowHeight(message(), false, false)).toBe(26);
   });
 
   it("reserves space for images and embeds before they load", () => {
@@ -41,7 +41,13 @@ describe("estimateMessageRowHeight", () => {
     });
 
     expect(estimateMessageRowHeight(withMedia, true, false)).toBe(
-      64 + 240 + 200,
+      62 + 240 + 200,
+    );
+  });
+
+  it("adds the day divider above the first row of a day", () => {
+    expect(estimateMessageRowHeight(message(), true, false, true)).toBe(
+      62 + 32,
     );
   });
 });

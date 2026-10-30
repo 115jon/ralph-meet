@@ -42,6 +42,7 @@ vi.mock("@/components/chat/VideoAttachment", async () => {
 });
 
 import { LinkEmbed } from "../LinkEmbed";
+import { clearEmbedHydrationCache } from "@/lib/embed-hydration-cache";
 
 function makeUnavailableEmbed(): EmbedInfo {
   return {
@@ -193,6 +194,7 @@ function makeTikTokVideoEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
 
 describe("LinkEmbed DOM rendering", () => {
   afterEach(() => {
+    clearEmbedHydrationCache();
     openImageViewerMock.mockReset();
     updateImageMock.mockReset();
     videoAttachmentMock.mockReset();
@@ -606,7 +608,7 @@ describe("LinkEmbed DOM rendering", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders TikTok slideshow branding in the footer without the extra badge", async () => {
+  it("names TikTok once, in the header, without a favicon badge", async () => {
     vi.stubGlobal(
       "IntersectionObserver",
       class {
@@ -686,10 +688,11 @@ describe("LinkEmbed DOM rendering", () => {
       ).not.toBeNull();
     });
 
-    const footerIcon = container.querySelector(
-      `img[src="${"https://www.tiktok.com/favicon.ico"}"]`,
-    );
-    expect(footerIcon).not.toBeNull();
+    const header = container.querySelector("[data-embed-header]");
+    expect(header?.textContent).toContain("TikTok");
+    expect(
+      container.querySelector('img[src="https://www.tiktok.com/favicon.ico"]'),
+    ).toBeNull();
     expect(container.textContent?.match(/TikTok/g)?.length ?? 0).toBe(1);
   });
 
@@ -743,7 +746,13 @@ describe("LinkEmbed DOM rendering", () => {
     });
 
     await act(async () => {
-      resolveFetch?.(new Response("not found", { status: 404 }));
+      // A miss (upstream down) is 502/503; 404 now means the post is gone.
+      resolveFetch?.(
+        Response.json(
+          { error: "Could not resolve TikTok media" },
+          { status: 502 },
+        ),
+      );
       await Promise.resolve();
     });
 
@@ -752,6 +761,9 @@ describe("LinkEmbed DOM rendering", () => {
         container.querySelector('[data-testid="tiktok-carousel-track"]'),
       ).not.toBeNull();
     });
+    expect(
+      container.querySelector('[data-testid="tiktok-unavailable"]'),
+    ).toBeNull();
 
     expect(container.querySelector("iframe")).toBeNull();
   });
@@ -1302,7 +1314,7 @@ describe("LinkEmbed DOM rendering", () => {
     });
   });
 
-  it("rehydrates TikTok video embeds when a same-url message update supplies direct media", async () => {
+  it("rehydrates TikTok video embeds from the shared cache when a same-url update remounts the card", async () => {
     vi.stubGlobal(
       "IntersectionObserver",
       class {
@@ -1400,15 +1412,256 @@ describe("LinkEmbed DOM rendering", () => {
 
     rerender(<LinkEmbed embed={updatedEmbed} />);
 
+    // The remount reads the answer it already has instead of fetching again
+    // (the message list remounts cards on every scroll).
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const video = container.querySelector(
       "video.rm-custom-video",
     ) as HTMLVideoElement | null;
     expect(video).not.toBeNull();
     expect(video?.getAttribute("poster")).toContain("full-frame-cover.webp");
+  });
+
+  // Ported from the user's work in progress (TikTok unavailable handling).
+  it("replaces a complete TikTok video with fresh signed media", async () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
+
+    const freshVideoUrl =
+      "https://v19.tiktokcdn-us.com/example/fresh-video.mp4";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
+
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
+          postType: "video",
+          videoUrl: freshVideoUrl,
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/fresh-cover.jpeg",
+          title: "What's up",
+          authorName: "Killa Cop",
+          authorHandle: "killa_cop_",
+          authorAvatarUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/fresh-avatar.jpeg",
+          media: [
+            {
+              type: "video",
+              url: freshVideoUrl,
+              thumbnailUrl:
+                "https://p16-common-sign.tiktokcdn-us.com/example/fresh-cover.jpeg",
+              contentType: "video/mp4",
+              durationSeconds: 9,
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokVideoEmbed({
+          author: {
+            name: "Killa Cop",
+            url: "https://www.tiktok.com/@killa_cop_",
+            iconURL:
+              "https://p19-common-sign.tiktokcdn-us.com/example/stale-avatar.jpeg",
+          },
+          thumbnail: {
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/stale-cover.jpeg",
+            width: 576,
+            height: 880,
+          },
+          video: {
+            url: "https://v19.tiktokcdn-us.com/example/stale-video.mp4?x-expires=1",
+            width: 576,
+            height: 880,
+            kind: "direct",
+            contentType: "video/mp4",
+          },
+          media: [
+            {
+              type: "video",
+              url: "https://v19.tiktokcdn-us.com/example/stale-video.mp4?x-expires=1",
+              thumbnailUrl:
+                "https://p19-common-sign.tiktokcdn-us.com/example/stale-cover.jpeg",
+              contentType: "video/mp4",
+            },
+          ],
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      const video = container.querySelector(
+        "video.rm-custom-video",
+      ) as HTMLVideoElement | null;
+      expect(
+        video?.getAttribute("src") ??
+          video?.querySelector("source")?.getAttribute("src"),
+      ).toContain("fresh-video.mp4");
+    });
+
+    expect(container.innerHTML).toContain("fresh-avatar.jpeg");
+    expect(container.innerHTML).not.toContain("stale-avatar.jpeg");
+    expect(container.innerHTML).not.toContain("stale-video.mp4");
+  });
+
+  it("does not replace a stored TikTok video with a cover-only payload", async () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
+
+        return Response.json({
+          postType: "video",
+          videoUrl: null,
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/preview-cover.jpeg",
+          title: "What's up",
+          media: [
+            {
+              type: "image",
+              url: "https://p16-common-sign.tiktokcdn-us.com/example/preview-cover.jpeg",
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokVideoEmbed({
+          video: {
+            url: "https://v19.tiktokcdn-us.com/example/stored-video.mp4",
+            width: 576,
+            height: 880,
+            kind: "direct",
+            contentType: "video/mp4",
+          },
+          media: [
+            {
+              type: "video",
+              url: "https://v19.tiktokcdn-us.com/example/stored-video.mp4",
+              contentType: "video/mp4",
+            },
+          ],
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
+    });
+    expect(container.innerHTML).toContain("stored-video.mp4");
+    expect(container.innerHTML).not.toContain("preview-cover.jpeg");
+  });
+
+  it("shows a not-found mark when a TikTok post is gone", async () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
+
+        return Response.json(
+          { error: "Could not resolve TikTok media" },
+          { status: 404 },
+        );
+      }) as unknown as typeof fetch,
+    );
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokVideoEmbed({
+          author: {
+            name: "gone",
+            url: "https://www.tiktok.com/@irlquandale",
+            iconURL:
+              "https://p16-common-sign.tiktokcdn-us.com/example/stale-avatar.jpeg",
+          },
+          thumbnail: {
+            url: "https://p16-common-sign.tiktokcdn-us.com/example/stale-cover.jpeg",
+            width: 576,
+            height: 880,
+          },
+          video: {
+            url: "https://v19.tiktokcdn-us.com/example/stale-video.mp4",
+            width: 576,
+            height: 880,
+            kind: "direct",
+            contentType: "video/mp4",
+          },
+          media: [
+            {
+              type: "video",
+              url: "https://v19.tiktokcdn-us.com/example/stale-video.mp4",
+              contentType: "video/mp4",
+            },
+          ],
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="tiktok-unavailable"]'),
+      ).not.toBeNull();
+    });
+    expect(container.innerHTML).toContain("/tiktok-unavailable.webp");
+    expect(container.innerHTML).not.toContain("stale-");
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("video.rm-custom-video")).toBeNull();
   });
 
   it("refetches a complete Instagram reel on view and replaces stale video", async () => {
@@ -1626,5 +1879,33 @@ describe("LinkEmbed DOM rendering", () => {
     expect(
       screen.queryByRole("button", { name: /Open media/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the remove-embeds control reachable on touch (hover reveal is fine-pointer only)", () => {
+    const onRemoveEmbeds = vi.fn();
+    render(
+      <LinkEmbed
+        embed={{
+          id: "embed_remove",
+          url: "https://example.com/post",
+          type: "link",
+          rawTitle: "Example",
+          fields: [],
+        }}
+        onRemoveEmbeds={onRemoveEmbeds}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Remove embeds" });
+    const classes = button.className.split(/\s+/);
+    // Hidden only where a fine pointer can hover it back; never a bare
+    // opacity-0 that would strand touch users.
+    expect(classes).toContain("pointer-fine:opacity-0");
+    expect(classes).not.toContain("opacity-0");
+    expect(classes).toContain("pointer-fine:group-hover/embedwrap:opacity-100");
+    expect(classes).toContain("pointer-fine:focus-visible:opacity-100");
+
+    fireEvent.click(button, { shiftKey: true });
+    expect(onRemoveEmbeds).toHaveBeenCalledTimes(1);
   });
 });

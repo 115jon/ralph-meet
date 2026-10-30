@@ -1,5 +1,9 @@
-import { getDisplayInitial } from "@/lib/display-name";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Num } from "@/components/ui/num";
 import { IconButton } from "@/components/ui/IconButton";
+import { CountBadge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import {
   getDesktopNotificationBadgeState,
@@ -9,22 +13,50 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { MENU_PANEL } from "@/components/ui/menu";
+import { PickerSurface } from "./PickerSurface";
 import { AvatarImage } from "./AvatarImage";
-import { Bell, Hash, X } from "./Icons";
+import { avatarShape } from "@/components/ui/avatar-shape";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
-// ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
+// ── Notification Bell — toolbar icon + inbox panel ──────────────────────────
+
+/** Gap between the bell and the panel, and the panel's viewport margin. */
+const PANEL_GAP = 8;
+
+type PanelPosition = { top: number; right: number };
+
+function measurePanelPosition(button: HTMLElement | null): PanelPosition {
+  if (!button) return { top: 56, right: PANEL_GAP };
+  const rect = button.getBoundingClientRect();
+  return {
+    top: Math.round(rect.bottom + PANEL_GAP),
+    right: Math.max(PANEL_GAP, Math.round(window.innerWidth - rect.right)),
+  };
+}
 
 export const NotificationBell = memo(function NotificationBell() {
   const unreadCount = useChatStore((s) => s.unreadNotificationCount);
   const notifications = useChatStore((s) => s.notifications);
-  const { loadNotifications, markNotificationsRead } = useChatActions();
+  const { loadNotifications } = useChatActions();
   const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<PanelPosition | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const loadedRef = useRef(false);
   const baseTitleRef = useRef<string | null>(null);
+  // A click elsewhere closes the panel and leaves focus where it landed;
+  // Escape, back and the close button return focus to the bell.
+  const interactedOutsideRef = useRef(false);
 
   // Load notifications on first open
   useEffect(() => {
@@ -50,40 +82,119 @@ export const NotificationBell = memo(function NotificationBell() {
     };
   }, [notifications]);
 
-  // Close on click outside or Escape
+  // Keep the panel under the bell when the window resizes.
   useEffect(() => {
     if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (panelRef.current?.contains(e.target as Node)) return;
-      if (buttonRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey, { capture: true });
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey, { capture: true });
-    };
+    const update = () => setPosition(measurePanelPosition(buttonRef.current));
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, [open]);
 
   const toggle = useCallback(() => {
-    setOpen((v) => !v);
-  }, []);
+    if (!open) {
+      interactedOutsideRef.current = false;
+      setPosition(measurePanelPosition(buttonRef.current));
+    }
+    setOpen(!open);
+  }, [open]);
 
-  const handleMarkAllRead = useCallback(() => {
-    markNotificationsRead();
-  }, [markNotificationsRead]);
+  const close = useCallback(() => setOpen(false), []);
+
+  const panelStyle: CSSProperties | undefined = position
+    ? {
+        top: position.top,
+        right: position.right,
+        maxHeight: `min(560px, calc(100dvh - ${position.top + PANEL_GAP}px))`,
+      }
+    : undefined;
+
+  return (
+    <div className="relative">
+      {/* Bell: the header's one count badge, top-right, cut from ply-0. */}
+      <IconButton
+        ref={buttonRef}
+        icon="bell"
+        variant="muted"
+        size={40}
+        tone={open ? "toggled" : "idle"}
+        aria-label="Notifications"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title="Notifications"
+        onClick={toggle}
+      />
+      {unreadCount > 0 && (
+        <CountBadge
+          count={unreadCount}
+          ring="ply-0"
+          className="pointer-events-none absolute top-0.5 right-0.5"
+        />
+      )}
+
+      {/*
+       * Desktop: a non-modal panel anchored under the bell. Phones: the
+       * picker drawer (the bell is hidden in the phone header and the inbox
+       * lives in the Notifications tab, but the drawer still works).
+       */}
+      <PickerSurface
+        open={open}
+        onOpenChange={setOpen}
+        modal={false}
+        onBackButton={close}
+        ariaLabel="Notifications"
+        desktopProps={{
+          onInteractOutside: (event) => {
+            const target = event.target;
+            if (target instanceof Node && buttonRef.current?.contains(target)) {
+              // The bell toggles the panel itself; closing here first would
+              // let its click reopen it.
+              event.preventDefault();
+              return;
+            }
+            interactedOutsideRef.current = true;
+          },
+          onCloseAutoFocus: (event) => {
+            if (interactedOutsideRef.current) event.preventDefault();
+          },
+        }}
+        className={cn(
+          MENU_PANEL,
+          "fixed z-50 m-0 flex w-[min(380px,calc(100vw-16px))] origin-top-right flex-col overflow-hidden p-0 outline-none",
+          "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:duration-180",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] data-[state=closed]:duration-120",
+        )}
+        style={panelStyle}
+      >
+        <NotificationInbox onClose={close} />
+      </PickerSurface>
+    </div>
+  );
+});
+
+// ── Inbox: header + list, shared by the bell and the mobile tab ────────────
+
+export function NotificationInbox({
+  onClose,
+  onNavigate,
+  variant = "panel",
+}: {
+  /** Shows a close button in the header. */
+  onClose?: () => void;
+  /** Called after a notification row navigates (the bell closes itself). */
+  onNavigate?: () => void;
+  /** `page` is the full-height mobile tab: larger title, no close button. */
+  variant?: "panel" | "page";
+}) {
+  const unreadCount = useChatStore((s) => s.unreadNotificationCount);
+  const notifications = useChatStore((s) => s.notifications);
+  const { markNotificationsRead } = useChatActions();
+  const page = variant === "page";
 
   const handleNotificationClick = useCallback(
     (notif: AppNotification) => {
-      // Mark as read
       if (!notif.is_read) {
         markNotificationsRead([notif.id]);
       }
-      // Navigate to the channel/message
       if (notif.channel_id && notif.message_id) {
         window.dispatchEvent(
           new CustomEvent("navigate-channel", {
@@ -95,116 +206,108 @@ export const NotificationBell = memo(function NotificationBell() {
           }),
         );
       }
-      setOpen(false);
+      onNavigate?.();
+      onClose?.();
     },
-    [markNotificationsRead],
+    [markNotificationsRead, onClose, onNavigate],
   );
+
+  const labelId = useId();
 
   return (
-    <div className="relative">
-      {/* Bell icon */}
-      <button
-        type="button"
-        ref={buttonRef}
-        className="group relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
-        title="Notifications"
-        onClick={toggle}
-      >
-        <Bell
-          className={cn(
-            "h-[14px] w-[14px] transition-colors",
-            open
-              ? "text-rm-accent"
-              : "text-rm-text-muted group-hover:text-rm-text",
-          )}
-        />
-        {unreadCount > 0 && (
-          <span className="badge-count absolute -top-1 -right-1 ring-2 ring-rm-bg-primary animate-in zoom-in-90 duration-200">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
+    <>
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-between gap-2 px-4",
+          page
+            ? "h-[calc(48px+var(--safe-area-top,0px))] pt-[var(--safe-area-top,0px)]"
+            : "h-12 border-b border-line",
         )}
-      </button>
+      >
+        <h2 className="min-w-0 truncate text-ui-md font-semibold text-ink-1">
+          {page ? "Notifications" : "Inbox"}
+        </h2>
+        <div className="flex shrink-0 items-center gap-2">
+          {unreadCount > 0 && (
+            <Button
+              type="button"
+              variant={page ? "secondary" : "link"}
+              size={page ? "md" : "xs"}
+              onClick={() => markNotificationsRead()}
+            >
+              Mark all read
+            </Button>
+          )}
+          {onClose ? (
+            <IconButton
+              aria-label="Close notifications"
+              icon="close"
+              size={28}
+              variant="muted"
+              onClick={onClose}
+            />
+          ) : null}
+        </div>
+      </div>
 
-      {/* Dropdown panel */}
-      {open && (
-        <div className="fixed inset-0 z-50 md:absolute md:inset-auto md:right-0 md:top-8 md:w-80 md:max-h-112 flex flex-col items-center justify-end md:justify-start pointer-events-none">
-          {/* Mobile backdrop overlay */}
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px] md:hidden pointer-events-auto animate-in fade-in duration-300"
-            onClick={() => setOpen(false)}
-            role="presentation"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setOpen(false);
-            }}
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-6 md:pb-0">
+        {notifications.length === 0 ? (
+          <EmptyState
+            size="sm"
+            className="py-10"
+            title="No notifications yet"
+            description="Mentions and replies show up here."
           />
-
-          <div
-            ref={panelRef}
-            className="relative w-full h-[85vh] md:h-auto max-h-[85vh] md:max-h-full flex flex-col rounded-t-2xl md:rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
-          >
-            {/* Mobile drag handle */}
-            <div className="w-full flex justify-center pt-3 pb-1 md:hidden">
-              <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
-            </div>
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 md:px-3 py-3 md:py-2.5 border-b border-rm-border">
-              <h3 className="text-ui-base md:text-ui-sm font-bold text-rm-text-primary tracking-tight">
-                Inbox
-              </h3>
-              <div className="flex items-center gap-3 md:gap-2">
-                {unreadCount > 0 && (
-                  <button
-                    type="button"
-                    className="text-ui-2xs font-semibold text-rm-accent hover:opacity-80 transition-colors"
-                    onClick={handleMarkAllRead}
-                  >
-                    Mark all read
-                  </button>
-                )}
-                <IconButton
-                  icon={X}
-                  size="xs"
-                  className="md:h-5 md:w-5"
-                  onClick={() => setOpen(false)}
-                />
-              </div>
-            </div>
-
-            {/* Notification list */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pb-6 md:pb-0">
-              {notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2">
-                  <Bell className="h-8 w-8 text-rm-text-muted opacity-40" />
-                  <p className="text-ui-xs font-medium text-rm-text-muted">
-                    No notifications yet
-                  </p>
-                </div>
-              ) : (
-                notifications.map((notif) => (
+        ) : page ? (
+          // Phone list grammar (shared with MobileYouPage): one sentence-case
+          // label over an inset grouped card, rows split by hairlines.
+          <section aria-labelledby={labelId}>
+            <h3
+              id={labelId}
+              className="px-4 pb-2 pt-2 text-ui-xs font-semibold text-ink-2"
+            >
+              Recent
+            </h3>
+            <ul className="mx-4 overflow-hidden rounded-lg border border-line bg-ply-2 divide-y divide-line">
+              {notifications.map((notif) => (
+                <li key={notif.id}>
                   <NotificationRow
-                    key={notif.id}
                     notification={notif}
                     onClick={handleNotificationClick}
+                    roomy
                   />
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <ul className="divide-y divide-line">
+            {notifications.map((notif) => (
+              <li key={notif.id}>
+                <NotificationRow
+                  notification={notif}
+                  onClick={handleNotificationClick}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
   );
-});
+}
 
 // ── Individual notification row ──────────────────────────────────────────────
 
 const NotificationRow = memo(function NotificationRow({
   notification,
   onClick,
+  roomy = false,
 }: {
   notification: AppNotification;
   onClick: (n: AppNotification) => void;
+  /** Touch spacing for the full-page inbox. */
+  roomy?: boolean;
 }) {
   const label =
     notification.type === "mention"
@@ -219,49 +322,93 @@ const NotificationRow = memo(function NotificationRow({
   );
   const timeAgo = getTimeAgo(notification.created_at);
 
+  const unread = !notification.is_read;
+
   return (
     <button
       type="button"
       className={cn(
-        "flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-rm-bg-hover border-b border-rm-border/50 last:border-0",
-        !notification.is_read && "bg-rm-accent/5",
+        "flex w-full items-start gap-3 px-4 text-left outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1 active:bg-tint-3 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+        roomy ? "min-h-14 py-3" : "py-3",
+        // The panel keeps the mention tint; the phone page marks unread with
+        // the dot alone.
+        unread && !roomy && "bg-accent-tint",
       )}
       onClick={() => onClick(notification)}
     >
-      {/* Avatar */}
-      <div className="shrink-0 mt-0.5">
+      {/* Avatar: AvatarImage honours the member's crop; Avatar is the
+          initial fallback. */}
+      <div className="mt-0.5 shrink-0">
         {authorInfo.avatarUrl ? (
-          <div className="h-8 w-8 overflow-visible rounded-full">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "relative flex bg-ply-2",
+              avatarShape(authorInfo.avatarDisplay),
+              roomy ? "size-10" : "size-8",
+            )}
+          >
             <AvatarImage
               src={getAuthAssetUrl(authorInfo.avatarUrl)}
               alt=""
               display={authorInfo.avatarDisplay}
             />
-          </div>
+          </span>
         ) : (
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-accent/20 text-ui-2xs font-bold text-rm-accent">
-            {getDisplayInitial({
-              display_name: authorInfo.displayName,
-              username: authorInfo.username,
-            })}
-          </div>
+          <Avatar
+            name={authorInfo.displayName || authorInfo.username || "?"}
+            size={roomy ? 40 : 32}
+            aria-hidden="true"
+          />
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-ui-xs leading-tight">
-          <span className="font-semibold text-rm-text-primary">
-            <InlineEmojiText text={authorInfo.displayName} />
-          </span>{" "}
-          <span className="text-rm-text-muted">{label}</span>
-        </p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <p className="min-w-0 flex-1 truncate text-ui-row">
+            <span
+              className={cn(
+                unread ? "font-semibold text-ink-1" : "font-medium text-ink-2",
+              )}
+            >
+              <InlineEmojiText text={authorInfo.displayName} />
+            </span>{" "}
+            <span
+              className={cn(
+                "font-normal",
+                unread ? "text-ink-2" : "text-ink-3",
+              )}
+            >
+              {label}
+            </span>
+          </p>
+          <Num className="shrink-0 text-ink-3">
+            {timeAgo === "just now" ? "now" : timeAgo.replace(/ ago$/, "")}
+            <span className="sr-only">
+              {timeAgo.endsWith(" ago") ? " ago" : ""}
+            </span>
+          </Num>
+          {unread && (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-1.5 shrink-0 self-center rounded-full bg-accent-ink"
+              />
+              <span className="sr-only">Unread</span>
+            </>
+          )}
+        </div>
 
-        {/* Channel + server context (skip for DMs — sender name is already shown above) */}
+        {/* Channel + server context (skip for DMs: the sender is already named above) */}
         {notification.type !== "dm" && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <Hash className="h-2.5 w-2.5 text-rm-text-muted opacity-60" />
-            <span className="text-ui-2xs text-rm-text-muted truncate">
+          <div className="mt-0.5 flex items-center gap-1">
+            <Icon
+              name="textChannel"
+              size="xs"
+              className="shrink-0 text-ink-3"
+            />
+            <span className="truncate text-ui-xs text-ink-3">
               <InlineEmojiText
                 text={`${notification.channel_name ?? "channel"}${
                   notification.server_name
@@ -275,23 +422,11 @@ const NotificationRow = memo(function NotificationRow({
 
         {/* Message snippet */}
         {notification.content && (
-          <p className="mt-1 text-ui-2xs text-rm-text-muted/80 line-clamp-2 leading-relaxed">
+          <p className="mt-1 line-clamp-2 text-ui-sm text-pretty text-ink-2">
             <InlineEmojiText text={notification.content} />
           </p>
         )}
-
-        {/* Timestamp */}
-        <span className="text-ui-2xs text-rm-text-muted/50 mt-1 block">
-          {timeAgo}
-        </span>
       </div>
-
-      {/* Unread dot */}
-      {!notification.is_read && (
-        <div className="shrink-0 mt-2">
-          <div className="h-2 w-2 rounded-full bg-rm-accent" />
-        </div>
-      )}
     </button>
   );
 });
@@ -310,5 +445,14 @@ function getTimeAgo(isoStr: string): string {
   if (diffHr < 24) return `${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
   if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(isoStr).toLocaleDateString();
+  // "Oct 22" (the year only when it differs): a full numeric date ate the
+  // row's name and action on phones.
+  const date = new Date(isoStr);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== new Date().getFullYear()
+      ? { year: "numeric" }
+      : {}),
+  });
 }

@@ -1468,6 +1468,42 @@ describe("MeetingRoom lifecycle", () => {
     callee.close();
   }, 12_000);
 
+  it("keeps a throttled background tab (one heartbeat a minute) and prunes a dead one", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = `throttled-${crypto.randomUUID()}`;
+    const socket = await openMeetingSocket(roomName, userId);
+    await identifyMeetingSocket(socket, { name: "Background Tab" });
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+    type Live = { sessions: Map<unknown, { last_heartbeat?: number }> };
+
+    const ageHeartbeat = (ms: number) =>
+      runInDurableObject(room, (instance) => {
+        for (const session of (instance as unknown as Live).sessions.values()) {
+          session.last_heartbeat = Date.now() - ms;
+        }
+      });
+    const sessionCount = () =>
+      runInDurableObject(
+        room,
+        (instance) => (instance as unknown as Live).sessions.size,
+      );
+
+    // Chrome's intensive throttling: the 15s beat lands about 60s apart.
+    await ageHeartbeat(62_000);
+    await runInDurableObject(room, (instance) =>
+      (instance as unknown as { alarm(): Promise<void> }).alarm(),
+    );
+    expect(await sessionCount()).toBe(1);
+
+    await ageHeartbeat(95_000);
+    await runInDurableObject(room, (instance) =>
+      (instance as unknown as { alarm(): Promise<void> }).alarm(),
+    );
+    expect(await sessionCount()).toBe(0);
+
+    socket.close();
+  });
+
   it("accepts a hibernatable room socket and sends Hello", async () => {
     const roomId = env.MEETING_ROOM.idFromName("lifecycle-test-room");
     const room = env.MEETING_ROOM.get(roomId);

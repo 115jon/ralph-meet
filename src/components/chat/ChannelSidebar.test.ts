@@ -116,7 +116,8 @@ describe("ChannelSidebar voice member identities", () => {
     const markup = container.innerHTML;
 
     expect(markup).toContain("Track One");
-    expect(markup).toContain("music");
+    // The track row leads with its play/pause state glyph.
+    expect(markup).toMatch(/data-icon="(play|pause)"/);
     expect(markup).toContain("0:05");
   });
 
@@ -159,9 +160,13 @@ describe("ChannelSidebar voice member identities", () => {
       }),
     );
 
-    expect(container.querySelector("svg.lucide-mic-off")).not.toBeNull();
-    expect(container.querySelector("svg.lucide-headphone-off")).not.toBeNull();
-    expect(container.querySelector("svg.lucide-volume-x")).not.toBeNull();
+    expect(container.querySelector("svg[data-icon='micOff']")).not.toBeNull();
+    expect(
+      container.querySelector("svg[data-icon='deafenOff']"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector("svg[data-icon='speakerOff']"),
+    ).not.toBeNull();
     expect(
       container.querySelector(
         '[data-slot="tooltip-trigger"][aria-label="Self-muted"]',
@@ -310,7 +315,7 @@ describe("ChannelSidebar voice member identities", () => {
     expect(markup).toContain("relationship-user");
     expect(markup).not.toContain("stale-member.png");
     expect(markup).not.toContain("stale-relationship.png");
-    expect(markup).not.toContain("linear-gradient");
+    expect(markup).not.toMatch(/background-image:\s*linear-gradient/);
   });
 
   it("renders voice member display name styles from the cached member profile", () => {
@@ -520,7 +525,7 @@ describe("ChannelSidebar voice member identities", () => {
     expect(markup).toContain('data-voice-connection-state="reconnecting"');
     expect(markup).not.toContain(">LIVE<");
     expect(markup).not.toContain("Streaming now");
-    expect(markup).not.toContain("Open Stream");
+    expect(markup).not.toContain("Open stream");
   });
 
   it("renders the split voice channel status controls only for members currently in that voice channel", () => {

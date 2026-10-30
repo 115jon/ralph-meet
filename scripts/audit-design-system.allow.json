@@ -1,0 +1,120 @@
+{
+  "$comment": "Justified exceptions for scripts/audit-design-system.mjs. `file` is a glob relative to the repo root, `rule` is a rule id or `*`, optional `match` is a regex tested against the snippet or the whole line. Every entry needs a `reason`.",
+  "entries": [
+    {
+      "file": "src/components/dev/**",
+      "rule": "*",
+      "reason": "Dev-only fixtures; never shipped."
+    },
+    {
+      "file": "src/components/chat/LinkEmbed.tsx",
+      "rule": "raw-color",
+      "match": "#FF0000|#4c98ff|#fff",
+      "reason": "Third-party brand marks inside link embeds: the YouTube red play button and the Instagram verified badge."
+    },
+    {
+      "file": "src/components/auth/AuthArtPanel.tsx",
+      "rule": "raw-color",
+      "reason": "Art panel (the auth media surface, 6.5): gradients are built from inks read off the active theme at runtime, with alpha stops."
+    },
+    {
+      "file": "src/components/ui/icon/glyphs.generated.ts",
+      "rule": "*",
+      "reason": "Generated Phosphor path data."
+    },
+    {
+      "file": "src/components/ui/icon/Icon.tsx",
+      "rule": "raw-color",
+      "reason": "Mask rect/stroke inside the SVG mask must be literal #fff/#000; not a theme colour."
+    },
+    {
+      "file": "src/components/ui/menu.ts",
+      "rule": "raw-color",
+      "match": "color-mix\\(in_oklab,var\\(--rm-warning-ink\\)",
+      "reason": "Warning tint mixed from a token; a --rm-warning-tint token would retire this."
+    },
+    {
+      "file": "src/components/chat/settings/primitives.tsx",
+      "rule": "arbitrary-radius",
+      "match": "rounded-\\[3px\\]",
+      "reason": "Search <mark> highlight inside running text; below the radius scale on purpose."
+    },
+    {
+      "file": "src/components/ui/button.tsx",
+      "rule": "slow-motion",
+      "match": "spin_1\\.6s|spin_700ms",
+      "reason": "Spinner loop, not UI motion."
+    },
+    {
+      "file": "src/components/chat/settings/AppearancePanel.tsx",
+      "rule": "raw-color",
+      "reason": "Theme swatches render the theme's own palette, not the active theme (7.1)."
+    },
+    {
+      "file": "src/components/chat/ThemePreviewSidebar.tsx",
+      "rule": "raw-color",
+      "reason": "Theme preview renders the previewed theme's own palette, not the active theme (7.1)."
+    },
+    {
+      "file": "src/components/chat/ConnectionOverlay.tsx",
+      "rule": "slow-motion",
+      "match": "rm-loading-exit",
+      "reason": "rm-loading-exit runs 1.2s: a loader dissolving into the app, not UI motion (10.1)."
+    },
+    {
+      "file": "src/components/HomePageClient.tsx",
+      "rule": "off-breakpoint",
+      "reason": "Marketing page has its own responsive ladder (decision 8); not the app shell."
+    },
+    {
+      "file": "src/components/voice/VoiceDebugScreen.tsx",
+      "rule": "off-breakpoint",
+      "reason": "Dev-only debug tool, not shipped UI (decision 8)."
+    },
+    {
+      "file": "src/components/chat/collectibles/CollectiblePreviews.tsx",
+      "rule": "arbitrary-radius",
+      "match": "rounded-\\[\\d+(?:\\.\\d+)?cqw\\]",
+      "reason": "Scaled collectible mockups size every part in container units (cqw) so the preview keeps its proportions at any tile size; a fixed radius token would not scale with it."
+    },
+    {
+      "file": "src/components/chat/settings/AppearancePanel.tsx",
+      "rule": "arbitrary-radius",
+      "match": "rounded-\\[3px\\]",
+      "reason": "Theme swatch miniature: the 3px radius and hairline heights are the shrunken app chrome inside a ~120px swatch, not UI at real size (same reason as its raw-color entry)."
+    },
+    {
+      "file": "src/components/chat/settings/AppearancePanel.tsx",
+      "rule": "off-grid-spacing",
+      "match": "min-h-\\[(3|6)px\\]",
+      "reason": "Theme swatch miniature: minimum heights for the shrunken message lines and composer so they stay visible at small swatch sizes."
+    },
+    {
+      "file": "src/components/chat/ProfileAssetLayer.tsx",
+      "rule": "raw-color",
+      "match": "rgba\\(0, 0, 0, \\$\\{alpha\\}\\)",
+      "reason": "CSS mask-image alpha stops for the nameplate fade: black here is mask opacity, not a colour on screen."
+    },
+    {
+      "file": "src/components/ui/DitherField.tsx",
+      "rule": "raw-color",
+      "reason": "Dithered art surface (6.5, like AuthArtPanel): colours are inks read off the active theme at runtime and given alpha for the fallback gradient."
+    },
+    {
+      "file": "src/components/ui/avatar.tsx",
+      "rule": "arbitrary-text-size",
+      "reason": "Avatar initials scale with the avatar box (18/20/24/32/40/80). No text-ui step fits 8-10px or 30px, so each size step carries its own glyph size (talk-tree-spec avatar sizes)."
+    },
+    {
+      "file": "src/components/ui/avatar.tsx",
+      "rule": "off-grid-spacing",
+      "match": "size-\\[18px\\]",
+      "reason": "The 18px avatar is the tree occupant size (talk-tree-spec, tree occupant row)."
+    },
+    {
+      "file": "src/components/ui/switch.tsx",
+      "rule": "off-grid-spacing",
+      "reason": "Switch geometry from the spec: 30x18 track, 14px thumb travel (talk-tree-spec, Switch)."
+    }
+  ]
+}

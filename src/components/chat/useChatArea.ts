@@ -1,4 +1,5 @@
 import { apiPost } from "@/lib/api-client";
+import { toast } from "@/components/ui/toast";
 import { debugChatScroll } from "@/lib/chat-scroll-debug";
 import { getDisplayName } from "@/lib/display-name";
 import { getGifAttachmentProvider } from "@/lib/gif-picker";
@@ -12,8 +13,16 @@ import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { isSoundEnabled } from "@/stores/useSoundSettingsStore";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/shallow";
+import type { BanTarget } from "./BanMemberDialog";
 import type { VirtualMessageListHandle } from "./VirtualMessageList";
 
 function messageHistoryCursor(message: Pick<Message, "created_at" | "id">) {
@@ -118,7 +127,6 @@ export function useChatArea({
     unreadSince,
   } = localState;
 
-  const pinSidebarRef = useRef<HTMLDivElement>(null);
   const pinButtonRef = useRef<HTMLButtonElement>(null);
   const virtualListRef = useRef<VirtualMessageListHandle>(null);
   const pendingScrollId = useRef<string | null>(null);
@@ -553,7 +561,7 @@ export function useChatArea({
     setLocalState({ hasMoreAfterAnchor: hasMoreAfter });
     if (!hasMoreAfter) {
       // User has reached the present — exit detached mode.
-      // This hides the "Jump to Present" button and enables normal behavior.
+      // This hides the "Jump to present" button and enables normal behavior.
       setLocalState({ isDetached: false });
     }
   }, [channelId, isDetached, state.messages, loadMessagesAfter]);
@@ -620,7 +628,8 @@ export function useChatArea({
       return;
     }
     if (!channelId) return;
-    setLocalState({ showPins: true });
+    // Pins and a thread share the right-hand panel; opening one closes the other.
+    setLocalState({ showPins: true, threadMessageId: null });
     loadPins(channelId);
   }, [showPins, channelId, loadPins]);
 
@@ -1133,6 +1142,10 @@ export function useChatArea({
     );
   }, [effectivePermissions]);
 
+  const canManageChannel =
+    hasPermission(userPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
+    hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+
   const canBan = useMemo(() => {
     return (
       hasPermission(userPermissions, PERMISSIONS.BAN_MEMBERS) ||
@@ -1140,45 +1153,31 @@ export function useChatArea({
     );
   }, [userPermissions]);
 
+  // Ban opens BanMemberDialog (reason + confirm); the request runs from it.
+  const [banTarget, setBanTarget] = useState<BanTarget | null>(null);
   const handleBan = useCallback(
-    async (targetUserId: string, username: string) => {
+    (targetUserId: string, username: string) => {
       if (!state.activeServerId || state.activeServerId === "@me") return;
-      const reason = window.prompt(
-        `Ban ${username}?\n\nOptionally provide a reason:`,
-      );
-      if (reason === null) return;
-      try {
-        await apiPost(`/api/servers/${state.activeServerId}/bans`, {
-          user_id: targetUserId,
-          reason: reason || undefined,
-        });
-      } catch (err: any) {
-        alert(err.message || "Failed to ban user");
-      }
+      setBanTarget({ userId: targetUserId, username });
+    },
+    [state.activeServerId],
+  );
+  const closeBan = useCallback(() => setBanTarget(null), []);
+  const confirmBan = useCallback(
+    async (target: BanTarget, reason: string) => {
+      if (!state.activeServerId || state.activeServerId === "@me") return;
+      await apiPost(`/api/servers/${state.activeServerId}/bans`, {
+        user_id: target.userId,
+        reason: reason || undefined,
+      });
+      toast.success(`Banned ${target.username}`);
     },
     [state.activeServerId],
   );
 
   const handleThread = useCallback((messageId: string) => {
-    setLocalState({ threadMessageId: messageId });
+    setLocalState({ threadMessageId: messageId, showPins: false });
   }, []);
-
-  useEffect(
-    function closePinsOnClickOutside() {
-      if (!showPins) return;
-
-      const handleClickOutside = (e: MouseEvent) => {
-        if (pinSidebarRef.current?.contains(e.target as Node)) return;
-        if (pinButtonRef.current?.contains(e.target as Node)) return;
-        setLocalState({ showPins: false });
-      };
-
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    },
-    [showPins],
-  );
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1240,7 +1239,6 @@ export function useChatArea({
     showChannelSettings,
     showChannelDetails,
     highlightAnchor,
-    pinSidebarRef,
     pinButtonRef,
     virtualListRef,
     handleLoadMore,
@@ -1255,6 +1253,9 @@ export function useChatArea({
     confirmPinAction,
     handleJumpToMessage,
     handleBan,
+    banTarget,
+    closeBan,
+    confirmBan,
     handleThread,
     handleAtBottom,
     handleScrollRangeChange,
@@ -1268,6 +1269,7 @@ export function useChatArea({
     canPin,
     canDeleteMessages,
     canBan,
+    canManageChannel,
     channelData,
     dispatch,
     restoreInProgress,

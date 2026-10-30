@@ -14,7 +14,7 @@ export function GifProviderBranding({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute bottom-2 left-2 z-10 rounded-md bg-black/35 px-1.5 py-1 backdrop-blur-[1px]",
+        "pointer-events-none absolute bottom-2 left-2 z-10 rounded-md bg-black/35 px-1.5 py-1",
         className,
       )}
     >

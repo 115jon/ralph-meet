@@ -14,7 +14,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppActive } from "@/hooks/useAppActive";
+import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+/** The level bar is written at most this often (30fps). */
+const METER_FRAME_MS = 1000 / 30;
 
 interface InputSensitivityMeterProps {
   autoSensitivity: boolean;
@@ -22,6 +27,11 @@ interface InputSensitivityMeterProps {
   processing: VoiceAudioProcessingSettings;
   value: number;
   onCommit: (value: number) => void;
+  /**
+   * id of a visible label rendered by the caller (a settings row). When set,
+   * the meter drops its own "Input sensitivity" caption.
+   */
+  labelledBy?: string;
 }
 
 export function InputSensitivityMeter({
@@ -30,9 +40,23 @@ export function InputSensitivityMeter({
   processing,
   value,
   onCommit,
+  labelledBy,
 }: InputSensitivityMeterProps) {
-  const [rms, setRms] = useState(0);
   const [draftValue, setDraftValue] = useState(value);
+  /**
+   * The live level is written straight to this element as
+   * `transform: scaleX(level)` (at most 30fps), never through React state,
+   * so the row doesn't re-render per frame. Above the marker it turns talk
+   * green (a data attribute, written only on a flip).
+   */
+  const levelRef = useRef<HTMLDivElement | null>(null);
+  const appActive = useAppActive();
+  const appActiveRef = useRef(appActive);
+  const loopRef = useRef<{ start: () => void; stop: () => void } | null>(null);
+  const thresholdRef = useRef(draftValue);
+  useEffect(() => {
+    thresholdRef.current = draftValue;
+  }, [draftValue]);
   const [isTooltipOpen, setIsTooltipOpen] = useState(false);
   const requestIdRef = useRef(0);
   const processingSignature = useMemo(
@@ -65,6 +89,8 @@ export function InputSensitivityMeter({
     let context: AudioContext | null = null;
     const cleanup = () => {
       if (animationFrame) cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+      loopRef.current = null;
       monitorStream?.getTracks().forEach((track) => track.stop());
       processor?.destroy();
       stream?.getTracks().forEach((track) => track.stop());
@@ -111,8 +137,12 @@ export function InputSensitivityMeter({
         context.resume().catch(() => {});
 
         const data = new Float32Array(analyser.frequencyBinCount);
+        let lastPaint = 0;
+        let over: boolean | null = null;
         const tick = () => {
+          animationFrame = 0;
           if (requestIdRef.current !== requestId) return;
+          if (!appActiveRef.current) return;
           let currentRms: number;
           if (typeof analyser.getFloatTimeDomainData === "function") {
             analyser.getFloatTimeDomainData(data);
@@ -122,12 +152,32 @@ export function InputSensitivityMeter({
             analyser.getByteTimeDomainData(byteData);
             currentRms = calculateTimeDomainRms(byteData);
           }
-          setRms(currentRms);
+          const now = performance.now();
+          const node = levelRef.current;
+          if (node && now - lastPaint >= METER_FRAME_MS) {
+            lastPaint = now;
+            const level = getVoiceActivityLevelPercent(currentRms);
+            node.style.transform = `scaleX(${(level / 100).toFixed(3)})`;
+            const nextOver = level >= thresholdRef.current + 100;
+            if (nextOver !== over) {
+              over = nextOver;
+              node.toggleAttribute("data-over", nextOver);
+            }
+          }
           animationFrame = requestAnimationFrame(tick);
         };
-        animationFrame = requestAnimationFrame(tick);
+        loopRef.current = {
+          start: () => {
+            if (!animationFrame) animationFrame = requestAnimationFrame(tick);
+          },
+          stop: () => {
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            animationFrame = 0;
+          },
+        };
+        if (appActiveRef.current) loopRef.current.start();
       } catch {
-        setRms(0);
+        if (levelRef.current) levelRef.current.style.transform = "scaleX(0)";
         cleanup();
       }
     };
@@ -136,8 +186,14 @@ export function InputSensitivityMeter({
     return cleanup;
   }, [inputDeviceId, processing, processingSignature]);
 
+  /* Stop the loop while the app isn't drawn (hidden, behind a game). */
+  useEffect(() => {
+    appActiveRef.current = appActive;
+    if (appActive) loopRef.current?.start();
+    else loopRef.current?.stop();
+  }, [appActive]);
+
   const sensitivityPercent = Math.min(100, Math.max(0, draftValue + 100));
-  const levelPercent = getVoiceActivityLevelPercent(rms);
 
   const sensitivitySlider = (
     <input
@@ -164,50 +220,59 @@ export function InputSensitivityMeter({
           onCommit(draftValue);
         }
       }}
-      aria-label="Input sensitivity"
-      className={`absolute inset-0 h-2 w-full appearance-none bg-transparent ${
+      aria-label={labelledBy ? undefined : "Input sensitivity"}
+      aria-labelledby={labelledBy}
+      aria-valuetext={autoSensitivity ? "Automatic" : `${draftValue} dB`}
+      // The box is the fader's travel: 28 high so the 12x28 ink-1 cap (the
+      // kit's slider cap) sits centred on the 8px track without margins.
+      className={`absolute inset-x-0 top-1/2 h-7 w-full -translate-y-1/2 appearance-none bg-transparent focus-visible:outline-none ${
         autoSensitivity
           ? "pointer-events-none cursor-default opacity-0 [&::-moz-range-thumb]:hidden [&::-webkit-slider-thumb]:hidden"
-          : "cursor-ew-resize accent-rm-accent"
-      } [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white`}
+          : "cursor-ew-resize"
+      } [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:rounded-[2px] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-ink-1 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:rounded-[2px] [&::-webkit-slider-thumb]:bg-ink-1 [&:focus-visible::-moz-range-thumb]:outline-2 [&:focus-visible::-moz-range-thumb]:outline-offset-2 [&:focus-visible::-moz-range-thumb]:outline-focus [&:focus-visible::-webkit-slider-thumb]:outline-2 [&:focus-visible::-webkit-slider-thumb]:outline-offset-2 [&:focus-visible::-webkit-slider-thumb]:outline-focus`}
     />
   );
 
+  const Wrapper = labelledBy ? "div" : "label";
   return (
-    <label
-      className={`block space-y-3 py-3 ${
-        autoSensitivity ? "cursor-default" : ""
-      }`}
-      htmlFor="input-sensitivity"
+    <Wrapper
+      className={cn(
+        "block space-y-3",
+        labelledBy ? "py-3" : "py-4",
+        autoSensitivity && "cursor-default",
+      )}
+      {...(labelledBy ? {} : { htmlFor: "input-sensitivity" })}
     >
-      <span className="text-sm font-semibold text-rm-text">
-        Input sensitivity
-      </span>
+      {labelledBy ? null : (
+        <span className="silkscreen text-ink-2">Input sensitivity</span>
+      )}
       <div
-        className={`relative h-2 overflow-visible rounded-full ${
-          autoSensitivity
-            ? "cursor-default bg-rm-text-muted/30"
-            : "bg-rm-bg-elevated"
-        }`}
+        className={cn(
+          "relative h-2 overflow-visible rounded-[1px]",
+          autoSensitivity ? "cursor-default bg-tint-2" : "bg-tint-3",
+        )}
       >
         {!autoSensitivity && (
-          <>
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 overflow-hidden rounded-[1px]"
+          >
+            {/* Zones: below the marker you're silent (idle), above it
+                people hear you (talk). Static; only the level moves. */}
             <div
-              className="absolute inset-0 overflow-hidden rounded-full"
-              style={{
-                background: `linear-gradient(to right, color-mix(in srgb, var(--rm-status-idle) 88%, var(--rm-bg-surface)) 0%, color-mix(in srgb, var(--rm-status-idle) 88%, var(--rm-bg-surface)) ${sensitivityPercent}%, color-mix(in srgb, var(--rm-status-online) 88%, var(--rm-bg-surface)) ${sensitivityPercent}%, color-mix(in srgb, var(--rm-status-online) 88%, var(--rm-bg-surface)) 100%)`,
-              }}
+              className="absolute inset-y-0 left-0 bg-warning-tint"
+              style={{ width: `${sensitivityPercent}%` }}
             />
             <div
-              className="absolute inset-y-0 right-0 rounded-r-full"
-              style={{
-                width: `${100 - levelPercent}%`,
-                backgroundColor:
-                  "color-mix(in srgb, var(--rm-bg-primary) 56%, transparent)",
-              }}
-              aria-hidden="true"
+              className="absolute inset-y-0 right-0 bg-talk-tint"
+              style={{ width: `${100 - sensitivityPercent}%` }}
             />
-          </>
+            <div
+              ref={levelRef}
+              className="absolute inset-0 origin-left bg-idle data-over:bg-talk"
+              style={{ transform: "scaleX(0)" }}
+            />
+          </div>
         )}
         {autoSensitivity ? (
           sensitivitySlider
@@ -215,7 +280,7 @@ export function InputSensitivityMeter({
           <Tooltip open={isTooltipOpen} onOpenChange={setIsTooltipOpen}>
             <TooltipTrigger asChild>
               <span
-                className="pointer-events-none absolute top-1/2 z-20 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                className="pointer-events-none absolute top-1/2 z-20 h-7 w-3 -translate-x-1/2 -translate-y-1/2 rounded-[2px]"
                 style={{ left: `${sensitivityPercent}%` }}
                 aria-hidden="true"
               />
@@ -227,6 +292,6 @@ export function InputSensitivityMeter({
           </Tooltip>
         )}
       </div>
-    </label>
+    </Wrapper>
   );
 }

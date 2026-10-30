@@ -25,6 +25,17 @@ export interface ChatState {
   connected: boolean;
   /** Current reconnection attempt (0 = not reconnecting) */
   reconnectAttempt: number;
+  /**
+   * How far the chat link has got: 0 signing in (fetching the socket
+   * ticket), 1 opening the socket, 2 waiting for Ready, 3 ready. The
+   * first-load checklist reads it.
+   */
+  connectStep: 0 | 1 | 2 | 3;
+  /**
+   * Why the gateway stopped trying, when it did. `auth`: the socket ticket
+   * was refused (401), so retrying cannot help until the user signs in.
+   */
+  gatewayFailure: "auth" | null;
   /** Current user */
   user: User | null;
   /** Servers the user belongs to */
@@ -148,6 +159,8 @@ type VoiceChannelMemberInput = VoiceChannelMember | VoiceChannelMemberDelta;
 export const initialState: ChatState = {
   connected: false,
   reconnectAttempt: 0,
+  connectStep: 0,
+  gatewayFailure: null,
   user: null,
   servers: [],
   channels: [],
@@ -233,6 +246,8 @@ function reconcileChannelIdentity(
 export type ChatAction =
   | { type: "SET_CONNECTED"; connected: boolean }
   | { type: "SET_RECONNECT_ATTEMPT"; attempt: number }
+  | { type: "SET_CONNECT_STEP"; step: ChatState["connectStep"] }
+  | { type: "SET_GATEWAY_FAILURE"; failure: ChatState["gatewayFailure"] }
   | { type: "MARK_MESSAGE_CACHES_STALE" }
   | { type: "SET_USER"; user: User }
   | {
@@ -623,9 +638,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         connected: action.connected,
         reconnectAttempt: action.connected ? 0 : state.reconnectAttempt,
+        gatewayFailure: action.connected ? null : state.gatewayFailure,
       };
     case "SET_RECONNECT_ATTEMPT":
       return { ...state, reconnectAttempt: action.attempt };
+    case "SET_CONNECT_STEP":
+      return state.connectStep === action.step
+        ? state
+        : { ...state, connectStep: action.step };
+    case "SET_GATEWAY_FAILURE":
+      return state.gatewayFailure === action.failure
+        ? state
+        : { ...state, gatewayFailure: action.failure };
     case "MARK_MESSAGE_CACHES_STALE":
       return {
         ...state,

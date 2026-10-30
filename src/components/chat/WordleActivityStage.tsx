@@ -1,5 +1,21 @@
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { describeApiError } from "@/lib/api-errors";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { IconButton } from "@/components/ui/IconButton";
+import { PRESS } from "@/components/ui/interaction";
+import { Num } from "@/components/ui/num";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { Switch } from "@/components/ui/switch";
+import { useAppActive } from "@/hooks/useAppActive";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { getNewYorkDateKey } from "@/lib/wordle";
@@ -12,8 +28,8 @@ import {
   isValidWordleGuess,
   shouldShowCompletionResult,
 } from "@/lib/wordle-game";
-import { BarChart3, Delete, Lightbulb, Settings, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "@/components/ui/icon";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 interface WordleActivityStageProps {
   sfu: SFUClient | null;
@@ -79,39 +95,77 @@ const DEFAULT_SETTINGS: WordleSettings = {
 const SETTING_ROWS: Array<[keyof WordleSettings, string, string]> = [
   [
     "hardMode",
-    "Hard Mode",
+    "Hard mode",
     "Any revealed hints must be used in subsequent guesses",
   ],
   [
     "highContrast",
-    "High Contrast Mode",
+    "High contrast mode",
     "Contrast and colorblindness improvements",
   ],
   [
     "keyboardOnly",
-    "Onscreen Keyboard Input Only",
+    "Onscreen keyboard input only",
     "Ignore key input except from the onscreen keyboard.",
   ],
   [
     "remindersMuted",
-    "Mute Daily Reminders",
+    "Mute daily reminders",
     "Don't send a notification when new puzzles are available.",
   ],
 ];
 
-const WORDLE_THEME = {
-  page: "bg-rm-bg-primary text-rm-text",
-  border: "border-rm-border",
-  icon: "text-rm-text-secondary",
-  key: "bg-rm-bg-elevated text-rm-text",
-  emptyTile: "border-rm-border",
-  modal: "bg-rm-bg-surface text-rm-text border-rm-border backdrop-blur-2xl",
-  overlay: "bg-black/50 backdrop-blur-sm",
-  exampleTile: "border-rm-text-secondary/70",
-  link: "text-rm-accent underline underline-offset-2",
-} as const;
+type Mark = "correct" | "present" | "absent";
+type Palette = "default" | "contrast";
 
-type WordleTheme = typeof WORDLE_THEME;
+/**
+ * Tile, key and mini-grid colours, all on LED tokens. `on-talk` is the ink
+ * for every lit fill: it is black on the dark LEDs and white on the darker
+ * light-theme LEDs, so it follows the fill it sits on. High contrast swaps
+ * green/amber for amber/azure (the orange/blue pair people with colour
+ * blindness already know from the classic game).
+ */
+const MARK_TILE: Record<Palette, Record<Mark, string>> = {
+  default: {
+    correct: "border-transparent bg-talk text-on-talk",
+    present: "border-transparent bg-idle text-on-talk",
+    absent: "border-transparent bg-tint-3 text-ink-1",
+  },
+  contrast: {
+    correct: "border-transparent bg-idle text-on-talk",
+    present: "border-transparent bg-live text-on-talk",
+    absent: "border-transparent bg-tint-3 text-ink-1",
+  },
+};
+
+const MARK_KEY: Record<Palette, Record<Mark, string>> = {
+  default: {
+    correct: "bg-talk text-on-talk",
+    present: "bg-idle text-on-talk",
+    absent: "bg-tint-1 text-ink-3",
+  },
+  contrast: {
+    correct: "bg-idle text-on-talk",
+    present: "bg-live text-on-talk",
+    absent: "bg-tint-1 text-ink-3",
+  },
+};
+
+const MARK_CELL: Record<Palette, Record<Mark, string>> = {
+  default: {
+    correct: "bg-talk",
+    present: "bg-idle",
+    absent: "bg-ink-off",
+  },
+  contrast: {
+    correct: "bg-idle",
+    present: "bg-live",
+    absent: "bg-ink-off",
+  },
+};
+
+/** The activity's name, in one place so the header and the dialogs agree. */
+const TITLE = "Daily Word";
 
 function readStoredFlag(key: string) {
   if (typeof window === "undefined") return false;
@@ -354,42 +408,52 @@ function hydrateLocalProgress(
   };
 }
 
-function getMarkLabel(mark: "correct" | "present" | "absent") {
+function getMarkLabel(mark: Mark) {
   if (mark === "correct") return "correct position";
   if (mark === "present") return "present elsewhere";
   return "not in the word";
 }
 
+/**
+ * A finished-or-in-progress board as one picture: 5 x 6 cells, colour only
+ * (never letters). It is a single image to assistive tech, named by `label`;
+ * thirty "Row 1, column 1" cells per player would bury the call.
+ */
 function MiniBoard({
   guesses,
   answer,
-  colors,
+  palette,
+  size = "sm",
+  label,
 }: {
   guesses: string[];
   answer: string;
-  colors: Record<"correct" | "present" | "absent", string>;
+  palette: Palette;
+  /** `sm` is the rail's 4px cell, `md` the result card's 10px cell. */
+  size?: "sm" | "md";
+  label: string;
 }) {
+  const rows = guesses.slice(0, 6).map((guess) => ({
+    marks: evaluateWordleGuess(guess, answer),
+  }));
   return (
-    <div className="grid grid-cols-5 gap-[2px]">
+    <div
+      role="img"
+      aria-label={label}
+      className={cn(
+        "grid shrink-0 grid-cols-5",
+        size === "sm" ? "gap-px" : "gap-0.5",
+      )}
+    >
       {Array.from({ length: 30 }).map((_, index) => {
-        const row = Math.floor(index / 5);
-        const col = index % 5;
-        const guess = guesses[row] ?? "";
-        const mark = guess ? evaluateWordleGuess(guess, answer)[col] : null;
+        const mark = rows[Math.floor(index / 5)]?.marks[index % 5] ?? null;
         return (
           <div
             key={index}
-            role="img"
-            aria-label={`Row ${row + 1}, column ${col + 1}: ${mark ? getMarkLabel(mark) : "empty"}`}
-            title={mark ? getMarkLabel(mark) : "Empty"}
-            style={
-              mark
-                ? { borderColor: colors[mark], backgroundColor: colors[mark] }
-                : undefined
-            }
+            aria-hidden="true"
             className={cn(
-              "h-2.5 w-2.5 border border-[#d3d6da]",
-              mark && "border-current bg-current",
+              size === "sm" ? "size-1" : "size-2.5",
+              mark ? MARK_CELL[palette][mark] : "bg-tint-1",
             )}
           />
         );
@@ -398,44 +462,170 @@ function MiniBoard({
   );
 }
 
+/** "Solved in 3", "Playing", "Out of tries" or "Not started". The board beside it is yours; the rail is everyone else. */
+function getPlayerMeta(player: Progress, answer: string) {
+  const solvedAt = answer ? player.guesses.indexOf(answer) : -1;
+  if (solvedAt >= 0) return `Solved in ${solvedAt + 1}`;
+  if (player.finished && player.missed) return "Out of tries";
+  if (player.guesses.length > 0) return "Playing";
+  return "Not started";
+}
+
+/**
+ * Group progress as a right rail (spec §8, Voice): a 240px ply-1 column with
+ * a 1px seam, one row per player. It only exists when the stage is wide
+ * enough (`@[900px]` of the stage's own container); below that the same rows
+ * collapse into `PlayerStrip` under the keyboard.
+ */
+function PlayerRail({
+  players,
+  answer,
+  palette,
+}: {
+  players: Progress[];
+  answer: string;
+  palette: Palette;
+}) {
+  return (
+    <aside
+      aria-label="Other players"
+      className="hidden w-60 shrink-0 flex-col overflow-y-auto border-l border-line bg-ply-1 @[900px]:flex"
+    >
+      <div className="flex items-center justify-between px-3 pt-3 pb-1.5">
+        <h3 className="silkscreen text-ink-3">Others</h3>
+        <Num className="text-ink-3">{players.length}</Num>
+      </div>
+      <ul className="flex flex-col pb-3">
+        {players.map((player) => {
+          const meta = getPlayerMeta(player, answer);
+          return (
+            <li
+              key={player.userId}
+              className="flex min-h-10 items-center gap-2.5 px-3 py-1.5"
+            >
+              <Avatar
+                name={player.name}
+                src={player.avatar ? getAuthAssetUrl(player.avatar) : null}
+                size={24}
+                ring="ply-1"
+              />
+              <div className="min-w-0 flex-1">
+                <div
+                  className="truncate text-ui-sm font-medium text-ink-1"
+                  title={player.name}
+                >
+                  {player.name}
+                </div>
+                <div className="truncate text-ui-xs text-ink-3">{meta}</div>
+              </div>
+              <MiniBoard
+                guesses={player.guesses}
+                answer={answer}
+                palette={palette}
+                label={`${player.name}: ${meta}`}
+              />
+            </li>
+          );
+        })}
+      </ul>
+      {players.length < 1 ? (
+        <p className="px-3 pb-3 text-ui-xs text-pretty text-ink-3">
+          Friends who join the call show up here as they play.
+        </p>
+      ) : null}
+    </aside>
+  );
+}
+
+/** The rail's narrow-stage form: avatar plus board per player, one scrolling row. */
+function PlayerStrip({
+  players,
+  answer,
+  palette,
+}: {
+  players: Progress[];
+  answer: string;
+  palette: Palette;
+}) {
+  if (players.length < 1) return null;
+  return (
+    <ul
+      aria-label="Other players"
+      className="flex w-full max-w-[480px] gap-2 overflow-x-auto p-0.5 @[900px]:hidden"
+    >
+      {players.map((player) => {
+        const meta = getPlayerMeta(player, answer);
+        return (
+          <li
+            key={player.userId}
+            title={`${player.name}: ${meta}`}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-line bg-ply-2 p-1.5"
+          >
+            <Avatar
+              name={player.name}
+              src={player.avatar ? getAuthAssetUrl(player.avatar) : null}
+              size={24}
+              ring="ply-2"
+            />
+            <MiniBoard
+              guesses={player.guesses}
+              answer={answer}
+              palette={palette}
+              label={`${player.name}: ${meta}`}
+            />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Counts down to the next puzzle in its own leaf, so the stage never re-renders on the tick. */
+function NextPuzzleCountdown() {
+  const active = useAppActive();
+  const [remaining, setRemaining] = useState(() => getMillisecondsUntilReset());
+
+  useEffect(() => {
+    if (!active) return;
+    const tick = () => setRemaining(getMillisecondsUntilReset());
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [active]);
+
+  return (
+    <div className="font-mono text-ui-2xl font-semibold tabular-nums">
+      {formatCountdown(remaining)}
+    </div>
+  );
+}
+
 function ExampleRow({
   letters,
   highlightedIndex,
   mark,
-  colors,
-  theme,
+  palette,
 }: {
   letters: string;
   highlightedIndex: number;
-  mark: "correct" | "present" | "absent";
-  colors: Record<"correct" | "present" | "absent", string>;
-  theme: WordleTheme;
+  mark: Mark;
+  palette: Palette;
 }) {
   return (
-    <div className="mt-2 flex gap-1">
-      {letters.split("").map((letter, index) => {
-        const highlighted = index === highlightedIndex;
-        return (
-          <div
-            key={`${letters}-${index}`}
-            className={cn(
-              "flex h-8 w-8 items-center justify-center border-2 text-xl font-black uppercase sm:h-9 sm:w-9",
-              theme.exampleTile,
-              highlighted && "text-white",
-            )}
-            style={
-              highlighted
-                ? {
-                    borderColor: colors[mark],
-                    backgroundColor: colors[mark],
-                  }
-                : undefined
-            }
-          >
-            {letter}
-          </div>
-        );
-      })}
+    <div className="flex gap-1">
+      {letters.split("").map((letter, index) => (
+        <div
+          key={`${letters}-${index}`}
+          className={cn(
+            "flex size-9 items-center justify-center rounded-sm border-2 text-ui-lg font-semibold uppercase",
+            index === highlightedIndex
+              ? MARK_TILE[palette][mark]
+              : "border-line-strong bg-ply-2",
+          )}
+        >
+          {letter}
+        </div>
+      ))}
     </div>
   );
 }
@@ -443,109 +633,92 @@ function ExampleRow({
 function HowToPlayModal({
   open,
   onClose,
-  colors,
+  palette,
 }: {
   open: boolean;
   onClose: () => void;
-  colors: Record<"correct" | "present" | "absent", string>;
+  palette: Palette;
 }) {
+  const examples: Array<{
+    letters: string;
+    index: number;
+    mark: Mark;
+    text: string;
+  }> = [
+    {
+      letters: "wordy",
+      index: 0,
+      mark: "correct",
+      text: "is in the word and in the correct spot.",
+    },
+    {
+      letters: "light",
+      index: 1,
+      mark: "present",
+      text: "is in the word but in the wrong spot.",
+    },
+    {
+      letters: "rogue",
+      index: 3,
+      mark: "absent",
+      text: "is not in the word in any spot.",
+    },
+  ];
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <div
-          className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center p-4",
-            WORDLE_THEME.overlay,
-          )}
-        >
-          <DialogSurface
-            showCloseButton={false}
-            aria-labelledby="wordle-how-to-play-title"
-            aria-modal="true"
-            className={cn(
-              "relative max-h-[min(640px,calc(100vh-32px))] w-full max-w-[500px] overflow-y-auto rounded-lg border p-6 shadow-2xl sm:p-8",
-              WORDLE_THEME.modal,
-            )}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close how to play"
-              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
-            >
-              <X size={28} strokeWidth={2} />
-            </button>
-            <h2
-              id="wordle-how-to-play-title"
-              className="pr-10 text-2xl font-black leading-tight"
-              style={{ fontFamily: "Georgia, serif" }}
-            >
-              How To Play
-            </h2>
-            <p className="mt-1 text-lg leading-snug">
-              Guess the Wordle in 6 tries.
-            </p>
-            <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm leading-snug sm:text-base">
-              <li>Each guess must be a valid 5-letter word.</li>
-              <li>
-                The color of the tiles will change to show how close your guess
-                was to the word.
-              </li>
-            </ul>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent
+        aria-modal="true"
+        className="gap-4"
+        dialogClassName="max-h-[min(640px,calc(100dvh-2rem))] overflow-y-auto md:max-w-md"
+      >
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>How to play</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Guess the word in 6 tries.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-            <h3 className="mt-5 text-sm font-black">Examples</h3>
-            <ExampleRow
-              letters="wordy"
-              highlightedIndex={0}
-              mark="correct"
-              colors={colors}
-              theme={WORDLE_THEME}
-            />
-            <p className="mt-1 text-sm">
-              <strong style={{ color: colors.correct }}>W</strong> is in the
-              word and in the correct spot.
-            </p>
-            <ExampleRow
-              letters="light"
-              highlightedIndex={1}
-              mark="present"
-              colors={colors}
-              theme={WORDLE_THEME}
-            />
-            <p className="mt-1 text-sm">
-              <strong style={{ color: colors.present }}>I</strong> is in the
-              word but in the wrong spot.
-            </p>
-            <ExampleRow
-              letters="rogue"
-              highlightedIndex={3}
-              mark="absent"
-              colors={colors}
-              theme={WORDLE_THEME}
-            />
-            <p className="mt-1 text-sm">
-              <strong style={{ color: colors.absent }}>U</strong> is not in the
-              word in any spot.
-            </p>
+        <ul className="list-disc space-y-1 pl-5 text-ui-sm text-ink-2">
+          <li>Each guess must be a valid 5-letter word.</li>
+          <li>
+            The color of the tiles will change to show how close your guess was
+            to the word.
+          </li>
+        </ul>
 
-            <div className={cn("my-5 border-t", WORDLE_THEME.border)} />
-            <p className="text-sm leading-snug sm:text-base">
-              A new puzzle is released daily at midnight. If you haven&apos;t
-              already, you can{" "}
-              <a
-                className={WORDLE_THEME.link}
-                href="https://www.nytimes.com/games/wordle/index.html"
-                target="_blank"
-                rel="noreferrer"
-              >
-                play Wordle
-              </a>{" "}
-              for a daily puzzle.
-            </p>
-          </DialogSurface>
+        <div className="space-y-3">
+          <h3 className="text-ui-row font-semibold">Examples</h3>
+          {examples.map((example) => (
+            <div key={example.letters} className="space-y-1.5">
+              <ExampleRow
+                letters={example.letters}
+                highlightedIndex={example.index}
+                mark={example.mark}
+                palette={palette}
+              />
+              <p className="text-ui-sm text-ink-2">
+                <strong className="font-semibold text-ink-1 uppercase">
+                  {example.letters[example.index]}
+                </strong>{" "}
+                {example.text}
+              </p>
+            </div>
+          ))}
         </div>
-      </DialogPortal>
-    </Dialog>
+
+        <p className="border-t border-line pt-4 text-ui-sm text-pretty text-ink-2">
+          A new puzzle arrives every day at midnight Eastern time. Everyone in
+          the call plays the same word.
+        </p>
+
+        <ResponsiveDialogFooter>
+          <Button onClick={onClose}>Start playing</Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 
@@ -591,6 +764,7 @@ function WordleActivityStageContent({
   const puzzleDate = storageKey.slice(storageKey.lastIndexOf(":") + 1);
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [puzzleError, setPuzzleError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const initialStored = useMemo(
     () => readStoredProgress(storageKey),
     [storageKey],
@@ -640,7 +814,6 @@ function WordleActivityStageContent({
     status: "solved" | "missed";
     guessIndex: number;
   } | null>(null);
-  const [nextPuzzleIn, setNextPuzzleIn] = useState(getMillisecondsUntilReset());
   const [settings, setSettings] = useState<WordleSettings>(() =>
     readStoredSettings(),
   );
@@ -651,13 +824,6 @@ function WordleActivityStageContent({
   }, [settings]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      setNextPuzzleIn(getMillisecondsUntilReset());
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
     const controller = new AbortController();
     fetch(apiUrl(`/api/wordle/today?date=${puzzleDate}`), {
       signal: controller.signal,
@@ -665,10 +831,10 @@ function WordleActivityStageContent({
       .then((res) => {
         if (!res.headers.get("Content-Type")?.toLowerCase().includes("json")) {
           throw new Error(
-            "Wordle API returned HTML instead of JSON. Check the API base URL for this environment.",
+            "The puzzle API returned HTML instead of JSON. Check the API base URL for this environment.",
           );
         }
-        if (!res.ok) throw new Error("Unable to load today's Wordle from NYT.");
+        if (!res.ok) throw new Error("Unable to load today's puzzle.");
         return res.json();
       })
       .then((data) => {
@@ -676,18 +842,16 @@ function WordleActivityStageContent({
           setPuzzle(data);
           return;
         }
-        throw new Error("Today's Wordle response was invalid.");
+        throw new Error("Today's puzzle response was invalid.");
       })
       .catch((error) => {
         if (!controller.signal.aborted)
-          setPuzzleError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load today's Wordle.",
-          );
+          console.warn("Daily Word load failed", error);
+        if (!controller.signal.aborted)
+          setPuzzleError(describeApiError(error, "load today's puzzle"));
       });
     return () => controller.abort();
-  }, [puzzleDate]);
+  }, [puzzleDate, loadAttempt]);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
@@ -1045,45 +1209,44 @@ function WordleActivityStageContent({
     ? Math.round((solvedCount / rowProgress.length) * 100)
     : 0;
   const currentStreak = localStoredProgress?.streak ?? 0;
-  const colors = settings.highContrast
-    ? {
-        correct: "#b45309",
-        present: "#1d4ed8",
-        absent: "#4b5563",
-      }
-    : {
-        correct: "#2f6f35",
-        present: "#7a5f00",
-        absent: "#4b5563",
-      };
-  const theme = {
-    ...WORDLE_THEME,
-  };
+  const palette: Palette = settings.highContrast ? "contrast" : "default";
+  const markTile = MARK_TILE[palette];
+  const markKey = MARK_KEY[palette];
 
   if (!puzzle) {
     return (
-      <div
-        className={cn(
-          "flex h-full w-full flex-col items-center justify-center px-6 text-center",
-          theme.page,
-        )}
-      >
-        <div
-          className="text-lg font-black"
-          style={{ fontFamily: "Georgia, serif" }}
-        >
-          The New York Times <span className="font-sans">Games</span>
+      <StageFrame>
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          {puzzleError ? (
+            <EmptyState
+              title="Today's puzzle didn't load"
+              description="Check your connection and try again."
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setPuzzleError(null);
+                    setLoadAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  Try again
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              loading
+              title="Loading today's puzzle"
+              description="Fetching the current puzzle."
+            />
+          )}
         </div>
-        <h2 className="mt-5 text-2xl font-black">
-          {puzzleError ? "Wordle unavailable" : "Loading today's Wordle"}
-        </h2>
-        <p className="mt-3 max-w-sm text-sm opacity-75">
-          {puzzleError ??
-            "Fetching the current New York Times puzzle for the New York calendar date."}
-        </p>
-      </div>
+      </StageFrame>
     );
   }
+
+  const keysLocked = !answer || localFinished || revealingRow !== null;
+  let content: ReactNode;
 
   if (activeView === "done") {
     const finishedStatus =
@@ -1094,297 +1257,155 @@ function WordleActivityStageContent({
     const completedGuessCount =
       (completionReveal?.guessIndex ?? completionStatus.finalGuessIndex ?? 0) +
       1;
-    return (
-      <div
-        className={cn(
-          "flex h-full w-full flex-col items-center justify-center overflow-y-auto px-4 py-8",
-          theme.page,
-        )}
-        style={{ fontFamily: "Georgia, serif" }}
-      >
-        <MiniBoard guesses={activeGuesses} answer={answer} colors={colors} />
-        <div className="mt-2 text-sm font-bold">Wordle</div>
-        <h2 className="mt-4 text-center text-3xl font-black sm:text-4xl">
-          {finishedStatus === "solved"
-            ? `Solved in ${completedGuessCount}`
-            : "Round complete"}
-        </h2>
-        <p className="mt-3 max-w-sm text-center text-base leading-relaxed sm:text-lg">
-          {finishedStatus === "solved"
-            ? "Nice work. Your channel can see how everyone did."
-            : `The answer was ${answer.toUpperCase()}. A new Wordle is on the way.`}
+    const resultTitle =
+      finishedStatus === "solved"
+        ? `Solved in ${completedGuessCount}`
+        : "Round complete";
+    content = (
+      <div className="m-auto flex w-full max-w-sm flex-col items-center gap-5 px-4 py-8 text-center">
+        <MiniBoard
+          size="md"
+          guesses={activeGuesses}
+          answer={answer}
+          palette={palette}
+          label={`Your board: ${resultTitle.toLowerCase()}`}
+        />
+        <div className="flex flex-col gap-1.5">
+          <h2 className="text-ui-xl font-semibold text-balance">
+            {resultTitle}
+          </h2>
+          <p className="text-ui-sm text-pretty text-ink-2">
+            {finishedStatus === "solved"
+              ? "Nice work. Your channel can see how everyone did."
+              : `The answer was ${answer.toUpperCase()}. A new puzzle is on the way.`}
+          </p>
+        </div>
+        <div className="flex w-full flex-col items-center gap-0.5 rounded-lg border border-line bg-ply-2 px-5 py-3">
+          <div className="text-ui-xs text-ink-3">Next puzzle in</div>
+          <NextPuzzleCountdown />
+          <div className="text-ui-xs text-ink-3">midnight Eastern time</div>
+        </div>
+        <Button size="lg" onClick={() => setView("stats")}>
+          Channel stats
+        </Button>
+        <p className="text-ui-xs text-pretty text-ink-3">
+          {new Date(`${puzzle.print_date}T00:00:00`).toLocaleDateString(
+            undefined,
+            { month: "long", day: "numeric", year: "numeric" },
+          )}
+          {puzzle.id !== null ? (
+            <>
+              {" · No. "}
+              <Num>{puzzle.id}</Num>
+            </>
+          ) : null}
+          {puzzle.editor ? ` · Edited by ${puzzle.editor}` : null}
         </p>
-        <div className="mt-5 rounded-xl border border-current/15 px-5 py-3 text-center font-sans shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-[0.12em] opacity-65">
-            Next Wordle in
-          </div>
-          <div className="mt-1 font-mono text-2xl font-bold tabular-nums">
-            {formatCountdown(nextPuzzleIn)}
-          </div>
-          <div className="mt-1 text-xs opacity-65">midnight Eastern time</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setView("stats")}
-          className="mt-6 rounded-full bg-black px-10 py-3 text-base font-bold text-white transition-transform active:scale-[0.96]"
-        >
-          Channel Stats
-        </button>
-        <div className="mt-9 text-center text-base">
-          <div>
-            {new Date(`${puzzle.print_date}T00:00:00`).toLocaleDateString(
-              undefined,
-              { month: "long", day: "numeric", year: "numeric" },
-            )}
-          </div>
-          <div>No. {puzzle.id ?? "----"}</div>
-          <div className="text-sm">
-            Edited by {puzzle.editor ?? "The New York Times"}
-          </div>
-        </div>
-        <div className="mt-20 text-2xl font-black">
-          The New York Times Games
-        </div>
       </div>
     );
-  }
-
-  if (activeView === "stats") {
-    const local = progress[localUserId || ""];
-    return (
-      <div
-        className={cn(
-          "relative flex h-full w-full items-center justify-center overflow-y-auto p-4",
-          theme.page,
-        )}
-      >
-        <button
-          type="button"
+  } else if (activeView === "stats") {
+    content = (
+      <div className="m-auto flex w-full max-w-sm flex-col items-center gap-6 px-4 py-8 text-center">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start"
           onClick={() => {
             setCompletedBoardOpen(true);
             setView("puzzle");
           }}
-          className="absolute right-5 top-5 flex items-center gap-2 text-base"
         >
-          Back to puzzle <X size={18} />
-        </button>
-        <div className="w-full max-w-[380px] text-center">
-          <div className="mx-auto flex w-[102px] flex-col items-center rounded-xl border-2 border-current p-3">
-            <div className="h-16 w-16 overflow-hidden rounded-full bg-[#d9d9d9]">
-              {local?.avatar ? (
-                <img
-                  src={getAuthAssetUrl(local.avatar)}
-                  alt=""
-                  className="h-16 w-16 rounded-full object-cover"
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-full bg-[#6aaa64]" />
-              )}
+          <Icon name="back" size="sm" />
+          Back to puzzle
+        </Button>
+        <h2 className="text-ui-lg font-semibold">Channel stats</h2>
+        <div className="grid w-full grid-cols-3 divide-x divide-line rounded-lg border border-line bg-ply-2 py-4">
+          <div className="px-2">
+            <div className="text-ui-xl font-semibold tabular-nums">
+              {winRate}%
             </div>
-            <div className="mt-2">
-              <MiniBoard
-                guesses={activeGuesses}
-                answer={answer}
-                colors={colors}
-              />
-            </div>
+            <div className="mt-1 text-ui-xs text-ink-3">Win rate</div>
           </div>
-          <h2 className="mt-8 text-base uppercase">General Statistics</h2>
-          <div className="mt-3 flex justify-center divide-x divide-[#d3d6da]">
-            <div className="px-4 sm:px-6">
-              <div className="text-2xl font-bold">{winRate}%</div>
-              <div className="text-xs">Win Rate</div>
+          <div className="px-2">
+            <div className="text-ui-xl font-semibold tabular-nums">
+              {currentStreak} Day
             </div>
-            <div className="px-4 sm:px-6">
-              <div className="text-2xl font-bold">{currentStreak} Day</div>
-              <div className="text-xs">Current Streak</div>
-            </div>
-            <div className="px-4 sm:px-6">
-              <div className="text-2xl font-bold">{currentStreak} Days</div>
-              <div className="text-xs">Best Streak</div>
-            </div>
+            <div className="mt-1 text-ui-xs text-ink-3">Current streak</div>
           </div>
-          <p className="mt-8 text-base">
-            For personal statistics,{" "}
-            <a
-              className="text-blue-600"
-              href="https://www.nytimes.com/games/wordle/index.html"
-              target="_blank"
-              rel="noreferrer"
-            >
-              play on NYTimes.com/Wordle
-            </a>
-          </p>
+          <div className="px-2">
+            <div className="text-ui-xl font-semibold tabular-nums">
+              {currentStreak} Days
+            </div>
+            <div className="mt-1 text-ui-xs text-ink-3">Best streak</div>
+          </div>
         </div>
+        <p className="text-ui-xs text-pretty text-ink-3">
+          Win rate is the share of the other players in this call who solved
+          today&apos;s puzzle.
+        </p>
       </div>
     );
-  }
-
-  return (
-    <div
-      className={cn(
-        "relative flex h-full w-full flex-col overflow-hidden",
-        theme.page,
-      )}
-    >
-      <style>{`
-        @keyframes rm-wordle-pop { 0% { transform: scale(.86); } 55% { transform: scale(1.08); } 100% { transform: scale(1); } }
-        @keyframes rm-wordle-flip { 0% { transform: rotateX(0); } 45% { transform: rotateX(90deg); } 55% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
-        @keyframes rm-wordle-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
-        @media (prefers-reduced-motion: reduce) { .rm-wordle-tile, .rm-wordle-invalid-letter { animation: none !important; } }
-      `}</style>
-      <div
-        className={cn(
-          "flex h-[52px] shrink-0 items-center justify-between border-b px-3 sm:px-5",
-          theme.border,
-        )}
-      >
-        <div
-          className="min-w-0 truncate text-lg font-black sm:text-2xl"
-          style={{ fontFamily: "Georgia, serif" }}
-        >
-          The New York Times <span className="font-sans">Games</span>
-        </div>
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-3 sm:gap-6",
-            theme.icon,
-          )}
-        >
-          <button
-            ref={hintsTriggerRef}
-            type="button"
-            onClick={() => {
-              dismissHintNotice();
-              setHintsOpen(true);
-            }}
-            aria-label="Open hints"
-            title="Hints"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
-          >
-            <Lightbulb size={26} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("stats")}
-            aria-label="Open channel stats"
-            title="Stats"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
-          >
-            <BarChart3 size={28} />
-          </button>
-          <button
-            ref={settingsTriggerRef}
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Open Wordle settings"
-            title="Settings"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
-          >
-            <Settings size={30} />
-          </button>
-        </div>
-      </div>
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto px-3 py-3 md:grid-cols-[170px_minmax(0,1fr)] md:overflow-hidden md:px-4">
-        <aside className="order-2 mt-3 flex max-h-28 gap-3 overflow-x-auto md:order-1 md:mt-0 md:max-h-none md:flex-col md:overflow-y-auto md:overflow-x-hidden">
-          <div className="flex gap-3 md:mt-4 md:flex-col">
-            {rowProgress.map((row) => (
-              <div
-                key={row.userId}
-                className="flex shrink-0 items-center gap-2"
-              >
-                {row.avatar ? (
-                  <img
-                    src={getAuthAssetUrl(row.avatar)}
-                    alt=""
-                    className="h-9 w-9 rounded-full object-cover"
-                  />
-                ) : (
-                  <div
-                    style={{ backgroundColor: colors.correct }}
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
-                  >
-                    {row.name[0]}
-                  </div>
-                )}
-                <MiniBoard
-                  guesses={row.guesses}
-                  answer={answer}
-                  colors={colors}
-                />
-              </div>
-            ))}
+  } else {
+    content = (
+      <div className="m-auto flex w-full flex-col items-center gap-6 px-4 py-4">
+        <div className="relative w-[min(300px,100%)]">
+          <div className="grid grid-cols-5 gap-1.5">
+            {Array.from({ length: 30 }).map((_, index) => {
+              const row = Math.floor(index / 5);
+              const col = index % 5;
+              const guess =
+                activeGuesses[row] ??
+                (row === activeGuesses.length ? draft : "");
+              const letter = guess[col] ?? "";
+              const mark = activeGuesses[row]
+                ? evaluateWordleGuess(activeGuesses[row], answer)[col]
+                : null;
+              const invalidWordRow =
+                notice?.kind === "invalid-word" &&
+                row === activeGuesses.length &&
+                draft.length === 5;
+              const animation = invalidWordRow
+                ? `rm-wordle-shake 300ms var(--ease-in-out) both ${col * 30}ms`
+                : activeGuesses[row] && revealingRow === row
+                  ? `rm-wordle-flip 520ms var(--ease-in-out) both ${col * 120}ms`
+                  : undefined;
+              return (
+                <div
+                  key={`${index}-${invalidGuessAttempt}`}
+                  role="img"
+                  aria-label={`Row ${row + 1}, column ${col + 1}: ${letter || "empty"}${mark ? `, ${getMarkLabel(mark)}` : ""}`}
+                  title={mark ? getMarkLabel(mark) : undefined}
+                  style={animation ? { animation } : undefined}
+                  className={cn(
+                    "rm-wordle-tile flex aspect-square w-full items-center justify-center rounded-sm border-2 text-ui-2xl font-semibold uppercase [backface-visibility:hidden]",
+                    mark
+                      ? markTile[mark]
+                      : letter
+                        ? "border-ink-3 bg-ply-2"
+                        : "border-line-strong bg-ply-2",
+                    invalidWordRow &&
+                      "rm-wordle-invalid-letter border-danger-ink text-danger-ink",
+                  )}
+                >
+                  {letter}
+                </div>
+              );
+            })}
           </div>
-        </aside>
 
-        <main className="order-1 flex min-h-[500px] min-w-0 flex-col items-center justify-center gap-4 md:order-2 md:min-h-0 md:gap-5">
-          <div className="relative w-[min(300px,calc(100vw-32px))]">
-            <div className="grid grid-cols-5 gap-[5px]">
-              {Array.from({ length: 30 }).map((_, index) => {
-                const row = Math.floor(index / 5);
-                const col = index % 5;
-                const guess =
-                  activeGuesses[row] ??
-                  (row === activeGuesses.length ? draft : "");
-                const letter = guess[col] ?? "";
-                const mark = activeGuesses[row]
-                  ? evaluateWordleGuess(activeGuesses[row], answer)[col]
-                  : null;
-                const invalidWordRow =
-                  notice?.kind === "invalid-word" &&
-                  row === activeGuesses.length &&
-                  draft.length === 5;
-                return (
-                  <div
-                    key={`${index}-${invalidGuessAttempt}`}
-                    role="img"
-                    aria-label={`Row ${row + 1}, column ${col + 1}: ${letter || "empty"}${mark ? `, ${getMarkLabel(mark)}` : ""}`}
-                    title={mark ? getMarkLabel(mark) : undefined}
-                    style={{
-                      animation: invalidWordRow
-                        ? `rm-wordle-shake 420ms ease-in-out both ${col * 30}ms`
-                        : activeGuesses[row]
-                          ? revealingRow === row
-                            ? `rm-wordle-flip 520ms ease both ${col * 120}ms`
-                            : undefined
-                          : letter
-                            ? "rm-wordle-pop 110ms ease-out"
-                            : undefined,
-                      ...(mark
-                        ? {
-                            borderColor: colors[mark],
-                            backgroundColor: colors[mark],
-                          }
-                        : {}),
-                    }}
-                    className={cn(
-                      "rm-wordle-tile flex aspect-square w-full items-center justify-center border-2 text-3xl font-black uppercase [backface-visibility:hidden]",
-                      !mark && theme.emptyTile,
-                      mark && "text-white",
-                      invalidWordRow && "rm-wordle-invalid-letter",
-                    )}
-                  >
-                    {letter}
-                  </div>
-                );
-              })}
+          {notice && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md bg-ink-1 px-3 py-2 text-center text-ui-sm font-medium whitespace-nowrap text-ply-0"
+            >
+              {notice.message}
             </div>
-
-            {notice && (
-              <div
-                role="status"
-                aria-live="polite"
-                className="pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-rm-bg-floating px-3 py-2 text-center text-xs font-bold shadow-xl"
-              >
-                {notice.message}
-              </div>
-            )}
-          </div>
+          )}
 
           {completionReveal && revealingRow !== null && (
             <div
-              className="text-center text-sm font-bold"
+              className="absolute inset-x-0 top-full pt-1.5 text-center text-ui-sm font-medium text-ink-2"
               role="status"
               aria-live="polite"
             >
@@ -1393,90 +1414,127 @@ function WordleActivityStageContent({
                 : "Revealing the final row..."}
             </div>
           )}
+        </div>
 
-          <div className="w-full max-w-[470px] space-y-2 px-1">
-            {KEY_ROWS.map((row, rowIndex) => (
-              <div key={row} className="flex justify-center gap-1.5">
-                {rowIndex === 2 && (
+        <div className="flex w-full max-w-[480px] flex-col gap-1.5">
+          {KEY_ROWS.map((row, rowIndex) => (
+            <div key={row} className="flex justify-center gap-1.5">
+              {rowIndex === 2 && (
+                <button
+                  type="button"
+                  onClick={submitGuess}
+                  disabled={keysLocked}
+                  className={cn(
+                    "h-11 max-w-16 min-w-0 flex-[1.5] rounded-sm bg-tint-2 text-ui-xs font-semibold text-ink-1 outline-none",
+                    PRESS,
+                    localFinished && "opacity-45",
+                  )}
+                >
+                  ENTER
+                </button>
+              )}
+              {row.split("").map((letter) => {
+                const mark = keyMarks[letter];
+                return (
                   <button
+                    key={letter}
                     type="button"
-                    onClick={submitGuess}
-                    disabled={!answer || localFinished || revealingRow !== null}
+                    onClick={() => addLetter(letter)}
+                    disabled={keysLocked}
                     className={cn(
-                      "h-12 rounded px-3 text-xs font-bold sm:h-[52px]",
-                      theme.key,
+                      "h-11 max-w-10 min-w-0 flex-1 rounded-sm text-ui-sm font-semibold uppercase outline-none",
+                      PRESS,
+                      mark ? markKey[mark] : "bg-tint-2 text-ink-1",
+                      localFinished && "opacity-45",
                     )}
                   >
-                    ENTER
+                    {letter}
                   </button>
-                )}
-                {row.split("").map((letter) => {
-                  const mark = keyMarks[letter];
-                  return (
-                    <button
-                      key={letter}
-                      type="button"
-                      onClick={() => addLetter(letter)}
-                      disabled={
-                        !answer || localFinished || revealingRow !== null
-                      }
-                      style={
-                        mark ? { backgroundColor: colors[mark] } : undefined
-                      }
-                      className={cn(
-                        "h-12 min-w-0 flex-1 rounded px-1 text-sm font-bold uppercase sm:h-[52px] sm:min-w-10 sm:flex-none sm:px-2",
-                        theme.key,
-                        mark && "text-white",
-                      )}
-                    >
-                      {letter}
-                    </button>
-                  );
-                })}
-                {rowIndex === 2 && (
-                  <button
-                    type="button"
-                    onClick={deleteLetter}
-                    disabled={!answer || localFinished || revealingRow !== null}
-                    aria-label="Delete letter"
-                    className={cn(
-                      "flex h-12 items-center rounded px-3 text-xs font-bold sm:h-[52px]",
-                      theme.key,
-                    )}
-                  >
-                    <Delete size={20} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </main>
+                );
+              })}
+              {rowIndex === 2 && (
+                <button
+                  type="button"
+                  onClick={deleteLetter}
+                  disabled={keysLocked}
+                  aria-label="Delete letter"
+                  className={cn(
+                    "flex h-11 max-w-16 min-w-0 flex-[1.5] items-center justify-center rounded-sm bg-tint-2 text-ink-1 outline-none",
+                    PRESS,
+                    localFinished && "opacity-45",
+                  )}
+                >
+                  <Icon name="backspace" size="md" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <PlayerStrip players={rowProgress} answer={answer} palette={palette} />
+      </div>
+    );
+  }
+
+  return (
+    <StageFrame
+      puzzleId={puzzle.id}
+      actions={
+        <>
+          {activeView === "puzzle" && !localFinished ? (
+            <IconButton
+              ref={hintsTriggerRef}
+              icon="lightbulb"
+              size={32}
+              onClick={() => {
+                dismissHintNotice();
+                setHintsOpen(true);
+              }}
+              aria-label="Open hints"
+            />
+          ) : null}
+          <IconButton
+            icon="stats"
+            size={32}
+            onClick={() => setView("stats")}
+            aria-label="Open channel stats"
+          />
+          <IconButton
+            ref={settingsTriggerRef}
+            icon="settings"
+            size={32}
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open settings"
+          />
+        </>
+      }
+    >
+      <div className="flex min-h-0 flex-1">
+        <main className="flex min-w-0 flex-1 overflow-y-auto">{content}</main>
+        <PlayerRail players={rowProgress} answer={answer} palette={palette} />
       </div>
 
       {hintNoticeOpen && !howToPlayOpen && !hintsOpen && (
         <aside
-          className="absolute right-4 top-[60px] z-20 w-[min(323px,calc(100vw-32px))] rounded bg-rm-bg-elevated p-4 text-rm-text shadow-2xl"
+          className="absolute top-14 right-4 z-20 w-[min(20rem,calc(100%-2rem))] rounded-lg border border-line bg-ply-3 p-3 text-ink-1 shadow-float"
           aria-label="Hint notice"
         >
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="inline-flex items-center rounded-full bg-rm-accent px-2.5 py-1 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white">
-                ★ New
-              </div>
-              <h2 className="mt-2 text-sm font-black">Want a hint?</h2>
-              <p className="mt-1 text-sm leading-snug text-rm-text-secondary">
+            <div className="min-w-0">
+              <h2 className="text-ui-row font-semibold">Want a hint?</h2>
+              <p className="mt-0.5 text-ui-sm text-pretty text-ink-2">
                 Click the lightbulb to reveal optional clues if you&apos;re
                 stuck on this puzzle.
               </p>
             </div>
-            <button
-              type="button"
+            <IconButton
+              icon="close"
+              size={24}
+              variant="muted"
               onClick={dismissHintNotice}
               aria-label="Dismiss hint notice"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
-            >
-              <X size={18} />
-            </button>
+              className="-mt-0.5 -mr-1"
+            />
           </div>
         </aside>
       )}
@@ -1485,11 +1543,11 @@ function WordleActivityStageContent({
         <HowToPlayModal
           open={howToPlayOpen}
           onClose={dismissHowToPlay}
-          colors={colors}
+          palette={palette}
         />
       )}
 
-      <Dialog
+      <ResponsiveDialog
         open={hintsOpen}
         onOpenChange={(open) => {
           if (!open) {
@@ -1498,219 +1556,199 @@ function WordleActivityStageContent({
           }
         }}
       >
-        <DialogPortal>
-          <div
-            className={cn(
-              "fixed inset-0 z-50 flex items-center justify-center p-4",
-              theme.overlay,
-            )}
-          >
-            <DialogSurface
-              showCloseButton={false}
-              aria-labelledby="wordle-hints-title"
-              aria-modal="true"
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                hintsTriggerRef.current?.focus();
-              }}
-              className={cn(
-                "w-full max-w-md rounded-2xl p-5 shadow-2xl",
-                theme.modal,
-              )}
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <h2
-                  id="wordle-hints-title"
-                  className="text-base font-black uppercase"
+        <ResponsiveDialogContent
+          aria-modal="true"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            hintsTriggerRef.current?.focus();
+          }}
+          dialogClassName="max-h-[min(640px,calc(100dvh-2rem))] overflow-y-auto md:max-w-md"
+        >
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Hints</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              Optional clues. They never use a guess.
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <div className="flex flex-col gap-2">
+            {[1, 2, 3].map((level) => {
+              const hint = getHintDetails(answer, level);
+              const isUnlocked = hintLevels.includes(level);
+              const isNext = level === hintLevels.length + 1;
+              return (
+                <div
+                  key={level}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-line bg-ply-2 p-3"
                 >
-                  Hints
-                </h2>
-                <button
-                  type="button"
-                  onClick={closeHints}
-                  aria-label="Close hints"
-                  className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
-                >
-                  <X size={26} />
-                </button>
-              </div>
-              <div className="space-y-3 text-sm">
-                <p className="text-xs opacity-70">
-                  Optional clues. They never use a guess.
-                </p>
-                {[1, 2, 3].map((level) => {
-                  const hint = getHintDetails(answer, level);
-                  const isUnlocked = hintLevels.includes(level);
-                  const isNext = level === hintLevels.length + 1;
-                  return (
-                    <div
-                      key={level}
-                      className={cn("rounded-md border p-3", theme.border)}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="font-bold">Clue {level}</div>
-                          {isUnlocked && hint ? (
-                            <div className="mt-1">
-                              {hint.kind === "position"
-                                ? `${hint.value} is in position ${hint.position}.`
-                                : `${hint.title}: ${hint.value}.`}
-                            </div>
-                          ) : (
-                            <div className="mt-1 opacity-60">
-                              {isNext
-                                ? "Ready to reveal"
-                                : "Unlock the previous clue first"}
-                            </div>
-                          )}
-                        </div>
-                        {!isUnlocked && (
-                          <button
-                            type="button"
-                            disabled={!isNext}
-                            onClick={unlockNextHint}
-                            className={cn(
-                              "shrink-0 rounded-full px-3 py-2 text-xs font-bold transition-transform active:scale-[0.96]",
-                              isNext
-                                ? "bg-black text-white"
-                                : "bg-slate-200 text-slate-500 dark:bg-slate-800",
-                            )}
-                          >
-                            Unlock
-                          </button>
-                        )}
-                      </div>
+                  <div className="min-w-0">
+                    <div className="text-ui-row font-semibold">
+                      Clue {level}
                     </div>
-                  );
-                })}
-                <div className={cn("rounded-md border p-3", theme.border)}>
-                  {answerRevealPending ? (
-                    <div>
-                      <div className="font-bold">Give up this round?</div>
-                      <p className="mt-1 text-xs opacity-70">
-                        The answer will be shown and this round will count as
-                        missed.
-                      </p>
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setAnswerRevealPending(false)}
-                          className="rounded-full border px-3 py-2 text-xs font-bold"
-                        >
-                          Keep playing
-                        </button>
-                        <button
-                          type="button"
-                          onClick={revealAnswer}
-                          className="rounded-full bg-black px-3 py-2 text-xs font-bold text-white"
-                        >
-                          Reveal answer
-                        </button>
+                    {isUnlocked && hint ? (
+                      <div className="mt-0.5 text-ui-sm">
+                        {hint.kind === "position"
+                          ? `${hint.value} is in position ${hint.position}.`
+                          : `${hint.title}: ${hint.value}.`}
                       </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setAnswerRevealPending(true)}
-                      className="font-bold"
+                    ) : (
+                      <div className="mt-0.5 text-ui-sm text-ink-3">
+                        {isNext
+                          ? "Ready to reveal"
+                          : "Unlock the previous clue first"}
+                      </div>
+                    )}
+                  </div>
+                  {!isUnlocked && (
+                    <Button
+                      size="sm"
+                      variant={isNext ? "primary" : "secondary"}
+                      disabled={!isNext}
+                      onClick={unlockNextHint}
                     >
-                      I&apos;m stuck - reveal the answer
-                    </button>
+                      Unlock
+                    </Button>
                   )}
                 </div>
-                <div className="text-xs opacity-60">
-                  Puzzle {puzzle.id ?? "----"} - {puzzle.print_date}
+              );
+            })}
+          </div>
+          <div className="border-t border-line pt-3">
+            {answerRevealPending ? (
+              <div>
+                <div className="text-ui-row font-semibold">
+                  Give up this round?
+                </div>
+                <p className="mt-0.5 text-ui-sm text-pretty text-ink-2">
+                  The answer will be shown and this round will count as missed.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAnswerRevealPending(false)}
+                  >
+                    Keep playing
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={revealAnswer}
+                  >
+                    Reveal answer
+                  </Button>
                 </div>
               </div>
-            </DialogSurface>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="-ml-2.5"
+                onClick={() => setAnswerRevealPending(true)}
+              >
+                I&apos;m stuck, reveal the answer
+              </Button>
+            )}
           </div>
-        </DialogPortal>
-      </Dialog>
+          <div className="text-ui-xs text-ink-3">
+            Puzzle <Num>{puzzle.id ?? "----"}</Num> · {puzzle.print_date}
+          </div>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
-      <Dialog
+      <ResponsiveDialog
         open={settingsOpen}
         onOpenChange={(open) => !open && closeSettings()}
       >
-        <DialogPortal>
-          <div
-            className={cn(
-              "fixed inset-0 z-50 flex items-center justify-center p-4",
-              theme.overlay,
-            )}
-          >
-            <DialogSurface
-              showCloseButton={false}
-              aria-labelledby="wordle-settings-title"
-              aria-modal="true"
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                settingsTriggerRef.current?.focus();
-              }}
-              className={cn(
-                "w-full max-w-[500px] rounded-2xl p-4 shadow-2xl",
-                theme.modal,
-              )}
-            >
-              <div className="mb-5 flex items-center justify-between">
-                <h2
-                  id="wordle-settings-title"
-                  className="flex-1 text-center text-base font-black uppercase"
-                >
-                  Settings
-                </h2>
-                <button
-                  type="button"
-                  onClick={closeSettings}
-                  aria-label="Close settings"
-                >
-                  <X size={28} />
-                </button>
-              </div>
-              {SETTING_ROWS.map(([key, label, description]) => (
-                <div
-                  key={key}
-                  className={cn(
-                    "flex items-center justify-between border-b py-4",
-                    theme.border,
-                  )}
-                >
-                  <div>
-                    <div className="text-lg">{label}</div>
-                    {description && (
-                      <div className="text-xs opacity-75">{description}</div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={`${label}: ${settings[key] ? "On" : "Off"}`}
-                    aria-pressed={settings[key]}
-                    onClick={() =>
-                      setSettings((current) => ({
-                        ...current,
-                        [key]: !current[key],
-                      }))
-                    }
-                    className={cn(
-                      "h-5 w-9 rounded-full bg-[#878a8c] p-0.5",
-                      settings[key] && "bg-[#6aaa64]",
-                    )}
+        <ResponsiveDialogContent
+          aria-modal="true"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            settingsTriggerRef.current?.focus();
+          }}
+          dialogClassName="md:max-w-md"
+        >
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Settings</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              These stay on this device.
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <div className="flex flex-col">
+            {SETTING_ROWS.map(([key, label, description], index) => (
+              <div
+                key={key}
+                className={cn(
+                  "flex items-center justify-between gap-4 py-3",
+                  index > 0 && "border-t border-line",
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="text-ui-row font-medium">{label}</div>
+                  <div
+                    id={`wordle-setting-${key}`}
+                    className="text-ui-sm text-pretty text-ink-2"
                   >
-                    <span
-                      className={cn(
-                        "block h-4 w-4 rounded-full bg-white transition-transform",
-                        settings[key] && "translate-x-4",
-                      )}
-                    />
-                  </button>
+                    {description}
+                  </div>
                 </div>
-              ))}
-              <div className="pt-4 text-right text-sm">
-                #{puzzle.id ?? "----"}
+                <Switch
+                  checked={settings[key]}
+                  aria-label={label}
+                  aria-describedby={`wordle-setting-${key}`}
+                  onCheckedChange={(checked) =>
+                    setSettings((current) => ({
+                      ...current,
+                      [key]: checked,
+                    }))
+                  }
+                />
               </div>
-            </DialogSurface>
+            ))}
           </div>
-        </DialogPortal>
-      </Dialog>
+          <div className="text-ui-xs text-ink-3">
+            Puzzle <Num>{puzzle.id ?? "----"}</Num>
+          </div>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+    </StageFrame>
+  );
+}
+
+/**
+ * The activity's frame: a 48px header on ply-0 with a 1px seam, then the
+ * body. The keyframes live here because they are the board's only motion:
+ * transform only, no scale (a keyboard-typed letter must not pop), and the
+ * reduced-motion rule covers rotate and translate, which the global rule
+ * does not.
+ */
+function StageFrame({
+  puzzleId,
+  actions,
+  children,
+}: {
+  puzzleId?: number | null;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="@container relative flex h-full w-full flex-col overflow-hidden bg-ply-0 text-ink-1">
+      <style>{`
+        @keyframes rm-wordle-flip { 0% { transform: rotateX(0); } 45% { transform: rotateX(90deg); } 55% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+        @keyframes rm-wordle-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+        @media (prefers-reduced-motion: reduce) { .rm-wordle-tile, .rm-wordle-invalid-letter { animation: none !important; } }
+      `}</style>
+      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="truncate text-ui-md font-semibold">{TITLE}</h2>
+          {puzzleId != null ? (
+            <Num className="text-ink-3">#{puzzleId}</Num>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 items-center gap-1">{actions}</div>
+        ) : null}
+      </header>
+      {children}
     </div>
   );
 }

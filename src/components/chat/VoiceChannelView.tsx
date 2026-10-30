@@ -4,7 +4,6 @@ import type {
   ScreenShareSourceState,
 } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
-import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { isActivityType, useActivityStore } from "@/stores/useActivityStore";
 
@@ -17,12 +16,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { ParticipantCard } from "../voice/ParticipantCard";
+import { EmptyState } from "@/components/ui/empty-state";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 import { VoiceHeader } from "../voice/VoiceHeader";
 import { VoiceLanding } from "../voice/VoiceLanding";
-import { ChevronUp } from "./Icons";
+import { MembersTray, VoiceStage } from "../voice/VoiceStage";
+import { ConnectionBanner } from "../voice/ConnectionBanner";
+import {
+  clearVoiceSessionStatus,
+  publishVoiceSessionStatus,
+  useVoiceSessionStatus,
+} from "../voice/voice-session-status";
+import type { VoiceActions } from "../voice/types";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({
@@ -94,7 +100,7 @@ interface VoiceChannelViewProps {
   onOpenMessageUser?: (userId: string) => void;
   /**
    * Optional guard called when the user attempts to join this voice channel.
-   * If provided, the landing page's "Join Voice" button will call this instead
+   * If provided, the landing page's "Join voice" button will call this instead
    * of joining directly. The callback receives the actual join function to invoke
    * when ready (e.g. after a confirmation modal).
    */
@@ -197,6 +203,37 @@ export default function VoiceChannelView({
   }>(null);
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
+
+  // Retry after a failed connection: leave the dead session, then join again
+  // on the next task (handleJoin skips while a session object still exists).
+  const handleJoinRef = useRef(handleJoin);
+  useEffect(() => {
+    handleJoinRef.current = handleJoin;
+  }, [handleJoin]);
+  const retryConnection = useCallback(() => {
+    handleLeave();
+    setTimeout(() => void handleJoinRef.current(), 0);
+  }, [handleLeave]);
+
+  // Publish the session's connection state for the call strip (UserPanel),
+  // which lives outside this view.
+  useEffect(() => {
+    if (!joined) return;
+    const current = useVoiceSessionStatus.getState();
+    publishVoiceSessionStatus({
+      channelId,
+      connectionState,
+      joinedAt:
+        current.channelId === channelId && current.joinedAt
+          ? current.joinedAt
+          : Date.now(),
+      retry: retryConnection,
+    });
+  }, [joined, channelId, connectionState, retryConnection]);
+  useEffect(() => {
+    if (!joined) return;
+    return () => clearVoiceSessionStatus(channelId);
+  }, [joined, channelId]);
 
   useEffect(() => {
     gridItemsRef.current = gridItems;
@@ -432,12 +469,18 @@ export default function VoiceChannelView({
   }, []);
 
   const toggleFs = () => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen();
-      setIsFullscreen(true);
+      // iOS Safari has no element fullscreen (only <video>); don't flip the
+      // state for a request that can't happen.
+      if (!document.fullscreenEnabled || !container.requestFullscreen) return;
+      container
+        .requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => setIsFullscreen(false));
     } else {
-      document.exitFullscreen();
+      void document.exitFullscreen?.().catch(() => {});
       setIsFullscreen(false);
     }
   };
@@ -483,6 +526,75 @@ export default function VoiceChannelView({
       />
     ) : null;
 
+  // One stable object, so the memoised grid and tiles don't re-render when
+  // nothing they use changed (a fresh literal per render defeated the memo).
+  const voiceActions = useMemo<VoiceActions>(
+    () => ({
+      onToggleScreenShare: toggleScreenShare,
+      isCurrentUserStreaming: isScreenSharing,
+      currentScreenQuality: currentScreenQuality,
+      currentScreenSource,
+      isStreamingAudio: isStreamingAudio,
+      onToggleStreamAudio: onToggleStreamAudio,
+      onToggleWatch: onToggleWatch,
+      onOpenProfileUser,
+      onOpenMessageUser,
+      watchedStreams: watchedStreams,
+      availableQualities,
+      onLeave: handleLeave,
+      isMuted: !isMicOn,
+      onToggleMute: toggleMic,
+      isDeafened,
+      onToggleDeafen: toggleDeafen,
+      onChangeSource: openScreenShareModal,
+      watchersByStreamer,
+      togglePreviewHidden,
+      isPreviewHidden,
+      alwaysShowStreamPreview,
+      onToggleAlwaysShowStreamPreview,
+      sfu,
+      serverId,
+      localUserId,
+    }),
+    [
+      toggleScreenShare,
+      isScreenSharing,
+      currentScreenQuality,
+      currentScreenSource,
+      isStreamingAudio,
+      onToggleStreamAudio,
+      onToggleWatch,
+      onOpenProfileUser,
+      onOpenMessageUser,
+      watchedStreams,
+      availableQualities,
+      handleLeave,
+      isMicOn,
+      toggleMic,
+      isDeafened,
+      toggleDeafen,
+      openScreenShareModal,
+      watchersByStreamer,
+      togglePreviewHidden,
+      isPreviewHidden,
+      alwaysShowStreamPreview,
+      onToggleAlwaysShowStreamPreview,
+      sfu,
+      serverId,
+      localUserId,
+    ],
+  );
+  const soundboardContext = useMemo(
+    () => ({
+      serverId,
+      channelId,
+      roomSlug,
+      voiceSessionId,
+      localUserId,
+    }),
+    [serverId, channelId, roomSlug, voiceSessionId, localUserId],
+  );
+
   // ── Not-connected landing page ──
   if (!joined) {
     return (
@@ -497,166 +609,107 @@ export default function VoiceChannelView({
     );
   }
 
-  const voiceActions = {
-    onToggleScreenShare: toggleScreenShare,
-    isCurrentUserStreaming: isScreenSharing,
-    currentScreenQuality: currentScreenQuality,
-    currentScreenSource,
-    isStreamingAudio: isStreamingAudio,
-    onToggleStreamAudio: onToggleStreamAudio,
-    onToggleWatch: onToggleWatch,
-    onOpenProfileUser,
-    onOpenMessageUser,
-    watchedStreams: watchedStreams,
-    availableQualities: getAvailableStreamQualities(),
-    onLeave: handleLeave,
-    isMuted: !isMicOn,
-    onToggleMute: toggleMic,
-    isDeafened,
-    onToggleDeafen: toggleDeafen,
-    onChangeSource: () => setIsScreenModalOpen(true),
-    watchersByStreamer,
-    togglePreviewHidden,
-    isPreviewHidden,
-    alwaysShowStreamPreview,
-    onToggleAlwaysShowStreamPreview,
-    sfu,
-    serverId,
-    localUserId,
-  };
-
   // ── Connected state ──
   return (
-    <div
+    <VoiceStage
       ref={containerRef}
-      className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden group/cinema"
-    >
-      {/* Absolute Header Overlay */}
-      <VoiceHeader
-        channelName={channelName}
-        connectionState={connectionState}
-        joined={joined}
-        focusedItem={focusedItem}
-        focusedWatchers={focusedWatchers}
-        currentScreenQuality={currentScreenQuality}
-        sfu={sfu}
-        showTextChat={showTextChat}
-        onToggleTextChat={onToggleTextChat}
-        onMenuClick={onMenuClick}
-      />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-0 relative">
-        <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
-          {activityStage ? (
-            <div className="h-full w-full pt-16">
-              <Suspense
-                fallback={
-                  <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),rgba(2,6,23,0.98)_55%)] px-6 text-center text-rm-text">
-                    <div>
-                      <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-cyan-200/80">
-                        Loading Activity
-                      </div>
-                      <div className="mt-3 text-2xl font-bold">
-                        Preparing the stage...
-                      </div>
-                    </div>
-                  </div>
-                }
-              >
-                {activityStage}
-              </Suspense>
-            </div>
-          ) : (
-            <VoiceGrid
-              items={gridItems}
-              focusedId={focusedId}
-              onFocus={setFocusedId}
-              globalDeafened={isDeafened}
-              currentSettings={currentSettings}
-              watchedStreams={watchedStreams}
-              streamThumbnails={streamThumbnails}
-              voiceActions={voiceActions}
-            />
-          )}
-        </div>
-
-        {/* Bottom Panel */}
-        <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
-          {/* Members Tray */}
-          {focusedId && showMembers && (
-            <div className="p-4 bg-rm-bg-primary/20 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
-              <div
-                className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                {gridItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className={cn(
-                      "w-44 sm:w-52 aspect-video shrink-0 transition-ui py-2",
-                      focusedId === item.id
-                        ? ""
-                        : "opacity-70 hover:opacity-100",
-                    )}
-                  >
-                    <ParticipantCard
-                      item={item}
-                      isFocused={focusedId === item.id}
-                      isTray={true}
-                      globalDeafened={isDeafened}
-                      watchedStreams={watchedStreams}
-                      streamThumbnails={streamThumbnails}
-                      voiceActions={voiceActions}
-                      suppressVideo={focusedId === item.id}
-                      onClick={() =>
-                        setFocusedId(focusedId === item.id ? null : item.id)
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Controls Bar */}
-          <VoiceControls
-            hasMicrophone={hasMicrophone}
-            isMicOn={isMicOn}
-            toggleMic={toggleMic}
-            isDeafened={isDeafened}
-            toggleDeafen={toggleDeafen}
-            hasCamera={hasCamera}
-            isCameraOn={isCameraOn}
-            toggleCamera={toggleCamera}
-            isScreenSharing={isScreenSharing}
-            toggleScreenShare={toggleScreenShare}
-            setIsScreenModalOpen={setIsScreenModalOpen}
-            focusedItem={focusedItem}
-            setFocusedId={setFocusedId}
-            handleLeave={handleLeave}
-            activeActivity={activeActivity?.activity}
-            leaveActivity={() => {
-              if (localUserId) {
-                clearUserActivity(localUserId);
-                sfu?.voiceGW.sendAppEvent({
-                  type: "activity.leave",
-                  userId: localUserId,
-                  channelId,
-                });
-              }
-            }}
-            isFullscreen={isFullscreen}
-            toggleFs={toggleFs}
-            showMembers={showMembers}
-            setShowMembers={setShowMembers}
-            ChevronUp={ChevronUp}
-            onOpenActivities={onOpenActivities}
-            settingsUserId={settingsUserId}
-            sfu={sfu}
+      header={
+        <VoiceHeader
+          channelName={channelName}
+          connectionState={connectionState}
+          joined={joined}
+          focusedItem={focusedItem}
+          focusedWatchers={focusedWatchers}
+          currentScreenQuality={currentScreenQuality}
+          sfu={sfu}
+          showTextChat={showTextChat}
+          onToggleTextChat={onToggleTextChat}
+          onMenuClick={onMenuClick}
+        />
+      }
+      banner={
+        <ConnectionBanner
+          connectionState={connectionState}
+          joined={joined}
+          onRetry={retryConnection}
+        />
+      }
+      tray={
+        focusedId && showMembers ? (
+          <MembersTray
+            items={gridItems}
+            focusedId={focusedId}
+            onFocus={setFocusedId}
+            globalDeafened={isDeafened}
+            watchedStreams={watchedStreams}
+            streamThumbnails={streamThumbnails}
+            voiceActions={voiceActions}
           />
-        </div>
-      </div>
+        ) : null
+      }
+      dock={
+        <VoiceControls
+          hasMicrophone={hasMicrophone}
+          isMicOn={isMicOn}
+          toggleMic={toggleMic}
+          isDeafened={isDeafened}
+          toggleDeafen={toggleDeafen}
+          hasCamera={hasCamera}
+          isCameraOn={isCameraOn}
+          toggleCamera={toggleCamera}
+          isScreenSharing={isScreenSharing}
+          toggleScreenShare={toggleScreenShare}
+          setIsScreenModalOpen={setIsScreenModalOpen}
+          focusedItem={focusedItem}
+          setFocusedId={setFocusedId}
+          handleLeave={handleLeave}
+          activeActivity={activeActivity?.activity}
+          leaveActivity={() => {
+            if (localUserId) {
+              clearUserActivity(localUserId);
+              sfu?.voiceGW.sendAppEvent({
+                type: "activity.leave",
+                userId: localUserId,
+                channelId,
+              });
+            }
+          }}
+          isFullscreen={isFullscreen}
+          toggleFs={toggleFs}
+          showMembers={showMembers}
+          setShowMembers={setShowMembers}
+          onOpenActivities={onOpenActivities}
+          settingsUserId={settingsUserId}
+          sfu={sfu}
+          soundboard={soundboardContext}
+        />
+      }
+    >
+      {activityStage ? (
+        <Suspense
+          fallback={
+            <EmptyState
+              loading
+              title="Loading activity…"
+              size="sm"
+              className="h-full"
+            />
+          }
+        >
+          {activityStage}
+        </Suspense>
+      ) : (
+        <VoiceGrid
+          items={gridItems}
+          focusedId={focusedId}
+          onFocus={setFocusedId}
+          globalDeafened={isDeafened}
+          currentSettings={currentSettings}
+          watchedStreams={watchedStreams}
+          streamThumbnails={streamThumbnails}
+          voiceActions={voiceActions}
+        />
+      )}
 
       {/* Screen share modal: desktop gets the custom picker, web gets quality-only */}
       <Suspense fallback={null}>
@@ -670,9 +723,9 @@ export default function VoiceChannelView({
             });
             setIsScreenModalOpen(false);
           }}
-          availableQualities={voiceActions.availableQualities}
+          availableQualities={availableQualities}
         />
       </Suspense>
-    </div>
+    </VoiceStage>
   );
 }

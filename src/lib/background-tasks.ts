@@ -1,6 +1,7 @@
 import { CacheKey } from "@/lib/cache";
 import {
   processMessagePostprocessingTask,
+  type MessagePostprocessingOutcome,
   type MessagePostprocessingTask,
 } from "@/services/message.service";
 export type { MessagePostprocessingTask } from "@/services/message.service";
@@ -21,17 +22,29 @@ const MESSAGE_POSTPROCESSING_MAX_ATTEMPTS = 10;
 const MESSAGE_POSTPROCESSING_BASE_DELAY_MS = 60_000;
 const MESSAGE_POSTPROCESSING_MAX_DELAY_MS = 6 * 60 * 60 * 1000;
 
+export function messagePostprocessingRetryDelayMs(attempt: number): number {
+  return Math.min(
+    MESSAGE_POSTPROCESSING_MAX_DELAY_MS,
+    MESSAGE_POSTPROCESSING_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
+  );
+}
+
 function nextMessagePostprocessingAttemptAt(
   attempt: number,
   now = Date.now(),
 ): string {
-  const delay = Math.min(
-    MESSAGE_POSTPROCESSING_MAX_DELAY_MS,
-    MESSAGE_POSTPROCESSING_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
-  );
-  return new Date(now + delay).toISOString();
+  return new Date(
+    now + messagePostprocessingRetryDelayMs(attempt),
+  ).toISOString();
 }
 const MESSAGE_POSTPROCESSING_RETRY_LIMIT = 100;
+/** Cloudflare Queues caps a delivery delay at 12 hours. */
+const MAX_QUEUE_DELAY_SECONDS = 12 * 60 * 60;
+/**
+ * When a delayed queue retry is scheduled, the cron safety net waits this
+ * much longer so the two do not race for the same attempt.
+ */
+const CRON_RETRY_SLACK_MS = 15 * 60 * 1000;
 
 export interface PresenceCacheInvalidationTask {
   type: typeof PRESENCE_CACHE_INVALIDATE_TASK;
@@ -69,6 +82,8 @@ export interface BackgroundTaskConsumerEnv {
   DB: D1Database;
   BUCKET: R2Bucket;
   MEETING_ROOM: DurableObjectNamespace;
+  /** Producer for delayed embed retries; the cron covers its absence. */
+  BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
 }
 
 type PresenceCacheInvalidationEnvelope = {
@@ -335,13 +350,13 @@ async function broadcastTaskEvent(
 async function processMessageTaskInRuntime(
   env: BackgroundTaskRuntimeEnv,
   task: MessagePostprocessingTask,
-): Promise<void> {
+): Promise<MessagePostprocessingOutcome> {
   const db = env.DB;
   const realtime = env.MEETING_ROOM;
   if (!db || !realtime) {
     throw new Error("Message postprocessing bindings are unavailable");
   }
-  await processMessagePostprocessingTask(db, task, (target, event, data) =>
+  return processMessagePostprocessingTask(db, task, (target, event, data) =>
     broadcastTaskEvent(realtime, target, event, data),
   );
 }
@@ -379,6 +394,95 @@ export async function clearMessagePostprocessingJob(
     )
     .bind(task.messageId, task.revision, task.channelId)
     .run();
+}
+
+/**
+ * Keep the job for another embed attempt: notifications already went out,
+ * so the retry runs with notify off. Backs off exponentially, schedules a
+ * delayed queue delivery when a producer is bound (the cron is the safety
+ * net), and gives up after the attempt cap.
+ */
+export async function deferMessagePostprocessingJob(
+  db: D1Database,
+  task: MessagePostprocessingTask,
+  queue?: Queue<BackgroundTaskEnvelope>,
+  now = Date.now(),
+): Promise<{ attempts: number; gaveUp: boolean }> {
+  const existing = await db
+    .prepare(
+      `SELECT attempts FROM message_postprocessing_jobs
+       WHERE message_id = ? AND revision = ?`,
+    )
+    .bind(task.messageId, task.revision)
+    .first<{ attempts: number }>();
+  const attempts = Number(existing?.attempts ?? 0) + 1;
+
+  if (attempts >= MESSAGE_POSTPROCESSING_MAX_ATTEMPTS) {
+    console.warn("Giving up on message embeds after repeated failures", {
+      messageId: task.messageId,
+      revision: task.revision,
+      attempts,
+    });
+    await clearMessagePostprocessingJob(db, task);
+    return { attempts, gaveUp: true };
+  }
+
+  const delayMs = messagePostprocessingRetryDelayMs(attempts);
+  let queued = false;
+  if (queue) {
+    try {
+      await queue.send(
+        createMessagePostprocessingTask({ ...task, notify: false }),
+        {
+          contentType: "json",
+          delaySeconds: Math.min(
+            MAX_QUEUE_DELAY_SECONDS,
+            Math.ceil(delayMs / 1000),
+          ),
+        },
+      );
+      queued = true;
+    } catch (error: unknown) {
+      console.error("Failed to queue delayed embed retry", error);
+    }
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO message_postprocessing_jobs
+         (message_id, revision, channel_id, notify, attempts, next_attempt_at)
+       VALUES (?, ?, ?, 0, ?, ?)
+       ON CONFLICT(message_id, revision) DO UPDATE SET
+         notify = 0,
+         attempts = excluded.attempts,
+         next_attempt_at = excluded.next_attempt_at`,
+    )
+    .bind(
+      task.messageId,
+      task.revision,
+      task.channelId,
+      attempts,
+      new Date(
+        now + delayMs + (queued ? CRON_RETRY_SLACK_MS : 0),
+      ).toISOString(),
+    )
+    .run();
+
+  return { attempts, gaveUp: false };
+}
+
+/** Clear a finished job, or keep it for another embed attempt. */
+export async function settleMessagePostprocessingJob(
+  db: D1Database,
+  task: MessagePostprocessingTask,
+  outcome: MessagePostprocessingOutcome | void,
+  queue?: Queue<BackgroundTaskEnvelope>,
+): Promise<void> {
+  if (outcome?.retryEmbeds) {
+    await deferMessagePostprocessingJob(db, task, queue);
+    return;
+  }
+  await clearMessagePostprocessingJob(db, task);
 }
 
 export async function retryMessagePostprocessing(
@@ -424,8 +528,13 @@ export async function retryMessagePostprocessing(
       notify: row.notify !== 0,
     };
     try {
-      await processMessageTaskInRuntime(env, task);
-      await clearMessagePostprocessingJob(db, task);
+      const outcome = await processMessageTaskInRuntime(env, task);
+      await settleMessagePostprocessingJob(
+        db,
+        task,
+        outcome,
+        env.BACKGROUND_TASKS,
+      );
     } catch (error: unknown) {
       console.error("Scheduled message postprocessing failed", error);
       const attempts = Math.min(
@@ -480,8 +589,8 @@ export function scheduleMessagePostprocessing(
         );
       }
     }
-    await processMessageTaskInRuntime(env, task);
-    if (db) await clearMessagePostprocessingJob(db, task);
+    const outcome = await processMessageTaskInRuntime(env, task);
+    if (db) await settleMessagePostprocessingJob(db, task, outcome);
   })();
   const settledWork = work.catch((error: unknown) => {
     console.error("Message postprocessing fallback failed", error);
@@ -573,13 +682,18 @@ export async function consumeBackgroundTaskBatch(
       if (task.type === PRESENCE_CACHE_INVALIDATE_TASK) {
         await deleteServerMemberCacheKeys(env.CACHE, task.serverIds);
       } else if (task.type === MESSAGE_POSTPROCESS_TASK) {
-        await processMessagePostprocessingTask(
+        const outcome = await processMessagePostprocessingTask(
           env.DB,
           task,
           (target, event, data) =>
             broadcastTaskEvent(env.MEETING_ROOM, target, event, data),
         );
-        await clearMessagePostprocessingJob(env.DB, task);
+        await settleMessagePostprocessingJob(
+          env.DB,
+          task,
+          outcome,
+          env.BACKGROUND_TASKS,
+        );
       } else {
         await processR2CleanupTask(env.DB, env.BUCKET, task);
       }

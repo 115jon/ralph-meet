@@ -1,9 +1,14 @@
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import {
+  ScreenSharePickerFooter,
+  ScreenSharePickerShell,
+} from "@/components/ScreenSharePickerShell";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { tabId } from "@/components/ui/tabs";
 import { isDesktop } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
 import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { Loader2, Monitor } from "lucide-react";
 import React, {
   useCallback,
   useEffect,
@@ -15,10 +20,11 @@ import {
   type MediaDeviceSource,
   type ScreenSource,
   type Tab,
-  DesktopScreenPickerBottomBar,
   DesktopScreenPickerTabBar,
   DeviceGrid,
-  QUALITY_PRESETS,
+  PickerEmpty,
+  SCREEN_PICKER_PANEL_ID,
+  SCREEN_PICKER_TABS_ID,
   SourceGrid,
 } from "./DesktopScreenPickerUI";
 import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
@@ -28,6 +34,11 @@ export interface DesktopScreenPickerModalProps {
   onClose: () => void;
   onStart: (options: StartScreenShareOptions) => void;
   availableQualities: string[];
+  /**
+   * The Tauri command bridge. Defaults to `@tauri-apps/api/core` in the
+   * desktop app; fixtures and tests pass a stub.
+   */
+  invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
 interface State {
@@ -58,6 +69,33 @@ type Action =
     };
 
 const log = clog("ScreenPicker");
+
+/** The last tab you shared from, remembered per device. */
+const LAST_TAB_KEY = "rm-screen-picker-tab";
+
+function readLastTab(): Tab {
+  try {
+    const stored = localStorage.getItem(LAST_TAB_KEY);
+    if (
+      stored === "applications" ||
+      stored === "screens" ||
+      stored === "devices"
+    ) {
+      return stored;
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return "applications";
+}
+
+function rememberTab(tab: Tab) {
+  try {
+    localStorage.setItem(LAST_TAB_KEY, tab);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 function logScreenPicker(message: string, details?: unknown) {
   if (details === undefined) {
@@ -124,7 +162,7 @@ function reducer(state: State, action: Action): State {
 
 export const DesktopScreenPickerModal: React.FC<
   DesktopScreenPickerModalProps
-> = ({ isOpen, onClose, onStart, availableQualities }) => {
+> = ({ isOpen, onClose, onStart, availableQualities, invoke }) => {
   const settings = useVoiceSettingsStore((s) => s.getSettings());
   const setScreenShareDefaults = useVoiceSettingsStore(
     (s) => s.setScreenShareDefaults,
@@ -134,22 +172,32 @@ export const DesktopScreenPickerModal: React.FC<
   )
     ? settings.screenShareQuality
     : (availableQualities[0] ?? "720p30");
-  const [state, dispatch] = useReducer(reducer, {
-    tab: "applications",
-    sources: [],
-    thumbnails: {},
-    loading: true,
-    previewLoading: false,
-    selectedId: null,
-    selectedQuality: initialQuality,
-    withAudio: settings.screenShareWithAudio,
-    devices: [],
-  });
+  const [state, dispatch] = useReducer(
+    reducer,
+    null,
+    (): State => ({
+      tab: readLastTab(),
+      sources: [],
+      thumbnails: {},
+      loading: true,
+      previewLoading: false,
+      selectedId: null,
+      selectedQuality: initialQuality,
+      withAudio: settings.screenShareWithAudio,
+      devices: [],
+    }),
+  );
+  const setTab = (tab: Tab) => {
+    rememberTab(tab);
+    dispatch({ type: "SET_TAB", payload: tab });
+  };
 
   const invokeRef = useRef<((cmd: string, args?: any) => Promise<any>) | null>(
-    null,
+    invoke ?? null,
   );
-  const [invokeReady, setInvokeReady] = useState(!isDesktop());
+  const [invokeReady, setInvokeReady] = useState(
+    Boolean(invoke) || !isDesktop(),
+  );
   const requestedThumbnailsRef = useRef<Set<string> | null>(null);
   const previewBatchKeyRef = useRef<string | null>(null);
   const thumbnailBatchTokenRef = useRef(0);
@@ -163,7 +211,7 @@ export const DesktopScreenPickerModal: React.FC<
 
   // Load the invoke function once
   useEffect(() => {
-    if (isDesktop()) {
+    if (!invokeRef.current && isDesktop()) {
       import("@tauri-apps/api/core")
         .then((mod) => {
           invokeRef.current = mod.invoke;
@@ -510,15 +558,11 @@ export const DesktopScreenPickerModal: React.FC<
   const selectedDevice = state.devices.find(
     (d) => d.deviceId === state.selectedId,
   );
-  const qualities = QUALITY_PRESETS.filter((q) =>
-    availableQualities.includes(q.id),
-  );
-  const selectedQ = QUALITY_PRESETS.find((q) => q.id === state.selectedQuality);
-
+  const pickedName =
+    state.tab === "devices" ? selectedDevice?.label : selectedSource?.name;
   const displayName =
-    state.tab === "devices"
-      ? selectedDevice?.label || "Select a device"
-      : selectedSource?.name || "Select a source";
+    pickedName ||
+    (state.tab === "devices" ? "Select a device" : "Select a source");
 
   const selectSource = (id: string) => {
     logScreenPicker("Selected source", {
@@ -531,133 +575,120 @@ export const DesktopScreenPickerModal: React.FC<
     dispatch({ type: "SET_SELECTED_ID", payload: id });
   };
 
+  const ignoreSelectDismiss = (event: {
+    target: EventTarget | null;
+    preventDefault: () => void;
+  }) => {
+    if (shouldIgnoreSelectDismiss(event.target)) event.preventDefault();
+  };
+
+  const startShare = () => {
+    if (!state.selectedId) return;
+    thumbnailBatchTokenRef.current += 1;
+    dispatch({ type: "SET_PREVIEW_LOADING", payload: false });
+    const source = state.sources.find((s) => s.id === state.selectedId);
+    const pickerSelectionElapsedMs = pickerOpenedAtRef.current
+      ? Math.round(performance.now() - pickerOpenedAtRef.current)
+      : undefined;
+    logScreenPicker("Starting selected source", {
+      elapsedMs: pickerSelectionElapsedMs ?? null,
+      tab: state.tab,
+      sourceId: state.selectedId,
+      captureId: source?.capture_id,
+      sourceName: source?.name ?? selectedDevice?.label,
+      sourceKind: state.tab === "devices" ? "device" : source?.kind,
+      quality: state.selectedQuality,
+      withAudio: state.withAudio,
+    });
+    setScreenShareDefaults({
+      quality: state.selectedQuality,
+      withAudio: state.withAudio,
+    });
+    onStart({
+      quality: state.selectedQuality,
+      withAudio: state.withAudio,
+      sourceId: state.selectedId,
+      captureId: source?.capture_id,
+      sourceName: source?.name ?? selectedDevice?.label,
+      sourceKind: state.tab === "devices" ? "device" : source?.kind,
+      sourceAppName: source?.app_name,
+      sourceIcon: source?.icon || undefined,
+      pickerOpenedAt: pickerOpenedAtRef.current ?? undefined,
+      pickerSelectionElapsedMs,
+    });
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogPortal>
-        <div
-          className="fixed inset-0 z-90 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
-          data-state={isOpen ? "open" : "closed"}
-          onPointerDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (shouldIgnoreSelectDismiss(event.target)) return;
-            onClose();
+    <ScreenSharePickerShell
+      open={isOpen}
+      onClose={onClose}
+      description="Pick an app, a screen or a capture device."
+      contentProps={{
+        "aria-busy": !invokeReady || state.loading || state.previewLoading,
+        onPointerDownOutside: ignoreSelectDismiss,
+        onFocusOutside: ignoreSelectDismiss,
+        onInteractOutside: ignoreSelectDismiss,
+      }}
+      tabs={<DesktopScreenPickerTabBar tab={state.tab} setTab={setTab} />}
+      sourceProps={{
+        role: "tabpanel",
+        id: SCREEN_PICKER_PANEL_ID,
+        "aria-labelledby": tabId(SCREEN_PICKER_TABS_ID, state.tab),
+      }}
+      footer={
+        <ScreenSharePickerFooter
+          quality={state.selectedQuality}
+          onQualityChange={(q) => dispatch({ type: "SET_QUALITY", payload: q })}
+          availableQualities={availableQualities}
+          withAudio={state.withAudio}
+          onWithAudioChange={() => dispatch({ type: "TOGGLE_AUDIO" })}
+          sourceName={displayName}
+          sourcePicked={Boolean(pickedName)}
+          onClose={onClose}
+          onStart={startShare}
+          startDisabled={!state.selectedId}
+        />
+      }
+    >
+      {state.tab === "devices" ? (
+        <DeviceGrid
+          devices={state.devices}
+          selectedId={state.selectedId}
+          onSelect={selectSource}
+        />
+      ) : state.loading || state.previewLoading ? (
+        <EmptyState
+          loading
+          motif="screen"
+          size="sm"
+          className="h-full min-h-40"
+          title="Finding what you can share"
+        />
+      ) : filteredSources.length === 0 ? (
+        state.tab === "applications" ? (
+          <PickerEmpty
+            title="No open apps to share"
+            body="Open the app you want to share, or share an entire screen instead."
+            action={
+              <Button variant="secondary" onClick={() => setTab("screens")}>
+                Share entire screen
+              </Button>
+            }
+          />
+        ) : (
+          <PickerEmpty title="No screens found" />
+        )
+      ) : (
+        <SourceGrid
+          sources={filteredSources}
+          thumbnails={state.thumbnails}
+          selectedId={state.selectedId}
+          onSelect={selectSource}
+          onPreview={(id) => {
+            void requestThumbnail(id);
           }}
-          role="presentation"
-        >
-          <DialogSurface
-            showCloseButton={false}
-            className="relative m-0 flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
-            aria-labelledby="screen-picker-title"
-            aria-busy={!invokeReady || state.loading || state.previewLoading}
-            onPointerDownOutside={(event) => {
-              if (shouldIgnoreSelectDismiss(event.target)) {
-                event.preventDefault();
-              }
-            }}
-            onFocusOutside={(event) => {
-              if (shouldIgnoreSelectDismiss(event.target)) {
-                event.preventDefault();
-              }
-            }}
-            onInteractOutside={(event) => {
-              if (shouldIgnoreSelectDismiss(event.target)) {
-                event.preventDefault();
-              }
-            }}
-          >
-            <DesktopScreenPickerTabBar
-              tab={state.tab}
-              setTab={(tab) => dispatch({ type: "SET_TAB", payload: tab })}
-            />
-
-            {/* Content Area */}
-            <div className="min-h-[320px] max-h-[420px] overflow-y-auto p-4">
-              {state.tab === "devices" ? (
-                <DeviceGrid
-                  devices={state.devices}
-                  selectedId={state.selectedId}
-                  onSelect={selectSource}
-                />
-              ) : state.loading || state.previewLoading ? (
-                <div className="flex h-[300px] items-center justify-center">
-                  <Loader2
-                    size={32}
-                    className="animate-spin text-rm-text-muted"
-                  />
-                </div>
-              ) : filteredSources.length === 0 ? (
-                <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
-                  <Monitor size={40} className="opacity-30" />
-                  <p className="text-sm">
-                    No{" "}
-                    {state.tab === "applications" ? "applications" : "screens"}{" "}
-                    found
-                  </p>
-                </div>
-              ) : (
-                <SourceGrid
-                  sources={filteredSources}
-                  thumbnails={state.thumbnails}
-                  selectedId={state.selectedId}
-                  onSelect={selectSource}
-                  onPreview={(id) => {
-                    void requestThumbnail(id);
-                  }}
-                />
-              )}
-            </div>
-
-            <DesktopScreenPickerBottomBar
-              displayName={displayName}
-              selectedQ={selectedQ}
-              qualities={qualities}
-              selectedQuality={state.selectedQuality}
-              setQuality={(q) => dispatch({ type: "SET_QUALITY", payload: q })}
-              withAudio={state.withAudio}
-              toggleAudio={() => dispatch({ type: "TOGGLE_AUDIO" })}
-              onClose={onClose}
-              onStart={() => {
-                if (!state.selectedId) return;
-                thumbnailBatchTokenRef.current += 1;
-                dispatch({ type: "SET_PREVIEW_LOADING", payload: false });
-                const source = state.sources.find(
-                  (s) => s.id === state.selectedId,
-                );
-                const pickerSelectionElapsedMs = pickerOpenedAtRef.current
-                  ? Math.round(performance.now() - pickerOpenedAtRef.current)
-                  : undefined;
-                logScreenPicker("Starting selected source", {
-                  elapsedMs: pickerSelectionElapsedMs ?? null,
-                  tab: state.tab,
-                  sourceId: state.selectedId,
-                  captureId: source?.capture_id,
-                  sourceName: source?.name ?? selectedDevice?.label,
-                  sourceKind: state.tab === "devices" ? "device" : source?.kind,
-                  quality: state.selectedQuality,
-                  withAudio: state.withAudio,
-                });
-                setScreenShareDefaults({
-                  quality: state.selectedQuality,
-                  withAudio: state.withAudio,
-                });
-                onStart({
-                  quality: state.selectedQuality,
-                  withAudio: state.withAudio,
-                  sourceId: state.selectedId,
-                  captureId: source?.capture_id,
-                  sourceName: source?.name ?? selectedDevice?.label,
-                  sourceKind: state.tab === "devices" ? "device" : source?.kind,
-                  sourceAppName: source?.app_name,
-                  sourceIcon: source?.icon || undefined,
-                  pickerOpenedAt: pickerOpenedAtRef.current ?? undefined,
-                  pickerSelectionElapsedMs,
-                });
-              }}
-              selectedId={state.selectedId}
-            />
-          </DialogSurface>
-        </div>
-      </DialogPortal>
-    </Dialog>
+        />
+      )}
+    </ScreenSharePickerShell>
   );
 };

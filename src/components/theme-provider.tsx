@@ -6,7 +6,8 @@ import * as React from "react";
 
 const DEFAULT_THEME_PROVIDER_PROPS = {
   attribute: "class",
-  defaultTheme: "dark",
+  // Signed-out visitors follow the OS scheme; a stored or synced choice wins.
+  defaultTheme: "system",
   enableSystem: true,
   disableTransitionOnChange: true,
   themes: NEXT_THEME_NAMES,

@@ -10,11 +10,23 @@ import {
   getVoiceActivityLevelPercent,
   getVoiceActivityThreshold,
 } from "@/lib/voice/vad";
-import { Mic2, Square } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { useAppActive } from "@/hooks/useAppActive";
+import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const log = clog("MicTest");
-const METER_BARS = 24;
+/** The level bar is written at most this often (30fps). */
+const METER_FRAME_MS = 1000 / 30;
+/** The level reads as a ladder of this many cells (the kit's bar meter). */
+const METER_CELLS = 16;
+const METER_GAP_PX = 3;
+/** Cuts the track and fill into cells; static, so only the fill moves. */
+const METER_CELL_MASK = `repeating-linear-gradient(to right, #000 0, #000 calc(100% / ${METER_CELLS} - ${METER_GAP_PX}px), transparent calc(100% / ${METER_CELLS} - ${METER_GAP_PX}px), transparent calc(100% / ${METER_CELLS}))`;
+/** Whole cells only: the fill steps from cell to cell. */
+const quantizeLevel = (level: number) =>
+  Math.round(level * METER_CELLS) / METER_CELLS;
 const RMS_SMOOTHING = 0.28;
 const SPEAKING_HOLD_MS = 220;
 const SPEAKING_EXIT_RATIO = 0.82;
@@ -48,8 +60,13 @@ export function MicTestWidget({
   processing,
 }: MicTestWidgetProps) {
   const [isActive, setIsActive] = useState(false);
-  const [rms, setRms] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const appActive = useAppActive();
+  const appActiveRef = useRef(appActive);
+  /** The level bar: written directly (transform only), never through state. */
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  const lastPaintRef = useRef(0);
+  const tickRef = useRef<(() => void) | null>(null);
   const [isPlaybackActive, setIsPlaybackActive] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const analysisStreamRef = useRef<MediaStream | null>(null);
@@ -72,7 +89,6 @@ export function MicTestWidget({
   useEffect(() => {
     thresholdRef.current = threshold;
   }, [threshold]);
-  const barPercent = getVoiceActivityLevelPercent(rms);
   const thresholdPercent = getVoiceActivityLevelPercent(threshold);
 
   const processingSignature = useMemo(
@@ -116,7 +132,7 @@ export function MicTestWidget({
       isSpeaking: false,
       lastSpeechAt: 0,
     };
-    setRms(0);
+    if (fillRef.current) fillRef.current.style.transform = "scaleX(0)";
     setIsSpeaking(false);
   }, []);
 
@@ -127,6 +143,7 @@ export function MicTestWidget({
       }
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
+      tickRef.current = null;
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
         previewAudioRef.current.srcObject = null;
@@ -259,7 +276,11 @@ export function MicTestWidget({
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         const tick = () => {
+          rafRef.current = 0;
           if (!analyserRef.current) return;
+          // Hidden or behind a fullscreen game: stop; the effect below
+          // restarts the loop when the app is drawn again.
+          if (!appActiveRef.current) return;
           analyserRef.current.getByteTimeDomainData(dataArray);
           let sum = 0;
           for (let i = 0; i < dataArray.length; i++) {
@@ -297,13 +318,21 @@ export function MicTestWidget({
             lastSpeechAt,
           };
 
-          setRms(smoothedRms);
+          if (now - lastPaintRef.current >= METER_FRAME_MS) {
+            lastPaintRef.current = now;
+            const level = getVoiceActivityLevelPercent(smoothedRms) / 100;
+            if (fillRef.current) {
+              fillRef.current.style.transform = `scaleX(${quantizeLevel(level).toFixed(3)})`;
+            }
+          }
+          // Only a flip re-renders (the label and colour), never a frame.
           setIsSpeaking((previous) =>
             previous === nextSpeaking ? previous : nextSpeaking,
           );
           rafRef.current = requestAnimationFrame(tick);
         };
 
+        tickRef.current = tick;
         rafRef.current = requestAnimationFrame(tick);
         setIsActive(true);
       } catch (error) {
@@ -344,10 +373,21 @@ export function MicTestWidget({
     };
   }, [stopTest]);
 
+  /* Pause the meter loop while the app isn't drawn; resume after. */
+  useEffect(() => {
+    appActiveRef.current = appActive;
+    if (appActive && tickRef.current && !rafRef.current) {
+      rafRef.current = requestAnimationFrame(tickRef.current);
+    }
+  }, [appActive]);
+
   return (
-    <div className="flex min-w-0 items-center gap-3">
-      <button
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      <Button
         type="button"
+        variant={isPlaybackActive ? "destructive" : "secondary"}
+        size="lg"
+        aria-pressed={isPlaybackActive}
         onClick={() => {
           if (isPlaybackActive) {
             stopTest({ cancelPendingStart: true });
@@ -355,49 +395,48 @@ export function MicTestWidget({
             startTest({ playback: true }).catch(() => {});
           }
         }}
-        className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors active:scale-[0.96] ${
-          isPlaybackActive
-            ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20"
-            : "border-rm-accent bg-rm-accent text-white hover:bg-rm-accent/90"
-        }`}
       >
-        <span className="flex items-center gap-1.5">
-          {isPlaybackActive ? <Square size={12} /> : <Mic2 size={12} />}
-          {isPlaybackActive ? "Stop testing" : "Mic Test"}
-        </span>
-      </button>
+        <Icon name={isPlaybackActive ? "stop" : "mic"} size="sm" />
+        {isPlaybackActive ? "Stop test" : "Test mic"}
+      </Button>
 
       <div
-        className="flex min-w-0 flex-1 items-center gap-1.5"
-        aria-label="Microphone test level"
+        className="relative h-6 min-w-40 flex-1 basis-40"
+        role="img"
+        aria-label={
+          !isActive
+            ? "Mic level, idle"
+            : isSpeaking
+              ? "Mic level, people can hear you"
+              : "Mic level, below the sensitivity marker"
+        }
       >
-        {Array.from({ length: METER_BARS }, (_, index) => {
-          const start = (index / METER_BARS) * 100;
-          const end = ((index + 1) / METER_BARS) * 100;
-          const isFilled = isActive && barPercent >= start;
-          const marksThreshold =
-            isActive &&
-            thresholdPercent >= start &&
-            (thresholdPercent < end ||
-              (index === METER_BARS - 1 && thresholdPercent === 100));
-
-          return (
-            <div
-              key={index}
-              className={`h-1.5 flex-1 rounded-sm transition-colors ${
-                !isActive
-                  ? "bg-rm-bg-elevated"
-                  : marksThreshold
-                    ? "bg-amber-400/90"
-                    : isFilled
-                      ? isSpeaking
-                        ? "bg-emerald-400/90"
-                        : "bg-sky-400/80"
-                      : "bg-rm-bg-surface"
-              }`}
-            />
-          );
-        })}
+        {/* The cells: a tint-3 track and the moving fill, both cut by one
+            static mask. Only the fill's transform changes. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 overflow-hidden bg-tint-3"
+          style={{
+            maskImage: METER_CELL_MASK,
+            WebkitMaskImage: METER_CELL_MASK,
+          }}
+        >
+          <div
+            ref={fillRef}
+            className={cn(
+              "absolute inset-0 origin-left",
+              !isActive ? "opacity-0" : isSpeaking ? "bg-talk" : "bg-ink-3",
+            )}
+            style={{ transform: "scaleX(0)" }}
+          />
+        </div>
+        {isActive ? (
+          <span
+            aria-hidden="true"
+            className="absolute top-1/2 h-5 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-warning-ink"
+            style={{ left: `${thresholdPercent}%` }}
+          />
+        ) : null}
       </div>
     </div>
   );

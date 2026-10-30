@@ -1,51 +1,52 @@
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import type { GridItem } from "@/components/voice/types";
-import { useMounted } from "@/hooks/useMounted";
+import { useAppActive } from "@/hooks/useAppActive";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
+import { connectionStatus } from "@/lib/voice/connection-status-label";
 import { cn } from "@/lib/utils";
+import {
+  ActionSheet,
+  type ActionSheetItem,
+} from "@/components/ui/action-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ResponsivePopover } from "@/components/ui/popover";
+import { PRESS } from "@/components/ui/interaction";
+import { DOCK_LEAVE } from "@/components/ui/dock";
+import { DockButton } from "@/components/ui/dock-button";
+import { IconButton } from "@/components/ui/IconButton";
+import { LedLabel, type LedState } from "@/components/ui/led";
+import { Num, NumClock } from "@/components/ui/num";
+import {
+  MENU_ITEM,
+  MENU_ITEM_DEFAULT,
+  MENU_ITEM_DEFAULT_ON,
+} from "@/components/ui/menu";
 import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  lazy,
-  Suspense,
-} from "react";
-import { createPortal } from "react-dom";
+import { memo, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
 import { FloatingSoundboardManager } from "./FloatingSoundboardManager";
-import { AppWindow, AudioWaveform } from "lucide-react";
-import {
-  Gamepad2,
-  Monitor,
-  MoreHorizontal,
-  Phone,
-  Radio,
-  Share2,
-  SignalHigh,
-  Sparkles,
-  Sticker,
-  Video,
-  VideoOff,
-  Volume2,
-  XCircle,
-} from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { NoiseReductionPanel } from "./NoiseReductionPanel";
 import { SpatialAudioPanel } from "./SpatialAudioPanel";
 
@@ -57,25 +58,75 @@ const SoundboardPicker = lazy(
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: GridItem[] = [];
 const EMPTY_WATCHERS_BY_STREAMER: StreamWatchersByStreamer = {};
-const NOISE_REDUCTION_PANEL_GAP = 8;
-const NOISE_REDUCTION_VIEWPORT_PADDING = 12;
 
+function formatQualityOption(quality: string) {
+  return quality.replace("p", "p ");
+}
+
+/** "1080p60", "4K60": numbers in the mono face, no shouting. */
 function formatScreenQualityBadge(quality?: string) {
   if (!quality) return null;
   const fourKMatch = quality.match(/^4k(\d+)$/i);
-  if (fourKMatch) {
-    return `4K · ${fourKMatch[1]} FPS`;
-  }
+  if (fourKMatch) return `4K${fourKMatch[1]}`;
   const standardMatch = quality.match(/^(\d+)p(\d+)$/i);
-  if (standardMatch) {
-    return `${standardMatch[1]}p · ${standardMatch[2]} FPS`;
-  }
-  return quality.toUpperCase();
+  if (standardMatch) return `${standardMatch[1]}p${standardMatch[2]}`;
+  return quality;
+}
+
+const LED_FOR_TONE: Record<string, LedState> = {
+  good: "talk",
+  pending: "off",
+  warning: "idle",
+  danger: "muted",
+};
+
+/**
+ * Call keys are 48 square with a 20px glyph (DESIGN.md, call dock; the kit's
+ * CallBar). Five of them fill the 264px tree panel edge to edge at a 2px gap.
+ */
+const KEY = { size: "lg", iconSize: "lg" } as const;
+/**
+ * The action row steps down so Leave is always whole on screen: five 48px
+ * keys from 248px of row (5 x 48 + 4 x 2px gaps), five 40px keys from 208px
+ * (the 264px default sidebar has 247), and below that activities and
+ * soundboard fold into a "…" menu beside camera, share and Leave.
+ */
+const NARROW_KEY = "@max-[247px]:size-10";
+const WIDE_ONLY_KEY = "hidden @min-[208px]:inline-flex";
+const MORE_KEY = "@min-[208px]:hidden";
+
+/**
+ * The connection ping, in its own leaf: it subscribes to the SFU stats only
+ * while the app is active and the call is connected, so a stats tick
+ * re-renders this one number, never the strip.
+ */
+function PingReadout({ sfu, live }: { sfu: SFUClient | null; live: boolean }) {
+  const active = useAppActive();
+  const stats = useVoiceStats(sfu, live && active);
+  if (!stats) return null;
+  return (
+    <Num size="sm" className="shrink-0 text-ink-3" title="Round-trip latency">
+      {Math.round(stats.ping)} ms
+    </Num>
+  );
 }
 
 interface VoiceDashboardProps {
   serverName: string;
   voiceChannelName?: string;
+  /** "dm": a direct call; the status line reads "Call with Ada". */
+  kind?: "channel" | "dm";
+  /** Transport state; drives the LED and the readout (spec §3 rule 4). */
+  connectionState?: string;
+  /** When the call (or your session) started, for the clock. */
+  startedAt?: number | null;
+  /** Retry after a failed connection. */
+  onRetry?: () => void;
+  /**
+   * The call's stage is on screen, so the stage bar owns the actions and the
+   * strip collapses to its status line (spec §3 rule 2).
+   */
+  collapsed?: boolean;
   onVoiceDisconnect?: () => void;
   onVoiceNavigate?: () => void;
   isScreenSharing?: boolean;
@@ -90,7 +141,6 @@ interface VoiceDashboardProps {
   onStreamQualityChange?: (quality: string) => void;
   isCameraActive?: boolean;
   hasCamera?: boolean;
-  hasMicrophone?: boolean;
   onToggleCamera?: () => void;
   sfu?: SFUClient | null;
   voiceChannelId?: string | null;
@@ -113,9 +163,22 @@ interface VoiceDashboardProps {
   showNoiseReductionShortcut?: boolean;
 }
 
-export function VoiceDashboard({
+/**
+ * The call strip (talk-tree-spec §3 rule 2): shown only during a call, above
+ * the account row. A 36px status line (LED, channel · server, ping and clock
+ * in mono, voice options) and a 40px action row (camera, share, activities,
+ * soundboard, Leave). Mic and deafen live in the account row, never here.
+ * While the call's stage is on screen it collapses to its status line.
+ * Joining slides it up from the account row (spec §6 focal moment 2).
+ */
+export const VoiceDashboard = memo(function VoiceDashboard({
   serverName,
   voiceChannelName,
+  kind = "channel",
+  connectionState = "connected",
+  startedAt,
+  onRetry,
+  collapsed = false,
   onVoiceDisconnect,
   onVoiceNavigate,
   isScreenSharing,
@@ -130,7 +193,6 @@ export function VoiceDashboard({
   onStreamQualityChange,
   isCameraActive,
   hasCamera,
-  hasMicrophone: _hasMicrophone,
   onToggleCamera,
   sfu = null,
   voiceChannelId,
@@ -149,35 +211,25 @@ export function VoiceDashboard({
   onOpenSoundboard,
   showNoiseReductionShortcut = true,
 }: VoiceDashboardProps) {
-  const mounted = useMounted();
+  const isMobile = useIsMobile();
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
-  const shouldRenderStreamMenu = isStreamMenuOpen;
+  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
-  const shouldRenderSpatial = isSpatialOpen;
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
-  const shouldRenderStickerPicker = isStickerPickerOpen;
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
   const [soundboardInitialView, setSoundboardInitialView] = useState<
     "soundboard" | "listenTogether"
   >("soundboard");
   const [isNoiseReductionOpen, setIsNoiseReductionOpen] = useState(false);
-  const shouldRenderNoiseReduction = isNoiseReductionOpen;
-  const stickerBtnRef = useRef<HTMLButtonElement>(null);
+  const optionsBtnRef = useRef<HTMLButtonElement>(null);
   const soundboardBtnRef = useRef<HTMLButtonElement>(null);
-  const noiseReductionBtnRef = useRef<HTMLButtonElement>(null);
-  const noiseReductionPanelRef = useRef<HTMLDivElement>(null);
-  const [noiseReductionPanelPosition, setNoiseReductionPanelPosition] =
-    useState({
-      top: 0,
-      left: 0,
-      placement: "bottom" as "top" | "bottom",
-    });
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  // The soundboard picker grows from whichever key opened it: the soundboard
+  // key, or the "…" key that holds it on a narrow strip.
+  const soundboardMarkerRef = useRef<HTMLElement | null>(null);
 
-  const stats = useVoiceStats(sfu, true);
-  const signalBtnRef = useRef<HTMLButtonElement>(null);
-  const spatialBtnRef = useRef<HTMLButtonElement>(null);
   const settings = useVoiceSettingsStore((s) =>
     s.getSettings(voiceSettingsUserId),
   );
@@ -189,136 +241,234 @@ export function VoiceDashboard({
     ? (watchersByStreamer[localUserId] ?? [])
     : [];
   const streamQualityBadge = formatScreenQualityBadge(screenQuality);
-  const hasSpecificStreamSource = !!(
-    currentScreenSource?.sourceName?.trim() ||
-    currentScreenSource?.sourceAppName?.trim() ||
-    currentScreenSource?.sourceIcon?.trim() ||
-    currentScreenSource?.sourceKind
-  );
   const streamSourceKind = currentScreenSource?.sourceKind ?? null;
   const streamSourceTitle =
     currentScreenSource?.sourceName?.trim() ||
     (streamSourceKind === "window"
-      ? "Streaming an application"
+      ? "An application"
       : streamSourceKind === "device"
-        ? "Streaming a capture device"
-        : "Streaming your screen");
-  const streamSourceLabel =
-    streamSourceKind === "window"
-      ? "Application"
-      : streamSourceKind === "device"
-        ? "Capture Device"
-        : hasSpecificStreamSource
-          ? "Entire Screen"
-          : "Screen";
-  const streamSourceSubtitle =
-    streamSourceKind === "window"
-      ? currentScreenSource?.sourceAppName?.trim() ||
-        "Selected application window"
-      : streamSourceKind === "device"
-        ? "Capture device source"
-        : hasSpecificStreamSource
-          ? "Selected display"
-          : "Your screen share is active";
+        ? "A capture device"
+        : "Your screen");
   const streamSourceIcon = currentScreenSource?.sourceIcon?.trim() || null;
   const alwaysShowStreamPreview = !!settings.alwaysShowStreamPreview;
   const gifPickerVoiceMode = useMemo(() => (sfu ? { sfu } : null), [sfu]);
-  const toggleSoundboardPicker = () => {
+  const spatialOn =
+    !!spatialAudioState?.enabled &&
+    settings.spatialAudioEnabled &&
+    settings.streamHighFidelity;
+
+  const status = connectionStatus(connectionState, true);
+  const ledState = LED_FOR_TONE[status.tone] ?? "off";
+  const connected = status.tone === "good";
+  const placeLabel =
+    kind === "dm"
+      ? `Call with ${serverName}`
+      : `${voiceChannelName || "Voice"} · ${serverName}`;
+
+  const toggleSoundboardPicker = (from: "key" | "more" = "key") => {
+    soundboardMarkerRef.current = (
+      from === "more" ? moreBtnRef : soundboardBtnRef
+    ).current;
     onOpenSoundboard?.();
     setSoundboardInitialView("soundboard");
     setIsSoundboardPickerOpen((value) => !value);
   };
   const openListenTogetherPicker = () => {
+    const key = soundboardBtnRef.current;
+    soundboardMarkerRef.current =
+      key && key.offsetParent !== null ? key : moreBtnRef.current;
     onOpenSoundboard?.();
     setSoundboardInitialView("listenTogether");
     setIsSoundboardPickerOpen(true);
   };
 
-  useLayoutEffect(() => {
-    if (
-      !shouldRenderNoiseReduction ||
-      !noiseReductionBtnRef.current ||
-      !noiseReductionPanelRef.current
-    ) {
-      return;
-    }
+  const toggleStreamAudio = () => onToggleStreamAudio?.();
+  const toggleAlwaysShowStreamPreview = () =>
+    updateUserSettings(
+      (current) => ({
+        ...current,
+        alwaysShowStreamPreview: !current.alwaysShowStreamPreview,
+      }),
+      voiceSettingsUserId,
+    );
+  // Phone form of the stream-settings menu (design-system 13.1).
+  const streamActionItems: ActionSheetItem[] = [
+    {
+      key: "change-source",
+      label: "Change source",
+      icon: <Icon name="screenShare" size="sm" />,
+      onClick: () => onChangeStreamSource?.(),
+    },
+    {
+      key: "stream-audio",
+      label: "Stream audio",
+      icon: <Icon name="speaker" size="sm" />,
+      rightIcon: isStreamingAudio ? <Icon name="check" size="xs" /> : undefined,
+      onClick: toggleStreamAudio,
+    },
+    {
+      key: "stream-preview",
+      label: "Always show stream preview",
+      icon: <Icon name="monitor" size="sm" />,
+      rightIcon: alwaysShowStreamPreview ? (
+        <Icon name="check" size="xs" />
+      ) : undefined,
+      onClick: toggleAlwaysShowStreamPreview,
+      divider: true,
+    },
+    ...(availableQualities.length > 0
+      ? [
+          {
+            key: "quality",
+            label: "Quality",
+            subtitle: streamQualityBadge ?? undefined,
+            icon: <Icon name="sliders" size="sm" />,
+            onClick: () => {},
+            divider: true,
+            submenu: (
+              <div role="radiogroup" aria-label="Quality">
+                {availableQualities.map((quality) => (
+                  <button
+                    key={quality}
+                    type="button"
+                    role="radio"
+                    aria-checked={screenQuality === quality}
+                    onClick={() => {
+                      onStreamQualityChange?.(quality);
+                      setIsStreamMenuOpen(false);
+                    }}
+                    className={cn(
+                      MENU_ITEM,
+                      screenQuality === quality
+                        ? MENU_ITEM_DEFAULT_ON
+                        : MENU_ITEM_DEFAULT,
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {formatQualityOption(quality)}
+                    </span>
+                    {screenQuality === quality && (
+                      <Icon name="check" size="xs" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: "stop-streaming",
+      label: "Stop streaming",
+      icon: <Icon name="streamOff" size="sm" />,
+      variant: "danger" as const,
+      onClick: () => onStopStreaming?.(),
+    },
+  ];
 
-    const updateNoiseReductionPosition = () => {
-      const anchorRect = noiseReductionBtnRef.current?.getBoundingClientRect();
-      const panelRect = noiseReductionPanelRef.current?.getBoundingClientRect();
+  const streamSettingsTrigger = isMobile ? (
+    <>
+      <IconButton
+        icon="more"
+        size={28}
+        variant="muted"
+        aria-label="Stream settings"
+        aria-haspopup="dialog"
+        aria-expanded={isStreamMenuOpen}
+        onClick={() => setIsStreamMenuOpen(true)}
+      />
+      <ActionSheet
+        open={isStreamMenuOpen}
+        onOpenChange={setIsStreamMenuOpen}
+        items={streamActionItems}
+        title="Stream settings"
+      />
+    </>
+  ) : (
+    <DropdownMenu open={isStreamMenuOpen} onOpenChange={setIsStreamMenuOpen}>
+      <DropdownMenuTrigger
+        render={
+          <IconButton
+            icon="more"
+            size={28}
+            variant="muted"
+            aria-label="Stream settings"
+          />
+        }
+      />
+      <DropdownMenuContent side="top" align="end" aria-label="Stream settings">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Stream settings</DropdownMenuLabel>
+          <DropdownMenuItem
+            icon={<Icon name="screenShare" size="sm" />}
+            onClick={() => onChangeStreamSource?.()}
+          >
+            Change source
+          </DropdownMenuItem>
+          <DropdownMenuCheckboxItem
+            icon={<Icon name="speaker" size="sm" />}
+            checked={!!isStreamingAudio}
+            onCheckedChange={toggleStreamAudio}
+            closeOnClick
+          >
+            Stream audio
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            icon={<Icon name="monitor" size="sm" />}
+            checked={alwaysShowStreamPreview}
+            onCheckedChange={toggleAlwaysShowStreamPreview}
+            closeOnClick
+          >
+            Always show stream preview
+          </DropdownMenuCheckboxItem>
+        </DropdownMenuGroup>
+        {availableQualities.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Quality</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={screenQuality ?? null}
+                onValueChange={(quality: string) =>
+                  onStreamQualityChange?.(quality)
+                }
+              >
+                {availableQualities.map((quality) => (
+                  <DropdownMenuRadioItem
+                    key={quality}
+                    value={quality}
+                    closeOnClick
+                  >
+                    {formatQualityOption(quality)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="danger"
+          icon={<Icon name="streamOff" size="sm" />}
+          onClick={() => onStopStreaming?.()}
+        >
+          Stop streaming
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
-      if (!anchorRect || !panelRect) return;
-
-      const anchorCenterX = anchorRect.left + anchorRect.width / 2;
-      let left = anchorCenterX - panelRect.width / 2;
-      left = Math.min(
-        Math.max(NOISE_REDUCTION_VIEWPORT_PADDING, left),
-        window.innerWidth - panelRect.width - NOISE_REDUCTION_VIEWPORT_PADDING,
-      );
-
-      const spaceAbove = anchorRect.top - NOISE_REDUCTION_VIEWPORT_PADDING;
-      const spaceBelow =
-        window.innerHeight -
-        anchorRect.bottom -
-        NOISE_REDUCTION_VIEWPORT_PADDING;
-      const openAbove =
-        spaceAbove >= panelRect.height + NOISE_REDUCTION_PANEL_GAP ||
-        spaceAbove >= spaceBelow;
-
-      let top = openAbove
-        ? anchorRect.top - panelRect.height - NOISE_REDUCTION_PANEL_GAP
-        : anchorRect.bottom + NOISE_REDUCTION_PANEL_GAP;
-
-      top = Math.min(
-        Math.max(NOISE_REDUCTION_VIEWPORT_PADDING, top),
-        window.innerHeight -
-          panelRect.height -
-          NOISE_REDUCTION_VIEWPORT_PADDING,
-      );
-
-      setNoiseReductionPanelPosition({
-        top,
-        left,
-        placement: openAbove ? "top" : "bottom",
-      });
-    };
-
-    updateNoiseReductionPosition();
-    window.addEventListener("resize", updateNoiseReductionPosition);
-    window.addEventListener("scroll", updateNoiseReductionPosition, true);
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => updateNoiseReductionPosition())
-        : null;
-    if (resizeObserver && noiseReductionPanelRef.current) {
-      resizeObserver.observe(noiseReductionPanelRef.current);
-    }
-
-    return () => {
-      window.removeEventListener("resize", updateNoiseReductionPosition);
-      window.removeEventListener("scroll", updateNoiseReductionPosition, true);
-      resizeObserver?.disconnect();
-    };
-  }, [shouldRenderNoiseReduction]);
-
-  useEffect(() => {
-    if (!shouldRenderNoiseReduction) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsNoiseReductionOpen(false);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [shouldRenderNoiseReduction]);
+  const hasSpatial = !!(spatialAudioState && onUpdateSpatialAudioState);
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <div className="animate-in slide-in-from-bottom-5 duration-300 border-b-0 rounded-b-none">
+    <TooltipProvider>
+      <section
+        aria-label="Voice call"
+        data-call-strip=""
+        data-collapsed={collapsed ? "" : undefined}
+        data-floating-avoid=""
+        className="border-t-2 border-b border-t-ink-1 border-b-line bg-ply-1 transition-[opacity,translate] duration-(--dur-4) ease-spring starting:translate-y-[calc(var(--motion-shift)*2)] starting:opacity-0"
+      >
         <FloatingListenTogetherPlayer
           sfu={sfu}
           roomSlug={roomSlug}
@@ -330,597 +480,370 @@ export function VoiceDashboard({
           sfu={sfu}
         />
 
-        <div className="p-2 space-y-2">
-          {/* VOICE CONNECTED HEADER */}
-          <div className="group/voice-status mx-1 flex items-center gap-2 rounded-lg px-1.5 py-1">
-            <div className="flex shrink-0 items-center">
-              <div className="relative">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      ref={signalBtnRef}
-                      onClick={() => setIsVoiceDetailsOpen(!isVoiceDetailsOpen)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rm-success/10 text-rm-success hover:bg-rm-success/20 transition-colors outline-none"
-                    >
-                      <SignalHigh size={18} className="animate-pulse" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={12}>
-                    <p className="flex items-center gap-1.5">
-                      {stats ? (
-                        `Latency: ${stats.ping} ms`
-                      ) : (
-                        <>
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-rm-success animate-pulse" />
-                          Connectingâ€¦
-                        </>
-                      )}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-                <VoiceDetailsPanel
-                  sfu={sfu}
-                  isOpen={isVoiceDetailsOpen}
-                  onClose={() => setIsVoiceDetailsOpen(false)}
-                  triggerRef={signalBtnRef}
-                  channelName={voiceChannelName}
-                />
-              </div>
-            </div>
+        {/* Status: a lit word (Voice connected), where you are, ping and
+            clock, voice options. */}
+        <div className="flex items-center gap-1.5 pt-1.5 pr-1.5 pl-2">
+          <button
+            type="button"
+            className={cn(
+              PRESS,
+              "@container flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-[2px] px-1.5 py-1 text-left outline-none focus-visible:outline-2 focus-visible:outline-focus [--hover-o:0.06]",
+            )}
+            onClick={onVoiceNavigate}
+            aria-label={`${placeLabel}, ${status.label}. Open the call`}
+          >
+            <LedLabel state={ledState} className="max-w-full">
+              {connected ? (
+                /* Whole words only: "Voice connected" where it fits (LED +
+                 * the light themes' silkscreen width), else "Connected". */
+                <>
+                  <span
+                    className={cn(
+                      "hidden",
+                      kind === "dm"
+                        ? "@min-[139px]:inline"
+                        : "@min-[147px]:inline",
+                    )}
+                  >
+                    {kind === "dm" ? "Call connected" : "Voice connected"}
+                  </span>
+                  <span
+                    className={
+                      kind === "dm"
+                        ? "@min-[139px]:hidden"
+                        : "@min-[147px]:hidden"
+                    }
+                  >
+                    Connected
+                  </span>
+                </>
+              ) : status.tone === "danger" ? (
+                "Connection lost"
+              ) : (
+                status.label
+              )}
+            </LedLabel>
+            {kind === "dm" ? (
+              <span className="w-full truncate text-[13px] leading-[18px] font-medium text-ink-2">
+                <InlineEmojiText text={placeLabel} />
+              </span>
+            ) : (
+              /* Channel, then " · server" only when the server fits whole:
+               * otherwise it wraps onto a clipped second line, so the server
+               * goes first and the channel truncates last. */
+              <span className="flex h-[18px] w-full flex-wrap overflow-hidden text-[13px] leading-[18px] font-medium text-ink-2">
+                <span className="max-w-full min-w-0 truncate">
+                  <InlineEmojiText text={voiceChannelName || "Voice"} />
+                </span>
+                <span className="shrink-0 whitespace-pre">
+                  {" · "}
+                  <InlineEmojiText text={serverName} />
+                </span>
+              </span>
+            )}
+          </button>
+
+          {connected ? (
+            <PingReadout sfu={sfu} live={connected} />
+          ) : status.tone === "danger" && onRetry ? (
             <button
               type="button"
-              className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors outline-none hover:bg-rm-bg-hover/40 focus-visible:ring-2 focus-visible:ring-rm-accent/30"
-              onClick={onVoiceNavigate}
-              aria-label="Open voice channel details"
+              onClick={onRetry}
+              className={cn(
+                PRESS,
+                "h-6 shrink-0 rounded-sm px-1.5 text-ui-xs font-medium text-ink-1 outline-none focus-visible:outline-2 focus-visible:outline-focus",
+              )}
             >
-              <div className="flex flex-col min-w-0">
-                <span className="text-[14px] font-bold tracking-tight text-rm-success leading-tight">
-                  Voice Connected
-                </span>
-                <span className="text-ui-xs font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
-                  <InlineEmojiText
-                    text={`${voiceChannelName || "General"} / ${serverName}`}
-                  />
-                </span>
-              </div>
+              Retry
             </button>
-            <div className="flex shrink-0 items-center gap-0.5">
-              {spatialAudioState && onUpdateSpatialAudioState && (
-                <div className="relative">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        ref={spatialBtnRef}
-                        onClick={() => setIsSpatialOpen((value) => !value)}
-                        className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group",
-                          spatialAudioState.enabled &&
-                            settings.spatialAudioEnabled &&
-                            settings.streamHighFidelity &&
-                            "text-primary bg-primary/10",
-                        )}
-                      >
-                        <Sparkles size={18} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={12}>
-                      <p>Spatial Audio</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  {shouldRenderSpatial && (
-                    <SpatialAudioPanel
-                      isOpen={isSpatialOpen}
-                      isClosing={!isSpatialOpen}
-                      anchorRef={spatialBtnRef}
-                      gridItems={gridItems}
-                      spatialAudioState={spatialAudioState}
-                      onUpdateSpatialAudioState={onUpdateSpatialAudioState}
-                      localSpatialEnabled={settings.spatialAudioEnabled}
-                      localHighFidelity={settings.streamHighFidelity}
-                      localUserId={localUserId}
-                      participantCapabilities={participantCapabilities}
-                      onLocalSpatialEnabledChange={(enabled) => {
-                        updateVoiceSettings(
-                          (current) => ({
-                            ...current,
-                            spatialAudioEnabled: enabled,
-                            streamHighFidelity: enabled
-                              ? true
-                              : current.streamHighFidelity,
-                            echoCancellation: enabled
-                              ? false
-                              : current.echoCancellation,
-                            noiseSuppression: enabled
-                              ? false
-                              : current.noiseSuppression,
-                          }),
-                          voiceSettingsUserId,
-                        );
-                      }}
-                      onOpenVoiceSettings={() => {
-                        setIsSpatialOpen(false);
-                        onOpenVoiceSettings?.();
-                      }}
-                      onClose={() => setIsSpatialOpen(false)}
-                    />
-                  )}
-                </div>
-              )}
-              {showNoiseReductionShortcut && (
-                <div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        ref={noiseReductionBtnRef}
-                        onClick={() =>
-                          setIsNoiseReductionOpen((value) => !value)
-                        }
-                        className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group",
-                          settings.noiseReductionEnabled &&
-                            "bg-sky-500/10 text-sky-300",
-                        )}
-                        aria-expanded={isNoiseReductionOpen}
-                        aria-haspopup="dialog"
-                      >
-                        <span className="relative flex items-center justify-center">
-                          <AudioWaveform
-                            size={18}
-                            className="group-hover:animate-wiggle"
-                          />
-                          {!settings.noiseReductionEnabled && (
-                            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                              <span className="absolute h-0.5 w-5 -rotate-45 rounded-full bg-current" />
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={12}>
-                      <p>Noise Suppression</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => onVoiceDisconnect?.()}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group"
-                  >
-                    <Phone
-                      size={20}
-                      strokeWidth={2.5}
-                      className="rotate-[135deg] group-hover:animate-wiggle"
-                    />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={12}>
-                  <p>Disconnect</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
+          ) : null}
+          {startedAt ? (
+            <NumClock
+              since={startedAt}
+              size="sm"
+              className="shrink-0 font-semibold text-ink-1"
+            />
+          ) : null}
 
-          {shouldRenderNoiseReduction &&
-            mounted &&
-            createPortal(
-              <>
-                <button
-                  type="button"
-                  className="fixed inset-0 z-20"
-                  aria-label="Close noise suppression panel"
-                  onClick={() => setIsNoiseReductionOpen(false)}
+          <DropdownMenu open={isOptionsOpen} onOpenChange={setIsOptionsOpen}>
+            <DropdownMenuTrigger
+              render={
+                <IconButton
+                  ref={optionsBtnRef}
+                  icon="sliders"
+                  size={24}
+                  variant="muted"
+                  aria-label="Voice options"
+                  tone={
+                    isVoiceDetailsOpen || isNoiseReductionOpen || isSpatialOpen
+                      ? "toggled"
+                      : undefined
+                  }
                 />
-                <div
-                  ref={noiseReductionPanelRef}
-                  className={cn(
-                    "fixed z-30 w-[min(340px,calc(100vw-1.5rem))]",
-                    noiseReductionPanelPosition.placement === "top"
-                      ? !isNoiseReductionOpen
-                        ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-                        : "origin-bottom animate-in fade-in slide-in-from-bottom-2 duration-200"
-                      : !isNoiseReductionOpen
-                        ? "origin-top animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
-                        : "origin-top animate-in fade-in slide-in-from-top-2 duration-200",
-                  )}
-                  style={{
-                    top: noiseReductionPanelPosition.top,
-                    left: noiseReductionPanelPosition.left,
-                  }}
-                  onClick={(event) => event.stopPropagation()}
+              }
+            />
+            <DropdownMenuContent
+              side="top"
+              align="end"
+              aria-label="Voice options"
+            >
+              <DropdownMenuItem
+                icon={<Icon name="signal" size="sm" />}
+                onClick={() => setIsVoiceDetailsOpen(true)}
+              >
+                Connection details
+              </DropdownMenuItem>
+              {showNoiseReductionShortcut && (
+                <DropdownMenuItem
+                  icon={<Icon name="noiseSuppression" size="sm" />}
+                  hint={settings.noiseReductionEnabled ? "On" : "Off"}
+                  onClick={() => setIsNoiseReductionOpen(true)}
                 >
-                  <NoiseReductionPanel
-                    settingsUserId={voiceSettingsUserId}
-                    compact
-                  />
+                  Noise suppression…
+                </DropdownMenuItem>
+              )}
+              {hasSpatial && (
+                <DropdownMenuItem
+                  icon={<Icon name="spatial" size="sm" />}
+                  hint={spatialOn ? "On" : "Off"}
+                  onClick={() => setIsSpatialOpen(true)}
+                >
+                  Spatial audio…
+                </DropdownMenuItem>
+              )}
+              {sfu && (
+                <DropdownMenuItem
+                  icon={<Icon name="sticker" size="sm" />}
+                  onClick={() => setIsStickerPickerOpen(true)}
+                >
+                  GIF &amp; sticker reactions
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <VoiceDetailsPanel
+          sfu={sfu}
+          isOpen={isVoiceDetailsOpen}
+          onClose={() => setIsVoiceDetailsOpen(false)}
+          triggerRef={optionsBtnRef}
+          channelName={voiceChannelName}
+        />
+        {showNoiseReductionShortcut && (
+          <ResponsivePopover
+            open={isNoiseReductionOpen}
+            onOpenChange={setIsNoiseReductionOpen}
+            title="Noise suppression"
+            variant="rich"
+            anchor={optionsBtnRef}
+            side="top"
+          >
+            <NoiseReductionPanel settingsUserId={voiceSettingsUserId} compact />
+          </ResponsivePopover>
+        )}
+        {spatialAudioState && onUpdateSpatialAudioState && (
+          <SpatialAudioPanel
+            isOpen={isSpatialOpen}
+            anchorRef={optionsBtnRef}
+            gridItems={gridItems}
+            spatialAudioState={spatialAudioState}
+            onUpdateSpatialAudioState={onUpdateSpatialAudioState}
+            localSpatialEnabled={settings.spatialAudioEnabled}
+            localHighFidelity={settings.streamHighFidelity}
+            localUserId={localUserId}
+            participantCapabilities={participantCapabilities}
+            onLocalSpatialEnabledChange={(enabled) => {
+              updateVoiceSettings(
+                (current) => ({
+                  ...current,
+                  spatialAudioEnabled: enabled,
+                  streamHighFidelity: enabled
+                    ? true
+                    : current.streamHighFidelity,
+                  echoCancellation: enabled ? false : current.echoCancellation,
+                  noiseSuppression: enabled ? false : current.noiseSuppression,
+                }),
+                voiceSettingsUserId,
+              );
+            }}
+            onOpenVoiceSettings={() => {
+              setIsSpatialOpen(false);
+              onOpenVoiceSettings?.();
+            }}
+            onClose={() => setIsSpatialOpen(false)}
+          />
+        )}
+
+        {/* Stream row + actions collapse while the call's stage is on
+            screen: the stage bar owns them there. Height-free collapse. */}
+        <div className="rm-collapse" data-open={collapsed ? undefined : ""}>
+          <div className="rm-collapse-inner" inert={collapsed || undefined}>
+            {isScreenSharing && (
+              <div className="mx-2 mb-1 rounded-md bg-tint-1 p-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-live-tint text-live-ink">
+                    {streamSourceIcon ? (
+                      <img
+                        src={streamSourceIcon}
+                        alt=""
+                        className="size-4 object-contain"
+                        draggable={false}
+                      />
+                    ) : (
+                      <Icon
+                        name={
+                          streamSourceKind === "window"
+                            ? "window"
+                            : streamSourceKind === "device"
+                              ? "camera"
+                              : "monitor"
+                        }
+                        state="active"
+                        size="sm"
+                      />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-ui-sm font-medium text-ink-1">
+                      {streamSourceTitle}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <LedLabel state="live">Live</LedLabel>
+                      {streamQualityBadge && (
+                        <Num className="text-ink-3">{streamQualityBadge}</Num>
+                      )}
+                    </p>
+                  </div>
+                  {streamSettingsTrigger}
                 </div>
-              </>,
-              document.body,
+                {localStreamWatchers.length > 0 && (
+                  <div className="mt-2">
+                    <StreamWatcherList watchers={localStreamWatchers} />
+                  </div>
+                )}
+              </div>
             )}
 
-          {/* STREAMING STATUS */}
-          {isScreenSharing && (
-            <div className="bg-rm-bg-elevated/50 rounded-lg p-2.5 border border-rm-border shadow-xl space-y-3 mx-1 mt-1">
-              <div className="flex items-start gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20 overflow-hidden">
-                  {streamSourceIcon ? (
-                    <img
-                      src={streamSourceIcon}
-                      alt=""
-                      className="h-5 w-5 object-contain"
-                      draggable={false}
-                    />
-                  ) : streamSourceKind === "window" ? (
-                    <AppWindow size={18} />
-                  ) : streamSourceKind === "device" ? (
-                    <Video size={18} />
-                  ) : (
-                    <Monitor size={18} />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
-                      {streamSourceLabel}
-                    </span>
-                    <span className="bg-primary text-ui-2xs font-bold px-1 rounded text-primary-foreground shadow-sm uppercase leading-tight">
-                      Live
-                    </span>
-                    {streamQualityBadge && (
-                      <span className="rounded bg-rm-bg-floating/80 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide text-rm-text-muted">
-                        {streamQualityBadge}
-                      </span>
-                    )}
-                  </div>
-                  <p className="truncate text-ui-xs font-bold text-rm-text">
-                    {streamSourceTitle}
-                  </p>
-                  <p className="truncate text-ui-2xs text-rm-text-muted">
-                    {streamSourceSubtitle}
-                  </p>
-                </div>
-              </div>
-
-              {localStreamWatchers.length > 0 && (
-                <StreamWatcherList watchers={localStreamWatchers} />
-              )}
-
-              <div className="flex gap-1.5 relative">
-                <button
-                  type="button"
-                  onClick={onStopStreaming}
-                  className="flex-1 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded font-bold text-ui-2xs transition-ui flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
-                >
-                  <XCircle size={10} /> Stop Streaming
-                </button>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsStreamMenuOpen(!isStreamMenuOpen)}
-                    className={cn(
-                      "p-1.5 h-full rounded transition-ui outline-none",
-                      isStreamMenuOpen
-                        ? "bg-rm-bg-elevated text-rm-text"
-                        : "bg-rm-bg-elevated/50 text-rm-text-muted hover:bg-rm-bg-elevated",
-                    )}
-                  >
-                    <MoreHorizontal size={14} />
-                  </button>
-
-                  {shouldRenderStreamMenu && (
-                    <>
-                      <button
-                        type="button"
-                        className="fixed inset-0 z-[60]"
-                        aria-label="Close stream settings"
-                        onClick={() => setIsStreamMenuOpen(false)}
-                      />
-                      <div
-                        className={cn(
-                          "absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] backdrop-blur-xl origin-bottom-right",
-                          !isStreamMenuOpen
-                            ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-                            : "animate-in fade-in slide-in-from-bottom-2 duration-200",
-                        )}
-                      >
-                        <div className="px-3 py-1.5 border-b border-rm-border mb-1">
-                          <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-                            Stream Settings
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onChangeStreamSource?.();
-                            setIsStreamMenuOpen(false);
-                          }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors flex items-center gap-2"
-                        >
-                          <Share2 size={14} /> Change Source
-                        </button>
-                        <div className="h-[1px] bg-rm-border my-1" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onToggleStreamAudio?.();
-                            setIsStreamMenuOpen(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
-                            isStreamingAudio
-                              ? "text-primary hover:bg-primary/10"
-                              : "text-rm-text-muted hover:bg-rm-bg-hover",
-                          )}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Volume2 size={14} /> Stream Audio
-                          </span>
-                          <div
-                            className={cn(
-                              "w-2 h-2 rounded-full",
-                              isStreamingAudio
-                                ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]"
-                                : "bg-rm-bg-active",
-                            )}
-                          />
-                        </button>
-                        <div className="h-[1px] bg-rm-border my-1" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            updateUserSettings(
-                              (current) => ({
-                                ...current,
-                                alwaysShowStreamPreview:
-                                  !current.alwaysShowStreamPreview,
-                              }),
-                              voiceSettingsUserId,
-                            );
-                            setIsStreamMenuOpen(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
-                            alwaysShowStreamPreview
-                              ? "text-primary hover:bg-primary/10"
-                              : "text-rm-text-muted hover:bg-rm-bg-hover",
-                          )}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Monitor size={14} /> Always Show Stream Preview
-                          </span>
-                          <div
-                            className={cn(
-                              "w-2 h-2 rounded-full",
-                              alwaysShowStreamPreview
-                                ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]"
-                                : "bg-rm-bg-active",
-                            )}
-                          />
-                        </button>
-                        {availableQualities.length > 0 && (
-                          <>
-                            <div className="h-[1px] bg-rm-border my-1" />
-                            <div className="px-3 py-1.5">
-                              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40">
-                                Quality
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-1 gap-0.5 max-h-48 overflow-y-auto custom-scrollbar">
-                              {availableQualities.map((q) => (
-                                <button
-                                  key={q}
-                                  type="button"
-                                  onClick={() => {
-                                    onStreamQualityChange?.(q);
-                                    setIsStreamMenuOpen(false);
-                                  }}
-                                  className={cn(
-                                    "w-full text-left px-3 py-1.5 text-ui-2xs font-medium rounded-md transition-ui flex items-center justify-between group/q outline-none",
-                                    screenQuality === q
-                                      ? "bg-primary/10 text-primary"
-                                      : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <Monitor
-                                      size={12}
-                                      className={cn(
-                                        "transition-opacity",
-                                        screenQuality === q
-                                          ? "opacity-100"
-                                          : "opacity-40",
-                                      )}
-                                    />
-                                    {q.replace("p", "p ")}
-                                  </div>
-                                  {screenQuality === q && (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--rm-glow)]" />
-                                  )}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ACTION BUTTON GRID */}
-          <div className="px-3 pt-1 pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleVoiceCameraToggle({
-                        hasCamera: !!hasCamera,
-                        isCameraActive: !!isCameraActive,
-                        alwaysPreviewVideo: settings?.alwaysPreviewVideo,
-                        onToggleCamera,
-                        onOpenPreviewModal: () => setIsCameraModalOpen(true),
-                      });
-                    }}
-                    disabled={!hasCamera}
-                    className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none border border-transparent group",
-                      isCameraActive
-                        ? "bg-rm-bg-active text-rm-text"
-                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
-                      !hasCamera && "opacity-20 cursor-not-allowed grayscale",
-                    )}
-                  >
-                    {isCameraActive ? (
-                      <Video size={18} className="group-hover:animate-wiggle" />
-                    ) : (
-                      <VideoOff
-                        size={18}
-                        className="group-hover:animate-wiggle"
-                      />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={12}>
-                  <p>
-                    {!hasCamera
+            {/* Actions: camera, share, activities, soundboard | Leave. The
+                row is a container (NARROW_KEY, WIDE_ONLY_KEY, MORE_KEY). */}
+            <div className="@container px-2 pt-1.5 pb-2">
+              <div className="flex items-center gap-0.5">
+                <DockButton
+                  {...KEY}
+                  className={NARROW_KEY}
+                  state={isCameraActive ? "live" : "rest"}
+                  icon="camera"
+                  tooltip={
+                    !hasCamera
                       ? "No camera detected"
                       : isCameraActive
-                        ? "Turn Off Camera"
-                        : "Turn On Camera"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-
-              {/* Screen Share */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isScreenSharing) {
-                        onStopStreaming?.();
-                      } else {
-                        onShareScreen?.();
-                      }
-                    }}
-                    className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none border border-transparent group",
-                      isScreenSharing
-                        ? "bg-rm-success text-white hover:bg-[#1f8b4c]"
-                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
-                    )}
-                  >
-                    <Monitor size={18} className="group-hover:animate-wiggle" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={12}>
-                  <p>
-                    {isScreenSharing ? "Stop Streaming" : "Share Your Screen"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-
-              {/* Activities */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenActivities?.();
-                    }}
-                    className="flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none bg-rm-bg-hover border border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active group"
-                  >
-                    <Gamepad2
-                      size={18}
-                      className="group-hover:animate-wiggle"
-                    />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={12}>
-                  <p>Start an Activity</p>
-                </TooltipContent>
-              </Tooltip>
-
-              {/* Soundboard */}
-              <div className="relative flex-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      ref={soundboardBtnRef}
-                      onClick={toggleSoundboardPicker}
-                      className={cn(
-                        "flex w-full h-8 items-center justify-center rounded-md transition-colors outline-none border group",
-                        isSoundboardPickerOpen
-                          ? "bg-rm-accent/20 border-rm-accent/40 text-rm-accent"
-                          : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
-                      )}
-                    >
-                      <Radio size={18} className="group-hover:animate-wiggle" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={12}>
-                    <p>Open Soundboard</p>
-                  </TooltipContent>
-                </Tooltip>
-                <Suspense fallback={null}>
-                  <SoundboardPicker
-                    open={isSoundboardPickerOpen}
-                    onClose={() => setIsSoundboardPickerOpen(false)}
-                    placement="top-start"
-                    markerRef={soundboardBtnRef}
-                    initialView={soundboardInitialView}
-                    sfu={sfu}
-                    serverId={serverId}
-                    channelId={voiceChannelId}
-                    roomSlug={roomSlug}
-                    voiceSessionId={voiceSessionId}
-                    isClosing={!isSoundboardPickerOpen}
-                    localUserId={localUserId}
+                        ? "Turn off camera"
+                        : "Turn on camera"
+                  }
+                  disabled={!hasCamera}
+                  aria-pressed={!!isCameraActive}
+                  onClick={() => {
+                    void handleVoiceCameraToggle({
+                      hasCamera: !!hasCamera,
+                      isCameraActive: !!isCameraActive,
+                      alwaysPreviewVideo: settings?.alwaysPreviewVideo,
+                      onToggleCamera,
+                      onOpenPreviewModal: () => setIsCameraModalOpen(true),
+                    });
+                  }}
+                />
+                <DockButton
+                  {...KEY}
+                  className={NARROW_KEY}
+                  state={isScreenSharing ? "live" : "rest"}
+                  icon="screenShare"
+                  tooltip={isScreenSharing ? "Stop sharing" : "Share screen"}
+                  aria-pressed={!!isScreenSharing}
+                  onClick={() => {
+                    if (isScreenSharing) onStopStreaming?.();
+                    else onShareScreen?.();
+                  }}
+                />
+                <DockButton
+                  {...KEY}
+                  className={WIDE_ONLY_KEY}
+                  state="rest"
+                  icon="activities"
+                  tooltip="Activities"
+                  onClick={() => onOpenActivities?.()}
+                />
+                <DockButton
+                  ref={soundboardBtnRef}
+                  {...KEY}
+                  className={WIDE_ONLY_KEY}
+                  state={isSoundboardPickerOpen ? "open" : "rest"}
+                  icon="soundboard"
+                  tooltip="Soundboard"
+                  aria-expanded={isSoundboardPickerOpen}
+                  onClick={() => toggleSoundboardPicker("key")}
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <DockButton
+                        ref={moreBtnRef}
+                        {...KEY}
+                        className={cn(NARROW_KEY, MORE_KEY)}
+                        state={isSoundboardPickerOpen ? "open" : "rest"}
+                        icon="more"
+                        aria-label="More call actions"
+                      />
+                    }
                   />
-                </Suspense>
+                  <DropdownMenuContent
+                    side="top"
+                    align="start"
+                    aria-label="More call actions"
+                  >
+                    <DropdownMenuItem
+                      icon={<Icon name="activities" size="sm" />}
+                      onClick={() => onOpenActivities?.()}
+                    >
+                      Activities
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      icon={<Icon name="soundboard" size="sm" />}
+                      onClick={() => toggleSoundboardPicker("more")}
+                    >
+                      Soundboard
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <IconButton
+                  variant="plain"
+                  {...KEY}
+                  icon="disconnect"
+                  tooltip="Leave call"
+                  className={cn("ml-auto", DOCK_LEAVE, NARROW_KEY)}
+                  onClick={() => onVoiceDisconnect?.()}
+                />
               </div>
-
-              {/* GIF/Sticker Reactions — only shown when connected to voice */}
-              {sfu && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="relative flex-1">
-                      <button
-                        type="button"
-                        ref={stickerBtnRef}
-                        onClick={() => setIsStickerPickerOpen((v) => !v)}
-                        className={cn(
-                          "flex w-full h-8 items-center justify-center rounded-md transition-colors outline-none border group",
-                          isStickerPickerOpen
-                            ? "bg-rm-accent/20 border-rm-accent/40 text-rm-accent"
-                            : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
-                        )}
-                      >
-                        <Sticker
-                          size={18}
-                          className="group-hover:animate-wiggle"
-                        />
-                      </button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={12}>
-                    <p>GIF &amp; Sticker Reactions</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
             </div>
           </div>
         </div>
+
+        <Suspense fallback={null}>
+          <SoundboardPicker
+            open={isSoundboardPickerOpen}
+            onClose={() => setIsSoundboardPickerOpen(false)}
+            placement="top-start"
+            markerRef={soundboardMarkerRef}
+            initialView={soundboardInitialView}
+            sfu={sfu}
+            serverId={serverId}
+            channelId={voiceChannelId}
+            roomSlug={roomSlug}
+            voiceSessionId={voiceSessionId}
+            isClosing={!isSoundboardPickerOpen}
+            localUserId={localUserId}
+          />
+        </Suspense>
 
         <CameraSettingsModal
           isOpen={isCameraModalOpen}
@@ -930,21 +853,20 @@ export function VoiceDashboard({
           settingsUserId={voiceSettingsUserId}
         />
 
-        {/* GIF Picker in voice reaction mode */}
         {gifPickerVoiceMode && (
           <Suspense fallback={null}>
             <GifPickerModal
-              open={shouldRenderStickerPicker}
+              open={isStickerPickerOpen}
               onClose={() => setIsStickerPickerOpen(false)}
               onSelect={async () => {
                 /* no-op: voice mode handles send */
               }}
               voiceMode={gifPickerVoiceMode}
-              markerRef={stickerBtnRef}
+              markerRef={optionsBtnRef}
             />
           </Suspense>
         )}
-      </div>
+      </section>
     </TooltipProvider>
   );
-}
+});

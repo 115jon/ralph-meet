@@ -6,6 +6,24 @@ const vadLog = clog("VAD");
 // ============================================================================
 
 import { SpeakingFlags } from "../types";
+import { VadCore } from "./vad-processor.worklet.js";
+
+type VadEvent = { type: "speaking" | "stalled"; value: boolean };
+
+/**
+ * The AudioWorklet module (same file as VadCore). Vite emits it as a static
+ * asset; the literal `new URL(..., import.meta.url)` form is what it rewrites.
+ */
+function vadWorkletUrl(): string {
+  return new URL("./vad-processor.worklet.js", import.meta.url).href;
+}
+
+function canUseAudioWorklet(context: AudioContext): boolean {
+  return (
+    typeof AudioWorkletNode !== "undefined" &&
+    typeof context.audioWorklet?.addModule === "function"
+  );
+}
 
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
 export function getVoiceActivityThreshold(
@@ -86,7 +104,6 @@ export class VoiceActivityDetector {
   private lastSentParticipantId: string | null = null;
   private lastEmittedParticipantId: string | null = null;
   private lifecycleGeneration = 0;
-  private silenceStart: number = 0;
   private threshold = getVoiceActivityThreshold(true, -50);
   private silenceDelay: number = 300; // ms of silence before "stopped speaking"
   private gateEnabled: boolean = true;
@@ -95,8 +112,16 @@ export class VoiceActivityDetector {
   private microphoneEnabled = true;
   private contextResumed: boolean = false; // avoid spamming resume()
   private lastRms: number = 0; // last computed RMS for live UI feedback
-  private pureSilenceStart: number = 0; // Timestamp when RMS hit exactly 0
   private isStalled: boolean = false; // True if RMS is exactly 0 for > 5s
+  // Speaking/stall hysteresis, shared by both paths (see vad-processor.worklet.js).
+  private core: VadCore | null = null;
+  // Worklet path: RMS and hysteresis run on the audio thread and only
+  // transitions are posted here, so the main thread does not wake 20 times a
+  // second and the gate is immune to background timer throttling. The
+  // AnalyserNode + 50 ms timer path is the fallback (and covers the
+  // suspended-context phase before the worklet takes over).
+  private workletNode: AudioWorkletNode | null = null;
+  private workletModuleReady: AudioContext | null = null;
 
   private readonly callbacks: VADCallbacks;
 
@@ -128,6 +153,11 @@ export class VoiceActivityDetector {
     try {
       const context = new AudioContext();
       this.audioContext = context;
+      const core = new VadCore({
+        threshold: this.threshold,
+        silenceDelayMs: this.silenceDelay,
+      });
+      this.core = core;
       this.analyser = context.createAnalyser();
       this.analyser.fftSize = 512;
       this.analyser.smoothingTimeConstant = 0.3;
@@ -187,6 +217,7 @@ export class VoiceActivityDetector {
             this.applyGate(true);
           }
         }
+        if (context.state === "running") this.activateWorklet(generation);
       });
 
       this.timer = setInterval(() => {
@@ -229,59 +260,22 @@ export class VoiceActivityDetector {
           rms = calculateTimeDomainRms(byteData);
         }
         this.lastRms = rms;
-        const now = Date.now();
 
-        if (rms === 0) {
-          if (this.pureSilenceStart === 0) {
-            this.pureSilenceStart = now;
-          } else if (!this.isStalled && now - this.pureSilenceStart >= 5000) {
-            this.isStalled = true;
-            this.callbacks.onAudioStalled?.(true);
-            if (DEBUG)
-              vadLog.warn("Audio hardware stalled: 0 RMS straight for 5s");
-          }
-        } else {
-          this.pureSilenceStart = 0;
-          if (this.isStalled) {
-            this.isStalled = false;
-            this.callbacks.onAudioStalled?.(false);
-            if (DEBUG)
-              vadLog.info("Audio hardware recovered: Non-zero RMS detected");
-          }
+        for (const event of core.update(rms, Date.now())) {
+          this.handleVadEvent(event);
         }
-
-        if (rms >= this.threshold) {
-          // Speaking
-          this.silenceStart = 0;
-          if (!this.microphoneSpeaking) {
-            this.microphoneSpeaking = true;
-            if (this.gateEnabled) {
-              this.applyGate(false);
-            }
-            this.refreshSpeakingState();
-          }
-        } else {
-          // Silence
-          if (
-            !this.microphoneSpeaking &&
-            this.gateEnabled &&
-            this.contextResumed
-          ) {
-            this.applyGate(true);
-          }
-          if (this.microphoneSpeaking) {
-            if (this.silenceStart === 0) {
-              this.silenceStart = now;
-            } else if (now - this.silenceStart >= this.silenceDelay) {
-              this.microphoneSpeaking = false;
-              if (this.gateEnabled) {
-                this.applyGate(true);
-              }
-              this.refreshSpeakingState();
-            }
-          }
+        // Silence while not speaking: keep the gate applied (idempotent).
+        if (
+          rms < this.threshold &&
+          !this.microphoneSpeaking &&
+          this.gateEnabled &&
+          this.contextResumed
+        ) {
+          this.applyGate(true);
         }
       }, 50);
+
+      void this.loadWorklet(context, generation);
 
       if (DEBUG) vadLog.info("Started voice activity detection");
       return true;
@@ -290,6 +284,118 @@ export class VoiceActivityDetector {
       vadLog.error("Failed to start:", err);
       return false;
     }
+  }
+
+  private async loadWorklet(
+    context: AudioContext,
+    generation: number,
+  ): Promise<void> {
+    if (!canUseAudioWorklet(context)) return;
+    try {
+      await context.audioWorklet.addModule(vadWorkletUrl());
+    } catch (err) {
+      vadLog.warn("VAD worklet unavailable; using the analyser timer", err);
+      return;
+    }
+    if (
+      this.lifecycleGeneration !== generation ||
+      this.audioContext !== context
+    )
+      return;
+    this.workletModuleReady = context;
+    if (context.state === "running") this.activateWorklet(generation);
+  }
+
+  /** Move detection onto the audio thread once the context is running. */
+  private activateWorklet(generation: number): void {
+    const context = this.audioContext;
+    if (
+      this.workletNode ||
+      !context ||
+      this.workletModuleReady !== context ||
+      this.lifecycleGeneration !== generation ||
+      context.state !== "running" ||
+      !this.source ||
+      !this.silentOutput
+    )
+      return;
+
+    let node: AudioWorkletNode;
+    try {
+      node = new AudioWorkletNode(context, "rm-vad", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+        processorOptions: {
+          threshold: this.threshold,
+          silenceDelayMs: this.silenceDelay,
+          speaking: this.microphoneSpeaking,
+        },
+      });
+    } catch (err) {
+      vadLog.warn("VAD worklet node failed; using the analyser timer", err);
+      return;
+    }
+    node.port.onmessage = (event: MessageEvent) => {
+      if (this.lifecycleGeneration !== generation || this.workletNode !== node)
+        return;
+      const data = event.data as VadEvent & { rms?: number };
+      if (typeof data.rms === "number") this.lastRms = data.rms;
+      this.handleVadEvent(data);
+    };
+    this.source.connect(node);
+    node.connect(this.silentOutput);
+    this.workletNode = node;
+    this.contextResumed = true;
+
+    // The analyser and its 50 ms timer are no longer needed.
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (this.analyser) {
+      try {
+        this.source.disconnect(this.analyser);
+      } catch {
+        /* already disconnected */
+      }
+      this.analyser.disconnect();
+    }
+    if (this.gateEnabled && !this.microphoneSpeaking) this.applyGate(true);
+    if (DEBUG) vadLog.info("Voice activity detection moved to AudioWorklet");
+  }
+
+  /** Apply one transition from the hysteresis (either path). */
+  private handleVadEvent(event: VadEvent): void {
+    if (event.type === "stalled") {
+      if (this.isStalled === event.value) return;
+      this.isStalled = event.value;
+      this.callbacks.onAudioStalled?.(event.value);
+      if (DEBUG) {
+        if (event.value)
+          vadLog.warn("Audio hardware stalled: 0 RMS straight for 5s");
+        else vadLog.info("Audio hardware recovered: Non-zero RMS detected");
+      }
+      return;
+    }
+    if (event.value) {
+      // Speaking
+      if (this.microphoneSpeaking) return;
+      this.microphoneSpeaking = true;
+      if (this.gateEnabled) this.applyGate(false);
+      this.refreshSpeakingState();
+      return;
+    }
+    // Stopped speaking after the silence delay
+    if (!this.microphoneSpeaking) return;
+    this.microphoneSpeaking = false;
+    if (this.gateEnabled) this.applyGate(true);
+    this.refreshSpeakingState();
+  }
+
+  /** Whether detection currently runs on the audio thread (diagnostics). */
+  isUsingAudioWorklet(): boolean {
+    return this.workletNode !== null;
   }
 
   /** Reconcile speaking signaling after a participant ID becomes available. */
@@ -373,6 +479,14 @@ export class VoiceActivityDetector {
       clearInterval(this.timer);
       this.timer = null;
     }
+    if (this.workletNode) {
+      this.workletNode.port.onmessage = null;
+      this.workletNode.port.postMessage({ type: "stop" });
+      this.workletNode.disconnect();
+      this.workletNode = null;
+    }
+    this.workletModuleReady = null;
+    this.core = null;
     if (this.source) {
       this.source.disconnect();
       this.source = null;
@@ -394,7 +508,6 @@ export class VoiceActivityDetector {
     }
     this.analyser = null;
     this.contextResumed = false;
-    this.pureSilenceStart = 0;
 
     if (this.isStalled) {
       this.isStalled = false;
@@ -402,7 +515,6 @@ export class VoiceActivityDetector {
     }
 
     this.microphoneSpeaking = false;
-    this.silenceStart = 0;
     this.refreshSpeakingState();
   }
 
@@ -411,6 +523,8 @@ export class VoiceActivityDetector {
    */
   setThreshold(threshold: number): void {
     this.threshold = threshold;
+    this.core?.setThreshold(threshold);
+    this.workletNode?.port.postMessage({ type: "threshold", value: threshold });
     if (DEBUG) vadLog.info("Threshold updated to:", threshold);
   }
 
@@ -472,7 +586,12 @@ export class VoiceActivityDetector {
   /** Keep source PCM gating consistent with the user's microphone mute. */
   setMicrophoneEnabled(enabled: boolean): void {
     this.microphoneEnabled = enabled;
-    if (!enabled) this.microphoneSpeaking = false;
+    if (!enabled) {
+      this.microphoneSpeaking = false;
+      // Let the hysteresis re-detect from silence, like the timer path did.
+      this.core?.resetSpeaking();
+      this.workletNode?.port.postMessage({ type: "reset-speaking" });
+    }
     if (this.gateEnabled) this.applyGate(this.getDesiredGateState());
   }
 
@@ -492,7 +611,11 @@ export class VoiceActivityDetector {
       );
   }
 
-  /** Get the most recent RMS level (0-100 scale) for live UI feedback. */
+  /**
+   * Most recent RMS level (0-100 scale). On the worklet path it is the level
+   * at the last transition, since per-tick levels never leave the audio
+   * thread.
+   */
   getCurrentRMS(): number {
     return this.lastRms;
   }

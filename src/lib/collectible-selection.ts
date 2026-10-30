@@ -4,7 +4,10 @@ import type {
   ProfileEffectLayer,
   ProfileFrameSelection,
 } from "@/lib/avatar-display";
-import { getAvatarCollectibles } from "@/lib/avatar-display";
+import {
+  getAvatarCollectibles,
+  normalizeAvatarDisplay,
+} from "@/lib/avatar-display";
 import type {
   CollectibleCatalogItem,
   CollectibleKind,
@@ -219,4 +222,41 @@ export function isBundleFullyApplied(
         selectedSkuForKind(display, constituent.kind) === constituent.skuId,
     )
   );
+}
+
+const DISPLAY_KEY_BY_KIND = {
+  avatar_decoration: "avatarDecoration",
+  profile_effect: "profileEffect",
+  nameplate: "nameplate",
+  profile_frame: "profileFrame",
+} as const satisfies Record<CollectibleKind, keyof AvatarCollectibles>;
+
+/**
+ * The display with one collectible slot swapped for `item` (or cleared when
+ * `item` is null). Everything else, crop and the other slots, is kept, so a
+ * picker can preview a choice on the user's real look before applying it.
+ */
+export function displayWithCollectible(
+  display: AvatarDisplay | string | null | undefined,
+  kind: CollectibleKind,
+  item: CollectibleCatalogItem | null,
+): AvatarDisplay | null {
+  const normalized = normalizeAvatarDisplay(display) ?? { version: 1 as const };
+  const collectibles: AvatarCollectibles = { ...normalized.collectibles };
+  delete collectibles[DISPLAY_KEY_BY_KIND[kind]];
+  if (item && item.kind === kind) {
+    Object.assign(collectibles, collectibleItemToSelection(item));
+  }
+  return normalizeAvatarDisplay({
+    ...normalized,
+    collectibles: Object.keys(collectibles).length ? collectibles : undefined,
+  });
+}
+
+/** The display with one collectible slot removed. */
+export function displayWithoutCollectible(
+  display: AvatarDisplay | string | null | undefined,
+  kind: CollectibleKind,
+) {
+  return displayWithCollectible(display, kind, null);
 }

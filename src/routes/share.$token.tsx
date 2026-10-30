@@ -1,14 +1,12 @@
 import SharedMessagePage from "@/components/chat/SharedMessagePage";
-import { getDB } from "@/lib/api-helpers";
-import { hydrateInstagramEmbedsForShare } from "@/lib/share-embed-refresh";
+import { RouteErrorPage } from "@/components/PageState";
 import { buildShareMetadata } from "@/lib/share-metadata";
-import { ServiceError } from "@/lib/service-error";
 import { getPublicWebUrl } from "@/lib/platform";
+import type { MessageShare } from "@/services/message-share.service";
 import {
-  getPublicMessageShare,
-  type MessageShare,
-} from "@/services/message-share.service";
-import { createFileRoute } from "@tanstack/react-router";
+  createFileRoute,
+  type ErrorComponentProps,
+} from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 interface ShareLoaderData {
@@ -20,6 +18,21 @@ interface ShareLoaderData {
 const loadPublicShare = createServerFn({ method: "GET" })
   .inputValidator((data: { token: string }) => data)
   .handler(async ({ data }): Promise<ShareLoaderData> => {
+    // Server-only modules load inside the handler. React Start's compiler
+    // strips the handler from the web client anyway, but the desktop build
+    // runs only the router plugin, so static imports here would put the
+    // embed fetcher and the share services (~65 KB) in its entry chunk.
+    const [
+      { getDB },
+      { hydrateInstagramEmbedsForShare },
+      { ServiceError },
+      { getPublicMessageShare },
+    ] = await Promise.all([
+      import("@/lib/api-helpers"),
+      import("@/lib/share-embed-refresh"),
+      import("@/lib/service-error"),
+      import("@/services/message-share.service"),
+    ]);
     const origin = getPublicWebUrl();
     const token = typeof data?.token === "string" ? data.token : "";
     try {
@@ -44,13 +57,13 @@ function shareHead(data?: ShareLoaderData) {
   if (!data?.share) {
     return {
       meta: [
-        { title: "Shared Message - Ralph Meet" },
+        { title: "Shared message — Ralph Meet" },
         { name: "robots", content: "noindex, nofollow" },
         {
           name: "description",
           content: "This Ralph Meet message share is unavailable.",
         },
-        { property: "og:title", content: "Shared Message - Ralph Meet" },
+        { property: "og:title", content: "Shared message — Ralph Meet" },
         {
           property: "og:description",
           content: "This Ralph Meet message share is unavailable.",
@@ -182,6 +195,7 @@ function shareHead(data?: ShareLoaderData) {
 export const Route = createFileRoute("/share/$token")({
   loader: ({ params }) => loadPublicShare({ data: { token: params.token } }),
   component: SharedMessageRoute,
+  errorComponent: ShareRouteError,
   head: ({ loaderData }) => shareHead(loaderData),
 });
 
@@ -193,6 +207,18 @@ function SharedMessageRoute() {
       token={token}
       initialShare={data.share}
       initialGone={data.gone}
+    />
+  );
+}
+
+/** Loader failures other than 404/410 (D1 down, network): retry, never the raw error. */
+function ShareRouteError({ error, reset }: ErrorComponentProps) {
+  return (
+    <RouteErrorPage
+      error={error}
+      reset={reset}
+      title="Couldn't load this message"
+      body="We couldn't load this shared message. Try again, or go back home."
     />
   );
 }

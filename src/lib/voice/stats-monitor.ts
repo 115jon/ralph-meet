@@ -1,17 +1,20 @@
 // ============================================================================
-// ConnectionStatsMonitor — WebRTC stats polling, debug time-series, detailed stats
+// ConnectionStatsMonitor — WebRTC stats digest, debug time-series, detailed stats
 // ============================================================================
 //
-// Design: the monitor owns a single 2s setInterval that collects stats and
-// writes them into connStatsCache. On every successful tick it also notifies
-// all registered listener callbacks so consumers get an instant push instead
-// of having to poll on their own timer. This eliminates the "Connecting…"
-// flash that happens when the listener's poll fires in the gap between the
-// monitor restarting and its first tick completing.
+// Design: the monitor owns no timer. The SFU client's StatsHub takes one
+// getStats() snapshot per tick (2 s, 1 s while a stall is suspected) and
+// hands it to ingestTrackStats() and ingestConnectionStats(). Each ingest
+// updates the caches and pushes to registered listeners, so consumers get an
+// instant push instead of polling on their own timer. A new listener receives
+// the cached snapshot synchronously, which avoids a "Connecting…" flash.
 
 import { clog } from "../console-logger";
 import type { VoiceConnectionStats } from "../sfu-client";
-import type { TrackInfo } from "../types";
+import type { ConnectionSample, TrackInfo } from "../types";
+
+/** Samples kept for the stats charts: 2 minutes at the 2 s tick. */
+export const CONNECTION_SAMPLE_CAPACITY = 60;
 
 const statsLog = clog("VoiceStats");
 
@@ -29,7 +32,6 @@ export interface StatsAccessor {
 
 export class ConnectionStatsMonitor {
   // -- Track-level stats --
-  private statsInterval: ReturnType<typeof setInterval> | null = null;
   private remoteTrackStats = new Map<
     string,
     {
@@ -44,7 +46,6 @@ export class ConnectionStatsMonitor {
   >();
 
   // -- Connection stats for Voice Details panel --
-  private connStatsInterval: ReturnType<typeof setInterval> | null = null;
   private connStatsCache: VoiceConnectionStats | null = null;
   private connStatsPingHistory: { time: string; ping: number }[] = [];
   private connStatsPrevBytes: {
@@ -52,13 +53,21 @@ export class ConnectionStatsMonitor {
     received: number;
     timestamp: number;
   } | null = null;
+  // Bounded ring for the charts; the snapshot carries a copy.
+  private connStatsSamples: ConnectionSample[] = [];
+  // Audio counters at the previous tick, for per-interval loss.
+  private connStatsPrevLoss: { sent: number; lost: number } | null = null;
 
   // -- Push-style listeners: notified on every tick instead of polling --
   private connStatsListeners = new Set<(stats: VoiceConnectionStats) => void>();
+  // -- Per-track stats listeners (QualityMonitor labels) --
+  private trackStatsListeners = new Set<() => void>();
 
   // -- Debug time-series (full debug screen) --
   private debugHistory: {
     time: string;
+    /** Epoch ms of the tick. */
+    timestamp: number;
     availableOutgoingBitrate: number;
     ping: number;
     outboundBitrate: number;
@@ -72,6 +81,7 @@ export class ConnectionStatsMonitor {
     string,
     {
       time: string;
+      timestamp: number;
       bitrate: number;
       packetsReceived: number;
       packetsLost: number;
@@ -106,6 +116,27 @@ export class ConnectionStatsMonitor {
     this.uuidToClerk.delete(uuid);
   }
 
+  /**
+   * Called after every track-stats ingest. Readers then call
+   * getStatsByClerkId(); returns an unsubscribe function.
+   */
+  subscribeTrackStats(cb: () => void): () => void {
+    this.trackStatsListeners.add(cb);
+    return () => {
+      this.trackStatsListeners.delete(cb);
+    };
+  }
+
+  private notifyTrackStatsListeners(): void {
+    for (const cb of Array.from(this.trackStatsListeners)) {
+      try {
+        cb();
+      } catch {
+        /* ignore listener errors */
+      }
+    }
+  }
+
   getTrackStats(trackName: string) {
     return this.remoteTrackStats.get(trackName);
   }
@@ -122,14 +153,13 @@ export class ConnectionStatsMonitor {
     return this.getTrackStats(`${trackPrefix}-video-${uuid}`);
   }
 
-  startStatsMonitoring(): void {
-    if (this.statsInterval) return;
-    this.statsInterval = setInterval(async () => {
-      const pullPC = this.accessor.getPullPC();
-      if (!pullPC) return;
+  /**
+   * Per-track video stats (fps, bitrate, resolution) from one shared stats
+   * snapshot. Fed by the StatsHub; the monitor owns no timer of its own.
+   */
+  ingestTrackStats(stats: RTCStatsReport, now: number = Date.now()): void {
+    {
       try {
-        const stats = await pullPC.getStats();
-        const now = Date.now();
         const pulledTracks = this.accessor.getPulledTracks();
 
         stats.forEach((report) => {
@@ -186,55 +216,42 @@ export class ConnectionStatsMonitor {
       } catch {
         /* ignore */
       }
-    }, 2000);
+    }
+    this.notifyTrackStatsListeners();
   }
 
   /**
-   * Start (or restart) the connection stats interval.
+   * Begin a connection-stats session for a new peer connection.
    *
-   * On restart we intentionally preserve `connStatsCache` so the UI
-   * continues to show the last known latency rather than flashing
-   * "Connecting…" while the first async tick is in flight.
-   * Full teardown (including cache clear) only happens in dispose().
+   * We intentionally preserve `connStatsCache` so the UI continues to show
+   * the last known latency rather than flashing "Connecting…" while the
+   * first snapshot of the new session is in flight. Full teardown (including
+   * cache clear) only happens in stopConnectionStatsMonitoring()/dispose().
    */
-  startConnectionStatsMonitoring(): void {
-    // Cancel the old interval only — do NOT call stopConnectionStatsMonitoring()
-    // because that would also clear connStatsCache and cause "Connecting…" flicker.
-    if (this.connStatsInterval) {
-      clearInterval(this.connStatsInterval);
-      this.connStatsInterval = null;
-    }
+  beginConnectionStatsSession(): void {
     // Reset per-session accumulators but keep the cache alive.
     this.connStatsPingHistory = [];
     this.connStatsPrevBytes = null;
+    this.connStatsSamples = [];
+    this.connStatsPrevLoss = null;
+  }
 
-    const tick = async () => {
-      const pushPC = this.accessor.getPushPC();
-      const pullPC = this.accessor.getPullPC();
-      if (!pushPC && !pullPC) return;
-
+  /**
+   * Build the Voice Details snapshot from one shared stats report and push
+   * it to every listener. PartyTracks uses a single peer connection, so the
+   * same report serves as both the "push" (outbound) and "pull" (inbound)
+   * view; every counter below is merged with Math.max, so that is safe.
+   */
+  ingestConnectionStats(
+    stats: RTCStatsReport,
+    pc: RTCPeerConnection | null,
+    now: number = Date.now(),
+  ): void {
+    const pushPC = pc;
+    const pushStats: RTCStatsReport | null = stats;
+    const pullStats: RTCStatsReport | null = stats;
+    {
       try {
-        const now = Date.now();
-
-        // ── Collect stats from BOTH PCs ──────────────────────────────────
-        // We need both because pushPC has outbound-rtp + remote-inbound-rtp
-        // and pullPC has inbound-rtp. Transport/candidate-pair may appear
-        // on either one. Collecting from both is the only cross-browser way
-        // to get complete stats.
-        let pushStats: RTCStatsReport | null = null;
-        let pullStats: RTCStatsReport | null = null;
-        try {
-          if (pushPC) pushStats = await pushPC.getStats();
-        } catch {
-          /* ignore */
-        }
-        try {
-          if (pullPC) pullStats = await pullPC.getStats();
-        } catch {
-          /* ignore */
-        }
-        if (!pushStats && !pullStats) return;
-
         let mediaRtt = 0;
         let localAddress = "";
         let remoteAddress = "";
@@ -368,6 +385,9 @@ export class ConnectionStatsMonitor {
         // Codec info, framesEncoded, and the RTCP-based RTT come from here.
         let rtpBytesSent = 0;
         let rtpPacketsSent = 0;
+        let audioPacketsSent = 0;
+        let jitterMs = 0;
+        let fractionLost: number | null = null;
         const remoteInboundRtts: number[] = [];
 
         if (pushStats) {
@@ -391,6 +411,7 @@ export class ConnectionStatsMonitor {
               rtpPacketsSent += report.packetsSent || 0;
 
               if (report.kind === "audio") {
+                audioPacketsSent += report.packetsSent || 0;
                 framesEncoded = report.framesEncoded || 0;
                 if (report.codecId && pushCodecMap.has(report.codecId)) {
                   const c = pushCodecMap.get(report.codecId)!;
@@ -408,6 +429,12 @@ export class ConnectionStatsMonitor {
             if (report.type === "remote-inbound-rtp") {
               if (report.kind === "audio") {
                 packetsLost = report.packetsLost || 0;
+                // The SFU's view of our audio: jitter in seconds, and the
+                // loss fraction of the interval its last report covered.
+                jitterMs = Math.max(jitterMs, (report.jitter || 0) * 1000);
+                if (typeof report.fractionLost === "number") {
+                  fractionLost = report.fractionLost;
+                }
               }
               if (report.roundTripTime != null && report.roundTripTime > 0) {
                 remoteInboundRtts.push(report.roundTripTime * 1000);
@@ -540,6 +567,29 @@ export class ConnectionStatsMonitor {
         const packetLossRate =
           totalPackets > 0 ? packetsLost / totalPackets : 0;
 
+        // Loss over this interval only: the receiver report's fraction when
+        // the browser exposes it, else the audio counter deltas.
+        let intervalLoss = 0;
+        if (fractionLost !== null) {
+          intervalLoss = fractionLost;
+        } else if (this.connStatsPrevLoss) {
+          const lost = packetsLost - this.connStatsPrevLoss.lost;
+          const sent = audioPacketsSent - this.connStatsPrevLoss.sent;
+          if (lost > 0 && sent > 0) intervalLoss = lost / (sent + lost);
+        }
+        this.connStatsPrevLoss = { sent: audioPacketsSent, lost: packetsLost };
+        const jitter = Math.round(jitterMs * 10) / 10;
+        this.connStatsSamples.push({
+          t: now,
+          bitrate: Math.round(outboundBitrate / 100) / 10,
+          loss: Math.round(Math.min(1, Math.max(0, intervalLoss)) * 1000) / 10,
+          jitter,
+          rtt: ping,
+        });
+        if (this.connStatsSamples.length > CONNECTION_SAMPLE_CAPACITY) {
+          this.connStatsSamples.shift();
+        }
+
         // Try to get audio level from local audio track settings
         if (pushPC) {
           const senders = pushPC.getSenders();
@@ -560,6 +610,8 @@ export class ConnectionStatsMonitor {
           ping,
           avgPing,
           pingHistory: [...this.connStatsPingHistory],
+          jitter,
+          samples: [...this.connStatsSamples],
           localAddress,
           remoteAddress,
           packetsSent,
@@ -583,7 +635,84 @@ export class ConnectionStatsMonitor {
           remoteTrackCount,
         };
 
-        // Update the cache and push to all listeners in one atomic step.
+        // -- Debug series; a failure here must not cost the push below --
+        try {
+          // -- Debug time-series: append transport-level history --
+          this.debugHistory.push({
+            time: timeStr,
+            timestamp: now,
+            availableOutgoingBitrate,
+            ping,
+            outboundBitrate,
+            inboundBitrate,
+            packetsReceived,
+            packetsSent,
+            bytesReceived,
+            bytesSent,
+          });
+          if (this.debugHistory.length > 60) this.debugHistory.shift();
+
+          // -- Debug: collect per-track inbound stats from the same report --
+          const debugPullStats = pullStats;
+          if (debugPullStats) {
+            const pullNow = Date.now();
+            const pulledTracks = this.accessor.getPulledTracks();
+            debugPullStats.forEach((report: any) => {
+              if (report.type === "inbound-rtp") {
+                // Chrome uses trackIdentifier, Firefox uses track.id via receiver
+                // or may have mid-based identification. Try both.
+                const trackId = report.trackIdentifier;
+                let trackInfo = trackId
+                  ? pulledTracks.find((t) => t.track?.id === trackId)
+                  : undefined;
+
+                // Firefox fallback: match by mid if trackIdentifier is absent
+                if (!trackInfo && report.mid != null) {
+                  trackInfo = pulledTracks.find((t) => t.mid === report.mid);
+                }
+
+                const trackName =
+                  trackInfo?.track_name || `ssrc-${report.ssrc}`;
+                const prev = this.debugPrevInbound.get(trackName);
+                const bytes = report.bytesReceived || 0;
+                const pkts = report.packetsReceived || 0;
+
+                let bitrate = 0;
+                if (prev) {
+                  const dt = (pullNow - prev.timestamp) / 1000;
+                  if (dt > 0.5) {
+                    bitrate = Math.max(0, ((bytes - prev.bytes) * 8) / dt);
+                  }
+                }
+                this.debugPrevInbound.set(trackName, {
+                  bytes,
+                  packets: pkts,
+                  timestamp: pullNow,
+                });
+
+                if (!this.debugInboundHistory.has(trackName)) {
+                  this.debugInboundHistory.set(trackName, []);
+                }
+                const history = this.debugInboundHistory.get(trackName)!;
+                history.push({
+                  time: timeStr,
+                  timestamp: now,
+                  bitrate,
+                  packetsReceived: pkts,
+                  packetsLost: report.packetsLost || 0,
+                  jitter: report.jitter || 0,
+                });
+                if (history.length > 60) history.shift();
+              }
+            });
+          }
+        } catch {
+          /* ignore debug-series errors */
+        }
+
+        // Update the cache and push to all listeners in one atomic step,
+        // after the debug series so a listener that reads getDebugData()
+        // sees this tick too.
         const isFirstSnapshot = this.connStatsCache === null;
         this.connStatsCache = snapshot;
         if (isFirstSnapshot) {
@@ -598,85 +727,10 @@ export class ConnectionStatsMonitor {
             /* ignore listener errors */
           }
         }
-
-        // -- Debug time-series: append transport-level history --
-        this.debugHistory.push({
-          time: timeStr,
-          availableOutgoingBitrate,
-          ping,
-          outboundBitrate,
-          inboundBitrate,
-          packetsReceived,
-          packetsSent,
-          bytesReceived,
-          bytesSent,
-        });
-        if (this.debugHistory.length > 60) this.debugHistory.shift();
-
-        // -- Debug: collect per-track inbound stats from pullPC --
-        // Reuse pullStats from above if available, otherwise re-fetch
-        const debugPullStats =
-          pullStats ||
-          (pullPC ? await pullPC.getStats().catch(() => null) : null);
-        if (debugPullStats) {
-          const pullNow = Date.now();
-          const pulledTracks = this.accessor.getPulledTracks();
-          debugPullStats.forEach((report: any) => {
-            if (report.type === "inbound-rtp") {
-              // Chrome uses trackIdentifier, Firefox uses track.id via receiver
-              // or may have mid-based identification. Try both.
-              const trackId = report.trackIdentifier;
-              let trackInfo = trackId
-                ? pulledTracks.find((t) => t.track?.id === trackId)
-                : undefined;
-
-              // Firefox fallback: match by mid if trackIdentifier is absent
-              if (!trackInfo && report.mid != null) {
-                trackInfo = pulledTracks.find((t) => t.mid === report.mid);
-              }
-
-              const trackName = trackInfo?.track_name || `ssrc-${report.ssrc}`;
-              const prev = this.debugPrevInbound.get(trackName);
-              const bytes = report.bytesReceived || 0;
-              const pkts = report.packetsReceived || 0;
-
-              let bitrate = 0;
-              if (prev) {
-                const dt = (pullNow - prev.timestamp) / 1000;
-                if (dt > 0.5) {
-                  bitrate = Math.max(0, ((bytes - prev.bytes) * 8) / dt);
-                }
-              }
-              this.debugPrevInbound.set(trackName, {
-                bytes,
-                packets: pkts,
-                timestamp: pullNow,
-              });
-
-              if (!this.debugInboundHistory.has(trackName)) {
-                this.debugInboundHistory.set(trackName, []);
-              }
-              const history = this.debugInboundHistory.get(trackName)!;
-              history.push({
-                time: timeStr,
-                bitrate,
-                packetsReceived: pkts,
-                packetsLost: report.packetsLost || 0,
-                jitter: report.jitter || 0,
-              });
-              if (history.length > 60) history.shift();
-            }
-          });
-        }
       } catch {
         /* ignore stats errors */
       }
-    };
-
-    // Run one tick immediately so the first snapshot is available as soon as
-    // the PeerConnection exists — before the first 2s interval fires.
-    tick();
-    this.connStatsInterval = setInterval(tick, 2000);
+    }
   }
 
   /**
@@ -707,23 +761,17 @@ export class ConnectionStatsMonitor {
   }
 
   stopConnectionStatsMonitoring(): void {
-    if (this.connStatsInterval) {
-      clearInterval(this.connStatsInterval);
-      this.connStatsInterval = null;
-    }
     this.connStatsCache = null;
     this.connStatsPingHistory = [];
     this.connStatsPrevBytes = null;
+    this.connStatsSamples = [];
+    this.connStatsPrevLoss = null;
     this.debugHistory = [];
     this.debugInboundHistory.clear();
     this.debugPrevInbound.clear();
   }
 
   stopStatsMonitoring(): void {
-    if (this.statsInterval) {
-      clearInterval(this.statsInterval);
-      this.statsInterval = null;
-    }
     this.remoteTrackStats.clear();
   }
 
@@ -739,6 +787,8 @@ export class ConnectionStatsMonitor {
     roomSlug: string;
     transportHistory: {
       time: string;
+      /** Epoch ms of the tick. */
+      timestamp: number;
       availableOutgoingBitrate: number;
       ping: number;
       outboundBitrate: number;
@@ -752,6 +802,7 @@ export class ConnectionStatsMonitor {
       string,
       {
         time: string;
+        timestamp: number;
         bitrate: number;
         packetsReceived: number;
         packetsLost: number;
@@ -902,6 +953,7 @@ export class ConnectionStatsMonitor {
     this.stopStatsMonitoring();
     this.stopConnectionStatsMonitoring();
     this.connStatsListeners.clear();
+    this.trackStatsListeners.clear();
     this.uuidToClerk.clear();
   }
 }

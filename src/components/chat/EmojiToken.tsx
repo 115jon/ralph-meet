@@ -3,6 +3,7 @@ import {
   resolveNativeEmojiShortcode,
   resolveNativeEmojiValue,
 } from "@/lib/emoji";
+import { useEmojiDataReady } from "@/hooks/useEmojiDataReady";
 
 import InlineEmoji from "./InlineEmoji";
 
@@ -29,6 +30,8 @@ export default function EmojiToken({
   selectable = false,
   size = "default",
 }: EmojiTokenProps) {
+  // Re-render once the lazily loaded emoji set lands (desktop).
+  useEmojiDataReady();
   const customEmoji = parseCustomEmojiToken(value);
   if (customEmoji) {
     const item = customEmojiMap[customEmoji.id];

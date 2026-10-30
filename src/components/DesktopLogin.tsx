@@ -1,15 +1,20 @@
 import { SplashScreen } from "@/components/SplashScreen";
-import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { CopyMorphIcon } from "@/components/auth/CopyMorphIcon";
 import { DeviceCodeDisplay } from "@/components/auth/DeviceCodeDisplay";
 import { useCopyFeedback } from "@/components/auth/use-copy-feedback";
 import { spellUserCode } from "@/components/auth/user-code";
 import {
-  panelMotion,
-  primaryButton,
-  quietButton,
-  secondaryButton,
-} from "@/components/auth/device-login-styles";
+  Notice,
+  PublicActions,
+  PublicBody,
+  PublicFrame,
+  PublicTitle,
+  StatusTile,
+  type StatusTone,
+} from "@/components/auth/PublicFrame";
+import { Button, Spinner } from "@/components/ui/button";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { LedLabel } from "@/components/ui/led";
 import { clog } from "@/lib/console-logger";
 import {
   clearDesktopAuthSession,
@@ -26,26 +31,10 @@ import {
   KOVA_AUTH_PUBLISHABLE_KEY,
 } from "@/lib/kova-auth-config";
 import { apiUrl } from "@/lib/platform";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@kova/react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
-import {
-  AnimatePresence,
-  motion,
-  MotionConfig,
-  useReducedMotion,
-} from "framer-motion";
-import {
-  Check,
-  CircleAlert,
-  ExternalLink,
-  Link2,
-  ShieldX,
-  TimerOff,
-  WifiOff,
-  type LucideIcon,
-} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SafeAreaView } from "./ui/safe-area-view";
 
 const log = clog("DesktopLogin");
 
@@ -119,14 +108,25 @@ export default function DesktopLogin() {
   return <DeviceSignInScreen isSignedIn={isSignedIn} />;
 }
 
-function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
+/**
+ * The sign-in screen itself. `signIn` overrides the device-code hook for
+ * fixtures and previews (the hook still mounts, idle, so hook order holds).
+ */
+export function DeviceSignInScreen({
+  isSignedIn,
+  signIn,
+}: {
+  isSignedIn: boolean;
+  signIn?: ReturnType<typeof useDeviceSignIn>;
+}) {
   const navigate = useNavigate();
   const device = useMemo(() => getDeviceInfo(), []);
-  const { state, start, cancel } = useDeviceSignIn({
+  const realSignIn = useDeviceSignIn({
     authUrl: getKovaAuthUrl(),
     publishableKey: KOVA_AUTH_PUBLISHABLE_KEY,
     device,
   });
+  const { state, start, cancel } = signIn ?? realSignIn;
   const [finish, setFinish] = useState<FinishState>({ kind: "none" });
   const [hasInteracted, setHasInteracted] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
@@ -187,6 +187,7 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
   }, [pendingUrl]);
 
   const view = deriveView(state, finish, startedFrom);
+  const firstViewRef = useRef(view);
   const starting = state.status === "starting";
 
   const handleStart = useCallback(() => {
@@ -226,25 +227,27 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
   const panel = renderPanel();
 
   return (
-    <MotionConfig reducedMotion="user">
-      <SafeAreaView className="items-center justify-center overflow-y-auto bg-rm-bg-primary px-6 py-8">
-        <main className="relative flex w-full max-w-[360px] flex-col items-center">
-          <p className="sr-only" role="status" aria-live="polite">
-            {announcementFor(view, state)}
-          </p>
-          <AnimatePresence mode="popLayout" initial={false}>
-            <motion.section
-              key={view}
-              {...panelMotion}
-              className="flex w-full flex-col items-center text-center"
-              aria-labelledby={`device-login-${view}-title`}
-            >
-              {panel}
-            </motion.section>
-          </AnimatePresence>
-        </main>
-      </SafeAreaView>
-    </MotionConfig>
+    <PublicFrame home={null}>
+      <div className="relative">
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcementFor(view, state)}
+        </p>
+        {/* Panel swap: the new panel fades up 4px (CSS, no framer-motion in
+            the desktop entry). The first panel appears without motion;
+            reduced motion keeps the fade only (global rule). */}
+        <section
+          key={view}
+          className={cn(
+            "flex w-full flex-col",
+            view !== firstViewRef.current &&
+              "animate-in fade-in slide-in-from-bottom-1 duration-200",
+          )}
+          aria-labelledby={`device-login-${view}-title`}
+        >
+          {panel}
+        </section>
+      </div>
+    </PublicFrame>
   );
 
   function renderPanel() {
@@ -285,8 +288,8 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
         return (
           <StatusPanel
             titleId={titleId}
-            icon={Check}
-            tone="accent"
+            icon="check"
+            tone="success"
             title="You're in"
             body="Opening Ralph Meet…"
           />
@@ -295,7 +298,8 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
         return (
           <StatusPanel
             titleId={titleId}
-            icon={WifiOff}
+            icon="offline"
+            tone="danger"
             title="Couldn't finish signing in"
             body="You approved it, but we couldn't reach Ralph Meet to confirm your account. Check your connection."
             actionLabel="Retry"
@@ -306,7 +310,8 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
         return (
           <StatusPanel
             titleId={titleId}
-            icon={CircleAlert}
+            icon="alert"
+            tone="danger"
             title="That sign-in didn't go through"
             body="Ralph Meet didn't accept the session. Start over with a fresh code."
             actionLabel="Try again"
@@ -318,7 +323,7 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
         return (
           <StatusPanel
             titleId={titleId}
-            icon={ShieldX}
+            icon="shieldX"
             title="Sign-in declined"
             body="The request was declined in your browser, so nothing was signed in."
             actionLabel="Try again"
@@ -330,7 +335,7 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
         return (
           <StatusPanel
             titleId={titleId}
-            icon={TimerOff}
+            icon="timerOff"
             title="That code expired"
             body="Codes only last a few minutes. Get a fresh one to keep going."
             actionLabel="Try again"
@@ -345,17 +350,18 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
         return (
           <StatusPanel
             titleId={titleId}
-            icon={retryable ? WifiOff : CircleAlert}
+            icon={mfaRequired ? "shield" : retryable ? "offline" : "alert"}
+            tone={mfaRequired ? "accent" : "danger"}
             title={
               mfaRequired
-                ? "Two-step verification required"
+                ? "Two-step verification needed"
                 : retryable
                   ? "Couldn't reach sign-in"
                   : "Sign-in isn't available"
             }
             body={
               mfaRequired
-                ? "Your organization requires two-step verification. Turn it on in your account settings, then try again."
+                ? "Your account needs two-step verification. Turn it on in your account settings, then try again."
                 : retryable
                   ? "Check your internet connection, then try again."
                   : "Something went wrong on our side. Try again in a moment."
@@ -363,6 +369,12 @@ function DeviceSignInScreen({ isSignedIn }: { isSignedIn: boolean }) {
             actionLabel="Try again"
             onAction={handleStart}
             busy={starting}
+            secondaryLabel={mfaRequired ? "Open account settings" : undefined}
+            onSecondary={
+              mfaRequired
+                ? () => void openInSystemBrowser(`${getKovaAuthUrl()}/settings`)
+                : undefined
+            }
           />
         );
       }
@@ -424,7 +436,7 @@ function announcementFor(view: View, state: DeviceSignInHookState): string {
       return "That code expired.";
     case "error":
       return state.status === "error" && state.error === "mfa_required"
-        ? "Two-step verification is required for this account."
+        ? "This account needs two-step verification."
         : "Couldn't start sign-in.";
   }
 }
@@ -432,11 +444,6 @@ function announcementFor(view: View, state: DeviceSignInHookState): string {
 // ---------------------------------------------------------------------------
 // Panels
 // ---------------------------------------------------------------------------
-
-const titleClass =
-  "text-[30px] leading-[1.1] font-normal tracking-[-0.01em] text-rm-text outline-none [font-family:var(--font-display)]";
-const bodyClass =
-  "max-w-[300px] text-sm leading-relaxed text-pretty text-rm-text-secondary";
 
 function useFocusOnMount<T extends HTMLElement>(enabled: boolean) {
   const ref = useRef<T>(null);
@@ -462,33 +469,33 @@ function IdlePanel({
   const buttonRef = useFocusOnMount<HTMLButtonElement>(focusOnMount);
   return (
     <>
-      <ThemeAwareSplashLogo className="mb-6 h-16 w-16 select-none" />
-      <h1 id={titleId} className={titleClass}>
-        Ralph Meet
-      </h1>
-      <p className={`${bodyClass} mt-2`}>
-        Sign in to pick up where you left off.
-      </p>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={starting ? undefined : onStart}
-        aria-disabled={starting || undefined}
-        aria-busy={starting || undefined}
-        className={`${primaryButton} mt-8`}
-      >
-        {starting ? (
-          <>
-            <WaitingDot tone="onAccent" />
-            Getting your code…
-          </>
-        ) : (
-          <>
-            <ExternalLink aria-hidden="true" className="h-4 w-4" />
-            Sign in with browser
-          </>
-        )}
-      </button>
+      <PublicTitle id={titleId} size="display">
+        Sign in to Ralph Meet
+      </PublicTitle>
+      <PublicBody size="lead">
+        Your browser opens to confirm it's you, then you're back here.
+      </PublicBody>
+      <PublicActions>
+        <Button
+          ref={buttonRef}
+          size="lg"
+          onClick={starting ? undefined : onStart}
+          aria-disabled={starting || undefined}
+          aria-busy={starting || undefined}
+        >
+          {starting ? (
+            <>
+              <Spinner />
+              Getting your code…
+            </>
+          ) : (
+            <>
+              <Icon name="externalLink" size="sm" />
+              Sign in with browser
+            </>
+          )}
+        </Button>
+      </PublicActions>
     </>
   );
 }
@@ -517,69 +524,69 @@ function PendingPanel({
 
   return (
     <>
-      <h1 id={titleId} ref={titleRef} tabIndex={-1} className={titleClass}>
+      <StatusTile icon="globe" tone="accent" />
+      <PublicTitle id={titleId} headingRef={titleRef}>
         Check your browser
-      </h1>
-      <p className={`${bodyClass} mt-2`}>
-        Make sure it shows this same code, then confirm.
-      </p>
+      </PublicTitle>
+      <PublicBody>Make sure it shows this same code, then confirm.</PublicBody>
 
-      <div className="mt-7 w-full">
+      <div className="mt-6 w-full">
         <DeviceCodeDisplay userCode={userCode} />
       </div>
 
-      <div className="mt-4 flex h-5 items-center justify-center gap-2 text-[13px] text-rm-text-muted">
+      {/* The expiry line only ticks inside its last minute; before that the
+          waiting row is static (an amber LED, no loop). */}
+      <div className="mt-4 flex h-5 items-center">
         {secondsLeft !== null ? (
-          <span className="tabular-nums">
-            Code expires in {formatSeconds(secondsLeft)}
-          </span>
+          <LedLabel state="idle">
+            Code expires in{" "}
+            <span className="tabular-nums">{formatSeconds(secondsLeft)}</span>
+          </LedLabel>
         ) : (
-          <>
-            <WaitingDot />
-            <span>Waiting for you to confirm</span>
-          </>
+          <LedLabel state="idle">Waiting for you to confirm</LedLabel>
         )}
       </div>
 
       {openFailed && (
-        <p className="mt-3 text-[13px] leading-relaxed text-rm-text-secondary">
+        <Notice tone="danger" className="mt-4">
           Couldn't open your browser. Copy the link and open it yourself.
-        </p>
+        </Notice>
       )}
 
-      <div className="mt-7 grid w-full grid-cols-2 gap-2">
-        <button type="button" onClick={onOpenAgain} className={secondaryButton}>
-          <ExternalLink aria-hidden="true" className="h-4 w-4" />
+      <div className="mt-8 grid w-full grid-cols-2 gap-2">
+        <Button variant="secondary" size="lg" onClick={onOpenAgain}>
+          <Icon name="externalLink" size="sm" />
           Open browser again
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
           onClick={() => void link.copy(verificationUrl)}
-          className={secondaryButton}
         >
-          <CopyMorphIcon copied={linkCopied} icon={Link2} />
+          <CopyMorphIcon copied={linkCopied} icon="link" />
           {linkCopied
             ? "Link copied"
             : link.status === "failed"
               ? "Couldn't copy"
               : "Copy link"}
-        </button>
+        </Button>
       </div>
 
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="lg"
         onClick={onCancel}
-        className={`${quietButton} mt-4`}
+        className="mt-2 w-full"
       >
         Cancel
-      </button>
+      </Button>
     </>
   );
 }
 
 function StatusPanel({
   titleId,
-  icon: Icon,
+  icon,
   tone = "neutral",
   title,
   body,
@@ -587,83 +594,61 @@ function StatusPanel({
   onAction,
   busy = false,
   waiting = false,
+  secondaryLabel,
+  onSecondary,
 }: {
   titleId: string;
-  icon?: LucideIcon;
-  tone?: "neutral" | "accent";
+  icon?: IconName;
+  /** The tile's tone; the title stays ink-1 (the tile carries the state). */
+  tone?: StatusTone;
   title: string;
   body: string;
   actionLabel?: string;
   onAction?: () => void;
   busy?: boolean;
   waiting?: boolean;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }) {
   const hasAction = !!(actionLabel && onAction);
-  const titleRef = useFocusOnMount<HTMLHeadingElement>(!hasAction);
-  const actionRef = useFocusOnMount<HTMLButtonElement>(hasAction);
+  // Focus lands on the heading, not the action: a ring on a button the
+  // person never reached for reads as already pressed. Tab reaches it next.
+  const titleRef = useFocusOnMount<HTMLHeadingElement>(true);
 
   return (
     <>
-      <div
-        aria-hidden="true"
-        className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border ${
-          tone === "accent"
-            ? "border-transparent bg-rm-accent-dim text-rm-accent"
-            : "border-rm-border bg-rm-bg-elevated text-rm-text-secondary"
-        }`}
-      >
-        {Icon ? <Icon className="h-6 w-6" /> : <WaitingDot size="lg" />}
-      </div>
-      <h1 id={titleId} ref={titleRef} tabIndex={-1} className={titleClass}>
+      <StatusTile icon={icon} tone={tone} busy={waiting || !icon} />
+      <PublicTitle id={titleId} headingRef={titleRef}>
         {title}
-      </h1>
-      <p className={`${bodyClass} mt-2`}>{body}</p>
+      </PublicTitle>
+      <PublicBody>{body}</PublicBody>
       {waiting && <span className="sr-only">In progress</span>}
       {hasAction && (
-        <button
-          ref={actionRef}
-          type="button"
-          onClick={busy ? undefined : onAction}
-          aria-disabled={busy || undefined}
-          aria-busy={busy || undefined}
-          className={`${primaryButton} mt-8`}
-        >
-          {busy ? (
-            <>
-              <WaitingDot tone="onAccent" />
-              Getting a new code…
-            </>
-          ) : (
-            actionLabel
-          )}
-        </button>
+        <PublicActions>
+          <Button
+            size="lg"
+            onClick={busy ? undefined : onAction}
+            aria-disabled={busy || undefined}
+            aria-busy={busy || undefined}
+          >
+            {busy ? (
+              <>
+                <Spinner />
+                Getting a new code…
+              </>
+            ) : (
+              actionLabel
+            )}
+          </Button>
+          {secondaryLabel && onSecondary ? (
+            <Button variant="ghost" size="lg" onClick={onSecondary}>
+              <Icon name="externalLink" size="sm" />
+              {secondaryLabel}
+            </Button>
+          ) : null}
+        </PublicActions>
       )}
     </>
-  );
-}
-
-/** Minimal "still working" indicator: one dot breathing in opacity only. */
-function WaitingDot({
-  tone = "accent",
-  size = "sm",
-}: {
-  tone?: "accent" | "onAccent";
-  size?: "sm" | "lg";
-}) {
-  const reduceMotion = useReducedMotion();
-  return (
-    <motion.span
-      aria-hidden="true"
-      className={`inline-block rounded-full ${size === "lg" ? "h-2.5 w-2.5" : "h-1.5 w-1.5"} ${
-        tone === "onAccent" ? "bg-white" : "bg-rm-accent"
-      }`}
-      animate={reduceMotion ? { opacity: 0.8 } : { opacity: [0.35, 1, 0.35] }}
-      transition={
-        reduceMotion
-          ? { duration: 0 }
-          : { duration: 1.6, ease: "easeInOut", repeat: Infinity }
-      }
-    />
   );
 }
 

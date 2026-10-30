@@ -1,5 +1,6 @@
 import { AUTH_CARD_APPEARANCE } from "@/components/auth/auth-card-appearance";
 import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
+import { DeviceWaitingNotice } from "@/components/auth/DeviceWaitingNotice";
 import DesktopLogin from "@/components/DesktopLogin";
 import { SplashScreen } from "@/components/SplashScreen";
 import {
@@ -13,6 +14,7 @@ import {
   redirectOrigins,
   sanitizeRedirectUrl,
 } from "@/lib/auth-route-urls";
+import { deviceCodeFromReturnPath } from "@/lib/device-code-format";
 import { isTauri } from "@/lib/platform";
 import { SignIn, useAuth } from "@kova/react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -142,8 +144,16 @@ function WebSignInPage() {
     return <SplashScreen />;
   }
 
+  const waitingDeviceCode = deviceCodeFromReturnPath(afterSignInUrl);
+
   return (
-    <AuthSplitLayout>
+    <AuthSplitLayout
+      subtitle={
+        waitingDeviceCode !== null ? (
+          <DeviceWaitingNotice code={waitingDeviceCode} />
+        ) : undefined
+      }
+    >
       <SignIn
         afterSignInUrl={oauthCallbackUrl}
         signUpUrl={signUpUrl}

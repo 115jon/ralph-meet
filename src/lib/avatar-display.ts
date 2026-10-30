@@ -401,6 +401,19 @@ function normalizeNameplate(value: unknown): NameplateSelection | undefined {
   };
 }
 
+/**
+ * Frame art lives under the frame item's own sku. Catalogs normalized before
+ * v3 built layer URLs from the bundle's sku instead, which 404s; displays
+ * saved from them are repointed here.
+ */
+function repairFrameLayerSrc(src: string, skuId: string, layerId: string) {
+  return src.replace(
+    /\/collectibles-shop\/\d+\/(\d+)\/static$/,
+    (match, id: string) =>
+      id === layerId ? `/collectibles-shop/${skuId}/${id}/static` : match,
+  );
+}
+
 function normalizeProfileFrame(
   value: unknown,
 ): ProfileFrameSelection | undefined {
@@ -422,7 +435,7 @@ function normalizeProfileFrame(
       if (!id || !src) return null;
       return {
         id,
-        src,
+        src: repairFrameLayerSrc(src, skuId, id),
         type,
         order: row.order === "back" ? ("back" as const) : ("front" as const),
         anchor,

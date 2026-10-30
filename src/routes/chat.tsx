@@ -3,6 +3,7 @@ import { ChatGateway } from "@/components/chat/ChatGateway";
 import ChatPageClient from "@/components/chat/ChatPageClient";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
+import { SettingsHost } from "@/components/chat/SettingsHost";
 import {
   getDesktopToken,
   getStoredKovaAuthSessionToken,
@@ -112,10 +113,13 @@ function ChatLayout() {
   return (
     <>
       <ChatGateway authenticatedUserId={userId} />
-      <ConnectionOverlay />
-      <ChatPageClient />
-      <ImageViewerModal />
-      <CommandMenu />
+      {/* The app is inert while the cold-load screen covers it. */}
+      <ConnectionOverlay>
+        <ChatPageClient />
+        <ImageViewerModal />
+        <SettingsHost />
+        <CommandMenu />
+      </ConnectionOverlay>
     </>
   );
 }
@@ -168,5 +172,5 @@ function ChatAuthCallbackGate() {
     );
   }
 
-  return <div className="min-h-screen bg-[var(--rm-bg-primary)]" />;
+  return <div className="min-h-dvh bg-[var(--rm-bg-primary)]" />;
 }

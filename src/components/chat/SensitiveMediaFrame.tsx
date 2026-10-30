@@ -1,10 +1,13 @@
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { useState } from "react";
 
 interface SensitiveMediaFrameProps {
   attachmentId: string;
   blur: boolean;
   className?: string;
+  /** Box sizing for the frame (a reserved aspect ratio, a capped width). */
+  style?: React.CSSProperties;
   mediaClassName?: string;
   overlayClassName?: string;
   dataMediaProps?: Record<string, string>;
@@ -23,6 +26,7 @@ export default function SensitiveMediaFrame({
 function SensitiveMediaFrameContent({
   blur,
   className,
+  style,
   mediaClassName,
   overlayClassName,
   dataMediaProps,
@@ -35,14 +39,14 @@ function SensitiveMediaFrameContent({
 
   if (!blur || revealed) {
     return (
-      <div {...dataMediaProps} className={className}>
+      <div {...dataMediaProps} className={className} style={style}>
         {resolvedChildren}
       </div>
     );
   }
 
   return (
-    <div className={cn("relative overflow-hidden", className)}>
+    <div className={cn("relative overflow-hidden", className)} style={style}>
       <div
         {...dataMediaProps}
         aria-hidden="true"
@@ -56,25 +60,33 @@ function SensitiveMediaFrameContent({
       </div>
       <div
         className={cn(
-          "absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/45 px-4 text-center backdrop-blur-[2px]",
+          "absolute inset-0 flex items-center justify-center bg-scrim p-3",
           overlayClassName,
         )}
       >
-        <div className="space-y-1">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/90">
-            Sensitive Media
-          </p>
-          <p className="text-xs font-medium text-white/70">
-            Hidden by your high media filter.
-          </p>
+        {/* A ply-3 float over the blurred media: its text keeps contrast in
+            every theme, whatever the image underneath. */}
+        <div className="flex max-w-full flex-col items-center gap-2 rounded-lg border border-line bg-ply-3 px-4 py-3 text-center shadow-float">
+          <div className="flex flex-col gap-0.5">
+            <p className="text-ui-sm font-semibold text-ink-1">
+              Sensitive media
+            </p>
+            <p className="text-ui-xs text-ink-2">
+              Hidden by your high media filter.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRevealed(true)}
+            className={cn(
+              "inline-flex h-7 items-center rounded-sm bg-tint-2 px-2.5 text-ui-sm font-medium text-ink-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+              PRESS,
+              HIT,
+            )}
+          >
+            Show media
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setRevealed(true)}
-          className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-white/18"
-        >
-          Show
-        </button>
       </div>
     </div>
   );

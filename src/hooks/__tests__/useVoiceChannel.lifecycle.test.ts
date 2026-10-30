@@ -1665,6 +1665,69 @@ describe("useVoiceChannel SFU lifecycle", () => {
     hook.unmount();
   });
 
+  it("never publishes local speaking while the mic is muted", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const rawStream = createStream([rawTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(rawStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await act(async () => {
+      sfu.emit("vad-speaking", { participantId: "self", isSpeaking: true });
+    });
+    await waitFor(() =>
+      expect(hook.result.current.speakingUsers.self).toBe(true),
+    );
+
+    // A speaking flip does not rebuild the tile list.
+    const tilesBefore = hook.result.current.gridItems;
+    await act(async () => {
+      sfu.emit("vad-speaking", { participantId: "self", isSpeaking: false });
+    });
+    expect(hook.result.current.speakingUsers.self).toBeUndefined();
+    expect(hook.result.current.gridItems).toBe(tilesBefore);
+    await act(async () => {
+      sfu.emit("vad-speaking", { participantId: "self", isSpeaking: true });
+    });
+    expect(hook.result.current.gridItems).toBe(tilesBefore);
+
+    // Muting mid-word: the VAD is stopped without a trailing "off".
+    chatActions.setSpeakingUsers.mockClear();
+    await act(async () => {
+      settingsState.getSettings().isMuted = true;
+      hook.rerender();
+    });
+    expect(hook.result.current.speakingUsers.self).toBeUndefined();
+    expect(chatActions.setSpeakingUsers).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ self: true }),
+      expect.any(String),
+    );
+    // A late echo while muted stays dark too.
+    await act(async () => {
+      sfu.emit("speaking", { participantId: "self", speaking: 1 });
+    });
+    expect(hook.result.current.speakingUsers.self).toBeUndefined();
+
+    await act(async () => {
+      settingsState.getSettings().isMuted = false;
+      hook.rerender();
+    });
+    expect(hook.result.current.speakingUsers.self).toBe(true);
+    hook.unmount();
+  });
+
   it("clears mapped remote speaking state when disconnect reports speaking off", async () => {
     const rawTrack = createTrack("audio", "raw-audio");
     const rawStream = createStream([rawTrack.track]);

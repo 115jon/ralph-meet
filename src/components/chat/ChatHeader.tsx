@@ -1,4 +1,9 @@
+import { useEffect } from "react";
 import { IconButton } from "@/components/ui/IconButton";
+import { FIELD_UNDERLINE } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
+import { Num } from "@/components/ui/num";
+import { HIT } from "@/components/ui/interaction";
 import {
   Tooltip,
   TooltipContent,
@@ -7,8 +12,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
-import { ArrowLeft, ChevronRight, Phone, Search } from "lucide-react";
-import { AtSign, Hash, Pin, Users, X } from "./Icons";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { getChannelIcon } from "@/lib/channel-icon";
 import InlineEmojiText from "./InlineEmojiText";
 import { NotificationBell } from "./NotificationBell";
 
@@ -26,6 +31,8 @@ interface ChatHeaderProps {
   pinnedCount: number;
   showPins: boolean;
   onOpenSearch: () => void;
+  /** Search panel is open: the search button reads as pressed. */
+  showSearch?: boolean;
   onClose?: () => void;
   onCall?: () => void;
   dmUsername?: string;
@@ -46,13 +53,26 @@ export function ChatHeader({
   pinnedCount,
   showPins,
   onOpenSearch,
+  showSearch = false,
   onClose,
   onCall,
   dmUsername,
   channelId,
 }: ChatHeaderProps) {
-  // Determine if the local user is actively in the call SFU on this channel
-  const voiceChannelStates = useChatStore((s) => s.voiceChannelStates);
+  const channel = useChatStore((s) =>
+    channelId ? s.channels.find((c) => c.id === channelId) : undefined,
+  );
+  const channelIcon: IconName = isDM
+    ? "mention"
+    : channel
+      ? getChannelIcon(channel)
+      : "textChannel";
+
+  // Determine if the local user is actively in the call SFU on this channel.
+  // One boolean, so a voice-state change elsewhere never re-renders the header.
+  const hasExistingCall = useChatStore((s) =>
+    channelId ? (s.voiceChannelStates[channelId]?.length ?? 0) > 0 : false,
+  );
   const callChannelId = useCallStore((s) => s.channelId);
   const callStatus = useCallStore((s) => s.status);
   const hasJoinedSFU = useCallStore((s) => s.hasJoinedSFU);
@@ -64,183 +84,234 @@ export function ChatHeader({
     (callStatus === "ringing_outgoing" || callStatus === "ringing_incoming") &&
     callChannelId === channelId;
   const hideCallButton = isInCallSFU || isRinging;
+  // Search replaces the right column, so the members toggle reads unpressed
+  // while it is open.
+  const membersPressed = !!showMembers && !showSearch;
 
-  // Show "Join Call" when others are already in the voice channel
-  const hasExistingCall = !!(
-    channelId && voiceChannelStates[channelId]?.length > 0
+  // "/" opens search when nothing editable has focus (the hint on the
+  // header field). Typing "/" in the composer still starts a command.
+  useEffect(() => {
+    if (showSearch) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.defaultPrevented) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='dialog'], [role='menu']",
+        )
+      )
+        return;
+      event.preventDefault();
+      onOpenSearch();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onOpenSearch, showSearch]);
+  const title = (
+    <h2 className="min-w-0 truncate font-display-tuned text-[18px] leading-6 font-extrabold tracking-[-0.02em] text-ink-1">
+      <InlineEmojiText text={channelName} />
+    </h2>
   );
 
   return (
     <header
-      className="relative z-20 flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary px-2.5 md:px-4"
+      className="relative z-20 flex shrink-0 items-center justify-between gap-2 border-b border-line bg-ply-0 px-4 max-md:pl-2"
       style={{
         height: "calc(48px + var(--safe-area-top, 0px))",
         paddingTop: "var(--safe-area-top, 0px)",
       }}
     >
-      <div className="flex items-center gap-1 group">
+      <div className="flex min-w-0 items-center gap-2">
         <IconButton
-          icon={ArrowLeft}
+          aria-label="Servers"
+          icon="back"
           variant="muted"
-          size="sm"
-          className="h-10 w-10 md:hidden"
+          size={40}
+          className="md:hidden"
           onClick={onMenuClick}
           title="Servers"
         />
 
         <button
-          className="group/mobiletext flex min-w-0 max-w-[min(45vw,180px)] items-center gap-1.5 text-left transition-opacity hover:opacity-80 md:hidden"
+          type="button"
+          className={cn(
+            "relative flex min-w-0 items-center gap-2 rounded-md text-left outline-none md:hidden",
+            HIT,
+          )}
           onClick={onMembersClick}
         >
-          {isDM ? (
-            <AtSign className="h-[22px] w-[22px] text-rm-text-muted shrink-0" />
-          ) : (
-            <Hash className="h-[22px] w-[22px] text-rm-text-muted shrink-0" />
-          )}
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-0.5 text-ui-md font-semibold text-rm-text leading-none truncate">
+          <Icon name={channelIcon} size="lg" className="shrink-0 text-ink-3" />
+          <div className="flex min-w-0 flex-col">
+            <div className="flex items-center gap-0.5 truncate font-display-tuned text-[18px] leading-6 font-extrabold tracking-[-0.02em] text-ink-1">
               <InlineEmojiText text={channelName} className="truncate" />
-              <ChevronRight className="h-[14px] w-[14px] text-rm-text-muted shrink-0" />
+              <Icon
+                name="chevronRight"
+                size="xs"
+                className="shrink-0 text-ink-3"
+              />
             </div>
             {!isDM && (
-              <span className="text-ui-2xs text-rm-text-muted font-medium flex items-center gap-1 mt-0.5 leading-none">
-                <div className="w-1.5 h-1.5 rounded-full bg-rm-text-muted/60" />
-                {memberCount} Members
+              <span className="mt-0.5 flex items-center gap-1 text-ui-xs text-ink-2">
+                <Num>{memberCount}</Num> members
               </span>
             )}
           </div>
         </button>
 
+        {/* The title opens the channel details; it reads as a control by
+            its hover tint and pressed state, not by a breadcrumb chevron. */}
         <button
+          type="button"
+          aria-pressed={showChannelDetails}
           className={cn(
-            "hidden items-center gap-1.5 md:flex pl-1 group/chname transition-ui cursor-pointer rounded-md px-2 py-1 -ml-2",
-            showChannelDetails ? "bg-rm-bg-hover" : "hover:bg-rm-bg-hover/60",
+            "group/chname relative hidden h-8 min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 outline-none transition-colors duration-(--dur-1) ease-out focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus md:flex",
+            HIT,
+            showChannelDetails ? "bg-tint-2" : "pointer-fine:hover:bg-tint-1",
           )}
           onClick={onToggleChannelDetails}
-          title="View channel details"
+          title={showChannelDetails ? "Hide details" : "Channel details"}
         >
-          {isDM ? (
-            <AtSign className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0" />
-          ) : (
-            <Hash className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0" />
-          )}
-          {isDM && dmUsername ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <h2
-                  className={cn(
-                    "text-ui-base font-semibold text-rm-text-primary leading-none",
-                    "group-hover/chname:underline underline-offset-2",
-                  )}
-                >
-                  <InlineEmojiText text={channelName} />
-                </h2>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">@{dmUsername}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <h2
-              className={cn(
-                "text-ui-base font-semibold text-rm-text-primary leading-none",
-                "group-hover/chname:underline underline-offset-2",
-              )}
-            >
-              <InlineEmojiText text={channelName} />
-            </h2>
-          )}
-          <ChevronRight
-            className={cn(
-              "h-3.5 w-3.5 transition-ui shrink-0",
-              showChannelDetails
-                ? "rotate-90 text-primary"
-                : "text-rm-text-muted/40 group-hover/chname:text-rm-text-muted",
-            )}
+          <Icon
+            name={channelIcon}
+            size="lg"
+            className="shrink-0 text-ink-3 transition-colors duration-(--dur-1) pointer-fine:group-hover/chname:text-ink-2"
           />
+          {isDM && dmUsername ? (
+            <>
+              {title}
+              <span aria-hidden className="h-4 w-px shrink-0 bg-line-strong" />
+              <span className="min-w-0 truncate text-ui-sm text-ink-3">
+                @{dmUsername}
+              </span>
+            </>
+          ) : (
+            title
+          )}
         </button>
       </div>
 
-      <div className="flex items-center gap-1 text-rm-text-muted md:gap-2">
-        <div className="hidden md:flex items-center gap-0.5 border-r border-rm-border pr-2">
+      <div className="flex shrink-0 items-center gap-2 text-ink-3">
+        <div className="hidden items-center gap-1 border-r border-line pr-2 md:flex">
           {isDM && onCall && !hideCallButton && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton
-                  icon={Phone}
+                  aria-label={
+                    hasExistingCall ? "Join call" : "Start voice call"
+                  }
+                  icon="call"
                   variant="muted"
-                  size="sm"
+                  size={40}
                   onClick={onCall}
-                  title={hasExistingCall ? "Join Call" : "Start Voice Call"}
                 />
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={8}>
-                <p>{hasExistingCall ? "Join Call" : "Start Voice Call"}</p>
+                {hasExistingCall ? "Join call" : "Start voice call"}
               </TooltipContent>
             </Tooltip>
           )}
-          <button
-            type="button"
-            aria-label="Pinned messages"
-            aria-pressed={showPins}
-            className="group relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
-            title="Pinned Messages"
-            onClick={handleTogglePins}
-            ref={pinButtonRef}
-          >
-            <Pin
-              className={cn(
-                "h-[18px] w-[18px] transition-colors",
-                showPins
-                  ? "text-rm-accent rotate-45"
-                  : "text-rm-text-muted group-hover:text-rm-text",
-              )}
-            />
-            {pinnedCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 badge-count bg-rm-accent">
-                {pinnedCount}
-              </span>
-            )}
-          </button>
+          {/* Pins: no count. The red badge means "needs you"; a pinned
+              total never does. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton
+                ref={pinButtonRef}
+                icon="pin"
+                variant="muted"
+                size={40}
+                tone={showPins ? "toggled" : "idle"}
+                aria-label={
+                  pinnedCount > 0
+                    ? `Pinned messages, ${pinnedCount}`
+                    : "Pinned messages"
+                }
+                aria-pressed={showPins}
+                onClick={handleTogglePins}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={8}>
+              Pinned messages
+            </TooltipContent>
+          </Tooltip>
           <NotificationBell />
           {onMembersClick && (
-            <IconButton
-              icon={Users}
-              variant="muted"
-              size="sm"
-              aria-label="Members"
-              aria-pressed={showMembers}
-              className={cn(
-                showMembers && "text-rm-accent hover:text-rm-accent",
-              )}
-              onClick={onMembersClick}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton
+                  icon="members"
+                  variant="muted"
+                  size={40}
+                  tone={membersPressed ? "toggled" : "idle"}
+                  aria-label="Members"
+                  aria-pressed={membersPressed}
+                  onClick={onMembersClick}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={8}>
+                {membersPressed ? "Hide members" : "Show members"}
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         <div className="flex items-center">
-          <button
-            type="button"
-            className="hidden md:inline-flex h-8 items-center gap-2 rounded-md border border-rm-border bg-rm-bg-elevated px-2.5 text-ui-sm font-medium text-rm-text-muted transition-ui hover:border-rm-border-strong hover:text-rm-text"
-            onClick={onOpenSearch}
-            title={`Search ${channelName}`}
-          >
-            <Search className="h-3.5 w-3.5 shrink-0" />
-            <span className="max-w-[110px] truncate">Search</span>
-          </button>
+          {/* One search input on screen: while the panel is open its own
+              field is the input, and this collapses to a pressed toggle. */}
+          {showSearch ? (
+            <IconButton
+              icon="search"
+              variant="muted"
+              size={40}
+              tone="toggled"
+              aria-label="Search"
+              aria-pressed
+              className="hidden md:inline-flex"
+              onClick={onOpenSearch}
+            />
+          ) : (
+            /* C1 underline field: no box, a 2px line-field rule that turns
+               accent on focus, an outline "/" key on the right. It opens the
+               search panel, whose own input takes the typing. */
+            <div className={cn(FIELD_UNDERLINE, "ml-2 hidden w-56 md:block")}>
+              <button
+                type="button"
+                aria-pressed={false}
+                aria-keyshortcuts="/"
+                className={cn(
+                  "flex h-9 w-full items-center gap-2 text-ui-sm text-ink-3 outline-none pointer-fine:hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+                  HIT,
+                )}
+                onClick={onOpenSearch}
+                title={isDM ? "Search this conversation" : "Search messages"}
+              >
+                <Icon name="search" size="sm" className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-left">
+                  Search
+                </span>
+                <Kbd variant="outline" size="sm" aria-hidden="true">
+                  /
+                </Kbd>
+              </button>
+            </div>
+          )}
           <IconButton
-            icon={Search}
+            aria-label="Search"
+            icon="search"
             variant="muted"
-            size="sm"
-            className="h-10 w-10 md:hidden"
+            size={40}
+            className="md:hidden"
             onClick={onOpenSearch}
           />
         </div>
         {onClose && (
           <IconButton
-            icon={X}
+            aria-label="Close chat"
+            icon="close"
             variant="muted"
-            size="sm"
-            className="ml-1 rounded-md border border-rm-border bg-rm-bg-elevated hover:bg-rm-bg-hover"
+            size={40}
+            className="ml-1"
             onClick={onClose}
-            title="Close Chat"
+            title="Close chat"
           />
         )}
       </div>

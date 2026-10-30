@@ -1,10 +1,24 @@
+/**
+ * Invite people to a server: pick expiry and uses, generate a link, copy it.
+ * The kit's C1 plate (DESIGN.md, Dialog): a silkscreen kicker ("Invite ·
+ * server"), the Bricolage title, the dithered rule, a 15/22 body, fields as
+ * legend plates on ply-3 with 48px controls, and a footer of 48px keys: a
+ * ghost Cancel (Done once there is a link) beside the notched primary. A
+ * form dialog (md, top-anchored); a bottom sheet below md.
+ */
+
+import { Button } from "@/components/ui/button";
+import { DialogKicker, DialogRule } from "@/components/ui/dialog";
+import { Icon } from "@/components/ui/icon";
+import { FieldPlate, Input } from "@/components/ui/input";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import {
   Select,
   SelectContent,
@@ -12,12 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { copyToClipboard } from "@/components/ui/toast";
 import { apiPost } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { getWebOrigin } from "@/lib/platform";
-import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
-import { Check, Copy, Loader2, X } from "./Icons";
+import { useEffect, useRef, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
+import { RowError } from "./settings/primitives";
+
 interface InviteModalProps {
   open: boolean;
   serverId: string;
@@ -37,7 +53,9 @@ export default function InviteModal({
     copied: false,
     expiresHours: 24,
     maxUses: 0,
+    error: null as string | null,
   });
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -47,13 +65,21 @@ export default function InviteModal({
       inviteCode: "",
       loading: false,
       copied: false,
+      error: null,
     }));
   }, [open, serverId]);
 
-  // Close on Escape
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
+  const firstSelectRef = useRef<HTMLButtonElement>(null);
 
   const createInvite = async () => {
-    setState((prev) => ({ ...prev, loading: true }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const data = await apiPost<{ code: string }>(
         `/api/servers/${serverId}/invites`,
@@ -63,171 +89,173 @@ export default function InviteModal({
         },
       );
       setState((prev) => ({ ...prev, inviteCode: data.code }));
-    } catch (err: any) {
-      console.error("Failed to create invite:", err);
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        error: describeApiError(err, "create the invite link"),
+      }));
     } finally {
       setState((prev) => ({ ...prev, loading: false }));
     }
   };
 
+  const link = `${getWebOrigin()}/invite/${state.inviteCode}`;
+
   const copyLink = async () => {
-    const link = `${getWebOrigin()}/invite/${state.inviteCode}`;
-    await navigator.clipboard.writeText(link);
+    if (!(await copyToClipboard(link, "Link copied"))) return;
     setState((prev) => ({ ...prev, copied: true }));
-    setTimeout(() => setState((prev) => ({ ...prev, copied: false })), 2000);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(
+      () => setState((prev) => ({ ...prev, copied: false })),
+      2000,
+    );
   };
 
-  const selectStyle =
-    "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-ui focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
+  const selectStyle = "w-full";
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent
-        showCloseButton={false}
-        className="relative w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200"
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent
+        size="md"
+        placement="top"
+        // Desktop only (the drawer drops this): start on the first field. On a
+        // phone focus stays on the sheet so nothing pops open under the thumb.
+        onOpenAutoFocus={(event) => {
+          if (!firstSelectRef.current) return;
+          event.preventDefault();
+          firstSelectRef.current.focus();
+        }}
       >
-        <div>
-          <DialogClose asChild>
-            <button
-              type="button"
-              className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
-              aria-label="Close invite modal"
+        <ResponsiveDialogHeader>
+          <DialogKicker>
+            Invite · <InlineEmojiText text={serverName} />
+          </DialogKicker>
+          <ResponsiveDialogTitle>
+            Invite people to <InlineEmojiText text={serverName} />
+          </ResponsiveDialogTitle>
+          <DialogRule />
+          <ResponsiveDialogDescription className="mt-2">
+            {state.inviteCode
+              ? "Share this link with others to let them join your server."
+              : "Choose how long the link lasts and how many people can use it."}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+
+        {!state.inviteCode ? (
+          <div className="flex flex-col gap-4">
+            <FieldPlate
+              label="Expire after"
+              htmlFor="expire-after"
+              ground="ply-3"
             >
-              <X className="h-4 w-4" />
-            </button>
-          </DialogClose>
-
-          <DialogTitle className="mb-6 text-base font-semibold text-rm-text">
-            Invite people to{" "}
-            <InlineEmojiText text={serverName} className="text-primary" />
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Generate an invite link for this server.
-          </DialogDescription>
-
-          {!state.inviteCode ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label
-                  htmlFor="expire-after"
-                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
-                >
-                  Expire after
-                </label>
-                <Select
-                  value={String(state.expiresHours)}
-                  onValueChange={(value) =>
-                    setState((prev) => ({
-                      ...prev,
-                      expiresHours: Number(value),
-                    }))
-                  }
-                >
-                  <SelectTrigger
-                    id="expire-after"
-                    aria-label="Expire after"
-                    className={selectStyle}
-                  >
-                    <SelectValue placeholder="Expire after" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" align="start">
-                    <SelectItem value="1">1 hour</SelectItem>
-                    <SelectItem value="6">6 hours</SelectItem>
-                    <SelectItem value="24">24 hours</SelectItem>
-                    <SelectItem value="168">7 days</SelectItem>
-                    <SelectItem value="0">Never</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label
-                  htmlFor="max-uses"
-                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
-                >
-                  Max uses
-                </label>
-                <Select
-                  value={String(state.maxUses)}
-                  onValueChange={(value) =>
-                    setState((prev) => ({
-                      ...prev,
-                      maxUses: Number(value),
-                    }))
-                  }
-                >
-                  <SelectTrigger
-                    id="max-uses"
-                    aria-label="Maximum uses"
-                    className={selectStyle}
-                  >
-                    <SelectValue placeholder="Maximum uses" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" align="start">
-                    <SelectItem value="0">No limit</SelectItem>
-                    <SelectItem value="1">1 use</SelectItem>
-                    <SelectItem value="5">5 uses</SelectItem>
-                    <SelectItem value="10">10 uses</SelectItem>
-                    <SelectItem value="25">25 uses</SelectItem>
-                    <SelectItem value="100">100 uses</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <button
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
-                onClick={createInvite}
-                disabled={state.loading}
-              >
-                {state.loading && (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                )}
-                {state.loading ? "Creating..." : "Generate Invite Link"}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <input
-                  value={`${getWebOrigin()}/invite/${state.inviteCode}`}
-                  readOnly
-                  aria-label="Invite link"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none"
-                />
-                <button
-                  onClick={copyLink}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium transition-ui",
-                    state.copied
-                      ? "border-primary/30 bg-primary/20 text-primary"
-                      : "border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover",
-                  )}
-                >
-                  {state.copied ? (
-                    <>
-                      <Check className="h-3.5 w-3.5" /> Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5" /> Copy
-                    </>
-                  )}
-                </button>
-              </div>
-              <p className="text-xs text-rm-text-muted">
-                Share this link with others to let them join your server.
-              </p>
-              <button
-                onClick={() =>
-                  setState((prev) => ({ ...prev, inviteCode: "" }))
+              <Select
+                value={String(state.expiresHours)}
+                onValueChange={(value) =>
+                  setState((prev) => ({
+                    ...prev,
+                    expiresHours: Number(value),
+                  }))
                 }
-                className="text-xs font-medium text-rm-text-muted/60 transition-colors hover:text-rm-text outline-none"
               >
-                Generate New Link
-              </button>
-            </div>
+                <SelectTrigger
+                  ref={firstSelectRef}
+                  id="expire-after"
+                  size="lg"
+                  className={selectStyle}
+                >
+                  <SelectValue placeholder="Expire after" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="1">1 hour</SelectItem>
+                  <SelectItem value="6">6 hours</SelectItem>
+                  <SelectItem value="24">24 hours</SelectItem>
+                  <SelectItem value="168">7 days</SelectItem>
+                  <SelectItem value="0">Never</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldPlate>
+            <FieldPlate label="Max uses" htmlFor="max-uses" ground="ply-3">
+              <Select
+                value={String(state.maxUses)}
+                onValueChange={(value) =>
+                  setState((prev) => ({
+                    ...prev,
+                    maxUses: Number(value),
+                  }))
+                }
+              >
+                <SelectTrigger id="max-uses" size="lg" className={selectStyle}>
+                  <SelectValue placeholder="Maximum uses" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="0">No limit</SelectItem>
+                  <SelectItem value="1">1 use</SelectItem>
+                  <SelectItem value="5">5 uses</SelectItem>
+                  <SelectItem value="10">10 uses</SelectItem>
+                  <SelectItem value="25">25 uses</SelectItem>
+                  <SelectItem value="100">100 uses</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldPlate>
+            {state.error ? (
+              <RowError className="mt-0">{state.error}</RowError>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-3">
+            <FieldPlate
+              label="Invite link"
+              htmlFor="invite-link"
+              ground="ply-3"
+              className="w-full"
+            >
+              <Input
+                id="invite-link"
+                inputSize="lg"
+                value={link}
+                readOnly
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+            </FieldPlate>
+            <Button
+              variant="rule"
+              onClick={() => setState((prev) => ({ ...prev, inviteCode: "" }))}
+            >
+              Generate new link
+            </Button>
+          </div>
+        )}
+
+        <ResponsiveDialogFooter>
+          {state.inviteCode ? (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Done
+              </Button>
+              <Button variant="primary" onClick={() => void copyLink()}>
+                <Icon name={state.copied ? "check" : "copy"} size="sm" />
+                {state.copied ? "Copied" : "Copy link"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void createInvite()}
+                loading={state.loading}
+              >
+                Generate invite link
+              </Button>
+            </>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

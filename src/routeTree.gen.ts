@@ -54,6 +54,7 @@ import { Route as ApiListenTogetherStreamRouteImport } from './routes/api/listen
 import { Route as ApiListenTogetherSearchRouteImport } from './routes/api/listen-together/search'
 import { Route as ApiListenTogetherResolveRouteImport } from './routes/api/listen-together/resolve'
 import { Route as ApiCollectiblesSyncRouteImport } from './routes/api/collectibles/sync'
+import { Route as ApiCollectiblesIngestRouteImport } from './routes/api/collectibles/ingest'
 import { Route as ApiCollectiblesCatalogRouteImport } from './routes/api/collectibles/catalog'
 import { Route as ApiCollectiblesApplyRouteImport } from './routes/api/collectibles/apply'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
@@ -85,6 +86,7 @@ import { Route as ApiChannelsIdVoiceDisconnectRouteImport } from './routes/api/c
 import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
 import { Route as ApiChannelsIdThreadsRouteImport } from './routes/api/channels/$id/threads'
 import { Route as ApiChannelsIdThreadRouteImport } from './routes/api/channels/$id/thread'
+import { Route as ApiChannelsIdSearchRouteImport } from './routes/api/channels/$id/search'
 import { Route as ApiChannelsIdReadStateRouteImport } from './routes/api/channels/$id/read-state'
 import { Route as ApiChannelsIdReactionsRouteImport } from './routes/api/channels/$id/reactions'
 import { Route as ApiChannelsIdPinsRouteImport } from './routes/api/channels/$id/pins'
@@ -329,6 +331,11 @@ const ApiCollectiblesSyncRoute = ApiCollectiblesSyncRouteImport.update({
   path: '/api/collectibles/sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCollectiblesIngestRoute = ApiCollectiblesIngestRouteImport.update({
+  id: '/api/collectibles/ingest',
+  path: '/api/collectibles/ingest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCollectiblesCatalogRoute = ApiCollectiblesCatalogRouteImport.update({
   id: '/api/collectibles/catalog',
   path: '/api/collectibles/catalog',
@@ -489,6 +496,11 @@ const ApiChannelsIdThreadRoute = ApiChannelsIdThreadRouteImport.update({
   path: '/thread',
   getParentRoute: () => ApiChannelsIdRoute,
 } as any)
+const ApiChannelsIdSearchRoute = ApiChannelsIdSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
 const ApiChannelsIdReadStateRoute = ApiChannelsIdReadStateRouteImport.update({
   id: '/read-state',
   path: '/read-state',
@@ -617,6 +629,7 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/ingest': typeof ApiCollectiblesIngestRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
   '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
@@ -639,6 +652,7 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/search': typeof ApiChannelsIdSearchRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
@@ -711,6 +725,7 @@ export interface FileRoutesByTo {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/ingest': typeof ApiCollectiblesIngestRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
   '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
@@ -733,6 +748,7 @@ export interface FileRoutesByTo {
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/search': typeof ApiChannelsIdSearchRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
@@ -806,6 +822,7 @@ export interface FileRoutesById {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/ingest': typeof ApiCollectiblesIngestRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
   '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
@@ -828,6 +845,7 @@ export interface FileRoutesById {
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/search': typeof ApiChannelsIdSearchRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
@@ -902,6 +920,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
+    | '/api/collectibles/ingest'
     | '/api/collectibles/sync'
     | '/api/listen-together/resolve'
     | '/api/listen-together/search'
@@ -924,6 +943,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
+    | '/api/channels/$id/search'
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
@@ -996,6 +1016,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
+    | '/api/collectibles/ingest'
     | '/api/collectibles/sync'
     | '/api/listen-together/resolve'
     | '/api/listen-together/search'
@@ -1018,6 +1039,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
+    | '/api/channels/$id/search'
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
@@ -1090,6 +1112,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
+    | '/api/collectibles/ingest'
     | '/api/collectibles/sync'
     | '/api/listen-together/resolve'
     | '/api/listen-together/search'
@@ -1112,6 +1135,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
+    | '/api/channels/$id/search'
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
@@ -1183,6 +1207,7 @@ export interface RootRouteChildren {
   ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
   ApiCollectiblesApplyRoute: typeof ApiCollectiblesApplyRoute
   ApiCollectiblesCatalogRoute: typeof ApiCollectiblesCatalogRoute
+  ApiCollectiblesIngestRoute: typeof ApiCollectiblesIngestRoute
   ApiCollectiblesSyncRoute: typeof ApiCollectiblesSyncRoute
   ApiListenTogetherResolveRoute: typeof ApiListenTogetherResolveRoute
   ApiListenTogetherSearchRoute: typeof ApiListenTogetherSearchRoute
@@ -1521,6 +1546,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCollectiblesSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/collectibles/ingest': {
+      id: '/api/collectibles/ingest'
+      path: '/api/collectibles/ingest'
+      fullPath: '/api/collectibles/ingest'
+      preLoaderRoute: typeof ApiCollectiblesIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/collectibles/catalog': {
       id: '/api/collectibles/catalog'
       path: '/api/collectibles/catalog'
@@ -1736,6 +1768,13 @@ declare module '@tanstack/react-router' {
       path: '/thread'
       fullPath: '/api/channels/$id/thread'
       preLoaderRoute: typeof ApiChannelsIdThreadRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/search': {
+      id: '/api/channels/$id/search'
+      path: '/search'
+      fullPath: '/api/channels/$id/search'
+      preLoaderRoute: typeof ApiChannelsIdSearchRouteImport
       parentRoute: typeof ApiChannelsIdRoute
     }
     '/api/channels/$id/read-state': {
@@ -2040,6 +2079,7 @@ interface ApiChannelsIdRouteChildren {
   ApiChannelsIdPinsRoute: typeof ApiChannelsIdPinsRoute
   ApiChannelsIdReactionsRoute: typeof ApiChannelsIdReactionsRoute
   ApiChannelsIdReadStateRoute: typeof ApiChannelsIdReadStateRoute
+  ApiChannelsIdSearchRoute: typeof ApiChannelsIdSearchRoute
   ApiChannelsIdThreadRoute: typeof ApiChannelsIdThreadRoute
   ApiChannelsIdThreadsRoute: typeof ApiChannelsIdThreadsRoute
   ApiChannelsIdTypingRoute: typeof ApiChannelsIdTypingRoute
@@ -2055,6 +2095,7 @@ const ApiChannelsIdRouteChildren: ApiChannelsIdRouteChildren = {
   ApiChannelsIdPinsRoute: ApiChannelsIdPinsRoute,
   ApiChannelsIdReactionsRoute: ApiChannelsIdReactionsRoute,
   ApiChannelsIdReadStateRoute: ApiChannelsIdReadStateRoute,
+  ApiChannelsIdSearchRoute: ApiChannelsIdSearchRoute,
   ApiChannelsIdThreadRoute: ApiChannelsIdThreadRoute,
   ApiChannelsIdThreadsRoute: ApiChannelsIdThreadsRoute,
   ApiChannelsIdTypingRoute: ApiChannelsIdTypingRoute,
@@ -2121,6 +2162,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
   ApiCollectiblesApplyRoute: ApiCollectiblesApplyRoute,
   ApiCollectiblesCatalogRoute: ApiCollectiblesCatalogRoute,
+  ApiCollectiblesIngestRoute: ApiCollectiblesIngestRoute,
   ApiCollectiblesSyncRoute: ApiCollectiblesSyncRoute,
   ApiListenTogetherResolveRoute: ApiListenTogetherResolveRoute,
   ApiListenTogetherSearchRoute: ApiListenTogetherSearchRoute,

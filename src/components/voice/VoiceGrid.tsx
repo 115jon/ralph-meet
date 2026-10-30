@@ -1,17 +1,40 @@
 import { Slider } from "@/components/ContextMenu/ContextMenuItems";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Headphones, MicOff, Volume2 } from "lucide-react";
-
-import { extractDominantColor } from "@/lib/color-utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
+import { Avatar } from "@/components/ui/avatar";
+import { Icon } from "@/components/ui/icon";
 import { getAuthAssetUrl } from "@/lib/platform";
-import React, { lazy, Suspense, useEffect, useState } from "react";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import React, {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { flushSync } from "react-dom";
 import { ParticipantCard } from "./ParticipantCard";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
-import { QualityMonitor } from "./QualityMonitor";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
+import {
+  fitGrid,
+  GRID_GAP,
+  gridColumnsClass,
+  tileAspectClass,
+  type GridFit,
+} from "./grid-columns";
+import { TileAvatar } from "./TileParts";
+import {
+  FOCUSED_AVATAR_SIZE,
+  streamOwnerName,
+  TILE_SURFACE,
+  useTileTintStyle,
+} from "./tile-utils";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({
@@ -22,9 +45,8 @@ const StreamContextMenu = lazy(() =>
 function getFocusedItemLabel(item: GridItem | undefined) {
   if (!item) return "";
   if (item.type !== "screen") return item.name;
-  if (item.isLocal) return "Your Stream";
-  const ownerName = item.name.replace(/'s Stream$/, "");
-  return `${ownerName}'s Stream`;
+  if (item.isLocal) return "Your stream";
+  return `${streamOwnerName(item)}'s Stream`;
 }
 
 function hasLiveAudioTrack(stream: MediaStream | null | undefined) {
@@ -32,6 +54,93 @@ function hasLiveAudioTrack(stream: MediaStream | null | undefined) {
     stream?.getAudioTracks?.().some((track) => track.readyState === "live") ??
     false
   );
+}
+
+/** Stage padding (p-4) on each side, subtracted before fitting tiles. */
+const STAGE_PAD = 16;
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/** A view-transition-name from an item id (idents can't start with a digit). */
+function tileTransitionName(id: string) {
+  return `tile-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
+/**
+ * Join and leave reflow with View Transitions (spec §6): when the set of
+ * tiles changes, the new set is committed inside `startViewTransition`, so
+ * the tile that left fades and the rest glide to their new cells
+ * (`view-transition-class: tile`, motion.css). Content changes to the same
+ * set render straight through. Skipped under reduced motion, while the app is
+ * inactive, and where the API is missing.
+ */
+function useReflowTransition(items: GridItem[], enabled: boolean): GridItem[] {
+  const key = items.map((item) => item.id).join("\u0000");
+  const [shown, setShown] = useState(() => ({ key, items }));
+  const pending = key !== shown.key;
+
+  useEffect(() => {
+    if (!pending) return;
+    const commit = () => setShown({ key, items });
+    const doc = document as Document & {
+      startViewTransition?: (cb: () => void) => unknown;
+    };
+    if (
+      !enabled ||
+      !doc.startViewTransition ||
+      doc.hidden ||
+      doc.documentElement.hasAttribute("data-app-inactive") ||
+      prefersReducedMotion()
+    ) {
+      commit();
+      return;
+    }
+    doc.startViewTransition(() => flushSync(commit));
+  }, [pending, key, items, enabled]);
+
+  return pending ? shown.items : items;
+}
+
+/**
+ * Measures the stage box and fits tiles to its width AND height: 16:9, or
+ * filling the stage's height for 2–4 people on a phone-width stage.
+ */
+function useGridFit(
+  ref: React.RefObject<HTMLDivElement | null>,
+  count: number,
+): GridFit | null {
+  const [fit, setFit] = useState<GridFit | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const next = fitGrid(
+        el.clientWidth - STAGE_PAD * 2,
+        el.clientHeight - STAGE_PAD * 2,
+        count,
+      );
+      setFit((prev) =>
+        prev &&
+        prev.cols === next.cols &&
+        prev.tileW === next.tileW &&
+        prev.tileH === next.tileH &&
+        prev.scrolls === next.scrolls &&
+        prev.aspect === next.aspect
+          ? prev
+          : next,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, count]);
+  return fit;
 }
 
 interface VoiceGridProps {
@@ -47,374 +156,349 @@ interface VoiceGridProps {
   layoutMode?: "grid" | "row";
 }
 
-export const VoiceGrid = React.memo(
-  ({
-    items,
-    focusedId,
-    onFocus,
-    globalDeafened,
-    currentSettings,
-    voiceActions,
-    watchedStreams,
-    streamThumbnails,
-    className,
-    layoutMode = "grid",
-  }: VoiceGridProps) => {
-    const focusedItem = items.find((i) => i.id === focusedId);
-    const focusedUserId = focusedItem?.userId ?? null;
-    const focusedIsScreen = focusedItem?.type === "screen";
-    const [contextMenu, setContextMenu] = useState<{
-      x: number;
-      y: number;
-    } | null>(null);
-    const shouldRenderStreamMenu = contextMenu != null;
-    const renderedContextMenu = contextMenu;
-    const [dominantColor, setDominantColor] = useState<string | null>(null);
-    const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
-    const setPeerStreamVolume = useVoiceSettingsStore(
-      (s) => s.setPeerStreamVolume,
-    );
-    const focusedPeerVolume = useVoiceSettingsStore((s) => {
-      if (!focusedUserId) return 100;
-      const peer = s.getSettings().peerSettings[focusedUserId];
-      if (!peer) return 100;
-      return focusedIsScreen ? peer.streamVolume : peer.volume;
-    });
+export const VoiceGrid = React.memo((props: VoiceGridProps) => {
+  const { items, focusedId } = props;
+  const focusedItem = focusedId
+    ? items.find((i) => i.id === focusedId)
+    : undefined;
+  if (focusedItem) return <FocusedStage {...props} focusedItem={focusedItem} />;
+  if (props.layoutMode === "row") return <RowLayout {...props} />;
+  return <FitGridLayout {...props} />;
+});
 
-    useEffect(() => {
-      let cancelled = false;
+VoiceGrid.displayName = "VoiceGrid";
 
-      const loadDominantColor = async () => {
-        if (!focusedItem?.avatar) return;
-
-        const color = await extractDominantColor(
-          getAuthAssetUrl(focusedItem.avatar),
-        );
-        if (!cancelled) setDominantColor(color);
-      };
-
-      void loadDominantColor();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [focusedItem?.avatar]);
-
-    if (focusedId && focusedItem) {
-      const isFocusedScreen = focusedItem.type === "screen";
-      const isFocusedCamera = focusedItem.type === "camera";
-      const isPreviewHidden =
-        isFocusedScreen &&
-        focusedItem.isLocal &&
-        !!voiceActions?.isPreviewHidden;
-      const focusedThumbnailPoster =
-        isFocusedScreen && !isPreviewHidden
-          ? streamThumbnails[focusedItem.userId]
-          : null;
-      const isStreaming =
-        (isFocusedCamera || isFocusedScreen) &&
-        !!focusedItem.stream &&
-        !isPreviewHidden;
-      const isLoadingStream =
-        (isFocusedCamera || isFocusedScreen) &&
-        !focusedItem.stream &&
-        !isPreviewHidden &&
-        !focusedThumbnailPoster;
-      const focusedLabel = getFocusedItemLabel(focusedItem);
-      const showFocusedVolume =
-        !focusedItem.isLocal &&
-        (isFocusedScreen || isFocusedCamera) &&
-        hasLiveAudioTrack(focusedItem.stream);
-
-      return (
+function RowLayout({
+  items,
+  focusedId,
+  onFocus,
+  globalDeafened,
+  voiceActions,
+  watchedStreams,
+  streamThumbnails,
+  className,
+}: VoiceGridProps) {
+  return (
+    <div
+      data-voice-grid="row"
+      className={cn(
+        "flex h-full w-full flex-row items-center justify-center gap-2 overflow-hidden p-2",
+        className,
+      )}
+    >
+      {items.map((item, index) => (
         <div
-          data-focused-stage="true"
-          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary group/stage cursor-pointer transition-shadow hover:ring-1 hover:ring-rm-border-strong"
+          key={item.id}
+          className="relative flex h-full max-w-[400px] min-w-0 flex-1 items-center justify-center"
         >
-          <StickerReactionsOverlay sfu={voiceActions?.sfu} />
-          <button
-            type="button"
-            data-focused-bg="true"
-            className="absolute inset-0 z-0 border-0 p-0 transition-colors duration-200"
-            style={{
-              backgroundColor:
-                isStreaming || focusedThumbnailPoster
-                  ? "black"
-                  : dominantColor || "var(--rm-bg-primary)",
-            }}
-            aria-label="Clear focused participant"
-            onClick={() => onFocus(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setContextMenu({ x: e.clientX, y: e.clientY });
-            }}
-          />
-
-          {isStreaming ? (
-            <VideoPlayer
-              stream={focusedItem.stream}
-              label={focusedItem.name}
-              muted={
-                isFocusedScreen ||
-                globalDeafened ||
-                !focusedItem.isLocal ||
-                (focusedItem.isLocal
-                  ? true
-                  : !!currentSettings.peerSettings[focusedItem.userId]?.muted)
-              }
-              isLocal={focusedItem.isLocal && focusedItem.type === "camera"}
-              className="w-full h-full object-contain relative z-10 pointer-events-none"
+          <div className="flex aspect-video max-h-full w-full items-center justify-center">
+            <ParticipantCard
+              item={item}
+              isFocused={focusedId === item.id}
+              isTray={false}
+              row
+              globalDeafened={globalDeafened}
+              voiceActions={voiceActions}
+              watchedStreams={watchedStreams}
+              streamThumbnails={streamThumbnails}
+              enterIndex={index}
+              onClick={() => onFocus(item.id === focusedId ? null : item.id)}
             />
-          ) : focusedThumbnailPoster ? (
-            <div
-              data-focused-visual="true"
-              className="relative z-10 h-full w-full overflow-hidden pointer-events-none"
-            >
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The stage grid (spec §3): 16:9 tiles sized to fit the stage's width and
+ * height, 8px gaps, centred; it scrolls only when tiles would drop under
+ * 200px wide. Before the first measurement it falls back to container-query
+ * columns.
+ */
+function FitGridLayout({
+  items,
+  focusedId,
+  onFocus,
+  globalDeafened,
+  voiceActions,
+  watchedStreams,
+  streamThumbnails,
+  className,
+}: VoiceGridProps) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const shownItems = useReflowTransition(items, true);
+  const fit = useGridFit(scrollerRef, shownItems.length);
+  const aspectClass = tileAspectClass(fit, shownItems.length);
+  const gridStyle: CSSProperties | undefined = fit
+    ? {
+        gridTemplateColumns: `repeat(${fit.cols}, ${fit.tileW}px)`,
+        gridAutoRows: fit.tileH ? `${fit.tileH}px` : undefined,
+        gap: GRID_GAP,
+      }
+    : undefined;
+
+  return (
+    <div
+      ref={scrollerRef}
+      data-voice-grid-scroller=""
+      className="@container flex h-full min-h-0 w-full flex-col overflow-y-auto overscroll-contain p-4"
+    >
+      <div
+        data-voice-grid
+        data-fit={fit ? `${fit.cols}x${fit.tileW}` : undefined}
+        data-tile-aspect={fit?.aspect}
+        className={cn(
+          // `safe center` centres a grid that fits but starts at the top once
+          // it overflows, so the first tiles stay reachable.
+          // Auto margins centre it vertically while it fits and fall back to
+          // the top once it overflows.
+          "my-auto grid w-full shrink-0 auto-rows-max place-content-[safe_center] gap-2",
+          !fit && gridColumnsClass(shownItems.length),
+          className,
+        )}
+        style={gridStyle}
+      >
+        {shownItems.map((item, index) => (
+          <div
+            key={item.id}
+            className="min-w-0"
+            style={
+              {
+                viewTransitionName: tileTransitionName(item.id),
+                viewTransitionClass: "tile",
+              } as CSSProperties
+            }
+          >
+            <ParticipantCard
+              item={item}
+              isFocused={focusedId === item.id}
+              isTray={false}
+              globalDeafened={globalDeafened}
+              voiceActions={voiceActions}
+              watchedStreams={watchedStreams}
+              streamThumbnails={streamThumbnails}
+              enterIndex={index}
+              className={aspectClass}
+              onClick={() => onFocus(item.id === focusedId ? null : item.id)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One tile on stage. The header is a bar above (never an overlay on the
+ * stream), media sits letterboxed in its own black box inside the stage
+ * padding, and a person without media gets an 80px avatar on their tinted
+ * 16:9 surface (never their picture stretched across the frame).
+ */
+function FocusedStage({
+  focusedItem,
+  onFocus,
+  globalDeafened,
+  currentSettings,
+  voiceActions,
+  streamThumbnails,
+}: VoiceGridProps & { focusedItem: GridItem }) {
+  const focusedUserId = focusedItem.userId;
+  const isFocusedScreen = focusedItem.type === "screen";
+  const isFocusedCamera = focusedItem.type === "camera";
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
+  const setPeerStreamVolume = useVoiceSettingsStore(
+    (s) => s.setPeerStreamVolume,
+  );
+  const focusedPeerVolume = useVoiceSettingsStore((s) => {
+    const peer = s.getSettings().peerSettings[focusedUserId];
+    if (!peer) return 100;
+    return isFocusedScreen ? peer.streamVolume : peer.volume;
+  });
+  const tintStyle = useTileTintStyle(focusedUserId);
+
+  const isPreviewHidden =
+    isFocusedScreen && focusedItem.isLocal && !!voiceActions?.isPreviewHidden;
+  const focusedThumbnailPoster =
+    isFocusedScreen && !isPreviewHidden
+      ? streamThumbnails[focusedItem.userId]
+      : null;
+  const isStreaming =
+    (isFocusedCamera || isFocusedScreen) &&
+    !!focusedItem.stream &&
+    !isPreviewHidden;
+  const isLoadingStream =
+    (isFocusedCamera || isFocusedScreen) &&
+    !focusedItem.stream &&
+    !isPreviewHidden &&
+    !focusedThumbnailPoster;
+  const focusedLabel = getFocusedItemLabel(focusedItem);
+  const showFocusedVolume =
+    !focusedItem.isLocal &&
+    (isFocusedScreen ? hasLiveAudioTrack(focusedItem.stream) : true);
+  const overMedia = isStreaming || !!focusedThumbnailPoster || isPreviewHidden;
+
+  return (
+    <section
+      data-focused-stage="true"
+      aria-label={focusedLabel}
+      className="group/stage relative isolate flex h-full w-full flex-col overflow-hidden bg-ply-0 p-4"
+    >
+      <StickerReactionsOverlay sfu={voiceActions?.sfu} />
+      <button
+        type="button"
+        data-focused-bg="true"
+        className="absolute inset-0 z-0 border-0 bg-transparent p-0 outline-none"
+        aria-label="Clear focused participant"
+        onClick={() => onFocus(null)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setContextMenu({ x: e.clientX, y: e.clientY });
+        }}
+      />
+
+      <div className="pointer-events-none relative z-10 flex min-h-0 flex-1 items-center justify-center">
+        {overMedia ? (
+          <div
+            data-focused-visual="true"
+            className="relative h-full w-full overflow-hidden rounded-lg bg-black"
+          >
+            {isStreaming ? (
+              <VideoPlayer
+                stream={focusedItem.stream}
+                label={focusedItem.name}
+                muted={
+                  isFocusedScreen ||
+                  globalDeafened ||
+                  !focusedItem.isLocal ||
+                  (focusedItem.isLocal
+                    ? true
+                    : !!currentSettings?.peerSettings?.[focusedItem.userId]
+                        ?.muted)
+                }
+                isLocal={focusedItem.isLocal && focusedItem.type === "camera"}
+                className="h-full w-full object-contain"
+              />
+            ) : focusedThumbnailPoster ? (
               <img
                 src={focusedThumbnailPoster}
                 alt={`${focusedItem.name} stream thumbnail`}
                 className="h-full w-full object-contain"
               />
-              <div className="absolute inset-0 bg-linear-to-t from-black/35 via-black/10 to-transparent" />
-            </div>
-          ) : isPreviewHidden ? (
-            <div
-              data-focused-visual="true"
-              className="relative z-10 flex h-full w-full items-center justify-center bg-black/75 pointer-events-none"
-            >
-              <div className="flex flex-col items-center gap-3 text-center">
-                <EyeOff size={28} className="text-white/60" />
-                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white/60">
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-center">
+                <Icon name="eyeOff" size="lg" className="text-white/60" />
+                <span className="text-ui-xs font-medium text-white/70">
                   Preview paused
                 </span>
               </div>
-            </div>
-          ) : (
-            <div
-              data-focused-visual="true"
-              className="w-full h-full flex items-center justify-center relative overflow-hidden z-10 pointer-events-none"
-            >
-              <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-300 relative z-10 w-full h-full p-8 md:p-16">
-                <div className="relative aspect-video w-full max-w-[600px] md:max-w-[800px] lg:max-w-[1000px] flex items-center justify-center">
-                  <div className="w-full h-full shadow-2xl rounded-2xl flex items-center justify-center overflow-hidden bg-rm-bg-elevated/40 transition-ui">
-                    {focusedItem.avatar ? (
-                      <img
-                        src={getAuthAssetUrl(focusedItem.avatar)}
-                        alt={focusedItem.name}
-                        className="w-full h-full object-contain drop-shadow-2xl"
-                      />
-                    ) : (
-                      <span className="text-8xl md:text-9xl font-bold text-white">
-                        {focusedItem.name[0]?.toUpperCase()}
-                      </span>
-                    )}
-                    {isLoadingStream && (
-                      <div className="absolute inset-0 z-20 animate-in fade-in duration-300">
-                        <StreamLoadingIndicator className="bg-rm-bg-surface/90 border border-rm-border" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {isFocusedScreen &&
-            focusedItem.isLocal &&
-            voiceActions?.togglePreviewHidden && (
-              <div
-                data-preview-toggle="true"
-                className="pointer-events-none absolute top-24 left-4 z-50 opacity-0 transition-opacity group-hover/stage:pointer-events-auto group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 md:left-6"
-              >
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    voiceActions.togglePreviewHidden?.();
-                  }}
-                  title={
-                    isPreviewHidden
-                      ? "Resume preview"
-                      : "Pause preview (saves resources)"
-                  }
-                  aria-label={
-                    isPreviewHidden ? "Resume preview" : "Pause preview"
-                  }
-                  className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/55 px-2.5 py-1.5 text-ui-2xs font-bold text-white/70 shadow-xl backdrop-blur-md transition-colors hover:border-white/30 hover:text-white active:scale-[0.96]"
-                >
-                  {isPreviewHidden ? (
-                    <>
-                      <Eye size={12} /> <span>Resume</span>
-                    </>
-                  ) : (
-                    <>
-                      <EyeOff size={12} /> <span>Pause</span>
-                    </>
-                  )}
-                </button>
-              </div>
             )}
-
-          {shouldRenderStreamMenu && renderedContextMenu && (
-            <Suspense fallback={null}>
-              <StreamContextMenu
-                userId={focusedItem.userId}
-                x={renderedContextMenu.x}
-                y={renderedContextMenu.y}
-                isStreaming={focusedItem.type === "screen"}
-                onClose={() => setContextMenu(null)}
-                isClosing={!contextMenu}
-                {...(voiceActions ?? {})}
-              />
-            </Suspense>
-          )}
-
-          {showFocusedVolume && (
-            <div className="absolute bottom-6 right-6 z-20 w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="rounded-lg border border-rm-border bg-rm-bg-primary/90 shadow-lg">
-                <div className="flex items-center justify-between px-4 pt-3">
-                  <div className="flex items-center gap-2 text-rm-text">
-                    <Volume2
-                      size={13}
-                      className="text-rm-text-muted shrink-0"
-                    />
-                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
-                      {isFocusedScreen ? "Stream Volume" : "User Volume"}
-                    </span>
-                  </div>
-                  <span className="text-ui-2xs font-bold tabular-nums text-rm-text-muted">
-                    {focusedPeerVolume}%
-                  </span>
-                </div>
-                <Slider
-                  label={isFocusedScreen ? "Stream Volume" : "User Volume"}
-                  value={focusedPeerVolume}
-                  onChange={(value) => {
-                    if (!focusedUserId) return;
-                    if (isFocusedScreen)
-                      setPeerStreamVolume(focusedUserId, value);
-                    else setPeerVolume(focusedUserId, value);
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="absolute bottom-6 left-6 z-20 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-rm-bg-primary/85 px-3 py-1.5 rounded-md border border-rm-border flex items-center gap-3 shadow-md">
-              <div className="flex items-center gap-1.5">
-                {focusedItem.isDeafened && (
-                  <Headphones
-                    size={12}
-                    className="text-rm-text-muted shrink-0"
-                  />
-                )}
-                {focusedItem.isMuted && (
-                  <MicOff
-                    size={12}
-                    className={
-                      focusedItem.serverMute
-                        ? "text-destructive shrink-0"
-                        : "text-rm-text-muted shrink-0"
-                    }
-                  />
-                )}
-              </div>
-
-              <p className="text-xs font-bold text-rm-text">{focusedLabel}</p>
-
-              {(focusedItem.type === "screen" ||
-                focusedItem.type === "camera") && (
-                <span className="bg-rm-bg-surface/60 px-1.5 rounded-xs text-ui-2xs font-bold text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
-                  <QualityMonitor
-                    track={focusedItem.stream?.getVideoTracks()[0]}
-                    signaledQuality={
-                      focusedItem.isLocal && focusedItem.type === "screen"
-                        ? voiceActions?.currentScreenQuality
-                        : null
-                    }
-                    sfu={voiceActions?.sfu}
-                    userId={focusedItem.userId}
-                    type={focusedItem.type === "screen" ? "screen" : "cam"}
-                  />
-                </span>
-              )}
-            </div>
           </div>
-        </div>
-      );
-    }
-
-    if (layoutMode === "row") {
-      return (
-        <div
-          className={cn(
-            "flex flex-row items-center justify-center gap-2 sm:gap-4 w-full h-full py-2 px-2 overflow-hidden",
-            className,
-          )}
-        >
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="relative flex-1 min-w-0 max-w-[400px] h-full flex items-center justify-center"
-            >
-              <div className="w-full flex items-center justify-center max-h-full aspect-video">
-                <ParticipantCard
-                  item={item}
-                  isFocused={focusedId === item.id}
-                  isTray={false}
-                  globalDeafened={globalDeafened}
-                  voiceActions={voiceActions}
-                  watchedStreams={watchedStreams}
-                  streamThumbnails={streamThumbnails}
-                  onClick={() =>
-                    onFocus(item.id === focusedId ? null : item.id)
-                  }
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    return (
-      <div
-        className={cn(
-          "grid gap-4 w-full h-full place-content-center items-center pt-20 px-6 pb-6 overflow-y-auto no-scrollbar scrollbar-hide",
-          items.length === 1
-            ? "grid-cols-1 max-w-5xl mx-auto"
-            : items.length === 2
-              ? "grid-cols-1 md:grid-cols-2"
-              : items.length <= 4
-                ? "grid-cols-1 sm:grid-cols-2"
-                : items.length <= 9
-                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-                  : items.length <= 16
-                    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                    : items.length <= 25
-                      ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-                      : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
-          className,
+        ) : (
+          <div
+            data-focused-visual="true"
+            style={tintStyle}
+            className={cn(
+              "relative flex aspect-video max-h-full w-full max-w-[960px] flex-col items-center justify-center gap-3 overflow-hidden rounded-lg border border-line",
+              TILE_SURFACE,
+            )}
+          >
+            {focusedItem.avatar ? (
+              <Avatar
+                name={focusedItem.name}
+                src={getAuthAssetUrl(focusedItem.avatar)}
+                size={80}
+              />
+            ) : (
+              <TileAvatar
+                name={focusedItem.name}
+                sizeClassName={FOCUSED_AVATAR_SIZE}
+              />
+            )}
+            <p className="max-w-[80%] truncate font-display [font-optical-sizing:auto] text-[18px] leading-6 font-bold text-ink-1">
+              <InlineEmojiText text={focusedItem.name} />
+            </p>
+            {isLoadingStream && (
+              <StreamLoadingIndicator
+                name={streamOwnerName(focusedItem)}
+                className="bg-ply-2/90"
+              />
+            )}
+          </div>
         )}
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        {items.map((item) => (
-          <ParticipantCard
-            key={item.id}
-            item={item}
-            isFocused={focusedId === item.id}
-            isTray={false}
-            globalDeafened={globalDeafened}
-            voiceActions={voiceActions}
-            watchedStreams={watchedStreams}
-            streamThumbnails={streamThumbnails}
-            onClick={() => onFocus(item.id === focusedId ? null : item.id)}
-          />
-        ))}
-      </div>
-    );
-  },
-);
 
-VoiceGrid.displayName = "VoiceGrid";
+        {isFocusedScreen &&
+          focusedItem.isLocal &&
+          voiceActions?.togglePreviewHidden && (
+            <div
+              data-preview-toggle="true"
+              className="pointer-events-auto absolute top-3 left-3 z-10 pointer-fine:opacity-0 transition-opacity duration-(--dur-1) pointer-fine:group-hover/stage:opacity-100 group-focus-within/stage:opacity-100"
+            >
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  voiceActions.togglePreviewHidden?.();
+                }}
+                title={
+                  isPreviewHidden
+                    ? "Resume preview"
+                    : "Pause preview (saves resources)"
+                }
+                aria-label={
+                  isPreviewHidden ? "Resume preview" : "Pause preview"
+                }
+                className={cn(
+                  PRESS,
+                  HIT,
+                  "flex h-7 items-center gap-1.5 rounded-sm bg-black/60 px-2 text-ui-xs font-medium text-white outline-none focus-visible:outline-2 focus-visible:outline-focus",
+                )}
+              >
+                {isPreviewHidden ? (
+                  <>
+                    <Icon name="eye" size="xs" /> <span>Resume</span>
+                  </>
+                ) : (
+                  <>
+                    <Icon name="eyeOff" size="xs" /> <span>Pause</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+      </div>
+
+      {showFocusedVolume && (
+        <div className="pointer-events-auto absolute right-7 bottom-7 z-20 w-[min(300px,calc(100%-3.5rem))] rounded-lg border border-line bg-ply-3 py-1 shadow-float">
+          <Slider
+            label={isFocusedScreen ? "Stream volume" : "User volume"}
+            value={focusedPeerVolume}
+            onChange={(value) => {
+              if (isFocusedScreen) setPeerStreamVolume(focusedUserId, value);
+              else setPeerVolume(focusedUserId, value);
+            }}
+          />
+        </div>
+      )}
+
+      {contextMenu && (
+        <Suspense fallback={null}>
+          <StreamContextMenu
+            userId={focusedItem.userId}
+            x={contextMenu.x}
+            y={contextMenu.y}
+            isStreaming={focusedItem.type === "screen"}
+            onClose={() => setContextMenu(null)}
+            isClosing={false}
+            {...(voiceActions ?? {})}
+          />
+        </Suspense>
+      )}
+    </section>
+  );
+}

@@ -99,9 +99,9 @@ describe("ParticipantCard — preview-paused placeholder (Req 5.2)", () => {
     });
 
     expect(markup).toMatch(
-      /aria-label="Open participant tile for You"[^>]*class="[^"]*z-10/,
+      /aria-label="Open participant tile for You"[^>]*class="[^"]*z-0/,
     );
-    expect(markup).toMatch(/data-preview-toggle="true"[^>]*class="[^"]*z-50/);
+    expect(markup).toMatch(/data-preview-toggle="true"[^>]*class="[^"]*z-10/);
   });
 });
 

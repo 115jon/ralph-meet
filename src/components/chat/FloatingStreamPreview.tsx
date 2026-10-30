@@ -1,56 +1,14 @@
 import type { StreamContextMenuProps } from "@/components/StreamContextMenu";
 import { StreamContextMenu } from "@/components/StreamContextMenu";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { VideoPlayer } from "@/components/voice/VideoPlayer";
-import { cn } from "@/lib/utils";
-import { ArrowLeft, MonitorX, Settings2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+
+import { FloatingSurface } from "./floating/FloatingSurface";
 import InlineEmojiText from "./InlineEmojiText";
-
-const DEFAULT_PREVIEW_SIZE = {
-  width: 360,
-  height: 220,
-};
-
-function getDefaultPosition(slotIndex: number) {
-  if (typeof window === "undefined") {
-    return { x: 16 + slotIndex * 20, y: 16 + slotIndex * 20 };
-  }
-
-  return {
-    x: Math.max(
-      16,
-      Math.min(
-        96 - slotIndex * 12,
-        window.innerWidth - DEFAULT_PREVIEW_SIZE.width - 16 - slotIndex * 24,
-      ),
-    ),
-    y: Math.max(
-      16,
-      window.innerHeight - DEFAULT_PREVIEW_SIZE.height - 120 - slotIndex * 28,
-    ),
-  };
-}
-
-function clampPosition(
-  position: { x: number; y: number },
-  width: number,
-  height: number,
-) {
-  if (typeof window === "undefined") return position;
-
-  return {
-    x: Math.min(
-      Math.max(12, position.x),
-      Math.max(12, window.innerWidth - width - 12),
-    ),
-    y: Math.min(
-      Math.max(12, position.y),
-      Math.max(12, window.innerHeight - height - 12),
-    ),
-  };
-}
 
 interface FloatingStreamPreviewProps {
   userId: string;
@@ -68,6 +26,53 @@ interface FloatingStreamPreviewProps {
   menuProps: Omit<StreamContextMenuProps, "x" | "y" | "onClose" | "userId">;
 }
 
+/** The video (or the paused card) at 16:9, filling its box. */
+function PreviewMedia({
+  previewStream,
+  isPreviewPaused,
+  displayName,
+  pausedTitle,
+  pausedDescription,
+  dense = false,
+}: {
+  previewStream: MediaStream | null;
+  isPreviewPaused: boolean;
+  displayName: string;
+  pausedTitle: string;
+  pausedDescription: string;
+  dense?: boolean;
+}) {
+  const live = !isPreviewPaused && previewStream;
+  return (
+    <div className="relative aspect-video overflow-hidden bg-black">
+      {live ? (
+        <VideoPlayer
+          stream={previewStream}
+          muted
+          label={`${displayName} stream preview`}
+          className="h-full w-full bg-black object-contain"
+        />
+      ) : dense ? (
+        <div className="absolute inset-0 flex items-center justify-center text-white/70">
+          <Icon name="screenShare" size="lg" />
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+          <p className="text-ui-md font-semibold text-white">{pausedTitle}</p>
+          <p className="mt-1 text-ui-sm text-white/70">{pausedDescription}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A screen share preview that floats over the chat: your own stream while
+ * you're away from the voice channel, or a stream you watch. Desktop: a
+ * resizable 16:9 card. Phone: a picture-in-picture thumbnail; tap for a sheet
+ * with the full preview and actions. Minimises to a bubble; drags to any
+ * corner.
+ */
 export default function FloatingStreamPreview({
   userId,
   channelName,
@@ -83,168 +88,132 @@ export default function FloatingStreamPreview({
   onNavigateToVoiceChannel,
   menuProps,
 }: FloatingStreamPreviewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const dragStateRef = useRef<{
-    pointerId: number;
-    offsetX: number;
-    offsetY: number;
-  } | null>(null);
-  const [position, setPosition] = useState(() => getDefaultPosition(slotIndex));
   const [menuPosition, setMenuPosition] = useState<{
     x: number;
     y: number;
   } | null>(null);
 
-  const openMenuAt = (x: number, y: number) => {
-    setMenuPosition({ x, y });
-  };
+  const media = (dense = false) => (
+    <PreviewMedia
+      previewStream={previewStream}
+      isPreviewPaused={isPreviewPaused}
+      displayName={displayName}
+      pausedTitle={pausedTitle}
+      pausedDescription={pausedDescription}
+      dense={dense}
+    />
+  );
 
-  useEffect(() => {
-    const clampToViewport = () => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      setPosition((current) =>
-        clampPosition(
-          current,
-          rect?.width ?? DEFAULT_PREVIEW_SIZE.width,
-          rect?.height ?? DEFAULT_PREVIEW_SIZE.height,
-        ),
-      );
-    };
-
-    clampToViewport();
-    window.addEventListener("resize", clampToViewport);
-    return () => window.removeEventListener("resize", clampToViewport);
-  }, []);
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.target as Node)) {
-      return;
-    }
-
-    if (event.button !== 0) {
-      return;
-    }
-
-    if (
-      (event.target as HTMLElement).closest(
-        "[data-stream-preview-interactive='true']",
-      )
-    ) {
-      return;
-    }
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-    };
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) {
-      return;
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    setPosition(
-      clampPosition(
-        {
-          x: event.clientX - dragState.offsetX,
-          y: event.clientY - dragState.offsetY,
-        },
-        rect?.width ?? DEFAULT_PREVIEW_SIZE.width,
-        rect?.height ?? DEFAULT_PREVIEW_SIZE.height,
-      ),
-    );
-  };
-
-  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (
-      !dragStateRef.current ||
-      dragStateRef.current.pointerId !== event.pointerId
-    ) {
-      return;
-    }
-
-    dragStateRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.target as Node)) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    openMenuAt(event.clientX, event.clientY);
-  };
+  const label = `${displayName}'s stream`;
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <div
-        ref={containerRef}
-        className="fixed z-40 w-[min(360px,calc(100vw-24px))] touch-none select-none cursor-grab active:cursor-grabbing"
-        style={{ left: position.x, top: position.y }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onContextMenu={handleContextMenu}
-      >
-        <div className="group relative aspect-video overflow-hidden rounded-lg border border-rm-border bg-rm-bg-floating/95 shadow-2xl">
-          {!isPreviewPaused && previewStream && (
-            <VideoPlayer
-              stream={previewStream}
-              muted
-              label={`${displayName} stream preview`}
-              className="h-full w-full object-contain bg-black"
-            />
-          )}
-
-          {(isPreviewPaused || !previewStream) && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black px-8 text-center">
-              <p className="text-lg font-bold tracking-tight text-white">
-                {pausedTitle}
-              </p>
-              <p className="mt-2 text-sm font-medium text-white/70">
-                {pausedDescription}
-              </p>
-            </div>
-          )}
-
-          {previewStream && !isPreviewPaused && (
-            <div className="absolute inset-0 bg-linear-to-t from-black/55 via-transparent to-black/20 pointer-events-none" />
-          )}
-
-          <button
-            type="button"
-            data-stream-preview-interactive="true"
+    <TooltipProvider>
+      <FloatingSurface
+        id={`stream-preview-${slotIndex}`}
+        label="Stream preview"
+        title={<InlineEmojiText text={label} className="truncate" />}
+        // Bottom left, as before: clear of now playing (bottom right) and
+        // the soundboard (top right).
+        defaultCorner="bottom-left"
+        width={{ min: 240, max: 640, default: 360 }}
+        phoneWidth={184}
+        portal={false}
+        minimizeLabel="Minimise stream preview"
+        restoreLabel={`Open ${displayName}'s stream preview`}
+        bubble={<Icon name="screenShare" size="lg" />}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setMenuPosition({ x: event.clientX, y: event.clientY });
+        }}
+        headerActions={
+          <IconButton
+            icon="arrowRight"
+            size={28}
+            variant="muted"
+            tooltip={`Go to ${channelName}`}
+            aria-label={`Go to ${channelName}`}
             onClick={onNavigateToVoiceChannel}
-            className="absolute left-3 top-3 z-20 flex max-w-[70%] items-center gap-1.5 rounded-md bg-black/40 px-2.5 py-1 text-ui-base font-semibold tracking-tight text-white/90 transition hover:text-white hover:underline"
-          >
-            <ArrowLeft size={14} className="shrink-0" />
-            <InlineEmojiText text={channelName} className="truncate" />
-          </button>
-
-          <div className="absolute bottom-3 left-3 z-20 max-w-[55%] rounded-md bg-black/40 px-2.5 py-1 text-sm font-bold tracking-tight text-white">
-            <InlineEmojiText text={displayName} className="truncate" />
+          />
+        }
+        compact={
+          <div className="relative">
+            {media(true)}
+            <span className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-sm bg-black/60 px-1.5 text-ui-xs font-medium text-white">
+              <InlineEmojiText text={displayName} />
+            </span>
           </div>
-
-          <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2">
+        }
+        sheetTitle={label}
+        sheetDescription={channelName}
+        sheet={
+          <div className="flex flex-col gap-3">
+            <div className="overflow-hidden rounded-lg">{media()}</div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={onNavigateToVoiceChannel}
+              >
+                <Icon name="arrowRight" size="sm" />
+                Go to channel
+              </Button>
+              <Button
+                variant="secondary"
+                size="lg"
+                aria-label="Open stream settings"
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setMenuPosition({ x: rect.left, y: rect.top });
+                }}
+              >
+                <Icon name="sliders" size="sm" />
+                Settings
+              </Button>
+            </div>
+            <Button
+              variant="destructive"
+              size="lg"
+              aria-label={primaryActionAriaLabel}
+              onClick={() => {
+                onPrimaryAction();
+                setMenuPosition(null);
+              }}
+            >
+              <Icon name="streamOff" size="sm" />
+              {primaryActionTooltip}
+            </Button>
+          </div>
+        }
+        overlay={
+          menuPosition ? (
+            <StreamContextMenu
+              {...menuProps}
+              x={menuPosition.x}
+              y={menuPosition.y}
+              userId={userId}
+              onClose={() => setMenuPosition(null)}
+            />
+          ) : null
+        }
+      >
+        <div className="group/preview relative">
+          {media()}
+          {/* Over video: a black/60 pill (the media-overlay exception to the
+              ply tokens). Revealed on hover or focus; always shown on touch
+              and while its menu is open. */}
+          <div
+            data-open={menuPosition ? "" : undefined}
+            className="absolute right-2 bottom-2 z-20 flex items-center gap-0.5 rounded-md bg-black/60 p-0.5 transition-opacity duration-(--dur-2) ease-out pointer-fine:opacity-0 pointer-fine:group-hover/preview:opacity-100 pointer-fine:group-has-focus-visible/preview:opacity-100 pointer-fine:data-open:opacity-100"
+          >
             <IconButton
-              data-stream-preview-interactive="true"
-              icon={Settings2}
-              size="xs"
-              tooltip="Stream Settings"
+              icon="sliders"
+              size={28}
+              variant="plain"
+              tooltip="Stream settings"
               aria-label="Open stream settings"
-              className="border border-white/10 bg-black/55 text-white/85 hover:bg-black/70 hover:text-white"
+              aria-haspopup="menu"
+              className="text-white/85 [--hover-o:0] pointer-fine:hover:bg-white/15 pointer-fine:hover:text-white focus-visible:outline-2 focus-visible:outline-white"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
                 setMenuPosition((current) =>
@@ -253,15 +222,12 @@ export default function FloatingStreamPreview({
               }}
             />
             <IconButton
-              data-stream-preview-interactive="true"
-              icon={MonitorX}
-              size="xs"
+              icon="streamOff"
+              size={28}
+              variant="plain"
               tooltip={primaryActionTooltip}
               aria-label={primaryActionAriaLabel}
-              className={cn(
-                "border border-white/10 bg-black/55 text-white/85 hover:bg-destructive hover:text-destructive-foreground",
-                "transition-colors",
-              )}
+              className="text-white/85 [--hover-o:0] pointer-fine:hover:bg-danger-fill pointer-fine:hover:text-on-danger focus-visible:outline-2 focus-visible:outline-white"
               onClick={() => {
                 onPrimaryAction();
                 setMenuPosition(null);
@@ -269,17 +235,7 @@ export default function FloatingStreamPreview({
             />
           </div>
         </div>
-
-        {menuPosition && (
-          <StreamContextMenu
-            {...menuProps}
-            x={menuPosition.x}
-            y={menuPosition.y}
-            userId={userId}
-            onClose={() => setMenuPosition(null)}
-          />
-        )}
-      </div>
+      </FloatingSurface>
     </TooltipProvider>
   );
 }

@@ -1,11 +1,15 @@
+import { toContextMenuEvent, useLongPress } from "@/hooks/useLongPress";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Channel, Server, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { HIT, PRESS, PRESS_ICON } from "@/components/ui/interaction";
+import { CountBadge } from "@/components/ui/badge";
+import { copyToClipboard } from "@/components/ui/toast";
 import { useMemo, useState } from "react";
-import { Volume2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   Tooltip,
   TooltipContent,
@@ -14,9 +18,9 @@ import {
 } from "@/components/ui/tooltip";
 import ContextMenu from "./ContextMenu";
 import { AvatarImage } from "./AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
 import CreateServerModal from "./CreateServerModal";
 import { HomeIcon } from "./HomeIcon";
-import { Check, Copy, Plus, Trash2 } from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 
 const EMPTY_CHANNELS: Channel[] = [];
@@ -139,24 +143,23 @@ export default function ServerList({
     );
     openMenu(event, [
       {
-        label: "Mark as Read",
-        icon: <Check className="h-4 w-4" />,
+        label: "Mark as read",
+        icon: <Icon name="check" size="sm" />,
         onClick: () => onMarkServerRead?.(server.id),
         disabled: !hasUnread,
       },
       {
         label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(server.id),
+        icon: <Icon name="copy" size="sm" />,
+        onClick: () => void copyToClipboard(server.id, "Server ID copied"),
       },
-      {
-        label: "Leave Server",
-        icon: <Trash2 className="h-4 w-4" />,
-        onClick: () => alert("Leave server not implemented yet"),
-        variant: "danger",
-      },
+      // "Leave server" returns once the API exists (FINAL-FIX-ROUND blocker 3).
     ]);
   };
+
+  const bindServerLongPress = useLongPress<Server>((info, server) =>
+    handleServerContextMenu(toContextMenuEvent(info), server),
+  );
 
   const { visibleDms, overflowCount } = useMemo(() => {
     if (dmExpanded || unreadDms.length <= MAX_VISIBLE_DMS) {
@@ -205,42 +208,43 @@ export default function ServerList({
   const hasDmSection = unreadDms.length > 0;
 
   return (
-    <TooltipProvider delayDuration={80}>
+    <TooltipProvider>
       <div
-        className="relative z-10 flex h-full w-full flex-col items-center gap-2 overflow-y-auto bg-rm-bg-floating pt-3 no-scrollbar"
+        className="relative z-10 flex h-full w-full flex-col items-center gap-2 overflow-y-auto bg-ply-0 scrollbar-none"
         style={{
           paddingTop: "calc(12px + var(--safe-area-top, 0px))",
           paddingBottom: "calc(12px + var(--safe-area-bottom, 0px))",
         }}
       >
-        <div className="group relative flex w-full justify-center">
+        <RailSlot pill={activeServerId === "@me" ? "selected" : "none"}>
           <button
+            type="button"
             className={cn(
-              "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
-              activeServerId === "@me" &&
-                "rounded-xl bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]",
+              RAIL_TILE,
+              // The home mark is a two-tone image that swaps on dark/light,
+              // so Home lifts to tint-3 instead of the primary key (the art
+              // would vanish on primary-fill).
+              "bg-tint-2 text-ink-1",
+              activeServerId === "@me" && "bg-tint-3",
             )}
             onClick={() => onSelect("@me")}
             aria-label="Direct messages"
+            aria-current={activeServerId === "@me" ? "page" : undefined}
           >
-            <HomeIcon className="h-7 w-7" />
+            <HomeIcon className="size-6" />
             {homeBadgeCount > 0 && (
-              <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating animate-in zoom-in duration-200">
-                {homeBadgeCount > 99 ? "99+" : homeBadgeCount}
-              </div>
+              <CountBadge
+                count={homeBadgeCount}
+                ring="ply-0"
+                className={RAIL_BADGE}
+              />
             )}
           </button>
-          <div
-            className={cn(
-              "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
-              activeServerId === "@me" ? "h-10" : "h-0 group-hover:h-5",
-            )}
-          />
-        </div>
+        </RailSlot>
 
         {hasDmSection && (
           <>
-            <div className="mx-auto h-0.5 w-8 rounded-full bg-rm-border" />
+            <div aria-hidden className={RAIL_RULE} />
 
             {visibleDms.map((dm) => {
               const isActiveDm =
@@ -248,54 +252,75 @@ export default function ServerList({
               const displayName = getDisplayName(dm.recipient);
 
               return (
-                <div
+                <RailSlot
                   key={dm.channelId}
-                  className="group relative flex w-full justify-center animate-in fade-in slide-in-from-left-2 duration-300"
+                  pill={isActiveDm ? "selected" : "unread"}
                 >
-                  <button
-                    className={cn(
-                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-ui enabled:active:scale-[0.96]",
-                      isActiveDm
-                        ? "ring-2 ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)]"
-                        : "ring-1 ring-rm-border hover:ring-rm-border-strong",
-                    )}
-                    onClick={() => onSelectDm?.(dm.channelId)}
-                  >
-                    {dm.recipient.avatar_url ? (
-                      <AvatarImage
-                        src={getAuthAssetUrl(dm.recipient.avatar_url)}
-                        alt={displayName}
-                        display={dm.recipient.avatar_display}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-rail-item text-sm font-bold text-rm-text">
-                        {getDisplayInitial(dm.recipient)}
-                      </div>
-                    )}
-                    <div className="pointer-events-none fixed left-[80px] z-150 hidden whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text opacity-0 shadow-md transition-opacity group-hover:opacity-100 md:block">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          RAIL_TILE,
+                          avatarShape(
+                            dm.recipient.avatar_url &&
+                              dm.recipient.avatar_display,
+                            { clip: false },
+                          ),
+                          isActiveDm && RAIL_TILE_SELECTED,
+                        )}
+                        onClick={() => onSelectDm?.(dm.channelId)}
+                        aria-label={displayName}
+                      >
+                        <span
+                          className={cn(
+                            "size-full",
+                            avatarShape(
+                              dm.recipient.avatar_url &&
+                                dm.recipient.avatar_display,
+                            ),
+                          )}
+                        >
+                          {dm.recipient.avatar_url ? (
+                            <AvatarImage
+                              src={getAuthAssetUrl(dm.recipient.avatar_url)}
+                              alt={displayName}
+                              display={dm.recipient.avatar_display}
+                            />
+                          ) : (
+                            <span className="flex size-full items-center justify-center">
+                              {getDisplayInitial(dm.recipient)}
+                            </span>
+                          )}
+                        </span>
+                        {(dm.unreadCount ?? 1) > 0 && (
+                          <CountBadge
+                            count={dm.unreadCount ?? 1}
+                            ring="ply-0"
+                            // Over a decoration's ring art (z-10).
+                            className={cn(RAIL_BADGE, "z-20")}
+                          />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      forceMount
+                      side="right"
+                      align="center"
+                      sideOffset={12}
+                    >
                       <InlineEmojiText text={displayName} />
-                    </div>
-                    {(dm.unreadCount ?? 1) > 0 && (
-                      <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating">
-                        {(dm.unreadCount ?? 1) > 99
-                          ? "99+"
-                          : (dm.unreadCount ?? 1)}
-                      </div>
-                    )}
-                  </button>
-                  <div
-                    className={cn(
-                      "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
-                      isActiveDm ? "h-10" : "h-2 group-hover:h-5",
-                    )}
-                  />
-                </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </RailSlot>
               );
             })}
 
             {overflowCount > 0 && (
               <button
-                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text"
+                type="button"
+                aria-label={`Show ${overflowCount} more unread conversations`}
+                className={cn(RAIL_TILE, "font-sans text-num-xs")}
                 onClick={() => setDmExpanded(true)}
               >
                 +{overflowCount}
@@ -304,7 +329,12 @@ export default function ServerList({
 
             {dmExpanded && unreadDms.length > MAX_VISIBLE_DMS && (
               <button
-                className="flex h-6 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-medium text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text"
+                type="button"
+                className={cn(
+                  "flex h-6 w-10 items-center justify-center rounded-sm text-ui-xs font-medium text-ink-3 pointer-fine:hover:text-ink-1",
+                  PRESS,
+                  HIT,
+                )}
                 onClick={() => setDmExpanded(false)}
               >
                 Less
@@ -313,7 +343,10 @@ export default function ServerList({
           </>
         )}
 
-        <div className="mx-auto h-0.5 w-8 rounded-full bg-rm-border" />
+        <div
+          aria-hidden
+          className={hasDmSection ? RAIL_SEPARATOR : RAIL_RULE}
+        />
 
         {servers.map((server) => {
           const isActive = activeServerId === server.id;
@@ -340,32 +373,36 @@ export default function ServerList({
             : server.name;
 
           return (
-            <div
+            <RailSlot
               key={server.id}
-              className="group relative flex w-full justify-center"
+              pill={isActive ? "selected" : hasUnread ? "unread" : "none"}
             >
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    type="button"
                     className={cn(
-                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full font-bold transition-ui enabled:active:scale-[0.96] hover:rounded-xl",
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]"
-                        : "bg-rm-rail-item text-rm-text hover:bg-primary hover:text-primary-foreground",
+                      RAIL_TILE,
+                      isActive && RAIL_TILE_SELECTED,
+                      hasUnread && !isActive && "text-ink-1",
+                      // You are here: your call's server wears the path.
+                      isInLocalVoiceServer && "ring-1 ring-path ring-inset",
                     )}
                     onClick={() => onSelect(server.id)}
                     onContextMenu={(event) =>
                       handleServerContextMenu(event, server)
                     }
+                    {...bindServerLongPress(server)}
                     aria-label={buttonLabel}
+                    aria-current={isActive ? "page" : undefined}
                     data-server-tooltip={voiceSummary ? "voice" : "label"}
                   >
-                    <span className="flex h-full w-full shrink-0 items-center justify-center rounded-[inherit] font-bold">
+                    <span className="flex size-full shrink-0 items-center justify-center overflow-hidden rounded-[inherit]">
                       {server.icon_url ? (
                         <img
                           src={getAuthAssetUrl(server.icon_url)}
                           alt={server.name}
-                          className="h-full w-full rounded-[inherit] object-cover"
+                          className="size-full object-cover"
                         />
                       ) : (
                         server.name.charAt(0).toUpperCase()
@@ -373,26 +410,34 @@ export default function ServerList({
                     </span>
 
                     {voiceSummary && (
-                      <div
+                      <span
                         data-server-voice-indicator="true"
                         data-local-voice={
                           isInLocalVoiceServer ? "true" : "false"
                         }
                         className={cn(
-                          "pointer-events-none absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border text-ui-2xs shadow-[0_4px_12px_rgba(0,0,0,0.28)] ring-[3px] ring-rm-bg-floating transition-colors",
+                          "pointer-events-none absolute flex items-center justify-center rounded-full ring-2 ring-ply-0",
                           isInLocalVoiceServer
-                            ? "border-primary/40 bg-primary text-primary-foreground"
-                            : "border-rm-border bg-rm-bg-elevated text-rm-text-secondary",
+                            ? "-top-1 -right-1 size-4 bg-path text-ply-0"
+                            : "-top-0.5 -right-0.5 size-2 bg-ink-3",
                         )}
                       >
-                        <Volume2 className="h-3 w-3" />
-                      </div>
+                        {isInLocalVoiceServer && (
+                          <Icon
+                            name="speaking"
+                            size="xs"
+                            className="size-2.5"
+                          />
+                        )}
+                      </span>
                     )}
 
                     {mentionCount > 0 && (
-                      <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating animate-in zoom-in duration-200">
-                        {mentionCount > 99 ? "99+" : mentionCount}
-                      </div>
+                      <CountBadge
+                        count={mentionCount}
+                        ring="ply-0"
+                        className={RAIL_BADGE}
+                      />
                     )}
                   </button>
                 </TooltipTrigger>
@@ -401,129 +446,76 @@ export default function ServerList({
                   forceMount
                   side="right"
                   align="center"
-                  sideOffset={14}
+                  sideOffset={12}
                   data-server-tooltip={voiceSummary ? "voice" : "label"}
-                  className={cn(
-                    voiceSummary &&
-                      "w-[248px] max-w-[calc(100vw-112px)] rounded-lg px-0 py-0 shadow-lg",
-                  )}
                 >
                   {voiceSummary ? (
-                    <div className="p-3">
-                      <p className="truncate text-sm font-semibold">
-                        <InlineEmojiText text={server.name} />
-                      </p>
-                      <p className="mt-1 text-ui-2xs font-medium text-rm-text-muted">
-                        {formatVoiceSummary(
-                          voiceSummary.totalMembers,
-                          voiceSummary.activeChannels.length,
-                        )}
-                      </p>
-
-                      <div className="mt-3 space-y-2">
-                        {visibleVoiceChannels.map((channel) => {
-                          const visibleMembers = channel.members.slice(
-                            0,
-                            MAX_VISIBLE_VOICE_AVATARS,
-                          );
-                          const hiddenMemberCount = Math.max(
-                            0,
-                            channel.members.length - visibleMembers.length,
-                          );
-
-                          return (
-                            <div
-                              key={channel.channelId}
-                              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl bg-rm-bg-elevated px-2.5 py-2"
-                            >
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <Volume2 className="h-3.5 w-3.5 shrink-0 text-rm-text-secondary" />
-                                  <span className="truncate text-xs font-semibold">
-                                    <InlineEmojiText
-                                      text={channel.channelName}
-                                    />
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-ui-2xs text-rm-text-muted">
-                                  {channel.members.length === 1
-                                    ? "1 person"
-                                    : `${channel.members.length} people`}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center">
-                                {visibleMembers.map((member, index) => {
-                                  const displayName = getDisplayName(
-                                    member,
-                                    member.name,
-                                  );
-                                  return (
-                                    <div
-                                      key={`${channel.channelId}-${member.clerk_user_id}`}
-                                      className={cn(
-                                        "flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-bg-floating bg-rm-bg-secondary text-ui-2xs font-semibold text-rm-text",
-                                        index > 0 && "-ml-2",
-                                      )}
-                                    >
-                                      {member.avatar_url ? (
-                                        <AvatarImage
-                                          src={getAuthAssetUrl(
-                                            member.avatar_url,
-                                          )}
-                                          alt={displayName}
-                                          display={member.avatar_display}
-                                        />
-                                      ) : (
-                                        getDisplayInitial(member, "?")
-                                      )}
-                                    </div>
-                                  );
-                                })}
-
-                                {hiddenMemberCount > 0 && (
-                                  <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full border border-rm-bg-floating bg-rm-bg-secondary text-ui-2xs font-semibold text-rm-text-secondary">
-                                    +{hiddenMemberCount}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {hiddenVoiceChannelCount > 0 && (
-                          <p className="text-ui-2xs font-medium text-rm-text-muted">
-                            {formatMoreChannels(hiddenVoiceChannelCount)}
-                          </p>
-                        )}
+                    <div className="flex flex-col gap-1.5 py-0.5">
+                      <div>
+                        <p className="truncate font-semibold">
+                          <InlineEmojiText text={server.name} />
+                        </p>
+                        <p className="opacity-70">
+                          {formatVoiceSummary(
+                            voiceSummary.totalMembers,
+                            voiceSummary.activeChannels.length,
+                          )}
+                        </p>
                       </div>
+                      {visibleVoiceChannels.map((channel) => {
+                        const names = channel.members
+                          .slice(0, MAX_VISIBLE_VOICE_AVATARS)
+                          .map((member) => getDisplayName(member, member.name));
+                        const hiddenMemberCount = Math.max(
+                          0,
+                          channel.members.length - names.length,
+                        );
+                        return (
+                          <div key={channel.channelId} className="min-w-0">
+                            <p className="flex items-center gap-1.5">
+                              <Icon
+                                name="voiceChannel"
+                                size="xs"
+                                className="shrink-0 opacity-70"
+                              />
+                              <span className="min-w-0 truncate font-semibold">
+                                <InlineEmojiText text={channel.channelName} />
+                              </span>
+                            </p>
+                            <p className="truncate pl-4.5 opacity-70">
+                              {names.join(", ")}
+                              {hiddenMemberCount > 0
+                                ? ` +${hiddenMemberCount}`
+                                : ""}
+                            </p>
+                          </div>
+                        );
+                      })}
+                      {hiddenVoiceChannelCount > 0 && (
+                        <p className="opacity-70">
+                          {formatMoreChannels(hiddenVoiceChannelCount)}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <InlineEmojiText text={server.name} />
                   )}
                 </TooltipContent>
               </Tooltip>
-
-              <div
-                className={cn(
-                  "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
-                  isActive
-                    ? "h-10"
-                    : hasUnread
-                      ? "h-2 group-hover:h-5"
-                      : "h-0 group-hover:h-5",
-                )}
-              />
-            </div>
+            </RailSlot>
           );
         })}
 
         <button
-          className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] hover:rounded-xl hover:bg-primary hover:text-primary-foreground"
+          type="button"
+          className={cn(
+            RAIL_TILE,
+            "border-2 border-line-strong bg-transparent text-ink-2 pointer-fine:hover:text-ink-1",
+          )}
           onClick={() => setShowCreate(true)}
           aria-label="Create server"
         >
-          <Plus className="h-6 w-6" />
+          <Icon name="add" size="lg" />
         </button>
 
         <CreateServerModal
@@ -542,5 +534,58 @@ export default function ServerList({
         )}
       </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Rail tile (component kit, Rail): a 40px square key with 2px corners, tint-1
+ * on the ply-0 rail, a Bricolage 800 initial. Selected is the primary key
+ * (primary-fill, on-primary). Hover and press are ink overlays (PRESS); the
+ * shape never morphs.
+ */
+const RAIL_TILE = cn(
+  "relative flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[2px] bg-tint-1 font-display-tuned text-[15px] leading-none font-extrabold text-ink-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+  PRESS,
+  PRESS_ICON,
+);
+const RAIL_TILE_SELECTED = "bg-primary-fill text-on-primary";
+/** Count chips sit on the tile's bottom-right corner, cut from the rail ply. */
+const RAIL_BADGE = "pointer-events-none absolute -right-1.5 -bottom-1.5";
+/** The 2px ink rule under Home. */
+const RAIL_RULE = "my-1 h-0.5 w-6 shrink-0 bg-ink-1";
+/** Hairline between the unread DMs and the servers. */
+const RAIL_SEPARATOR = "h-px w-6 shrink-0 bg-line";
+
+type PillState = "selected" | "unread" | "none";
+
+/**
+ * One rail row and its pill: a single 4x32 bar on the left edge that scales
+ * (scaleY) between 0, 8px unread, 16px hover and 32px selected, so the
+ * motion stays on the compositor. The selected pill is the head of the lit
+ * you-are-here path (--path).
+ */
+function RailSlot({
+  pill,
+  children,
+}: {
+  pill: PillState;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="group relative flex w-full justify-center">
+      {children}
+      <span
+        aria-hidden
+        data-pill={pill}
+        className={cn(
+          "pointer-events-none absolute top-1/2 left-0 h-8 w-1 -translate-y-1/2 rounded-r-full transition-[scale] duration-(--dur-3) ease-out",
+          pill === "selected"
+            ? "scale-y-100 bg-path"
+            : pill === "unread"
+              ? "scale-y-25 bg-ink-1 pointer-fine:group-hover:scale-y-50"
+              : "scale-y-0 bg-ink-2 pointer-fine:group-hover:scale-y-50",
+        )}
+      />
+    </div>
   );
 }

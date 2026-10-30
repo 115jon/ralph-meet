@@ -1,95 +1,101 @@
 "use client";
 
-import * as React from "react";
-import { XIcon } from "lucide-react";
-import { Dialog as SheetPrimitive } from "radix-ui";
+/**
+ * Desktop side sheet (design-system 12.10): a modal panel attached to a
+ * screen edge, 360 wide, on the modal layer (z-50) over `bg-scrim`.
+ * Phones use a Drawer with `direction` instead (see ui/side-panel.tsx).
+ *
+ * Built on ui/dialog.tsx, so it shares the dialog stack: the hardware/browser
+ * back button closes the topmost surface, Escape closes it (a drawer or
+ * dialog above it closes first), and focus returns to whatever opened it.
+ *
+ *   <Sheet open={open} onOpenChange={setOpen}>
+ *     <SheetContent aria-label="Pinned messages">
+ *       <SheetHeader><SheetTitle>Pinned messages</SheetTitle></SheetHeader>
+ *       …
+ *     </SheetContent>
+ *   </Sheet>
+ */
 
+import * as React from "react";
+
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogOverlay,
+  DialogPortal,
+  DialogSurface,
+  DialogTitle,
+  DialogTrigger,
+  BEHIND_CUE,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />;
-}
+const Sheet = Dialog;
+const SheetTrigger = DialogTrigger;
+const SheetClose = DialogClose;
 
-function SheetTrigger({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
-  return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />;
-}
+type SheetSide = "top" | "right" | "bottom" | "left";
 
-function SheetClose({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Close>) {
-  return <SheetPrimitive.Close data-slot="sheet-close" {...props} />;
-}
+const SIDE_CLASSES: Record<SheetSide, string> = {
+  right:
+    "inset-y-0 right-0 h-full w-[360px] max-w-full border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+  left: "inset-y-0 left-0 h-full w-[360px] max-w-full border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+  top: "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+  bottom:
+    "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+};
 
-function SheetPortal({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Portal>) {
-  return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
-}
+type SheetContentProps = React.ComponentProps<typeof DialogSurface> & {
+  side?: SheetSide;
+  /** Skip the scrim (a preview that must leave the page undimmed). */
+  hideOverlay?: boolean;
+};
 
-function SheetOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
-  return (
-    <SheetPrimitive.Overlay
-      data-slot="sheet-overlay"
-      className={cn(
-        "fixed inset-0 z-50 bg-rm-scrim data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
+  function SheetContent(
+    {
+      className,
+      children,
+      side = "right",
+      hideOverlay = false,
+      showCloseButton = false,
+      ...props
+    },
+    ref,
+  ) {
+    return (
+      <DialogPortal>
+        {hideOverlay ? null : <DialogOverlay data-slot="sheet-overlay" />}
+        <DialogSurface
+          ref={ref}
+          data-slot="sheet-content"
+          showCloseButton={showCloseButton}
+          className={cn(
+            "fixed z-50 flex flex-col overscroll-contain border-line bg-ply-3 text-ink-1 shadow-modal outline-none ease-drawer data-stacked:z-60 data-[state=closed]:animate-out data-[state=closed]:duration-(--dur-4-exit) data-[state=open]:animate-in data-[state=open]:duration-260 data-keyboard:duration-100! data-keyboard:[--tw-enter-translate-x:0]! data-keyboard:[--tw-enter-translate-y:0]!",
+            BEHIND_CUE,
+            SIDE_CLASSES[side],
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </DialogSurface>
+      </DialogPortal>
+    );
+  },
+);
 
-function SheetContent({
-  className,
-  children,
-  side = "right",
-  showCloseButton = true,
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Content> & {
-  side?: "top" | "right" | "bottom" | "left";
-  showCloseButton?: boolean;
-}) {
-  return (
-    <SheetPortal>
-      <SheetOverlay />
-      <SheetPrimitive.Content
-        data-slot="sheet-content"
-        className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-rm-bg-primary shadow-2xl ease-drawer data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-[280ms]",
-          side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
-          side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
-          side === "top" &&
-            "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
-          side === "bottom" &&
-            "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
-          className,
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-md text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text enabled:active:scale-[0.96] disabled:pointer-events-none">
-            <XIcon className="size-4" />
-            <span className="sr-only">Close</span>
-          </SheetPrimitive.Close>
-        )}
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  );
-}
-
+/** 48px header with a bottom hairline (12.10); title leads, actions trail. */
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-header"
-      className={cn("flex flex-col gap-1.5 p-4", className)}
+      className={cn(
+        "flex h-12 shrink-0 items-center gap-2 border-b border-line px-4",
+        className,
+      )}
       {...props}
     />
   );
@@ -108,11 +114,14 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
 function SheetTitle({
   className,
   ...props
-}: React.ComponentProps<typeof SheetPrimitive.Title>) {
+}: React.ComponentProps<typeof DialogTitle>) {
   return (
-    <SheetPrimitive.Title
+    <DialogTitle
       data-slot="sheet-title"
-      className={cn("font-semibold text-foreground", className)}
+      className={cn(
+        "min-w-0 flex-1 truncate text-ui-row font-semibold text-ink-1",
+        className,
+      )}
       {...props}
     />
   );
@@ -121,23 +130,26 @@ function SheetTitle({
 function SheetDescription({
   className,
   ...props
-}: React.ComponentProps<typeof SheetPrimitive.Description>) {
+}: React.ComponentProps<typeof DialogDescription>) {
   return (
-    <SheetPrimitive.Description
+    <DialogDescription
       data-slot="sheet-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-ui-sm text-ink-2", className)}
       {...props}
     />
   );
 }
 
+Object.assign(SheetTitle, { rmSlot: "title" });
+Object.assign(SheetDescription, { rmSlot: "description" });
+
 export {
   Sheet,
-  SheetTrigger,
   SheetClose,
   SheetContent,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
   SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
 };

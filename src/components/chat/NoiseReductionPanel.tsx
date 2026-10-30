@@ -1,19 +1,26 @@
-import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
+import { Icon } from "@/components/ui/icon";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   NOISE_REDUCTION_PROVIDER_LABELS,
   isNoiseReductionProviderSupported,
 } from "@/lib/voice/noise-reduction";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { AudioWaveform, ShieldCheck } from "lucide-react";
+import { useId } from "react";
 import { useShallow } from "zustand/shallow";
 
 interface NoiseReductionPanelProps {
   settingsUserId?: string | null;
+  /** Bare body for a popover/drawer host (no card border or surface). */
   compact?: boolean;
   className?: string;
 }
 
+/**
+ * A switch row and one line: "Removes background noise from your mic." The
+ * provider (RNNoise) is a muted footnote. The full variant is the same row
+ * on a card with one more line about when the change applies.
+ */
 export function NoiseReductionPanel({
   settingsUserId,
   compact = false,
@@ -25,6 +32,8 @@ export function NoiseReductionPanel({
   const updateVoiceSettings = useVoiceSettingsStore(
     (state) => state.updateVoiceSettings,
   );
+  const labelId = useId();
+  const descId = useId();
   const supported = isNoiseReductionProviderSupported(
     settings.noiseReductionProvider,
   );
@@ -32,71 +41,71 @@ export function NoiseReductionPanel({
     NOISE_REDUCTION_PROVIDER_LABELS[settings.noiseReductionProvider] ??
     "RNNoise";
 
+  const toggle = () => {
+    if (!supported) return;
+
+    updateVoiceSettings((current) => {
+      const nextEnabled = !current.noiseReductionEnabled;
+      return {
+        ...current,
+        noiseReductionEnabled: nextEnabled,
+        noiseReductionProvider: current.noiseReductionProvider ?? "rnnoise",
+        noiseSuppression: nextEnabled ? false : current.noiseSuppression,
+      };
+    }, settingsUserId ?? undefined);
+  };
+
   return (
     <div
       className={cn(
-        "rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]",
-        compact ? "w-[340px] max-w-[calc(100vw-2rem)]" : "w-full",
+        compact ? "p-3" : "w-full rounded-lg border border-line bg-ply-2 p-4",
         className,
       )}
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-2">
-          <div className="flex items-center gap-2">
-            <AudioWaveform size={16} className="text-sky-300" />
-            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-              Noise Suppression
-            </span>
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-ui-base font-bold text-rm-text">
-              Suppress background noise before your voice leaves the app
-            </h3>
-            <p className="text-ui-xs leading-relaxed text-rm-text-muted">
-              Enable live {providerLabel} noise suppression for your outbound
-              voice. It updates in real time while you test and remains
-              compatible with high-fidelity and spatial audio.
+        <div className="min-w-0">
+          <p
+            id={labelId}
+            className={cn(
+              "font-semibold text-ink-1",
+              compact ? "text-ui-sm" : "text-ui-md",
+            )}
+          >
+            Noise suppression
+          </p>
+          <p id={descId} className="mt-0.5 text-ui-sm text-pretty text-ink-2">
+            Removes background noise from your mic.
+          </p>
+          {compact ? null : (
+            <p className="mt-1 text-ui-xs text-pretty text-ink-3">
+              It updates while you test and works with high-fidelity and spatial
+              audio.
             </p>
-          </div>
+          )}
         </div>
 
-        <SettingsSwitch
+        <Switch
+          aria-labelledby={labelId}
+          aria-describedby={descId}
           checked={supported && settings.noiseReductionEnabled}
-          onChange={() => {
-            if (!supported) return;
-
-            updateVoiceSettings((current) => {
-              const nextEnabled = !current.noiseReductionEnabled;
-              return {
-                ...current,
-                noiseReductionEnabled: nextEnabled,
-                noiseReductionProvider:
-                  current.noiseReductionProvider ?? "rnnoise",
-                noiseSuppression: nextEnabled
-                  ? false
-                  : current.noiseSuppression,
-              };
-            }, settingsUserId ?? undefined);
-          }}
+          disabled={!supported}
+          onCheckedChange={toggle}
+          className="mt-0.5"
         />
       </div>
 
       {!supported && (
-        <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-ui-2xs text-amber-100/90">
-          This browser does not expose the AudioWorklet features needed for live
-          provider-based noise suppression here yet.
+        <div
+          role="status"
+          className="mt-3 flex items-start gap-2 rounded-md bg-warning-tint px-3 py-2 text-ui-sm text-warning-ink"
+        >
+          <Icon name="warning" size="sm" className="mt-px shrink-0" />
+          This browser can&apos;t run live noise suppression. Try the desktop
+          app or a recent Chrome, Edge or Firefox.
         </div>
       )}
 
-      <div className="mt-4 flex items-center justify-between rounded-lg border border-rm-border bg-rm-bg-elevated/30 px-3 py-2">
-        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-          <ShieldCheck size={12} className="text-emerald-400" />
-          Powered By
-        </div>
-        <div className="text-sm font-semibold tracking-tight text-rm-text">
-          {providerLabel}
-        </div>
-      </div>
+      <p className="mt-2 text-ui-xs text-ink-3">Powered by {providerLabel}</p>
     </div>
   );
 }

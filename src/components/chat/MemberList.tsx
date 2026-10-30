@@ -1,5 +1,27 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
+import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { ButtonBase } from "@/components/ui/button-base";
+import { Button, Spinner } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { copyToClipboard, toast } from "@/components/ui/toast";
+import { describeApiError } from "@/lib/api-errors";
+import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
+import { IconButton } from "@/components/ui/IconButton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Led } from "@/components/ui/led";
+import { Num } from "@/components/ui/num";
+import {
+  PHONE_GROUP,
+  PHONE_ICON_SLOT,
+  PHONE_ROW,
+  sidebarRowClass,
+  TREE_BRANCH_GAP,
+  TREE_BRANCH_LABEL,
+} from "@/components/ui/sidebar-row";
+import { TreeBranch, TreeLeaf } from "@/components/ui/tree";
+import { useSpeakingAttr } from "@/hooks/useIsSpeaking";
+import { Tabs } from "@/components/ui/tabs";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 
 import {
@@ -13,58 +35,37 @@ import { apiDelete, apiGet } from "@/lib/api-client";
 import { clog } from "@/lib/console-logger";
 import { getFileIcon } from "@/lib/file-icons";
 import { isVideo } from "@/lib/media";
-import { PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { buildProxyMediaPath } from "@/lib/proxy-media-url";
-import type { Attachment, Message, Role, User } from "@/lib/types";
+import type { Attachment, Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VideoPlaybackAvailabilityRequest } from "@/lib/video-playback-availability";
 import { primeVideoPlaybackAvailability } from "@/lib/video-playback-availability";
-import { useChatActions, useChatStore } from "@/stores/chat-store";
+import {
+  type VoiceChannelMember,
+  useChatActions,
+  useChatStore,
+} from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
-import { UserStatusDot } from "./UserStatusDot";
-import {
-  ArrowLeft,
-  Bell,
-  ChevronRight,
-  Download,
-  ExternalLink,
-  Hash,
-  Image,
-  ImageOff,
-  Link2,
-  MessageCircle,
-  RefreshCw,
-  Search,
-  Settings,
-  TriangleAlert,
-  UserPlus,
-  WifiOff,
-} from "lucide-react";
+import { TypingDots } from "./TypingDots";
+import { normalizeUserStatus } from "./UserStatusDot";
+import { PRESENCE_LED } from "@/components/ui/avatar";
+import { Icon } from "@/components/ui/icon";
 import {
   type CSSProperties,
+  memo,
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import ContextMenu from "./ContextMenu";
-import {
-  AlertTriangle,
-  AtSign,
-  Copy,
-  Crown,
-  MessageSquare,
-  Phone,
-  Pin,
-  User as UserIcon,
-} from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
-import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
 import { NAMEPLATE_MASK_SCALE_CSS_VAR } from "./ProfileAssetLayer";
 import { UserDisplayName } from "./UserDisplayName";
@@ -78,7 +79,7 @@ const log = clog("MemberList");
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-type TabId = "members" | "media" | "pins" | "threads" | "links" | "files";
+type TabId = "members" | "media" | "threads" | "links" | "files";
 
 interface MediaItem {
   id: string;
@@ -146,11 +147,6 @@ interface MemberListProps {
   onOpenSearch?: () => void;
   onOpenSettings?: () => void;
   onInviteClick?: () => void;
-  // Pins support
-  pinnedMessages?: Message[];
-  loadingPins?: boolean;
-  canUnpin?: boolean;
-  onUnpin?: (messageId: string, skipConfirm: boolean) => void;
   onJumpToMessage?: (messageId: string) => void;
   // Threads support
   onOpenThread?: (messageId: string) => void;
@@ -211,7 +207,6 @@ function extractUrls(text: string): string[] {
 const TABS: { id: TabId; label: string }[] = [
   { id: "members", label: "Members" },
   { id: "media", label: "Media" },
-  { id: "pins", label: "Pins" },
   { id: "threads", label: "Threads" },
   { id: "links", label: "Links" },
   { id: "files", label: "Files" },
@@ -233,10 +228,6 @@ export default function MemberList({
   onOpenSearch,
   onOpenSettings,
   onInviteClick,
-  pinnedMessages,
-  loadingPins,
-  canUnpin: _canUnpin,
-  onUnpin: _onUnpin,
   onJumpToMessage,
   onOpenThread,
   showDetails,
@@ -246,8 +237,16 @@ export default function MemberList({
   const { menu, openMenu, closeMenu, isClosing } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
   const memberTabIdPrefix = useId().replace(/:/g, "");
-  const presencePlatformsByUserId = useChatStore(
-    (state) => state.presencePlatformsByUserId,
+  // Both select a primitive, so the list re-renders only when the owner or
+  // your call changes; presence platforms, speaking and call membership are
+  // selected per row.
+  const ownerId = useChatStore((s) =>
+    serverId && serverId !== "@me"
+      ? (s.servers.find((server) => server.id === serverId)?.owner_id ?? null)
+      : null,
+  );
+  const callChannelId = useChatStore((s) =>
+    findCallChannelId(s.voiceChannelStates, currentUserId ?? s.user?.id),
   );
   const { open: openImageViewer } = useImageViewerActions();
   const [state, setState] = useState({
@@ -307,11 +306,7 @@ export default function MemberList({
 
   // Load tab data when switching tabs
   useEffect(() => {
-    if (
-      !channelId ||
-      state.activeTab === "members" ||
-      state.activeTab === "pins"
-    ) {
+    if (!channelId || state.activeTab === "members") {
       return;
     }
 
@@ -361,16 +356,8 @@ export default function MemberList({
         }
       } catch (err: unknown) {
         if (!isActive || controller.signal.aborted) return;
-        let errMsg = `Failed to load ${activeTab}`;
-        if (err instanceof Error) {
-          errMsg = err.message;
-        } else if (typeof err === "string") {
-          errMsg = err;
-        } else if (err && typeof err === "object" && "message" in err) {
-          errMsg = String(err.message);
-        }
         log.error(`Failed to load ${activeTab} tab:`, err);
-        partialState.tabError = errMsg;
+        partialState.tabError = describeApiError(err, `load ${activeTab}`);
       }
 
       if (!isActive || controller.signal.aborted) return;
@@ -394,32 +381,37 @@ export default function MemberList({
     setTimeout(() => setState((prev) => ({ ...prev, activeTab: tab })), 0);
   }, [state.activeTab]);
 
-  // Member list logic
-  const online = members.filter(
-    (m) => onlineUsers.has(m.user.id) && m.user.status !== "offline",
-  );
-  const offline = members.filter(
-    (m) => !onlineUsers.has(m.user.id) || m.user.status === "offline",
-  );
-
-  const sortedOnline = online.toSorted(compareMembersByRole);
-  const sortedOffline = offline.toSorted(compareMembersByRole);
-
-  // Group online members by highest role
-  const groups: { name: string; members: typeof sortedOnline }[] = [];
-  const addGroup = (member: (typeof sortedOnline)[0]) => {
-    const highestRole = getHighestRole(member.roles);
-    const groupName =
-      highestRole && !highestRole.is_default ? highestRole.name : "ONLINE";
-    let group = groups.find((g) => g.name === groupName);
-    if (!group) {
-      group = { name: groupName, members: [] };
-      groups.push(group);
+  // Role groups (online, by highest role) and Offline, as tree branches.
+  const groups = useMemo<MemberGroup[]>(() => {
+    const isOnline = (m: MemberEntry) =>
+      onlineUsers.has(m.user.id) && m.user.status !== "offline";
+    const result: MemberGroup[] = [];
+    for (const member of members
+      .filter(isOnline)
+      .toSorted(compareMembersByRole)) {
+      const highestRole = getHighestRole(member.roles);
+      const name =
+        highestRole && !highestRole.is_default ? highestRole.name : "Online";
+      let group = result.find((g) => g.online && g.name === name);
+      if (!group) {
+        group = { key: `role:${name}`, name, online: true, members: [] };
+        result.push(group);
+      }
+      group.members.push(member);
     }
-    group.members.push(member);
-  };
-
-  sortedOnline.forEach(addGroup);
+    const offline = members
+      .filter((m) => !isOnline(m))
+      .toSorted(compareMembersByRole);
+    if (offline.length > 0) {
+      result.push({
+        key: "offline",
+        name: "Offline",
+        online: false,
+        members: offline,
+      });
+    }
+    return result;
+  }, [members, onlineUsers]);
 
   // Stable close callback that clears both popoverUser AND popoverAnchor
   const closePopover = useCallback(() => {
@@ -443,17 +435,11 @@ export default function MemberList({
 
   // Shared member click/context-menu handlers
   const handleMemberClick = useCallback(
-    (
-      e: React.MouseEvent<HTMLButtonElement>,
-      user: User,
-      memberRoles?: Role[],
-    ) => {
+    (e: React.MouseEvent<HTMLButtonElement>, member: MemberEntry) => {
+      const user = member.user;
       // On mobile, show full-screen profile sheet
-      if (window.innerWidth < 768) {
-        setState((prev) => ({
-          ...prev,
-          mobileProfileUser: { user, roles: memberRoles },
-        }));
+      if (isMobileViewport()) {
+        setState((prev) => ({ ...prev, mobileProfileUser: member }));
         return;
       }
       // On desktop, toggle popover: close if same user, open if different
@@ -469,7 +455,7 @@ export default function MemberList({
   );
 
   const handleMemberContext = useCallback(
-    async (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
+    async (e: React.MouseEvent, member: MemberEntry) => {
       e.preventDefault();
 
       // Check if we should hide the call option (already in call or ringing this user)
@@ -492,12 +478,12 @@ export default function MemberList({
       openMenu(e, [
         {
           label: "Profile",
-          icon: <UserIcon className="h-4 w-4" />,
+          icon: <Icon name="account" size="sm" />,
           onClick: () => setProfileUser(member.user),
         },
         {
           label: "Message",
-          icon: <MessageSquare className="h-4 w-4" />,
+          icon: <Icon name="chat" size="sm" />,
           onClick: async () => {
             const channelId = await openDm(member.user.id);
             if (channelId) {
@@ -508,8 +494,8 @@ export default function MemberList({
         ...(!hideCallOption
           ? [
               {
-                label: "Start a Call",
-                icon: <Phone className="h-4 w-4" />,
+                label: "Start a call",
+                icon: <Icon name="call" size="sm" />,
                 onClick: async () => {
                   const channelId =
                     dmForUser?.id ?? (await openDm(member.user.id));
@@ -536,15 +522,15 @@ export default function MemberList({
           : []),
         {
           label: "Copy ID",
-          icon: <Copy className="h-4 w-4" />,
-          onClick: () => navigator.clipboard.writeText(member.user.id),
+          icon: <Icon name="copy" size="sm" />,
+          onClick: () => void copyToClipboard(member.user.id, "User ID copied"),
           divider: !!onBan && member.user.id !== currentUserId,
         },
         ...(onBan && member.user.id !== currentUserId
           ? [
               {
                 label: "Ban",
-                icon: <AlertTriangle className="h-4 w-4" />,
+                icon: <Icon name="ban" size="sm" />,
                 onClick: () => onBan(member.user.id, member.user.username),
                 variant: "danger" as const,
               },
@@ -555,36 +541,44 @@ export default function MemberList({
     [openMenu, setProfileUser, openDm, dispatch, onBan, currentUserId],
   );
 
+  // Kick waits on a ConfirmDialog; the request runs from its confirm button.
+  const [kickTarget, setKickTarget] = useState<{
+    userId: string;
+    username: string;
+  } | null>(null);
+
   const handleKick = useCallback(
-    async (userId: string, username: string) => {
+    (userId: string, username: string) => {
       if (onKick) {
-        await onKick(userId, username);
+        onKick(userId, username);
         return;
       }
       if (!serverId || serverId === "@me") return;
-      if (!confirm(`Kick ${username}?`)) return;
-      try {
-        await apiDelete(`/api/servers/${serverId}/members/${userId}`);
-      } catch (err) {
-        log.error("Failed to kick member:", err);
-      }
+      setKickTarget({ userId, username });
     },
     [onKick, serverId],
   );
 
+  const confirmKick = useCallback(async () => {
+    if (!kickTarget || !serverId) return;
+    try {
+      await apiDelete(`/api/servers/${serverId}/members/${kickTarget.userId}`);
+    } catch (err) {
+      log.error("Failed to kick member:", err);
+      throw err;
+    }
+    toast.success(`Kicked ${kickTarget.username}`);
+  }, [kickTarget, serverId]);
+
   // Tab content renderers
 
   return (
-    <TooltipProvider delayDuration={0}>
+    <TooltipProvider>
       <div
         data-testid="members-list"
-        className={cn(
-          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full duration-300 ease-drawer",
-          // Desktop: static sidebar, width depends on details mode
-          showDetails
-            ? "lg:static lg:z-auto lg:w-[360px] lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
-            : "lg:static lg:z-auto lg:w-60 lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none",
-        )}
+        // The host's SidePanel places it: docked at lg, a sheet below, a
+        // right drawer on phones.
+        className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden md:bg-ply-0"
       >
         <MobileHeader
           onClose={onClose}
@@ -602,7 +596,12 @@ export default function MemberList({
         )}
 
         <div
-          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-10 pt-2 custom-scrollbar lg:px-2 lg:pt-4"
+          className={cn(
+            "relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pt-4 md:px-2",
+            // The first branch's own 8px gap puts its label on the channel
+            // tree's first-label baseline; details mode has tabs above.
+            showDetails ? "md:pt-2" : "md:pt-0",
+          )}
           style={{ paddingBottom: "max(40px, var(--safe-area-bottom, 0px))" }}
         >
           <MemberListTabs
@@ -635,14 +634,16 @@ export default function MemberList({
                 case "members":
                   return (
                     <MembersTabContent
+                      // A new server is a fresh list: rows must not play
+                      // their join motion.
+                      key={serverId ?? "none"}
                       groups={groups}
-                      sortedOffline={sortedOffline}
-                      sortedOnline={sortedOnline}
                       typingUsers={typingUsers}
                       currentUserId={currentUserId}
+                      ownerId={ownerId}
+                      callChannelId={callChannelId}
                       onMemberClick={handleMemberClick}
                       onMemberContext={handleMemberContext}
-                      presencePlatformsByUserId={presencePlatformsByUserId}
                     />
                   );
                 case "media":
@@ -655,17 +656,6 @@ export default function MemberList({
                       onRetry={handleRetry}
                       onJumpToMessage={onJumpToMessage}
                       onClose={onClose}
-                    />
-                  );
-                case "pins":
-                  return (
-                    <PinsTabContent
-                      loading={loadingPins}
-                      messages={pinnedMessages}
-                      onJumpToMessage={(id: string) => {
-                        onJumpToMessage?.(id);
-                        onClose?.();
-                      }}
                     />
                   );
                 case "threads":
@@ -736,7 +726,7 @@ export default function MemberList({
 
         {state.mobileProfileUser && (
           <MobileProfileSheet
-            open={state.mobileProfileUser !== null}
+            open={!state.mobileProfileUserClosing}
             user={state.mobileProfileUser.user}
             roles={state.mobileProfileUser.roles}
             onClose={closeMobileProfile}
@@ -747,6 +737,19 @@ export default function MemberList({
             onKick={handleKick}
           />
         )}
+
+        <ConfirmDialog
+          open={kickTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setKickTarget(null);
+          }}
+          title="Kick member"
+          description={`${kickTarget?.username ?? ""} will be removed from this server. They can rejoin with an invite.`}
+          confirmLabel="Kick"
+          irreversible
+          errorAction="kick this member"
+          onConfirm={confirmKick}
+        />
       </div>
     </TooltipProvider>
   );
@@ -761,38 +764,39 @@ function MobileHeader({
 }: {
   onClose?: () => void;
   onOpenSearch?: () => void;
+  /** Channel settings; omitted when you can't manage the channel. */
   onOpenSettings?: () => void;
 }) {
+  // Phone page header (12.2): 48px + safe area, 40px buttons at the edges.
   return (
-    <div
-      className="flex items-center justify-between pb-4 px-4 lg:hidden sticky top-0 bg-transparent z-10 shrink-0 border-b border-rm-border/30"
-      style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
-    >
-      <ButtonBase
+    <div className="flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center justify-between gap-2 border-b border-line px-2 pt-[var(--safe-area-top,0px)] md:hidden">
+      <IconButton
+        aria-label="Close member list"
+        icon="back"
+        variant="muted"
+        size="md"
         onClick={onClose}
-        className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors"
-      >
-        <ArrowLeft size={24} />
-      </ButtonBase>
-      <div className="flex items-center gap-5 text-rm-text-muted">
-        <ButtonBase
-          className="hover:text-rm-text transition-colors"
+      />
+      <div className="flex items-center gap-2">
+        <IconButton
+          aria-label="Search this channel"
+          icon="search"
+          variant="muted"
+          size="md"
           onClick={() => {
             onOpenSearch?.();
             onClose?.();
           }}
-        >
-          <Search size={22} />
-        </ButtonBase>
-        <ButtonBase className="hover:text-rm-text transition-colors">
-          <Bell size={22} />
-        </ButtonBase>
-        <ButtonBase
-          className="hover:text-rm-text transition-colors"
-          onClick={onOpenSettings}
-        >
-          <Settings size={22} />
-        </ButtonBase>
+        />
+        {onOpenSettings ? (
+          <IconButton
+            aria-label="Channel settings"
+            icon="settings"
+            variant="muted"
+            size="md"
+            onClick={onOpenSettings}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -808,32 +812,26 @@ function DesktopHeader({
   isDM?: boolean;
 }) {
   return (
-    <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-transparent shrink-0">
-      <div className="flex items-center gap-2 min-w-0">
-        {isDM ? (
-          <AtSign className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />
-        ) : (
-          <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />
-        )}
-        <h2 className="text-ui-base font-semibold text-rm-text-primary truncate">
+    <div className="hidden h-12 shrink-0 items-center justify-between gap-2 border-b border-line px-4 md:flex">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon
+          name={isDM ? "mention" : "textChannel"}
+          size="md"
+          className="shrink-0 text-ink-3"
+        />
+        <h2 className="truncate font-display-tuned text-[17px] leading-6 font-extrabold tracking-[-0.01em] text-ink-1">
           <InlineEmojiText
             text={channelName || (isDM ? "details" : "general")}
           />
         </h2>
       </div>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <ButtonBase
-            onClick={onToggleDetails}
-            className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
-          >
-            <ArrowLeft size={18} />
-          </ButtonBase>
-        </TooltipTrigger>
-        <TooltipContent side="top" sideOffset={10}>
-          Close details
-        </TooltipContent>
-      </Tooltip>
+      <IconButton
+        icon="back"
+        variant="muted"
+        size="sm"
+        tooltip="Close details"
+        onClick={onToggleDetails}
+      />
     </div>
   );
 }
@@ -853,126 +851,56 @@ function MemberListTabs({
   showDetails?: boolean;
   isDM?: boolean;
 }) {
-  const renderTabs = (className: string, variant: "mobile" | "desktop") => (
-    <div role="tablist" aria-label="Member details" className={className}>
-      {TABS.map((tab) => (
-        <MemberTabButton
-          key={tab.id}
-          tab={tab}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          idPrefix={`${idPrefix}-${variant}`}
-        />
-      ))}
-    </div>
-  );
+  const items = TABS.map((tab) => ({ value: tab.id, label: tab.label }));
 
   return (
     <>
-      <div className="lg:hidden mb-6 shrink-0">
-        <div className="flex items-center gap-2 mb-1">
-          {isDM ? (
-            <AtSign className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />
-          ) : (
-            <Hash className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />
-          )}
-          <h1 className="text-ui-xl font-semibold text-rm-text-primary leading-none truncate">
+      <div className="mb-4 shrink-0 md:hidden">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon
+            name={isDM ? "mention" : "textChannel"}
+            size="xl"
+            className="shrink-0 text-ink-3"
+          />
+          <h1 className="truncate font-display-tuned text-ui-xl font-extrabold tracking-[-0.02em] text-ink-1">
             <InlineEmojiText
               text={channelName || (isDM ? "details" : "general")}
             />
           </h1>
         </div>
-        <p className="text-ui-sm font-medium text-rm-text-muted mb-6 ml-8">
-          {isDM ? "Direct Message" : "Text Channel"}
+        <p className="mt-1 mb-4 text-ui-sm text-ink-2">
+          {isDM ? "Direct message" : "Text channel"}
         </p>
 
-        {renderTabs(
-          "flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-ui-base font-semibold text-rm-text-muted border-b border-rm-border pb-2.5",
-          "mobile",
-        )}
+        {/* Scrolls sideways with an edge fade, so "Files" is never clipped
+            without a cue; 44px tall on touch. */}
+        <Tabs
+          label="Member details"
+          idBase={`${idPrefix}-mobile`}
+          panelId="member-details-panel"
+          items={items}
+          value={activeTab}
+          onValueChange={onTabChange}
+          scrollable
+          className="-mx-4 gap-6 border-b border-line px-4"
+        />
       </div>
 
       {showDetails && (
-        <div className="hidden lg:block mb-4 shrink-0 px-2">
-          {renderTabs(
-            "flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-ui-sm font-semibold text-rm-text-muted border-b border-rm-border pb-2",
-            "desktop",
-          )}
+        <div className="mb-2 hidden shrink-0 px-2 md:block">
+          <Tabs
+            label="Member details"
+            idBase={`${idPrefix}-desktop`}
+            panelId="member-details-panel"
+            items={items}
+            value={activeTab}
+            onValueChange={onTabChange}
+            scrollable
+            className="h-10 border-b border-line"
+          />
         </div>
       )}
     </>
-  );
-}
-
-function MemberTabButton({
-  tab,
-  activeTab,
-  onTabChange,
-  idPrefix,
-}: {
-  tab: { id: TabId; label: string };
-  activeTab: TabId;
-  onTabChange: (id: TabId) => void;
-  idPrefix: string;
-}) {
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onTabChange(tab.id);
-      return;
-    }
-    if (
-      ![
-        "ArrowRight",
-        "ArrowDown",
-        "ArrowLeft",
-        "ArrowUp",
-        "Home",
-        "End",
-      ].includes(event.key)
-    ) {
-      return;
-    }
-    event.preventDefault();
-    const currentIndex = TABS.findIndex((item) => item.id === tab.id);
-    const nextIndex =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? TABS.length - 1
-          : (currentIndex +
-              (event.key === "ArrowRight" || event.key === "ArrowDown"
-                ? 1
-                : -1) +
-              TABS.length) %
-            TABS.length;
-    const tablist = event.currentTarget.parentElement;
-    tablist
-      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-      .item(nextIndex)
-      ?.focus();
-  };
-
-  return (
-    <button
-      type="button"
-      role="tab"
-      id={`${idPrefix}-tab-${tab.id}`}
-      aria-controls="member-details-panel"
-      aria-selected={activeTab === tab.id}
-      tabIndex={activeTab === tab.id ? 0 : -1}
-      className={cn(
-        "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-        activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text",
-      )}
-      onClick={() => onTabChange(tab.id)}
-      onKeyDown={handleKeyDown}
-    >
-      {tab.label}
-      {activeTab === tab.id && (
-        <span className="absolute -bottom-[11px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
-      )}
-    </button>
   );
 }
 
@@ -984,115 +912,135 @@ function MobileInviteButton({
   onClose?: () => void;
 }) {
   return (
-    <div className="lg:hidden mb-6 shrink-0 pt-2">
-      <ButtonBase
-        className="w-full flex items-center justify-between bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text p-4 rounded-lg transition-ui ring-1 ring-rm-border enabled:active:scale-[0.98]"
-        onClick={() => {
-          onInviteClick?.();
-          onClose?.();
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-full text-primary-foreground border border-rm-border/50">
-            <UserPlus size={18} fill="currentColor" className="opacity-90" />
-          </div>
-          <span className="font-semibold text-ui-md text-rm-text-primary">
-            Invite Members
+    <div className="mb-2 shrink-0 md:hidden">
+      <div className={PHONE_GROUP}>
+        <button
+          type="button"
+          className={PHONE_ROW}
+          onClick={() => {
+            onInviteClick?.();
+            onClose?.();
+          }}
+        >
+          <span
+            className={cn(PHONE_ICON_SLOT, "bg-accent-tint text-accent-ink")}
+          >
+            <Icon name="invite" size="lg" />
           </span>
-        </div>
-        <ChevronRight size={20} className="text-rm-text-muted" />
-      </ButtonBase>
+          <span className="min-w-0 flex-1 truncate">Invite members</span>
+          <Icon name="chevronRight" size="xs" className="shrink-0 text-ink-3" />
+        </button>
+      </div>
     </div>
   );
 }
 // ── Extracted Tab Components ──────────────────────────────────────────────
 
+/**
+ * Role groups (component kit, MemberPanel): a silkscreen label with its count
+ * right-aligned, then 40px member rows with 32px square avatars. The groups
+ * keep the TreeBranch structure (an in-call member's talk LED is its node)
+ * but draw no guides; the LED sits in the row's left gutter. On phones each
+ * group is one tinted, hairline-divided block (12.4).
+ */
+const MEMBER_GROUP =
+  "max-md:divide-y max-md:divide-line max-md:overflow-hidden max-md:rounded-lg max-md:bg-tint-1";
+/** The trunk drops from the label's first letter (list inset 8 + label px-2). */
+const MEMBER_GUIDE_X = 8;
+const MEMBER_ROW_H = 40;
+
+type MemberEntry = { user: User; roles?: Role[] };
+type MemberGroup = {
+  key: string;
+  name: string;
+  online: boolean;
+  members: MemberEntry[];
+};
+
+/** The voice channel a user is connected to, from the shared voice roster. */
+function findCallChannelId(
+  voiceChannelStates: Record<string, VoiceChannelMember[]>,
+  userId: string | null | undefined,
+): string | null {
+  if (!userId) return null;
+  for (const channelId in voiceChannelStates) {
+    if (
+      voiceChannelStates[channelId]?.some((m) => m.clerk_user_id === userId)
+    ) {
+      return channelId;
+    }
+  }
+  return null;
+}
+
 interface MembersTabContentProps {
-  groups: { name: string; members: { user: User; roles?: Role[] }[] }[];
-  sortedOffline: { user: User; roles?: Role[] }[];
-  sortedOnline: { user: User; roles?: Role[] }[];
-  presencePlatformsByUserId: Record<string, User["presence_platforms"]>;
+  groups: MemberGroup[];
   typingUsers?: Set<string>;
   currentUserId?: string;
+  ownerId: string | null;
+  callChannelId: string | null;
   onMemberClick: (
     e: React.MouseEvent<HTMLButtonElement>,
-    user: User,
-    roles?: Role[],
+    member: MemberEntry,
   ) => void;
-  onMemberContext: (
-    e: React.MouseEvent,
-    member: { user: User; roles?: Role[] },
-  ) => void;
+  onMemberContext: (e: React.MouseEvent, member: MemberEntry) => void;
 }
 function MembersTabContent({
   groups,
-  sortedOffline,
-  sortedOnline,
-  presencePlatformsByUserId,
   typingUsers,
   currentUserId,
+  ownerId,
+  callChannelId,
   onMemberClick,
   onMemberContext,
 }: MembersTabContentProps) {
+  if (groups.length === 0) {
+    return (
+      <EmptyState
+        size="sm"
+        title="No members to show"
+        description="People who join this server appear here."
+      />
+    );
+  }
+
   return (
     <>
       {groups.map((group) => (
-        <div key={group.name}>
-          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center px-2 pb-1 pt-4 text-rm-text-muted">
-            <InlineEmojiText text={group.name} className="uppercase" />
-            <span className="ml-1.5 text-ui-2xs font-medium tabular-nums tracking-normal">
-              {group.members.length}
-            </span>
-          </div>
+        <TreeBranch
+          key={group.key}
+          className={TREE_BRANCH_GAP}
+          guideX={MEMBER_GUIDE_X}
+          rowHeight={MEMBER_ROW_H}
+          childrenClassName={MEMBER_GROUP}
+          header={
+            <h3 className={cn(TREE_BRANCH_LABEL, "max-md:mb-1 max-md:px-4")}>
+              <span className="min-w-0 flex-1 truncate">
+                {group.online ? (
+                  <InlineEmojiText text={group.name} />
+                ) : (
+                  group.name
+                )}
+              </span>
+              <Num className="shrink-0 text-ink-3">{group.members.length}</Num>
+            </h3>
+          }
+        >
           {group.members.map((member) => (
             <MemberItem
               key={member.user.id}
               member={member}
-              isOnline={true}
-              isTyping={typingUsers?.has(member.user.id)}
+              isOnline={group.online}
+              isTyping={typingUsers?.has(member.user.id) ?? false}
               isMe={member.user.id === currentUserId}
-              platforms={
-                presencePlatformsByUserId[member.user.id] ??
-                member.user.presence_platforms
-              }
-              onClick={(e) => onMemberClick(e, member.user, member.roles)}
-              onContextMenu={(e) => onMemberContext(e, member)}
+              isOwner={!!ownerId && member.user.id === ownerId}
+              callChannelId={callChannelId}
+              onClick={onMemberClick}
+              onContextMenu={onMemberContext}
             />
           ))}
-        </div>
+        </TreeBranch>
       ))}
-
-      {sortedOffline.length > 0 && (
-        <div>
-          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center px-2 pb-1 pt-4 text-rm-text-muted">
-            <span className="uppercase">Offline</span>
-            <span className="ml-1.5 text-ui-2xs font-medium tabular-nums tracking-normal">
-              {sortedOffline.length}
-            </span>
-          </div>
-          {sortedOffline.map((m) => (
-            <MemberItem
-              key={m.user.id}
-              member={m}
-              isOnline={false}
-              isTyping={typingUsers?.has(m.user.id)}
-              isMe={m.user.id === currentUserId}
-              platforms={
-                presencePlatformsByUserId[m.user.id] ??
-                m.user.presence_platforms
-              }
-              onClick={(e) => onMemberClick(e, m.user, m.roles)}
-              onContextMenu={(e) => onMemberContext(e, m)}
-            />
-          ))}
-        </div>
-      )}
-
-      {sortedOnline.length === 0 && sortedOffline.length === 0 && (
-        <div className="py-4 text-center text-xs text-rm-text-muted">
-          No members found
-        </div>
-      )}
     </>
   );
 }
@@ -1185,7 +1133,10 @@ function MediaTabContent({
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
   if (items.length === 0)
     return (
-      <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />
+      <TabEmptyState
+        icon={<Icon name="image" size="2xl" />}
+        label="No media shared yet"
+      />
     );
 
   return (
@@ -1197,10 +1148,17 @@ function MediaTabContent({
           <ButtonBase
             key={item.id}
             onClick={() => handleMediaClick(idx)}
-            className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-ui group relative"
+            className="aspect-square rounded-xl overflow-hidden bg-ply-2 border border-line/20 pointer-fine:hover:border-primary/40 transition-ui group relative"
           >
             <div className="absolute top-1.5 right-1.5 z-10">
-              <div className="h-6 w-6 rounded-full overflow-visible border-2 border-black/30 shadow-md bg-rm-bg-elevated">
+              <div
+                className={cn(
+                  "h-6 w-6 border-2 border-black/30 shadow-md bg-ply-2",
+                  avatarShape(
+                    item.author.avatar_url && item.author.avatar_display,
+                  ),
+                )}
+              >
                 {item.author.avatar_url ? (
                   <AvatarImage
                     src={getAuthAssetUrl(item.author.avatar_url)}
@@ -1208,7 +1166,7 @@ function MediaTabContent({
                     display={item.author.avatar_display}
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-primary text-ui-2xs font-bold text-primary-foreground">
+                  <div className="h-full w-full flex items-center justify-center bg-tint-2 text-ui-2xs font-semibold text-ink-2">
                     {getDisplayInitial(item.author)}
                   </div>
                 )}
@@ -1239,80 +1197,14 @@ function MediaTabContent({
                   : undefined
               }
             />
-            <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-              <span className="text-ui-2xs font-bold text-white truncate">
+            <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 pointer-fine:group-hover:opacity-100 transition-opacity flex items-end p-2">
+              <span className="text-ui-2xs font-semibold text-white truncate">
                 {item.filename}
               </span>
             </div>
           </ButtonBase>
         );
       })}
-    </div>
-  );
-}
-
-interface PinsTabContentProps {
-  loading?: boolean;
-  messages?: Message[];
-  onJumpToMessage: (id: string) => void;
-}
-function PinsTabContent({
-  loading,
-  messages,
-  onJumpToMessage,
-}: PinsTabContentProps) {
-  if (loading) return <TabSpinnerState />;
-  if (!messages || messages.length === 0) {
-    return (
-      <TabEmptyState icon={<Pin size={40} />} label="No pinned messages" />
-    );
-  }
-  return (
-    <div className="space-y-3">
-      {messages.map((msg) =>
-        (() => {
-          const displayName = getDisplayName(msg.author);
-          return (
-            <ButtonBase
-              key={msg.id}
-              className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
-              onClick={() => onJumpToMessage(msg.id)}
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
-                  {msg.author?.avatar_url ? (
-                    <AvatarImage
-                      src={getAuthAssetUrl(msg.author.avatar_url)}
-                      alt=""
-                      display={msg.author.avatar_display}
-                    />
-                  ) : (
-                    getDisplayInitial(msg.author)
-                  )}
-                </div>
-                <span className="text-ui-xs font-bold text-rm-text-primary truncate">
-                  <InlineEmojiText text={displayName} />
-                </span>
-                <span className="text-ui-2xs text-rm-text-muted ml-auto shrink-0">
-                  {formatRelativeTime(msg.created_at)}
-                </span>
-              </div>
-              <div className="text-ui-sm text-rm-text-secondary line-clamp-2 leading-relaxed">
-                <MarkdownRenderer content={msg.content.slice(0, 200)} />
-              </div>
-              {msg.attachments && msg.attachments.length > 0 && (
-                <div className="mt-2 flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
-                  <Image size={12} />
-                  <span>
-                    {msg.attachments.length} attachment
-                    {msg.attachments.length > 1 ? "s" : ""}
-                  </span>
-                </div>
-              )}
-            </ButtonBase>
-          );
-        })(),
-      )}
     </div>
   );
 }
@@ -1336,7 +1228,7 @@ function ThreadsTabContent({
   if (threads.length === 0)
     return (
       <TabEmptyState
-        icon={<MessageCircle size={40} />}
+        icon={<Icon name="chat" size="2xl" />}
         label="No threads in this channel"
       />
     );
@@ -1348,11 +1240,18 @@ function ThreadsTabContent({
           return (
             <ButtonBase
               key={thread.id}
-              className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
+              className="w-full text-left bg-ply-2 pointer-fine:hover:bg-tint-1 border border-line rounded-lg p-3 transition-colors group"
               onClick={() => onOpenThread(thread.id)}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
+                <div
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center bg-tint-2 text-ui-2xs font-semibold text-ink-2",
+                    avatarShape(
+                      thread.author.avatar_url && thread.author.avatar_display,
+                    ),
+                  )}
+                >
                   {thread.author.avatar_url ? (
                     <AvatarImage
                       src={getAuthAssetUrl(thread.author.avatar_url)}
@@ -1363,16 +1262,16 @@ function ThreadsTabContent({
                     getDisplayInitial(thread.author)
                   )}
                 </div>
-                <span className="text-ui-xs font-bold text-rm-text-primary truncate">
+                <span className="text-ui-xs font-semibold text-ink-1 truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
               </div>
-              <div className="text-ui-sm text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
+              <div className="text-ui-sm text-ink-2 line-clamp-2 leading-relaxed mb-2">
                 <InlineEmojiText text={thread.content} />
               </div>
-              <div className="flex items-center gap-3 text-ui-2xs text-rm-text-muted">
+              <div className="flex items-center gap-3 text-ui-2xs text-ink-3">
                 <div className="flex items-center gap-1">
-                  <MessageCircle size={12} />
+                  <Icon name="chat" size="xs" />
                   <span className="font-semibold">{thread.reply_count}</span>
                   <span>{thread.reply_count === 1 ? "reply" : "replies"}</span>
                 </div>
@@ -1406,7 +1305,10 @@ function LinksTabContent({
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
   if (items.length === 0)
     return (
-      <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />
+      <TabEmptyState
+        icon={<Icon name="link" size="2xl" />}
+        label="No links shared yet"
+      />
     );
   return (
     <div className="space-y-2.5">
@@ -1417,10 +1319,17 @@ function LinksTabContent({
         return (
           <div
             key={item.id}
-            className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover"
+            className="bg-ply-2 border border-line rounded-lg p-3 transition-colors pointer-fine:hover:bg-tint-1"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
+              <div
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center bg-tint-2 text-ui-2xs font-semibold text-ink-2",
+                  avatarShape(
+                    item.author.avatar_url && item.author.avatar_display,
+                  ),
+                )}
+              >
                 {item.author.avatar_url ? (
                   <AvatarImage
                     src={getAuthAssetUrl(item.author.avatar_url)}
@@ -1431,19 +1340,19 @@ function LinksTabContent({
                   getDisplayInitial(item.author)
                 )}
               </div>
-              <span className="text-ui-xs font-bold text-rm-text-primary truncate">
+              <span className="text-ui-xs font-semibold text-ink-1 truncate">
                 <InlineEmojiText text={displayName} />
               </span>
               {channelName && (
                 <>
-                  <span className="text-rm-text-muted/30">&middot;</span>
-                  <span className="text-ui-2xs text-rm-text-muted flex items-center gap-0.5 shrink-0">
-                    <Hash size={10} className="opacity-60" />
+                  <span className="text-ink-3/30">&middot;</span>
+                  <span className="text-ui-2xs text-ink-3 flex items-center gap-0.5 shrink-0">
+                    <Icon name="textChannel" size="xs" className="opacity-60" />
                     <InlineEmojiText text={channelName} />
                   </span>
                 </>
               )}
-              <span className="text-ui-2xs text-rm-text-muted ml-auto shrink-0">
+              <span className="text-ui-2xs text-ink-3 ml-auto shrink-0">
                 {formatRelativeTime(item.created_at)}
               </span>
             </div>
@@ -1453,9 +1362,9 @@ function LinksTabContent({
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-ui-sm text-primary hover:underline truncate mt-1"
+                className="flex items-center gap-2 text-ui-sm text-accent-ink pointer-fine:hover:underline truncate mt-1"
               >
-                <ExternalLink size={12} className="shrink-0" />
+                <Icon name="externalLink" size="xs" className="shrink-0" />
                 <span className="truncate">{url}</span>
               </a>
             ))}
@@ -1487,10 +1396,10 @@ function FilesTabContent({
   if (loading) return <TabSpinnerState />;
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
   if (items.length === 0) {
-    const { Icon: EmptyIcon } = getFileIcon("file.txt");
+    const { icon: emptyIcon } = getFileIcon("file.txt");
     return (
       <TabEmptyState
-        icon={<EmptyIcon size={40} />}
+        icon={<Icon name={emptyIcon} size="2xl" />}
         label="No files shared yet"
       />
     );
@@ -1498,7 +1407,7 @@ function FilesTabContent({
   return (
     <div className="space-y-2">
       {items.map((item) => {
-        const { Icon: FileTypeIcon, colorClass } = getFileIcon(
+        const { icon: fileTypeIcon, colorClass } = getFileIcon(
           item.filename,
           item.content_type,
         );
@@ -1514,7 +1423,7 @@ function FilesTabContent({
         return (
           <div
             key={item.id}
-            className="group relative flex cursor-pointer items-center gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-elevated p-3.5 transition-colors hover:bg-rm-bg-hover outline-none focus-within:ring-2 focus-within:ring-primary/20"
+            className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-line bg-ply-2 p-3 transition-colors pointer-fine:hover:bg-tint-1 outline-none focus-within:ring-2 focus-within:ring-primary/20"
           >
             <ButtonBase
               onClick={() => {
@@ -1526,27 +1435,32 @@ function FilesTabContent({
             />
             <div
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border/30",
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ply-2 border border-line/30",
                 colorClass,
               )}
             >
-              <FileTypeIcon size={22} />
+              <Icon name={fileTypeIcon} size="xl" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-ui-sm font-bold text-rm-text-primary truncate">
+              <div className="text-ui-sm font-semibold text-ink-1 truncate">
                 {item.filename}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-ui-2xs text-rm-text-muted">
+                <span className="text-ui-2xs text-ink-3">
                   {formatFileSize(item.size_bytes)}
                 </span>
-                <span className="text-rm-text-muted/30">&middot;</span>
-                <span className="text-ui-2xs text-rm-text-muted">
-                  {uploadDate}
-                </span>
+                <span className="text-ink-3/30">&middot;</span>
+                <span className="text-ui-2xs text-ink-3">{uploadDate}</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
-                <div className="h-4 w-4 rounded-full overflow-visible bg-rm-bg-surface border border-rm-border/30 shrink-0">
+                <div
+                  className={cn(
+                    "h-4 w-4 bg-ply-2 border border-line/30 shrink-0",
+                    avatarShape(
+                      item.author.avatar_url && item.author.avatar_display,
+                    ),
+                  )}
+                >
                   {item.author.avatar_url ? (
                     <AvatarImage
                       src={getAuthAssetUrl(item.author.avatar_url)}
@@ -1554,19 +1468,26 @@ function FilesTabContent({
                       display={item.author.avatar_display}
                     />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
-                      {getDisplayInitial(item.author)}
-                    </div>
+                    // 16px is too small for a legible initial; the name sits
+                    // beside it, so the fallback is a plain tint.
+                    <div
+                      aria-hidden
+                      className="size-full rounded-full bg-accent-tint"
+                    />
                   )}
                 </div>
-                <span className="text-ui-2xs font-medium text-rm-text-muted truncate">
+                <span className="text-ui-2xs font-medium text-ink-3 truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
                 {channelName && (
                   <>
-                    <span className="text-rm-text-muted/30">&middot;</span>
-                    <span className="text-ui-2xs text-rm-text-muted flex items-center gap-0.5 shrink-0">
-                      <Hash size={10} className="opacity-60" />
+                    <span className="text-ink-3/30">&middot;</span>
+                    <span className="text-ui-2xs text-ink-3 flex items-center gap-0.5 shrink-0">
+                      <Icon
+                        name="textChannel"
+                        size="xs"
+                        className="opacity-60"
+                      />
                       <InlineEmojiText text={channelName} />
                     </span>
                   </>
@@ -1579,9 +1500,16 @@ function FilesTabContent({
                   href={getDownloadUrl(item.url)}
                   download={item.filename}
                   onClick={(e) => e.stopPropagation()}
-                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-ui hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                  aria-label={`Download ${item.filename}`}
+                  className={cn(
+                    "relative z-20 flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1",
+                    PRESS,
+                    HIT,
+                    "relative",
+                    REVEAL,
+                  )}
                 >
-                  <Download size={16} />
+                  <Icon name="download" size="sm" />
                 </a>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={10}>
@@ -1597,44 +1525,34 @@ function FilesTabContent({
 
 // Shared sub-components
 
-/** Spinner state for text-based tabs (threads, links, files, pins) */
+/** Skeleton rows for the text tabs (threads, links, files, pins), 14.2. */
 function TabSpinnerState() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      <span className="text-ui-xs font-bold text-rm-text-muted">
-        Loading...
-      </span>
+    <div role="status" className="flex flex-col gap-2 py-2">
+      <span className="sr-only">Loading</span>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          aria-hidden
+          className="h-14 animate-pulse rounded-md bg-tint-1 motion-reduce:animate-none"
+        />
+      ))}
     </div>
   );
 }
 
-/** Animated skeleton grid for the Media tab */
+/** Skeleton tiles for the Media tab, at the real tile size. */
 function MediaSkeletonGrid() {
   return (
-    <div className="grid grid-cols-3 gap-1.5">
+    <div role="status" className="grid grid-cols-3 gap-1.5">
+      <span className="sr-only">Loading</span>
       {Array.from({ length: 9 }).map((_, i) => (
         <div
           key={i}
-          className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 relative"
-        >
-          {/* Shimmer animation */}
-          <div className="absolute inset-0 bg-linear-to-r from-transparent via-rm-text-muted/5 to-transparent animate-shimmer" />
-          {/* Fake avatar skeleton */}
-          <div className="absolute top-1.5 right-1.5 z-10 h-6 w-6 rounded-full bg-rm-text-muted/10 animate-pulse" />
-        </div>
+          aria-hidden
+          className="aspect-square animate-pulse rounded-lg bg-tint-1 motion-reduce:animate-none"
+        />
       ))}
-
-      {/* Inline shimmer keyframe */}
-      <style>{`
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        .animate-shimmer {
-          animation: shimmer 1.5s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }
@@ -1663,8 +1581,8 @@ function MediaGridImage({
 
   if (error) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-rm-bg-elevated">
-        <ImageOff size={20} className="text-rm-text-muted/30" />
+      <div className="w-full h-full flex items-center justify-center bg-ply-2">
+        <Icon name="imageBroken" size="lg" className="text-ink-3/30" />
       </div>
     );
   }
@@ -1674,8 +1592,8 @@ function MediaGridImage({
       return (
         <>
           {!loaded && (
-            <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
-              <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center bg-tint-1 text-ink-3">
+              <Spinner />
             </div>
           )}
           <img
@@ -1689,8 +1607,8 @@ function MediaGridImage({
             onLoad={() => setLoaded(true)}
             onError={() => setError(true)}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-5">
-            <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center shadow-lg border border-white/10">
               <PlayIcon className="w-5 h-5 text-white" />
             </div>
           </div>
@@ -1701,8 +1619,8 @@ function MediaGridImage({
     return (
       <>
         {!loaded && (
-          <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
-            <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center bg-tint-1 text-ink-3">
+            <Spinner />
           </div>
         )}
         <video
@@ -1718,8 +1636,8 @@ function MediaGridImage({
           onError={() => setError(true)}
         />
         {/* Play icon overlay */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-5">
-          <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center shadow-lg border border-white/10">
             <PlayIcon className="w-5 h-5 text-white" />
           </div>
         </div>
@@ -1730,8 +1648,8 @@ function MediaGridImage({
   return (
     <>
       {!loaded && (
-        <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
-          <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center bg-tint-1 text-ink-3">
+          <Spinner />
         </div>
       )}
       <img
@@ -1749,7 +1667,7 @@ function MediaGridImage({
   );
 }
 
-/** Error state with graphic and retry option */
+/** Whole-tab error: the empty-state anatomy with a danger title (14.3). */
 function TabErrorState({
   message,
   onRetry,
@@ -1758,37 +1676,26 @@ function TabErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-5">
-      {/* Error graphic */}
-      <div className="relative">
-        <div className="h-20 w-20 rounded-2xl bg-destructive/10 flex items-center justify-center border border-destructive/20">
-          <WifiOff size={32} className="text-destructive/60" />
-        </div>
-        <div className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-destructive/20 flex items-center justify-center border border-destructive/30">
-          <TriangleAlert size={14} className="text-destructive" />
-        </div>
-      </div>
-
-      <div className="text-center space-y-1.5">
-        <p className="text-[14px] font-bold text-rm-text-primary">
-          Failed to load
-        </p>
-        <p className="text-ui-xs text-rm-text-muted max-w-[200px] leading-relaxed">
-          {message}
-        </p>
-      </div>
-
-      <ButtonBase
-        onClick={onRetry}
-        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-bold text-rm-text-primary transition-colors"
-      >
-        <RefreshCw size={14} />
-        Retry
-      </ButtonBase>
+    <div
+      role="alert"
+      className="flex flex-col items-center gap-3 px-6 py-12 text-center"
+    >
+      <Icon name="offline" size="2xl" className="text-ink-3" />
+      <p className="text-ui-md font-semibold text-danger-ink">
+        Unable to load this tab
+      </p>
+      <p className="max-w-[36ch] text-ui-sm text-pretty text-ink-2">
+        {message}
+      </p>
+      <Button variant="secondary" onClick={onRetry}>
+        <Icon name="refresh" size="sm" />
+        Try again
+      </Button>
     </div>
   );
 }
 
+/** Empty tab (14.1): muted illustration and a title, no box. */
 function TabEmptyState({
   icon,
   label,
@@ -1797,30 +1704,56 @@ function TabEmptyState({
   label: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4 text-rm-text-muted">
-      <div className="opacity-20">{icon}</div>
-      <span className="text-ui-sm font-medium">{label}</span>
+    <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <div className="text-ink-3">{icon}</div>
+      <p className="text-ui-md font-semibold text-ink-1">{label}</p>
     </div>
   );
 }
 
-function MemberItem({
+/**
+ * One member row (component kit, MemberPanel): 40px, a 32px square avatar
+ * with a presence LED cut from ply-0, text-ui-row 500 in ink-2,
+ * ink-1 on hover. Someone in your call carries a talk LED on the guide that
+ * lights while they speak; the leaf subscribes to that one user's flag, so a
+ * speaking flip re-renders only this row. Offline rows dim to half.
+ */
+const MemberItem = memo(function MemberItem({
   member,
   isOnline,
   isTyping,
   isMe,
-  platforms,
+  isOwner,
+  callChannelId,
   onClick,
   onContextMenu,
 }: {
-  member: { user: User; roles?: Role[] };
+  member: MemberEntry;
   isOnline: boolean;
-  isTyping?: boolean;
-  isMe?: boolean;
-  platforms?: User["presence_platforms"];
-  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  onContextMenu?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  isTyping: boolean;
+  isMe: boolean;
+  isOwner: boolean;
+  callChannelId: string | null;
+  onClick: (
+    e: React.MouseEvent<HTMLButtonElement>,
+    member: MemberEntry,
+  ) => void;
+  onContextMenu: (e: React.MouseEvent, member: MemberEntry) => void;
 }) {
+  const userId = member.user.id;
+  const livePlatforms = useChatStore(
+    (state) => state.presencePlatformsByUserId[userId],
+  );
+  const platforms = livePlatforms ?? member.user.presence_platforms;
+  const inCall = useChatStore((state) =>
+    callChannelId
+      ? (state.voiceChannelStates[callChannelId]?.some(
+          (m) => m.clerk_user_id === userId,
+        ) ?? false)
+      : false,
+  );
+  const speakingAttr = useSpeakingAttr(inCall ? userId : null);
+
   const displayName = getDisplayName(member.user);
   const nameplatePresentation = getUserNameplatePresentation(member.user);
   const hasNameplate = nameplatePresentation.hasNameplate;
@@ -1831,11 +1764,10 @@ function MemberItem({
     !hasNameplate && isOnline && !member.user.display_name_style
       ? highestRole?.color || undefined
       : undefined;
-  const isAdmin = Boolean(
-    (highestRole?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR,
-  );
+  const status = isOnline ? (member.user.status ?? "online") : "offline";
+  const showTyping = isTyping && (member.user.status !== "offline" || isMe);
   const shouldExtendNameplateMask =
-    hasNameplate && (Boolean(platforms?.length) || isAdmin);
+    hasNameplate && (Boolean(platforms?.length) || isOwner);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const trailingIconsRef = useRef<HTMLDivElement | null>(null);
 
@@ -1891,147 +1823,141 @@ function MemberItem({
     if (buttonRef.current) observer.observe(buttonRef.current);
     if (trailingIconsRef.current) observer.observe(trailingIconsRef.current);
     return () => observer.disconnect();
-  }, [shouldExtendNameplateMask, displayName, isAdmin, platforms]);
+  }, [shouldExtendNameplateMask, displayName, isOwner, platforms]);
 
   return (
-    <ButtonBase
-      ref={buttonRef}
-      className={cn(
-        "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors lg:gap-2.5",
-        "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-lg", // mobile
-        hasNameplate
-          ? "border border-transparent"
-          : "border border-rm-border/30",
-        hasNameplate && "isolate",
-        hasNameplate
-          ? "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover"
-          : "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover", // desktop
-        !isOnline && "opacity-60 grayscale hover:opacity-100 hover:grayscale-0",
-      )}
-      style={
-        hasNameplate && nameplateTheme
-          ? {
-              boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
-            }
-          : undefined
-      }
-      onClick={(e) => {
-        if (e.button === 0) onClick?.(e);
-      }}
-      onContextMenu={onContextMenu}
-      aria-label={`${displayName} (${isOnline ? "Online" : "Offline"})`}
+    <TreeLeaf
+      {...speakingAttr}
+      node={inCall ? <Led state="talk" follow="speaking" /> : undefined}
+      // No guides: the LED (when in your call) moves into the row's left
+      // gutter so every avatar in the group starts on the same x.
+      className="[&>.rm-tree-guide]:hidden"
+      rowClassName="pl-0 max-md:h-auto [&>span:first-child]:absolute [&>span:first-child]:inset-y-0 [&>span:first-child]:left-0.5 [&>span:first-child]:z-20 max-md:[&>span:first-child]:left-1.5"
     >
-      {hasNameplate && (
-        <>
+      <ButtonBase
+        ref={buttonRef}
+        className={cn(
+          sidebarRowClass({ tall: true }),
+          "min-w-0 flex-1 cursor-pointer gap-3 overflow-hidden pl-2.5 transition-[color,background-color,opacity] focus-visible:outline-offset-[-2px]",
+          // Phone (12.4): a 48px row inside the role's tinted group.
+          "max-md:h-auto max-md:min-h-12 max-md:gap-3 max-md:rounded-none max-md:px-4 max-md:py-1.5 max-md:text-ui-base max-md:text-ink-1 max-md:active:bg-tint-2",
+          !isOnline && "opacity-50 pointer-fine:hover:opacity-100",
+          hasNameplate && "isolate",
+        )}
+        style={
+          hasNameplate && nameplateTheme
+            ? {
+                boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
+              }
+            : undefined
+        }
+        onClick={(e) => {
+          if (e.button === 0) onClick(e, member);
+        }}
+        onContextMenu={(e) => onContextMenu(e, member)}
+        aria-label={`${displayName} (${isOnline ? "Online" : "Offline"}${showTyping ? ", typing" : ""})`}
+      >
+        {hasNameplate && (
           <UserNameplateLayer
             user={member.user}
             alt={`${displayName} nameplate`}
             className="pointer-events-none z-0 opacity-[0.98]"
             useMeasuredMask={shouldExtendNameplateMask}
           />
-        </>
-      )}
-      <div className="relative z-10">
-        <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-ui group-hover:ring-2 group-hover:ring-primary/20">
-          {member.user.avatar_url ? (
-            <AvatarImage
-              src={getAuthAssetUrl(member.user.avatar_url)}
-              alt={displayName}
-              display={member.user.avatar_display}
-            />
-          ) : (
-            getDisplayInitial(member.user)
-          )}
-        </div>
-        {isTyping && (member.user.status !== "offline" || isMe) ? (
-          <div
+        )}
+        <span className="relative z-10 shrink-0">
+          <span
             className={cn(
-              "absolute -bottom-0.5 -right-0.5 z-20 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
-              isMe && member.user.status === "offline"
-                ? "bg-rm-text-muted/40"
-                : "bg-primary",
+              "flex size-10 items-center justify-center bg-tint-3 font-display-tuned text-[18px] leading-none font-extrabold text-ink-1 md:size-8 md:text-[14px]",
+              avatarShape(member.user.avatar_url && member.user.avatar_display),
             )}
           >
-            <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
-            <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]" />
-            <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]" />
-          </div>
-        ) : (
-          <UserStatusDot
-            status={isOnline ? (member.user.status ?? "online") : "offline"}
-            className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors lg:h-3 lg:w-3 lg:border-rm-bg-sidebar"
-          />
-        )}
-      </div>
-      <div className="relative z-10 min-w-0 flex-1">
-        <div className={cn("relative min-w-0 px-2 -ml-1 py-1")}>
-          <div className="relative min-w-0">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="min-w-0 shrink">
-                <UserDisplayName
-                  user={member.user}
-                  text={displayName}
-                  className={cn(
-                    "block min-w-0 truncate text-ui-base lg:text-ui-sm font-semibold lg:font-medium leading-[1.2] transition-colors",
-                    hasNameplate
-                      ? "text-rm-text-primary"
-                      : !isOnline
-                        ? "text-rm-text-secondary"
-                        : "group-hover:text-rm-text",
-                    roleNameColor && "rm-role-name",
-                  )}
-                  minContrastRatio={hasNameplate ? 2.8 : undefined}
-                  style={
-                    roleNameColor
-                      ? ({
-                          color: roleNameColor,
-                          "--rm-role-color": roleNameColor,
-                        } as CSSProperties)
-                      : undefined
-                  }
-                />
-              </div>
-              <div
-                ref={trailingIconsRef}
-                className="flex shrink-0 items-center gap-1.5 pl-0.5"
-              >
-                <UserPlatformIndicators
-                  userId={member.user.id}
-                  platforms={platforms}
-                  status={member.user.status}
-                  className="shrink-0"
-                  iconClassName="h-3.5 w-3.5"
-                />
-                {isAdmin ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex shrink-0 items-center">
-                        <Crown className="h-3 w-3 fill-primary/20 text-primary" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8}>
-                      Administrator
-                    </TooltipContent>
-                  </Tooltip>
-                ) : null}
-              </div>
-            </div>
-
-            {member.user.custom_status && (
-              <div
-                className={cn(
-                  "mt-0.5 truncate text-ui-2xs font-medium italic",
-                  hasNameplate
-                    ? "text-rm-text-secondary"
-                    : "text-rm-text-muted",
-                )}
-              >
-                {member.user.custom_status}
-              </div>
+            {member.user.avatar_url ? (
+              <AvatarImage
+                src={getAuthAssetUrl(member.user.avatar_url)}
+                alt={displayName}
+                display={member.user.avatar_display}
+              />
+            ) : (
+              getDisplayInitial(member.user)
             )}
-          </div>
-        </div>
-      </div>
-    </ButtonBase>
+          </span>
+          {showTyping ? (
+            // Static: nothing loops in a list you can reach during a call.
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -bottom-0.5 z-20 flex rounded-[2px] bg-ply-2 p-0.5 md:bg-ply-0"
+            >
+              <TypingDots variant="badge" />
+            </span>
+          ) : (
+            // Presence: an LED in a square cut out of the panel ply.
+            <span
+              aria-hidden="true"
+              data-presence={normalizeUserStatus(status)}
+              className="absolute -right-0.5 -bottom-0.5 z-20 flex size-3.5 items-center justify-center rounded-[2px] bg-ply-2 md:size-3 md:bg-ply-0"
+            >
+              <Led state={PRESENCE_LED[normalizeUserStatus(status)]} />
+            </span>
+          )}
+        </span>
+        <span className="relative z-10 flex min-w-0 flex-1 flex-col">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="min-w-0 shrink">
+              <UserDisplayName
+                user={member.user}
+                text={displayName}
+                className={cn(
+                  "block min-w-0 truncate",
+                  roleNameColor && "rm-role-name",
+                )}
+                minContrastRatio={hasNameplate ? 2.8 : undefined}
+                style={
+                  roleNameColor
+                    ? ({
+                        color: roleNameColor,
+                        "--rm-role-color": roleNameColor,
+                      } as CSSProperties)
+                    : undefined
+                }
+              />
+            </span>
+            <div
+              ref={trailingIconsRef}
+              className="flex shrink-0 items-center gap-1.5"
+            >
+              <UserPlatformIndicators
+                userId={userId}
+                platforms={platforms}
+                status={member.user.status}
+                className="shrink-0"
+                iconSize="xs"
+              />
+              {isOwner ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      role="img"
+                      aria-label="Server owner"
+                      className="flex shrink-0 items-center text-warning-ink"
+                    >
+                      <Icon name="crown" size="xs" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={8}>
+                    Server owner
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+            </div>
+          </span>
+          {member.user.custom_status && (
+            <span className="truncate text-ui-xs font-normal text-ink-3">
+              {member.user.custom_status}
+            </span>
+          )}
+        </span>
+      </ButtonBase>
+    </TreeLeaf>
   );
-}
+});

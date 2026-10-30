@@ -43,7 +43,7 @@ describe("FloatingStreamPreview context menu", () => {
         channelName="General"
         displayName="You"
         previewStream={null}
-        primaryActionTooltip="Stop Streaming"
+        primaryActionTooltip="Stop streaming"
         primaryActionAriaLabel="Stop streaming"
         onPrimaryAction={() => {}}
         onNavigateToVoiceChannel={() => {}}
@@ -66,15 +66,15 @@ describe("FloatingStreamPreview context menu", () => {
       screen.getByRole("button", { name: "Open stream settings" }),
     );
     fireEvent.click(
-      await screen.findByRole("menuitem", {
-        name: "Always Show Stream Preview",
+      await screen.findByRole("menuitemcheckbox", {
+        name: "Always show stream preview",
       }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Open stream settings" }),
     );
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Stop Streaming" }),
+      await screen.findByRole("menuitem", { name: "Stop streaming" }),
     );
 
     expect(onToggleAlwaysShowStreamPreview).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ describe("FloatingStreamPreview context menu", () => {
         channelName="General"
         displayName="You"
         previewStream={null}
-        primaryActionTooltip="Stop Streaming"
+        primaryActionTooltip="Stop streaming"
         primaryActionAriaLabel="Stop streaming"
         onPrimaryAction={() => {}}
         onNavigateToVoiceChannel={() => {}}
@@ -110,7 +110,7 @@ describe("FloatingStreamPreview context menu", () => {
     );
 
     const previewRoot = container.querySelector(
-      ".fixed.z-40",
+      ".fixed.z-30",
     ) as HTMLDivElement | null;
     expect(previewRoot).not.toBeNull();
     const setPointerCapture = vi.fn();
@@ -121,8 +121,8 @@ describe("FloatingStreamPreview context menu", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Open stream settings" }),
     );
-    const menuItem = await screen.findByRole("menuitem", {
-      name: "Always Show Stream Preview",
+    const menuItem = await screen.findByRole("menuitemcheckbox", {
+      name: "Always show stream preview",
     });
     fireEvent.pointerDown(menuItem, {
       button: 0,
@@ -145,7 +145,7 @@ describe("FloatingStreamPreview context menu", () => {
         channelName="General"
         displayName="You"
         previewStream={null}
-        primaryActionTooltip="Stop Streaming"
+        primaryActionTooltip="Stop streaming"
         primaryActionAriaLabel="Stop streaming"
         onPrimaryAction={() => {}}
         onNavigateToVoiceChannel={() => {}}
@@ -164,13 +164,13 @@ describe("FloatingStreamPreview context menu", () => {
       />,
     );
 
-    const previewRoot = container.querySelector(".fixed.z-40");
+    const previewRoot = container.querySelector(".fixed.z-30");
     expect(previewRoot).not.toBeNull();
     fireEvent.contextMenu(previewRoot!);
 
     expect(
-      await screen.findByRole("menuitem", {
-        name: "Always Show Stream Preview",
+      await screen.findByRole("menuitemcheckbox", {
+        name: "Always show stream preview",
       }),
     ).toBeTruthy();
   });

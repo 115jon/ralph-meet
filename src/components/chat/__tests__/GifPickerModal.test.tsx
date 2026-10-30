@@ -69,7 +69,7 @@ describe("GifPickerModal recent queries rendering", () => {
     expect(markup).toContain("Favorites");
     expect(markup).toContain("Trending");
     expect(markup).toContain("Memes");
-    expect(markup).toContain("Recent Searches");
+    expect(markup).toContain("Recent searches");
   });
 
   it("keeps the expanded picker above its full-viewport backdrop", () => {
@@ -82,13 +82,56 @@ describe("GifPickerModal recent queries rendering", () => {
         skipAuth
       />,
     );
-    const markup = document.body.innerHTML;
+    // Expanded is a modal workbench: the standard scrim, then the surface
+    // on the same layer (later in the DOM, so above it).
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    const surface = screen.getByRole("dialog", { name: "GIF picker" });
+    expect(overlay).toHaveClass("z-50", "bg-scrim");
+    expect(surface).toHaveClass("z-50", "rounded-[2px]", "shadow-float");
+    expect(
+      overlay!.compareDocumentPosition(surface) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 
-    expect(markup).toContain(
-      'class="fixed inset-0 transition-opacity duration-150 z-90"',
+  it("raises the whole picker to the stacked layer when opened from a dialog", () => {
+    render(
+      <GifPickerModal
+        open
+        initialExpanded
+        stacked
+        onClose={() => {}}
+        onSelect={async () => {}}
+        skipAuth
+      />,
     );
-    expect(markup).toContain(
-      "absolute z-10 flex min-h-0 flex-col overflow-hidden rounded-3xl",
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toHaveClass(
+      "z-60",
+    );
+    expect(screen.getByRole("dialog", { name: "GIF picker" })).toHaveClass(
+      "z-60",
+    );
+  });
+
+  it("switches media type with tabs and keeps the compact picker non-modal", async () => {
+    const user = userEvent.setup();
+    render(
+      <GifPickerModal
+        open
+        onClose={() => {}}
+        onSelect={async () => {}}
+        skipAuth
+      />,
+    );
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
+    const tabs = screen.getByRole("tablist", { name: "Media type" });
+    expect(tabs.querySelectorAll('[role="tab"]')).toHaveLength(4);
+    const stickers = screen.getByRole("tab", { name: "Stickers" });
+    await user.click(stickers);
+    expect(stickers).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "GIFs" })).toHaveAttribute(
+      "aria-selected",
+      "false",
     );
   });
 });

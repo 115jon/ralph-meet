@@ -3,8 +3,9 @@ import { extendTailwindMerge } from "tailwind-merge";
 
 /**
  * tailwind-merge only knows Tailwind's default theme. Register the app's own
- * scales (see `@theme` in styles.css) so `text-ui-sm` is treated as a font
- * size rather than a colour and survives `cn("text-ui-sm", "text-rm-text")`.
+ * scales (see `@theme` in styles.css) so `text-ui-sm` / `text-num-xs` are
+ * treated as font sizes rather than colours and survive
+ * `cn("text-ui-sm", "text-ink-2")`.
  */
 const twMerge = extendTailwindMerge({
   extend: {
@@ -13,6 +14,7 @@ const twMerge = extendTailwindMerge({
         "ui-2xs",
         "ui-xs",
         "ui-sm",
+        "ui-row",
         "ui-base",
         "ui-md",
         "ui-lg",
@@ -20,9 +22,15 @@ const twMerge = extendTailwindMerge({
         "ui-2xl",
         "display",
         "display-lg",
+        // Mono number steps (styles.css @utility): font size + face.
+        "num-xs",
+        "num-sm",
+        // Bricolage control label (styles.css @utility text-control).
+        "control",
       ],
-      font: ["ui", "display"],
-      ease: ["drawer"],
+      font: ["ui", "display", "silk"],
+      ease: ["drawer", "spring"],
+      shadow: ["float", "modal"],
     },
     classGroups: {
       transition: ["transition-ui"],

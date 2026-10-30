@@ -340,10 +340,15 @@ export async function requireActiveVoiceChannelSession(
   );
 }
 
+/**
+ * Who is calling, or the response to send instead: 401 when Kova says there
+ * is no session, 503 (AUTH_UNAVAILABLE) when Kova could not answer. Clients
+ * retry a 503 with their normal backoff; only a 401 means "sign in again".
+ */
 export async function requireAuth(
   req?: Request,
 ): Promise<{ userId: string } | Response> {
-  const { auth, verifyToken } = await import("@/lib/kova-auth-server");
+  const { auth, checkToken } = await import("@/lib/kova-auth-server");
   const requestContext = getRequestLogContext(req);
   try {
     const authState = await auth();
@@ -351,6 +356,7 @@ export async function requireAuth(
     if (authState.userId) {
       return { userId: authState.userId };
     }
+    let unavailable = authState.unavailable;
 
     // Try verifying manually if auth() didn't pick it up (e.g. custom desktop JWT in header or query param)
     const { getRequestHeader } = await import(
@@ -373,19 +379,20 @@ export async function requireAuth(
     }
 
     if (token) {
-      try {
-        const claims = await verifyToken(token);
-        if (claims?.sub) {
-          return { userId: claims.sub };
-        }
-      } catch (e) {
-        authLog.warn("Custom desktop token validation failed", {
-          ...requestContext,
-          hasAuthorizationHeader: !!authHeader,
-          hasQueryToken,
-          error: e,
-        });
+      const check = await checkToken(token);
+      if (check.status === "signed-in") {
+        return { userId: check.user.id };
       }
+      if (check.status === "unavailable") unavailable = true;
+    }
+
+    if (unavailable) {
+      authLog.warn("Session check unavailable", {
+        ...requestContext,
+        hasAuthorizationHeader: !!authHeader,
+        hasQueryToken,
+      });
+      return authUnavailable(req);
     }
 
     authLog.warn("Unauthorized request", {
@@ -400,15 +407,22 @@ export async function requireAuth(
       { status: 401, headers: getCorsHeaders(req) },
     );
   } catch (error: unknown) {
+    // The check itself broke: that says nothing about the session.
     authLog.error("Authorization check failed", {
       ...requestContext,
       error,
     });
-    return Response.json(
-      { error: "Unauthorized" },
-      { status: 401, headers: getCorsHeaders(req) },
-    );
+    return authUnavailable(req);
   }
+}
+
+function authUnavailable(req?: Request): Response {
+  return apiError(
+    "Couldn't check your session right now. Try again shortly.",
+    503,
+    "AUTH_UNAVAILABLE",
+    req,
+  );
 }
 
 /** Standardized successful API response — returns data directly */

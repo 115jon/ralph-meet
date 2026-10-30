@@ -1,0 +1,86 @@
+import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
+import { UserButton, useAuth } from "@kova/react";
+import { useEffect, useState } from "react";
+import { buttonVariants } from "@/components/ui/button";
+import { CONTAINER, SILK_LINK } from "./ui";
+
+export const SCROLL_SENTINEL_ID = "home-scroll-sentinel";
+
+const NAV = [
+  { href: "#product", label: "Product" },
+  { href: "#download", label: "Download" },
+  { href: "#join", label: "Join a room" },
+] as const;
+
+/**
+ * Fixed header laid out as a three-column grid rather than a bar: brand,
+ * in-page links in silkscreen, account. Transparent over the hero; once the
+ * sentinel under it scrolls away it takes the page ground and a hairline.
+ */
+export function HomeHeader() {
+  const { isSignedIn } = useAuth();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const sentinel = document.getElementById(SCROLL_SENTINEL_ID);
+    if (!sentinel || typeof IntersectionObserver !== "function") return;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      setScrolled(entry ? !entry.isIntersecting : false);
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <header
+      data-scrolled={scrolled ? "true" : "false"}
+      className="fixed inset-x-0 top-0 z-20 border-b border-transparent pt-[var(--safe-area-top,0px)] transition-colors duration-(--dur-3) ease-out data-[scrolled=true]:border-line data-[scrolled=true]:bg-ply-0"
+    >
+      <div
+        className={`${CONTAINER} grid h-16 grid-cols-[1fr_auto] items-center gap-4 md:grid-cols-[1fr_auto_1fr]`}
+      >
+        <a
+          href="#home-hero"
+          className="flex min-h-11 w-fit items-center gap-3 rounded-[2px] font-display text-[17px] font-extrabold tracking-[-0.02em] text-ink-1"
+        >
+          <ThemeAwareSplashLogo className="size-7 select-none" />
+          Ralph Meet
+        </a>
+
+        <nav aria-label="Page" className="hidden items-center gap-8 md:flex">
+          {NAV.map((item) => (
+            <a key={item.href} href={item.href} className={SILK_LINK}>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        <nav
+          aria-label="Account"
+          className="flex items-center justify-end gap-3"
+        >
+          {isSignedIn ? (
+            <>
+              <a
+                href="/chat"
+                className={buttonVariants({ variant: "primary", size: "sm" })}
+              >
+                Open the app
+              </a>
+              <div className="flex size-9 items-center justify-center rounded-[2px] bg-tint-1">
+                {/* Colours come from the provider; the SDK ignores
+                    per-instance appearance variables. */}
+                <UserButton afterSignOutUrl="/" size={32} />
+              </div>
+            </>
+          ) : (
+            <a href="/sign-in" className={`${SILK_LINK} text-ink-1`}>
+              Sign in
+            </a>
+          )}
+        </nav>
+      </div>
+    </header>
+  );
+}

@@ -1,35 +1,92 @@
+import type { CSSProperties } from "react";
+
 import { cn } from "@/lib/utils";
 
 export type UserStatus = "online" | "idle" | "dnd" | "offline";
 
-const statusColors: Record<UserStatus, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-[var(--rm-status-offline)]",
+/** Presence fills from the theme's `--status-*` tokens (never accent). */
+export const USER_STATUS_COLOR_CLASSES: Record<UserStatus, string> = {
+  online: "bg-status-online",
+  idle: "bg-status-idle",
+  dnd: "bg-status-dnd",
+  offline: "bg-status-offline",
+};
+
+export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  online: "Online",
+  idle: "Idle",
+  dnd: "Do not disturb",
+  offline: "Offline",
+};
+
+/** Maps any stored status string (e.g. "invisible") onto the four dots. */
+export function normalizeUserStatus(value: unknown): UserStatus {
+  return value === "online" || value === "idle" || value === "dnd"
+    ? value
+    : "offline";
+}
+
+// The offline ring and the dnd bar are holes cut with a mask, not shapes
+// painted in a surface colour: whatever sits behind the dot (a ring, a row
+// tint, a profile gradient) shows through, so the cut-out matches every
+// surface. Paths are a 20x20 disc minus a 42% hole / a 55%x18% bar.
+const DISC = "M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20z";
+const cutoutMask = (hole: string): CSSProperties => {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill-rule='evenodd' d='${DISC}${hole}'/></svg>`;
+  const image = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  return {
+    maskImage: image,
+    WebkitMaskImage: image,
+    maskSize: "100% 100%",
+    WebkitMaskSize: "100% 100%",
+  };
+};
+const CUTOUT_MASKS: Partial<Record<UserStatus, CSSProperties>> = {
+  offline: cutoutMask("M10 5.8a4.2 4.2 0 1 0 0 8.4a4.2 4.2 0 1 0 0-8.4z"),
+  dnd: cutoutMask("M6.3 8.2h7.4a1.8 1.8 0 0 1 0 3.6h-7.4a1.8 1.8 0 0 1 0-3.6z"),
 };
 
 export function UserStatusDot({
   status,
   className,
+  ring,
+  label,
 }: {
   status: UserStatus;
+  /** Size and position; with `ring`, of the ring box (dot = box - 4px). */
   className?: string;
+  /**
+   * Background class(es) of the surface behind the dot, e.g.
+   * `"bg-ply-0"` or `"bg-ply-2 md:bg-ply-0"`. Draws a
+   * 2px ring in that colour where the dot overlaps an avatar. Omit when the
+   * dot sits on its own (menu rows) or inside a ringed wrapper.
+   */
+  ring?: string;
+  /** Pass to announce the status; omitted, the dot is decorative. */
+  label?: string;
 }) {
+  const a11y = label
+    ? { role: "img", "aria-label": label }
+    : { "aria-hidden": true as const };
+  const dot = (
+    <span
+      data-status={status}
+      className={cn(
+        "flex aspect-square rounded-full",
+        USER_STATUS_COLOR_CLASSES[status],
+        ring ? "size-full" : className,
+      )}
+      style={CUTOUT_MASKS[status]}
+      {...(ring ? {} : a11y)}
+    />
+  );
+  if (!ring) return dot;
   return (
     <span
-      className={cn(
-        "relative flex aspect-square items-center justify-center rounded-full",
-        statusColors[status],
-        className,
-      )}
+      className={cn("flex aspect-square rounded-full p-0.5", ring, className)}
+      {...a11y}
     >
-      {status === "offline" ? (
-        <span className="absolute left-1/2 top-1/2 h-[42%] w-[42%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-rm-bg-surface" />
-      ) : null}
-      {status === "dnd" ? (
-        <span className="absolute left-1/2 top-1/2 h-[18%] w-[55%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-rm-bg-surface" />
-      ) : null}
+      {dot}
     </span>
   );
 }

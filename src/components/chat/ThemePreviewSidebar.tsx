@@ -1,6 +1,24 @@
 import { cn } from "@/lib/utils";
 import { type AppTheme } from "@/lib/theme-preferences";
-import { ChevronLeft, Eye, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { PRESS } from "@/components/ui/interaction";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useAppearanceTheme } from "./useAppearanceTheme";
 
 const THEME_OPTIONS: Array<{
@@ -37,92 +55,131 @@ const THEME_OPTIONS: Array<{
   },
 ];
 
+const TITLE = "Preview theme";
+const DESCRIPTION = "Switch themes and see the current screen update live.";
+
 interface ThemePreviewSidebarProps {
-  isClosing?: boolean;
-  onClose: () => void;
+  open: boolean;
+  /** Escape, back, the close button and "Back to settings" all land here. */
   onBackToSettings: () => void;
-  className?: string;
+  /** Force one form (fixtures, tests). */
+  forceMode?: "sheet" | "drawer";
 }
 
+/**
+ * Live theme preview (design-system 12.10): a right side sheet on desktop, a
+ * bottom drawer on phones so the app stays visible above it. Neither dims the
+ * page; seeing the app in the new theme is the point.
+ */
 export default function ThemePreviewSidebar({
-  isClosing,
-  onClose,
+  open,
   onBackToSettings,
-  className,
+  forceMode,
 }: ThemePreviewSidebarProps) {
+  const isMobile = useIsMobile();
+  const drawer = forceMode ? forceMode === "drawer" : isMobile;
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) onBackToSettings();
+  };
+
+  const closeButton = (
+    <IconButton
+      icon="close"
+      size="sm"
+      variant="muted"
+      aria-label="Close preview"
+      onClick={onBackToSettings}
+    />
+  );
+  const backButton = (
+    <Button
+      type="button"
+      variant="secondary"
+      className="w-full"
+      onClick={onBackToSettings}
+    >
+      <Icon name="chevronLeft" size="sm" />
+      Back to settings
+    </Button>
+  );
+
+  if (drawer) {
+    return (
+      <Drawer open={open} onOpenChange={handleOpenChange}>
+        <DrawerContent hideOverlay aria-label={TITLE}>
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
+            <DrawerTitle className="min-w-0 flex-1 truncate text-ui-md font-semibold">
+              {TITLE}
+            </DrawerTitle>
+          </div>
+          <DrawerDescription className="sr-only">
+            {DESCRIPTION}
+          </DrawerDescription>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 custom-scrollbar">
+            <ThemeGrid compact />
+          </div>
+          <div className="shrink-0 px-4 pt-2">{backButton}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent side="right" hideOverlay aria-label={TITLE}>
+        <SheetHeader>
+          <SheetTitle>{TITLE}</SheetTitle>
+          {closeButton}
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 custom-scrollbar">
+          <SheetDescription className="mb-4">{DESCRIPTION}</SheetDescription>
+          <ThemeGrid />
+        </div>
+        <SheetFooter className="border-t border-line">{backButton}</SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ThemeGrid({ compact = false }: { compact?: boolean }) {
   const { theme, setAppearanceTheme } = useAppearanceTheme();
 
   return (
-    <aside
-      className={cn(
-        "pointer-events-auto flex h-full w-full max-w-[320px] flex-col border-l border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-right-8 duration-200",
-        isClosing && "animate-out slide-out-to-right-8 duration-200",
-        className,
-      )}
-      aria-label="Theme preview sidebar"
-    >
-      <header className="flex items-center gap-3 border-b border-rm-border px-4 py-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-elevated text-rm-text-muted">
-          <Eye size={18} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-bold text-rm-text">Preview Theme</h2>
-          <p className="text-xs text-rm-text-muted">
-            Switch themes and see the current screen update live.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-bg-elevated text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
-        >
-          <X size={16} />
-        </button>
-      </header>
-
-      <div className="flex-1 overflow-y-auto px-4 py-5 custom-scrollbar">
-        <div className="grid grid-cols-2 gap-3">
-          {THEME_OPTIONS.map((option) => {
-            const active = theme === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => void setAppearanceTheme(option.id)}
-                className={cn(
-                  "rounded-2xl border p-2 text-left transition-ui",
-                  active
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-hover",
-                )}
-              >
-                <div
-                  className={cn("mb-2 h-20 rounded-xl", option.previewClass)}
-                />
-                <span
-                  className={cn(
-                    "text-xs font-bold",
-                    active ? "text-primary" : "text-rm-text",
-                  )}
-                >
-                  {option.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="border-t border-rm-border p-4">
-        <button
-          type="button"
-          onClick={onBackToSettings}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text transition-colors hover:bg-rm-bg-hover"
-        >
-          <ChevronLeft size={16} />
-          Back to Settings
-        </button>
-      </div>
-    </aside>
+    <div className={cn("grid gap-3", compact ? "grid-cols-3" : "grid-cols-2")}>
+      {THEME_OPTIONS.map((option) => {
+        const active = theme === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => void setAppearanceTheme(option.id)}
+            className={cn(
+              "rounded-lg border p-2 text-left",
+              PRESS,
+              active
+                ? "border-accent-ink bg-accent-tint ring-1 ring-accent-ink"
+                : "border-line bg-tint-1",
+            )}
+          >
+            <div
+              className={cn(
+                "mb-2 rounded-md",
+                compact ? "h-12" : "h-20",
+                option.previewClass,
+              )}
+            />
+            <span
+              className={cn(
+                "block truncate text-ui-xs font-semibold",
+                active ? "text-accent-ink" : "text-ink-1",
+              )}
+            >
+              {option.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

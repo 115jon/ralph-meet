@@ -249,3 +249,29 @@ describe("avatar display metadata", () => {
     });
   });
 });
+
+describe("profile frame layer repair", () => {
+  it("repoints layer art saved under a bundle sku to the frame's own sku", () => {
+    const display = normalizeAvatarDisplay({
+      version: 1,
+      collectibles: {
+        profileFrame: {
+          skuId: "1556809649808736266",
+          name: "Dark Moon",
+          layers: [
+            {
+              id: "777",
+              src: "https://cdn.discordapp.com/media/v1/collectibles-shop/1556811033446846555/777/static",
+              type: "staple",
+              order: "front",
+              anchor: "top",
+            },
+          ],
+        },
+      },
+    });
+    expect(display?.collectibles?.profileFrame?.layers[0]?.src).toBe(
+      "https://cdn.discordapp.com/media/v1/collectibles-shop/1556809649808736266/777/static",
+    );
+  });
+});

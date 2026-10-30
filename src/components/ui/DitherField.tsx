@@ -3,18 +3,21 @@
  *
  * A square canvas (so dither cells stay square at any aspect) is centred in
  * the host and upscaled with `image-rendering: pixelated`. The greyscale
- * source field from `@/lib/auth-art` is painted at ~30 fps on a 104×104 2D
- * canvas and ditherwave snaps it to a Bayer grid mapped onto a six-step ink
- * ramp derived from the active theme's `--rm-accent` / `--rm-bg-primary`.
+ * source field from `@/lib/auth-art` is painted on a 104×104 2D canvas and
+ * ditherwave snaps it to a Bayer grid mapped onto a six-step ink ramp derived
+ * from the active theme's `--rm-accent` / `--rm-bg-primary`.
  *
- * Cheap by construction:
- *  - mounts after first paint (two frames + a macrotask), never during SSR
- *  - stops painting while offscreen (IntersectionObserver) or in a hidden tab
- *  - renders one frame and releases the GL context under reduced motion or
- *    when `still` is set
- *  - falls back to CSS gradients when WebGL2 is unavailable
+ * Still by default (talk-tree-spec §6, performance-motion P1-3): it paints
+ * one frame, copies it to a plain 2D canvas and releases the GL context, so
+ * nothing ticks while it is on screen. ditherwave's own rAF loop never
+ * starts (see `createDitherWithoutLoop`).
  *
- * Keep at most a few on screen; each live instance owns a WebGL context.
+ * `animate` opts into a slow 12 fps drift for marketing/auth surfaces only.
+ * It is ignored under reduced motion, and the timer skips frames while the
+ * field is offscreen, the document is hidden or the app is inactive.
+ *
+ * Mounts after first paint (two frames + a macrotask), never during SSR, and
+ * falls back to CSS gradients when WebGL2 is unavailable.
  */
 
 import {
@@ -32,7 +35,8 @@ import { createDither, type DitherHandle } from "ditherwave";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 const PIXEL_RATIO = 0.5;
-const FRAME_INTERVAL_MS = 33;
+/** Opt-in animation cadence (12 fps). */
+const ANIMATE_INTERVAL_MS = 83;
 const FALLBACK: ThemeColors = { accent: "#5865f2", background: "#070709" };
 
 export interface DitherFieldProps {
@@ -46,7 +50,12 @@ export interface DitherFieldProps {
   contrast?: number;
   /** Opacity of the art layer once live (0–1). */
   opacity?: number;
-  /** Freeze on a single frame regardless of the motion preference. */
+  /**
+   * Opt into a slow drift (12 fps). In-app surfaces must not set it: a call
+   * may be open behind them. Ignored under reduced motion.
+   */
+  animate?: boolean;
+  /** Force a single frame even when `animate` is set. Still is the default. */
   still?: boolean;
   /** Time offset in seconds so neighbouring fields don't move in lockstep. */
   seed?: number;
@@ -62,7 +71,20 @@ export interface DitherFieldProps {
    * its contrast in every theme. Use it whenever copy sits on the art.
    */
   tone?: "full" | "quiet";
+  /**
+   * Paint a different greyscale source (mount-time). Defaults to the auth
+   * field. It is drawn on the square SOURCE_SIZE canvas, of which a wide or
+   * tall host shows only the centred slice. `t` is undefined for the still
+   * frame.
+   */
+  paint?: FieldPainter;
 }
+
+export type FieldPainter = (
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  t?: number,
+) => void;
 
 /** Ramp for fields that sit behind text: never far from the ground. */
 function quietInks({ accent, background }: ThemeColors): ArtInks {
@@ -118,6 +140,27 @@ function fadeOverlay(
   }
 }
 
+/**
+ * ditherwave's createDither() always starts a requestAnimationFrame loop that
+ * redraws every vsync. Construct it with rAF stubbed out so that loop never
+ * starts; callers draw with `handle.render()` when they mean to.
+ */
+function createDitherWithoutLoop(
+  ...args: Parameters<typeof createDither>
+): DitherHandle {
+  const raf = window.requestAnimationFrame;
+  window.requestAnimationFrame = () => 0;
+  try {
+    return createDither(...args);
+  } finally {
+    window.requestAnimationFrame = raf;
+  }
+}
+
+function appInactive(): boolean {
+  return document.documentElement.hasAttribute("data-app-inactive");
+}
+
 function cellResolution(cssSize: number, cell: number): number {
   return Math.max(48, Math.min(256, Math.round(cssSize / cell)));
 }
@@ -129,15 +172,18 @@ export function DitherField({
   intensity = 0.55,
   contrast = 1.25,
   opacity = 1,
+  animate = false,
   still = false,
   seed = 0,
   inks: inkOverride,
   fade = "none",
   fadeTo = "var(--rm-bg-primary)",
   tone = "full",
+  paint = paintField,
 }: DitherFieldProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<DitherHandle | null>(null);
+  const repaintStillRef = useRef<((palette: ArtInks) => void) | null>(null);
   const [colors, setColors] = useState<ThemeColors>(FALLBACK);
   const [live, setLive] = useState(false);
 
@@ -203,15 +249,15 @@ export function DitherField({
       let size = fit();
       host.appendChild(target);
 
-      const frozen = still || prefersReducedMotion();
+      const frozen = !animate || still || prefersReducedMotion();
       const started = performance.now() - seed * 1000;
       const palette =
         inkOverride ??
         inksFor(readThemeColors(document.documentElement, FALLBACK), tone);
       let handle: DitherHandle;
       try {
-        paintField(ctx, SOURCE_SIZE, frozen ? undefined : seed);
-        handle = createDither(target, source, {
+        paint(ctx, SOURCE_SIZE, frozen ? undefined : seed);
+        handle = createDitherWithoutLoop(target, source, {
           mode: "bayer",
           matrixSize: 8,
           resolution: cellResolution(size, cell),
@@ -248,21 +294,55 @@ export function DitherField({
           keep.style.opacity = String(opacity);
           setLive(true);
         });
-        cleanup = () => keep.remove();
+        // A theme change repaints the still frame once (a short-lived GL
+        // context on a detached canvas), then releases it again.
+        repaintStillRef.current = (nextPalette) => {
+          if (disposed) return;
+          // Laid out like the visible frame (ditherwave sizes from layout),
+          // but transparent, and removed as soon as it has been copied.
+          const scratch = document.createElement("canvas");
+          scratch.setAttribute("aria-hidden", "true");
+          scratch.style.cssText = keep.style.cssText;
+          scratch.style.transition = "none";
+          scratch.style.opacity = "0";
+          host.appendChild(scratch);
+          try {
+            const once = createDitherWithoutLoop(scratch, source, {
+              mode: "bayer",
+              matrixSize: 8,
+              resolution: cellResolution(size, cell),
+              palette: nextPalette,
+              intensity,
+              contrast,
+              animate: false,
+              pauseOffscreen: false,
+              pixelRatio: PIXEL_RATIO,
+            });
+            once.render();
+            const keepCtx = keep.getContext("2d");
+            keepCtx?.clearRect(0, 0, keep.width, keep.height);
+            keepCtx?.drawImage(scratch, 0, 0, keep.width, keep.height);
+            once.destroy();
+          } catch {
+            /* keep the previous frame */
+          } finally {
+            scratch.remove();
+          }
+        };
+        cleanup = () => {
+          repaintStillRef.current = null;
+          keep.remove();
+        };
         return;
       }
 
       let visible = true;
-      let last = 0;
-      const tick = (now: number) => {
-        if (disposed) return;
-        frame = requestAnimationFrame(tick);
-        if (!visible || document.hidden || now - last < FRAME_INTERVAL_MS)
-          return;
-        last = now;
-        paintField(ctx, SOURCE_SIZE, (now - started) / 1000);
-      };
-      frame = requestAnimationFrame(tick);
+      handle.render();
+      const timer = window.setInterval(() => {
+        if (disposed || !visible || document.hidden || appInactive()) return;
+        paint(ctx, SOURCE_SIZE, (performance.now() - started) / 1000);
+        handle.render();
+      }, ANIMATE_INTERVAL_MS);
       requestAnimationFrame(reveal);
 
       const intersection =
@@ -289,7 +369,7 @@ export function DitherField({
       resize?.observe(host);
 
       cleanup = () => {
-        cancelAnimationFrame(frame);
+        window.clearInterval(timer);
         intersection?.disconnect();
         resize?.disconnect();
         handle.destroy();
@@ -313,7 +393,12 @@ export function DitherField({
   }, []);
 
   useEffect(() => {
-    handleRef.current?.setOptions({ palette: inks });
+    if (handleRef.current) {
+      handleRef.current.setOptions({ palette: inks });
+      handleRef.current.render();
+    } else {
+      repaintStillRef.current?.(inks);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colors, inkOverride]);
 
@@ -336,7 +421,7 @@ export function DitherField({
     >
       {overlay && (
         <div
-          className="pointer-events-none absolute inset-0 z-[2]"
+          className="pointer-events-none absolute inset-0 z-10"
           style={{ background: overlay }}
         />
       )}

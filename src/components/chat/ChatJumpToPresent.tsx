@@ -1,17 +1,32 @@
-import { ChevronDown } from "./Icons";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 
-export function ChatJumpToPresent({ isDetached, onJumpToPresent }: any) {
+interface ChatJumpToPresentProps {
+  isDetached: boolean;
+  onJumpToPresent: () => void;
+}
+
+/**
+ * Shown while you're reading history away from the live tail. A ply-3 float
+ * (line + float shadow) above the composer; it fades and rises 4px in.
+ */
+export function ChatJumpToPresent({
+  isDetached,
+  onJumpToPresent,
+}: ChatJumpToPresentProps) {
   if (!isDetached) return null;
   return (
-    <div className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-1 duration-150">
-      <button
+    <div className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2 transition-[opacity,translate] duration-(--dur-3) ease-out starting:translate-y-(--motion-shift) starting:opacity-0">
+      <Button
         type="button"
+        variant="secondary"
+        size="sm"
         onClick={onJumpToPresent}
-        className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-rm-accent pl-3.5 pr-2.5 text-ui-sm font-semibold text-white shadow-md transition-ui hover:bg-rm-accent-hover enabled:active:scale-[0.96]"
+        className="border border-line bg-ply-3 text-ink-1 shadow-float"
       >
-        <span>Jump to Present</span>
-        <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
-      </button>
+        Jump to present
+        <Icon name="chevronDown" size="sm" />
+      </Button>
     </div>
   );
 }

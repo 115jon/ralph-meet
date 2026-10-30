@@ -109,7 +109,22 @@ type EmojiMartPayload = {
   aliases?: Record<string, string>;
 };
 
-const martData = emojiMartData as unknown as EmojiMartPayload;
+// ── Emoji data: bundled on the web, lazy on desktop ─────────────────────
+//
+// The web build imports @emoji-mart/data statically, so everything below is
+// synchronous and ready at module evaluation (SSR included). The desktop
+// build aliases the bare "@emoji-mart/data" specifier to an empty payload
+// (desktop/shims/emoji-mart-data-empty.ts) so the ~400 KB JSON stays out of
+// the entry chunk; this module then fetches the real set with a dynamic
+// import as soon as it is evaluated, rebuilds the index and notifies
+// subscribers. Until then the sync API answers as if no native emoji existed
+// (plain text), which in practice lasts a few milliseconds of local disk
+// read, well before any message list renders.
+//
+//   loadEmojiData()                   // the picker: skeleton until it lands
+//   useEmojiDataReady()               // inline renderers re-render on ready
+//                                     // (src/hooks/useEmojiDataReady.ts)
+const staticMartData = emojiMartData as unknown as EmojiMartPayload;
 const CUSTOM_EMOJI_TOKEN_REGEX = /^<:([a-z0-9_]+):([a-z0-9-]+)>$/i;
 const NATIVE_CATEGORY_META: Record<
   string,
@@ -157,7 +172,7 @@ function normalizeSearchText(value: string): string {
   return value.toLowerCase().replace(/[_-]+/g, " ").trim();
 }
 
-function buildAliasMap() {
+function buildAliasMap(martData: EmojiMartPayload) {
   const aliasesById = new Map<string, string[]>();
 
   for (const [alias, canonicalId] of Object.entries(martData.aliases ?? {})) {
@@ -228,144 +243,227 @@ function applyNativeEmojiSkinToneInternal(
   };
 }
 
-const aliasesById = buildAliasMap();
-const nativeEmojis: NativeEmoji[] = [];
-const nativeEmojiById = new Map<string, NativeEmoji>();
-const nativeEmojiByValue = new Map<string, NativeEmoji>();
-const nativeEmojiByShortcode = new Map<string, NativeEmoji>();
-const nativeEmojiCategories: NativeEmojiCategory[] = [];
+interface NativeEmojiIndex {
+  nativeEmojis: NativeEmoji[];
+  nativeEmojiById: Map<string, NativeEmoji>;
+  nativeEmojiByValue: Map<string, NativeEmoji>;
+  nativeEmojiByShortcode: Map<string, NativeEmoji>;
+  nativeEmojiCategories: NativeEmojiCategory[];
+  nativeEmojiRegex: RegExp | null;
+}
 
-for (const category of martData.categories ?? []) {
-  const categoryItems: NativeEmoji[] = [];
+function buildNativeEmojiIndex(martData: EmojiMartPayload): NativeEmojiIndex {
+  const aliasesById = buildAliasMap(martData);
+  const nativeEmojis: NativeEmoji[] = [];
+  const nativeEmojiById = new Map<string, NativeEmoji>();
+  const nativeEmojiByValue = new Map<string, NativeEmoji>();
+  const nativeEmojiByShortcode = new Map<string, NativeEmoji>();
+  const nativeEmojiCategories: NativeEmojiCategory[] = [];
 
-  for (const emojiId of category.emojis ?? []) {
-    const source = martData.emojis[emojiId];
-    if (!source) continue;
+  for (const category of martData.categories ?? []) {
+    const categoryItems: NativeEmoji[] = [];
 
-    const skins = (source.skins ?? [])
-      .map((skin, index) => {
-        if (!skin.native || !skin.unified) return null;
+    for (const emojiId of category.emojis ?? []) {
+      const source = martData.emojis[emojiId];
+      if (!source) continue;
 
-        return {
-          tone: Math.min(index, 5) as NativeEmojiSkinTone,
-          native: skin.native,
-          unified: skin.unified,
-          imageUrl: buildNativeEmojiAssetUrl(skin.unified),
-        } satisfies NativeEmojiSkinVariant;
-      })
-      .filter((skin): skin is NativeEmojiSkinVariant => Boolean(skin));
-    const defaultSkin = skins[0];
-    if (!defaultSkin) continue;
+      const skins = (source.skins ?? [])
+        .map((skin, index) => {
+          if (!skin.native || !skin.unified) return null;
 
-    const aliasCandidates = aliasesById.get(source.id) ?? [];
-    const sanitizedAliases = aliasCandidates
-      .map(sanitizeShortcodeCandidate)
-      .filter(Boolean);
-    const sanitizedId = sanitizeShortcodeCandidate(source.id);
-    const shortcodes = Array.from(
-      new Set([...sanitizedAliases, sanitizedId].filter(Boolean)),
-    );
-    if (shortcodes.length === 0) continue;
+          return {
+            tone: Math.min(index, 5) as NativeEmojiSkinTone,
+            native: skin.native,
+            unified: skin.unified,
+            imageUrl: buildNativeEmojiAssetUrl(skin.unified),
+          } satisfies NativeEmojiSkinVariant;
+        })
+        .filter((skin): skin is NativeEmojiSkinVariant => Boolean(skin));
+      const defaultSkin = skins[0];
+      if (!defaultSkin) continue;
 
-    const emoji: NativeEmoji = {
-      id: source.id,
-      native: defaultSkin.native,
-      unified: defaultSkin.unified,
-      imageUrl: defaultSkin.imageUrl,
-      name: source.name ?? source.id,
-      keywords: Array.from(
-        new Set(
-          [...(source.keywords ?? []), ...(source.emoticons ?? [])]
-            .map((entry) => String(entry).trim())
-            .filter(Boolean),
+      const aliasCandidates = aliasesById.get(source.id) ?? [];
+      const sanitizedAliases = aliasCandidates
+        .map(sanitizeShortcodeCandidate)
+        .filter(Boolean);
+      const sanitizedId = sanitizeShortcodeCandidate(source.id);
+      const shortcodes = Array.from(
+        new Set([...sanitizedAliases, sanitizedId].filter(Boolean)),
+      );
+      if (shortcodes.length === 0) continue;
+
+      const emoji: NativeEmoji = {
+        id: source.id,
+        native: defaultSkin.native,
+        unified: defaultSkin.unified,
+        imageUrl: defaultSkin.imageUrl,
+        name: source.name ?? source.id,
+        keywords: Array.from(
+          new Set(
+            [...(source.keywords ?? []), ...(source.emoticons ?? [])]
+              .map((entry) => String(entry).trim())
+              .filter(Boolean),
+          ),
         ),
-      ),
-      shortcodes,
-      preferredShortcode: shortcodes[0],
-      categoryId: category.id,
-      categoryLabel: category.name ?? category.id,
-      searchText: normalizeSearchText(
-        [
-          source.id,
-          source.name ?? "",
-          ...shortcodes,
-          ...(source.keywords ?? []),
-          ...(source.emoticons ?? []),
-        ].join(" "),
-      ),
-      skins,
-      supportsSkinTone: skins.length > 1,
-    };
-
-    nativeEmojis.push(emoji);
-    categoryItems.push(emoji);
-
-    if (!nativeEmojiById.has(emoji.id)) {
-      nativeEmojiById.set(emoji.id, emoji);
-    }
-
-    for (const skin of skins) {
-      const resolvedEmoji = {
-        ...emoji,
-        native: skin.native,
-        unified: skin.unified,
-        imageUrl: skin.imageUrl,
+        shortcodes,
+        preferredShortcode: shortcodes[0],
+        categoryId: category.id,
+        categoryLabel: category.name ?? category.id,
+        searchText: normalizeSearchText(
+          [
+            source.id,
+            source.name ?? "",
+            ...shortcodes,
+            ...(source.keywords ?? []),
+            ...(source.emoticons ?? []),
+          ].join(" "),
+        ),
+        skins,
+        supportsSkinTone: skins.length > 1,
       };
 
-      for (const nativeValue of new Set([
-        skin.native,
-        normalizeNativeEmojiValueKey(skin.native),
-      ])) {
-        if (!nativeEmojiByValue.has(nativeValue)) {
-          nativeEmojiByValue.set(nativeValue, resolvedEmoji);
+      nativeEmojis.push(emoji);
+      categoryItems.push(emoji);
+
+      if (!nativeEmojiById.has(emoji.id)) {
+        nativeEmojiById.set(emoji.id, emoji);
+      }
+
+      for (const skin of skins) {
+        const resolvedEmoji = {
+          ...emoji,
+          native: skin.native,
+          unified: skin.unified,
+          imageUrl: skin.imageUrl,
+        };
+
+        for (const nativeValue of new Set([
+          skin.native,
+          normalizeNativeEmojiValueKey(skin.native),
+        ])) {
+          if (!nativeEmojiByValue.has(nativeValue)) {
+            nativeEmojiByValue.set(nativeValue, resolvedEmoji);
+          }
+        }
+      }
+
+      for (const shortcode of emoji.shortcodes) {
+        if (!nativeEmojiByShortcode.has(shortcode)) {
+          nativeEmojiByShortcode.set(shortcode, emoji);
         }
       }
     }
 
-    for (const shortcode of emoji.shortcodes) {
-      if (!nativeEmojiByShortcode.has(shortcode)) {
-        nativeEmojiByShortcode.set(shortcode, emoji);
-      }
+    if (categoryItems.length > 0) {
+      const meta = NATIVE_CATEGORY_META[category.id];
+      const iconEmoji =
+        meta?.iconShortcodes
+          .map((shortcode) => {
+            const normalized = sanitizeShortcodeCandidate(shortcode);
+            return (
+              categoryItems.find(
+                (emoji) =>
+                  emoji.shortcodes.includes(normalized) ||
+                  emoji.preferredShortcode === normalized,
+              ) ?? null
+            );
+          })
+          .find((emoji): emoji is NativeEmoji => Boolean(emoji)) ??
+        categoryItems[0];
+
+      nativeEmojiCategories.push({
+        id: category.id,
+        label: meta?.label ?? category.name ?? category.id,
+        iconNative: iconEmoji.native,
+        iconImageUrl: iconEmoji.imageUrl,
+        iconShortcode: iconEmoji.preferredShortcode,
+        emojis: categoryItems,
+      });
     }
   }
 
-  if (categoryItems.length > 0) {
-    const meta = NATIVE_CATEGORY_META[category.id];
-    const iconEmoji =
-      meta?.iconShortcodes
-        .map((shortcode) => {
-          const normalized = sanitizeShortcodeCandidate(shortcode);
-          return (
-            categoryItems.find(
-              (emoji) =>
-                emoji.shortcodes.includes(normalized) ||
-                emoji.preferredShortcode === normalized,
-            ) ?? null
-          );
-        })
-        .find((emoji): emoji is NativeEmoji => Boolean(emoji)) ??
-      categoryItems[0];
+  const nativeEmojiPattern = Array.from(new Set(nativeEmojiByValue.keys()))
+    .sort(
+      (left, right) => right.length - left.length || left.localeCompare(right),
+    )
+    .map(escapeRegex)
+    .join("|");
+  const nativeEmojiRegex = nativeEmojiPattern
+    ? new RegExp(nativeEmojiPattern, "g")
+    : null;
 
-    nativeEmojiCategories.push({
-      id: category.id,
-      label: meta?.label ?? category.name ?? category.id,
-      iconNative: iconEmoji.native,
-      iconImageUrl: iconEmoji.imageUrl,
-      iconShortcode: iconEmoji.preferredShortcode,
-      emojis: categoryItems,
-    });
-  }
+  return {
+    nativeEmojis,
+    nativeEmojiById,
+    nativeEmojiByValue,
+    nativeEmojiByShortcode,
+    nativeEmojiCategories,
+    nativeEmojiRegex,
+  };
 }
 
-const nativeEmojiPattern = Array.from(new Set(nativeEmojiByValue.keys()))
-  .sort(
-    (left, right) => right.length - left.length || left.localeCompare(right),
-  )
-  .map(escapeRegex)
-  .join("|");
-const nativeEmojiRegex = nativeEmojiPattern
-  ? new RegExp(nativeEmojiPattern, "g")
+function hasEmojiData(data: EmojiMartPayload | null | undefined): boolean {
+  return !!data && Array.isArray(data.categories) && data.categories.length > 0;
+}
+
+let emojiIndex: NativeEmojiIndex = buildNativeEmojiIndex(staticMartData);
+let emojiDataReady = hasEmojiData(staticMartData);
+let emojiDataPromise: Promise<void> | null = emojiDataReady
+  ? Promise.resolve()
   : null;
+const emojiDataListeners = new Set<() => void>();
+
+/** True once the native emoji set is indexed (always true on the web). */
+export function isEmojiDataReady(): boolean {
+  return emojiDataReady;
+}
+
+/**
+ * Resolve when the native emoji set is indexed. Free when it is already
+ * loaded; otherwise one dynamic import shared by every caller.
+ */
+export function loadEmojiData(): Promise<void> {
+  if (emojiDataPromise) return emojiDataPromise;
+  emojiDataPromise = import("@emoji-mart/data/sets/15/native.json")
+    .then((module) => {
+      const data = ((module as { default?: unknown }).default ??
+        module) as EmojiMartPayload;
+      if (!hasEmojiData(data)) {
+        emojiDataPromise = null; // allow a retry
+        return;
+      }
+      emojiIndex = buildNativeEmojiIndex(data);
+      emojiDataReady = true;
+      for (const listener of Array.from(emojiDataListeners)) {
+        try {
+          listener();
+        } catch {
+          /* a listener's failure must not block the others */
+        }
+      }
+    })
+    .catch(() => {
+      // Allow a later retry (e.g. the picker opening) after a failed load.
+      emojiDataPromise = null;
+    });
+  return emojiDataPromise;
+}
+
+/**
+ * Called once when lazily loaded emoji data becomes available (desktop).
+ * Returns an unsubscribe function. Never fires when the data was bundled.
+ */
+export function subscribeEmojiData(listener: () => void): () => void {
+  if (emojiDataReady) return () => {};
+  emojiDataListeners.add(listener);
+  return () => {
+    emojiDataListeners.delete(listener);
+  };
+}
+
+if (!emojiDataReady && typeof window !== "undefined") {
+  void loadEmojiData();
+}
 
 export function applyNativeEmojiSkinTone(
   emoji: NativeEmoji,
@@ -380,7 +478,7 @@ export function applyNativeEmojiSkinTone(
 export function getNativeEmojiCategories(
   tone: number | null | undefined = 0,
 ): NativeEmojiCategory[] {
-  return nativeEmojiCategories.map((category) => ({
+  return emojiIndex.nativeEmojiCategories.map((category) => ({
     ...category,
     emojis: category.emojis.map((emoji) =>
       applyNativeEmojiSkinTone(emoji, tone),
@@ -392,14 +490,14 @@ export function getNativeEmojiById(
   id: string,
   tone: number | null | undefined = 0,
 ): NativeEmoji | null {
-  const emoji = nativeEmojiById.get(id);
+  const emoji = emojiIndex.nativeEmojiById.get(id);
   return emoji ? applyNativeEmojiSkinTone(emoji, tone) : null;
 }
 
 export function resolveNativeEmojiValue(value: string): NativeEmoji | null {
   return (
-    nativeEmojiByValue.get(value) ??
-    nativeEmojiByValue.get(normalizeNativeEmojiValueKey(value)) ??
+    emojiIndex.nativeEmojiByValue.get(value) ??
+    emojiIndex.nativeEmojiByValue.get(normalizeNativeEmojiValueKey(value)) ??
     null
   );
 }
@@ -410,7 +508,7 @@ export function resolveNativeEmojiShortcode(
 ): NativeEmoji | null {
   const normalized = sanitizeShortcodeCandidate(shortcode);
   if (!normalized) return null;
-  const emoji = nativeEmojiByShortcode.get(normalized);
+  const emoji = emojiIndex.nativeEmojiByShortcode.get(normalized);
   return emoji ? applyNativeEmojiSkinTone(emoji, tone) : null;
 }
 
@@ -420,6 +518,7 @@ export type NativeEmojiTextSegment =
 
 export function splitTextByNativeEmoji(text: string): NativeEmojiTextSegment[] {
   if (!text) return [];
+  const nativeEmojiRegex = emojiIndex.nativeEmojiRegex;
   if (!nativeEmojiRegex) return [{ type: "text", value: text }];
 
   nativeEmojiRegex.lastIndex = 0;
@@ -437,8 +536,8 @@ export function splitTextByNativeEmoji(text: string): NativeEmojiTextSegment[] {
     }
 
     const emoji =
-      nativeEmojiByValue.get(match[0]) ??
-      nativeEmojiByValue.get(normalizeNativeEmojiValueKey(match[0]));
+      emojiIndex.nativeEmojiByValue.get(match[0]) ??
+      emojiIndex.nativeEmojiByValue.get(normalizeNativeEmojiValueKey(match[0]));
     if (emoji) {
       segments.push({ type: "emoji", value: match[0], emoji });
     } else {
@@ -464,7 +563,7 @@ export function searchNativeEmojis(
   if (!normalizedQuery) return [];
 
   const terms = normalizedQuery.split(/\s+/).filter(Boolean);
-  const scored = nativeEmojis
+  const scored = emojiIndex.nativeEmojis
     .map((emoji) => {
       let score = 0;
 

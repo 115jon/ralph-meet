@@ -1,61 +1,48 @@
 import { useMounted } from "@/hooks/useMounted";
-import { useVoiceStats } from "@/hooks/useVoiceStats";
+import {
+  classifyVoiceQuality,
+  useVoiceStats,
+  type VoiceQualityLevel,
+} from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { cn } from "@/lib/utils";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { VoiceDebugScreen } from "./VoiceDebugScreen";
+import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
+import { ResponsivePopover } from "@/components/ui/popover";
+import { Tabs, tabId } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { LedLabel, type LedState } from "@/components/ui/led";
+import { DitherSmallMultiples } from "./DitherChart";
+import { CONNECTION_METRICS } from "./dither-chart-model";
+import { connectionStateLed, VoiceDebugScreen } from "./VoiceDebugScreen";
 
 const log = clog("VoiceDetails");
 
-const AreaChart = lazy(() =>
-  import("recharts").then((m) => ({ default: m.AreaChart })),
-);
-const Area = lazy(() => import("recharts").then((m) => ({ default: m.Area })));
-const ResponsiveContainer = lazy(() =>
-  import("recharts").then((m) => ({ default: m.ResponsiveContainer })),
-);
-const XAxis = lazy(() =>
-  import("recharts").then((m) => ({ default: m.XAxis })),
-);
-const YAxis = lazy(() =>
-  import("recharts").then((m) => ({ default: m.YAxis })),
-);
-const ReTooltip = lazy(() =>
-  import("recharts").then((m) => ({ default: m.Tooltip })),
-);
-const CHART_MARGIN = { top: 4, right: 4, bottom: 0, left: 0 };
-const AXIS_TICK_STYLE = { fontSize: 9, fill: "var(--rm-text-muted)" };
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: "var(--rm-bg-floating)",
-  border: "1px solid var(--rm-border)",
-  borderRadius: "8px",
-  fontSize: "11px",
-  fontWeight: 600,
-  color: "var(--rm-text)",
-  padding: "4px 8px",
-};
-const TOOLTIP_LABEL_STYLE = { color: "var(--rm-text-muted)", fontSize: "10px" };
-const DETAILS_PANEL_GAP = 8;
-const DETAILS_PANEL_VIEWPORT_PADDING = 12;
 const LIVE_CONNECTION_POLL_MS = 1000;
+/**
+ * The popover charts the last 48 s (24 samples at the 2 s tick): about 5–6px
+ * per bar in its ~140px tiles, so bars stay whole dither cells.
+ */
+const CHART_CAPACITY = 24;
+
+const QUALITY_STATUS: Record<
+  VoiceQualityLevel,
+  { led: LedState; label: string }
+> = {
+  connecting: { led: "off", label: "Connecting" },
+  good: { led: "talk", label: "Stable" },
+  warn: { led: "idle", label: "Unsteady" },
+  bad: { led: "muted", label: "Poor" },
+};
 
 interface VoiceDetailsPanelProps {
-  isClosing?: boolean;
   sfu: SFUClient | null;
   isOpen: boolean;
   onClose: () => void;
+  /** The control that toggles the panel; the popover anchors to it. */
   triggerRef?: React.RefObject<HTMLElement | null>;
   channelName?: string;
 }
@@ -66,6 +53,21 @@ function formatConnectionStateLabel(state: string) {
   return state
     .replace(/-/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+type StateTone = "good" | "pending" | "bad";
+
+/** Settled states read without an ellipsis; transitional ones keep it. */
+function describeConnectionState(state: string): {
+  label: string;
+  tone: StateTone;
+} {
+  const label = formatConnectionStateLabel(state);
+  if (state === "connected") return { label, tone: "good" };
+  if (state === "failed" || state === "closed" || state === "disconnected") {
+    return { label, tone: "bad" };
+  }
+  return { label: `${label}…`, tone: "pending" };
 }
 
 function getLiveConnectionSnapshot(sfu: SFUClient | null) {
@@ -82,7 +84,6 @@ export function VoiceDetailsPanel({
   onClose,
   triggerRef,
   channelName,
-  isClosing,
 }: VoiceDetailsPanelProps) {
   const mounted = useMounted();
   const [activeTab, setActiveTab] = useState<TabId>("connection");
@@ -91,13 +92,6 @@ export function VoiceDetailsPanel({
   const [liveSnapshot, setLiveSnapshot] = useState(() =>
     getLiveConnectionSnapshot(sfu),
   );
-  const [panelPosition, setPanelPosition] = useState({
-    top: 0,
-    left: 0,
-    placement: "top" as "top" | "bottom",
-    ready: false,
-  });
-  const panelRef = useRef<HTMLDivElement>(null);
   const stats = useVoiceStats(sfu, isOpen);
   const connectionSnapshot = stats
     ? {
@@ -106,18 +100,6 @@ export function VoiceDetailsPanel({
         subscribeConnectionState: stats.subscribeConnectionState,
       }
     : liveSnapshot;
-
-  useEffect(() => {
-    if (isOpen) return;
-
-    const timeoutId = window.setTimeout(() => {
-      setPanelPosition((current) =>
-        current.ready ? { ...current, ready: false } : current,
-      );
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [isOpen]);
 
   useEffect(() => {
     const syncSnapshot = () => setLiveSnapshot(getLiveConnectionSnapshot(sfu));
@@ -133,103 +115,6 @@ export function VoiceDetailsPanel({
       window.clearInterval(intervalId);
     };
   }, [isOpen, sfu]);
-
-  useLayoutEffect(() => {
-    if (!isOpen || !panelRef.current) return;
-
-    const updatePosition = () => {
-      const panelRect = panelRef.current?.getBoundingClientRect();
-      if (!panelRect) return;
-
-      const anchorRect = triggerRef?.current?.getBoundingClientRect();
-      const anchorLeft = anchorRect?.left ?? DETAILS_PANEL_VIEWPORT_PADDING;
-      const anchorTop = anchorRect?.top ?? DETAILS_PANEL_VIEWPORT_PADDING;
-      const anchorBottom = anchorRect?.bottom ?? DETAILS_PANEL_VIEWPORT_PADDING;
-
-      let left = anchorLeft;
-      left = Math.min(
-        Math.max(DETAILS_PANEL_VIEWPORT_PADDING, left),
-        window.innerWidth - panelRect.width - DETAILS_PANEL_VIEWPORT_PADDING,
-      );
-
-      const spaceAbove = anchorTop - DETAILS_PANEL_VIEWPORT_PADDING;
-      const spaceBelow =
-        window.innerHeight - anchorBottom - DETAILS_PANEL_VIEWPORT_PADDING;
-      const openAbove =
-        !anchorRect ||
-        spaceAbove >= panelRect.height + DETAILS_PANEL_GAP ||
-        spaceAbove >= spaceBelow;
-
-      let top = openAbove
-        ? anchorTop - panelRect.height - DETAILS_PANEL_GAP
-        : anchorBottom + DETAILS_PANEL_GAP;
-      top = Math.min(
-        Math.max(DETAILS_PANEL_VIEWPORT_PADDING, top),
-        window.innerHeight - panelRect.height - DETAILS_PANEL_VIEWPORT_PADDING,
-      );
-
-      setPanelPosition({
-        top,
-        left,
-        placement: openAbove ? "top" : "bottom",
-        ready: true,
-      });
-    };
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => updatePosition())
-        : null;
-
-    resizeObserver?.observe(panelRef.current);
-    if (triggerRef?.current) {
-      resizeObserver?.observe(triggerRef.current);
-    }
-
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-      resizeObserver?.disconnect();
-    };
-  }, [isOpen, triggerRef]);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(target) &&
-        (!triggerRef?.current || !triggerRef.current.contains(target))
-      ) {
-        onClose();
-      }
-    };
-    // Delay to avoid immediate close from the same click that opened it
-    const timer = setTimeout(
-      () => document.addEventListener("mousedown", handler),
-      50,
-    );
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", handler);
-    };
-  }, [isOpen, onClose, triggerRef]);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [isOpen, onClose]);
 
   const handleCopyStats = useCallback(async () => {
     if (!sfu) return;
@@ -271,146 +156,156 @@ export function VoiceDetailsPanel({
         )
       : null;
 
-  const panelPortal =
-    isOpen && mounted
-      ? createPortal(
-          <aside
-            ref={panelRef}
-            className={cn(
-              "fixed z-30 w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
-              panelPosition.placement === "top"
-                ? isClosing
-                  ? "origin-bottom-left animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-                  : "origin-bottom-left animate-in fade-in slide-in-from-bottom-2 duration-200"
-                : isClosing
-                  ? "origin-top-left animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
-                  : "origin-top-left animate-in fade-in slide-in-from-top-2 duration-200",
-            )}
-            style={{
-              top: panelPosition.top,
-              left: panelPosition.left,
-              visibility: panelPosition.ready ? "visible" : "hidden",
-            }}
-            aria-label="Voice Details"
-          >
-            {/* Header */}
-            <div className="px-4 pt-4 pb-2">
-              <h3 className="text-ui-base font-bold text-rm-text tracking-tight">
-                Voice Details
-              </h3>
-            </div>
+  // Popover anchored to the trigger on desktop, bottom drawer on phones
+  // (design-system 13.1). The primitive owns placement, Escape, the back
+  // button, outside presses and focus return.
+  const panel = (
+    <ResponsivePopover
+      open={isOpen}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Voice details"
+      variant="rich"
+      anchor={triggerRef}
+      side="top"
+      align="start"
+      className="p-0"
+    >
+      {/* Header */}
+      <div className="px-4 pt-4 pb-2">
+        <h3 className="font-display text-[22px] leading-7 font-extrabold tracking-[-0.03em] text-ink-1 [font-optical-sizing:auto]">
+          Voice details
+        </h3>
+      </div>
 
-            {/* Tabs */}
-            <div className="flex px-4 gap-4 border-b border-rm-border">
-              <TabButton
-                id="connection"
-                label="Connection"
-                active={activeTab}
-                onSelect={setActiveTab}
-              />
-              <TabButton
-                id="privacy"
-                label="Privacy"
-                active={activeTab}
-                onSelect={setActiveTab}
-              />
-            </div>
+      {/* Tabs: the list is inset 4px inside a 12px wrapper, so tab text sits
+          on the 16px content inset and the focus ring isn't clipped. */}
+      <div className="border-b border-line px-3">
+        <Tabs
+          label="Voice details sections"
+          items={TAB_ITEMS}
+          value={activeTab}
+          onValueChange={setActiveTab}
+          idBase={TABS_ID}
+          panelId={PANEL_ID}
+          className="h-10 px-1 py-1"
+        />
+      </div>
 
-            {/* Tab content */}
-            <div className="px-4 py-3">
-              {activeTab === "connection" ? (
-                <ConnectionTab
-                  stats={stats}
-                  connectionState={connectionSnapshot.connectionState}
-                  publishConnectionState={
-                    connectionSnapshot.publishConnectionState
-                  }
-                  subscribeConnectionState={
-                    connectionSnapshot.subscribeConnectionState
-                  }
-                />
-              ) : (
-                <PrivacyTab />
-              )}
-            </div>
+      {/* Tab content */}
+      <div
+        role="tabpanel"
+        id={PANEL_ID}
+        aria-labelledby={tabId(TABS_ID, activeTab)}
+        className="px-4 py-3"
+      >
+        {activeTab === "connection" ? (
+          <ConnectionTab
+            stats={stats}
+            connectionState={connectionSnapshot.connectionState}
+            publishConnectionState={connectionSnapshot.publishConnectionState}
+            subscribeConnectionState={
+              connectionSnapshot.subscribeConnectionState
+            }
+          />
+        ) : (
+          <PrivacyTab />
+        )}
+      </div>
 
-            {/* Footer */}
-            <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-ui-xs font-medium">
-              <span className="flex items-center gap-1.5 text-rm-success">
-                <LockIcon />
-                End-to-end encrypted
-              </span>
-              <span className="flex-1" />
-              {stats ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleDebug}
-                    className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-                  >
-                    Debug <ExternalLinkIcon />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyStats}
-                    className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-                  >
-                    {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
-                  </button>
-                </>
-              ) : (
-                <span className="text-rm-text-muted/70 text-ui-2xs">
-                  {connectionSnapshot.connectionState === "connected"
-                    ? "Connected · gathering live metrics…"
-                    : `${formatConnectionStateLabel(connectionSnapshot.connectionState)}…`}
-                </span>
-              )}
-            </div>
-          </aside>,
-          document.body,
-        )
-      : null;
-
-  if (!panelPortal && !debugPortal) return null;
+      {/* Footer: the encryption claim only appears while connected, so it
+          never sits next to "Disconnected". */}
+      <div className="flex min-h-12 items-center gap-3 border-t border-line px-4 py-2">
+        <FooterStatus state={connectionSnapshot.connectionState} />
+        <span className="flex-1" />
+        {stats ? (
+          <>
+            <Button variant="link" size="xs" onClick={handleDebug}>
+              Debug <Icon name="externalLink" size="xs" />
+            </Button>
+            <Button variant="link" size="xs" onClick={handleCopyStats}>
+              {copyFeedback ? "Copied" : "Copy stats"}{" "}
+              <Icon name={copyFeedback ? "check" : "copy"} size="xs" />
+            </Button>
+          </>
+        ) : connectionSnapshot.connectionState === "connected" ? (
+          <span className="text-ui-xs font-normal text-ink-3">
+            Connected · gathering live metrics…
+          </span>
+        ) : null}
+      </div>
+    </ResponsivePopover>
+  );
 
   return (
     <>
       {debugPortal}
-      {panelPortal}
+      {panel}
     </>
   );
 }
 
-// ── Tab Button ──────────────────────────────────────────────────────────────
+const TABS_ID = "voice-details";
+const PANEL_ID = "voice-details-panel";
+const TAB_ITEMS = [
+  { value: "connection", label: "Connection" },
+  { value: "privacy", label: "Privacy" },
+] as const satisfies ReadonlyArray<{ value: TabId; label: string }>;
 
-function TabButton({
-  id,
-  label,
-  active,
-  onSelect,
-}: {
-  id: TabId;
-  label: string;
-  active: TabId;
-  onSelect: (id: TabId) => void;
-}) {
-  const isActive = active === id;
+// ── Footer ──────────────────────────────────────────────────────────────────
+
+function FooterStatus({ state }: { state: string }) {
+  if (state === "connected") {
+    return (
+      <LedLabel state="talk">
+        <span className="sr-only">End-to-end </span>Encrypted
+      </LedLabel>
+    );
+  }
+  const { label, tone } = describeConnectionState(state);
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(id)}
-      className={`pb-2 text-ui-sm font-semibold border-b-2 transition-colors outline-none ${
-        isActive
-          ? "text-rm-text-link border-rm-text-link"
-          : "text-rm-text-muted border-transparent hover:text-rm-text hover:border-rm-text-muted/30"
-      }`}
+    <LedLabel
+      state={tone === "bad" ? "muted" : "idle"}
+      tone={tone === "bad" ? "led" : "plain"}
     >
       {label}
-    </button>
+    </LedLabel>
   );
 }
 
 // ── Connection Tab ──────────────────────────────────────────────────────────
+
+/** Transport states as silkscreen label over an LED label, three up. */
+function SummaryCards({
+  cards,
+}: {
+  cards: { label: string; state: string }[];
+}) {
+  return (
+    <dl className="grid grid-cols-3 gap-x-4">
+      {cards.map((card) => (
+        <div key={card.label} className="min-w-0">
+          <dt className="silkscreen text-ink-3">{card.label}</dt>
+          <dd className="mt-1.5 flex min-w-0">
+            <LedLabel state={connectionStateLed(card.state)}>
+              {formatConnectionStateLabel(card.state)}
+            </LedLabel>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function StatRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-line py-1.5 last:border-b-0">
+      <dt className="silkscreen text-ink-3">{label}</dt>
+      <dd className="text-ink-1">{children}</dd>
+    </div>
+  );
+}
 
 function ConnectionTab({
   stats,
@@ -424,178 +319,62 @@ function ConnectionTab({
   subscribeConnectionState: string;
 }) {
   const summaryCards = [
-    { label: "Session", value: formatConnectionStateLabel(connectionState) },
-    {
-      label: "Publish",
-      value: formatConnectionStateLabel(publishConnectionState),
-    },
-    {
-      label: "Receive",
-      value: formatConnectionStateLabel(subscribeConnectionState),
-    },
+    { label: "Session", state: connectionState },
+    { label: "Publish", state: publishConnectionState },
+    { label: "Receive", state: subscribeConnectionState },
   ];
-
-  const chartData =
-    stats && stats.pingHistory.length > 0
-      ? stats.pingHistory
-      : [{ time: "now", ping: 0 }];
-
-  const maxPing = Math.max(...chartData.map((d) => d.ping), 20);
-  const yMax = Math.ceil(maxPing / 10) * 10;
-  const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
-  const formatPing = useCallback(
-    (value: number | string | readonly (number | string)[] | undefined) => {
-      const pingValue = Array.isArray(value) ? (value[0] ?? 0) : (value ?? 0);
-      return [`${pingValue} ms`, "Ping"] as const;
-    },
-    [],
-  );
 
   if (!stats) {
     return (
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2">
-          {summaryCards.map((card) => (
-            <div
-              key={card.label}
-              className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2"
-            >
-              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
-                {card.label}
-              </p>
-              <p className="mt-1 text-ui-xs font-bold text-rm-text">
-                {card.value}
-              </p>
-            </div>
-          ))}
-        </div>
-        <div className="rounded-lg border border-rm-border bg-rm-bg-surface/50 px-3 py-4 text-center text-ui-xs text-rm-text-muted">
+        <SummaryCards cards={summaryCards} />
+        <p className="px-1 py-3 text-center text-ui-xs text-ink-3">
           {connectionState === "connected"
             ? "Connected to voice. Gathering latency and packet metrics…"
             : "Connecting to the voice transport…"}
-        </div>
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
-        {summaryCards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2"
-          >
-            <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
-              {card.label}
-            </p>
-            <p className="mt-1 text-ui-xs font-bold text-rm-text">
-              {card.value}
-            </p>
-          </div>
-        ))}
-      </div>
+    <div className="space-y-4">
+      <SummaryCards cards={summaryCards} />
 
-      {/* Ping Chart */}
-      <div className="bg-rm-bg-surface rounded-lg p-2 border border-rm-border">
-        <Suspense
-          fallback={
-            <div className="h-[80px] w-full flex items-center justify-center text-ui-2xs text-rm-text-muted">
-              Loading chart...
-            </div>
-          }
-        >
-          <ResponsiveContainer width="100%" height={80}>
-            <AreaChart data={chartData} margin={CHART_MARGIN}>
-              <defs>
-                <linearGradient id="pingGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor="var(--rm-success)"
-                    stopOpacity={0.3}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor="var(--rm-success)"
-                    stopOpacity={0.02}
-                  />
-                </linearGradient>
-              </defs>
-              <XAxis
-                dataKey="time"
-                tick={AXIS_TICK_STYLE}
-                axisLine={false}
-                tickLine={false}
-                interval="preserveStartEnd"
-                minTickGap={60}
-              />
-              <YAxis
-                domain={yDomain}
-                tick={AXIS_TICK_STYLE}
-                axisLine={false}
-                tickLine={false}
-                width={28}
-                tickCount={3}
-              />
-              <ReTooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                formatter={formatPing}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-              />
-              <Area
-                type="monotone"
-                dataKey="ping"
-                stroke="var(--rm-success)"
-                strokeWidth={1.5}
-                fill="url(#pingGradient)"
-                dot={false}
-                activeDot={{
-                  r: 3,
-                  fill: "var(--rm-success)",
-                  stroke: "var(--rm-success)",
-                }}
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Suspense>
-      </div>
+      {/* Uplink small multiples: fed by the snapshot's bounded sample ring,
+          so they redraw once per stats tick and show history on open. */}
+      <DitherSmallMultiples
+        title="Connection"
+        status={QUALITY_STATUS[classifyVoiceQuality(stats)]}
+        metrics={CONNECTION_METRICS}
+        samples={stats.samples}
+        capacity={CHART_CAPACITY}
+        compact
+      />
 
-      {/* Server + Stats */}
-      <div className="space-y-1.5">
-        <p className="text-ui-xs font-mono text-rm-text-muted tracking-tight">
-          {stats.serverIdentifier}
+      {/* Server + stats */}
+      <div className="space-y-1">
+        <p className="flex min-w-0 items-baseline gap-2">
+          <span className="silkscreen shrink-0 text-ink-3">Server</span>
+          <Num size="sm" className="truncate text-ink-2">
+            {stats.serverIdentifier}
+          </Num>
         </p>
-        <div className="text-ui-sm text-rm-text space-y-0.5">
-          <p>
-            <span className="font-semibold">Average ping:</span>{" "}
-            <span className="font-bold text-rm-text">{stats.avgPing} ms</span>
-          </p>
-          <p>
-            <span className="font-semibold">Last ping:</span>{" "}
-            <span className="font-bold text-rm-text">{stats.ping} ms</span>
-          </p>
-          <p>
-            <span className="font-semibold">Outbound packet loss rate:</span>{" "}
-            <span className="font-bold text-rm-text">
-              {(stats.packetLossRate * 100).toFixed(1)}%
-            </span>
-          </p>
-          <p>
-            <span className="font-semibold">Remote tracks:</span>{" "}
-            <span className="font-bold text-rm-text">
-              {stats.remoteTrackCount}
-            </span>
-          </p>
-        </div>
+        <dl>
+          <StatRow label="Session packet loss">
+            <Num size="sm">{(stats.packetLossRate * 100).toFixed(1)}%</Num>
+          </StatRow>
+          <StatRow label="Remote tracks">
+            <Num size="sm">{stats.remoteTrackCount}</Num>
+          </StatRow>
+        </dl>
       </div>
 
-      {/* Info Blurb */}
-      <div className="text-ui-2xs text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
+      <p className="text-ui-xs text-pretty text-ink-3">
         You may notice delayed audio at 250 ms or higher. You may sound robotic
         if your packet loss rate is over 10%. If the problem persists,
         disconnect and try again.
-      </div>
+      </p>
     </div>
   );
 }
@@ -604,91 +383,24 @@ function ConnectionTab({
 
 function PrivacyTab() {
   return (
-    <div className="py-4 space-y-3">
+    <div className="space-y-3 py-2">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-rm-success/10 flex items-center justify-center">
-          <LockIcon className="text-rm-success" size={20} />
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-success-tint text-success-ink">
+          <Icon name="lock" size="lg" />
         </div>
         <div>
-          <p className="text-[14px] font-bold text-rm-text">
-            End-to-End Encrypted
+          <p className="text-ui-sm font-semibold text-ink-1">
+            End-to-end encrypted
           </p>
-          <p className="text-ui-xs text-rm-text-muted">
+          <p className="text-ui-xs text-ink-3">
             Your voice connection is secured with DTLS-SRTP encryption.
           </p>
         </div>
       </div>
-      <div className="text-ui-2xs text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
+      <p className="text-ui-xs text-pretty text-ink-3">
         Audio and video data is encrypted in transit using DTLS-SRTP. Only
         participants in this voice channel can hear or see your media.
-      </div>
+      </p>
     </div>
-  );
-}
-
-// ── Inline SVG Icons ────────────────────────────────────────────────────────
-
-function LockIcon({
-  className = "",
-  size = 14,
-}: {
-  className?: string;
-  size?: number;
-}) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={12}
-      height={12}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-      <polyline points="15,3 21,3 21,9" />
-      <line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  );
-}
-
-function ClipboardIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={12}
-      height={12}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-    </svg>
   );
 }

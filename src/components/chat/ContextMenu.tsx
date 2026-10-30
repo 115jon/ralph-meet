@@ -1,418 +1,341 @@
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useMounted } from "@/hooks/useMounted";
+import {
+  ActionSheet,
+  type ActionSheetItem,
+} from "@/components/ui/action-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  pointAnchor,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 
-export interface ContextMenuItem {
-  key?: string;
-  label: string;
-  subtitle?: string;
-  icon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
-  onClick: () => void;
-  variant?: "default" | "danger" | "warning";
-  divider?: boolean;
-  disabled?: boolean;
-  submenu?: React.ReactNode;
-  closeOnClick?: boolean;
-}
+/**
+ * The one menu item model (overlays §3b): the same rows render as a Base UI
+ * `DropdownMenu` on desktop (right-click, a point anchor) and as the
+ * `ActionSheet` on phones. `ContextMenuItem` and `ActionSheetItem` are one
+ * type.
+ *
+ *   icon       leading 16px glyph (a verb). Once any row has one, every row
+ *              reserves the 16 column so labels share a left edge.
+ *   rightIcon  trailing hint (a glyph or a short value), ink-3
+ *   subtitle   a 12/16 second line; the row grows to 44
+ *   divider    ends a group (a separator follows the row)
+ *   submenu    content of a flyout submenu (desktop) or an inline expansion
+ *              (phones). Desktop submenus open on hover intent with Base UI's
+ *              safe triangle, or ArrowRight / Enter / Space.
+ *   variant    "danger" rows are always moved into their own last group.
+ *   checked    a toggle row (menu item checkbox on desktop, a check on phones)
+ */
+export type ContextMenuItem = ActionSheetItem;
 
 interface ContextMenuProps {
+  /** Kept for callers; the menu closes as soon as `onClose` runs. */
   isClosing?: boolean;
   x: number;
   y: number;
   items: ContextMenuItem[];
   topContent?: React.ReactNode;
   onClose: () => void;
+  /** Accessible name of the menu (sheet title on phones). */
+  label?: string;
 }
 
-function getDirectMenuItems(menu: HTMLElement | null): HTMLElement[] {
-  if (!menu) return [];
-  return Array.from(
-    menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'),
-  ).filter((item) => item.closest('[role="menu"]') === menu);
+/**
+ * Right-click menu on desktop; on phones (below md) the same items as a bottom
+ * action sheet with 48px rows, opened by long press (useLongPressMenu) or
+ * Android's native long-press contextmenu.
+ */
+export default function ContextMenu(props: ContextMenuProps) {
+  const isMobile = useIsMobile();
+  return isMobile ? (
+    <ContextActionSheet {...props} />
+  ) : (
+    <PointContextMenu {...props} />
+  );
 }
 
-export default function ContextMenu({
+function ContextActionSheet({
+  items,
+  topContent,
+  onClose,
+  label,
+}: ContextMenuProps) {
+  const [open, setOpen] = useState(true);
+  // Owners unmount the menu on close; let the sheet slide away first.
+  useEffect(() => {
+    if (open) return;
+    const timer = window.setTimeout(onClose, 280);
+    return () => window.clearTimeout(timer);
+  }, [open, onClose]);
+
+  return (
+    <ActionSheet
+      open={open}
+      onOpenChange={setOpen}
+      items={items}
+      header={topContent}
+      title={label}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Groups                                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Splits the flat list into groups at each `divider` and moves every danger
+ * row into a final group of its own, so destructive rows always sit last,
+ * behind a separator, and are never the first (default-focused) row.
+ */
+export function groupMenuItems(items: ContextMenuItem[]): ContextMenuItem[][] {
+  const groups: ContextMenuItem[][] = [[]];
+  const danger: ContextMenuItem[] = [];
+  for (const item of items) {
+    if (item.label) {
+      if (item.variant === "danger") danger.push(item);
+      else groups[groups.length - 1]!.push(item);
+    }
+    if (item.divider) groups.push([]);
+  }
+  return [...groups, danger].filter((group) => group.length > 0);
+}
+
+/* ------------------------------------------------------------------ */
+/* Rows                                                                 */
+/* ------------------------------------------------------------------ */
+
+function RowLabel({ item }: { item: ContextMenuItem }) {
+  if (!item.subtitle) return <>{item.label}</>;
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="truncate">{item.label}</span>
+      <span className="truncate text-ui-xs font-normal text-ink-2">
+        {item.subtitle}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A row with a flyout. Custom submenu content (a reaction strip, a slider)
+ * isn't made of Base UI items, so Escape and ArrowLeft hand focus straight
+ * back to the trigger row while Base UI closes one level.
+ */
+function SubmenuRow({
+  item,
+  icon,
+  className,
+  panelProps,
+}: {
+  item: ContextMenuItem;
+  icon: React.ReactNode;
+  className?: string;
+  panelProps?: React.ComponentPropsWithoutRef<"div">;
+}) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger
+        ref={triggerRef}
+        icon={icon}
+        disabled={item.disabled}
+        onClick={() => item.onClick()}
+        className={className}
+      >
+        <RowLabel item={item} />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent
+        {...panelProps}
+        aria-label={`${item.label} submenu`}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" || event.key === "ArrowLeft") {
+            triggerRef.current?.focus({ preventScroll: true });
+          }
+        }}
+      >
+        {item.submenu}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/**
+ * Renders the item model as Base UI menu rows. Use inside a
+ * `DropdownMenuContent`; ContextMenu uses it with a point anchor, and any
+ * other desktop menu can render the same items. `panelProps` is spread on
+ * every submenu panel (event isolation, data attributes, width).
+ */
+export function MenuItemRows({
+  items,
+  panelProps,
+}: {
+  items: ContextMenuItem[];
+  panelProps?: React.ComponentPropsWithoutRef<"div">;
+}) {
+  const groups = useMemo(() => groupMenuItems(items), [items]);
+  const reserveIcon = items.some((item) => Boolean(item.icon));
+  const iconSlot = (item: ContextMenuItem) =>
+    item.icon ?? (reserveIcon ? <span /> : undefined);
+
+  return (
+    <>
+      {groups.map((group, groupIndex) => (
+        <React.Fragment key={group[0]?.key ?? group[0]?.label ?? groupIndex}>
+          {groupIndex > 0 ? <DropdownMenuSeparator /> : null}
+          {group.map((item) => {
+            const key = item.key ?? item.label;
+            const rowClass = cn(item.subtitle && "min-h-11");
+            if (item.submenu) {
+              return (
+                <SubmenuRow
+                  key={key}
+                  item={item}
+                  icon={iconSlot(item)}
+                  className={rowClass}
+                  panelProps={panelProps}
+                />
+              );
+            }
+            if (item.checked !== undefined) {
+              return (
+                <DropdownMenuCheckboxItem
+                  key={key}
+                  checked={item.checked}
+                  icon={iconSlot(item)}
+                  disabled={item.disabled}
+                  closeOnClick={item.closeOnClick ?? true}
+                  onCheckedChange={() => item.onClick()}
+                  className={cn(
+                    rowClass,
+                    item.variant === "danger" && "text-danger-ink",
+                  )}
+                >
+                  <RowLabel item={item} />
+                </DropdownMenuCheckboxItem>
+              );
+            }
+            return (
+              <DropdownMenuItem
+                key={key}
+                variant={item.variant ?? "default"}
+                icon={iconSlot(item)}
+                hint={item.rightIcon}
+                disabled={item.disabled}
+                closeOnClick={item.closeOnClick ?? true}
+                onClick={() => item.onClick()}
+                className={rowClass}
+              >
+                <RowLabel item={item} />
+              </DropdownMenuItem>
+            );
+          })}
+        </React.Fragment>
+      ))}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Desktop: DropdownMenu at the pointer                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Focuses the menu's first enabled row as soon as the panel mounts (Base UI
+ * would otherwise focus the list on its next frame), so the first arrow key
+ * moves from row one. Renders nothing.
+ */
+function FocusFirstRow() {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const menu = ref.current?.closest<HTMLElement>('[role="menu"]');
+    menu
+      ?.querySelector<HTMLElement>('[role="menuitem"]:not([data-disabled])')
+      ?.focus({ preventScroll: true });
+  }, []);
+  return <span ref={ref} hidden />;
+}
+
+function PointContextMenu({
   x,
   y,
   items,
   topContent,
   onClose,
-  isClosing,
+  label,
 }: ContextMenuProps) {
   const mounted = useMounted();
-  const menuRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const submenuRef = useRef<HTMLDivElement>(null);
-  const submenuAnchorRectRef = useRef<DOMRect | null>(null);
-  const submenuTriggerRef = useRef<HTMLElement | null>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const [coords, setCoords] = useState({ x, y });
-  const [activeSubmenuKey, setActiveSubmenuKey] = useState<string | null>(null);
-  const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties>({});
-  const menuContextInitializedRef = useRef(false);
+  const menuId = useId();
+  const anchor = useMemo(() => pointAnchor(x, y), [x, y]);
+  const [opener] = useState<HTMLElement | null>(() =>
+    typeof document !== "undefined" &&
+    document.activeElement instanceof HTMLElement &&
+    document.activeElement !== document.body
+      ? document.activeElement
+      : null,
+  );
 
+  // While open, the browser's own context menu stays shut everywhere: a
+  // right-click elsewhere closes this one and lets its owner open the next.
   useEffect(() => {
     if (!mounted) return;
-
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-
-    return () => {
-      if (previousFocusRef.current?.isConnected) {
-        previousFocusRef.current.focus();
-      }
-    };
+    const prevent = (event: MouseEvent) => event.preventDefault();
+    window.addEventListener("contextmenu", prevent);
+    return () => window.removeEventListener("contextmenu", prevent);
   }, [mounted]);
 
+  // Focus returns to whatever had it before the menu opened.
   useEffect(() => {
     if (!mounted) return;
-
-    // Close on click outside
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
-    // Close on escape
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-
-    let timeout: NodeJS.Timeout;
-    // Adjust position if it goes off screen
-    if (panelRef.current) {
-      const rect = panelRef.current.getBoundingClientRect();
-      const padding = 10;
-      let nextX = x;
-      let nextY = y;
-
-      if (x + rect.width > window.innerWidth - padding) {
-        nextX = x - rect.width;
-      }
-      if (y + rect.height > window.innerHeight - padding) {
-        nextY = y - rect.height;
-      }
-
-      timeout = setTimeout(() => {
-        setCoords({ x: Math.max(padding, nextX), y: Math.max(padding, nextY) });
-      }, 0);
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    window.addEventListener("keydown", handleKeyDown);
-
-    // Global context menu prevention
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener("contextmenu", handleContextMenu);
-
     return () => {
-      if (timeout) clearTimeout(timeout);
-      document.removeEventListener("mousedown", handleClickOutside);
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("contextmenu", handleContextMenu);
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
     };
-  }, [mounted, x, y, onClose]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    if (!menuContextInitializedRef.current) {
-      menuContextInitializedRef.current = true;
-      return;
-    }
-    const frameId = window.requestAnimationFrame(() => {
-      submenuAnchorRectRef.current = null;
-      submenuTriggerRef.current = null;
-      setSubmenuStyle({});
-      setActiveSubmenuKey(null);
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [items, mounted, x, y]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    const activeSubmenuAnchorRect = submenuAnchorRectRef.current;
-    if (!activeSubmenuKey || !activeSubmenuAnchorRect) {
-      return;
-    }
-
-    const updateSubmenuPosition = () => {
-      const padding = 10;
-      const gap = 8;
-      const submenuWidth = submenuRef.current?.offsetWidth ?? 220;
-      const submenuHeight = submenuRef.current?.offsetHeight ?? 0;
-      let left = activeSubmenuAnchorRect.right - coords.x + gap;
-
-      if (
-        activeSubmenuAnchorRect.right + gap + submenuWidth >
-        window.innerWidth - padding
-      ) {
-        left = activeSubmenuAnchorRect.left - coords.x - submenuWidth - gap;
-      }
-
-      let top = activeSubmenuAnchorRect.top - coords.y - 4;
-      const minTop = padding - coords.y;
-      const maxTop = window.innerHeight - padding - submenuHeight - coords.y;
-
-      if (submenuHeight > 0) {
-        top = Math.min(Math.max(top, minTop), Math.max(minTop, maxTop));
-      }
-
-      setSubmenuStyle({ left, top });
-    };
-
-    const frameId = window.requestAnimationFrame(updateSubmenuPosition);
-    window.addEventListener("resize", updateSubmenuPosition);
-
-    return () => {
-      window.removeEventListener("resize", updateSubmenuPosition);
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [activeSubmenuKey, coords.x, coords.y, mounted]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    getDirectMenuItems(menuRef.current)[0]?.focus();
-  }, [mounted]);
-
-  useEffect(() => {
-    if (!mounted || !activeSubmenuKey) return;
-    const frameId = window.requestAnimationFrame(() => {
-      submenuRef.current
-        ?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')
-        ?.focus();
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [activeSubmenuKey, mounted]);
-
-  const closeSubmenu = () => {
-    const parentItem = submenuTriggerRef.current;
-    setActiveSubmenuKey(null);
-    submenuAnchorRectRef.current = null;
-    submenuTriggerRef.current = null;
-    setSubmenuStyle({});
-    parentItem?.focus();
-  };
-
-  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    const currentMenu =
-      target?.closest<HTMLElement>('[role="menu"]') ?? menuRef.current;
-    const menuItems = getDirectMenuItems(currentMenu);
-    const eventTargetIndex = menuItems.indexOf(event.target as HTMLElement);
-    const currentIndex =
-      eventTargetIndex >= 0
-        ? eventTargetIndex
-        : menuItems.indexOf(
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement
-              : menuItems[0],
-          );
-
-    if (
-      event.key === "Escape" &&
-      activeSubmenuKey &&
-      currentMenu !== menuRef.current
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-      closeSubmenu();
-      return;
-    }
-
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      const direction = event.key === "ArrowDown" ? 1 : -1;
-      const nextIndex =
-        (currentIndex + direction + menuItems.length) % menuItems.length;
-      menuItems[nextIndex]?.focus();
-    } else if (event.key === "Home" || event.key === "End") {
-      event.preventDefault();
-      menuItems[event.key === "Home" ? 0 : menuItems.length - 1]?.focus();
-    } else if (event.key === "ArrowRight" && currentMenu === menuRef.current) {
-      const currentItem = items[currentIndex];
-      if (currentItem?.submenu) {
-        event.preventDefault();
-        submenuAnchorRectRef.current =
-          menuItems[currentIndex]?.getBoundingClientRect() ?? null;
-        submenuTriggerRef.current = menuItems[currentIndex] ?? null;
-        setActiveSubmenuKey(currentItem.key ?? currentItem.label);
-      }
-    } else if (event.key === "ArrowLeft" && activeSubmenuKey) {
-      event.preventDefault();
-      closeSubmenu();
-    }
-  };
-
-  const activeSubmenuItem = activeSubmenuKey
-    ? items.find(
-        (item) => (item.key ?? item.label) === activeSubmenuKey && item.submenu,
-      )
-    : undefined;
+  }, [mounted, opener]);
 
   if (!mounted) return null;
 
-  return createPortal(
-    <div
-      ref={menuRef}
-      className={cn(
-        "fixed z-70 min-w-[220px] origin-top-left overflow-visible",
-        isClosing
-          ? "animate-out fade-out zoom-out-[0.97] duration-100"
-          : "animate-in fade-in zoom-in-[0.97] duration-150",
-      )}
-      style={{ top: coords.y, left: coords.x }}
-      role="menu"
-      tabIndex={-1}
-      onKeyDown={handleMenuKeyDown}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseLeave={() => {
-        setActiveSubmenuKey(null);
-        submenuAnchorRectRef.current = null;
-        submenuTriggerRef.current = null;
-        setSubmenuStyle({});
+  return (
+    <DropdownMenu
+      open
+      modal={false}
+      onOpenChange={(next) => {
+        if (!next) onClose();
       }}
     >
-      <div
-        ref={panelRef}
-        className="overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-lg"
+      <DropdownMenuContent
+        anchor={anchor}
+        side="bottom"
+        align="start"
+        sideOffset={2}
+        aria-label={label}
+        finalFocus={false}
+        data-rm-context-menu={menuId}
+        // The first enabled row takes focus, so arrow keys work at once.
+        initialFocus={() =>
+          document.querySelector<HTMLElement>(
+            `[data-rm-context-menu="${CSS.escape(menuId)}"] [role="menuitem"]:not([data-disabled])`,
+          ) ?? true
+        }
+        onContextMenu={(event) => event.preventDefault()}
       >
-        <div className="flex flex-col gap-0.5">
-          {topContent ? (
-            <div className="mb-1.5 border-b border-rm-border pb-1.5">
-              {topContent}
-            </div>
-          ) : null}
-          {items.map((item) => {
-            const itemKey = item.key ?? item.label;
-            const isSubmenuOpen =
-              activeSubmenuKey === itemKey && Boolean(item.submenu);
-
-            return (
-              <React.Fragment key={itemKey}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={item.disabled}
-                  aria-haspopup={item.submenu ? "menu" : undefined}
-                  aria-expanded={item.submenu ? isSubmenuOpen : undefined}
-                  onMouseEnter={(event) => {
-                    if (item.submenu) {
-                      submenuAnchorRectRef.current =
-                        event.currentTarget.getBoundingClientRect();
-                      submenuTriggerRef.current = event.currentTarget;
-                      setActiveSubmenuKey(itemKey);
-                      return;
-                    }
-
-                    if (activeSubmenuKey) {
-                      setActiveSubmenuKey(null);
-                      submenuAnchorRectRef.current = null;
-                      setSubmenuStyle({});
-                    }
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (item.disabled) return;
-
-                    if (item.submenu) {
-                      submenuAnchorRectRef.current =
-                        event.currentTarget.getBoundingClientRect();
-                      submenuTriggerRef.current = event.currentTarget;
-                      setActiveSubmenuKey((current) =>
-                        current === itemKey ? null : itemKey,
-                      );
-                      item.onClick();
-                      if (item.closeOnClick) {
-                        onClose();
-                      }
-                      return;
-                    }
-
-                    item.onClick();
-                    if (item.closeOnClick ?? true) {
-                      onClose();
-                    }
-                  }}
-                  className={cn(
-                    "group flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-ui-sm font-medium transition-ui",
-                    item.disabled
-                      ? "cursor-default opacity-40"
-                      : "cursor-pointer",
-                    item.disabled && "text-rm-text-muted",
-                    !item.disabled &&
-                      (item.variant === "danger"
-                        ? isSubmenuOpen
-                          ? "bg-destructive text-destructive-foreground"
-                          : "text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                        : item.variant === "warning"
-                          ? isSubmenuOpen
-                            ? "bg-warning text-white"
-                            : "text-warning hover:bg-warning hover:text-white"
-                          : isSubmenuOpen
-                            ? "bg-primary text-primary-foreground"
-                            : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground"),
-                  )}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    {item.icon ? (
-                      <span
-                        className={cn(
-                          "shrink-0 opacity-60",
-                          isSubmenuOpen && "opacity-100",
-                          !item.disabled && "group-hover:opacity-100",
-                        )}
-                      >
-                        {item.icon}
-                      </span>
-                    ) : null}
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate">{item.label}</span>
-                      {item.subtitle ? (
-                        <span className="text-ui-2xs font-normal leading-tight opacity-60">
-                          {item.subtitle}
-                        </span>
-                      ) : null}
-                    </span>
-                  </span>
-                  {item.rightIcon ? (
-                    <span
-                      className={cn(
-                        "ml-2 shrink-0 opacity-40",
-                        isSubmenuOpen && "opacity-80",
-                        !item.disabled && "group-hover:opacity-80",
-                      )}
-                    >
-                      {item.rightIcon}
-                    </span>
-                  ) : null}
-                </button>
-                {item.divider ? (
-                  <div className="my-1.5 h-px w-full bg-rm-border" />
-                ) : null}
-              </React.Fragment>
-            );
-          })}
-        </div>
-      </div>
-      {activeSubmenuItem?.submenu ? (
-        <div
-          ref={submenuRef}
-          role="menu"
-          aria-label={`${activeSubmenuItem.label} submenu`}
-          className="absolute z-80 w-[210px] overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-lg"
-          style={submenuStyle}
-        >
-          {activeSubmenuItem.submenu}
-        </div>
-      ) : null}
-    </div>,
-    document.body,
+        {topContent ? (
+          <>
+            <div className="px-1 pt-1 pb-1">{topContent}</div>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        <MenuItemRows items={items} />
+        <FocusFirstRow />
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

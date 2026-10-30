@@ -1,164 +1,129 @@
-import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { useOnline } from "@/components/chat/ConnectionBanner";
+import {
+  ColdLoadScreen,
+  type ColdError,
+  type ColdStep,
+} from "@/components/chat/ColdLoad";
+import { LOADER_SETTLE_MS, useElapsed } from "@/components/ui/LoadingScreen";
+import { signInFromHere } from "@/lib/sign-in-here";
+import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-import { useCallback, useEffect, useReducer } from "react";
+import { useEffect, useReducer, type ReactNode } from "react";
 
 interface ConnectionOverlayState {
   visible: boolean;
   fadeOut: boolean;
   hasConnected: boolean;
-  tipIndex: number;
-  tipVisible: boolean;
 }
 
-const LOADING_TIPS = [
-  "Warming up the servers...",
-  "Connecting you to the conversation...",
-  "Getting everything ready...",
-  "Almost there...",
-  "Loading your messages...",
-  "Preparing your workspace...",
-  "Syncing your channels...",
-  "Polishing the pixels...",
-];
-
-const RECONNECT_TIPS = [
-  "Reconnecting you to the conversation...",
-  "Hang tight, we're working on it...",
-  "Your messages are safe — reconnecting...",
-  "Checking the connection...",
-  "Still trying to reach the server...",
-  "The server might be taking a break...",
-  "We haven't given up yet...",
-  "Dusting off the cables...",
-];
+/** Connected but no Ready yet: stop covering the app after this long. */
+const READY_FALLBACK_MS = 4000;
 
 /**
- * Full-screen overlay shown on initial load while the WebSocket gateway is
- * connecting, and again whenever it disconnects and starts reconnecting.
- * Same composition as the splash: dithered field, logo, accent progress
- * line, status and a rotating tip. Fades out when connection is established.
+ * The cold-load screen (ColdLoad) shown only on the first load, while the
+ * gateway signs in, connects and becomes ready, and nothing is usable yet.
+ * The mark resolves one stage per completed step and the status line
+ * follows; it fades out once all three are done. Later drops never cover the app (talk-tree-spec §3 rule 4): the
+ * connection strip (ConnectionBanner) shows them under the header.
+ *
+ * `children` is the app it covers: inert while the screen is up, so focus
+ * and the screen reader cannot wander into a UI that is not there yet.
  */
-export function ConnectionOverlay() {
+export function ConnectionOverlay({
+  initialHasConnected = false,
+  children,
+}: {
+  /** Start as if a connection had already been made (fixtures, tests). */
+  initialHasConnected?: boolean;
+  children?: ReactNode;
+} = {}) {
   const connected = useChatStore((s) => s.connected);
-  const reconnectAttempt = useChatStore((s) => s.reconnectAttempt);
+  const connectStep = useChatStore((s) => s.connectStep);
+  const failure = useChatStore((s) => s.gatewayFailure);
+  const online = useOnline();
+  const slow = useElapsed(LOADER_SETTLE_MS);
 
-  // Overlay and Tip state combined into one object to fix `react-doctor` cascading state limits
   const [state, dispatch] = useReducer(
     (
       prev: ConnectionOverlayState,
       next: Partial<ConnectionOverlayState>,
     ): ConnectionOverlayState => ({ ...prev, ...next }),
     {
-      visible: true,
+      // Ready has been seen before (connectStep stays 3 across a disconnect):
+      // the store still holds the app's data, so coming back to /chat, a
+      // route remount or a hot update is a reconnect, which the strip shows.
+      // Only a store that never got there gets the cold load.
+      visible: connectStep < 3 && !initialHasConnected,
       fadeOut: false,
-      hasConnected: false,
-      tipIndex: 0,
-      tipVisible: true,
+      hasConnected: initialHasConnected || connectStep >= 3,
     },
   );
+  const [readyTimedOut, setReadyTimedOut] = useReducer(() => true, false);
 
-  const isReconnecting = state.hasConnected && !connected;
-  const tips = isReconnecting ? RECONNECT_TIPS : LOADING_TIPS;
+  // Connected but Ready never came: do not hold the app hostage.
+  useEffect(() => {
+    if (!connected || connectStep >= 3) return;
+    const id = setTimeout(setReadyTimedOut, READY_FALLBACK_MS);
+    return () => clearTimeout(id);
+  }, [connected, connectStep]);
 
-  const handleConnectionState = useCallback(() => {
-    let timer1: NodeJS.Timeout;
-    let timer2: NodeJS.Timeout;
-
-    if (!connected) {
-      // On initial load, show overlay immediately.
-      // On reconnect, add a grace period — Cloudflare edge recycles cause
-      // brief ChatGW disconnects (~1-2s) that don't affect audio (SFU is
-      // on a separate WS). No need to flash a scary overlay for that.
-      const delay = state.hasConnected ? 3000 : 0;
-      timer1 = setTimeout(() => {
-        dispatch({ visible: true, fadeOut: false });
-      }, delay);
-    } else if (connected && state.visible) {
-      // Just connected — record it and fade out
-      timer1 = setTimeout(() => {
-        dispatch({ hasConnected: true, fadeOut: true });
-      }, 0);
-      timer2 = setTimeout(() => {
-        dispatch({ visible: false, fadeOut: false });
-      }, 1200);
-    }
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-    };
-  }, [connected, state.visible, state.hasConnected]);
+  const ready = connected && (connectStep >= 3 || readyTimedOut);
 
   useEffect(() => {
-    return handleConnectionState();
-  }, [handleConnectionState]);
+    if (!ready || !state.visible || state.fadeOut) return;
+    const id = setTimeout(() =>
+      dispatch({ hasConnected: true, fadeOut: true }),
+    );
+    return () => clearTimeout(id);
+  }, [ready, state.visible, state.fadeOut]);
 
-  // Rotate tips
+  // The exit holds "all three done" briefly, then fades (rm-loading-exit,
+  // 1.2s); unmount when it ends.
   useEffect(() => {
-    if (!state.visible || state.fadeOut) return;
-    let tipTimeout: ReturnType<typeof setTimeout> | null = null;
-    const interval = setInterval(() => {
-      dispatch({ tipVisible: false });
-      tipTimeout = setTimeout(() => {
-        dispatch({
-          tipIndex: (state.tipIndex + 1) % tips.length,
-          tipVisible: true,
-        });
-      }, 400);
-    }, 3500);
-    return () => {
-      clearInterval(interval);
-      if (tipTimeout) clearTimeout(tipTimeout);
-    };
-  }, [state.visible, state.fadeOut, state.tipIndex, tips.length]);
+    if (!state.fadeOut) return;
+    const id = setTimeout(
+      () => dispatch({ visible: false, fadeOut: false }),
+      1200,
+    );
+    return () => clearTimeout(id);
+  }, [state.fadeOut]);
 
-  if (!state.visible) return null;
+  const covering = state.visible && !(state.hasConnected && !state.fadeOut);
+  const step: ColdStep = state.fadeOut || ready ? 3 : connectStep;
+  const error: ColdError =
+    failure === "auth"
+      ? "auth"
+      : !online
+        ? "offline"
+        : slow && !ready
+          ? "slow"
+          : null;
 
-  const getStatusText = () => {
-    if (state.fadeOut) return "Connected!";
-    if (!state.hasConnected) return "Connecting...";
-    if (reconnectAttempt <= 1) return "Reconnecting...";
-    if (reconnectAttempt <= 5)
-      return `Reconnecting — attempt ${reconnectAttempt}`;
-    return `Still reconnecting — attempt ${reconnectAttempt}`;
-  };
-
-  // Skip the fade-in on the initial connection (!hasConnected): the pending
-  // SplashScreen was already solid, so starting from opacity 0 would flash.
-  const animationClass = state.fadeOut
-    ? "rm-loading-exit"
-    : state.hasConnected
-      ? "animate-in fade-in duration-300"
-      : "";
-
+  // No fade-in: the pending SplashScreen drew this same screen at step 0,
+  // so the mark and status stay put. The exit fades the whole layer
+  // (plate and backdrop) to reveal the app.
+  // One stable tree in every state, so the app never remounts when the
+  // screen comes or goes. Fading out reveals a live app: it takes input.
   return (
-    <LoadingScreen
-      logoAlt=""
-      logoTestId="connection-overlay-logo"
-      className={`fixed inset-0 z-100 ${animationClass}`}
-    >
-      <p
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className="text-ui-base font-medium text-rm-text"
-      >
-        {getStatusText()}
-      </p>
-
-      {/* Rotating tip; keep its space reserved during fade-out to avoid shifting the stack. */}
-      <p
-        aria-hidden="true"
-        className={`mt-1 min-h-5 text-ui-sm text-rm-text-muted transition-opacity duration-300 ${
-          state.fadeOut
-            ? "invisible opacity-0"
-            : state.tipVisible
-              ? "opacity-100"
-              : "opacity-0"
-        }`}
-      >
-        {tips[state.tipIndex]}
-      </p>
-    </LoadingScreen>
+    <>
+      {children === undefined ? null : (
+        <div className="contents" inert={covering && !state.fadeOut}>
+          {children}
+        </div>
+      )}
+      {covering ? (
+        <ColdLoadScreen
+          step={step}
+          error={error}
+          onSignIn={signInFromHere}
+          onReload={() => window.location.reload()}
+          focusAction
+          className={cn(
+            "fixed inset-0 z-100",
+            state.fadeOut && "rm-loading-exit",
+          )}
+        />
+      ) : null}
+    </>
   );
 }

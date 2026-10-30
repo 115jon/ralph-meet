@@ -1,475 +1,719 @@
+/**
+ * Server settings → Roles.
+ *
+ *   split  list (256) beside the editor, inside the workbench page
+ *   push   the list is the page; choosing a role pushes the editor, and the
+ *          workbench header's back button (and Escape) pops it. Used on
+ *          phones and wherever the page is too narrow for two columns.
+ *
+ * The shell owns `editorOpen` so its header back button and Escape ladder
+ * can close the editor. Save and Reset live in the workbench's shared
+ * UnsavedBar: the editor reports its draft through `onUnsavedChange`, and
+ * while it is dirty the shell refuses to switch role or page (`blocked`),
+ * nudging the bar instead (overlays audit issue 7, flow 3).
+ */
+
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { PERMISSIONS } from "@/lib/permissions";
 import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useEffect, useReducer } from "react";
-import { Loader2, Plus, Settings2, Shield, Trash2 } from "./Icons";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
+import { SettingsSwitch } from "./SettingsSwitch";
+import type { UnsavedBarProps } from "./settings/UnsavedBar";
+import {
+  ConfirmStrip,
+  SettingsCard,
+  SettingsRow,
+  useConfirm,
+} from "./settings/primitives";
+import { FieldRow } from "./server-settings/Field";
+import { LoadError, SkeletonRows } from "./server-settings/states";
+
+/** What the role editor hands the workbench's save bar. */
+export type RoleUnsaved = Pick<
+  UnsavedBarProps,
+  "dirty" | "saving" | "error" | "onReset" | "onSave" | "saveLabel"
+>;
 
 interface RoleManagementProps {
   serverId: string;
+  /** Role to open first (fixtures, deep links). */
+  initialRoleId?: string;
+  /** Two columns; otherwise list and editor push. */
+  split: boolean;
+  /** Push layout only: the editor is showing instead of the list. */
+  editorOpen: boolean;
+  onEditorOpenChange: (open: boolean) => void;
+  /** Push layout: the page title for the open editor. */
+  onEditorTitle?: (title: string | null) => void;
+  /** The open editor's draft state for the save bar (null when none). */
+  onUnsavedChange?: (state: RoleUnsaved | null) => void;
+  /** The draft is dirty: switching role calls `onBlocked` instead. */
+  blocked?: boolean;
+  onBlocked?: () => void;
 }
 
-interface State {
+/** Token fallback for a role with no colour of its own. */
+const NO_COLOR = "var(--ink-3)";
+/** <input type="color"> only accepts #rrggbb, so it needs a hex start. */
+const PICKER_START = "#99aab5"; // ds-allow:raw-color native colour input needs a hex value
+const HEX = /^#[0-9a-f]{6}$/i;
+
+type PermissionDef = { mask: number; name: string; desc: string };
+
+const PERMISSION_GROUPS: { title: string; items: PermissionDef[] }[] = [
+  {
+    title: "Server",
+    items: [
+      {
+        mask: PERMISSIONS.ADMINISTRATOR,
+        name: "Administrator",
+        desc: "Every permission, and channel overrides don't apply. Give this sparingly.",
+      },
+      {
+        mask: PERMISSIONS.MANAGE_SERVER,
+        name: "Manage server",
+        desc: "Change the server name, icon, sharing and invites.",
+      },
+      {
+        mask: PERMISSIONS.MANAGE_ROLES,
+        name: "Manage roles",
+        desc: "Create, edit and delete roles below their own.",
+      },
+      {
+        mask: PERMISSIONS.MANAGE_CATEGORIES,
+        name: "Manage categories",
+        desc: "Create, rename and reorder categories.",
+      },
+      {
+        mask: PERMISSIONS.MANAGE_CHANNELS,
+        name: "Manage channels",
+        desc: "Create, edit and delete channels.",
+      },
+    ],
+  },
+  {
+    title: "Members",
+    items: [
+      {
+        mask: PERMISSIONS.KICK_MEMBERS,
+        name: "Kick members",
+        desc: "Remove members. They can rejoin with an invite.",
+      },
+      {
+        mask: PERMISSIONS.BAN_MEMBERS,
+        name: "Ban members",
+        desc: "Remove members and stop them rejoining.",
+      },
+      {
+        mask: PERMISSIONS.CREATE_INVITE,
+        name: "Create invites",
+        desc: "Make invite links for this server.",
+      },
+    ],
+  },
+  {
+    title: "Messages",
+    items: [
+      {
+        mask: PERMISSIONS.SEND_MESSAGES,
+        name: "Send messages",
+        desc: "Post in text channels.",
+      },
+      {
+        mask: PERMISSIONS.MANAGE_MESSAGES,
+        name: "Manage messages",
+        desc: "Delete and pin other people's messages.",
+      },
+    ],
+  },
+];
+
+type Draft = { name: string; color: string; permissions: number };
+
+const has = (permissions: number, mask: number) =>
+  (permissions & mask) === mask;
+
+function Swatch({ color }: { color: string | null | undefined }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-3 shrink-0 rounded-full"
+      // A role's colour is the person's own data (7.1 exception).
+      style={{ backgroundColor: color || NO_COLOR }}
+    />
+  );
+}
+
+function RoleList({
+  roles,
+  selectedId,
+  creating,
+  narrow,
+  onSelect,
+  onCreate,
+}: {
   roles: Role[];
-  loading: boolean;
-  error: string | null;
-  selectedRole: Role | null;
-  editState: {
-    name: string;
-    color: string;
-    permissions: number;
-    saving: boolean;
-    isCreating: boolean;
+  selectedId: string | null;
+  creating: boolean;
+  narrow: boolean;
+  onSelect: (role: Role) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <section aria-label="Roles" className="flex min-w-0 flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-ui-sm text-ink-2">
+          {roles.length === 1 ? "1 role" : `${roles.length} roles`}
+        </p>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="max-md:min-h-11"
+          onClick={onCreate}
+        >
+          <Icon name="add" size="sm" />
+          New role
+        </Button>
+      </div>
+      <ul
+        className={cn(
+          "flex flex-col",
+          narrow
+            ? "divide-y divide-line rounded-lg border border-line bg-ply-2"
+            : "gap-px",
+        )}
+      >
+        {roles.map((role) => {
+          const current = !narrow && !creating && role.id === selectedId;
+          return (
+            <li key={role.id}>
+              <button
+                type="button"
+                aria-current={current ? "true" : undefined}
+                onClick={() => onSelect(role)}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-sm text-left transition-colors duration-(--dur-1) ease-out",
+                  PRESS,
+                  HIT,
+                  narrow ? "min-h-12 px-4 text-ui-row" : "h-8 px-2 text-ui-sm",
+                  current
+                    ? "bg-tint-2 font-semibold text-ink-1"
+                    : "font-medium text-ink-2 pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1",
+                  narrow && "rounded-none text-ink-1",
+                )}
+              >
+                <Swatch color={role.color} />
+                <InlineEmojiText
+                  text={role.name}
+                  className="min-w-0 flex-1 truncate"
+                />
+                {role.is_default ? (
+                  <span className="text-ui-xs font-medium text-ink-3">
+                    Everyone
+                  </span>
+                ) : null}
+                {narrow ? (
+                  <Icon
+                    name="chevronRight"
+                    size="xs"
+                    className="shrink-0 text-ink-3"
+                  />
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+        {creating && !narrow ? (
+          <li>
+            <span className="flex h-8 items-center gap-2.5 rounded-sm bg-tint-2 px-2 text-ui-sm font-semibold text-ink-1">
+              <Swatch color={null} />
+              New role
+            </span>
+          </li>
+        ) : null}
+      </ul>
+    </section>
+  );
+}
+
+const draftOf = (role: Role | null): Draft => ({
+  name: role?.name ?? "New role",
+  color: role?.color ?? "",
+  permissions: role?.permissions ?? 0,
+});
+
+function RoleEditor({
+  serverId,
+  role,
+  creating,
+  titled,
+  onSaved,
+  onDeleted,
+  onCancelCreate,
+  onUnsavedChange,
+}: {
+  serverId: string;
+  role: Role | null;
+  creating: boolean;
+  /** Show the role name; off when the page header already names it. */
+  titled: boolean;
+  onSaved: (savedId: string | null) => Promise<void>;
+  onDeleted: (roleId: string) => Promise<void>;
+  /** Reset on a new-role draft drops the draft. */
+  onCancelCreate: () => void;
+  onUnsavedChange?: (state: RoleUnsaved | null) => void;
+}) {
+  const [draft, setDraft] = useState<Draft>(() => draftOf(role));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [colorError, setColorError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+  const { armed, arm, cancel, done, triggerRef } = useConfirm();
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const nameId = useId();
+  const nameHelpId = useId();
+  const colorId = useId();
+  const colorHelpId = useId();
+
+  const isDefault = Boolean(role?.is_default);
+  const isAdmin = has(draft.permissions, PERMISSIONS.ADMINISTRATOR);
+  const roleName = creating ? "New role" : (role?.name ?? "");
+  const dirty =
+    creating ||
+    draft.name !== (role?.name ?? "") ||
+    draft.color !== (role?.color ?? "") ||
+    draft.permissions !== (role?.permissions ?? 0);
+
+  const edit = (patch: Partial<Draft>) => {
+    setJustSaved(false);
+    setSaveError(null);
+    setDraft((prev) => ({ ...prev, ...patch }));
   };
-}
 
-type Action =
-  | { type: "SET_ROLES"; payload: Role[] }
-  | { type: "SET_LOADING"; payload: boolean }
-  | { type: "SET_ERROR"; payload: string | null }
-  | { type: "SELECT_ROLE"; payload: Role | null }
-  | { type: "SET_EDIT_STATE"; payload: Partial<State["editState"]> }
-  | { type: "TOGGLE_PERMISSION"; payload: number }
-  | { type: "START_CREATE" };
-
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "SET_ROLES":
-      return { ...state, roles: action.payload };
-    case "SET_LOADING":
-      return { ...state, loading: action.payload };
-    case "SET_ERROR":
-      return { ...state, error: action.payload };
-    case "SELECT_ROLE":
-      return {
-        ...state,
-        selectedRole: action.payload,
-        editState: action.payload
-          ? {
-              ...state.editState,
-              name: action.payload.name,
-              color: action.payload.color || "",
-              permissions: action.payload.permissions,
-              isCreating: false,
-            }
-          : state.editState,
-      };
-    case "SET_EDIT_STATE":
-      return { ...state, editState: { ...state.editState, ...action.payload } };
-    case "TOGGLE_PERMISSION": {
-      const current = state.editState.permissions;
-      const mask = action.payload;
-      const newPermissions =
-        (current & mask) === mask ? current & ~mask : current | mask;
-      return {
-        ...state,
-        editState: { ...state.editState, permissions: newPermissions },
-      };
+  const reset = () => {
+    if (creating) {
+      onCancelCreate();
+      return;
     }
-    case "START_CREATE":
-      return {
-        ...state,
-        selectedRole: null,
-        editState: {
-          name: "New Role",
-          color: "#99aab5",
-          permissions: 0,
-          saving: false,
-          isCreating: true,
-        },
+    setDraft(draftOf(role));
+    setSaveError(null);
+    setNameError(null);
+    setColorError(null);
+  };
+
+  const save = async () => {
+    if (saving) return;
+    const name = draft.name.trim();
+    const color = draft.color.trim();
+    const badName = !name;
+    const badColor = Boolean(color) && !HEX.test(color);
+    setNameError(badName ? "Enter a role name." : null);
+    setColorError(
+      badColor ? "Enter a colour as # and six hex digits, like #3e9b4f." : null,
+    );
+    if (badName || badColor) {
+      document.getElementById(badName ? nameId : colorId)?.focus();
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const body = {
+        name,
+        color: color || null,
+        permissions: draft.permissions,
       };
-    default:
-      return state;
-  }
+      if (creating) {
+        const created = await apiPost<{ id?: string } | null>(
+          `/api/servers/${serverId}/roles`,
+          body,
+        );
+        await onSaved(created?.id ?? null);
+      } else if (role) {
+        await apiPatch(`/api/servers/${serverId}/roles/${role.id}`, body);
+        await onSaved(role.id);
+      }
+      setJustSaved(true);
+    } catch (err) {
+      setSaveError(
+        describeApiError(err, creating ? "create this role" : "save this role"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* Report the draft to the workbench save bar. The handlers go through a
+     ref so the report only changes when the visible state does. */
+  const handlers = useRef({ save, reset });
+  useEffect(() => {
+    handlers.current = { save, reset };
+  });
+  useEffect(() => {
+    onUnsavedChange?.({
+      dirty,
+      saving,
+      error: saveError,
+      saveLabel: creating ? "Create role" : "Save changes",
+      onSave: () => void handlers.current.save(),
+      onReset: () => handlers.current.reset(),
+    });
+  }, [creating, dirty, onUnsavedChange, saveError, saving]);
+  useEffect(() => () => onUnsavedChange?.(null), [onUnsavedChange]);
+
+  const confirmDelete = async () => {
+    if (!role) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiDelete(`/api/servers/${serverId}/roles/${role.id}`);
+      done();
+      await onDeleted(role.id);
+    } catch (err) {
+      setDeleteError(describeApiError(err, `delete ${role.name}`));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const canDelete = !isDefault && !creating;
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-4">
+      {titled || (canDelete && !armed) ? (
+        <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
+          {titled ? (
+            <h3 className="flex min-w-0 flex-1 items-center gap-2 text-ui-lg font-semibold text-ink-1">
+              <Swatch color={draft.color || role?.color} />
+              <InlineEmojiText text={roleName} className="truncate" />
+            </h3>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {canDelete && !armed ? (
+            <Button
+              ref={triggerRef}
+              type="button"
+              variant="destructive"
+              className="max-md:min-h-11"
+              onClick={() => {
+                setDeleteError(null);
+                arm();
+              }}
+            >
+              <Icon name="trash" size="sm" />
+              Delete
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      <p role="status" className="sr-only">
+        {justSaved && !dirty ? "Role saved" : ""}
+      </p>
+      {armed && role ? (
+        <ConfirmStrip
+          irreversible
+          busy={deleting}
+          error={deleteError}
+          confirmLabel="Delete role"
+          consequence={
+            <>
+              <strong className="font-semibold">
+                Delete <InlineEmojiText text={role.name} />?
+              </strong>{" "}
+              Everyone with this role loses its permissions. This can't be
+              undone.
+            </>
+          }
+          onCancel={() => {
+            setDeleteError(null);
+            cancel();
+          }}
+          onConfirm={() => void confirmDelete()}
+        />
+      ) : null}
+
+      {isDefault ? (
+        <p className="text-pretty text-ui-sm text-ink-2">
+          Everyone has this role. Its name and colour are fixed.
+        </p>
+      ) : (
+        <SettingsCard title="Display">
+          <FieldRow
+            label="Role name"
+            htmlFor={nameId}
+            helperId={nameHelpId}
+            error={nameError}
+          >
+            <Input
+              id={nameId}
+              value={draft.name}
+              maxLength={100}
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? nameHelpId : undefined}
+              onChange={(event) => {
+                setNameError(null);
+                edit({ name: event.target.value });
+              }}
+              className="max-md:min-h-11"
+            />
+          </FieldRow>
+          <FieldRow
+            label="Colour"
+            htmlFor={colorId}
+            helperId={colorHelpId}
+            helper="Names with this role show in this colour. Leave empty for none."
+            error={colorError}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={HEX.test(draft.color) ? draft.color : PICKER_START}
+                aria-label="Pick a role colour"
+                onChange={(event) => {
+                  setColorError(null);
+                  edit({ color: event.target.value });
+                }}
+                className="size-8 shrink-0 cursor-pointer rounded-md border border-line-field bg-transparent p-0.5 max-md:size-11"
+              />
+              <Input
+                id={colorId}
+                value={draft.color}
+                placeholder="#3e9b4f"
+                spellCheck={false}
+                aria-invalid={colorError ? true : undefined}
+                aria-describedby={colorHelpId}
+                onChange={(event) => {
+                  setColorError(null);
+                  edit({ color: event.target.value });
+                }}
+                className="max-w-40 font-mono max-md:min-h-11"
+              />
+              {draft.color ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="max-md:min-h-11"
+                  onClick={() => edit({ color: "" })}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </FieldRow>
+        </SettingsCard>
+      )}
+
+      {PERMISSION_GROUPS.map((group, index) => (
+        <SettingsCard
+          key={group.title}
+          title={group.title}
+          description={
+            index === 0 && isAdmin
+              ? "Administrator is on, so this role has every permission."
+              : undefined
+          }
+        >
+          {group.items.map((perm) => {
+            const locked = isAdmin && perm.mask !== PERMISSIONS.ADMINISTRATOR;
+            const checked = locked || has(draft.permissions, perm.mask);
+            return (
+              <SettingsRow
+                key={perm.mask}
+                id={`perm-${perm.mask}`}
+                label={perm.name}
+                description={perm.desc}
+                layout="inline"
+                disabled={locked}
+              >
+                {({ labelId, descId }) => (
+                  <SettingsSwitch
+                    checked={checked}
+                    disabled={locked}
+                    labelledBy={labelId}
+                    describedBy={descId}
+                    onChange={() =>
+                      edit({ permissions: draft.permissions ^ perm.mask })
+                    }
+                  />
+                )}
+              </SettingsRow>
+            );
+          })}
+        </SettingsCard>
+      ))}
+    </div>
+  );
 }
 
-export default function RoleManagement({ serverId }: RoleManagementProps) {
-  const [state, dispatch] = useReducer(reducer, {
-    roles: [],
-    loading: true,
-    error: null,
-    selectedRole: null,
-    editState: {
-      name: "",
-      color: "",
-      permissions: 0,
-      saving: false,
-      isCreating: false,
-    },
-  });
+export default function RoleManagement({
+  serverId,
+  initialRoleId,
+  split,
+  editorOpen,
+  onEditorOpenChange,
+  onEditorTitle,
+  onUnsavedChange,
+  blocked = false,
+  onBlocked,
+}: RoleManagementProps) {
+  const [roles, setRoles] = useState<Role[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialRoleId ?? null,
+  );
+  const [creatingDraft, setCreating] = useState(false);
+  // A new-role draft only lives while its editor is showing.
+  const creating = creatingDraft && (split || editorOpen);
 
-  const fetchRoles = async () => {
+  const fetchRoles = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const data = await apiGet<Role[]>(`/api/servers/${serverId}/roles`);
-      dispatch({ type: "SET_ROLES", payload: data });
-      if (data.length > 0) {
-        if (!state.selectedRole) {
-          dispatch({
-            type: "SELECT_ROLE",
-            payload: data.find((r: Role) => r.is_default) || data[0],
-          });
-        }
-      }
-    } catch (err: any) {
-      dispatch({
-        type: "SET_ERROR",
-        payload: err.message || "An error occurred",
-      });
+      setRoles(data);
+      setSelectedId(
+        (prev) =>
+          (prev && data.some((r) => r.id === prev) ? prev : null) ??
+          (data.find((r) => r.is_default) ?? data[0])?.id ??
+          null,
+      );
+      return data;
+    } catch (err) {
+      setLoadError(describeApiError(err, "load the roles"));
+      return null;
     } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
+      setLoading(false);
     }
-  };
+  }, [serverId]);
 
   useEffect(() => {
-    fetchRoles();
-  }, [serverId]); // eslint-disable-line react-hooks/exhaustive-deps
+    void fetchRoles();
+  }, [fetchRoles]);
 
-  const selectRole = (role: Role | null) => {
-    dispatch({ type: "SELECT_ROLE", payload: role });
-  };
+  const selected = roles?.find((r) => r.id === selectedId) ?? null;
+  const showEditor = split || editorOpen;
 
-  const handleSave = async () => {
-    if (!state.editState.name.trim()) return;
-    dispatch({ type: "SET_EDIT_STATE", payload: { saving: true } });
-    try {
-      const url = state.editState.isCreating
-        ? `/api/servers/${serverId}/roles`
-        : `/api/servers/${serverId}/roles/${state.selectedRole!.id}`;
+  const editorTitle = creating ? "New role" : (selected?.name ?? null);
+  useEffect(() => {
+    onEditorTitle?.(!split && editorOpen ? editorTitle : null);
+  }, [editorOpen, editorTitle, onEditorTitle, split]);
 
-      const body = {
-        name: state.editState.name.trim(),
-        color: state.editState.color.trim() || null,
-        permissions: state.editState.permissions,
-      };
-
-      if (state.editState.isCreating) {
-        await apiPost(url, body);
-      } else {
-        await apiPatch(url, body);
-      }
-
-      await fetchRoles();
-      dispatch({ type: "SET_EDIT_STATE", payload: { isCreating: false } });
-    } catch (err: any) {
-      dispatch({
-        type: "SET_ERROR",
-        payload: err.message || "Failed to save role",
-      });
-    } finally {
-      dispatch({ type: "SET_EDIT_STATE", payload: { saving: false } });
+  const select = (role: Role) => {
+    if (blocked && (creating || role.id !== selectedId)) {
+      onBlocked?.();
+      return;
     }
-  };
-
-  const handleDelete = async (roleId: string) => {
-    if (!confirm("Are you sure you want to delete this role?")) return;
-    dispatch({ type: "SET_EDIT_STATE", payload: { saving: true } });
-    try {
-      await apiDelete(`/api/servers/${serverId}/roles/${roleId}`);
-      if (state.selectedRole?.id === roleId) {
-        dispatch({
-          type: "SELECT_ROLE",
-          payload: state.roles.find((r) => r.id !== roleId) || null,
-        });
-      }
-      await fetchRoles();
-    } catch (err: any) {
-      dispatch({
-        type: "SET_ERROR",
-        payload: err.message || "Failed to delete role",
-      });
-    } finally {
-      dispatch({ type: "SET_EDIT_STATE", payload: { saving: false } });
-    }
+    setCreating(false);
+    setSelectedId(role.id);
+    if (!split) onEditorOpenChange(true);
   };
 
   const startCreate = () => {
-    dispatch({ type: "START_CREATE" });
+    if (blocked) {
+      onBlocked?.();
+      return;
+    }
+    setCreating(true);
+    if (!split) onEditorOpenChange(true);
   };
 
-  const togglePermission = (mask: number) => {
-    dispatch({ type: "TOGGLE_PERMISSION", payload: mask });
-  };
-
-  const PERMISSION_LIST = [
-    {
-      mask: PERMISSIONS.ADMINISTRATOR,
-      name: "Administrator",
-      desc: "Grants all permissions and bypasses bounds",
-    },
-    {
-      mask: PERMISSIONS.MANAGE_SERVER,
-      name: "Manage Server",
-      desc: "Edit server settings",
-    },
-    {
-      mask: PERMISSIONS.MANAGE_ROLES,
-      name: "Manage Roles",
-      desc: "Create and edit roles",
-    },
-    {
-      mask: PERMISSIONS.MANAGE_CATEGORIES,
-      name: "Manage Categories",
-      desc: "Create and edit categories",
-    },
-    {
-      mask: PERMISSIONS.MANAGE_CHANNELS,
-      name: "Manage Channels",
-      desc: "Create and edit channels",
-    },
-    {
-      mask: PERMISSIONS.KICK_MEMBERS,
-      name: "Kick Members",
-      desc: "Remove members from server",
-    },
-    {
-      mask: PERMISSIONS.BAN_MEMBERS,
-      name: "Ban Members",
-      desc: "Permanently remove members",
-    },
-    {
-      mask: PERMISSIONS.CREATE_INVITE,
-      name: "Create Invite",
-      desc: "Invite new members",
-    },
-    {
-      mask: PERMISSIONS.MANAGE_MESSAGES,
-      name: "Manage Messages",
-      desc: "Delete or pin others messages",
-    },
-    {
-      mask: PERMISSIONS.SEND_MESSAGES,
-      name: "Send Messages",
-      desc: "Send text messages",
-    },
-  ];
-
-  if (state.loading) {
+  if (loadError && !roles) {
     return (
-      <div className="flex justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" />
+      <LoadError
+        title="Roles didn't load"
+        message={loadError}
+        retrying={loading}
+        onRetry={() => void fetchRoles()}
+      />
+    );
+  }
+  if (!roles)
+    return (
+      <SkeletonRows
+        label="Loading roles"
+        rows={4}
+        avatar={false}
+        rowClass="h-12"
+      />
+    );
+
+  const editor =
+    selected || creating ? (
+      <RoleEditor
+        key={creating ? "new" : selected?.id}
+        serverId={serverId}
+        role={creating ? null : selected}
+        creating={creating}
+        titled={split}
+        onUnsavedChange={onUnsavedChange}
+        onCancelCreate={() => {
+          setCreating(false);
+          if (!split) onEditorOpenChange(false);
+        }}
+        onSaved={async (savedId) => {
+          const data = await fetchRoles();
+          if (creating) {
+            setCreating(false);
+            const created =
+              (savedId && data?.find((r) => r.id === savedId)) ??
+              data?.[data.length - 1];
+            if (created) setSelectedId(created.id);
+          }
+        }}
+        onDeleted={async (roleId) => {
+          setSelectedId((prev) => (prev === roleId ? null : prev));
+          if (!split) onEditorOpenChange(false);
+          await fetchRoles();
+        }}
+      />
+    ) : null;
+
+  if (!split) {
+    return showEditor && editor ? (
+      <div className="mx-auto w-full max-w-[720px]">{editor}</div>
+    ) : (
+      <div className="mx-auto w-full max-w-[720px]">
+        <RoleList
+          roles={roles}
+          selectedId={selectedId}
+          creating={creating}
+          narrow
+          onSelect={select}
+          onCreate={startCreate}
+        />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-0 h-[500px] border border-rm-border rounded-xl overflow-hidden bg-rm-bg-surface">
-      {/* Role List Sidebar */}
-      <div className="w-48 bg-rm-bg-secondary border-r border-rm-border flex flex-col">
-        <div className="p-3 border-b border-rm-border flex justify-between items-center">
-          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
-            Roles
-          </span>
-          <button
-            onClick={startCreate}
-            className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="min-h-0 overflow-y-auto p-2 space-y-1">
-          {state.roles.map((role) => (
-            <button
-              key={role.id}
-              onClick={() => selectRole(role)}
-              className={cn(
-                "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
-                state.selectedRole?.id === role.id &&
-                  !state.editState.isCreating
-                  ? "bg-primary/20 text-primary"
-                  : "hover:bg-rm-bg-hover text-rm-text",
-              )}
-            >
-              <div
-                className="w-3 h-3 rounded-full shrink-0"
-                style={{ backgroundColor: role.color || "#94a3b8" }}
-              />
-              <InlineEmojiText text={role.name} className="truncate" />
-            </button>
-          ))}
-          {state.editState.isCreating && (
-            <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left bg-primary/20 text-primary">
-              <div className="w-3 h-3 rounded-full shrink-0 bg-[#99aab5]" />
-              <span className="truncate italic">New Role</span>
-            </div>
-          )}
-        </div>
+    <div className="flex items-start gap-6">
+      <div className="sticky top-0 w-64 shrink-0">
+        <RoleList
+          roles={roles}
+          selectedId={selectedId}
+          creating={creating}
+          narrow={false}
+          onSelect={select}
+          onCreate={startCreate}
+        />
       </div>
-
-      {/* Role Editor */}
-      <div className="flex min-h-0 flex-1 flex-col bg-rm-bg-primary overflow-hidden">
-        {state.selectedRole || state.editState.isCreating ? (
-          <>
-            <div className="p-4 border-b border-rm-border flex justify-between items-center">
-              <h3 className="font-bold text-rm-text flex items-center gap-2">
-                <Shield className="h-4 w-4" /> Edit Role
-                {state.selectedRole?.is_default && (
-                  <span className="text-ui-2xs bg-rm-bg-elevated px-1.5 py-0.5 rounded uppercase tracking-widest text-rm-text-muted">
-                    Default
-                  </span>
-                )}
-              </h3>
-              <div className="flex gap-2">
-                {!state.selectedRole?.is_default &&
-                  !state.editState.isCreating && (
-                    <button
-                      onClick={() => handleDelete(state.selectedRole!.id)}
-                      className="p-1.5 text-rm-text-muted hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                <button
-                  onClick={handleSave}
-                  disabled={
-                    state.editState.saving || !state.editState.name.trim()
-                  }
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {state.editState.saving && (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  )}
-                  Save
-                </button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
-              {state.error && (
-                <div className="bg-destructive/10 text-destructive text-xs p-3 rounded">
-                  {state.error}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="role-name"
-                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
-                  >
-                    Role Name
-                  </label>
-                  <input
-                    id="role-name"
-                    value={state.editState.name}
-                    onChange={(e) =>
-                      dispatch({
-                        type: "SET_EDIT_STATE",
-                        payload: { name: e.target.value },
-                      })
-                    }
-                    disabled={state.selectedRole?.is_default}
-                    className="w-full rounded bg-rm-bg-surface border border-rm-border px-3 py-2 text-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="role-color"
-                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
-                  >
-                    Role Color
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      id="role-color"
-                      type="color"
-                      value={state.editState.color || "#94a3b8"}
-                      onChange={(e) =>
-                        dispatch({
-                          type: "SET_EDIT_STATE",
-                          payload: { color: e.target.value },
-                        })
-                      }
-                      disabled={state.selectedRole?.is_default}
-                      className="h-8 w-8 rounded cursor-pointer disabled:opacity-50 border-0 p-0 bg-transparent"
-                    />
-                    <input
-                      value={state.editState.color}
-                      aria-label="Role color hex value"
-                      onChange={(e) =>
-                        dispatch({
-                          type: "SET_EDIT_STATE",
-                          payload: { color: e.target.value },
-                        })
-                      }
-                      placeholder="#000000"
-                      disabled={state.selectedRole?.is_default}
-                      className="w-32 rounded bg-rm-bg-surface border border-rm-border px-3 py-1.5 text-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50 font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-px bg-rm-border my-6" />
-
-              <div>
-                <h4 className="text-sm font-bold text-rm-text mb-4">
-                  Permissions
-                </h4>
-                <div className="space-y-2">
-                  {PERMISSION_LIST.map((perm) => {
-                    const hasPerm =
-                      (state.editState.permissions & perm.mask) === perm.mask;
-                    // Administrator role grants everything, visually lock them if Admin is checked
-                    const isAdmin =
-                      (state.editState.permissions &
-                        PERMISSIONS.ADMINISTRATOR) ===
-                      PERMISSIONS.ADMINISTRATOR;
-                    const isDisabled =
-                      isAdmin && perm.mask !== PERMISSIONS.ADMINISTRATOR;
-
-                    return (
-                      <label
-                        htmlFor={`perm-${perm.mask}`}
-                        key={perm.mask}
-                        className={cn(
-                          "flex items-center justify-between p-3 rounded-lg border",
-                          hasPerm
-                            ? "bg-primary/5 border-primary/20"
-                            : "bg-rm-bg-surface border-rm-border cursor-pointer hover:border-rm-text/20",
-                          isDisabled && "opacity-50 cursor-not-allowed",
-                        )}
-                        aria-label={perm.name}
-                      >
-                        <div>
-                          <div
-                            className={cn(
-                              "font-medium text-sm",
-                              hasPerm ? "text-primary" : "text-rm-text",
-                            )}
-                          >
-                            {perm.name}
-                          </div>
-                          <div className="text-xs text-rm-text-secondary mt-0.5">
-                            {perm.desc}
-                          </div>
-                        </div>
-                        <input
-                          id={`perm-${perm.mask}`}
-                          type="checkbox"
-                          checked={hasPerm || isDisabled}
-                          onChange={() =>
-                            !isDisabled && togglePermission(perm.mask)
-                          }
-                          disabled={isDisabled}
-                          aria-label={perm.name}
-                          className="w-4 h-4 rounded border-rm-border text-primary focus:ring-primary outline-none accent-primary"
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-rm-text-muted">
-            <Settings2 className="h-12 w-12 mb-4 opacity-20" />
-            <p className="text-sm font-medium">Select a role to edit</p>
-          </div>
-        )}
-      </div>
+      {editor ?? (
+        <p className="flex-1 py-12 text-center text-ui-sm text-ink-2">
+          Choose a role to edit it.
+        </p>
+      )}
     </div>
   );
 }

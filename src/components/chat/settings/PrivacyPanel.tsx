@@ -1,0 +1,460 @@
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import { Button, Spinner } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { LedLabel, type LedState } from "@/components/ui/led";
+import { Tabs, tabId } from "@/components/ui/tabs";
+import { apiDelete, apiGet, apiPatch } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
+import {
+  MEDIA_CONTENT_FILTER_OPTIONS,
+  type MediaContentFilter,
+} from "@/lib/media-content-filter";
+import { useChatStore } from "@/stores/chat-store";
+import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
+import { useUser } from "@kova/react";
+import { useCallback, useEffect, useId, useState } from "react";
+import {
+  ConfirmStrip,
+  RowError,
+  SegmentedField,
+  SettingsCard,
+  SettingsRow,
+  useConfirm,
+} from "./primitives";
+import { isSessionEnded, RecoverButton } from "./session-ended";
+
+/* ------------------------------------------------------------------ */
+/* Media filter                                                         */
+/* ------------------------------------------------------------------ */
+
+function MediaFilterRow() {
+  const { user } = useUser();
+  const chatUser = useChatStore((state) => state.user);
+  const dispatch = useChatStore((state) => state.dispatch);
+  const loadCurrentUser = useChatStore(
+    (state) => state.actions.loadCurrentUser,
+  );
+  const settingsUserId = chatUser?.id ?? user?.id ?? null;
+  const mediaSafetySettings = useMediaSafetySettingsStore((state) =>
+    state.getSettings(settingsUserId),
+  );
+  const updateMediaSafetySettings = useMediaSafetySettingsStore(
+    (state) => state.updateSettings,
+  );
+  const hydrateMediaSafetySettings = useMediaSafetySettingsStore(
+    (state) => state.hydrateSettings,
+  );
+  const setCurrentUser = useMediaSafetySettingsStore(
+    (state) => state.setCurrentUser,
+  );
+  const [savingFilter, setSavingFilter] = useState<MediaContentFilter | null>(
+    null,
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSessionEnded, setSaveSessionEnded] = useState(false);
+
+  useEffect(() => {
+    setCurrentUser(settingsUserId);
+  }, [settingsUserId, setCurrentUser]);
+
+  useEffect(() => {
+    if (!chatUser?.id) return;
+    if (!chatUser.media_content_filter) return;
+    hydrateMediaSafetySettings(
+      { contentFilter: chatUser.media_content_filter },
+      chatUser.id,
+    );
+  }, [
+    chatUser?.id,
+    chatUser?.media_content_filter,
+    hydrateMediaSafetySettings,
+  ]);
+
+  const handleFilterChange = async (nextFilter: MediaContentFilter) => {
+    if (!settingsUserId) return;
+    if (mediaSafetySettings.contentFilter === nextFilter) return;
+
+    const previousFilter = mediaSafetySettings.contentFilter;
+    setSaveError(null);
+    setSaveSessionEnded(false);
+    setSavingFilter(nextFilter);
+    updateMediaSafetySettings({ contentFilter: nextFilter }, settingsUserId);
+
+    if (chatUser?.id) {
+      dispatch({
+        type: "UPDATE_MEMBER_PROFILE",
+        userId: chatUser.id,
+        media_content_filter: nextFilter,
+      });
+    }
+
+    try {
+      await apiPatch("/api/update-profile", {
+        mediaContentFilter: nextFilter,
+      });
+    } catch (error) {
+      updateMediaSafetySettings(
+        { contentFilter: previousFilter },
+        settingsUserId,
+      );
+      await loadCurrentUser();
+      setSaveError(describeApiError(error, "save your media filter"));
+      setSaveSessionEnded(isSessionEnded(error));
+    } finally {
+      setSavingFilter(null);
+    }
+  };
+
+  return (
+    <SettingsRow
+      id="media-filter"
+      layout="block"
+      footer={
+        saveError ? (
+          <>
+            <RowError>{saveError}</RowError>
+            {saveSessionEnded ? (
+              <div className="mt-2">
+                <RecoverButton sessionEnded onRetry={() => {}} />
+              </div>
+            ) : null}
+          </>
+        ) : null
+      }
+    >
+      {(ids) => (
+        <SegmentedField
+          ids={ids}
+          value={mediaSafetySettings.contentFilter}
+          options={MEDIA_CONTENT_FILTER_OPTIONS.map((option) => ({
+            value: option.value,
+            label: option.label,
+            badge: option.badge,
+            desc: option.description,
+          }))}
+          busyValue={savingFilter}
+          onChange={(value) => void handleFilterChange(value)}
+        />
+      )}
+    </SettingsRow>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared messages                                                      */
+/* ------------------------------------------------------------------ */
+
+interface ShareListItem {
+  id: string;
+  token: string;
+  content: string;
+  author: {
+    username: string;
+    display_name: string | null;
+  };
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  status: "active" | "revoked" | "deleted" | "expired";
+  view_count: number;
+}
+
+const dateFormat = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+function formatDate(value: string | null): string {
+  if (!value) return "Never";
+  return dateFormat.format(new Date(value));
+}
+
+function effectiveStatus(share: ShareListItem): ShareListItem["status"] {
+  if (share.status !== "active") return share.status;
+  if (share.revoked_at) return "revoked";
+  if (share.expires_at && new Date(share.expires_at).getTime() <= Date.now())
+    return "expired";
+  return "active";
+}
+
+const STATUS_LABEL: Record<ShareListItem["status"], string> = {
+  active: "Live",
+  revoked: "Revoked",
+  deleted: "Deleted",
+  expired: "Expired",
+};
+
+/** The LED a link's status lights: only a live link is lit. */
+const STATUS_LED: Record<ShareListItem["status"], LedState> = {
+  active: "live",
+  revoked: "off",
+  deleted: "off",
+  expired: "idle",
+};
+
+const viewsFormat = new Intl.PluralRules(undefined);
+function formatViews(count: number) {
+  return viewsFormat.select(count) === "one"
+    ? `${count} view`
+    : `${count} views`;
+}
+
+function ShareItem({
+  share,
+  onRevoke,
+}: {
+  share: ShareListItem;
+  onRevoke: (id: string) => Promise<void>;
+}) {
+  const {
+    armed: confirmArmed,
+    arm: armConfirm,
+    cancel: cancelConfirm,
+    done: finishConfirm,
+    triggerRef: confirmTriggerRef,
+  } = useConfirm();
+  const [revoking, setRevoking] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+  const url = `${window.location.origin}/share/${share.token}`;
+  const status = effectiveStatus(share);
+  const active = status === "active";
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <li className="py-3 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] leading-5 font-medium text-ink-1">
+            <InlineEmojiText
+              text={share.author.display_name ?? share.author.username}
+            />
+          </p>
+          <p className="mt-0.5 line-clamp-2 text-ui-sm text-ink-2">
+            <InlineEmojiText text={share.content || "(Attachment only)"} />
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-ui-xs text-ink-2">
+            <LedLabel state={STATUS_LED[status]}>
+              {STATUS_LABEL[status]}
+            </LedLabel>
+            <span>Shared {formatDate(share.created_at)}</span>
+            <span>Expires {formatDate(share.expires_at)}</span>
+            <span>{formatViews(share.view_count)}</span>
+          </p>
+        </div>
+        {active && !confirmArmed ? (
+          <div className="flex shrink-0 gap-1.5">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void copy()}
+            >
+              <Icon name={copied ? "check" : "copy"} size="sm" />
+              {copied ? "Copied" : "Copy link"}
+            </Button>
+            <Button asChild variant="secondary" size="sm">
+              <a href={url} target="_blank" rel="noreferrer">
+                <Icon name="externalLink" size="sm" />
+                Open
+              </a>
+            </Button>
+            <Button
+              ref={confirmTriggerRef}
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={armConfirm}
+            >
+              Revoke
+            </Button>
+          </div>
+        ) : null}
+      </div>
+      {confirmArmed ? (
+        <ConfirmStrip
+          consequence="Anyone with this link will see that it's gone. You can't undo this."
+          confirmLabel="Revoke link"
+          irreversible
+          busy={revoking}
+          error={revokeError}
+          onCancel={() => {
+            setRevokeError(null);
+            cancelConfirm();
+          }}
+          onConfirm={() => {
+            setRevoking(true);
+            setRevokeError(null);
+            onRevoke(share.id)
+              .then(() => finishConfirm())
+              .catch((err: unknown) =>
+                setRevokeError(describeApiError(err, "revoke this link")),
+              )
+              .finally(() => setRevoking(false));
+          }}
+        />
+      ) : null}
+    </li>
+  );
+}
+
+function SharedMessagesRow() {
+  const [shares, setShares] = useState<ShareListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
+  const [filter, setFilter] = useState<"current" | "all">("current");
+  const tabsId = useId();
+  const panelId = useId();
+
+  const loadShares = useCallback(() => {
+    let cancelled = false;
+    apiGet<{ shares: ShareListItem[] }>("/api/shares")
+      .then((data) => {
+        if (!cancelled) setShares(data.shares);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setShares([]);
+          setError(describeApiError(err, "load your shared messages"));
+          setSessionEnded(isSessionEnded(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => loadShares(), [loadShares]);
+
+  const revoke = async (shareId: string) => {
+    await apiDelete(`/api/shares/${shareId}`);
+    setShares((prev) =>
+      prev.map((share) =>
+        share.id === shareId
+          ? {
+              ...share,
+              status: "revoked",
+              revoked_at: new Date().toISOString(),
+            }
+          : share,
+      ),
+    );
+  };
+
+  const currentShares = shares.filter(
+    (share) => effectiveStatus(share) === "active",
+  );
+  const visibleShares = filter === "current" ? currentShares : shares;
+
+  return (
+    <SettingsRow id="shared-messages" layout="block" hideLabel>
+      {(ids) => (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Tabs
+              label="Shared links to show"
+              idBase={tabsId}
+              panelId={panelId}
+              className="h-9"
+              value={filter}
+              onValueChange={setFilter}
+              items={[
+                {
+                  value: "current",
+                  label: "Live",
+                  adornment: <TabCount>{currentShares.length}</TabCount>,
+                },
+                {
+                  value: "all",
+                  label: "All",
+                  adornment: <TabCount>{shares.length}</TabCount>,
+                },
+              ]}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setLoading(true);
+                setError(null);
+                loadShares();
+              }}
+              loading={loading}
+            >
+              <Icon name="refresh" size="sm" />
+              Refresh
+            </Button>
+          </div>
+
+          <div
+            role="tabpanel"
+            id={panelId}
+            aria-labelledby={tabId(tabsId, filter)}
+            aria-describedby={ids.descId}
+          >
+            {loading ? (
+              <p
+                role="status"
+                className="flex items-center gap-2 text-ui-sm text-ink-2"
+              >
+                <Spinner className="size-4" />
+                Loading shared messages…
+              </p>
+            ) : error ? (
+              <div className="flex flex-col items-start gap-2">
+                <RowError className="mt-0 self-stretch">{error}</RowError>
+                {sessionEnded ? (
+                  <RecoverButton sessionEnded onRetry={() => {}} />
+                ) : null}
+              </div>
+            ) : visibleShares.length === 0 ? (
+              <p className="text-ui-sm text-ink-2">
+                {filter === "current"
+                  ? "No live links. Share a message from its menu to make one."
+                  : "You haven't shared any messages yet."}
+              </p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {visibleShares.map((share) => (
+                  <ShareItem key={share.id} share={share} onRevoke={revoke} />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </SettingsRow>
+  );
+}
+
+function TabCount({ children }: { children: number }) {
+  return (
+    <span className="min-w-5 rounded-[2px] bg-tint-2 px-1.5 text-center text-num-xs leading-5 font-semibold text-ink-2">
+      {children}
+    </span>
+  );
+}
+
+export default function PrivacyPanel() {
+  return (
+    <>
+      <SettingsCard id="media-filter">
+        <MediaFilterRow />
+      </SettingsCard>
+      <SettingsCard id="shared-messages">
+        <SharedMessagesRow />
+      </SettingsCard>
+    </>
+  );
+}

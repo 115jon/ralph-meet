@@ -90,8 +90,9 @@ export function useAppUpdater(): AppUpdaterState {
         setStatus("up-to-date");
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      setError(
+        "Unable to check for updates. Check your connection and try again.",
+      );
       setStatus("error");
       console.error("[useAppUpdater] check failed:", err);
     } finally {
@@ -132,8 +133,7 @@ export function useAppUpdater(): AppUpdaterState {
       setStatus("idle");
       setDownloadProgress(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      setError("Unable to install the update. Try again in a moment.");
       setStatus("error");
       setDownloadProgress(null);
       console.error("[useAppUpdater] install failed:", err);

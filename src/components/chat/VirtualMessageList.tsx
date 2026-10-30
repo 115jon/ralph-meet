@@ -27,13 +27,19 @@ import {
 import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { clog } from "@/lib/console-logger";
 import MessageItem from "./MessageItem";
-import { NewMessageSeparator } from "./NewMessageSeparator";
-import { setMessageListScrolling } from "./message-list-scroll";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAnimateEnter } from "@/components/ui/tree";
 import {
-  DEFAULT_MESSAGE_ITEM_SIZE,
-  getMessageRowMinHeight,
-  setCachedMessageRowHeight,
-} from "./message-row-height";
+  DayDivider,
+  DIVIDER_ROW,
+  DividerLabel,
+  NewMessageSeparator,
+} from "./NewMessageSeparator";
+import { setMessageListScrolling } from "./message-list-scroll";
+import { estimateListItemSize } from "./message-row-height";
+import { useMessageTimeFormat } from "./message-time";
+import { buildMessageRows, type MessageRow } from "./message-rows";
+import { isStickyDayVisible } from "./sticky-day";
 
 const log = clog("VirtualMessageList");
 
@@ -42,6 +48,11 @@ type ScrollBehavior = "auto" | "smooth";
 const BOTTOM_LOCK_THRESHOLD_PX = 12;
 const VIRTUALIZER_BUFFER_PX = 800;
 const HISTORY_FETCH_PX = 800;
+/** A tail append keeps its list-enter class this long, then never again. */
+const ENTERING_MS = 600;
+/** Jump highlight: hold the tint, then let it fade (the row transitions it). */
+const HIGHLIGHT_HOLD_MS = 1200;
+const HIGHLIGHT_FADE_MS = 300;
 
 // ── Public ref API ─────────────────────────────────────────────────────────
 
@@ -96,64 +107,33 @@ function buildIndexMap(messages: Message[]): Map<string, number> {
   return map;
 }
 
-interface MessageRow {
-  message: Message;
-  showHeader: boolean;
-  showSeparator: boolean;
-}
-
-function buildMessageRows(
-  messages: Message[],
-  unreadSeparatorId?: string | null,
-): MessageRow[] {
-  return messages.map((message, index) => {
-    let showHeader = true;
-    if (index > 0) {
-      const prev = messages[index - 1];
-      if (prev) {
-        const hasSameAuthor = prev.author_id === message.author_id;
-        const hasNoReply = !message.reply_to_id;
-        if (hasSameAuthor && hasNoReply) {
-          const prevTime = new Date(prev.created_at).getTime();
-          const curTime = new Date(message.created_at).getTime();
-          showHeader = curTime - prevTime > 5 * 60 * 1000;
-        }
-      }
-    }
-
-    const showSeparator = unreadSeparatorId === message.id;
-
-    return {
-      message,
-      showHeader: showHeader || showSeparator,
-      showSeparator,
-    };
-  });
-}
-
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 function MessageSkeleton({ compact = false }: { compact?: boolean }) {
+  // Static placeholders on the row metrics (avatar 40, 20px author line,
+  // 22px body lines): nothing pulses while history loads.
   return (
-    <div className={cn("flex gap-4 px-4", compact ? "py-0.5" : "pt-4 pb-1")}>
-      {!compact && (
-        <div className="mt-0.5 h-10 w-10 shrink-0 animate-pulse rounded-full bg-rm-bg-hover" />
+    <div
+      className={cn("flex gap-3 pr-6 pl-4", compact ? "py-0.5" : "mt-4 py-0.5")}
+    >
+      {compact ? (
+        <div className="w-10 shrink-0" />
+      ) : (
+        <Skeleton className="size-10 shrink-0 rounded-avatar" />
       )}
-      {compact && <div className="w-10 shrink-0" />}
-      <div className="flex flex-1 flex-col gap-2 justify-center">
+      <div className="flex flex-1 flex-col justify-center gap-2">
         {!compact && (
-          <div className="flex items-center gap-3">
-            <div className="h-3.5 w-24 animate-pulse rounded bg-rm-bg-hover" />
-            <div className="h-3 w-16 animate-pulse rounded bg-rm-bg-hover opacity-50" />
+          <div className="flex h-5 items-center gap-2">
+            <Skeleton className="h-3 w-24 rounded-xs" />
+            <Skeleton className="h-2.5 w-10 rounded-xs" />
           </div>
         )}
-        <div
-          className="h-3.5 animate-pulse rounded bg-rm-bg-hover"
-          style={{ width: `${compact ? 45 : 65}%` }}
-        />
-        {!compact && (
-          <div className="h-3.5 w-2/5 animate-pulse rounded bg-rm-bg-hover" />
-        )}
+        <div className="flex h-5.5 items-center">
+          <Skeleton
+            className="h-3 rounded-xs"
+            style={{ width: `${compact ? 45 : 65}%` }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -199,6 +179,10 @@ interface VirtualMessageRowProps {
   message: Message;
   showHeader: boolean;
   showSeparator: boolean;
+  /** Day divider label above this row ("Today", "Thursday, October 22"). */
+  dayLabel?: string;
+  /** A fresh tail append: enters with list-enter once. */
+  entering?: boolean;
   currentUserId?: string;
   canPin: boolean;
   canDeleteMessages: boolean;
@@ -218,6 +202,8 @@ const VirtualMessageRow = memo(function VirtualMessageRow({
   message,
   showHeader,
   showSeparator,
+  dayLabel,
+  entering = false,
   currentUserId,
   canPin,
   canDeleteMessages,
@@ -232,8 +218,6 @@ const VirtualMessageRow = memo(function VirtualMessageRow({
   onMessageVisible,
   onHeightChange,
 }: VirtualMessageRowProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const minHeight = getMessageRowMinHeight(message, showHeader, showSeparator);
   const handleMediaPlay = useCallback(
     () => onMediaPlay(message.id),
     [message.id, onMediaPlay],
@@ -247,14 +231,14 @@ const VirtualMessageRow = memo(function VirtualMessageRow({
     [message.id, onMessageVisible],
   );
 
-  useLayoutEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    setCachedMessageRowHeight(message.id, el.offsetHeight);
-  }, [message.id]);
-
+  // No min-height: the estimate only seeds the virtualizer's itemSize, so a
+  // row is exactly as tall as what it renders (no gap under short embeds).
   return (
-    <div ref={rootRef} style={{ minHeight, contain: "layout" }}>
+    <div
+      style={{ contain: "layout" }}
+      className={entering ? "rm-list-enter" : undefined}
+    >
+      {dayLabel && <DayDivider label={dayLabel} iso={message.created_at} />}
       {showSeparator && <NewMessageSeparator />}
       <MessageItem
         id={`message-${message.id}`}
@@ -319,10 +303,23 @@ const VirtualMessageList = memo(
         () => (Array.isArray(messages) ? messages : []),
         [messages],
       );
+      const showLeadingDivider = !hasMore;
       const messageRows = useMemo(
-        () => buildMessageRows(safeMessages, unreadSeparatorId),
-        [safeMessages, unreadSeparatorId],
+        () =>
+          buildMessageRows(safeMessages, unreadSeparatorId, showLeadingDivider),
+        [safeMessages, unreadSeparatorId, showLeadingDivider],
       );
+      const { dayLabel: formatDayLabel } = useMessageTimeFormat();
+      // List-enter for tail appends only, never on first paint or history.
+      const animateEnter = useAnimateEnter();
+      const [stickyDay, setStickyDay] = useState<{
+        key: string;
+        iso: string;
+        visible: boolean;
+      } | null>(null);
+      // Seed for rows virtua hasn't measured; computed once per mount so the
+      // virtualizer's estimate doesn't change under it.
+      const [itemSize] = useState(() => estimateListItemSize(messageRows));
       const [startMargin, setStartMargin] = useState(0);
       const headerRef = useRef<HTMLDivElement>(null);
       const showLeadingHeader = !hasMore && !loading;
@@ -429,7 +426,7 @@ const VirtualMessageList = memo(
       // Detect prepends at render time by comparing first AND last message IDs.
       // A true prepend: first message changed, last message stayed the same
       // (items were added at the start, end is unchanged).
-      // A full replacement (e.g. Jump to Present): both first AND last change.
+      // A full replacement (e.g. Jump to present): both first AND last change.
       // We must NOT set shift=true for full replacements.
       const prevFirstMsgIdRef = useRef<string | null>(
         safeMessages.length > 0 ? safeMessages[0].id : null,
@@ -466,6 +463,18 @@ const VirtualMessageList = memo(
         didAppendToEnd &&
         lastMessage?.author_id !== undefined &&
         lastMessage.author_id === currentUserId;
+
+      // The tail message that just arrived (not a prepend, not the echo
+      // replacing an optimistic row): it gets list-enter for one mount.
+      const [enteringId, setEnteringId] = useState<string | null>(null);
+      if (didAppendToEnd && lastMsgId !== null && lastMsgId !== enteringId) {
+        setEnteringId(lastMsgId);
+      }
+      useEffect(() => {
+        if (!enteringId) return;
+        const timer = setTimeout(() => setEnteringId(null), ENTERING_MS);
+        return () => clearTimeout(timer);
+      }, [enteringId]);
 
       useLayoutEffect(() => {
         prevFirstMsgIdRef.current = firstMsgId;
@@ -531,8 +540,17 @@ const VirtualMessageList = memo(
         const tryHighlight = () => {
           const el = document.getElementById(`message-${messageId}`);
           if (el) {
-            el.classList.add("bg-rm-accent/10");
-            setTimeout(() => el.classList.remove("bg-rm-accent/10"), 2000);
+            // The row owns the look: `data-highlight=on` tints at once,
+            // `off` lets the tint fade, then the attribute goes.
+            el.dataset.highlight = "on";
+            setTimeout(() => {
+              el.dataset.highlight = "off";
+              setTimeout(() => {
+                if (el.dataset.highlight === "off") {
+                  delete el.dataset.highlight;
+                }
+              }, HIGHLIGHT_FADE_MS);
+            }, HIGHLIGHT_HOLD_MS);
           } else if (attempts < 15) {
             attempts++;
             setTimeout(tryHighlight, 100);
@@ -845,6 +863,46 @@ const VirtualMessageList = memo(
       }, []);
 
       // ── Scroll event handler (from official Chat story) ──────────────────
+      // ── Sticky day label ─────────────────────────────────────────────────
+      // The day of the topmost row, pinned under the header, hidden while
+      // that day's own divider is still on screen. State changes only when
+      // the day (or visibility) changes, not per scroll frame.
+      const rowsRef = useRef(messageRows);
+      useLayoutEffect(() => {
+        rowsRef.current = messageRows;
+      }, [messageRows]);
+      const startMarginRef = useRef(startMargin);
+      useLayoutEffect(() => {
+        startMarginRef.current = startMargin;
+      }, [startMargin]);
+      const updateStickyDay = useCallback((offset: number) => {
+        const handle = virtualizerRef.current;
+        if (!handle || typeof handle.findItemIndex !== "function") return;
+        const rows = rowsRef.current;
+        if (rows.length === 0) return;
+        const index = Math.min(
+          rows.length - 1,
+          Math.max(0, handle.findItemIndex(offset)),
+        );
+        const row = rows[index];
+        if (!row?.dayKey) return;
+        const visible = isStickyDayVisible({
+          scrollOffset: offset,
+          startMargin: startMarginRef.current,
+          rowTop:
+            typeof handle.getItemOffset === "function"
+              ? handle.getItemOffset(index)
+              : 0,
+          rowHasDivider: !!row.showDayDivider,
+        });
+        const iso = row.message.created_at;
+        setStickyDay((current) =>
+          current?.key === row.dayKey && current.visible === visible
+            ? current
+            : { key: row.dayKey as string, iso, visible },
+        );
+      }, []);
+
       const handleScroll = useCallback(
         (offset: number) => {
           if (!virtualizerRef.current) return;
@@ -854,6 +912,8 @@ const VirtualMessageList = memo(
           if (!isUserScrollingRef.current) {
             setScrollingVisualState(true);
           }
+
+          updateStickyDay(offset);
 
           const actualDistanceFromBottom = scrollContainerRef.current
             ? scrollContainerRef.current.scrollHeight -
@@ -914,6 +974,7 @@ const VirtualMessageList = memo(
           onScrollRangeChange,
           restoreInProgress,
           setScrollingVisualState,
+          updateStickyDay,
         ],
       );
 
@@ -952,6 +1013,12 @@ const VirtualMessageList = memo(
             message={row.message}
             showHeader={row.showHeader}
             showSeparator={row.showSeparator}
+            dayLabel={
+              row.showDayDivider
+                ? formatDayLabel(row.message.created_at)
+                : undefined
+            }
+            entering={animateEnter && row.message.id === enteringId}
             currentUserId={currentUserId}
             canPin={canPin}
             canDeleteMessages={canDeleteMessages}
@@ -968,9 +1035,12 @@ const VirtualMessageList = memo(
           />
         ),
         [
+          animateEnter,
           canDeleteMessages,
           canPin,
           currentUserId,
+          enteringId,
+          formatDayLabel,
           handleHeightChange,
           handleMediaPlay,
           handleMediaStop,
@@ -999,46 +1069,66 @@ const VirtualMessageList = memo(
         );
       }
 
+      const stickyLabel = stickyDay ? formatDayLabel(stickyDay.iso) : null;
+
       return (
-        <div
-          key={mountKey}
-          ref={scrollContainerRef}
-          className={cn(
-            "flex-1 custom-scrollbar",
-            "[&.is-scrolling>*]:pointer-events-none",
-          )}
-          style={{
-            overflowY: "auto",
-            height: "100%",
-            // Opt out of browser's scroll anchoring — it conflicts with
-            // virtua's own scroll anchoring via the shift prop.
-            overflowAnchor: "none",
-          }}
-        >
-          {showLeadingHeader && (
-            <div ref={headerRef}>
-              <ListHeader
-                hasMore={hasMore}
-                loading={loading}
-                hasMessages
-                welcomeContent={welcomeContent}
-              />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div
+            key={mountKey}
+            ref={scrollContainerRef}
+            data-animate-enter={animateEnter || undefined}
+            className={cn(
+              "flex-1 overscroll-contain custom-scrollbar pb-2",
+              "[&.is-scrolling>*]:pointer-events-none",
+            )}
+            style={{
+              overflowY: "auto",
+              height: "100%",
+              // Opt out of browser's scroll anchoring — it conflicts with
+              // virtua's own scroll anchoring via the shift prop.
+              overflowAnchor: "none",
+            }}
+          >
+            {showLeadingHeader && (
+              <div ref={headerRef}>
+                <ListHeader
+                  hasMore={hasMore}
+                  loading={loading}
+                  hasMessages
+                  welcomeContent={welcomeContent}
+                />
+              </div>
+            )}
+            <Virtualizer
+              ref={virtualizerRef}
+              data={messageRows}
+              startMargin={startMargin}
+              scrollRef={scrollContainerRef}
+              shift={wasPrepend}
+              onScroll={handleScroll}
+              onScrollEnd={handleScrollEnd}
+              bufferSize={VIRTUALIZER_BUFFER_PX}
+              itemSize={itemSize}
+              keepMounted={keepMounted}
+            >
+              {renderVirtualItem}
+            </Virtualizer>
+          </div>
+          {stickyLabel && (
+            <div
+              aria-hidden
+              data-visible={stickyDay?.visible ? "true" : "false"}
+              className={cn(
+                DIVIDER_ROW,
+                "pointer-events-none absolute inset-x-0 top-0 z-10 h-7 border-b border-line bg-ply-0",
+                // Opacity-only crossfade with the inline divider; never layout.
+                "transition-opacity duration-100 ease-out motion-reduce:transition-none",
+                stickyDay?.visible ? "opacity-100" : "opacity-0",
+              )}
+            >
+              <DividerLabel>{stickyLabel}</DividerLabel>
             </div>
           )}
-          <Virtualizer
-            ref={virtualizerRef}
-            data={messageRows}
-            startMargin={startMargin}
-            scrollRef={scrollContainerRef}
-            shift={wasPrepend}
-            onScroll={handleScroll}
-            onScrollEnd={handleScrollEnd}
-            bufferSize={VIRTUALIZER_BUFFER_PX}
-            itemSize={DEFAULT_MESSAGE_ITEM_SIZE}
-            keepMounted={keepMounted}
-          >
-            {renderVirtualItem}
-          </Virtualizer>
         </div>
       );
     },

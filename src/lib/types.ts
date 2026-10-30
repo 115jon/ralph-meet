@@ -639,6 +639,17 @@ export interface EmbedInfo {
   url: string;
   type: "video" | "rich" | "link" | "image";
   unavailable?: boolean;
+  /**
+   * The link points straight at an image, GIF or video file; render the
+   * media bare (no card). Set by the server's direct-media detection.
+   */
+  direct?: boolean;
+  /**
+   * How a link card shows its image: "large" under the text (the page asked
+   * for summary_large_image or the image is wide) or a small "thumbnail"
+   * beside it. Absent on embeds stored before this existed: treat as large.
+   */
+  imageLayout?: "large" | "thumbnail";
   rawTitle?: string;
   rawDescription?: string;
   author?: EmbedAuthor;
@@ -980,10 +991,31 @@ export interface SFUEventMap {
 
 // ── Connection Stats Types ──────────────────────────────────────────────────
 
+/**
+ * One point of the uplink time-series behind the voice stats charts, taken
+ * once per stats tick. Rates are per interval, not cumulative.
+ */
+export interface ConnectionSample {
+  /** Epoch ms of the stats tick. */
+  t: number;
+  /** Outbound transport bitrate, kbps. */
+  bitrate: number;
+  /** Outbound audio loss the SFU reported for the last interval, percent. */
+  loss: number;
+  /** Outbound audio jitter the SFU reported, ms. */
+  jitter: number;
+  /** Media-path round trip (RTCP), ms; 0 until the first receiver report. */
+  rtt: number;
+}
+
 export interface VoiceConnectionStats {
   ping: number;
   avgPing: number;
   pingHistory: { time: string; ping: number }[];
+  /** Outbound audio jitter from the SFU's receiver report, ms. */
+  jitter: number;
+  /** The last ~2 minutes of samples, oldest first (bounded ring). */
+  samples: ConnectionSample[];
   localAddress: string;
   remoteAddress: string;
   packetsSent: number;

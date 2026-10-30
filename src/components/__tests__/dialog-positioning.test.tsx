@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +15,10 @@ beforeAll(() => {
   HTMLElement.prototype.setPointerCapture = vi.fn();
   HTMLElement.prototype.releasePointerCapture = vi.fn();
 });
+
+vi.mock("@/components/chat/settings/CameraCard", () => ({
+  default: () => <div data-testid="camera-card" />,
+}));
 
 vi.mock("@/lib/useMediaDevices", () => ({
   useMediaDevices: () => ({
@@ -45,7 +49,7 @@ describe("dialog positioning regression guard", () => {
     cleanup();
   });
 
-  it("uses the shadcn dialog primitive for screen share positioning", () => {
+  it("uses the shared responsive dialog for web screen share", () => {
     render(
       <ScreenShareModal
         isOpen
@@ -57,10 +61,17 @@ describe("dialog positioning regression guard", () => {
     const markup = document.body.innerHTML;
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-90");
+    // No hand-rolled scrim: the dialog primitive owns overlay and z (13.1).
+    expect(markup).not.toContain("fixed inset-0 z-60");
+    expect(
+      document.querySelector('[data-slot="dialog-content"]'),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("dialog", { name: "Share your screen" }),
+    ).toBeVisible();
   });
 
-  it("uses the shadcn dialog primitive for desktop screen picker positioning", () => {
+  it("uses the shared responsive dialog for the desktop picker", () => {
     render(
       <DesktopScreenPickerModal
         isOpen
@@ -72,10 +83,13 @@ describe("dialog positioning regression guard", () => {
     const markup = document.body.innerHTML;
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-90");
+    expect(markup).not.toContain("fixed inset-0 z-60");
+    expect(
+      document.querySelector('[data-slot="dialog-content"]'),
+    ).not.toBeNull();
   });
 
-  it("keeps the desktop picker open when the quality select opens", async () => {
+  it("keeps the desktop picker open while quality chips are used", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(
@@ -87,37 +101,32 @@ describe("dialog positioning regression guard", () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole("combobox", { name: "Select stream quality" }),
-    );
+    // The quality control is two rows of chips in the dialog itself, so
+    // choosing a preset is an inside press.
+    await user.click(screen.getByRole("radio", { name: "1080p" }));
+    expect(screen.getByRole("radio", { name: "1080p" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "60 fps" })).toBeChecked();
 
     expect(onClose).not.toHaveBeenCalled();
     expect(
-      document.querySelector('[data-slot="dialog-surface"][data-state="open"]'),
-    ).not.toBeNull();
-    const listbox = screen.getByRole("listbox");
-    expect(listbox).toHaveClass("z-[110]");
-    expect(screen.getByRole("option", { name: /1080p/i })).toBeVisible();
-
-    const overlay = document.querySelector('[role="presentation"]');
-    expect(overlay).not.toBeNull();
-    fireEvent.pointerDown(overlay as Element);
-    expect(onClose).not.toHaveBeenCalled();
-    expect(
-      document.querySelector('[data-slot="dialog-surface"][data-state="open"]'),
+      document.querySelector('[data-slot="dialog-content"][data-state="open"]'),
     ).not.toBeNull();
   });
 
-  it("uses the shadcn dialog primitive for camera settings positioning", () => {
+  it("uses the shared responsive dialog for camera settings", () => {
     render(<CameraSettingsModal isOpen onClose={() => {}} />);
     const markup = document.body.innerHTML;
-    const scrollRegion = document.querySelector<HTMLElement>(
-      ".flex-1.space-y-5.overflow-y-auto",
+    const content = document.querySelector<HTMLElement>(
+      '[data-slot="dialog-content"]',
     );
+    const scrollRegion =
+      content?.querySelector<HTMLElement>(".overflow-y-auto");
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-50");
+    expect(content).not.toBeNull();
+    expect(screen.getByRole("dialog", { name: "Camera" })).toBeVisible();
     expect(scrollRegion).not.toBeNull();
     expect(scrollRegion).toHaveClass("min-h-0");
+    expect(screen.getByTestId("camera-card")).toBeVisible();
   });
 });

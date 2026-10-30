@@ -7,6 +7,8 @@ import {
 import { getFavoriteActionLabel } from "@/lib/gif-favorite-item";
 import { getGifItemIdentityKey, type GifPickerItem } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import {
   useGifFavoriteActions,
   useGifFavoritesStore,
@@ -49,26 +51,23 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
               }
             }}
             className={cn(
-              "absolute left-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-xl border border-black/10 bg-white/95 text-black shadow-lg transition-ui disabled:pointer-events-none disabled:opacity-70 dark:bg-black/70 dark:text-white",
-              isFavorite && "scale-105",
+              // Sits over the GIF itself: a media overlay chip (6.5).
+              "absolute left-2 top-2 z-30 flex size-8 items-center justify-center rounded-md bg-black/60 text-white disabled:pointer-events-none disabled:opacity-70",
+              PRESS,
+              HIT,
+              "absolute",
               className,
             )}
             aria-label={label}
-            title={label}
+            aria-pressed={isFavorite}
           >
-            <svg
-              viewBox="0 0 24 24"
-              className={cn(
-                "h-4.5 w-4.5 transition-ui",
-                isFavorite
-                  ? "scale-110 fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400"
-                  : "fill-transparent text-current hover:text-amber-500 dark:hover:text-yellow-400",
-              )}
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-            </svg>
+            <Icon
+              name="star"
+              state={isFavorite ? "active" : "idle"}
+              size="md"
+              // Over media the chip is black/60, where the theme's accent ink
+              // can fall under 3:1 (light themes); the fill carries the state.
+            />
           </button>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={8}>

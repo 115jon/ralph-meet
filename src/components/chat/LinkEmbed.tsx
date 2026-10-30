@@ -15,8 +15,18 @@ import {
   unwrapProxyMediaUrl,
 } from "@/lib/gif-favorite-item";
 import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
+import {
+  hydrationKey,
+  loadEmbedHydration,
+  peekEmbedHydration,
+} from "@/lib/embed-hydration-cache";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
+import { HIT } from "@/components/ui/interaction";
+import { Num } from "@/components/ui/num";
+import { useAppActive } from "@/hooks/useAppActive";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
+import { useEmojiDataReady } from "@/hooks/useEmojiDataReady";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import {
@@ -29,31 +39,24 @@ import {
   useRef,
   useState,
 } from "react";
+import { EmbedFrame } from "./EmbedFrame";
+import { EmbedDate, EmbedHeader, EmbedOpenButton } from "./embeds/EmbedChrome";
+import { MediaPlayButton } from "./embeds/MediaPlayButton";
+import {
+  DIRECT_MEDIA_MAX_HEIGHT,
+  DIRECT_MEDIA_MAX_WIDTH,
+  EMBED_PORTRAIT_MAX_HEIGHT,
+  type EmbedWidth,
+  SOCIAL_UNAVAILABLE_IMAGE,
+  getDirectMediaBox,
+  getSpotifyEmbedUrl,
+  getSpotifyPlayerHeight,
+  getXSingleImageBoxStyle,
+} from "./embed-layout";
 import EmojiToken from "./EmojiToken";
+import { RemoveEmbedsDialog } from "./RemoveEmbedsDialog";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import VideoAttachment from "./VideoAttachment";
-
-const EMBED_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-const EMBED_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  year: "numeric",
-  month: "numeric",
-  day: "numeric",
-});
-
-const X_HEADER_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-});
-
-const X_HEADER_DATE_WITH_YEAR_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
 
 // TikTok's player bootstrap reads its own cookies; without allow-same-origin
 // the iframe fallback logs SecurityError and never finishes initialising.
@@ -61,14 +64,6 @@ const EMBED_PLAYER_SANDBOX =
   "allow-presentation allow-same-origin allow-scripts";
 const EMBED_WIDGET_SANDBOX =
   "allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-scripts";
-
-const X_FOOTER_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
 
 const EMBED_INLINE_URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 const X_STANDALONE_TWEET_COLLAPSED_LINES = 5;
@@ -83,9 +78,13 @@ const useSafeLayoutEffect =
 interface BaseEmbedProps {
   embed: EmbedInfo;
   children: React.ReactNode;
-  width?: number;
+  /** One of the three embed widths (embed-layout.ts). */
+  width?: EmbedWidth;
   /** If true, skip rendering rawTitle/rawDescription/provider inside the wrapper */
   bare?: boolean;
+  /** Adds the open-external control to the header (players, not links). */
+  openHref?: string;
+  openLabel?: string;
 }
 
 function renderEmbedPlainText(
@@ -235,6 +234,7 @@ const EmbedInlineText = memo(
     linkClassName?: string;
     compactUrls?: boolean;
   }) => {
+    useEmojiDataReady(); // re-render once lazy emoji data lands (desktop)
     const customEmojiIds = extractCustomEmojiIds(text);
     const customEmojiMap = useCustomEmojiLookup(customEmojiIds);
 
@@ -249,150 +249,121 @@ const EmbedInlineText = memo(
   },
 );
 
-const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
-  const timestampText = formatEmbedTimestamp(embed.timestamp);
+/** Link classes for URLs inside embed text. */
+const EMBED_TEXT_LINK =
+  "text-accent-ink underline-offset-3 pointer-fine:hover:underline";
 
+/** The card title: a link in accent ink, 14/20 at 600. */
+function EmbedTitle({ embed }: { embed: EmbedInfo }) {
+  if (!embed.rawTitle) return null;
   return (
-    <div
-      className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-elevated/40 text-rm-text-primary"
-      style={{
-        borderLeftColor: embed.color || "#202225",
-        borderLeftWidth: 4,
-        width: width ? `${width}px` : "100%",
-        maxWidth: "100%",
-      }}
+    <a
+      href={embed.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-ui-row font-semibold text-balance break-words text-accent-ink underline-offset-3 pointer-fine:hover:underline"
     >
-      <div className="p-3 flex flex-col gap-1.5">
-        {!bare && embed.provider && (
-          <div className="text-[12px] font-semibold text-rm-text-muted/80">
-            <EmbedInlineText
-              text={embed.provider.name}
-              keyPrefix={`${embed.id}-provider`}
-            />
-          </div>
-        )}
+      <EmbedInlineText text={embed.rawTitle} keyPrefix={`${embed.id}-title`} />
+    </a>
+  );
+}
 
-        {!bare && embed.rawTitle && (
-          <a
-            href={embed.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[15px] font-bold text-[#00A8FC] hover:underline leading-snug break-words"
-          >
-            <EmbedInlineText
-              text={embed.rawTitle}
-              keyPrefix={`${embed.id}-title`}
-            />
-          </a>
-        )}
-
-        {!bare && embed.rawDescription && (
-          <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words mt-0.5 opacity-90 line-clamp-3">
-            <EmbedInlineText
-              text={embed.rawDescription}
-              keyPrefix={`${embed.id}-description`}
-            />
-          </div>
-        )}
-
-        {children}
-
-        {!bare && embed.footer && (
-          <div className="flex items-center gap-2 text-[12px] text-rm-text-muted/80 mt-1">
-            {embed.footer.iconURL && (
-              <img
-                src={embed.footer.iconURL}
-                alt=""
-                className="w-4 h-4 rounded-full"
-              />
-            )}
-            <span>
-              <EmbedInlineText
-                text={embed.footer.text}
-                keyPrefix={`${embed.id}-footer`}
-              />
-            </span>
-            {timestampText && (
-              <>
-                <span className="opacity-50">·</span>
-                <span>{timestampText}</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+/** The card description: 13/20 in ink-2, three lines at most. */
+function EmbedDescription({ embed }: { embed: EmbedInfo }) {
+  if (!embed.rawDescription) return null;
+  return (
+    <div className="line-clamp-3 text-ui-sm leading-5 text-pretty whitespace-pre-wrap break-words text-ink-2">
+      <EmbedInlineText
+        text={embed.rawDescription}
+        keyPrefix={`${embed.id}-description`}
+      />
     </div>
   );
-});
-
-// ─── Remove Embeds Confirmation Modal ─────────────────────────────────────
-
-function formatEmbedTimestamp(timestamp?: string): string | null {
-  if (!timestamp) return null;
-
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const now = new Date();
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  );
-  const startOfDate = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  );
-  const dayDelta = Math.round(
-    (startOfToday.getTime() - startOfDate.getTime()) / 86_400_000,
-  );
-  const timeText = EMBED_TIME_FORMATTER.format(date);
-
-  if (dayDelta === 0) return `Today at ${timeText}`;
-  if (dayDelta === 1) return `Yesterday at ${timeText}`;
-
-  const dateText = EMBED_DATE_FORMATTER.format(date);
-
-  return `${dateText} ${timeText}`;
 }
 
-function formatXHeaderTimestamp(timestamp?: string): string | null {
-  if (!timestamp) return null;
-
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const now = new Date();
-  const diffMs = Math.max(0, now.getTime() - date.getTime());
-  const diffSeconds = Math.floor(diffMs / 1000);
-
-  if (diffSeconds < 60) return `${Math.max(1, diffSeconds)}s`;
-
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) return `${diffMinutes}m`;
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d`;
-
-  if (date.getFullYear() === now.getFullYear()) {
-    return X_HEADER_DATE_FORMATTER.format(date);
-  }
-
-  return X_HEADER_DATE_WITH_YEAR_FORMATTER.format(date);
+/** Header for a generic card: dot, provider name and the post date. */
+function EmbedCardHeader({
+  embed,
+  openHref,
+  openLabel,
+}: {
+  embed: EmbedInfo;
+  openHref?: string;
+  openLabel?: string;
+}) {
+  if (!embed.provider && !embed.timestamp && !openHref) return null;
+  return (
+    <EmbedHeader
+      provider={
+        embed.provider ? (
+          <EmbedInlineText
+            text={embed.provider.name}
+            keyPrefix={`${embed.id}-provider`}
+          />
+        ) : undefined
+      }
+      color={embed.color}
+      timestamp={embed.timestamp}
+      openHref={openHref}
+      openLabel={openLabel}
+    />
+  );
 }
 
-function formatXFooterTimestamp(timestamp?: string): string | null {
-  if (!timestamp) return null;
+/**
+ * The one embed anatomy (talk-tree-spec §8): a ply-2 card at radius 10 with
+ * a header (provider dot, provider name, date, open control), then title,
+ * description, media and a footer line. `bare` lets a provider card lay out
+ * its own body inside the same frame and padding.
+ */
+const BaseEmbed = memo(
+  ({
+    embed,
+    children,
+    width = "standard",
+    bare,
+    openHref,
+    openLabel,
+  }: BaseEmbedProps) => {
+    return (
+      <EmbedFrame width={width}>
+        <div className="flex flex-col gap-2 p-3">
+          {!bare && (
+            <EmbedCardHeader
+              embed={embed}
+              openHref={openHref}
+              openLabel={openLabel}
+            />
+          )}
 
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return null;
+          {!bare && <EmbedTitle embed={embed} />}
 
-  return X_FOOTER_DATE_TIME_FORMATTER.format(date);
-}
+          {!bare && <EmbedDescription embed={embed} />}
+
+          {children}
+
+          {!bare && embed.footer && (
+            <div className="flex min-w-0 items-center gap-2 text-ui-xs text-ink-3">
+              {embed.footer.iconURL && (
+                <img
+                  src={embed.footer.iconURL}
+                  alt=""
+                  className="size-4 shrink-0 rounded-avatar"
+                />
+              )}
+              <span className="min-w-0 truncate">
+                <EmbedInlineText
+                  text={embed.footer.text}
+                  keyPrefix={`${embed.id}-footer`}
+                />
+              </span>
+            </div>
+          )}
+        </div>
+      </EmbedFrame>
+    );
+  },
+);
 
 function shouldCollapseXText(
   text: string,
@@ -408,84 +379,25 @@ function shouldCollapseXText(
   );
 }
 
-const RemoveEmbedsModal = memo(
-  ({
-    onConfirm,
-    onCancel,
-  }: {
-    onConfirm: () => void;
-    onCancel: () => void;
-  }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/60"
-        onClick={onCancel}
-        aria-label="Close remove embeds confirmation"
-      />
-      <div
-        className="relative w-full max-w-[440px] rounded-xl bg-rm-bg-surface border border-rm-border shadow-2xl p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-xl font-bold text-rm-text-primary mb-2">
-          Are you sure?
-        </h2>
-        <p className="text-[14px] text-rm-text-secondary leading-relaxed">
-          This will remove all embeds on this message for everyone.
-        </p>
-        <p className="text-[12px] text-rm-text-muted mt-2 mb-6">
-          Hold shift when clearing embeds to skip this modal.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-5 py-2.5 rounded-md text-[14px] font-medium text-rm-text-secondary hover:text-rm-text-primary hover:bg-rm-bg-hover transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="px-5 py-2.5 rounded-md text-[14px] font-medium text-white bg-[#da373c] hover:bg-[#a12828] transition-colors"
-          >
-            Remove All Embeds
-          </button>
-        </div>
-      </div>
+// ─── Media chrome ─────────────────────────────────────────────────────────
+
+/**
+ * Floating control on top of media (carousel chevrons, GIF controls): a
+ * ply-3 float in ink-1, so it holds its contrast over any frame and theme.
+ */
+const MEDIA_FLOAT =
+  "border border-line bg-ply-3 text-ink-1 shadow-float outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-ply-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+
+/** "+3" over the last visible tile when more media is hidden. */
+function MediaMoreOverlay({ count }: { count: number }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-scrim">
+      <span className="rounded-md bg-ply-3 px-2 py-1 text-ink-1">
+        <Num size="sm">+{count}</Num>
+      </span>
     </div>
-  ),
-);
-
-// ─── Overlay Button ───────────────────────────────────────────────────────
-
-const PlayIcon = ({ className = "w-7 h-7 ml-0.5" }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="white" className={className}>
-    <path d="M8 5v14l11-7z" />
-  </svg>
-);
-
-const ExternalIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="w-5 h-5"
-  >
-    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-    <polyline points="15 3 21 3 21 9" />
-    <line x1="10" y1="14" x2="21" y2="3" />
-  </svg>
-);
-
-const PauseIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="white" className={className}>
-    <path d="M7 5h3v14H7zm7 0h3v14h-3z" />
-  </svg>
-);
+  );
+}
 
 function getAspectRatio(
   width?: number | null,
@@ -585,13 +497,18 @@ const YouTubeEmbed = memo(
     const w = embed.video?.width ?? 1280;
     const h = embed.video?.height ?? 720;
     const isPortrait = h > w;
-    // Cap portrait embeds at 400px wide so they don't dominate the chat
-    const embedWidth = isPortrait ? 280 : 432;
 
     return (
-      <BaseEmbed embed={embed} width={embedWidth}>
+      <BaseEmbed
+        embed={embed}
+        // Landscape takes the media width; Shorts sit in a compact card and
+        // stop growing at the portrait cap.
+        width={isPortrait ? "compact" : "media"}
+        openHref={embed.url}
+        openLabel="Open in YouTube"
+      >
         <div
-          className="relative rounded-md overflow-hidden bg-black w-full"
+          className="relative w-full overflow-hidden rounded-md bg-black"
           {...(embed.thumbnail?.url
             ? {
                 "data-media-element": "true",
@@ -599,7 +516,10 @@ const YouTubeEmbed = memo(
                 "data-media-download-url": getAuthAssetUrl(embed.thumbnail.url),
               }
             : {})}
-          style={{ aspectRatio: `${w}/${h}` }}
+          style={{
+            aspectRatio: `${w}/${h}`,
+            maxHeight: isPortrait ? EMBED_PORTRAIT_MAX_HEIGHT : undefined,
+          }}
         >
           {playing ? (
             <iframe
@@ -616,33 +536,24 @@ const YouTubeEmbed = memo(
                 <img
                   src={embed.thumbnail.url}
                   alt={embed.rawTitle || "YouTube video"}
+                  loading="lazy"
                   className="absolute inset-0 w-full h-full object-cover"
                   data-media-element="true"
                   data-media-url={embed.thumbnail.url}
                   data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
                 />
               )}
-              {/* Overlay buttons */}
-              <div className="absolute inset-0 flex items-center justify-center gap-3">
-                {/* Play button */}
-                <button
-                  onClick={handlePlay}
-                  className="w-16 h-11 bg-[#FF0000] hover:bg-[#FF0000]/80 rounded-xl flex items-center justify-center transition-colors cursor-pointer shadow-lg"
-                  title="Play"
-                >
-                  <PlayIcon />
-                </button>
-                {/* Open in new tab */}
-                <a
-                  href={embed.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
-                  title="Open in YouTube"
-                >
-                  <ExternalIcon />
-                </a>
-              </div>
+              {/* The whole frame plays; the shared disc is centred on it. */}
+              <button
+                type="button"
+                onClick={handlePlay}
+                className="group/media absolute inset-0 flex cursor-pointer items-center justify-center outline-none"
+                aria-label={
+                  embed.rawTitle ? `Play ${embed.rawTitle}` : "Play video"
+                }
+              >
+                <MediaPlayButton />
+              </button>
             </>
           )}
         </div>
@@ -674,7 +585,9 @@ type TikTokPlayerState =
   | { mode: "loading" }
   | { mode: "ready" }
   | { mode: "iframe" }
-  | { mode: "error" };
+  | { mode: "error" }
+  /** The server confirmed the post is gone (deleted or private). */
+  | { mode: "missing" };
 
 type MediaDimensions = {
   width: number;
@@ -853,11 +766,48 @@ function getTikTokCaptionText(embed: EmbedInfo): string | undefined {
   );
 }
 
+function isWeakTikTokHydrationPayload(
+  payload: TikTokHydrationPayload,
+): boolean {
+  const media = payload.media ?? [];
+  const hasVideo =
+    Boolean(payload.videoUrl) || media.some((entry) => entry.type === "video");
+  const hasSlideshow =
+    payload.postType === "slideshow" &&
+    media.some((entry) => entry.type === "image");
+  return !hasVideo && !hasSlideshow;
+}
+
+function embedHasDirectTikTokMedia(embed: EmbedInfo): boolean {
+  return (
+    Boolean(embed.media?.some((entry) => entry.type === "video")) ||
+    Boolean(embed.video?.url && embed.video.kind === "direct")
+  );
+}
+
 function hydrateTikTokEmbed(
   embed: EmbedInfo,
   payload: TikTokHydrationPayload | null,
 ): EmbedInfo {
   if (!payload) return embed;
+
+  // A cover-only answer (tikwm fallback) must not replace a stored video.
+  if (
+    isWeakTikTokHydrationPayload(payload) &&
+    embedHasDirectTikTokMedia(embed)
+  ) {
+    return {
+      ...embed,
+      author: embed.author
+        ? {
+            ...embed.author,
+            iconURL: payload.authorAvatarUrl || embed.author.iconURL,
+          }
+        : embed.author,
+      timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
+      audio: payload.audio ?? embed.audio ?? undefined,
+    };
+  }
 
   const media = payload.media?.length ? payload.media : embed.media;
   const firstVideo = media?.find((entry) => entry.type === "video");
@@ -890,8 +840,9 @@ function hydrateTikTokEmbed(
       ? `https://www.tiktok.com/@${payload.authorHandle}`
       : undefined);
   const nextAuthorName = embed.author?.name || payload.authorName;
+  // Signed avatar URLs expire too: prefer the fresh one.
   const nextAuthorIcon =
-    embed.author?.iconURL || payload.authorAvatarUrl || undefined;
+    payload.authorAvatarUrl || embed.author?.iconURL || undefined;
   const nextAuthor = nextAuthorName
     ? {
         name: nextAuthorName,
@@ -926,11 +877,295 @@ function hydrateTikTokEmbed(
       views: embed.metrics?.views ?? payload.viewCount ?? undefined,
     },
     timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
-    audio: embed.audio ?? payload.audio ?? undefined,
+    audio: payload.audio ?? embed.audio ?? undefined,
     footer: {
       text: "TikTok",
     },
   };
+}
+
+// ─── Portrait social (TikTok, Instagram) shared parts ──────────────────────
+
+/** Avatar, name and verified mark under the header of a social post. */
+function SocialAuthorRow({
+  name,
+  url,
+  avatarSrc,
+  verified,
+  keyPrefix,
+}: {
+  name?: string;
+  url?: string;
+  avatarSrc?: string | null;
+  verified?: boolean;
+  keyPrefix: string;
+}) {
+  if (!name) return null;
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="size-8 shrink-0 overflow-hidden rounded-avatar bg-tint-3">
+        {avatarSrc ? (
+          <img
+            src={avatarSrc}
+            alt=""
+            className="size-full object-cover"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        ) : null}
+      </span>
+      <div className="flex min-w-0 items-center gap-1 text-ui-sm">
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "relative min-w-0 truncate font-semibold text-ink-1 underline-offset-3 pointer-fine:hover:underline",
+              HIT,
+            )}
+          >
+            <EmbedInlineText text={name} keyPrefix={keyPrefix} />
+          </a>
+        ) : (
+          <span className="min-w-0 truncate font-semibold text-ink-1">
+            <EmbedInlineText text={name} keyPrefix={keyPrefix} />
+          </span>
+        )}
+        {verified ? (
+          <Icon
+            name="verified"
+            size="sm"
+            label="Verified"
+            className="shrink-0 text-accent-ink"
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Likes, comments and views as Num counts with 16px glyphs, in ink-2. */
+function SocialMetrics({
+  likes,
+  comments,
+  views,
+}: {
+  likes?: number;
+  comments?: number;
+  views?: number;
+}) {
+  const likeText = formatInstagramMetricCount(likes);
+  const commentText = formatInstagramMetricCount(comments);
+  const viewText = formatInstagramMetricCount(views);
+  if (!likeText && !commentText && !viewText) return null;
+  const item = "inline-flex items-center gap-1.5";
+  return (
+    <div className="flex items-center gap-4 text-ink-2">
+      {likeText && (
+        <span className={item} title="Likes">
+          <Icon name="like" size="sm" />
+          <Num size="sm">{likeText}</Num>
+        </span>
+      )}
+      {commentText && (
+        <span className={item} title="Comments">
+          <Icon name="chat" size="sm" />
+          <Num size="sm">{commentText}</Num>
+        </span>
+      )}
+      {viewText && (
+        <span className={item} title="Views">
+          <Icon name="eye" size="sm" />
+          <Num size="sm">{viewText}</Num>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Carousel chevrons and position dots over the media. Chevrons are ply-3
+ * floats; a dot marks position with opacity and scale (never width).
+ */
+function CarouselControls({
+  count,
+  activeIndex,
+  dotKeyPrefix,
+  onPrev,
+  onNext,
+  onDot,
+  onPointerDown,
+}: {
+  count: number;
+  activeIndex: number;
+  dotKeyPrefix: string;
+  onPrev: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onNext: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDot: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
+  onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+}) {
+  if (count <= 1) return null;
+  const chevron = cn(
+    "absolute top-1/2 z-10 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full",
+    MEDIA_FLOAT,
+    HIT,
+  );
+  return (
+    <>
+      {activeIndex > 0 && (
+        <button
+          type="button"
+          onClick={onPrev}
+          onPointerDown={onPointerDown}
+          className={cn(chevron, "left-2")}
+          aria-label="Previous media"
+        >
+          <Icon name="chevronLeft" size="sm" />
+        </button>
+      )}
+      {activeIndex < count - 1 && (
+        <button
+          type="button"
+          onClick={onNext}
+          onPointerDown={onPointerDown}
+          className={cn(chevron, "right-2")}
+          aria-label="Next media"
+        >
+          <Icon name="chevronRight" size="sm" />
+        </button>
+      )}
+      <div className="absolute inset-x-0 bottom-2 z-10 flex justify-center gap-1.5">
+        {Array.from({ length: count }, (_, index) => (
+          <button
+            type="button"
+            key={`${dotKeyPrefix}-${index}`}
+            onClick={(event) => onDot(event, index)}
+            onPointerDown={onPointerDown}
+            aria-label={`Go to media ${index + 1}`}
+            aria-current={index === activeIndex}
+            className={cn(
+              // Tall coarse target that tiles with its neighbours (6px dot +
+              // 6px gap) instead of overlapping them.
+              "relative size-1.5 rounded-full bg-ink-1 shadow-float transition-[opacity,scale] duration-(--dur-2) ease-out",
+              HIT,
+              "before:min-w-3",
+              index === activeIndex ? "scale-133 opacity-100" : "opacity-45",
+            )}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** Track transform for a carousel: slides on --ease-in-out, follows a drag. */
+function carouselTrackStyle(
+  count: number,
+  activeIndex: number,
+  dragOffset: number,
+  dragging: boolean,
+): React.CSSProperties {
+  const slideWidthPercent = count > 0 ? 100 / count : 100;
+  return {
+    width: `${Math.max(count, 1) * 100}%`,
+    transform: `translate3d(calc(${-activeIndex * slideWidthPercent}% + ${dragOffset}px), 0, 0)`,
+    transition: dragging ? "none" : "transform var(--dur-4) var(--ease-in-out)",
+    willChange: "transform",
+  };
+}
+
+/** The original-sound row under a post: artwork that plays, title, artist. */
+function SocialAudioChip({
+  audio,
+  artworkSrc,
+  playbackUrl,
+  playing,
+  audioRef,
+  keyPrefix,
+  onToggle,
+  onAudioPlay,
+  onAudioStop,
+}: {
+  audio: NonNullable<EmbedInfo["audio"]>;
+  artworkSrc: string | null;
+  playbackUrl: string | null;
+  playing: boolean;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  keyPrefix: string;
+  onToggle: () => void;
+  onAudioPlay: () => void;
+  onAudioStop: () => void;
+}) {
+  const artwork = artworkSrc ? (
+    <img
+      src={artworkSrc}
+      alt=""
+      className="size-full object-cover"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+    />
+  ) : (
+    <span className="flex size-full items-center justify-center text-ink-2">
+      <Icon name="music" size="sm" />
+    </span>
+  );
+
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-tint-1 p-2 text-ui-xs">
+      {playbackUrl ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="group/media relative size-10 shrink-0 overflow-hidden rounded-sm bg-tint-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          aria-label={playing ? "Pause audio preview" : "Play audio preview"}
+        >
+          {artwork}
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="flex size-6 items-center justify-center rounded-full bg-ply-3 text-ink-1 shadow-float transition-colors duration-(--dur-1) ease-out pointer-fine:group-hover/media:bg-ply-4">
+              <Icon
+                name={playing ? "pause" : "play"}
+                state="active"
+                size="xs"
+              />
+            </span>
+          </span>
+        </button>
+      ) : (
+        <span className="size-10 shrink-0 overflow-hidden rounded-sm bg-tint-2">
+          {artwork}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        {audio.title && (
+          <div className="truncate font-medium text-ink-1">
+            <EmbedInlineText
+              text={audio.title}
+              keyPrefix={`${keyPrefix}-audio-title`}
+            />
+          </div>
+        )}
+        {audio.artist && (
+          <div className="truncate text-ink-3">
+            <EmbedInlineText
+              text={audio.artist}
+              keyPrefix={`${keyPrefix}-audio-artist`}
+            />
+          </div>
+        )}
+      </div>
+      {playbackUrl && (
+        <audio
+          ref={audioRef}
+          src={playbackUrl}
+          preload="none"
+          onPlay={onAudioPlay}
+          onPause={onAudioStop}
+          onEnded={onAudioStop}
+        />
+      )}
+    </div>
+  );
 }
 
 const TikTokEmbed = memo(
@@ -947,11 +1182,27 @@ const TikTokEmbed = memo(
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
   }) => {
+    const tiktokHydrationKey = hydrationKey("/api/tiktok-video", embed.url);
+    // Read once per mount; the key cannot change (the card is keyed on it).
+    const [cachedHydration] = useState(() =>
+      peekEmbedHydration<TikTokHydrationPayload>(tiktokHydrationKey),
+    );
     const [hydratedPayload, setHydratedPayload] =
-      useState<TikTokHydrationPayload | null>(null);
-    const [player, setPlayer] = useState<TikTokPlayerState>(() => ({
-      mode: getTikTokRenderableMedia(embed).length === 0 ? "loading" : "idle",
-    }));
+      useState<TikTokHydrationPayload | null>(() =>
+        cachedHydration?.status === "ok" ? cachedHydration.payload : null,
+      );
+    const [player, setPlayer] = useState<TikTokPlayerState>(() =>
+      cachedHydration?.status === "missing"
+        ? { mode: "missing" }
+        : cachedHydration?.status === "ok"
+          ? { mode: "ready" }
+          : {
+              mode:
+                getTikTokRenderableMedia(embed).length === 0
+                  ? "loading"
+                  : "idle",
+            },
+    );
     const [activeIndex, setActiveIndex] = useState(0);
     const [measuredMediaDimensions, setMeasuredMediaDimensions] = useState<
       Record<string, MediaDimensions>
@@ -978,7 +1229,6 @@ const TikTokEmbed = memo(
       pressedImageIndex: null,
     });
     const { open } = useImageViewerActions();
-    const prefersReducedMotion = usePrefersReducedMotion();
     const hydrationSignature = useMemo(
       () => getTikTokHydrationSignature(embed),
       [embed],
@@ -1027,21 +1277,26 @@ const TikTokEmbed = memo(
     );
     const activeMedia = resolvedMedia[resolvedActiveIndex] ?? resolvedMedia[0];
     const captionText = getTikTokCaptionText(displayEmbed);
-    const timestampText = formatInstagramTimestamp(displayEmbed.timestamp);
     const likeCount = displayEmbed.metrics?.likes;
     const commentCount = displayEmbed.metrics?.comments;
     const viewCount = displayEmbed.metrics?.views;
     const slideWidthPercent = media.length > 0 ? 100 / media.length : 100;
-    const audioArtworkSrc = displayEmbed.audio?.artworkUrl
-      ? getAuthAssetUrl(
-          buildProxyMediaPath(displayEmbed.audio.artworkUrl, displayEmbed.url),
-        )
-      : null;
-    const audioPlaybackUrl = displayEmbed.audio?.url
-      ? getMediaUrl(
-          buildProxyMediaPath(displayEmbed.audio.url, displayEmbed.url),
-        )
-      : null;
+    const isMissing = player.mode === "missing";
+    const audioArtworkSrc =
+      !isMissing && displayEmbed.audio?.artworkUrl
+        ? getAuthAssetUrl(
+            buildProxyMediaPath(
+              displayEmbed.audio.artworkUrl,
+              displayEmbed.url,
+            ),
+          )
+        : null;
+    const audioPlaybackUrl =
+      !isMissing && displayEmbed.audio?.url
+        ? getMediaUrl(
+            buildProxyMediaPath(displayEmbed.audio.url, displayEmbed.url),
+          )
+        : null;
     const aspectRatioStyle =
       activeMedia?.width && activeMedia?.height
         ? `${activeMedia.width}/${activeMedia.height}`
@@ -1054,6 +1309,7 @@ const TikTokEmbed = memo(
       resolvedMedia.some((item) => item.type === "video") ||
       displayEmbed.video?.kind === "direct";
     const hasRenderableMedia =
+      !isMissing &&
       media.length > 0 &&
       (hasPersistentInlineMedia || player.mode !== "iframe");
     const iframeUrl =
@@ -1069,59 +1325,53 @@ const TikTokEmbed = memo(
           })();
 
     useEffect(() => {
-      if (!displayEmbed.url || fetchedRef.current) return;
+      if (!embed.url || fetchedRef.current) return;
+      // Already answered from the shared cache in the initial state.
+      if (cachedHydration) {
+        fetchedRef.current = true;
+        return;
+      }
 
       fetchedRef.current = true;
-      const controller =
-        typeof AbortController !== "undefined" ? new AbortController() : null;
       let isActive = true;
 
-      fetch(
-        apiUrl(
-          `/api/tiktok-video?videoUrl=${encodeURIComponent(displayEmbed.url)}`,
-        ),
-        controller ? { signal: controller.signal } : undefined,
-      )
-        .then((res) => {
-          if (!res.ok) throw new Error(`${res.status}`);
-          return res.json() as Promise<TikTokHydrationPayload>;
-        })
-        .then((payload) => {
-          if (!isActive) return;
-          setHydratedPayload(payload);
-          setPlayer(
-            payload.videoUrl ||
+      // Shared across mounts: a card scrolled back into view (the list is
+      // virtualised) reuses the answer instead of fetching again.
+      void loadEmbedHydration<TikTokHydrationPayload>(
+        tiktokHydrationKey,
+        apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(embed.url)}`),
+      ).then((result) => {
+        if (!isActive) return;
+        if (result.status === "missing") {
+          setPlayer({ mode: "missing" });
+          return;
+        }
+        const payload = result.status === "ok" ? result.payload : null;
+        if (payload) setHydratedPayload(payload);
+        setPlayer(
+          payload &&
+            (payload.videoUrl ||
               payload.media?.length ||
               payload.coverUrl ||
               payload.audio ||
-              payload.title
-              ? { mode: "ready" }
-              : hasPersistentInlineMedia || hasDirectVideoMedia
-                ? { mode: "error" }
-                : { mode: "iframe" },
-          );
-        })
-        .catch((error) => {
-          if (!isActive) return;
-          if (error instanceof DOMException && error.name === "AbortError")
-            return;
-          setPlayer(
-            hasPersistentInlineMedia || hasDirectVideoMedia
+              payload.title)
+            ? { mode: "ready" }
+            : hasPersistentInlineMedia || hasDirectVideoMedia
               ? { mode: "error" }
               : { mode: "iframe" },
-          );
-        });
+        );
+      });
 
       return () => {
         isActive = false;
-        controller?.abort();
       };
     }, [
-      displayEmbed.url,
+      cachedHydration,
+      embed.url,
       hasDirectVideoMedia,
       hasPersistentInlineMedia,
-      media.length,
       hydrationSignature,
+      tiktokHydrationKey,
     ]);
 
     const handleVideoError = useCallback(() => {
@@ -1414,75 +1664,50 @@ const TikTokEmbed = memo(
       [],
     );
 
+    const handleAudioStopped = useCallback(() => {
+      setIsAudioPlaying(false);
+      if (audioActiveRef.current) {
+        audioActiveRef.current = false;
+        onMediaStop?.();
+      }
+    }, [onMediaStop]);
+
     return (
-      <BaseEmbed embed={displayEmbed} width={360} bare>
-        <article ref={containerRef} className="flex flex-col gap-3">
-          <header className="flex items-center gap-3">
-            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-rm-bg-surface/70 ring-1 ring-rm-border/60">
-              {displayEmbed.author?.iconURL ? (
-                <img
-                  src={getAuthAssetUrl(
+      <BaseEmbed embed={displayEmbed} width="compact" bare>
+        <article ref={containerRef} className="flex flex-col gap-2">
+          <EmbedHeader
+            provider="TikTok"
+            color={displayEmbed.color}
+            timestamp={displayEmbed.timestamp}
+            openHref={displayEmbed.url}
+            openLabel="Open in TikTok"
+          />
+
+          <SocialAuthorRow
+            name={displayEmbed.author?.name}
+            url={displayEmbed.author?.url}
+            avatarSrc={
+              !isMissing && displayEmbed.author?.iconURL
+                ? getAuthAssetUrl(
                     buildProxyMediaPath(
                       displayEmbed.author.iconURL,
                       displayEmbed.url,
                     ),
-                  )}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="h-full w-full bg-[radial-gradient(circle_at_top,_rgba(255,0,128,0.42),transparent_68%)]" />
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[14px] font-semibold leading-tight text-rm-text-primary">
-                {displayEmbed.author?.url ? (
-                  <a
-                    href={displayEmbed.author.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline"
-                  >
-                    <EmbedInlineText
-                      text={displayEmbed.author.name}
-                      keyPrefix={`${embed.id}-tiktok-author`}
-                    />
-                  </a>
-                ) : (
-                  <EmbedInlineText
-                    text={displayEmbed.author?.name || "TikTok"}
-                    keyPrefix={`${embed.id}-tiktok-author`}
-                  />
-                )}
-              </div>
-              <div className="text-[12px] text-rm-text-muted/82">
-                {timestampText || "TikTok"}
-              </div>
-            </div>
-
-            <a
-              href={displayEmbed.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors hover:bg-black/85"
-              title="Open in TikTok"
-              aria-label="Open in TikTok"
-            >
-              <ExternalIcon />
-            </a>
-          </header>
+                  )
+                : null
+            }
+            keyPrefix={`${embed.id}-tiktok-author`}
+          />
 
           {hasRenderableMedia ? (
             <>
-              <div className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]">
+              <div className="relative overflow-hidden rounded-md bg-black">
                 <div
                   ref={trackRef}
                   className="relative w-full overflow-hidden"
                   style={{
                     aspectRatio: aspectRatioStyle,
+                    maxHeight: EMBED_PORTRAIT_MAX_HEIGHT,
                     touchAction: media.length > 1 ? "pan-y" : undefined,
                   }}
                   tabIndex={media.length > 1 ? 0 : -1}
@@ -1495,14 +1720,12 @@ const TikTokEmbed = memo(
                   <div
                     data-testid="tiktok-carousel-track"
                     className="flex h-full"
-                    style={{
-                      width: `${Math.max(media.length, 1) * 100}%`,
-                      transform: `translate3d(calc(${-resolvedActiveIndex * slideWidthPercent}% + ${dragOffset}px), 0, 0)`,
-                      transition: !isDragging
-                        ? `transform ${prefersReducedMotion ? 0 : 260}ms cubic-bezier(0.22, 1, 0.36, 1)`
-                        : "none",
-                      willChange: "transform",
-                    }}
+                    style={carouselTrackStyle(
+                      media.length,
+                      resolvedActiveIndex,
+                      dragOffset,
+                      isDragging,
+                    )}
                   >
                     {resolvedMedia.map((item, index) => {
                       const mediaKey = getEmbedMediaKey(item, index);
@@ -1575,7 +1798,7 @@ const TikTokEmbed = memo(
                                 handleImageKeyDown(event, index)
                               }
                               onDragStart={preventNativeDrag}
-                              className="block h-full w-full cursor-zoom-in select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0"
+                              className="block h-full w-full cursor-zoom-in select-none outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
                               aria-label={`Open media ${index + 1} of ${resolvedMedia.length}`}
                               data-tiktok-image-index={index}
                             >
@@ -1586,7 +1809,7 @@ const TikTokEmbed = memo(
                                   displayEmbed.rawTitle ||
                                   "TikTok slideshow media"
                                 }
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain"
                                 loading={index === 0 ? "eager" : "lazy"}
                                 referrerPolicy="no-referrer"
                                 draggable={false}
@@ -1602,204 +1825,74 @@ const TikTokEmbed = memo(
                     })}
                   </div>
 
-                  {resolvedMedia.length > 1 && (
-                    <>
-                      {resolvedActiveIndex > 0 && (
-                        <button
-                          type="button"
-                          onClick={handlePrevButtonClick}
-                          onPointerDown={stopChromePointerPropagation}
-                          className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
-                          aria-label="Previous media"
-                        >
-                          <InstagramChevronIcon direction="left" />
-                        </button>
-                      )}
-                      {resolvedActiveIndex < resolvedMedia.length - 1 && (
-                        <button
-                          type="button"
-                          onClick={handleNextButtonClick}
-                          onPointerDown={stopChromePointerPropagation}
-                          className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
-                          aria-label="Next media"
-                        >
-                          <InstagramChevronIcon direction="right" />
-                        </button>
-                      )}
-                      <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
-                        {resolvedMedia.map((_, index) => (
-                          <button
-                            type="button"
-                            key={`${embed.id}-tiktok-dot-${index}`}
-                            onClick={(event) => handleDotClick(event, index)}
-                            onPointerDown={stopChromePointerPropagation}
-                            aria-label={`Go to media ${index + 1}`}
-                            aria-current={index === resolvedActiveIndex}
-                            className={cn(
-                              "h-1.5 w-1.5 rounded-full transition-all",
-                              index === resolvedActiveIndex
-                                ? "bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.18)]"
-                                : "bg-white/45",
-                            )}
-                          />
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  <CarouselControls
+                    count={resolvedMedia.length}
+                    activeIndex={resolvedActiveIndex}
+                    dotKeyPrefix={`${embed.id}-tiktok-dot`}
+                    onPrev={handlePrevButtonClick}
+                    onNext={handleNextButtonClick}
+                    onDot={handleDotClick}
+                    onPointerDown={stopChromePointerPropagation}
+                  />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 text-rm-text-primary">
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
-                    <InstagramHeartIcon />
-                    {formatInstagramMetricCount(likeCount) && (
-                      <span>{formatInstagramMetricCount(likeCount)}</span>
-                    )}
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
-                    <InstagramCommentIcon />
-                    {formatInstagramMetricCount(commentCount) && (
-                      <span>{formatInstagramMetricCount(commentCount)}</span>
-                    )}
-                  </div>
-                  {formatInstagramMetricCount(viewCount) && (
-                    <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
-                      <InstagramViewsIcon />
-                      <span>{formatInstagramMetricCount(viewCount)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <SocialMetrics
+                likes={likeCount}
+                comments={commentCount}
+                views={viewCount}
+              />
 
               {captionText && (
-                <p className="text-[13px] leading-relaxed text-rm-text-primary">
+                <p className="text-ui-sm leading-5 text-pretty break-words text-ink-1">
                   <EmbedInlineText
                     text={captionText}
                     keyPrefix={`${embed.id}-tiktok-caption`}
-                    linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] hover:underline"
+                    linkClassName={EMBED_TEXT_LINK}
                   />
                 </p>
               )}
 
               {displayEmbed.audio &&
                 (displayEmbed.audio.title || displayEmbed.audio.artist) && (
-                  <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-[12px] text-rm-text-secondary">
-                    {audioPlaybackUrl ? (
-                      <button
-                        type="button"
-                        onClick={handleAudioToggle}
-                        className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
-                        aria-label={
-                          isAudioPlaying
-                            ? "Pause audio preview"
-                            : "Play audio preview"
-                        }
-                      >
-                        {audioArtworkSrc ? (
-                          <img
-                            src={audioArtworkSrc}
-                            alt=""
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text-primary">
-                            <InstagramMusicIcon />
-                          </span>
-                        )}
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/28 backdrop-blur-[1px]">
-                          {isAudioPlaying ? (
-                            <PauseIcon className="h-4 w-4" />
-                          ) : (
-                            <PlayIcon className="h-4 w-4" />
-                          )}
-                        </span>
-                      </button>
-                    ) : (
-                      <>
-                        {audioArtworkSrc ? (
-                          <img
-                            src={audioArtworkSrc}
-                            alt=""
-                            className="h-10 w-10 shrink-0 rounded-xl object-cover"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text-primary">
-                            <InstagramMusicIcon />
-                          </span>
-                        )}
-                      </>
-                    )}
-                    <div className="min-w-0 flex-1 leading-tight">
-                      {displayEmbed.audio.title && (
-                        <div className="truncate font-semibold text-rm-text-primary">
-                          <EmbedInlineText
-                            text={displayEmbed.audio.title}
-                            keyPrefix={`${embed.id}-tiktok-audio-title`}
-                          />
-                        </div>
-                      )}
-                      {displayEmbed.audio.artist && (
-                        <div className="truncate text-rm-text-muted/86">
-                          <EmbedInlineText
-                            text={displayEmbed.audio.artist}
-                            keyPrefix={`${embed.id}-tiktok-audio-artist`}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    {audioPlaybackUrl && (
-                      <audio
-                        ref={audioRef}
-                        src={audioPlaybackUrl}
-                        preload="none"
-                        onPlay={() => setIsAudioPlaying(true)}
-                        onPause={() => {
-                          setIsAudioPlaying(false);
-                          if (audioActiveRef.current) {
-                            audioActiveRef.current = false;
-                            onMediaStop?.();
-                          }
-                        }}
-                        onEnded={() => {
-                          setIsAudioPlaying(false);
-                          if (audioActiveRef.current) {
-                            audioActiveRef.current = false;
-                            onMediaStop?.();
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
+                  <SocialAudioChip
+                    audio={displayEmbed.audio}
+                    artworkSrc={audioArtworkSrc}
+                    playbackUrl={audioPlaybackUrl}
+                    playing={isAudioPlaying}
+                    audioRef={audioRef}
+                    keyPrefix={`${embed.id}-tiktok`}
+                    onToggle={handleAudioToggle}
+                    onAudioPlay={() => setIsAudioPlaying(true)}
+                    onAudioStop={handleAudioStopped}
+                  />
                 )}
-
-              <div className="flex items-center gap-2 text-[11px] text-rm-text-muted/78">
-                <img
-                  src={TIKTOK_ICON_URL}
-                  alt=""
-                  className="h-3.5 w-3.5 rounded-sm"
-                />
-                <span>TikTok</span>
-                {displayEmbed.timestamp && (
-                  <>
-                    <span className="opacity-45">·</span>
-                    <span>
-                      {formatEmbedTimestamp(displayEmbed.timestamp) ||
-                        displayEmbed.timestamp}
-                    </span>
-                  </>
-                )}
-              </div>
             </>
           ) : (
             <div
-              className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]"
-              style={{ aspectRatio: "9/16" }}
+              className={cn(
+                "relative overflow-hidden rounded-md",
+                isMissing ? "bg-tint-1" : "bg-black",
+              )}
+              style={{
+                aspectRatio: "9/16",
+                maxHeight: EMBED_PORTRAIT_MAX_HEIGHT,
+              }}
             >
+              {isMissing ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                  <img
+                    src={SOCIAL_UNAVAILABLE_IMAGE}
+                    alt=""
+                    data-testid="tiktok-unavailable"
+                    className="size-36 rounded-xl"
+                    draggable={false}
+                  />
+                  <p className="text-ui-sm font-medium text-ink-2">
+                    This TikTok is no longer available
+                  </p>
+                </div>
+              ) : null}
               {(player.mode === "iframe" || player.mode === "ready") &&
                 iframeUrl && (
                   <iframe
@@ -1820,10 +1913,13 @@ const TikTokEmbed = memo(
                     href={displayEmbed.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="absolute inset-0 flex items-center justify-center"
+                    className="group/media absolute inset-0 flex items-center justify-center outline-none"
                     title="Open in TikTok"
+                    aria-label="Open in TikTok"
                   >
-                    <ExternalIcon />
+                    <span className="flex size-12 items-center justify-center rounded-full border border-line bg-ply-3 text-ink-1 shadow-float transition-colors duration-(--dur-1) ease-out pointer-fine:group-hover/media:bg-ply-4 group-focus-visible/media:outline-2 group-focus-visible/media:outline-offset-2 group-focus-visible/media:outline-focus">
+                      <Icon name="externalLink" size="lg" />
+                    </span>
                   </a>
                 )}
 
@@ -1841,20 +1937,23 @@ const TikTokEmbed = memo(
                       )}
                       alt={displayEmbed.rawTitle || "TikTok preview"}
                       className={cn(
-                        "absolute inset-0 h-full w-full object-cover",
+                        "absolute inset-0 h-full w-full object-cover transition-opacity duration-(--dur-3) ease-out",
                         player.mode === "loading" ? "opacity-50" : undefined,
                       )}
                       referrerPolicy="no-referrer"
                     />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
                   <div className="absolute inset-0 flex items-center justify-center">
                     {player.mode === "loading" ? (
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      <span className="flex size-12 items-center justify-center rounded-full border border-line bg-ply-3 text-ink-1 shadow-float">
+                        <span
+                          role="status"
+                          aria-label="Loading TikTok"
+                          className="rm-spinner size-5"
+                        />
+                      </span>
                     ) : (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50">
-                        <PlayIcon />
-                      </div>
+                      <MediaPlayButton />
                     )}
                   </div>
                 </>
@@ -1868,121 +1967,41 @@ const TikTokEmbed = memo(
 );
 
 const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
-  // Build the embed URL from the original Spotify URL
-  const spotifyEmbedUrl = embed.url
-    .replace("open.spotify.com/", "open.spotify.com/embed/")
-    .replace(/\?.*$/, "");
+  const spotifyEmbedUrl = getSpotifyEmbedUrl(embed.url);
+  const playerHeight = getSpotifyPlayerHeight(embed.url);
 
-  // Spotify iframe handles ALL rendering — we use a bare BaseEmbed (no title/desc/thumbnail)
+  // Spotify's player is its own card (art, colour, controls), so it renders
+  // bare: no ply-2 fill, edge or padding around it (no card in a card), just
+  // clipped to the embed radius at the compact width. Its default theme takes
+  // its colour from the artwork, so it reads on every app theme without
+  // sniffing which one is active.
   return (
-    <BaseEmbed embed={embed} width={400} bare>
+    <EmbedFrame width="compact" bare>
       <iframe
-        src={`${spotifyEmbedUrl}?utm_source=generator&theme=0`}
+        src={`${spotifyEmbedUrl}?utm_source=generator`}
         title="Spotify player"
         frameBorder="0"
         sandbox={EMBED_WIDGET_SANDBOX}
         allow="clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-        className="rounded-xl"
-        style={{ width: "100%", maxWidth: 400, minWidth: 280, height: 80 }}
+        className="block"
+        style={{
+          width: "100%",
+          minWidth: 0,
+          height: playerHeight,
+        }}
         loading="lazy"
       />
-    </BaseEmbed>
+    </EmbedFrame>
   );
 });
 
-const XReplyIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M8 10.5H5.5a2.5 2.5 0 010-5h9A4.5 4.5 0 0119 10v2a4.5 4.5 0 01-4.5 4.5H12" />
-    <path d="M8 10.5l-4 4 4 4" />
-  </svg>
-);
+const XReplyIcon = () => <Icon name="reply" size="sm" />;
 
-const XRetweetIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M17 3l4 4-4 4" />
-    <path d="M3 7h18" />
-    <path d="M7 21l-4-4 4-4" />
-    <path d="M21 17H3" />
-  </svg>
-);
+const XRetweetIcon = () => <Icon name="repost" size="sm" />;
 
-const XHeartIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M12 20.5l-1.2-1.08C5.4 14.53 2 11.45 2 7.67 2 4.79 4.27 2.5 7.1 2.5c1.62 0 3.18.76 4.2 1.96A5.56 5.56 0 0115.5 2.5C18.33 2.5 20.6 4.79 20.6 7.67c0 3.78-3.4 6.86-8.8 11.75L12 20.5z" />
-  </svg>
-);
+const XHeartIcon = () => <Icon name="like" size="sm" />;
 
-const XImpressionsIcon = ({
-  className = "h-4 w-4",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M4 19V9" />
-    <path d="M10 19V5" />
-    <path d="M16 19v-7" />
-    <path d="M22 19v-4" />
-  </svg>
-);
-
-const XBrandIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M4.75 4h4.04l4.12 5.56L17.83 4h1.92l-5.99 6.85L20 20h-4.04l-4.44-5.99L6.28 20H4.36l6.31-7.22L4.75 4Zm2.02 1.1 9.73 13.8h1.47L8.24 5.1H6.77Z" />
-  </svg>
-);
-
-const XOpenInNewIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M14 5h5v5" />
-    <path d="M10 14L19 5" />
-    <path d="M19 14v4a1 1 0 01-1 1h-12a1 1 0 01-1-1V6a1 1 0 011-1h4" />
-  </svg>
-);
+const XImpressionsIcon = () => <Icon name="stats" size="sm" />;
 
 function getXHandleFromUrl(url?: string): string | undefined {
   if (!url) return undefined;
@@ -2044,15 +2063,6 @@ function trimMetricDecimal(value: number): string {
   return rounded.replace(/\.0$/, "");
 }
 
-function hasXMetrics(metrics?: EmbedMetrics): boolean {
-  return (
-    metrics?.replies !== undefined ||
-    metrics?.retweets !== undefined ||
-    metrics?.likes !== undefined ||
-    metrics?.impressions !== undefined
-  );
-}
-
 const XMetricBar = memo(({ metrics }: { metrics?: EmbedMetrics }) => {
   const items: Array<{
     key: string;
@@ -2100,7 +2110,7 @@ const XMetricBar = memo(({ metrics }: { metrics?: EmbedMetrics }) => {
   if (items.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rm-border/45 pt-2.5 text-[12px] text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-2 text-ink-3">
       {items.map((item) => {
         const formattedValue =
           item.value > 0 ? formatXMetricCount(item.value) : null;
@@ -2113,54 +2123,14 @@ const XMetricBar = memo(({ metrics }: { metrics?: EmbedMetrics }) => {
             aria-label={`${item.label}: ${rawValue}`}
             title={`${item.label}: ${rawValue}`}
           >
-            <span className="text-rm-text-muted/80">{item.icon}</span>
-            {formattedValue && <span>{formattedValue}</span>}
+            {item.icon}
+            {formattedValue && <Num size="sm">{formattedValue}</Num>}
           </div>
         );
       })}
     </div>
   );
 });
-
-const XFooterBar = memo(
-  ({
-    label,
-    keyPrefix,
-    timestamp,
-    bordered = false,
-  }: {
-    label: string;
-    keyPrefix: string;
-    timestamp?: string | null;
-    bordered?: boolean;
-  }) => {
-    if (!label && !timestamp) return null;
-
-    return (
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-rm-text-muted/80",
-          bordered ? "border-t border-rm-border/45 pt-2.5" : "pt-0.5",
-        )}
-      >
-        <span className="text-rm-text-muted/75">
-          <XBrandIcon />
-        </span>
-        {label && (
-          <span className="font-medium text-rm-text-muted/85">
-            <EmbedInlineText text={label} keyPrefix={`${keyPrefix}-label`} />
-          </span>
-        )}
-        {timestamp && (
-          <>
-            <span className="opacity-50">·</span>
-            <span>{timestamp}</span>
-          </>
-        )}
-      </div>
-    );
-  },
-);
 
 function getXExternalCardDomain(card?: EmbedExternalCard): string | null {
   if (card?.domain?.trim()) {
@@ -2185,7 +2155,7 @@ const XExternalCardChip = memo(
 
     return (
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-start p-3">
-        <div className="max-w-[calc(100%-1.5rem)] rounded-md bg-black/82 px-2.5 py-1.5 text-[12px] leading-snug text-white shadow-sm backdrop-blur-sm">
+        <div className="max-w-full rounded-sm border border-line bg-ply-3 px-2 py-1 text-ui-xs text-ink-1 shadow-float">
           <span className="block max-w-full truncate">
             <EmbedInlineText
               text={label}
@@ -2212,8 +2182,6 @@ const XEmbed = memo(
     onMediaPlay?: () => void;
     onMediaStop?: () => void;
   }) => {
-    const headerTimestampText = formatXHeaderTimestamp(embed.timestamp);
-    const footerTimestampText = formatXFooterTimestamp(embed.timestamp);
     const authorParts = useMemo(
       () => getXAuthorParts(embed.author),
       [embed.author],
@@ -2261,56 +2229,47 @@ const XEmbed = memo(
       ) : undefined;
 
     return (
-      <BaseEmbed embed={embed} width={520} bare>
-        <div className="flex flex-col gap-3">
+      <BaseEmbed embed={embed} width="standard" bare>
+        <div className="flex flex-col gap-2">
+          <EmbedHeader
+            provider={embed.provider?.name || "X"}
+            color={embed.color}
+            timestamp={embed.timestamp}
+            openHref={embed.url}
+            openLabel="Open post on X"
+          />
+
           {embed.author && (
-            <div className="flex items-start gap-3 min-w-0">
-              {embed.author.iconURL && (
+            <div className="flex min-w-0 items-center gap-2">
+              {embed.author.iconURL ? (
                 <img
                   src={embed.author.iconURL}
                   alt=""
-                  className="h-8 w-8 rounded-full object-cover shrink-0"
+                  className="size-8 shrink-0 rounded-avatar bg-tint-3 object-cover"
                   loading="lazy"
                 />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5 text-[14px] leading-tight">
-                  <a
-                    href={embed.author.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="min-w-0 truncate font-semibold text-rm-text-primary hover:underline"
-                  >
+              ) : null}
+              <div className="flex min-w-0 flex-1 items-baseline gap-1.5 text-ui-sm">
+                <a
+                  href={embed.author.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 truncate font-semibold text-ink-1 underline-offset-3 pointer-fine:hover:underline"
+                >
+                  <EmbedInlineText
+                    text={authorParts.displayName || embed.author.name}
+                    keyPrefix={`${embed.id}-author-name`}
+                  />
+                </a>
+                {authorParts.handle && (
+                  <span className="min-w-0 truncate text-ink-3">
                     <EmbedInlineText
-                      text={authorParts.displayName || embed.author.name}
-                      keyPrefix={`${embed.id}-author-name`}
+                      text={authorParts.handle}
+                      keyPrefix={`${embed.id}-author-handle`}
                     />
-                  </a>
-                  {authorParts.handle && (
-                    <span className="min-w-0 truncate text-rm-text-muted/85">
-                      <EmbedInlineText
-                        text={authorParts.handle}
-                        keyPrefix={`${embed.id}-author-handle`}
-                      />
-                    </span>
-                  )}
-                  {headerTimestampText && (
-                    <span className="shrink-0 text-rm-text-muted/85">
-                      &middot; {headerTimestampText}
-                    </span>
-                  )}
-                </div>
+                  </span>
+                )}
               </div>
-              <a
-                href={embed.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors hover:text-rm-text-primary"
-                aria-label="Open post on X"
-                title="Open on X"
-              >
-                <XOpenInNewIcon />
-              </a>
             </div>
           )}
 
@@ -2342,9 +2301,9 @@ const XEmbed = memo(
               href={embed.externalCard.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[12px] leading-none text-rm-text-muted/82 transition-colors hover:text-rm-text-primary"
+              className="w-fit text-ui-xs text-ink-3 transition-colors duration-(--dur-1) ease-out pointer-fine:hover:text-ink-1"
             >
-              <span className="text-rm-text-muted/72">From </span>
+              <span>From </span>
               <span className="font-medium">{externalCardDomain}</span>
             </a>
           )}
@@ -2359,12 +2318,6 @@ const XEmbed = memo(
           )}
 
           <XMetricBar metrics={embed.metrics} />
-          <XFooterBar
-            label={embed.footer?.text || embed.provider?.name || "X"}
-            keyPrefix={`${embed.id}-footer`}
-            timestamp={footerTimestampText}
-            bordered={!hasXMetrics(embed.metrics)}
-          />
         </div>
       </BaseEmbed>
     );
@@ -2383,7 +2336,6 @@ const XReferencedTweetCard = memo(
     onMediaPlay?: () => void;
     onMediaStop?: () => void;
   }) => {
-    const timestampText = formatXHeaderTimestamp(tweet.timestamp);
     const media = tweet.media ?? [];
     const authorParts = useMemo(
       () => getXAuthorParts(tweet.author),
@@ -2391,56 +2343,53 @@ const XReferencedTweetCard = memo(
     );
 
     return (
-      <div className="overflow-hidden rounded-lg border border-rm-border/75 bg-rm-bg-surface/35">
-        <div className="flex flex-col gap-2.5 p-3">
+      // A quote inside the card is a ruled block, not a second card: line
+      // edge at radius 8 (concentric inside the 10 card), no fill.
+      <div className="overflow-hidden rounded-md border border-line">
+        <div className="flex flex-col gap-2 p-3">
           {tweet.author && (
-            <div className="flex items-start gap-2.5 min-w-0">
-              {tweet.author.iconURL && (
+            <div className="flex min-w-0 items-center gap-2">
+              {tweet.author.iconURL ? (
                 <img
                   src={tweet.author.iconURL}
                   alt=""
-                  className="h-6 w-6 shrink-0 rounded-full object-cover"
+                  className="size-5 shrink-0 rounded-avatar bg-tint-3 object-cover"
                   loading="lazy"
                 />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5 text-[13px] leading-tight">
-                  <span className="min-w-0 truncate font-semibold text-rm-text-primary">
+              ) : null}
+              <div className="flex min-w-0 flex-1 items-baseline gap-1.5 text-ui-sm">
+                <span className="min-w-0 truncate font-semibold text-ink-1">
+                  <EmbedInlineText
+                    text={authorParts.displayName || tweet.author.name}
+                    keyPrefix={`${tweet.url || "tweet"}-author-name`}
+                  />
+                </span>
+                {authorParts.handle && (
+                  <span className="min-w-0 truncate text-ink-3">
                     <EmbedInlineText
-                      text={authorParts.displayName || tweet.author.name}
-                      keyPrefix={`${tweet.url || "tweet"}-author-name`}
+                      text={authorParts.handle}
+                      keyPrefix={`${tweet.url || "tweet"}-author-handle`}
                     />
                   </span>
-                  {authorParts.handle && (
-                    <span className="min-w-0 truncate text-rm-text-muted/85">
-                      <EmbedInlineText
-                        text={authorParts.handle}
-                        keyPrefix={`${tweet.url || "tweet"}-author-handle`}
-                      />
+                )}
+                {tweet.timestamp ? (
+                  <>
+                    <span aria-hidden="true" className="text-ui-xs text-ink-3">
+                      ·
                     </span>
-                  )}
-                  {timestampText && (
-                    <span className="shrink-0 text-rm-text-muted/85">
-                      &middot; {timestampText}
-                    </span>
-                  )}
-                </div>
+                    <EmbedDate value={tweet.timestamp} />
+                  </>
+                ) : null}
               </div>
               {tweet.url && (
-                <a
+                <EmbedOpenButton
                   href={tweet.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors hover:text-rm-text-primary"
-                  aria-label="Open quoted post on X"
-                  title="Open on X"
-                >
-                  <XOpenInNewIcon className="h-3.5 w-3.5" />
-                </a>
+                  label="Open quoted post on X"
+                  className="-my-1 -mr-1"
+                />
               )}
             </div>
           )}
-
           {tweet.rawDescription && (
             <XReferencedTweetText
               text={tweet.rawDescription}
@@ -2568,7 +2517,7 @@ const XExpandableText = memo(
           <EmbedInlineText
             text={text}
             keyPrefix={keyPrefix}
-            linkClassName="text-primary transition-colors hover:underline"
+            linkClassName={EMBED_TEXT_LINK}
             compactUrls
           />
         </div>
@@ -2597,12 +2546,12 @@ const XStandaloneTweetText = memo(
       collapsedLinesClassName="line-clamp-5"
       estimatedCollapsedLines={X_STANDALONE_TWEET_COLLAPSED_LINES}
       estimatedCollapsedChars={X_STANDALONE_TWEET_COLLAPSED_CHAR_THRESHOLD}
-      textClassName="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95"
+      textClassName="text-ui-sm leading-5 text-pretty whitespace-pre-wrap break-words text-ink-1"
       collapsedLabel="Show more"
       expandedLabel="Show less"
       expandAriaLabel="Expand post text"
       collapseAriaLabel="Collapse post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-[14px] font-medium text-primary transition-colors hover:text-primary hover:underline"
+      buttonClassName="inline-flex w-fit items-center rounded-xs text-ui-sm font-medium text-accent-ink underline-offset-3 outline-none pointer-fine:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
     />
   ),
 );
@@ -2615,12 +2564,12 @@ const XReferencedTweetText = memo(
       collapsedLinesClassName="line-clamp-4"
       estimatedCollapsedLines={X_REFERENCED_TWEET_COLLAPSED_LINES}
       estimatedCollapsedChars={X_REFERENCED_TWEET_COLLAPSED_CHAR_THRESHOLD}
-      textClassName="text-[13px] leading-5 whitespace-pre-wrap break-words text-rm-text-primary/90"
+      textClassName="text-ui-sm leading-5 text-pretty whitespace-pre-wrap break-words text-ink-1"
       collapsedLabel="..."
       expandedLabel="Show less"
       expandAriaLabel="Expand quoted post text"
       collapseAriaLabel="Collapse quoted post text"
-      buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-[12px] font-medium text-rm-text-muted/80 transition-colors hover:text-rm-text-primary data-[expanded=false]:tracking-[0.24em]"
+      buttonClassName="inline-flex w-fit items-center rounded-xs px-1 text-ui-xs font-medium text-ink-3 outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-[expanded=false]:tracking-[0.24em]"
     />
   ),
 );
@@ -2806,8 +2755,8 @@ const XMediaGrid = memo(
     }
 
     const heightClass = compact
-      ? "h-[140px] sm:h-[180px]"
-      : "h-[220px] sm:h-[300px]";
+      ? "h-[140px] md:h-[180px]"
+      : "h-[220px] md:h-[300px]";
     const gridClass =
       count === 2
         ? cn("grid-cols-2", heightClass)
@@ -2816,7 +2765,7 @@ const XMediaGrid = memo(
     return (
       <div
         className={cn(
-          "grid max-w-full gap-1 overflow-hidden rounded-[18px] border border-rm-border/45 bg-rm-bg-surface/30",
+          "grid max-w-full gap-1 overflow-hidden rounded-md border border-line bg-tint-1",
           gridClass,
         )}
       >
@@ -2998,9 +2947,9 @@ const XMediaTile = memo(
         className={
           single
             ? compact
-              ? `flex h-[180px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
-              : `flex h-[180px] max-h-[420px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
-            : "flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted"
+              ? `flex h-[180px] w-auto max-w-full items-center justify-center bg-tint-1 px-4 text-center text-ui-xs font-medium text-ink-3 ${singleObjectPositionClass}`
+              : `flex h-[180px] max-h-[420px] w-auto max-w-full items-center justify-center bg-tint-1 px-4 text-center text-ui-xs font-medium text-ink-3 ${singleObjectPositionClass}`
+            : "flex h-full min-h-40 w-full items-center justify-center bg-tint-1 px-4 text-center text-ui-xs font-medium text-ink-3"
         }
       >
         Media unavailable
@@ -3012,9 +2961,16 @@ const XMediaTile = memo(
         className={
           single
             ? compact
-              ? `h-[180px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 hover:brightness-105`
-              : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 hover:brightness-105`
-            : "h-full w-full object-cover transition-all duration-300 hover:brightness-105"
+              ? `h-[180px] w-auto max-w-full object-contain ${singleObjectPositionClass}`
+              : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass}`
+            : "h-full w-full object-cover"
+        }
+        // Reserve the single image's box from its known size so the message
+        // row does not grow (and the list jump) when the image arrives.
+        style={
+          single && !compact
+            ? getXSingleImageBoxStyle(attachment.width, attachment.height)
+            : undefined
         }
         loading="lazy"
         referrerPolicy="no-referrer"
@@ -3030,14 +2986,14 @@ const XMediaTile = memo(
           ? cn(
               "block h-[180px] max-w-[240px]",
               usesFramedSingleChrome &&
-                "rounded-[18px] border border-rm-border/45 bg-rm-bg-surface/30",
+                "rounded-md border border-line bg-tint-1",
             )
           : cn(
               "block w-fit max-w-full",
               !isVideo &&
                 usesFramedSingleChrome &&
-                "rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
-              isVideo && usesFramedSingleChrome && "rounded-[20px]",
+                "rounded-md border border-line bg-tint-1",
+              isVideo && usesFramedSingleChrome && "rounded-md",
             )
         : "block",
       !isVideo || isGif ? "cursor-zoom-in" : "",
@@ -3049,7 +3005,10 @@ const XMediaTile = memo(
         <button
           type="button"
           {...mediaContextProps}
-          className={cn(wrapperClassName, "appearance-none p-0 text-left")}
+          className={cn(
+            wrapperClassName,
+            "appearance-none p-0 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+          )}
           onClick={() => onOpen(index)}
           onKeyDown={(event) => onKeyDown(event, index)}
           aria-label={isGif ? "Open GIF viewer" : "Open media viewer"}
@@ -3059,11 +3018,7 @@ const XMediaTile = memo(
         >
           {content}
           {overlay}
-          {extraCount > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
-              +{extraCount}
-            </div>
-          )}
+          {extraCount > 0 && <MediaMoreOverlay count={extraCount} />}
         </button>
       );
     }
@@ -3076,7 +3031,7 @@ const XMediaTile = memo(
           {...mediaContextProps}
           className={cn(
             wrapperClassName,
-            "text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0",
+            "text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
           )}
           onClick={() => onOpen(index)}
           onKeyDown={(event) => onKeyDown(event, index)}
@@ -3085,11 +3040,7 @@ const XMediaTile = memo(
         >
           {content}
           {overlay}
-          {extraCount > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
-              +{extraCount}
-            </div>
-          )}
+          {extraCount > 0 && <MediaMoreOverlay count={extraCount} />}
         </div>
       );
     }
@@ -3098,11 +3049,7 @@ const XMediaTile = memo(
       <div {...mediaContextProps} className={wrapperClassName}>
         {content}
         {overlay}
-        {extraCount > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
-            +{extraCount}
-          </div>
-        )}
+        {extraCount > 0 && <MediaMoreOverlay count={extraCount} />}
       </div>
     );
   },
@@ -3301,6 +3248,9 @@ const XGifTile = memo(
     const videoRef = useRef<HTMLVideoElement>(null);
     const altControlRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = usePrefersReducedMotion();
+    // Stop the loop while the app is hidden or behind a game (spec §5f);
+    // it picks up again on return unless the user paused it.
+    const appActive = useAppActive();
     const titleId = useId();
     const altTextId = useId();
     const altText = attachment.alt_text?.trim() || "";
@@ -3314,6 +3264,7 @@ const XGifTile = memo(
       : null;
     const useWebp = Boolean(webpSrc) && !webpLoadError;
     const playbackPaused = paused || prefersReducedMotion;
+    const loopStopped = playbackPaused || !appActive;
     const posterUrl = attachment.thumbnailUrl
       ? getAuthAssetUrl(
           buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl),
@@ -3344,7 +3295,7 @@ const XGifTile = memo(
 
       if (useWebp) return;
 
-      if (prefersReducedMotion || paused) {
+      if (loopStopped) {
         video.pause();
         return;
       }
@@ -3352,7 +3303,7 @@ const XGifTile = memo(
       void video.play().catch(() => {
         // Browser/autoplay support decides whether inline GIF playback starts.
       });
-    }, [paused, prefersReducedMotion, useWebp]);
+    }, [loopStopped, useWebp]);
 
     useEffect(() => {
       if (!altPinned) return;
@@ -3407,7 +3358,7 @@ const XGifTile = memo(
             className={cn(
               single ? singleMediaClass : "h-full w-full object-contain",
             )}
-            paused={playbackPaused}
+            paused={loopStopped}
             onError={handleWebpError}
             onReady={handleWebpReady}
           />
@@ -3427,7 +3378,7 @@ const XGifTile = memo(
             aria-label={`${displayAltText} unavailable`}
             className={cn(
               single ? singleMediaClass : "h-full w-full",
-              "flex items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted",
+              "flex items-center justify-center bg-tint-1 px-4 text-center text-ui-xs font-medium text-ink-3",
             )}
           >
             GIF unavailable
@@ -3440,7 +3391,7 @@ const XGifTile = memo(
             className={cn(
               single ? singleMediaClass : "h-full w-full object-contain",
             )}
-            autoPlay={!prefersReducedMotion}
+            autoPlay={!prefersReducedMotion && appActive}
             loop
             muted
             playsInline
@@ -3453,68 +3404,75 @@ const XGifTile = memo(
         )}
         {!mediaUnavailable && <GifFavoriteButton gif={favorite} />}
         {!mediaUnavailable && (
-          <div className="absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-black/70 via-black/20 to-transparent px-2 pb-2 pt-8">
-            <div className="flex items-center gap-2 text-white">
-              <button
-                type="button"
-                onClick={handleTogglePaused}
-                disabled={prefersReducedMotion}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-black/45 transition-colors hover:bg-black/65"
-                aria-label={playbackPaused ? "Play GIF" : "Pause GIF"}
-                title={
-                  prefersReducedMotion
-                    ? "Animation disabled by reduced motion"
-                    : playbackPaused
-                      ? "Play GIF"
-                      : "Pause GIF"
-                }
-              >
-                {playbackPaused ? (
-                  <PlayIcon className="h-3.5 w-3.5" />
-                ) : (
-                  <PauseIcon className="h-3.5 w-3.5" />
-                )}
-                <span className="sr-only" id={titleId}>
-                  {playbackPaused ? "Play GIF" : "Pause GIF"}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleOpenViewer}
-                className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold tracking-[0.12em] transition-colors hover:bg-black/65"
-                aria-label="Open GIF viewer"
-                title="Open GIF viewer"
-              >
-                GIF
-              </button>
-
-              {hasAltText && (
-                <div className="group/x-gif-alt relative" ref={altControlRef}>
-                  <button
-                    type="button"
-                    onClick={handleToggleAlt}
-                    className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-black/65"
-                    aria-label="Show GIF alt text"
-                    aria-controls={altTextId}
-                    aria-expanded={altPinned}
-                    title="Show GIF alt text"
-                  >
-                    ALT
-                  </button>
-                  <div
-                    id={altTextId}
-                    className={cn(
-                      "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-[12px] leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
-                      altPinned ? "opacity-100" : "opacity-0",
-                    )}
-                    role="tooltip"
-                  >
-                    {altText}
-                  </div>
-                </div>
+          <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleTogglePaused}
+              disabled={prefersReducedMotion}
+              className={cn(
+                "relative flex size-7 items-center justify-center rounded-full disabled:opacity-45",
+                MEDIA_FLOAT,
               )}
-            </div>
+              aria-label={playbackPaused ? "Play GIF" : "Pause GIF"}
+              title={
+                prefersReducedMotion
+                  ? "Animation disabled by reduced motion"
+                  : playbackPaused
+                    ? "Play GIF"
+                    : "Pause GIF"
+              }
+            >
+              <Icon
+                name={playbackPaused ? "play" : "pause"}
+                state="active"
+                size="xs"
+              />
+              <span className="sr-only" id={titleId}>
+                {playbackPaused ? "Play GIF" : "Pause GIF"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenViewer}
+              className={cn(
+                "flex h-7 items-center rounded-sm px-2 text-ui-2xs uppercase",
+                MEDIA_FLOAT,
+              )}
+              aria-label="Open GIF viewer"
+              title="Open GIF viewer"
+            >
+              GIF
+            </button>
+
+            {hasAltText && (
+              <div className="group/x-gif-alt relative" ref={altControlRef}>
+                <button
+                  type="button"
+                  onClick={handleToggleAlt}
+                  className={cn(
+                    "flex h-7 items-center rounded-sm px-2 text-ui-2xs uppercase",
+                    MEDIA_FLOAT,
+                  )}
+                  aria-label="Show GIF alt text"
+                  aria-controls={altTextId}
+                  aria-expanded={altPinned}
+                  title="Show GIF alt text"
+                >
+                  ALT
+                </button>
+                <div
+                  id={altTextId}
+                  className={cn(
+                    "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-line bg-ply-3 px-3 py-2 text-ui-xs text-pretty text-ink-1 shadow-float transition-opacity duration-(--dur-2) ease-out pointer-fine:group-hover/x-gif-alt:opacity-100",
+                    altPinned ? "opacity-100" : "opacity-0",
+                  )}
+                  role="tooltip"
+                >
+                  {altText}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -3573,15 +3531,23 @@ function getXAttachmentUrl(attachment: Attachment): string {
 
 const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   return (
-    <BaseEmbed embed={embed} width={432}>
+    <BaseEmbed embed={embed} width="standard">
       {embed.thumbnail?.url && (
         <div
-          className="relative rounded-md overflow-hidden"
+          className="relative overflow-hidden rounded-md bg-tint-1"
           data-media-element="true"
           data-media-url={embed.thumbnail.url}
           data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
         >
-          <a href={embed.url} target="_blank" rel="noopener noreferrer">
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group/media relative block outline-none"
+            aria-label={
+              embed.rawTitle ? `Play ${embed.rawTitle}` : "Play video"
+            }
+          >
             <img
               src={embed.thumbnail.url}
               alt="Video thumbnail"
@@ -3599,12 +3565,10 @@ const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
               data-media-url={embed.thumbnail.url}
               data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
             />
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <MediaPlayButton />
+            </span>
           </a>
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-14 h-14 bg-black/50 rounded-full flex items-center justify-center">
-              <PlayIcon />
-            </div>
-          </div>
         </div>
       )}
     </BaseEmbed>
@@ -3636,7 +3600,12 @@ const RichEmbed = memo(
     );
 
     return (
-      <BaseEmbed embed={embed} width={432}>
+      <BaseEmbed
+        embed={embed}
+        width="standard"
+        openHref={embed.video ? embed.url : undefined}
+        openLabel="Open in a new tab"
+      >
         <div className="flex flex-col gap-2">
           {embed.author && (
             <div className="flex items-center gap-2">
@@ -3644,7 +3613,7 @@ const RichEmbed = memo(
                 href={embed.author.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-bold text-[14px] text-rm-text-primary hover:underline"
+                className="text-ui-sm font-semibold text-ink-1 underline-offset-3 pointer-fine:hover:underline"
               >
                 <EmbedInlineText
                   text={embed.author.name}
@@ -3656,7 +3625,7 @@ const RichEmbed = memo(
 
           {embed.thumbnail?.url && (
             <div
-              className="relative rounded-md overflow-hidden border border-rm-border/30"
+              className="relative overflow-hidden rounded-md bg-tint-1"
               data-media-element="true"
               data-media-url={embed.thumbnail.url}
               data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
@@ -3695,24 +3664,16 @@ const RichEmbed = memo(
                     )}
                   />
                   {embed.video && (
-                    <div className="absolute inset-0 flex items-center justify-center gap-3">
+                    <>
                       <button
+                        type="button"
                         onClick={handlePlay}
-                        className="w-12 h-12 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                        className="group/media absolute inset-0 flex cursor-pointer items-center justify-center outline-none"
                         aria-label="Play video"
                       >
-                        <PlayIcon />
+                        <MediaPlayButton />
                       </button>
-                      <a
-                        href={embed.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
-                        aria-label="Open in new tab"
-                      >
-                        <ExternalIcon />
-                      </a>
-                    </div>
+                    </>
                   )}
                 </>
               )}
@@ -3724,7 +3685,6 @@ const RichEmbed = memo(
   },
 );
 
-const TIKTOK_ICON_URL = "https://www.tiktok.com/favicon.ico";
 const INSTAGRAM_ICON_URL =
   "https://static.cdninstagram.com/rsrc.php/v4/yI/r/VsNE-OHk_8a.png";
 type InstagramHydrationPayload = {
@@ -3742,197 +3702,10 @@ type InstagramHydrationPayload = {
   audio?: EmbedInfo["audio"];
 };
 
-const InstagramChevronIcon = ({
-  direction,
-  className = "h-4 w-4",
-}: {
-  direction: "left" | "right";
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.25"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    {direction === "left" ? (
-      <path d="m15 5-7 7 7 7" />
-    ) : (
-      <path d="m9 5 7 7-7 7" />
-    )}
-  </svg>
-);
-
-const InstagramHeartIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M12 20.8 10.8 19.7C5.4 14.9 2 11.8 2 7.9 2 4.9 4.3 2.6 7.2 2.6c1.8 0 3.5.8 4.8 2.2 1.3-1.4 3-2.2 4.8-2.2 2.9 0 5.2 2.3 5.2 5.3 0 3.9-3.4 7-8.8 11.8L12 20.8Z" />
-  </svg>
-);
-
-const InstagramCommentIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M20 14.5a4.5 4.5 0 0 1-4.5 4.5H8l-4 3V7.5A4.5 4.5 0 0 1 8.5 3h7A4.5 4.5 0 0 1 20 7.5Z" />
-  </svg>
-);
-
-const InstagramSendIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M22 2 11 13" />
-    <path d="M22 2 15 22l-4-9-9-4Z" />
-  </svg>
-);
-
-const InstagramBookmarkIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M6 3.5h12a1 1 0 0 1 1 1v16l-7-4.2-7 4.2v-16a1 1 0 0 1 1-1Z" />
-  </svg>
-);
-
-const InstagramViewsIcon = ({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-
-const InstagramVerifiedIcon = ({
-  className = "h-4 w-4",
-}: {
-  className?: string;
-}) => (
-  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-    <path
-      fill="#4c98ff"
-      d="M12 2.7 14 4l2.4-.1 1 2.1 2.2 1 .1 2.4 1.3 2-1.3 2 .1 2.4-2.2 1-1 2.1-2.4-.1L12 21.3l-2-1.3-2.4.1-1-2.1-2.2-1 .1-2.4-1.3-2 1.3-2-.1-2.4 2.2-1 1-2.1L10 4Z"
-    />
-    <path
-      fill="#fff"
-      d="m10.6 15.9-3-3 1.2-1.2 1.8 1.8 4.6-4.7 1.2 1.2-5.8 5.9Z"
-    />
-  </svg>
-);
-
-const InstagramMusicIcon = ({
-  className = "h-4 w-4",
-}: {
-  className?: string;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M9 18V6l10-2v12" />
-    <path d="M9 10 19 8" />
-    <circle cx="6" cy="18" r="3" />
-    <circle cx="16" cy="16" r="3" />
-  </svg>
-);
-
 function formatInstagramMetricCount(value?: number): string | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
     return null;
   return value > 0 ? formatXMetricCount(value) : "0";
-}
-
-function formatInstagramTimestamp(timestamp?: string): string | null {
-  if (!timestamp) return null;
-
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const now = new Date();
-  const diffMs = Math.max(0, now.getTime() - date.getTime());
-  const diffSeconds = Math.floor(diffMs / 1000);
-
-  if (diffSeconds < 60) return "just now";
-
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60)
-    return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24)
-    return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
-
-  return X_HEADER_DATE_WITH_YEAR_FORMATTER.format(date);
 }
 
 function needsInstagramHydration(embed: EmbedInfo): boolean {
@@ -3987,7 +3760,7 @@ function InstagramImage({
       <div
         role="img"
         aria-label="Media unavailable"
-        className="flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted"
+        className="flex h-full min-h-40 w-full items-center justify-center bg-tint-1 px-4 text-center text-ui-xs font-medium text-ink-3"
       >
         Media unavailable
       </div>
@@ -3998,7 +3771,7 @@ function InstagramImage({
     <img
       src={src}
       alt={alt}
-      className="h-full w-full object-cover"
+      className="h-full w-full object-contain"
       loading={loading}
       referrerPolicy="no-referrer"
       draggable={false}
@@ -4157,8 +3930,20 @@ const InstagramEmbed = memo(
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
   }) => {
+    const instagramHydrationKey = hydrationKey(
+      "/api/instagram-video",
+      embed.url,
+    );
+    const [cachedHydration] = useState(() =>
+      peekEmbedHydration<InstagramHydrationPayload>(instagramHydrationKey),
+    );
     const [hydratedPayload, setHydratedPayload] =
-      useState<InstagramHydrationPayload | null>(null);
+      useState<InstagramHydrationPayload | null>(() =>
+        cachedHydration?.status === "ok" ? cachedHydration.payload : null,
+      );
+    const [isGone, setIsGone] = useState(
+      () => cachedHydration?.status === "missing",
+    );
     const [activeIndex, setActiveIndex] = useState(0);
     const [dragOffset, setDragOffset] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
@@ -4181,7 +3966,6 @@ const InstagramEmbed = memo(
       pressedImageIndex: null,
     });
     const { open } = useImageViewerActions();
-    const prefersReducedMotion = usePrefersReducedMotion();
     const needsHydration = needsInstagramHydration(embed);
     const displayEmbed = useMemo(
       () => hydrateInstagramEmbed(embed, hydratedPayload),
@@ -4205,7 +3989,6 @@ const InstagramEmbed = memo(
     );
     const activeMedia = media[resolvedActiveIndex] ?? media[0];
     const captionText = displayEmbed.rawDescription ?? displayEmbed.rawTitle;
-    const timestampText = formatInstagramTimestamp(displayEmbed.timestamp);
     const commentCount = displayEmbed.metrics?.comments;
     const likeCount = displayEmbed.metrics?.likes;
     const viewCount = displayEmbed.metrics?.views;
@@ -4227,10 +4010,15 @@ const InstagramEmbed = memo(
 
     useEffect(() => {
       if (!embed.url || fetchedRef.current || !needsHydration) return;
+      if (cachedHydration) {
+        fetchedRef.current = true;
+        return;
+      }
       if (typeof IntersectionObserver === "undefined") return;
 
       const el = trackRef.current;
       if (!el) return;
+      let isActive = true;
 
       const observer = new IntersectionObserver(
         (entries) => {
@@ -4238,28 +4026,26 @@ const InstagramEmbed = memo(
           fetchedRef.current = true;
           observer.disconnect();
 
-          fetch(
+          void loadEmbedHydration<InstagramHydrationPayload>(
+            instagramHydrationKey,
             apiUrl(
               `/api/instagram-video?videoUrl=${encodeURIComponent(embed.url)}`,
             ),
-          )
-            .then((res) => {
-              if (!res.ok) throw new Error(`${res.status}`);
-              return res.json() as Promise<InstagramHydrationPayload>;
-            })
-            .then((payload) => {
-              setHydratedPayload(payload);
-            })
-            .catch(() => {
-              setHydratedPayload(null);
-            });
+          ).then((result) => {
+            if (!isActive) return;
+            if (result.status === "ok") setHydratedPayload(result.payload);
+            if (result.status === "missing") setIsGone(true);
+          });
         },
         { threshold: 0.2 },
       );
 
       observer.observe(el);
-      return () => observer.disconnect();
-    }, [embed.url, needsHydration]);
+      return () => {
+        isActive = false;
+        observer.disconnect();
+      };
+    }, [cachedHydration, embed.url, instagramHydrationKey, needsHydration]);
 
     const goToIndex = useCallback(
       (index: number) => {
@@ -4514,77 +4300,50 @@ const InstagramEmbed = memo(
       [onMediaStop],
     );
 
+    const handleAudioStopped = useCallback(() => {
+      setIsAudioPlaying(false);
+      if (audioActiveRef.current) {
+        audioActiveRef.current = false;
+        onMediaStop?.();
+      }
+    }, [onMediaStop]);
+
+    if (isGone) {
+      return <UnavailableSocialEmbed embed={displayEmbed} />;
+    }
+
     return (
-      <BaseEmbed embed={displayEmbed} width={392} bare>
-        <article className="flex flex-col gap-3">
-          <header className="flex items-center gap-3">
-            <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-rm-bg-surface/70 ring-1 ring-rm-border/60">
-              {displayEmbed.author?.iconURL ? (
-                <img
-                  src={getAuthAssetUrl(
+      <BaseEmbed embed={displayEmbed} width="compact" bare>
+        <article className="flex flex-col gap-2">
+          <EmbedHeader
+            provider="Instagram"
+            color={displayEmbed.color}
+            timestamp={displayEmbed.timestamp}
+            openHref={embed.url}
+            openLabel="Open in Instagram"
+          />
+
+          <SocialAuthorRow
+            name={displayEmbed.author?.name}
+            url={displayEmbed.author?.url}
+            avatarSrc={
+              displayEmbed.author?.iconURL
+                ? getAuthAssetUrl(
                     buildProxyMediaPath(displayEmbed.author.iconURL, embed.url),
-                  )}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="h-full w-full bg-[radial-gradient(circle_at_top,_color-mix(in_srgb,var(--rm-accent)_55%,transparent),transparent_65%)]" />
-              )}
-            </div>
+                  )
+                : null
+            }
+            verified={displayEmbed.author?.isVerified}
+            keyPrefix={`${embed.id}-instagram-author`}
+          />
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 text-[14px] leading-tight">
-                {displayEmbed.author?.url ? (
-                  <a
-                    href={displayEmbed.author.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate font-semibold text-rm-text-primary hover:underline"
-                  >
-                    <EmbedInlineText
-                      text={displayEmbed.author.name}
-                      keyPrefix={`${embed.id}-instagram-author`}
-                    />
-                  </a>
-                ) : (
-                  <span className="truncate font-semibold text-rm-text-primary">
-                    <EmbedInlineText
-                      text={displayEmbed.author?.name || "Instagram"}
-                      keyPrefix={`${embed.id}-instagram-author`}
-                    />
-                  </span>
-                )}
-                {displayEmbed.author?.isVerified && (
-                  <InstagramVerifiedIcon className="h-3.5 w-3.5 shrink-0" />
-                )}
-              </div>
-              {timestampText && (
-                <div className="text-[12px] text-rm-text-muted/82">
-                  {timestampText}
-                </div>
-              )}
-            </div>
-
-            <a
-              href={embed.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors hover:bg-black/85"
-              title="Open in Instagram"
-              aria-label="Open in Instagram"
-            >
-              <ExternalIcon />
-            </a>
-          </header>
-
-          <div className="relative overflow-hidden rounded-[22px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.28)]">
+          <div className="relative overflow-hidden rounded-md bg-black">
             <div
               ref={trackRef}
               className="relative w-full overflow-hidden"
               style={{
                 aspectRatio: aspectRatioStyle,
+                maxHeight: EMBED_PORTRAIT_MAX_HEIGHT,
                 touchAction: media.length > 1 ? "pan-y" : undefined,
               }}
               tabIndex={media.length > 1 ? 0 : -1}
@@ -4597,14 +4356,12 @@ const InstagramEmbed = memo(
               <div
                 data-testid="instagram-carousel-track"
                 className="flex h-full"
-                style={{
-                  width: `${Math.max(media.length, 1) * 100}%`,
-                  transform: `translate3d(calc(${-resolvedActiveIndex * slideWidthPercent}% + ${dragOffset}px), 0, 0)`,
-                  transition: !isDragging
-                    ? `transform ${prefersReducedMotion ? 0 : 260}ms cubic-bezier(0.22, 1, 0.36, 1)`
-                    : "none",
-                  willChange: "transform",
-                }}
+                style={carouselTrackStyle(
+                  media.length,
+                  resolvedActiveIndex,
+                  dragOffset,
+                  isDragging,
+                )}
               >
                 {media.map((item, index) => {
                   const imageSrc = getAuthAssetUrl(
@@ -4677,7 +4434,7 @@ const InstagramEmbed = memo(
                             handleImageKeyDown(event, index)
                           }
                           onDragStart={preventNativeDrag}
-                          className="block h-full w-full cursor-zoom-in select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0"
+                          className="block h-full w-full cursor-zoom-in select-none outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
                           aria-label={`Open media ${index + 1} of ${media.length}`}
                           data-instagram-image-index={index}
                         >
@@ -4697,83 +4454,26 @@ const InstagramEmbed = memo(
                 })}
               </div>
 
-              {media.length > 1 && (
-                <>
-                  {resolvedActiveIndex > 0 && (
-                    <button
-                      type="button"
-                      onClick={handlePrevButtonClick}
-                      onPointerDown={stopChromePointerPropagation}
-                      className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
-                      aria-label="Previous media"
-                    >
-                      <InstagramChevronIcon direction="left" />
-                    </button>
-                  )}
-                  {resolvedActiveIndex < media.length - 1 && (
-                    <button
-                      type="button"
-                      onClick={handleNextButtonClick}
-                      onPointerDown={stopChromePointerPropagation}
-                      className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
-                      aria-label="Next media"
-                    >
-                      <InstagramChevronIcon direction="right" />
-                    </button>
-                  )}
-                  <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
-                    {media.map((_, index) => (
-                      <button
-                        type="button"
-                        key={`${embed.id}-instagram-dot-${index}`}
-                        onClick={(event) => handleDotClick(event, index)}
-                        onPointerDown={stopChromePointerPropagation}
-                        aria-label={`Go to media ${index + 1}`}
-                        aria-current={index === resolvedActiveIndex}
-                        className={cn(
-                          "h-1.5 w-1.5 rounded-full transition-all",
-                          index === resolvedActiveIndex
-                            ? "bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.18)]"
-                            : "bg-white/45",
-                        )}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
+              <CarouselControls
+                count={media.length}
+                activeIndex={resolvedActiveIndex}
+                dotKeyPrefix={`${embed.id}-instagram-dot`}
+                onPrev={handlePrevButtonClick}
+                onNext={handleNextButtonClick}
+                onDot={handleDotClick}
+                onPointerDown={stopChromePointerPropagation}
+              />
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 text-rm-text-primary">
-            <div className="flex items-center gap-3">
-              <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
-                <InstagramHeartIcon />
-                {formatInstagramMetricCount(likeCount) && (
-                  <span>{formatInstagramMetricCount(likeCount)}</span>
-                )}
-              </div>
-              <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
-                <InstagramCommentIcon />
-                {formatInstagramMetricCount(commentCount) && (
-                  <span>{formatInstagramMetricCount(commentCount)}</span>
-                )}
-              </div>
-              {formatInstagramMetricCount(viewCount) && (
-                <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
-                  <InstagramViewsIcon />
-                  <span>{formatInstagramMetricCount(viewCount)}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="inline-flex items-center gap-3 text-rm-text-muted/82">
-              <InstagramSendIcon />
-              <InstagramBookmarkIcon />
-            </div>
-          </div>
+          <SocialMetrics
+            likes={likeCount}
+            comments={commentCount}
+            views={viewCount}
+          />
 
           {captionText && (
-            <p className="text-[13px] leading-relaxed text-rm-text-primary">
+            <p className="text-ui-sm leading-5 text-pretty break-words text-ink-1">
               {displayEmbed.author?.name && (
                 <span className="mr-1 font-semibold">
                   {displayEmbed.author.name}
@@ -4782,7 +4482,7 @@ const InstagramEmbed = memo(
               <EmbedInlineText
                 text={captionText}
                 keyPrefix={`${embed.id}-instagram-caption`}
-                linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] hover:underline"
+                linkClassName={EMBED_TEXT_LINK}
               />
             </p>
           )}
@@ -4792,118 +4492,27 @@ const InstagramEmbed = memo(
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[12px] text-rm-text-muted/86 transition-colors hover:text-rm-text-primary"
+              className="w-fit text-ui-xs text-ink-3 transition-colors duration-(--dur-1) ease-out pointer-fine:hover:text-ink-1"
             >
-              View all {commentCount.toLocaleString()} comments
+              View all <Num size="sm">{commentCount.toLocaleString()}</Num>{" "}
+              comments
             </a>
           )}
 
           {displayEmbed.audio &&
             (displayEmbed.audio.title || displayEmbed.audio.artist) && (
-              <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-[12px] text-rm-text-secondary">
-                {audioPlaybackUrl ? (
-                  <button
-                    type="button"
-                    onClick={handleAudioToggle}
-                    className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
-                    aria-label={
-                      isAudioPlaying
-                        ? "Pause audio preview"
-                        : "Play audio preview"
-                    }
-                  >
-                    {audioArtworkSrc ? (
-                      <img
-                        src={audioArtworkSrc}
-                        alt=""
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text-primary">
-                        <InstagramMusicIcon />
-                      </span>
-                    )}
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/28 backdrop-blur-[1px]">
-                      {isAudioPlaying ? (
-                        <PauseIcon className="h-4 w-4" />
-                      ) : (
-                        <PlayIcon className="h-4 w-4" />
-                      )}
-                    </span>
-                  </button>
-                ) : (
-                  <>
-                    {audioArtworkSrc ? (
-                      <img
-                        src={audioArtworkSrc}
-                        alt=""
-                        className="h-10 w-10 shrink-0 rounded-xl object-cover"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text-primary">
-                        <InstagramMusicIcon />
-                      </span>
-                    )}
-                  </>
-                )}
-                <div className="min-w-0 flex-1 leading-tight">
-                  {displayEmbed.audio.title && (
-                    <div className="truncate font-semibold text-rm-text-primary">
-                      {displayEmbed.audio.title}
-                    </div>
-                  )}
-                  {displayEmbed.audio.artist && (
-                    <div className="truncate text-rm-text-muted/86">
-                      {displayEmbed.audio.artist}
-                    </div>
-                  )}
-                </div>
-                {audioPlaybackUrl && (
-                  <audio
-                    ref={audioRef}
-                    src={audioPlaybackUrl}
-                    preload="none"
-                    onPlay={() => setIsAudioPlaying(true)}
-                    onPause={() => {
-                      setIsAudioPlaying(false);
-                      if (audioActiveRef.current) {
-                        audioActiveRef.current = false;
-                        onMediaStop?.();
-                      }
-                    }}
-                    onEnded={() => {
-                      setIsAudioPlaying(false);
-                      if (audioActiveRef.current) {
-                        audioActiveRef.current = false;
-                        onMediaStop?.();
-                      }
-                    }}
-                  />
-                )}
-              </div>
+              <SocialAudioChip
+                audio={displayEmbed.audio}
+                artworkSrc={audioArtworkSrc}
+                playbackUrl={audioPlaybackUrl}
+                playing={isAudioPlaying}
+                audioRef={audioRef}
+                keyPrefix={`${embed.id}-instagram`}
+                onToggle={handleAudioToggle}
+                onAudioPlay={() => setIsAudioPlaying(true)}
+                onAudioStop={handleAudioStopped}
+              />
             )}
-
-          <div className="flex items-center gap-2 text-[11px] text-rm-text-muted/78">
-            <img
-              src={INSTAGRAM_ICON_URL}
-              alt=""
-              className="h-3.5 w-3.5 rounded-sm"
-            />
-            <span>Instagram</span>
-            {displayEmbed.timestamp && (
-              <>
-                <span className="opacity-45">·</span>
-                <span>
-                  {formatEmbedTimestamp(displayEmbed.timestamp) ||
-                    displayEmbed.timestamp}
-                </span>
-              </>
-            )}
-          </div>
         </article>
       </BaseEmbed>
     );
@@ -4922,6 +4531,7 @@ function getInstagramFallbackTitle(url: string): string {
 }
 
 const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
+  const [imageFailed, setImageFailed] = useState(false);
   const providerName = embed.provider?.name?.toLowerCase();
   const displayEmbed = useMemo<EmbedInfo>(
     () =>
@@ -4931,28 +4541,73 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
     [embed, providerName],
   );
   const thumbnailSrc =
-    embed.provider?.name?.toLowerCase() === "instagram" && embed.thumbnail?.url
+    providerName === "instagram" && embed.thumbnail?.url
       ? getAuthAssetUrl(buildProxyMediaPath(embed.thumbnail.url, embed.url))
       : embed.thumbnail?.url;
+  const width = embed.thumbnail?.width;
+  const height = embed.thumbnail?.height;
+  const showImage = Boolean(thumbnailSrc) && !imageFailed;
+  // Pages that ask for a summary card (or send a small/square image) get a
+  // thumbnail beside the text; a square logo blown up to full width read as
+  // a broken layout. Embeds stored before `imageLayout` existed stay large.
+  const layout = embed.imageLayout ?? "large";
+
+  if (showImage && layout === "thumbnail") {
+    return (
+      <BaseEmbed embed={displayEmbed} width="compact" bare>
+        <div className="flex items-start gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <EmbedCardText embed={displayEmbed} />
+          </div>
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0"
+            tabIndex={-1}
+            aria-hidden="true"
+          >
+            <img
+              src={thumbnailSrc}
+              alt=""
+              loading="lazy"
+              className="size-20 rounded-md bg-tint-1 object-cover"
+              referrerPolicy="no-referrer"
+              onError={() => setImageFailed(true)}
+              data-media-element="true"
+              data-media-url={embed.thumbnail?.url || embed.url}
+              data-media-download-url={thumbnailSrc}
+            />
+          </a>
+        </div>
+      </BaseEmbed>
+    );
+  }
 
   return (
-    <BaseEmbed embed={displayEmbed} width={432}>
-      {thumbnailSrc && (
-        <a href={embed.url} target="_blank" rel="noopener noreferrer">
+    // A large image takes the standard width; a text-only card the compact.
+    <BaseEmbed embed={displayEmbed} width={showImage ? "standard" : "compact"}>
+      {showImage && (
+        <a
+          href={embed.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${displayEmbed.rawTitle || displayEmbed.provider?.name || "link"}`}
+        >
           <img
             src={thumbnailSrc}
-            alt="Thumbnail"
-            width={embed.thumbnail?.width}
-            height={embed.thumbnail?.height}
-            className="w-full rounded-md object-cover max-h-[300px]"
-            style={
-              embed.thumbnail?.width && embed.thumbnail?.height
-                ? {
-                    aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
-                  }
-                : { minHeight: 160 }
-            }
+            alt=""
+            loading="lazy"
+            width={width}
+            height={height}
+            className="w-full rounded-md bg-tint-1 object-cover max-h-[300px]"
+            // Reserve the box so the row does not grow when the image loads.
+            style={{
+              aspectRatio:
+                width && height ? `${width} / ${height}` : "1.91 / 1",
+            }}
             referrerPolicy="no-referrer"
+            onError={() => setImageFailed(true)}
             data-media-element="true"
             data-media-url={embed.thumbnail?.url || embed.url}
             data-media-download-url={thumbnailSrc}
@@ -4963,33 +4618,222 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
+/** Header, title and description for a card laid out by its caller. */
+function EmbedCardText({ embed }: { embed: EmbedInfo }) {
+  return (
+    <>
+      <EmbedCardHeader embed={embed} />
+      <EmbedTitle embed={embed} />
+      <EmbedDescription embed={embed} />
+    </>
+  );
+}
+
+function getUnavailableMessage(embed: EmbedInfo): string {
+  const provider = embed.provider?.name?.toLowerCase();
+  if (provider === "tiktok") return "This TikTok is no longer available";
+  if (provider === "youtube") return "This video is no longer available";
+  return "This post is no longer available";
+}
+
 const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   return (
-    <BaseEmbed embed={embed} width={420}>
-      <div className="flex flex-col gap-2 py-1">
-        {embed.author?.name ? (
-          <div className="text-[14px] font-semibold text-rm-text-primary">
+    <BaseEmbed embed={embed} width="compact" bare>
+      <EmbedHeader
+        provider={
+          embed.provider?.name ? (
             <EmbedInlineText
-              text={embed.author.name}
-              keyPrefix={`${embed.id}-unavailable-author`}
+              text={embed.provider.name}
+              keyPrefix={`${embed.id}-unavailable-provider`}
             />
-          </div>
-        ) : null}
-        <p className="text-[14px] leading-relaxed text-rm-text-muted">
-          This post is no longer available
-        </p>
-        <a
-          href={embed.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-fit text-[13px] font-semibold text-[#00A8FC] hover:underline"
-        >
-          View original
-        </a>
+          ) : undefined
+        }
+        color={embed.color}
+      />
+      <div className="flex items-center gap-3" data-testid="embed-unavailable">
+        <img
+          src={SOCIAL_UNAVAILABLE_IMAGE}
+          alt=""
+          className="size-16 shrink-0 rounded-md"
+          draggable={false}
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          {embed.author?.name ? (
+            <div className="truncate text-ui-sm font-semibold text-ink-1">
+              <EmbedInlineText
+                text={embed.author.name}
+                keyPrefix={`${embed.id}-unavailable-author`}
+              />
+            </div>
+          ) : null}
+          <p className="text-ui-sm text-ink-2">
+            {getUnavailableMessage(embed)}
+          </p>
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-fit text-ui-sm font-medium text-accent-ink underline-offset-3 pointer-fine:hover:underline"
+          >
+            View original
+          </a>
+        </div>
       </div>
     </BaseEmbed>
   );
 });
+
+// ─── Direct media links ──────────────────────────────────────────────────
+
+function getDirectMediaFilename(url: string, fallback: string): string {
+  try {
+    const name = new URL(url).pathname.split("/").filter(Boolean).pop();
+    return name ? decodeURIComponent(name) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function DirectMediaFallback({ embed }: { embed: EmbedInfo }) {
+  let host = embed.url;
+  try {
+    host = new URL(embed.url).hostname.replace(/^www\./, "");
+  } catch {
+    /* keep raw */
+  }
+  return (
+    <EmbedFrame width="compact">
+      <a
+        href={embed.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group/fallback flex items-center gap-3 p-3 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-tint-2 text-ink-2">
+          <Icon name="imageBroken" size="lg" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-ui-sm font-medium text-accent-ink underline-offset-3 pointer-fine:group-hover/fallback:underline">
+            {getDirectMediaFilename(embed.url, "Media")}
+          </span>
+          <span className="block truncate text-ui-xs text-ink-3">{host}</span>
+        </span>
+      </a>
+    </EmbedFrame>
+  );
+}
+
+/**
+ * A link straight to an image, GIF or video file: the media itself, no card
+ * (like an attachment). The box is reserved from the sizes the server read
+ * out of the file header, so the message row does not jump when it loads.
+ */
+const DirectMediaEmbed = memo(
+  ({
+    embed,
+    messageId,
+    onJumpToMessage,
+    onMediaPlay,
+    onMediaStop,
+  }: {
+    embed: EmbedInfo;
+    messageId?: string;
+    onJumpToMessage?: (messageId: string) => void;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
+  }) => {
+    const [failed, setFailed] = useState(false);
+    const { open } = useImageViewerActions();
+    const image = embed.media?.find((item) => item.type === "image");
+    const video =
+      embed.video?.kind === "direct" && embed.video.url ? embed.video : null;
+
+    if (failed || (!image && !video)) {
+      return <DirectMediaFallback embed={embed} />;
+    }
+
+    if (video) {
+      const box = getDirectMediaBox(video.width, video.height);
+      return (
+        <div className="max-w-full" data-testid="direct-media-video">
+          <DirectVideoEmbed
+            src={video.url}
+            filename={getDirectMediaFilename(video.url, "video.mp4")}
+            maxWidth={box?.width ?? DIRECT_MEDIA_MAX_WIDTH}
+            maxHeight={DIRECT_MEDIA_MAX_HEIGHT}
+            aspectRatio={box?.aspectRatio}
+            referrerPolicy="no-referrer"
+            onVideoError={() => setFailed(true)}
+            showDurationBadge
+            durationBadgeSeconds={video.durationSeconds}
+            onPlay={onMediaPlay}
+            onStop={onMediaStop}
+          />
+        </div>
+      );
+    }
+
+    const item = image!;
+    const box = getDirectMediaBox(item.width, item.height);
+    const filename = getDirectMediaFilename(item.url, "image");
+    const openViewer = () => {
+      open(
+        [
+          {
+            id: `direct-${messageId ?? "embed"}-${item.url}`,
+            message_id: messageId,
+            filename,
+            file_key: item.url,
+            url: item.url,
+            content_type: item.contentType || "image/jpeg",
+            size_bytes: 0,
+            alt_text: item.altText ?? null,
+          },
+        ],
+        0,
+        { onJumpToMessage },
+      );
+    };
+
+    return (
+      <button
+        type="button"
+        onClick={openViewer}
+        // Image attachments are radius 12 (spec §4); the tint fills any
+        // letterbox so a transparent PNG or a logo is never cropped.
+        className="block max-w-full cursor-zoom-in overflow-hidden rounded-xl border border-line bg-tint-1 p-0 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        style={
+          box
+            ? {
+                width: `min(100%, ${box.width}px)`,
+                aspectRatio: box.aspectRatio,
+              }
+            : { maxWidth: `min(100%, ${DIRECT_MEDIA_MAX_WIDTH}px)` }
+        }
+        aria-label={item.isGif ? "Open GIF" : "Open image"}
+        data-media-element="true"
+        data-media-url={item.url}
+        data-media-download-url={item.url}
+        data-media-filename={filename}
+      >
+        <img
+          src={item.url}
+          alt={item.altText || ""}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className={cn(
+            "block",
+            box
+              ? "h-full w-full object-contain"
+              : "h-auto max-h-100 w-auto max-w-full object-contain",
+          )}
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      </button>
+    );
+  },
+);
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
@@ -5010,6 +4854,9 @@ export const LinkEmbed = memo(
     onMediaStop?: () => void;
   }) => {
     const [showModal, setShowModal] = useState(false);
+    // Mount the confirm on first use (not per embed up front), then keep it
+    // so its close animation can run.
+    const [modalMounted, setModalMounted] = useState(false);
     const providerName = embed.provider?.name?.toLowerCase();
     const isXEmbed =
       providerName === "x" ||
@@ -5029,6 +4876,7 @@ export const LinkEmbed = memo(
         if (e.shiftKey) {
           onRemoveEmbeds();
         } else {
+          setModalMounted(true);
           setShowModal(true);
         }
       },
@@ -5046,6 +4894,16 @@ export const LinkEmbed = memo(
     // Provider-specific routing
     if (embed.unavailable) {
       embedContent = <UnavailableSocialEmbed embed={embed} />;
+    } else if (embed.direct) {
+      embedContent = (
+        <DirectMediaEmbed
+          embed={embed}
+          messageId={messageId}
+          onJumpToMessage={onJumpToMessage}
+          onMediaPlay={onMediaPlay}
+          onMediaStop={onMediaStop}
+        />
+      );
     } else if (providerName === "youtube" && embed.video?.url) {
       embedContent = (
         <YouTubeEmbed
@@ -5118,30 +4976,32 @@ export const LinkEmbed = memo(
             <button
               type="button"
               onClick={handleXClick}
-              className="absolute -top-2 -right-6 z-20 w-5 h-5 flex items-center justify-center rounded text-rm-text-muted hover:text-rm-text-primary hover:bg-rm-bg-hover opacity-0 group-hover/embedwrap:opacity-100 transition-all"
+              className={cn(
+                // Fine pointers: just outside the card's corner, revealed on
+                // hover. Touch: on the corner itself as a filled chip, since
+                // a full-width card on a phone leaves no gutter and the old
+                // -right-6 position was clipped off-screen.
+                "absolute z-20 flex size-5 items-center justify-center text-ink-3 outline-none pointer-fine:-top-2 pointer-fine:-right-6 pointer-fine:rounded-sm pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1 pointer-coarse:-top-2 pointer-coarse:-right-2 pointer-coarse:rounded-full pointer-coarse:border pointer-coarse:border-line pointer-coarse:bg-ply-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+                HIT,
+                // REVEAL, scoped to this embed (the message row is also a
+                // `group`): hidden until hover/focus on fine pointers, always
+                // visible on touch.
+                "pointer-fine:opacity-0 pointer-fine:transition-[color,background-color,opacity] pointer-fine:duration-(--dur-1) pointer-fine:ease-out pointer-fine:group-hover/embedwrap:opacity-100 pointer-fine:group-focus-within/embedwrap:opacity-100 pointer-fine:focus-visible:opacity-100",
+              )}
               aria-label="Remove embeds"
               title="Remove all embeds (Shift+click to skip confirmation)"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <Icon name="close" size="sm" />
             </button>
           )}
         </div>
-        {showModal && (
-          <RemoveEmbedsModal
+        {onRemoveEmbeds && modalMounted && (
+          <RemoveEmbedsDialog
+            open={showModal}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) handleCancel();
+            }}
             onConfirm={handleConfirm}
-            onCancel={handleCancel}
           />
         )}
       </>
