@@ -10,11 +10,14 @@
 //   - the listener never pulls the standby's track, and the joiner's name
 //     never shows in the listener's voice UI while it is only in standby,
 //   - the voice room never sees the standby identify (dev server log),
+//   - after --idle-ms (35 s) of idle standby, longer than the SFU keeps a
+//     track that sends no media (30 s), the join is still heard,
 //   - a hidden tab drops standby after the grace period, offline drops it
 //     at once, leaving the server (to DMs) drops it.
 // Prints PASS/FAIL per check with the evidence; exit code 1 on any FAIL.
 //
 //   pnpm bench:voice:verify [--config <file>] [--server-log <file>]
+//                           [--idle-ms <ms>]
 //
 // --server-log: the dev server's stdout log, to count VoiceIdentify lines
 // (for oxmgr: %LOCALAPPDATA%/oxmgr/logs/<app>.out.log).
@@ -36,6 +39,7 @@ const opts = {
   ),
   serverLog: argValue("--server-log", null),
   hiddenGraceMs: Number(argValue("--hidden-grace", "15000")),
+  idleMs: Number(argValue("--idle-ms", "35000")),
   verbose: args.includes("--verbose"),
   login: args.includes("--login"),
 };
@@ -167,6 +171,17 @@ async function main() {
       );
     }
 
+    // ── Long idle: past the SFU's 30 s limit for a track without media ─
+    const idleLeft = opts.idleMs - ((await joiner.now()) - opened);
+    if (idleLeft > 0) await sleep(idleLeft);
+    const idleEnd = await joiner.snapshot(0);
+    const longIdleSent = outboundPackets(idleEnd) - outboundPackets(idleA);
+    check(
+      "standby stays silent both ways for the whole idle",
+      longIdleSent === 0 && inboundPackets(idleEnd) === 0,
+      `audio packets over ${Math.round(((await joiner.now()) - opened) / 1000)} s of standby: sent ${longIdleSent}, received ${inboundPackets(idleEnd)}`,
+    );
+
     // ── Join after standby: capture starts at the click ──────────────
     since = await joiner.now();
     await joiner.clickJoin();
@@ -187,7 +202,7 @@ async function main() {
         Object.values((await listener.snapshot(since)).rtp.inbound).some(
           (entry) => entry.firstAudible && entry.firstAudible >= since,
         ),
-      `first getUserMedia ${firstGum ? Math.round(firstGum.start - since) : "none"} ms after the click`,
+      `first getUserMedia ${firstGum ? Math.round(firstGum.start - since) : "none"} ms after the click, after ${Math.round((since - opened) / 1000)} s of standby`,
     );
     await joiner.leave();
     await sleep(2_000);

@@ -9,6 +9,10 @@ import {
 import { SFUClient } from "@/lib/sfu-client";
 import type { User } from "@/lib/types";
 import {
+  createPublicationLiveness,
+  type PublicationLiveness,
+} from "@/lib/voice/publication-liveness";
+import {
   createSilentAudioTrack,
   type SilentAudioTrack,
 } from "@/lib/voice/standby-audio";
@@ -41,6 +45,8 @@ interface StandbyRecord extends VoiceStandbySession {
   claimed: boolean;
   disposed: boolean;
   audible: boolean;
+  /** Whether the paused silence's SFU track is still alive. */
+  readonly liveness: PublicationLiveness;
 }
 
 const sessions = new Map<string, StandbyRecord>();
@@ -99,6 +105,7 @@ function createRecord(profile: VoiceStandbyProfile): StandbyRecord {
     claimed: false,
     disposed: false,
     audible: false,
+    liveness: createPublicationLiveness(),
   };
 }
 
@@ -142,8 +149,12 @@ async function warm(
     }
     return;
   }
-  // Negotiated: idle until a join claims it (no audio thread, no RTP).
-  if (!record.claimed) record.silence?.pause();
+  // Negotiated: idle until a join claims it (no audio thread, no RTP). The
+  // SFU drops a track without media after 30 s; a later claim republishes.
+  if (!record.claimed && record.silence) {
+    record.silence.pause();
+    record.liveness.markIdle();
+  }
 }
 
 export function holdVoiceStandby(profile: VoiceStandbyProfile): {
@@ -199,6 +210,7 @@ export function claimVoiceStandby(
   // Silence flows again at once, so the SFU has packets for this track by
   // the time the room is told about it and others pull it.
   record.silence?.resume();
+  republishIfStale(record);
   sessions.delete(key);
   liveClaims.set(key, record);
   applyClaimedAudible(record, audible);
@@ -214,6 +226,26 @@ export function setClaimedVoiceAudible(
   if (!record || record.disposed) return false;
   applyClaimedAudible(record, audible);
   return true;
+}
+
+/**
+ * A standby idle for longer than the SFU keeps a track without media has
+ * lost its publication: resuming the silence (and swapping the microphone
+ * in) would feed a track nobody can pull. Push it again before the room is
+ * told about it; the join's microphone then replaces the silence on the new
+ * publication as usual.
+ */
+function republishIfStale(record: StandbyRecord): void {
+  const idleMs = record.liveness.idleMs();
+  const stale = record.liveness.isStale();
+  record.liveness.markFlowing();
+  if (!stale) return;
+  const trackName = record.sfu.getMicrophoneTrackName();
+  const republished = !!trackName && record.sfu.republishTrack(trackName);
+  standbyLog.info("Republished idle standby track", {
+    idleMs: Math.round(idleMs),
+    republished,
+  });
 }
 
 /**

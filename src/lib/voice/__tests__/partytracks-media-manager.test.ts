@@ -239,4 +239,92 @@ describe("PartyTracksMediaManager", () => {
     });
     expect(remoteVideo.stop).toHaveBeenCalledTimes(1);
   });
+
+  it("republishes a dropped publication on a new transceiver and detaches the old one", () => {
+    const events: string[] = [];
+    const metadata: Subject<TrackInfo>[] = [];
+    const sources: Array<Array<MediaStreamTrack | null>> = [];
+    const peerConnectionState$ = new Subject<RTCPeerConnectionState>();
+    const transport: PartyTracksMediaTransport = {
+      peerConnectionState$,
+      push: (sourceTrack$) =>
+        new Observable<TrackInfo>((subscriber) => {
+          const push = metadata.length + 1;
+          const published: Array<MediaStreamTrack | null> = [];
+          sources.push(published);
+          events.push(`push:${push}`);
+          const metadata$ = new Subject<TrackInfo>();
+          metadata.push(metadata$);
+          const source = sourceTrack$.subscribe((track) =>
+            published.push(track),
+          );
+          const announced = metadata$.subscribe(subscriber);
+          return () => {
+            events.push(`close:${push}`);
+            source.unsubscribe();
+            announced.unsubscribe();
+          };
+        }),
+      pull: () => new Subject<MediaStreamTrack>(),
+    };
+    const announced: TrackInfo[] = [];
+    const onPublicationStopped = vi.fn();
+    const manager = new PartyTracksMediaManager(transport, "participant", {
+      onPublicationMetadata: (track) => announced.push(track),
+      onPublicationStopped,
+      onRemoteTrack: vi.fn(),
+    });
+    const silence = mediaTrack("audio", "silence");
+    const microphone = mediaTrack("audio", "microphone");
+    const trackInfo = (sfuTrackName: string): TrackInfo => ({
+      participant_id: "participant",
+      track_name: "cam-audio-participant",
+      sfu_track_name: sfuTrackName,
+      session_id: "session",
+      kind: "audio",
+    });
+
+    manager.publishStream(mediaStream(silence), "cam");
+    metadata[0]?.next(trackInfo("dropped-by-sfu"));
+    expect(manager.republishTrack("cam-audio-participant")).toBe(true);
+
+    // A new push for the same alias; the old sender is detached but not
+    // closed (that renegotiation can reset a standby's only transport), and
+    // the alias is never reported as stopped to the room.
+    expect(events).toEqual(["push:1", "push:2"]);
+    expect(sources[0]).toEqual([silence, null]);
+    expect(onPublicationStopped).not.toHaveBeenCalled();
+    expect(sources[1]).toEqual([silence]);
+    expect(manager.getPublishedTrack("cam-audio-participant")).toBe(silence);
+
+    // The dead track is never announced again (VoiceReady re-announces);
+    // the new one is announced once the SFU answers its push.
+    announced.length = 0;
+    manager.reannouncePublications();
+    expect(announced).toEqual([]);
+    metadata[1]?.next(trackInfo("fresh"));
+    manager.reannouncePublications();
+    expect(announced.map((track) => track.sfu_track_name)).toEqual([
+      "fresh",
+      "fresh",
+    ]);
+
+    // The join's microphone swaps in on the new publication.
+    expect(manager.replaceTrack("cam-audio-participant", microphone)).toBe(
+      true,
+    );
+    expect(sources[1]).toEqual([silence, microphone]);
+    expect(sources[0]).toEqual([silence, null]);
+
+    // Dropped once the session is down (PartyTracks skips the close then).
+    peerConnectionState$.next("connected");
+    expect(events).toEqual(["push:1", "push:2"]);
+    peerConnectionState$.next("disconnected");
+    expect(events).toEqual(["push:1", "push:2", "close:1"]);
+
+    expect(manager.republishTrack("cam-audio-missing")).toBe(false);
+    manager.dispose();
+    expect(events).toEqual(["push:1", "push:2", "close:1", "close:2"]);
+    expect(manager.republishTrack("cam-audio-participant")).toBe(false);
+  });
 });

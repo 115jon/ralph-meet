@@ -53,6 +53,9 @@ const { instances, FakeSFU, micTrack, silenceTrack } = vi.hoisted(() => {
       (trackName: string) => this.published.get(trackName) ?? null,
     );
     readonly getMicrophoneTrackName = vi.fn(() => "cam-audio-self");
+    readonly republishTrack = vi.fn((trackName: string) =>
+      this.published.has(trackName),
+    );
     senderTrack: { id: string } | null = null;
     readonly senderHasLiveTrack = vi.fn(
       (track: { id: string }) => this.senderTrack === track,
@@ -122,6 +125,10 @@ vi.mock("@/stores/useVoiceSettingsStore", () => ({
 }));
 
 import { releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
+import {
+  PUBLICATION_STALE_AFTER_MS,
+  SFU_TRACK_INACTIVITY_GC_MS,
+} from "@/lib/voice/publication-liveness";
 import {
   claimVoiceStandby,
   markVoiceChannelJoining,
@@ -213,6 +220,65 @@ describe("voice standby", () => {
     expect(duringJoin.session).toBeNull();
     expect(instances).toHaveLength(1);
     duringJoin.release();
+  });
+
+  describe("published silence liveness", () => {
+    let now = 0;
+
+    beforeEach(() => {
+      now = 1_000;
+      vi.spyOn(performance, "now").mockImplementation(() => now);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("keeps the standby track when the join comes before the SFU could drop it", async () => {
+      const held = holdVoiceStandby(profile);
+      await flush();
+      now += PUBLICATION_STALE_AFTER_MS - 1;
+
+      claimVoiceStandby("channel", "server", true);
+
+      expect(silenceResume).toHaveBeenCalledOnce();
+      expect(instances[0]?.republishTrack).not.toHaveBeenCalled();
+      held.release();
+    });
+
+    it("republishes a standby track idle past the SFU's inactivity limit", async () => {
+      const held = holdVoiceStandby(profile);
+      await flush();
+      // Browsing the landing for longer than the SFU keeps a silent track.
+      now += SFU_TRACK_INACTIVITY_GC_MS + 15_000;
+
+      const claimed = claimVoiceStandby("channel", "server", true);
+
+      expect(claimed?.sfu).toBe(instances[0]);
+      expect(silenceResume).toHaveBeenCalledOnce();
+      expect(instances[0]?.republishTrack).toHaveBeenCalledExactlyOnceWith(
+        "cam-audio-self",
+      );
+      // Still no microphone: the join's capture replaces the silence on the
+      // new publication, exactly like a fresh standby.
+      expect(startEarlyMic).not.toHaveBeenCalled();
+      expect(instances[0]?.published.get("cam-audio-self")?.id).toBe("silence");
+      held.release();
+    });
+
+    it("measures idle from the pause, not from when the standby was created", async () => {
+      const held = holdVoiceStandby(profile);
+      // The push takes a while; the clock starts once the silence pauses.
+      now += 10_000;
+      await flush();
+      expect(silencePause).toHaveBeenCalledOnce();
+      now += PUBLICATION_STALE_AFTER_MS - 1;
+
+      claimVoiceStandby("channel", "server", true);
+
+      expect(instances[0]?.republishTrack).not.toHaveBeenCalled();
+      held.release();
+    });
   });
 
   it("mutes the microphone the join published without swapping back to silence", async () => {

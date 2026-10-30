@@ -62,6 +62,19 @@ function emitMediaBootstrap(
   client.roomGW.emit("media-bootstrap", { participantId, voiceToken });
 }
 
+function announcedSfuTracks(send: {
+  mock: { calls: Array<[{ op: number; d?: unknown }, ...unknown[]]> };
+}): string[] {
+  return send.mock.calls
+    .map(([message]) => message)
+    .filter((message) => message.op === VoiceOpcode.Video)
+    .flatMap(
+      (message) =>
+        (message.d as { tracks?: TrackInfo[] } | undefined)?.tracks ?? [],
+    )
+    .map((track) => track.sfu_track_name ?? "");
+}
+
 class TestPartyTracksTransport implements PartyTracksClientTransport {
   readonly peerConnection$ = new Subject<RTCPeerConnection>();
   readonly peerConnectionState$ = new Subject<RTCPeerConnectionState>();
@@ -165,6 +178,7 @@ describe("SFUClient PartyTracks facade", () => {
     const identify = vi
       .spyOn(client.voiceGW, "connectVoice")
       .mockImplementation(() => {});
+    const send = vi.spyOn(client.voiceGW, "send");
     client.connect("Local", undefined, "user-1", undefined, null, null, {
       standby: true,
       channelId: "channel",
@@ -205,8 +219,8 @@ describe("SFUClient PartyTracks facade", () => {
     expect(transport.operationOrder.some((op) => op.startsWith("pull:"))).toBe(
       false,
     );
-    // The announcement waits in the unidentified socket's queue.
-    expect(client.voiceGW.getDebugState().queued).toBeGreaterThan(0);
+    // Nothing is queued for it either: VoiceReady announces publications.
+    expect(client.voiceGW.getDebugState().queued).toBe(0);
 
     client.promoteStandby({ selfMute: false, selfDeaf: false });
     expect(identify).toHaveBeenCalledOnce();
@@ -226,6 +240,57 @@ describe("SFUClient PartyTracks facade", () => {
     expect(transport.operationOrder).toContain(
       "pull:cam-audio-remote-participant",
     );
+    expect(announcedSfuTracks(send)).toEqual(["opaque-local-audio"]);
+    client.disconnect("component-unmount");
+  });
+
+  it("announces only the republished track when an idle standby is claimed", async () => {
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => transport,
+    });
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    vi.spyOn(client.roomGW, "promoteStandby").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+    const send = vi.spyOn(client.voiceGW, "send");
+    client.connect("Local", undefined, "user-1", undefined, null, null, {
+      standby: true,
+      channelId: "channel",
+      serverId: "server",
+    });
+    emitMediaBootstrap(client, "local-participant", "voice-token");
+    emitMediaReady(client);
+    const silence = new MockMediaStreamTrack(
+      "audio",
+    ) as unknown as MediaStreamTrack;
+    await client.publishTracks(
+      new MockMediaStream([silence]) as unknown as MediaStream,
+      "cam",
+    );
+    const trackName = "cam-audio-local-participant";
+    const answer = (sfuTrackName: string) =>
+      transport.publicationMetadata.get(trackName)?.next({
+        participant_id: "local-participant",
+        track_name: trackName,
+        sfu_track_name: sfuTrackName,
+        session_id: "local-session",
+        kind: "audio",
+      });
+    answer("garbage-collected-by-sfu");
+
+    // The claim found the silence idle past the SFU's limit.
+    expect(client.republishTrack(trackName)).toBe(true);
+    expect(transport.push).toHaveBeenCalledTimes(2);
+    expect(client.getPublishedTrack(trackName)).toBe(silence);
+    client.promoteStandby({ selfMute: false, selfDeaf: false });
+    client.voiceGW.emit("voice-ready", { tracks: [] });
+    // Not yet answered: nothing to announce, and never the dead track.
+    expect(announcedSfuTracks(send)).toEqual([]);
+
+    answer("fresh-track");
+    expect(announcedSfuTracks(send)).toEqual(["fresh-track"]);
+    expect(client.republishTrack("cam-audio-nobody")).toBe(false);
     client.disconnect("component-unmount");
   });
 
