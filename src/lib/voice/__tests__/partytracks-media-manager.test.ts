@@ -165,6 +165,35 @@ describe("PartyTracksMediaManager", () => {
     manager.dispose();
   });
 
+  it("replays the current publication when the peer connection connects", () => {
+    const transport = new TestTransport();
+    const manager = new PartyTracksMediaManager(transport, "participant", {
+      onPublicationMetadata: vi.fn(),
+      onPublicationStopped: vi.fn(),
+      onRemoteTrack: vi.fn(),
+    });
+    const silence = mediaTrack("audio", "silence");
+    const microphone = mediaTrack("audio", "microphone");
+
+    manager.publishStream(mediaStream(silence), "cam");
+    expect(manager.replaceTrack("cam-audio-participant", microphone)).toBe(
+      true,
+    );
+    expect(transport.pushSources.get("cam-audio-participant")).toEqual([
+      silence,
+      microphone,
+    ]);
+
+    transport.peerConnectionState$.next("connected");
+
+    expect(transport.pushSources.get("cam-audio-participant")).toEqual([
+      silence,
+      microphone,
+      microphone,
+    ]);
+    manager.dispose();
+  });
+
   it("replaces publications without a second push and tears down local and remote tracks", () => {
     const transport = new TestTransport();
     const onPublicationStopped = vi.fn();

@@ -217,6 +217,58 @@ describe("RoomGateway", () => {
     gateway.disconnect();
   });
 
+  it("identifies a standby session and clears that flag when promoted", async () => {
+    const gateway = new RoomGateway();
+    gateway.connectRoom({
+      name: "Test User",
+      clerkUserId: "user-1",
+      roomSlug: "voice-server-channel",
+      standby: true,
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.message({
+      op: VoiceOpcode.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    socket.message({
+      op: VoiceOpcode.Error,
+      d: { code: 4006, message: "Continuity lost" },
+    });
+    socket.message({
+      op: VoiceOpcode.Ready,
+      d: {
+        participant_id: "session-1",
+        ice_servers: [],
+        participants: [],
+        voice_token: "voice-token",
+      },
+    });
+    gateway.promoteStandby();
+    socket.message({
+      op: VoiceOpcode.Error,
+      d: { code: 4006, message: "Continuity lost" },
+    });
+
+    const identifyMessages = sentMessages(socket).filter(
+      (message) => message.op === VoiceOpcode.Identify,
+    );
+    expect(identifyMessages.map((message) => message.d)).toEqual([
+      expect.objectContaining({ clerk_user_id: "user-1", standby: true }),
+      expect.objectContaining({ clerk_user_id: "user-1", standby: true }),
+      expect.not.objectContaining({ standby: true }),
+    ]);
+    expect(sentMessages(socket)).toContainEqual({
+      op: VoiceOpcode.VoiceStateUpdate,
+      d: { promote_standby: true },
+    });
+
+    gateway.disconnect();
+  });
+
   it("sends a profile refresh through the existing opcode", async () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({

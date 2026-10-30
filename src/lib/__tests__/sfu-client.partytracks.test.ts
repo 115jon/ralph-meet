@@ -1,4 +1,4 @@
-import { VoiceOpcode, type TrackInfo } from "@/lib/types";
+import { VoiceOpcode, type TrackInfo, type VoiceState } from "@/lib/types";
 import type {
   PartyTracksClientTransport,
   SFUClientOptions,
@@ -23,6 +23,23 @@ const FORBIDDEN_BROWSER_NATIVE_SIGNALING_OPCODES = new Set<number>([
 
 const FIRST_ICE_SERVERS = [{ urls: ["stun:first.example.test"] }];
 const SECOND_ICE_SERVERS = [{ urls: ["stun:second.example.test"] }];
+
+function voiceParticipant(
+  id: string,
+  overrides: Partial<VoiceState> = {},
+): VoiceState {
+  return {
+    id,
+    name: id,
+    self_mute: false,
+    self_deaf: false,
+    self_stream: false,
+    self_video: false,
+    suppress: false,
+    tracks: [],
+    ...overrides,
+  };
+}
 
 function emitMediaReady(
   client: SFUClient,
@@ -111,6 +128,182 @@ describe("SFUClient PartyTracks facade", () => {
     await publication;
 
     expect(transport.push).toHaveBeenCalledOnce();
+    client.disconnect("component-unmount");
+  });
+
+  it("starts PartyTracks with bootstrap ICE servers", async () => {
+    const transport = new TestPartyTracksTransport();
+    const createPartyTracksTransport = vi.fn(() => transport);
+    const client = new SFUClient("test-room", { createPartyTracksTransport });
+
+    client.roomGW.emit("media-bootstrap", {
+      participantId: "reserved-participant",
+      voiceToken: "bootstrap-token",
+      iceServers: FIRST_ICE_SERVERS,
+    });
+    await Promise.resolve();
+
+    expect(createPartyTracksTransport).toHaveBeenCalledWith({
+      roomSlug: "test-room",
+      participantId: "reserved-participant",
+      voiceToken: "bootstrap-token",
+      iceServers: FIRST_ICE_SERVERS,
+    });
+    client.disconnect("component-unmount");
+  });
+
+  it("pulls remote tracks while a standby session is warming", () => {
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => transport,
+    });
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    const promote = vi
+      .spyOn(client.roomGW, "promoteStandby")
+      .mockImplementation(() => {});
+    client.connect("Local", undefined, "user-1", undefined, null, null, {
+      standby: true,
+      channelId: "channel",
+      serverId: "server",
+    });
+    emitMediaReady(client);
+    client.voiceGW.emit("voice-ready", {
+      tracks: [
+        {
+          participant_id: "remote-participant",
+          track_name: "cam-audio-remote-participant",
+          sfu_track_name: "opaque-remote-audio",
+          session_id: "remote-session",
+          kind: "audio",
+        },
+      ],
+    });
+
+    expect(transport.operationOrder).toContain(
+      "pull:cam-audio-remote-participant",
+    );
+    const mediaTrack = {
+      id: "remote-audio",
+      kind: "audio",
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
+    transport.remoteTracks
+      .get("cam-audio-remote-participant")
+      ?.next(mediaTrack);
+    const heard: string[] = [];
+    client.on("remote-track", (event) => {
+      if (event.action === "add") heard.push(event.trackInfo.track_name);
+    });
+    const pullsBeforePromote = transport.operationOrder.filter((entry) =>
+      entry.startsWith("pull:"),
+    );
+    client.promoteStandby();
+    expect(heard).toEqual(["cam-audio-remote-participant"]);
+    expect(
+      transport.operationOrder.filter((entry) => entry.startsWith("pull:")),
+    ).toEqual(pullsBeforePromote);
+    expect(promote).toHaveBeenCalledOnce();
+    client.disconnect("component-unmount");
+  });
+
+  it("drops standby tracks that stop or leave before promotion", () => {
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => transport,
+    });
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    vi.spyOn(client.roomGW, "promoteStandby").mockImplementation(() => {});
+    client.connect("Local", undefined, "user-1", undefined, null, null, {
+      standby: true,
+    });
+    emitMediaReady(client);
+    const stopped = {
+      participant_id: "remote-participant",
+      track_name: "cam-audio-remote-participant",
+      sfu_track_name: "opaque-remote-audio",
+      session_id: "remote-session",
+      kind: "audio" as const,
+    };
+    const left = {
+      participant_id: "left-participant",
+      track_name: "cam-audio-left-participant",
+      sfu_track_name: "opaque-left-audio",
+      session_id: "left-session",
+      kind: "audio" as const,
+    };
+    client.voiceGW.emit("voice-ready", { tracks: [stopped, left] });
+    client.voiceGW.emit("stop-tracks", {
+      track_names: [stopped.track_name],
+      tracks: [stopped],
+    });
+    client.voiceGW.emit("client-disconnect", {
+      participant_id: "left-participant",
+    });
+    expect(transport.operationOrder).toEqual([
+      "pull:cam-audio-remote-participant",
+      "pull:cam-audio-left-participant",
+    ]);
+    client.promoteStandby();
+    expect(transport.operationOrder).toEqual([
+      "pull:cam-audio-remote-participant",
+      "pull:cam-audio-left-participant",
+    ]);
+    client.disconnect("component-unmount");
+  });
+
+  it("keeps the standby roster current until promotion replays it", () => {
+    const client = new SFUClient("test-room");
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    client.connect("Local", undefined, "user-1", undefined, null, null, {
+      standby: true,
+    });
+    const seated = voiceParticipant("seated", { self_video: true });
+    const joined: VoiceState[][] = [];
+    client.on("joined", (event) => {
+      joined.push(
+        event.participants.map((participant) => ({ ...participant })),
+      );
+    });
+    client.roomGW.emit("ready", {
+      participantId: "local-participant",
+      sessionId: "local-session",
+      iceServers: FIRST_ICE_SERVERS,
+      voiceToken: "ready-token",
+      tracksToQueue: [],
+      participants: [seated, voiceParticipant("leaver")],
+    });
+
+    client.roomGW.emit("participant-joined", {
+      participant: voiceParticipant("newcomer", { clerk_user_id: "clerk-new" }),
+    });
+    client.roomGW.emit("voice-state-update", {
+      action: "update",
+      participant: {
+        id: "seated",
+        self_mute: true,
+        self_deaf: false,
+        self_stream: false,
+        self_video: false,
+        suppress: false,
+        tracks: [],
+      },
+    });
+    client.roomGW.emit("participant-left", { participantId: "leaver" });
+
+    expect(client.replayJoinedSnapshot()).toBe(true);
+    expect(joined[1]?.map((participant) => participant.id)).toEqual([
+      "seated",
+      "newcomer",
+    ]);
+    expect(joined[1]?.[0]).toMatchObject({
+      name: "seated",
+      self_mute: true,
+      self_video: false,
+    });
+    expect(joined[1]?.[1]?.clerk_user_id).toBe("clerk-new");
     client.disconnect("component-unmount");
   });
 

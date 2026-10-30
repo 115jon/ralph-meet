@@ -563,6 +563,11 @@ export class VoiceActivityDetector {
    */
   enableNoiseGate(): void {
     this.gateEnabled = true;
+    if (!this.microphoneEnabled) {
+      this.applyGate(true);
+      if (DEBUG) vadLog.info("Noise gate enabled");
+      return;
+    }
     if (!this.microphoneSpeaking && this.contextResumed) {
       this.applyGate(true);
     }

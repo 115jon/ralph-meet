@@ -89,6 +89,19 @@ const {
         return Promise.resolve();
       },
     );
+    readonly publishTracksIf = vi.fn(
+      async (
+        stream: MediaStream,
+        prefix: string,
+        stillCurrent: () => boolean,
+      ): Promise<boolean> => {
+        if (!stillCurrent()) return false;
+        await Promise.resolve();
+        if (!stillCurrent()) return false;
+        await this.publishTracks(stream, prefix);
+        return true;
+      },
+    );
     readonly replaceTrack = vi.fn(
       (
         trackName: string,
@@ -167,8 +180,23 @@ const {
       );
     }
 
+    joinedSnapshot: unknown = null;
+
     emit(event: string, value: unknown): void {
+      if (event === "joined") this.joinedSnapshot = value;
       this.handlers.get(event)?.forEach((handler) => handler(value));
+    }
+
+    replayJoinedSnapshot(): boolean {
+      if (!this.joinedSnapshot) return false;
+      const snapshot = this.joinedSnapshot;
+      this.joinedSnapshot = null;
+      this.handlers.get("joined")?.forEach((handler) => handler(snapshot));
+      return true;
+    }
+
+    promoteStandby(): void {
+      this.roomGW.sendVoiceState({ promote_standby: true });
     }
   }
 
@@ -209,7 +237,7 @@ const {
   };
 
   const chatState = {
-    voiceChannelStates: {},
+    voiceChannelStates: {} as Record<string, Array<Record<string, unknown>>>,
     voiceChannelSpatialAudioStates: {},
     user: null,
     connected: true,
@@ -253,6 +281,22 @@ vi.mock("@/lib/console-logger", () => ({
 vi.mock("@/lib/camera-background-effects", () => ({
   createCameraBackgroundEffect: vi.fn(),
   getCameraBackgroundEffectKey: vi.fn(() => "none"),
+}));
+vi.mock("@/lib/voice/standby-audio", () => ({
+  createSilentAudioTrack: () => {
+    const track = {
+      id: "silence",
+      kind: "audio",
+      enabled: true,
+      readyState: "live",
+      stop: vi.fn(),
+    };
+    return {
+      track,
+      stream: { getAudioTracks: () => [track], getTracks: () => [track] },
+      stop: vi.fn(() => track.stop()),
+    };
+  },
 }));
 vi.mock("@/lib/local-media-manager", () => ({
   acquireLocalStream: vi.fn(),
@@ -348,6 +392,7 @@ vi.mock("@/stores/useSoundSettingsStore", () => ({
 }));
 
 import { mergeVoiceState, useVoiceChannel } from "@/hooks/useVoiceChannel";
+import { resetVoiceStandbyForTests } from "@/lib/voice/voice-standby";
 import { playAutomaticSoundboardTrigger } from "@/lib/voice/auto-soundboard";
 import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 
@@ -444,6 +489,7 @@ function deferred<T>() {
 
 describe("useVoiceChannel SFU lifecycle", () => {
   beforeEach(() => {
+    resetVoiceStandbyForTests();
     vi.clearAllMocks();
     vi.mocked(createLocalAudioGate).mockReset();
     vi.mocked(acquireLocalStream).mockReset();
@@ -454,6 +500,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     vi.mocked(getCameraBackgroundEffectKey).mockReturnValue("none");
     sfuInstances.length = 0;
     authUser.current = null;
+    chatState.voiceChannelStates = {};
     settingsState.getSettings().isMuted = false;
     settingsState.getSettings().inputDeviceId = "default";
     settingsState.getSettings().videoDeviceId = "default";
@@ -511,6 +558,130 @@ describe("useVoiceChannel SFU lifecycle", () => {
     });
     expect(mergeVoiceState(undefined, legacyUpdate)).toEqual(legacyUpdate);
     expect(mergeVoiceState(undefined, delta)).toBeNull();
+  });
+
+  it("publishes silence without joining, then promotes the warmed session", async () => {
+    authUser.current = { id: "user-1" };
+    chatState.voiceChannelStates = {
+      channel: [
+        {
+          clerk_user_id: "other-user",
+          name: "Other",
+          connected: true,
+        },
+      ],
+    };
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sfuInstances).toHaveLength(1);
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("Standby SFU was not created");
+    expect(sfu.connect).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      "user-1",
+      expect.any(String),
+      null,
+      undefined,
+      expect.objectContaining({
+        channelId: "channel",
+        serverId: "server",
+        standby: true,
+      }),
+    );
+    expect(chatActions.sendVoiceChannelJoin).not.toHaveBeenCalled();
+    expect(sfu.publishTracks).toHaveBeenCalledTimes(1);
+    const published = sfu.publishTracks.mock.calls[0]?.[0] as MediaStream;
+    expect(published.getAudioTracks()[0]?.id).toBe("silence");
+    expect(published.getAudioTracks()[0]?.enabled).toBe(true);
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    expect(sfu.publishTracks).toHaveBeenCalledTimes(1);
+    expect(sfu.disconnect).not.toHaveBeenCalled();
+    expect(chatActions.sendVoiceChannelJoin).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+
+    expect(sfuInstances).toHaveLength(1);
+    expect(sfu.connect).toHaveBeenCalledTimes(1);
+    expect(sfu.roomGW.sendVoiceState).toHaveBeenCalledWith({
+      promote_standby: true,
+    });
+    expect(chatActions.sendVoiceChannelJoin).toHaveBeenCalledWith(
+      "channel",
+      false,
+      null,
+    );
+  });
+
+  it("does not open the live microphone while the standby session is warming", async () => {
+    authUser.current = { id: "user-1" };
+    chatState.voiceChannelStates = {
+      channel: [
+        {
+          clerk_user_id: "other-user",
+          name: "Other",
+          connected: true,
+        },
+      ],
+    };
+    const mic = {
+      id: "live-mic",
+      kind: "audio",
+      enabled: true,
+      readyState: "live",
+      stop: vi.fn(),
+      getSettings: () => ({}),
+    };
+    vi.mocked(acquireLocalStream).mockResolvedValue({
+      getAudioTracks: () => [mic],
+      getVideoTracks: () => [],
+      getTracks: () => [mic],
+    } as unknown as MediaStream);
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("Standby SFU was not created");
+
+    expect(acquireLocalStream).not.toHaveBeenCalled();
+    expect(sfu.publishTracks).toHaveBeenCalledTimes(1);
+    const published = sfu.publishTracks.mock.calls[0]?.[0] as MediaStream;
+    expect(published.getAudioTracks()[0]?.id).toBe("silence");
+    expect(published.getAudioTracks()[0]?.enabled).toBe(true);
+
+    authUser.current = { id: "user-1" };
+    chatState.user = {
+      display_name: "Renamed",
+      username: "renamed",
+      avatar_url: "https://example.com/next.png",
+      avatar_display: "frame:next",
+    } as unknown as null;
+    hook.rerender();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    chatState.user = null;
+
+    expect(sfu.disconnect).not.toHaveBeenCalled();
+    expect(sfu.connect).toHaveBeenCalledTimes(1);
+    expect(sfuInstances).toHaveLength(1);
   });
 
   it("passes the active voice gateway to automatic join and leave triggers", async () => {

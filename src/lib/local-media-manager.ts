@@ -311,10 +311,12 @@ export async function acquireLocalStream(
     );
     const audioTrack = state.activeStream.getAudioTracks()[0];
     const videoTrack = state.activeStream.getVideoTracks()[0];
-    if (videoConstraint && !videoTrack) {
+    const audioLive = !audioTrack || audioTrack.readyState !== "ended";
+    if ((videoConstraint && !videoTrack) || !audioLive) {
       supersededActiveStream = state.activeStream;
     }
     const audioOk =
+      audioLive &&
       (!audioFellBackToDefault ||
         state.activeAudioRequestDeviceId === audio.deviceId) &&
       (!audioTrack || audioConstraintsMatch(audioTrack, resolvedAudio));
@@ -345,7 +347,9 @@ export async function acquireLocalStream(
       const existingAudio = existing.getAudioTracks()[0];
       const existingVideo = existing.getVideoTracks()[0];
       const audioMatches =
-        !!existingAudio && audioConstraintsMatch(existingAudio, audio);
+        !!existingAudio &&
+        existingAudio.readyState !== "ended" &&
+        audioConstraintsMatch(existingAudio, audio);
       const videoMatches =
         !videoConstraint ||
         (!!existingVideo &&

@@ -77,6 +77,7 @@ export class PartyTracksMediaManager {
       next: (state) => {
         this.peerConnectionState = state;
         this.callbacks.onConnectionState?.(state);
+        if (state === "connected") this.replayPublishedTracks();
       },
       error: (error) => this.callbacks.onError?.(error),
     });
@@ -122,6 +123,12 @@ export class PartyTracksMediaManager {
           },
           error: (error) => this.callbacks.onError?.(error),
         });
+    }
+  }
+
+  private replayPublishedTracks(): void {
+    for (const publication of this.publications.values()) {
+      publication.source$.next(publication.currentTrack);
     }
   }
 
@@ -250,6 +257,18 @@ export class PartyTracksMediaManager {
       if (publication.latestMetadata) {
         this.callbacks.onPublicationMetadata(publication.latestMetadata);
       }
+    }
+  }
+
+  replayRemoteTracks(): void {
+    if (this.disposed) return;
+    for (const [trackName, pull] of this.pulls) {
+      if (!pull.currentTrack) continue;
+      this.callbacks.onRemoteTrack({
+        action: "add",
+        track: pull.currentTrack,
+        trackInfo: this.offers.get(trackName) ?? pull.metadata$.value,
+      });
     }
   }
 

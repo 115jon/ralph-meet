@@ -267,6 +267,32 @@ describe("local-media-manager", () => {
     expect(early.track.stop).toHaveBeenCalledOnce();
   });
 
+  it("does not reuse an ended microphone", async () => {
+    const ended = createAudioStream("mic");
+    (ended.track as { readyState: MediaStreamTrackState }).readyState = "ended";
+    const replacement = createAudioStream("mic");
+    (replacement.track as { readyState: MediaStreamTrackState }).readyState =
+      "live";
+    const getUserMedia = vi
+      .fn()
+      .mockResolvedValueOnce(ended.stream)
+      .mockResolvedValueOnce(replacement.stream);
+
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia },
+    });
+
+    await expect(acquireLocalStream(audioConstraints, null)).resolves.toBe(
+      ended.stream,
+    );
+    await expect(acquireLocalStream(audioConstraints, null)).resolves.toBe(
+      replacement.stream,
+    );
+
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(ended.track.stop).toHaveBeenCalledOnce();
+  });
+
   it("reuses an early stream after resolving a stale stored device ID", async () => {
     const early = createAudioStream("current-device");
     const enumerateDevices = vi.fn().mockResolvedValue([

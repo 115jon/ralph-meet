@@ -116,6 +116,8 @@ interface Props {
   hasCamera?: boolean;
   hasMicrophone?: boolean;
   onToggleCamera?: () => void;
+  onToggleMic?: () => void;
+  onToggleDeafen?: () => void;
   sfu?: SFUClient | null;
   gridItems?: GridItem[];
   watchersByStreamer?: StreamWatchersByStreamer;
@@ -327,6 +329,8 @@ export default function UserPanel({
   hasCamera,
   hasMicrophone,
   onToggleCamera,
+  onToggleMic,
+  onToggleDeafen,
   sfu,
   gridItems = EMPTY_GRID_ITEMS,
   watchersByStreamer = EMPTY_WATCHERS_BY_STREAMER,
@@ -559,17 +563,21 @@ export default function UserPanel({
         }
       : undefined;
 
+  const settingsUserId = voiceSettingsUserId ?? user?.id;
   const toggleMic = () => {
     if (!effectiveHasMic) return;
     // In a call, route through the call's toggle (it plays the sounds).
     const callToggle = useCallVoiceStore.getState().toggleMic;
     if (callActive && callToggle) callToggle();
-    else setIsMuted(!settings.isMuted);
+    // In a voice channel, the session's toggle keeps the live track in step.
+    else if (voiceConnected && onToggleMic) onToggleMic();
+    else setIsMuted(!settings.isMuted, settingsUserId);
   };
   const toggleDeafen = () => {
     const callToggle = useCallVoiceStore.getState().toggleDeafen;
     if (callActive && callToggle) callToggle();
-    else setIsDeafened(!settings.isDeafened);
+    else if (voiceConnected && onToggleDeafen) onToggleDeafen();
+    else setIsDeafened(!settings.isDeafened, settingsUserId);
   };
 
   const micLabel = !effectiveHasMic

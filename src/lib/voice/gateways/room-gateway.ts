@@ -68,6 +68,7 @@ export interface ConnectOptions {
   serverId?: string;
   roomSlug: string;
   wsUrlGenerator: (path: string) => string;
+  standby?: boolean;
 }
 
 export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
@@ -201,18 +202,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           );
         } else {
           this.send(
-            {
-              op: VoiceOpcode.Identify,
-              d: {
-                name: this.options?.name || "Guest",
-                username: this.options?.username,
-                display_name: this.options?.displayName,
-                avatar_url: this.options?.avatarUrl,
-                avatar_display: this.options?.avatarDisplay,
-                clerk_user_id: this.options?.clerkUserId,
-                supports_voice_state_deltas: true,
-              },
-            },
+            { op: VoiceOpcode.Identify, d: this.identifyPayload() },
             true,
           );
         }
@@ -316,18 +306,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           this.participantId = null;
           this.lastReplayableSeq = 0;
           this.send(
-            {
-              op: VoiceOpcode.Identify,
-              d: {
-                name: this.options?.name || "Guest",
-                username: this.options?.username,
-                display_name: this.options?.displayName,
-                avatar_url: this.options?.avatarUrl,
-                avatar_display: this.options?.avatarDisplay,
-                clerk_user_id: this.options?.clerkUserId,
-                supports_voice_state_deltas: true,
-              },
-            },
+            { op: VoiceOpcode.Identify, d: this.identifyPayload() },
             true,
           );
           break;
@@ -340,6 +319,34 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
   }
 
   // --- External API for sending specific messages ---
+
+  public promoteStandby(voice?: {
+    selfMute?: boolean;
+    selfDeaf?: boolean;
+  }): void {
+    if (this.options) this.options = { ...this.options, standby: false };
+    this.send({
+      op: VoiceOpcode.VoiceStateUpdate,
+      d: {
+        promote_standby: true,
+        ...(voice?.selfMute !== undefined ? { self_mute: voice.selfMute } : {}),
+        ...(voice?.selfDeaf !== undefined ? { self_deaf: voice.selfDeaf } : {}),
+      },
+    });
+  }
+
+  private identifyPayload() {
+    return {
+      name: this.options?.name || "Guest",
+      username: this.options?.username,
+      display_name: this.options?.displayName,
+      avatar_url: this.options?.avatarUrl,
+      avatar_display: this.options?.avatarDisplay,
+      clerk_user_id: this.options?.clerkUserId,
+      supports_voice_state_deltas: true,
+      ...(this.options?.standby ? { standby: true } : {}),
+    };
+  }
 
   public sendMuteUpdate(isMicOn: boolean, isCameraOn: boolean) {
     this.send({

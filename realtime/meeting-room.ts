@@ -227,6 +227,7 @@ interface WsAttachment {
   voice_channel_id?: string;
   /** Client can merge profile-less VOICE_CHANNEL_STATE_UPDATE members. */
   supports_voice_state_deltas?: boolean;
+  standby?: boolean;
 }
 
 interface ReplayEntry {
@@ -1186,7 +1187,7 @@ export class MeetingRoom extends DurableObject<Env> {
           // disconnect path skips this to avoid premature removal from
           // other clients' participant lists during brief reconnects.
           const expiredSession = this.resumableSessions.get(id);
-          if (expiredSession) {
+          if (expiredSession && !expiredSession.standby) {
             this.broadcast({
               op: Op.VoiceStateUpdate,
               d: {
@@ -2158,13 +2159,15 @@ export class MeetingRoom extends DurableObject<Env> {
     this.resumableSessionExpiry.delete(sessionId);
     this.persistResumableSessionExpiry();
 
-    this.broadcast({
-      op: Op.VoiceStateUpdate,
-      d: {
-        participant: this.buildVoiceState(resumable),
-        action: "leave",
-      },
-    });
+    if (!resumable.standby) {
+      this.broadcast({
+        op: Op.VoiceStateUpdate,
+        d: {
+          participant: this.buildVoiceState(resumable),
+          action: "leave",
+        },
+      });
+    }
 
     return true;
   }
@@ -2423,6 +2426,7 @@ export class MeetingRoom extends DurableObject<Env> {
       clerk_user_id?: string;
       platform?: PresencePlatform;
       supports_voice_state_deltas?: boolean;
+      standby?: boolean;
     },
   ) {
     if (this.getSession(ws)) {
@@ -2538,6 +2542,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // Build roster
       const participants: VoiceState[] = [];
       for (const [, data] of this.sessions) {
+        if (data.standby) continue;
         participants.push(this.buildVoiceState(data));
       }
 
@@ -2559,6 +2564,7 @@ export class MeetingRoom extends DurableObject<Env> {
         status: resolvedStatus,
         tracks: [],
         supports_voice_state_deltas: d.supports_voice_state_deltas === true,
+        standby: d.standby === true,
         last_heartbeat: Date.now(),
         seq: 0,
         outbound_seq: 0,
@@ -2590,33 +2596,35 @@ export class MeetingRoom extends DurableObject<Env> {
         );
       }
 
-      // Op 15: VoiceStateUpdate (join) to everyone else
-      this.broadcast(
-        {
-          op: Op.VoiceStateUpdate,
-          d: {
-            participant: this.buildVoiceState(attachment),
-            action: "join",
-          },
-        },
-        ws,
-      );
-
-      // Broadcast PRESENCE_UPDATE (online) to all clients if this user has a clerk_user_id
-      if (attachment.clerk_user_id) {
-        const presenceSnapshot = this.buildPresenceSnapshotForUser(
-          attachment.clerk_user_id,
-        );
+      if (!attachment.standby) {
         this.broadcast(
           {
-            op: Op.Dispatch,
+            op: Op.VoiceStateUpdate,
             d: {
-              event: "PRESENCE_UPDATE",
-              data: presenceSnapshot,
+              participant: this.buildVoiceState(attachment),
+              action: "join",
             },
           },
           ws,
         );
+      }
+
+      if (attachment.clerk_user_id) {
+        if (!attachment.standby) {
+          const presenceSnapshot = this.buildPresenceSnapshotForUser(
+            attachment.clerk_user_id,
+          );
+          this.broadcast(
+            {
+              op: Op.Dispatch,
+              d: {
+                event: "PRESENCE_UPDATE",
+                data: presenceSnapshot,
+              },
+            },
+            ws,
+          );
+        }
 
         // Resume Pending Ringing upon Identify
         const userId = attachment.clerk_user_id;
@@ -2850,6 +2858,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
       const participants: VoiceState[] = [];
       for (const [, data] of this.sessions) {
+        if (data.standby) continue;
         participants.push(this.buildVoiceState(data));
       }
 
@@ -2912,6 +2921,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const participants: VoiceState[] = [];
     for (const [, data] of this.sessions) {
+      if (data.standby) continue;
       participants.push(this.buildVoiceState(data));
     }
 
@@ -2939,10 +2949,43 @@ export class MeetingRoom extends DurableObject<Env> {
       spatial_audio_enabled?: boolean;
       spatial_audio_high_fidelity?: boolean;
       spatial_audio_state?: SpatialAudioState;
+      promote_standby?: boolean;
     },
   ) {
     const session = this.requireSession(ws);
     if (!session) return;
+
+    if (d.promote_standby === true) {
+      if (session.standby) {
+        session.standby = false;
+        if (d.self_mute !== undefined) session.self_mute = d.self_mute;
+        if (d.self_deaf !== undefined) session.self_deaf = d.self_deaf;
+        this.persist(ws, session);
+        this.broadcast(
+          {
+            op: Op.VoiceStateUpdate,
+            d: {
+              participant: this.buildVoiceState(session),
+              action: "join",
+            },
+          },
+          ws,
+        );
+        if (session.clerk_user_id) {
+          this.broadcast(
+            {
+              op: Op.Dispatch,
+              d: {
+                event: "PRESENCE_UPDATE",
+                data: this.buildPresenceSnapshotForUser(session.clerk_user_id),
+              },
+            },
+            ws,
+          );
+        }
+      }
+      return;
+    }
 
     const isPublicDemo = session.admission?.accessMode === "public-demo";
     if (
@@ -3125,7 +3168,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!session) return;
 
     // Broadcast updated presence/platform state before cleanup
-    if (session.clerk_user_id) {
+    if (session.clerk_user_id && !session.standby) {
       let nextSnapshot: {
         user_id: string;
         status: "online" | "idle" | "dnd" | "offline";
@@ -3177,7 +3220,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     // Clean up calls — cancel pending or end active
-    if (session.clerk_user_id) {
+    if (session.clerk_user_id && !session.standby) {
       this.cleanupCallsForUser(session.clerk_user_id, "disconnected");
     }
 
@@ -3217,7 +3260,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // is deferred — leading to a desync between the VC view (shows user left)
     // and the sidebar (still shows user present). The alarm's reconcileVoiceMembers
     // will clean up and broadcast leave if the resume never happens.
-    if (intentional) {
+    if (intentional && !session.standby) {
       this.broadcast(
         {
           op: Op.VoiceStateUpdate,

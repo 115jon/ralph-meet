@@ -117,8 +117,8 @@ interface VoiceSettingsState {
   resetSpatialSettings: (userId?: string) => void;
 
   // Global actions
-  setIsMuted: (muted: boolean) => void;
-  setIsDeafened: (deafened: boolean) => void;
+  setIsMuted: (muted: boolean, userId?: string) => void;
+  setIsDeafened: (deafened: boolean, userId?: string) => void;
   setDevice: (
     kind: "input" | "output" | "video",
     deviceId: string,
@@ -505,8 +505,8 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         }));
       },
 
-      setIsMuted: (isMuted) => {
-        const uid = get().currentUser;
+      setIsMuted: (isMuted, userId) => {
+        const uid = userId ?? get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
 
@@ -532,8 +532,8 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         }));
       },
 
-      setIsDeafened: (isDeafened) => {
-        const uid = get().currentUser;
+      setIsDeafened: (isDeafened, userId) => {
+        const uid = userId ?? get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
 

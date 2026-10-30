@@ -5,6 +5,7 @@ import {
   subscribeDesktopTokenChanges,
 } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
+import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useUser } from "@kova/react";
@@ -592,6 +593,7 @@ export function useChatPageLogic() {
         !!targetChannel &&
         targetChannel.channel_type === "voice" &&
         !options?.isJump;
+      if (shouldAutoJoinVoice) prewarmAudioContext();
 
       if (channelId === activeChannelId) {
         uiDispatch({ type: "SET_SIDEBAR", open: false });
