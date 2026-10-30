@@ -14,6 +14,8 @@
 // Scenarios (--scenario, comma separated):
 //   cold     join an occupied channel with warm standby turned off
 //   warm     the same join, after the standby session has warmed up
+//   warm-idle  warm, but the landing sits idle for --idle-ms (45 s) first:
+//            longer than the SFU keeps a track that sends no media (30 s)
 //   switch   connected in channel 1, click channel 2 (occupied by "other")
 //            in the sidebar, standby off; switch-warm: the same, standby on
 //   drop     connected, go offline for --drop-ms, measure the recovery
@@ -37,6 +39,7 @@
 //
 //   pnpm bench:voice --scenario cold,warm --runs 10
 //   pnpm bench:voice --scenario warm --profile none,rtt300 --json out.json
+//   pnpm bench:voice --scenario warm-idle --runs 5
 //   node scripts/voice-latency/bench.mjs --help
 //
 // Output: a p50/p95 table per scenario × profile on stdout, and every raw run
@@ -69,6 +72,7 @@ function parseArgs(argv) {
     dropMs: 5_000,
     hiddenMs: 15_000,
     settleMs: 2_500,
+    idleMs: 45_000,
     verbose: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -88,6 +92,7 @@ function parseArgs(argv) {
     else if (arg === "--drop-ms") opts.dropMs = Number(next());
     else if (arg === "--hidden-ms") opts.hiddenMs = Number(next());
     else if (arg === "--settle") opts.settleMs = Number(next());
+    else if (arg === "--idle-ms") opts.idleMs = Number(next());
     else if (arg === "--verbose" || arg === "-v") opts.verbose = true;
     else if (arg === "--trace-sfu") opts.traceSfu = true;
     else if (arg === "--help" || arg === "-h") opts.help = true;
@@ -453,9 +458,13 @@ async function main() {
           const ctx = { joiner, listener, other, opts };
           // Throttle after the page has loaded: we time the join, not the load.
           const throttle = () => joiner.setNetwork(profile);
-          if (scenario === "cold" || scenario === "warm") {
+          if (
+            scenario === "cold" ||
+            scenario === "warm" ||
+            scenario === "warm-idle"
+          ) {
             const t = Date.now();
-            await joiner.open(0, { standby: scenario === "warm" });
+            await joiner.open(0, { standby: scenario !== "cold" });
             if (opts.verbose) log(`landing ready in ${Date.now() - t} ms`);
             await throttle();
             result = await runColdOrWarmLoaded(scenario, ctx);
@@ -499,8 +508,8 @@ async function main() {
 }
 
 async function runColdOrWarmLoaded(kind, { joiner, listener, opts }) {
-  if (kind === "warm") await waitForStandbyWarm(joiner, 0);
-  await sleep(opts.settleMs);
+  if (kind !== "cold") await waitForStandbyWarm(joiner, 0);
+  await sleep(kind === "warm-idle" ? opts.idleMs : opts.settleMs);
   const result = await measureJoin({
     joiner,
     listener,
