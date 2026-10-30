@@ -296,11 +296,21 @@ async function runSwitch({ joiner, other, opts, standby }) {
     listener: other,
     opts,
     runTimeout: opts.timeoutMs,
-    click: () =>
-      joiner.page
+    // The sidebar click leaves channel 1 and opens channel 2's landing
+    // (it does not auto-join while connected elsewhere); then press Join.
+    // Stages are timed from the Join press, like the other scenarios.
+    click: async () => {
+      const at = await joiner.now();
+      await joiner.page
         .getByRole("button", { name: `Open voice channel ${channelName}` })
         .first()
-        .click({ timeout: 10_000 }),
+        .click({ timeout: 10_000 });
+      const autoJoined = await joiner
+        .waitForMark("join-click", at, {}, 300)
+        .then(() => true)
+        .catch(() => false);
+      if (!autoJoined) await joiner.clickJoin();
+    },
   });
   await joiner.leave();
   await sleep(1_000);

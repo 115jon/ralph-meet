@@ -245,6 +245,15 @@ export async function openClient(browser, cfg, role, opts) {
     permissions: ["microphone", "camera"],
   });
   await context.addInitScript({ path: path.join(here, "probe-init.js") });
+  // The "switch voice channel?" confirmation's own "don't ask again", so a
+  // sidebar click into another voice channel switches straight away.
+  await context.addInitScript(() => {
+    try {
+      localStorage.setItem("rm-voice-switch-skip-confirm", "true");
+    } catch {
+      // Opaque origins (about:blank) have no storage.
+    }
+  });
   const page = await context.newPage();
   page.on("pageerror", (error) => {
     if (opts.verbose)
