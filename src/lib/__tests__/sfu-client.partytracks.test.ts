@@ -152,7 +152,7 @@ describe("SFUClient PartyTracks facade", () => {
     client.disconnect("component-unmount");
   });
 
-  it("pulls remote tracks while a standby session is warming", () => {
+  it("keeps a standby voice socket unidentified until promotion", async () => {
     const transport = new TestPartyTracksTransport();
     const client = new SFUClient("test-room", {
       createPartyTracksTransport: () => transport,
@@ -162,12 +162,56 @@ describe("SFUClient PartyTracks facade", () => {
     const promote = vi
       .spyOn(client.roomGW, "promoteStandby")
       .mockImplementation(() => {});
+    const identify = vi
+      .spyOn(client.voiceGW, "connectVoice")
+      .mockImplementation(() => {});
     client.connect("Local", undefined, "user-1", undefined, null, null, {
       standby: true,
       channelId: "channel",
       serverId: "server",
     });
+    emitMediaBootstrap(client, "local-participant", "voice-token");
     emitMediaReady(client);
+    client.roomGW.emit("ready", {
+      participantId: "local-participant",
+      sessionId: "local-session",
+      iceServers: FIRST_ICE_SERVERS,
+      voiceToken: "voice-token",
+      tracksToQueue: [],
+      participants: [],
+    });
+    client.roomGW.emit("resumed", {});
+
+    // The silent standby publication reaches the SFU...
+    const silence = new MockMediaStreamTrack(
+      "audio",
+    ) as unknown as MediaStreamTrack;
+    const published = client.publishTracks(
+      new MockMediaStream([silence]) as unknown as MediaStream,
+      "cam",
+    );
+    await published;
+    transport.publicationMetadata.get("cam-audio-local-participant")?.next({
+      participant_id: "local-participant",
+      track_name: "cam-audio-local-participant",
+      sfu_track_name: "opaque-local-audio",
+      session_id: "local-session",
+      kind: "audio",
+    });
+
+    // ...but the voice room never hears about this session: no identify, so
+    // no track list to pull and nobody is offered the silent track.
+    expect(identify).not.toHaveBeenCalled();
+    expect(transport.operationOrder.some((op) => op.startsWith("pull:"))).toBe(
+      false,
+    );
+    // The announcement waits in the unidentified socket's queue.
+    expect(client.voiceGW.getDebugState().queued).toBeGreaterThan(0);
+
+    client.promoteStandby({ selfMute: false, selfDeaf: false });
+    expect(identify).toHaveBeenCalledOnce();
+    expect(promote).toHaveBeenCalledOnce();
+
     client.voiceGW.emit("voice-ready", {
       tracks: [
         {
@@ -179,31 +223,34 @@ describe("SFUClient PartyTracks facade", () => {
         },
       ],
     });
-
     expect(transport.operationOrder).toContain(
       "pull:cam-audio-remote-participant",
     );
-    const mediaTrack = {
-      id: "remote-audio",
-      kind: "audio",
-      stop: vi.fn(),
-    } as unknown as MediaStreamTrack;
-    transport.remoteTracks
-      .get("cam-audio-remote-participant")
-      ?.next(mediaTrack);
-    const heard: string[] = [];
-    client.on("remote-track", (event) => {
-      if (event.action === "add") heard.push(event.trackInfo.track_name);
+    client.disconnect("component-unmount");
+  });
+
+  it("identifies on the voice socket from the ticket bootstrap, before MediaReady", () => {
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => transport,
     });
-    const pullsBeforePromote = transport.operationOrder.filter((entry) =>
-      entry.startsWith("pull:"),
-    );
-    client.promoteStandby();
-    expect(heard).toEqual(["cam-audio-remote-participant"]);
-    expect(
-      transport.operationOrder.filter((entry) => entry.startsWith("pull:")),
-    ).toEqual(pullsBeforePromote);
-    expect(promote).toHaveBeenCalledOnce();
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    const identify = vi
+      .spyOn(client.voiceGW, "connectVoice")
+      .mockImplementation(() => {});
+    client.connect("Local", undefined, "user-1", undefined, null, null, {
+      channelId: "channel",
+      serverId: "server",
+    });
+
+    emitMediaBootstrap(client, "local-participant", "bootstrap-token");
+
+    expect(identify).toHaveBeenCalledOnce();
+    expect(identify.mock.calls[0]?.slice(0, 2)).toEqual([
+      "local-participant",
+      "bootstrap-token",
+    ]);
     client.disconnect("component-unmount");
   });
 

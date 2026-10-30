@@ -11,6 +11,8 @@ interface VoiceLandingProps {
   channelName: string;
   vcMembers: any[];
   handleJoin: () => void;
+  /** Pointer or focus on "Join voice": refresh the prefetched tickets. */
+  onJoinIntent?: () => void;
   showTextChat: boolean;
   onToggleTextChat: () => void;
   onMenuClick?: () => void;
@@ -72,6 +74,7 @@ export function VoiceLanding({
   channelName,
   vcMembers,
   handleJoin,
+  onJoinIntent,
   showTextChat,
   onToggleTextChat,
   onMenuClick,
@@ -138,7 +141,13 @@ export function VoiceLanding({
           </ul>
         )}
 
-        <Button type="button" size="lg" onClick={handleJoin}>
+        <Button
+          type="button"
+          size="lg"
+          onClick={handleJoin}
+          onPointerEnter={onJoinIntent}
+          onFocus={onJoinIntent}
+        >
           Join voice
         </Button>
       </div>

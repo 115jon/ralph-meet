@@ -295,6 +295,8 @@ vi.mock("@/lib/voice/standby-audio", () => ({
       track,
       stream: { getAudioTracks: () => [track], getTracks: () => [track] },
       stop: vi.fn(() => track.stop()),
+      pause: vi.fn(),
+      resume: vi.fn(),
     };
   },
 }));

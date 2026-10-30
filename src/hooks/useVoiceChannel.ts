@@ -61,9 +61,13 @@ import {
   holdVoiceStandby,
   markVoiceChannelJoining,
   retireVoiceStandby,
+  isVoiceStandbyDisabled,
   setClaimedVoiceAudible,
+  useVoiceStandbyActive,
 } from "@/lib/voice/voice-standby";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
+import { markVoice } from "@/lib/voice/latency-marks";
+import { prefetchSocketTickets } from "@/lib/voice/socket-ticket-client";
 import { getVoiceActivityThreshold } from "@/lib/voice/vad";
 import {
   getSoundboardServerKey,
@@ -1558,10 +1562,12 @@ export function useVoiceChannel({
   ]);
 
   const handleJoin = useCallback(async () => {
+    markVoice("join-click", { channelId, serverId, mode });
     const claimedStandby =
       mode === "channel" && channelId && serverId
         ? claimVoiceStandby(channelId, serverId, isMicOnRef.current)
         : null;
+    if (claimedStandby) markVoice("standby-claimed", { channelId });
     const adoptingStandby =
       claimedStandby !== null ||
       (standbyRef.current && sfuRef.current !== null);
@@ -1755,20 +1761,21 @@ export function useVoiceChannel({
         ),
       noiseReductionProvider: currentSettings.noiseReductionProvider,
     });
-    if (!claimedStandby) {
-      startEarlyMic(
-        {
-          deviceId: currentSettings.inputDeviceId,
-          deviceLabel: currentSettings.inputDeviceLabel,
-          groupId: currentSettings.inputDeviceGroupId,
-          noiseSuppression: captureProcessing.noiseSuppression,
-          echoCancellation: captureProcessing.echoCancellation,
-          autoGainControl: captureProcessing.autoGainControl,
-          stereo: true,
-        },
-        localMediaOwner,
-      );
-    }
+    // A claimed standby never opened the microphone (it only published
+    // silence); capture starts here, concurrently with promotion, on the
+    // standby's media owner so the device sync below reuses this request.
+    startEarlyMic(
+      {
+        deviceId: currentSettings.inputDeviceId,
+        deviceLabel: currentSettings.inputDeviceLabel,
+        groupId: currentSettings.inputDeviceGroupId,
+        noiseSuppression: captureProcessing.noiseSuppression,
+        echoCancellation: captureProcessing.echoCancellation,
+        autoGainControl: captureProcessing.autoGainControl,
+        stereo: true,
+      },
+      claimedStandby?.mediaOwner ?? localMediaOwner,
+    );
 
     const sfuUnsubscribers: Array<() => void> = [];
     const onSfu = <K extends keyof SFUEventMap>(
@@ -1831,6 +1838,7 @@ export function useVoiceChannel({
 
         // Bumping participants immediately correctly sets initial call participants
         voiceDispatch({ type: "JOINED" });
+        markVoice("ui-joined", { channelId, participantId });
         onJoined?.();
 
         // Play connected sound (skip for calls — gateway plays CALL_CONNECT instead)
@@ -2708,9 +2716,7 @@ export function useVoiceChannel({
       );
     }
     sfu.resumeAudioContext();
-    if (claimedStandby?.stream) {
-      localStreamRef.current = claimedStandby.stream;
-    } else if (!claimedStandby) {
+    if (!claimedStandby) {
       localStreamRef.current = new MediaStream();
     }
   }, [
@@ -2820,8 +2826,39 @@ export function useVoiceChannel({
     username: chatUsername || user?.username || user?.fullName || "Guest",
   };
 
+  const standbyActive = useVoiceStandbyActive();
+
+  // While the "Join voice" landing is up, fetch the room and voice tickets
+  // so the click starts at the WebSocket instead of at the ticket round trip.
+  // An occupied channel is covered by its warm standby instead.
+  const canPrefetchJoin =
+    mode === "channel" &&
+    !joined &&
+    !autoJoin &&
+    standbyActive &&
+    !!user?.id &&
+    !!channelId &&
+    !!serverId &&
+    (!channelHasOtherMembers || isVoiceStandbyDisabled());
+  const prefetchJoin = useCallback(() => {
+    if (!canPrefetchJoin || sfuRef.current) return;
+    const ticketRequest = {
+      channelId: channelId ?? undefined,
+      roomSlug: resolvedRoomSlug,
+      serverId: serverId ?? undefined,
+    };
+    prefetchSocketTickets([
+      { audience: "room", ...ticketRequest },
+      { audience: "voice", ...ticketRequest },
+    ]);
+  }, [canPrefetchJoin, channelId, resolvedRoomSlug, serverId]);
+  useEffect(() => {
+    prefetchJoin();
+  }, [prefetchJoin]);
+
   useEffect(() => {
     if (
+      !standbyActive ||
       !channelHasOtherMembers ||
       sfuRef.current ||
       !channelId ||
@@ -2856,7 +2893,14 @@ export function useVoiceChannel({
         standbySilenceRef.current = null;
       }
     };
-  }, [channelHasOtherMembers, channelId, resolvedRoomSlug, serverId, user?.id]);
+  }, [
+    standbyActive,
+    channelHasOtherMembers,
+    channelId,
+    resolvedRoomSlug,
+    serverId,
+    user?.id,
+  ]);
 
   useEffect(() => {
     const generation = ++localMediaGenerationRef.current;
@@ -5559,6 +5603,7 @@ export function useVoiceChannel({
     setAudioBlocked: (blocked: boolean) =>
       voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: blocked }),
     handleJoin,
+    prefetchJoin,
     handleLeave,
     toggleMic,
     toggleDeafen,

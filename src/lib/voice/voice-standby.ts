@@ -1,24 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clog } from "@/lib/console-logger";
 import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import {
   createLocalMediaOwner,
   releaseLocalStream,
-  startEarlyMic,
-  type LocalAudioConstraints,
   type LocalMediaOwner,
 } from "@/lib/local-media-manager";
 import { SFUClient } from "@/lib/sfu-client";
 import type { User } from "@/lib/types";
 import {
-  isNoiseReductionProviderSupported,
-  resolveCaptureAudioProcessing,
-} from "@/lib/voice/noise-reduction";
-import {
   createSilentAudioTrack,
   type SilentAudioTrack,
 } from "@/lib/voice/standby-audio";
-import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
 const standbyLog = clog("VoiceStandby");
 const MAX_STANDBY_CHANNELS = 2;
@@ -37,10 +30,9 @@ export interface VoiceStandbyProfile {
 
 export interface VoiceStandbySession {
   readonly sfu: SFUClient;
+  /** Owns the microphone the join opens; standby itself never opens it. */
   readonly mediaOwner: LocalMediaOwner;
   silence: SilentAudioTrack | null;
-  stream: MediaStream | null;
-  track: MediaStreamTrack | null;
 }
 
 interface StandbyRecord extends VoiceStandbySession {
@@ -55,38 +47,29 @@ const sessions = new Map<string, StandbyRecord>();
 const liveClaims = new Map<string, StandbyRecord>();
 const joining = new Set<string>();
 
+/**
+ * `localStorage["ralph:voice-standby"] = "off"` turns standby off for this
+ * browser: a troubleshooting switch, and how `pnpm bench:voice` measures a
+ * cold join into an occupied channel.
+ */
+export const VOICE_STANDBY_STORAGE_KEY = "ralph:voice-standby";
+
+export function isVoiceStandbyDisabled(): boolean {
+  try {
+    return (
+      globalThis.localStorage?.getItem(VOICE_STANDBY_STORAGE_KEY) === "off"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function sessionKey(channelId: string, serverId: string): string {
   return `${serverId}:${channelId}`;
 }
 
-function captureConstraints(userId: string): LocalAudioConstraints {
-  const settings = useVoiceSettingsStore.getState().getSettings(userId);
-  const captureProcessing = resolveCaptureAudioProcessing({
-    noiseSuppression: settings.noiseSuppression,
-    echoCancellation: settings.echoCancellation,
-    autoSensitivity: settings.autoSensitivity,
-    streamHighFidelity: settings.streamHighFidelity,
-    noiseReductionEnabled:
-      settings.noiseReductionEnabled &&
-      isNoiseReductionProviderSupported(settings.noiseReductionProvider),
-    noiseReductionProvider: settings.noiseReductionProvider,
-  });
-  return {
-    deviceId: settings.inputDeviceId,
-    deviceLabel: settings.inputDeviceLabel,
-    groupId: settings.inputDeviceGroupId,
-    noiseSuppression: captureProcessing.noiseSuppression,
-    echoCancellation: captureProcessing.echoCancellation,
-    autoGainControl: captureProcessing.autoGainControl,
-    stereo: true,
-  };
-}
-
 function stopStandbyCapture(record: StandbyRecord): void {
   releaseLocalStream(record.mediaOwner);
-  record.stream?.getTracks().forEach((track) => track.stop());
-  record.stream = null;
-  record.track = null;
   record.silence?.stop();
   record.silence = null;
 }
@@ -112,8 +95,6 @@ function createRecord(profile: VoiceStandbyProfile): StandbyRecord {
     sfu: new SFUClient(profile.roomSlug),
     mediaOwner: createLocalMediaOwner(),
     silence,
-    stream: null,
-    track: null,
     holds: 0,
     claimed: false,
     disposed: false,
@@ -121,6 +102,15 @@ function createRecord(profile: VoiceStandbyProfile): StandbyRecord {
   };
 }
 
+/**
+ * Warms a standby session without touching the microphone: the room socket
+ * connects hidden (`standby: true`), the SFU session is created, ICE/DTLS
+ * come up and a silent track is pushed, so a join only has to swap the
+ * microphone in. The voice socket stays unidentified (see
+ * `SFUClient.connectVoice`), so the room is never offered this session's
+ * track and this session pulls nobody's audio before the user joins. The
+ * microphone is first opened by the join itself.
+ */
 async function warm(
   record: StandbyRecord,
   profile: VoiceStandbyProfile,
@@ -138,111 +128,22 @@ async function warm(
       standby: true,
     },
   );
-  const micPromise = Promise.resolve()
-    .then(() =>
-      startEarlyMic(captureConstraints(profile.userId), record.mediaOwner),
-    )
-    .catch(() => null);
-
-  if (record.silence) {
-    const published = await record.sfu
-      .publishTracksIf(record.silence.stream, "cam", () => !record.disposed)
-      .catch((error) => {
-        standbyLog.warn("Standby publish failed", error);
-        return false;
-      });
-    if (!published || record.disposed) {
+  if (!record.silence) return;
+  const published = await record.sfu
+    .publishTracksIf(record.silence.stream, "cam", () => !record.disposed)
+    .catch((error) => {
+      standbyLog.warn("Standby publish failed", error);
+      return false;
+    });
+  if (!published || record.disposed) {
+    if (!record.claimed) {
       record.silence?.stop();
       record.silence = null;
-      const abandoned = await micPromise;
-      abandoned?.getTracks().forEach((track) => track.stop());
-      return;
     }
-  }
-
-  const stream = await micPromise;
-  if (record.disposed) {
-    stream?.getTracks().forEach((track) => track.stop());
     return;
   }
-  const track = stream?.getAudioTracks()[0];
-  if (!stream || !track) return;
-
-  const trackName = record.sfu.getMicrophoneTrackName();
-  const published = trackName ? record.sfu.getPublishedTrack(trackName) : null;
-  if (
-    record.claimed &&
-    published &&
-    published !== track &&
-    published !== record.silence?.track
-  ) {
-    stream.getTracks().forEach((mediaTrack) => mediaTrack.stop());
-    return;
-  }
-
-  track.enabled = record.audible;
-  record.stream = stream;
-  record.track = track;
-  if (!record.audible) return;
-  if (trackName && published) {
-    const replaced = await record.sfu.replaceTrack(trackName, track);
-    if (!replaced || record.disposed) {
-      if (!record.claimed) {
-        track.stop();
-        record.stream = null;
-        record.track = null;
-      }
-      return;
-    }
-  } else if (!published) {
-    const publishedMic = await record.sfu
-      .publishTracksIf(stream, "cam", () => !record.disposed)
-      .catch((error) => {
-        standbyLog.warn("Standby microphone publish failed", error);
-        return false;
-      });
-    if (!publishedMic || record.disposed) {
-      if (!record.claimed) {
-        track.stop();
-        record.stream = null;
-        record.track = null;
-      }
-      return;
-    }
-  }
-  track.enabled = record.audible;
-  const publishedName = record.sfu.getMicrophoneTrackName();
-  if (publishedName) {
-    record.sfu.setPublishedTrackEnabled(publishedName, record.audible);
-  }
-  if (record.silence && record.silence.track !== track) {
-    releaseSilenceAfterHandoff(record, record.silence, track);
-  }
-}
-
-function releaseSilenceAfterHandoff(
-  record: StandbyRecord,
-  silence: SilentAudioTrack,
-  microphone: MediaStreamTrack,
-): void {
-  const started = Date.now();
-  const timer = setInterval(() => {
-    if (record.silence !== silence) {
-      clearInterval(timer);
-      return;
-    }
-    if (record.disposed) {
-      clearInterval(timer);
-      return;
-    }
-    if (record.sfu.senderHasLiveTrack(microphone)) {
-      clearInterval(timer);
-      if (record.silence === silence) record.silence = null;
-      silence.stop();
-      return;
-    }
-    if (Date.now() - started > 15_000) clearInterval(timer);
-  }, 50);
+  // Negotiated: idle until a join claims it (no audio thread, no RTP).
+  if (!record.claimed) record.silence?.pause();
 }
 
 export function holdVoiceStandby(profile: VoiceStandbyProfile): {
@@ -250,7 +151,7 @@ export function holdVoiceStandby(profile: VoiceStandbyProfile): {
   release: () => void;
 } {
   const key = sessionKey(profile.channelId, profile.serverId);
-  if (joining.has(key)) {
+  if (joining.has(key) || isVoiceStandbyDisabled()) {
     return { session: null, release: () => undefined };
   }
   const claimed = liveClaims.get(key);
@@ -295,6 +196,9 @@ export function claimVoiceStandby(
   if (!record || record.disposed) return null;
   joining.add(key);
   record.claimed = true;
+  // Silence flows again at once, so the SFU has packets for this track by
+  // the time the room is told about it and others pull it.
+  record.silence?.resume();
   sessions.delete(key);
   liveClaims.set(key, record);
   applyClaimedAudible(record, audible);
@@ -312,59 +216,19 @@ export function setClaimedVoiceAudible(
   return true;
 }
 
+/**
+ * Mute state for a claimed session. While the standby silence is still the
+ * published microphone there is nothing to gate (the join's capture replaces
+ * it, see useVoiceChannel); once a real microphone is published, muting
+ * disables its sender.
+ */
 function applyClaimedAudible(record: StandbyRecord, audible: boolean): void {
   record.audible = audible;
-  const microphone = record.track;
-  const silence = record.silence;
   const trackName = record.sfu.getMicrophoneTrackName();
-  const published = trackName ? record.sfu.getPublishedTrack(trackName) : null;
-  standbyLog.info("Claimed mic audible", {
-    audible,
-    publishedSilence: !!silence && published === silence.track,
-    hasMicrophoneTrack: !!microphone,
-  });
-  if (!audible) {
-    if (silence && published === silence.track) {
-      silence.track.enabled = true;
-      if (microphone && microphone !== silence.track)
-        microphone.enabled = false;
-      return;
-    }
-    if (microphone && microphone !== published) microphone.enabled = false;
-    if (trackName) record.sfu.setPublishedTrackEnabled(trackName, false);
-    return;
-  }
-  const microphoneLive =
-    !!microphone &&
-    (microphone.readyState === undefined || microphone.readyState === "live");
-  if (
-    !microphone ||
-    !microphoneLive ||
-    !trackName ||
-    microphone === silence?.track
-  ) {
-    standbyLog.warn("Unmute has no live microphone", {
-      trackName,
-      readyState: microphone?.readyState ?? null,
-    });
-    return;
-  }
-  microphone.enabled = true;
-  if (published === microphone) {
-    record.sfu.setPublishedTrackEnabled(trackName, true);
-    return;
-  }
-  void record.sfu.replaceTrack(trackName, microphone).then((replaced) => {
-    if (!replaced || !record.audible || record.silence !== silence) {
-      standbyLog.warn("Unmute did not replace standby silence", {
-        trackName,
-        replaced,
-      });
-      return;
-    }
-    record.sfu.setPublishedTrackEnabled(trackName, true);
-    if (silence) releaseSilenceAfterHandoff(record, silence, microphone);
-  });
+  if (!trackName) return;
+  const published = record.sfu.getPublishedTrack(trackName);
+  if (!published || published === record.silence?.track) return;
+  record.sfu.setPublishedTrackEnabled(trackName, audible);
 }
 
 export function retireVoiceStandby(channelId: string, serverId: string): void {
@@ -403,6 +267,53 @@ function isOccupiedBySomeoneElse(
   return members.some(
     (member) => member.clerk_user_id !== userId && member.connected !== false,
   );
+}
+
+/** How long a hidden tab keeps its standby sessions before dropping them. */
+export const STANDBY_HIDDEN_GRACE_MS = 15_000;
+
+function isPageActive(): boolean {
+  if (typeof document === "undefined") return false;
+  const online = typeof navigator === "undefined" || navigator.onLine !== false;
+  return document.visibilityState !== "hidden" && online;
+}
+
+/**
+ * Whether standby sessions should exist right now: the tab is visible and
+ * online. A hidden tab keeps them for {@link STANDBY_HIDDEN_GRACE_MS} (so an
+ * alt-tab does not churn sessions); going offline drops them at once. Event
+ * driven, no timers while visible.
+ */
+export function useVoiceStandbyActive(): boolean {
+  const [active, setActive] = useState(isPageActive);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const update = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      if (isPageActive()) {
+        setActive(true);
+      } else if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setActive(false);
+      } else {
+        timer = setTimeout(() => {
+          timer = null;
+          setActive(isPageActive());
+        }, STANDBY_HIDDEN_GRACE_MS);
+      }
+    };
+    update();
+    document.addEventListener("visibilitychange", update);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", update);
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  return active;
 }
 
 export function useOccupiedVoiceStandby(input: {
@@ -447,7 +358,8 @@ export function useOccupiedVoiceStandby(input: {
   const standbyKey = [...standbyIds].sort().join(",");
   const latestRef = useRef({ input, standbyIds });
   const holdsRef = useRef(new Map<string, () => void>());
-  const targetKey = `${input.serverId ?? ""}|${userId}|${input.joinedChannelId ?? ""}|${standbyKey}`;
+  const active = useVoiceStandbyActive();
+  const targetKey = `${active ? "on" : "off"}|${input.serverId ?? ""}|${userId}|${input.joinedChannelId ?? ""}|${standbyKey}`;
 
   useEffect(() => {
     latestRef.current = { input, standbyIds };
@@ -465,7 +377,12 @@ export function useOccupiedVoiceStandby(input: {
         holds.delete(channelId);
       }
     };
-    if (!current.serverId || current.serverId === "@me" || !profile?.id) {
+    if (
+      !active ||
+      !current.serverId ||
+      current.serverId === "@me" ||
+      !profile?.id
+    ) {
       desired.clear();
       releaseMissing();
       return;
@@ -487,7 +404,7 @@ export function useOccupiedVoiceStandby(input: {
       if (!held.session) continue;
       holds.set(channelId, held.release);
     }
-  }, [targetKey]);
+  }, [targetKey, active]);
 
   useEffect(() => {
     const holds = holdsRef.current;

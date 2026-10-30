@@ -138,6 +138,7 @@ export default function VoiceChannelView({
     gridItems,
     watchersByStreamer,
     handleJoin,
+    prefetchJoin,
     handleLeave,
     toggleMic,
     toggleDeafen,
@@ -602,6 +603,7 @@ export default function VoiceChannelView({
         channelName={channelName}
         vcMembers={vcMembers}
         handleJoin={onBeforeJoin ? () => onBeforeJoin(handleJoin) : handleJoin}
+        onJoinIntent={prefetchJoin}
         showTextChat={showTextChat}
         onToggleTextChat={onToggleTextChat}
         onMenuClick={onMenuClick}

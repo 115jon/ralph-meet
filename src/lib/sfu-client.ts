@@ -808,6 +808,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private connectVoice(): void {
     if (!this.participantId || !this.voiceToken) return;
+    // A standby session keeps its voice socket open but unidentified: the
+    // voice room only learns about a participant on VoiceIdentify, so until
+    // the user joins it neither offers this session anyone's tracks nor
+    // announces its (silent) publication to the room. Queued announcements
+    // flush on VoiceReady after promoteStandby().
+    if (this.standby) return;
     this.voiceGW.connectVoice(
       this.participantId,
       this.voiceToken,
@@ -969,6 +975,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     selfDeaf?: boolean;
   }): void {
     this.standby = false;
+    this.markLatency("standbyPromotedAt");
+    this.connectVoice();
     this.flushDeferredRemoteTracks();
     this.roomGW.promoteStandby(voice);
     this.partyTracksMedia?.replayRemoteTracks();

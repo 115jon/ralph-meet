@@ -1,6 +1,15 @@
 export interface SilentAudioTrack {
   stream: MediaStream;
   track: MediaStreamTrack;
+  /**
+   * Stops rendering: the track stays live (the sender keeps its transceiver
+   * and the SFU its track) but no audio frames, and so no RTP, are produced.
+   * A warmed standby sits paused so browsing costs no audio thread, encoder
+   * or packets.
+   */
+  pause: () => void;
+  /** Starts producing (silent) frames again; used the moment a join claims it. */
+  resume: () => void;
   stop: () => void;
 }
 
@@ -22,6 +31,14 @@ export function createSilentAudioTrack(): SilentAudioTrack {
   return {
     stream: destination.stream,
     track,
+    pause: () => {
+      if (stopped || context.state !== "running") return;
+      void context.suspend().catch(() => undefined);
+    },
+    resume: () => {
+      if (stopped || context.state === "running") return;
+      void context.resume().catch(() => undefined);
+    },
     stop: () => {
       if (stopped) return;
       stopped = true;

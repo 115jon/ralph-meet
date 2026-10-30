@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
-import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { silencePause, silenceResume } = vi.hoisted(() => ({
+  silencePause: vi.fn(),
+  silenceResume: vi.fn(),
+}));
 const { instances, FakeSFU, micTrack, silenceTrack } = vi.hoisted(() => {
   const instances: FakeSFU[] = [];
   const micTrack = {
@@ -86,6 +90,8 @@ vi.mock("@/lib/voice/standby-audio", () => ({
       getTracks: () => [silenceTrack],
     },
     stop: vi.fn(() => silenceTrack.stop()),
+    pause: silencePause,
+    resume: silenceResume,
   }),
 }));
 
@@ -115,7 +121,7 @@ vi.mock("@/stores/useVoiceSettingsStore", () => ({
   },
 }));
 
-import { startEarlyMic } from "@/lib/local-media-manager";
+import { releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
 import {
   claimVoiceStandby,
   markVoiceChannelJoining,
@@ -124,6 +130,8 @@ import {
   resetVoiceStandbyForTests,
   setClaimedVoiceAudible,
   useOccupiedVoiceStandby,
+  STANDBY_HIDDEN_GRACE_MS,
+  VOICE_STANDBY_STORAGE_KEY,
 } from "@/lib/voice/voice-standby";
 
 const profile = {
@@ -148,7 +156,7 @@ describe("voice standby", () => {
     vi.clearAllMocks();
   });
 
-  it("publishes live silence until the microphone is in the sender", async () => {
+  it("warms with published silence and never opens the microphone", async () => {
     const first = holdVoiceStandby(profile);
     const second = holdVoiceStandby(profile);
     await flush();
@@ -167,32 +175,36 @@ describe("voice standby", () => {
       getAudioTracks: () => Array<{ enabled: boolean; id: string }>;
     };
     expect(firstStream.getAudioTracks()[0]?.id).toBe("silence");
-    expect(firstStream.getAudioTracks()[0]?.enabled).toBe(true);
-    expect(silenceTrack.stop).not.toHaveBeenCalled();
     expect(instances[0]?.published.get("cam-audio-self")?.id).toBe("silence");
-    expect(micTrack.enabled).toBe(false);
+    // Browsing a server must never light the microphone indicator, and the
+    // negotiated silence sits paused (no audio thread, no RTP) until a join.
+    expect(startEarlyMic).not.toHaveBeenCalled();
+    expect(silencePause).toHaveBeenCalledOnce();
+    expect(silenceResume).not.toHaveBeenCalled();
     expect(silenceTrack.stop).not.toHaveBeenCalled();
 
     first.release();
     expect(instances[0]?.disconnect).not.toHaveBeenCalled();
     second.release();
     expect(instances[0]?.disconnect).toHaveBeenCalledWith("component-unmount");
+    expect(silenceTrack.stop).toHaveBeenCalled();
   });
 
-  it("claim turns the warmed microphone on without disconnecting", async () => {
+  it("claim keeps the session and leaves the silence for the join's capture", async () => {
     const held = holdVoiceStandby(profile);
     await flush();
 
-    expect(micTrack.enabled).toBe(false);
-    expect(instances[0]?.published.get("cam-audio-self")?.id).toBe("silence");
-    const claimed = claimVoiceStandby("channel", "server", false);
-    expect(claimed?.track?.id).toBe("mic");
-    expect(claimed?.track?.enabled).toBe(false);
-    expect(instances[0]?.published.get("cam-audio-self")?.id).toBe("silence");
+    const claimed = claimVoiceStandby("channel", "server", true);
+    expect(claimed?.sfu).toBe(instances[0]);
+    expect(silenceResume).toHaveBeenCalledOnce();
+    expect(startEarlyMic).not.toHaveBeenCalled();
+    expect(setClaimedVoiceAudible("channel", "server", false)).toBe(true);
     expect(setClaimedVoiceAudible("channel", "server", true)).toBe(true);
     await flush();
-    expect(micTrack.enabled).toBe(true);
-    expect(instances[0]?.published.get("cam-audio-self")?.id).toBe("mic");
+    // Silence is not a microphone: mute/unmute leave its sender alone.
+    expect(instances[0]?.replaceTrack).not.toHaveBeenCalled();
+    expect(instances[0]?.setPublishedTrackEnabled).not.toHaveBeenCalled();
+    expect(instances[0]?.published.get("cam-audio-self")?.id).toBe("silence");
 
     held.release();
     expect(instances[0]?.disconnect).not.toHaveBeenCalled();
@@ -203,14 +215,12 @@ describe("voice standby", () => {
     duringJoin.release();
   });
 
-  it("mutes a live microphone without swapping back to silence", async () => {
+  it("mutes the microphone the join published without swapping back to silence", async () => {
     const held = holdVoiceStandby(profile);
     await flush();
     claimVoiceStandby("channel", "server", true);
-    await flush();
     const sfu = instances[0];
-    expect(sfu?.published.get("cam-audio-self")?.id).toBe("mic");
-    sfu?.replaceTrack.mockClear();
+    sfu?.published.set("cam-audio-self", micTrack);
 
     expect(setClaimedVoiceAudible("channel", "server", false)).toBe(true);
     await flush();
@@ -224,49 +234,28 @@ describe("voice standby", () => {
     held.release();
   });
 
-  it("keeps the capture when join publishes it before standby notices", async () => {
-    const held = holdVoiceStandby(profile);
-    const sfu = instances[0];
-    if (!sfu) throw new Error("Standby SFU was not created");
-    sfu.published.set("cam-audio-self", micTrack);
-    const claimed = claimVoiceStandby("channel", "server", true);
-    await flush();
-
-    expect(micTrack.stop).not.toHaveBeenCalled();
-    expect(claimed?.track).toBe(micTrack);
-    expect(claimed?.stream).not.toBeNull();
-    held.release();
-  });
-
-  it("stops a microphone that arrives after leave", async () => {
-    let resolveMic: (stream: MediaStream | null) => void = () => undefined;
-    vi.mocked(startEarlyMic).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveMic = resolve;
-        }),
-    );
+  it("retiring a claim releases its media owner and stops the silence", async () => {
     const held = holdVoiceStandby(profile);
     await flush();
-    const claimed = claimVoiceStandby("channel", "server", true);
-    expect(claimed?.stream).toBeNull();
-    expect(startEarlyMic).toHaveBeenCalledTimes(1);
-
-    const lateTrack = {
-      id: "late-mic",
-      enabled: true,
-      stop: vi.fn(),
-    };
-    resolveMic({
-      getAudioTracks: () => [lateTrack],
-      getTracks: () => [lateTrack],
-    } as unknown as MediaStream);
+    claimVoiceStandby("channel", "server", true);
     retireVoiceStandby("channel", "server");
-    await flush();
 
-    expect(lateTrack.stop).toHaveBeenCalled();
+    expect(releaseLocalStream).toHaveBeenCalled();
+    expect(silenceTrack.stop).toHaveBeenCalled();
+    expect(setClaimedVoiceAudible("channel", "server", true)).toBe(false);
     held.release();
     expect(instances[0]?.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("can be switched off per browser", () => {
+    localStorage.setItem(VOICE_STANDBY_STORAGE_KEY, "off");
+    try {
+      expect(holdVoiceStandby(profile).session).toBeNull();
+      expect(instances).toHaveLength(0);
+    } finally {
+      localStorage.removeItem(VOICE_STANDBY_STORAGE_KEY);
+    }
+    expect(holdVoiceStandby(profile).session).not.toBeNull();
   });
 
   it("does not block warming when nothing was claimed", () => {
@@ -310,5 +299,81 @@ describe("voice standby", () => {
     expect(instances[0]?.disconnect).not.toHaveBeenCalled();
     expect(instances[1]?.disconnect).not.toHaveBeenCalled();
     hook.unmount();
+  });
+
+  describe("page activity", () => {
+    const member = { clerk_user_id: "other", connected: true };
+    const input = {
+      serverId: "server",
+      joinedChannelId: null as string | null,
+      activeChannelId: "a",
+      channels: [{ id: "a", server_id: "server", channel_type: "voice" }],
+      voiceChannelStates: { a: [member] },
+      user: { id: "user-1", username: "ada" },
+    };
+    let visibility: DocumentVisibilityState = "visible";
+    let online = true;
+
+    beforeEach(() => {
+      visibility = "visible";
+      online = true;
+      vi.spyOn(document, "visibilityState", "get").mockImplementation(
+        () => visibility,
+      );
+      vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("drops standby after a hidden tab's grace period and rewarms on return", async () => {
+      vi.useFakeTimers();
+      try {
+        const hook = renderHook(() => useOccupiedVoiceStandby(input));
+        await act(async () => flush());
+        expect(instances).toHaveLength(1);
+
+        visibility = "hidden";
+        act(() => {
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        act(() => {
+          vi.advanceTimersByTime(STANDBY_HIDDEN_GRACE_MS - 1);
+        });
+        expect(instances[0]?.disconnect).not.toHaveBeenCalled();
+        act(() => {
+          vi.advanceTimersByTime(1);
+        });
+        expect(instances[0]?.disconnect).toHaveBeenCalledWith(
+          "component-unmount",
+        );
+
+        visibility = "visible";
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"));
+          await flush();
+        });
+        expect(instances).toHaveLength(2);
+        hook.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("drops standby as soon as the browser goes offline", async () => {
+      const hook = renderHook(() => useOccupiedVoiceStandby(input));
+      await act(async () => flush());
+      expect(instances).toHaveLength(1);
+
+      online = false;
+      act(() => {
+        window.dispatchEvent(new Event("offline"));
+      });
+      expect(instances[0]?.disconnect).toHaveBeenCalledWith(
+        "component-unmount",
+      );
+      hook.unmount();
+    });
   });
 });
