@@ -13,6 +13,8 @@
 
 # tanstack start
 /.tanstack/
+# router-plugin temp dir of the desktop build
+/desktop/.tanstack/
 /.output/
 /.vinxi/
 /.tsbuildinfo
