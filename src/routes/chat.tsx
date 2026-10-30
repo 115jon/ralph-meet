@@ -113,11 +113,13 @@ function ChatLayout() {
   return (
     <>
       <ChatGateway authenticatedUserId={userId} />
-      <ConnectionOverlay />
-      <ChatPageClient />
-      <ImageViewerModal />
-      <SettingsHost />
-      <CommandMenu />
+      {/* The app is inert while the cold-load screen covers it. */}
+      <ConnectionOverlay>
+        <ChatPageClient />
+        <ImageViewerModal />
+        <SettingsHost />
+        <CommandMenu />
+      </ConnectionOverlay>
     </>
   );
 }

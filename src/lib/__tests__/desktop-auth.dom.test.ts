@@ -136,3 +136,43 @@ describe("handleKovaSessionTokenChange", () => {
     expect(consumeAuthLogoutIntent()).toBe(true);
   });
 });
+
+describe("token change announcements", () => {
+  it("announces a token the SDK already wrote to its pk key (web)", () => {
+    setTauri(false);
+    // KovaAuthProvider writes kova-auth:<pk>:session-token, then reports it.
+    localStorage.setItem(CURRENT, "tok_sdk");
+    const listener = vi.fn();
+    const unsubscribe = subscribeDesktopTokenChanges(listener);
+
+    handleKovaSessionTokenChange("tok_sdk", { seenSessionToken: false });
+
+    expect(listener).toHaveBeenCalledWith("tok_sdk");
+    unsubscribe();
+  });
+
+  it("announces a token when desktop_auth_token already holds it (desktop)", () => {
+    localStorage.setItem(CURRENT, "tok_sdk");
+    localStorage.setItem("desktop_auth_token", "tok_sdk");
+    const listener = vi.fn();
+    const unsubscribe = subscribeDesktopTokenChanges(listener);
+
+    handleKovaSessionTokenChange("tok_sdk", { seenSessionToken: false });
+
+    expect(listener).toHaveBeenCalledWith("tok_sdk");
+    unsubscribe();
+  });
+
+  it("announces a stored token even when the slot already holds it", () => {
+    setTauri(false);
+    localStorage.setItem(CURRENT, "tok_same");
+    const listener = vi.fn();
+    const unsubscribe = subscribeDesktopTokenChanges(listener);
+
+    setStoredKovaAuthSessionToken("tok_same");
+
+    expect(listener).toHaveBeenCalledWith("tok_same");
+    expect(localStorage.getItem(CURRENT)).toBe("tok_same");
+    unsubscribe();
+  });
+});

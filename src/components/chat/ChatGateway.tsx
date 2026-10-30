@@ -61,6 +61,25 @@ export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
     useChatStore.getState().gateway.setClerkUserId(gatewayUserId);
   }, [gatewayUserId]);
 
+  // A backgrounded tab or a sleeping phone throttles or freezes timers, so a
+  // pending retry can sit for its whole backoff (up to 30s) after the user is
+  // back, and a socket that died in the background is only noticed after
+  // three missed heartbeats. Wake the gateway the moment the page returns.
+  useEffect(() => {
+    const wake = () => useChatStore.getState().gateway.wake();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") wake();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", wake);
+    window.addEventListener("pageshow", wake);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", wake);
+      window.removeEventListener("pageshow", wake);
+    };
+  }, []);
+
   // Listen for invite deep links while the user is signed in (desktop only)
   useEffect(() => {
     if (!isTauri()) return;
