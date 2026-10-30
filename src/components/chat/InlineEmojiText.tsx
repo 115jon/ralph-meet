@@ -1,5 +1,6 @@
 import { extractCustomEmojiIds, splitTextByNativeEmoji } from "@/lib/emoji";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
+import { useEmojiDataReady } from "@/hooks/useEmojiDataReady";
 
 import EmojiToken from "./EmojiToken";
 
@@ -38,6 +39,8 @@ export default function InlineEmojiText({
   emojiClassName,
   selectable = false,
 }: InlineEmojiTextProps) {
+  // Re-render once the lazily loaded emoji set lands (desktop).
+  useEmojiDataReady();
   const customEmojiIds = extractCustomEmojiIds(text);
   const customEmojiMap = useCustomEmojiLookup(customEmojiIds);
   const nodes: React.ReactNode[] = [];

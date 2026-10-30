@@ -25,10 +25,14 @@ describe("BanMemberDialog (replaces window.prompt)", () => {
       />,
     );
     const dialog = await screen.findByRole("dialog", { name: "Ban member" });
+    // A ban is an irreversible confirm: the solid danger fill.
+    expect(
+      within(dialog).getByRole("button", { name: "Ban grace" }),
+    ).toHaveAttribute("data-variant", "danger");
     fireEvent.change(within(dialog).getByLabelText(/Reason/), {
       target: { value: "  spam  " },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Ban" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Ban grace" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(onBan).toHaveBeenCalledWith(
@@ -54,7 +58,7 @@ describe("BanMemberDialog (replaces window.prompt)", () => {
       />,
     );
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Ban" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Ban grace" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       "You don't have permission to ban this member.",
     );

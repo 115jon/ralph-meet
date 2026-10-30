@@ -9,14 +9,19 @@
  * picker is a fixed 85dvh sheet, and dragging only starts when the inner list
  * is scrolled to the top.
  *
- * Desktop: an anchored popover panel (design-system 13.1) in the menu recipe:
- * `MENU_PANEL` geometry, radius 12, `shadow-lg`, capped at
- * `min(600px, 100dvh - 24px)`. The surface owns its z-index (modal layer 50,
- * or the stacked layer 60 when opened from a dialog). Callers pass only
- * position and width. Outside presses close it through the Dialog's own
- * dismiss handling (non-modal by default), so pickers add no click-catcher;
- * a press on the control that opened it is ignored, so that control's own
- * toggle closes it instead of closing and reopening it.
+ * Desktop: an anchored float in the menu recipe (`MENU_PANEL`: ply-3, line,
+ * shadow-float, radius 10), capped at `min(600px, 100dvh - 24px)`. The
+ * surface owns its z-index (modal layer 50, or the stacked layer 60 when
+ * opened from a dialog). Callers pass only position and width. Outside
+ * presses close it through the Dialog's own dismiss handling (non-modal by
+ * default), so pickers add no click-catcher; a press on the control that
+ * opened it is ignored, so that control's own toggle closes it instead of
+ * closing and reopening it.
+ *
+ * Motion (talk-tree-spec §6, presence): a pointer open fades and scales from
+ * the trigger (transform-origin is measured from the opener, or `anchorRef`)
+ * over --dur-3; the exit runs at ~0.7x (--dur-3-exit). A keyboard-initiated
+ * open never scales: it fades in over --dur-1 and out over 70ms.
  */
 
 import * as React from "react";
@@ -32,15 +37,26 @@ import { MENU_PANEL } from "@/components/ui/menu";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 
+import { getLastInputWasKeyboard } from "./picker-grid";
+
 type DialogSurfaceProps = React.ComponentProps<typeof DialogSurface>;
+
+function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
+  if (typeof ref === "function") ref(value);
+  else if (ref) (ref as React.MutableRefObject<T | null>).current = value;
+}
 
 /** The desktop panel recipe. */
 const PICKER_PANEL = cn(
   MENU_PANEL,
   "fixed z-50 m-0 flex max-h-[min(600px,calc(100dvh-24px))] flex-col overflow-hidden p-0 outline-none",
-  "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:duration-180",
-  "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] data-[state=closed]:duration-120",
 );
+/** Pointer open: fade + scale from the trigger; exit at ~0.7x. */
+const PRESENCE_POINTER =
+  "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-(--motion-scale-in) data-[state=open]:duration-(--dur-3) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-(--motion-scale-out) data-[state=closed]:duration-(--dur-3-exit)";
+/** Keyboard open: opacity only, 100ms in, 70ms out. */
+const PRESENCE_KEYBOARD =
+  "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-(--dur-1) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-70";
 
 export type PickerSurfaceProps = {
   open: boolean;
@@ -79,6 +95,17 @@ export type PickerSurfaceProps = {
   stacked?: boolean;
   /** Ref to the surface element (desktop DialogSurface / phone drawer). */
   contentRef?: React.Ref<HTMLDivElement>;
+  /**
+   * Desktop: where focus lands on open (usually the search field) instead of
+   * the first focusable control. Phones keep the drawer's own focus, so the
+   * keyboard doesn't jump up over the sheet.
+   */
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
+  /**
+   * The element the presence scales out of. Defaults to the control that had
+   * focus when the picker opened.
+   */
+  anchorRef?: React.RefObject<HTMLElement | null>;
   children: React.ReactNode;
 };
 
@@ -95,15 +122,68 @@ export function PickerSurface({
   desktopProps,
   stacked = false,
   contentRef,
+  initialFocusRef,
+  anchorRef,
   children,
 }: PickerSurfaceProps) {
   const isMobile = useIsMobile();
   // The control that had focus when the picker opened (usually its toggle).
   const openerRef = React.useRef<Element | null>(null);
+  const surfaceRef = React.useRef<HTMLDivElement | null>(null);
+  // How this open started; read once per open so the class is on the first
+  // frame the presence keyframes run on.
+  const [keyboardOpen, setKeyboardOpen] = React.useState(
+    () => open && getLastInputWasKeyboard(),
+  );
+  const [prevOpen, setPrevOpen] = React.useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setKeyboardOpen(getLastInputWasKeyboard());
+  }
+
   // Layout effect: runs before the dialog's focus scope moves focus inside.
   React.useLayoutEffect(() => {
     if (open) openerRef.current = document.activeElement;
   }, [open]);
+
+  const setSurfaceRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      surfaceRef.current = node;
+      assignRef(contentRef, node);
+    },
+    [contentRef],
+  );
+
+  // Origin-aware presence: scale out of the trigger's nearest point. Pickers
+  // position themselves after mount, so this re-measures when the position
+  // style changes.
+  const positionKey = style
+    ? `${style.left}|${style.top}|${style.right}|${style.bottom}`
+    : "";
+  React.useLayoutEffect(() => {
+    if (!open || modal || isMobile) return;
+    const surface = surfaceRef.current;
+    const anchor =
+      anchorRef?.current ??
+      (openerRef.current instanceof HTMLElement &&
+      openerRef.current !== document.body
+        ? openerRef.current
+        : null);
+    if (!surface || !anchor) return;
+    const box = surface.getBoundingClientRect();
+    const target = anchor.getBoundingClientRect();
+    if (box.width === 0 || target.width === 0) return;
+    const clamp = (value: number, max: number) =>
+      Math.min(Math.max(value, 0), max);
+    const x = clamp(target.left + target.width / 2 - box.left, box.width);
+    const y =
+      target.top >= box.bottom
+        ? box.height
+        : target.bottom <= box.top
+          ? 0
+          : clamp(target.top + target.height / 2 - box.top, box.height);
+    surface.style.transformOrigin = `${Math.round(x)}px ${Math.round(y)}px`;
+  }, [anchorRef, isMobile, modal, open, positionKey, className]);
 
   if (isMobile) {
     return (
@@ -114,7 +194,7 @@ export function PickerSurface({
         repositionInputs
       >
         <DrawerContent
-          ref={contentRef}
+          ref={setSurfaceRef}
           aria-label={ariaLabel}
           overlayClassName={cn(stacked && "z-60")}
           onEscapeKeyDown={onEscapeKeyDown}
@@ -126,7 +206,8 @@ export function PickerSurface({
     );
   }
 
-  const { onInteractOutside, ...restDesktopProps } = desktopProps ?? {};
+  const { onInteractOutside, onOpenAutoFocus, ...restDesktopProps } =
+    desktopProps ?? {};
 
   return (
     <Dialog
@@ -139,13 +220,27 @@ export function PickerSurface({
         {modal ? <DialogOverlay className={cn(stacked && "z-60")} /> : null}
         <DialogSurface
           {...restDesktopProps}
-          ref={contentRef}
+          ref={setSurfaceRef}
           showCloseButton={false}
-          className={cn(PICKER_PANEL, stacked && "z-60", className)}
+          className={cn(
+            PICKER_PANEL,
+            keyboardOpen ? PRESENCE_KEYBOARD : PRESENCE_POINTER,
+            stacked && "z-60",
+            className,
+          )}
           style={style}
           aria-label={ariaLabel}
           onEscapeKeyDown={onEscapeKeyDown}
           onPointerDownOutside={onPointerDownOutside}
+          onOpenAutoFocus={(event) => {
+            onOpenAutoFocus?.(event);
+            if (event.defaultPrevented) return;
+            const target = initialFocusRef?.current;
+            if (target) {
+              event.preventDefault();
+              target.focus({ preventScroll: true });
+            }
+          }}
           onInteractOutside={(event) => {
             const target = event.target;
             const opener = openerRef.current;

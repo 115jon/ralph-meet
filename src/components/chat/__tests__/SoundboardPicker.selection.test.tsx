@@ -645,9 +645,9 @@ describe("SoundboardPicker selection mode", () => {
     expect(picker).toHaveClass("z-60");
     expect(picker).not.toHaveClass("inset-0");
     expect(picker).not.toHaveClass("bottom-[calc(100%+10px)]");
-    expect(picker).toHaveClass("w-[min(440px,calc(100vw-24px))]");
+    expect(picker).toHaveClass("w-[min(420px,calc(100vw-24px))]");
     // The shared picker recipe (PickerSurface), not a per-picker one.
-    expect(picker).toHaveClass("rounded-lg", "shadow-lg");
+    expect(picker).toHaveClass("rounded-[2px]", "shadow-float");
     expect(picker).not.toHaveClass("rounded-3xl");
     expect(document.querySelector('div[aria-hidden="true"]')).toBeNull();
   });

@@ -18,6 +18,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import {
+  getListenTogetherLivePositionMs,
   useListenTogetherPlaybackState,
   type ListenTogetherPlaybackState,
 } from "./listen-together-playback";
@@ -203,6 +204,9 @@ export function DesktopThumbnailToolbarSync({
   const voiceSettings = useVoiceSettingsStore((state) =>
     state.getSettings(activeSession?.settingsUserId),
   );
+  // The toolbar only needs the play/pause state, so this re-renders on
+  // room-state changes alone. The live position is read when a toolbar
+  // button is pressed (see `toggle-media-playback`).
   const playback = useListenTogetherPlaybackState(activeSession?.roomSlug);
 
   const mediaControls = useMemo<DesktopMediaControls | null>(
@@ -233,29 +237,65 @@ export function DesktopThumbnailToolbarSync({
   const activeSessionRef = useRef<ToolbarVoiceSession | null>(activeSession);
   const mediaControlsRef = useRef(mediaControls);
   const alwaysPreviewVideoRef = useRef(voiceSettings.alwaysPreviewVideo);
+  const positionSourceRef = useRef({
+    snapshot: playback.snapshot ?? null,
+    durationMs: playback.durationMs ?? 0,
+  });
 
   useEffect(() => {
     activeSessionRef.current = activeSession;
     mediaControlsRef.current = mediaControls;
     alwaysPreviewVideoRef.current = voiceSettings.alwaysPreviewVideo;
-  }, [activeSession, mediaControls, voiceSettings.alwaysPreviewVideo]);
+    positionSourceRef.current = {
+      snapshot: playback.snapshot ?? null,
+      durationMs: playback.durationMs ?? 0,
+    };
+  }, [
+    activeSession,
+    mediaControls,
+    voiceSettings.alwaysPreviewVideo,
+    playback.snapshot,
+    playback.durationMs,
+  ]);
 
+  // Sync the native toolbar only when a button's state changes. The session
+  // and media objects are rebuilt often (playback position, store updates);
+  // keying the effect on the primitives keeps IPC to real transitions.
+  const toolbarVisible = !!activeSession;
+  const toolbarHasCamera = activeSession?.hasCamera ?? false;
+  const toolbarCameraOn = activeSession?.isCameraOn ?? false;
+  const toolbarHasMicrophone = activeSession?.hasMicrophone ?? false;
+  const toolbarMuted = activeSession
+    ? activeSession.isDeafened || !activeSession.isMicOn
+    : false;
+  const toolbarDeafened = activeSession?.isDeafened ?? false;
+  const toolbarHasMedia = !!mediaControls;
+  const toolbarMediaPaused = mediaControls?.paused ?? false;
   useEffect(() => {
     if (!isTauri()) return;
-    const nextToolbarState: DesktopThumbnailToolbarState = activeSession
+    const nextToolbarState: DesktopThumbnailToolbarState = toolbarVisible
       ? {
           visible: true,
-          hasCamera: activeSession.hasCamera,
-          isCameraOn: activeSession.isCameraOn,
-          hasMicrophone: activeSession.hasMicrophone,
-          isMuted: activeSession.isDeafened || !activeSession.isMicOn,
-          isDeafened: activeSession.isDeafened,
-          hasMediaControls: !!mediaControls,
-          isMediaPaused: mediaControls?.paused ?? false,
+          hasCamera: toolbarHasCamera,
+          isCameraOn: toolbarCameraOn,
+          hasMicrophone: toolbarHasMicrophone,
+          isMuted: toolbarMuted,
+          isDeafened: toolbarDeafened,
+          hasMediaControls: toolbarHasMedia,
+          isMediaPaused: toolbarMediaPaused,
         }
       : HIDDEN_DESKTOP_THUMBNAIL_TOOLBAR_STATE;
     void syncDesktopThumbnailToolbar(nextToolbarState);
-  }, [activeSession, mediaControls]);
+  }, [
+    toolbarVisible,
+    toolbarHasCamera,
+    toolbarCameraOn,
+    toolbarHasMicrophone,
+    toolbarMuted,
+    toolbarDeafened,
+    toolbarHasMedia,
+    toolbarMediaPaused,
+  ]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -292,6 +332,17 @@ export function DesktopThumbnailToolbarSync({
           return;
         case "toggle-media-playback": {
           if (!media) return;
+          // Pin the pause at where the track is now, not at the last render.
+          const live: DesktopMediaControls = {
+            ...media,
+            positionMs: getListenTogetherLivePositionMs(
+              {
+                ...positionSourceRef.current,
+                localPlayback: media.localPlayback,
+              },
+              Date.now(),
+            ),
+          };
           const sent = sendListenTogetherCommand(media.sfu, media.roomSlug, {
             type: "listen_together.pause",
             room_slug: media.roomSlug,
@@ -299,7 +350,7 @@ export function DesktopThumbnailToolbarSync({
             entryId: media.entryId,
           });
           if (sent) {
-            const nextMedia = getNextDesktopMediaControls(media);
+            const nextMedia = getNextDesktopMediaControls(live);
             mediaControlsRef.current = nextMedia;
             media.setLocalPlayback(media.roomSlug, nextMedia.localPlayback);
           }

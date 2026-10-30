@@ -13,6 +13,7 @@ import {
   type ClientDateFormatter,
 } from "@/lib/client-date-format";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveDialog,
@@ -163,66 +164,48 @@ export function DemoRoomChatPanel({
   return (
     <aside
       className={cn(
-        "flex min-h-0 flex-col border-t border-rm-border bg-rm-bg-surface/95 md:w-[380px] md:border-l md:border-t-0",
+        "flex min-h-0 flex-col border-t border-line bg-ply-1 md:w-[360px] md:border-t-0 md:border-l",
         className,
       )}
     >
-      <div className="border-b border-rm-border px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-accent-dim text-rm-accent ring-1 ring-rm-accent/20">
-              <Icon name="chat" size="sm" />
-            </div>
-            <div>
-              <h2 className="text-ui-sm font-semibold text-rm-text">
-                Temporary chat
-              </h2>
-              <p className="text-ui-2xs font-medium text-rm-text-muted">
-                Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
-              </p>
-            </div>
-          </div>
-          <Icon
-            name="sparkle"
-            size="sm"
-            className="text-rm-accent opacity-80"
-          />
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
+        <Icon name="chat" size="lg" className="shrink-0 text-ink-3" />
+        <div className="min-w-0">
+          <h2 className="truncate text-ui-sm font-semibold text-ink-1">
+            Temporary chat
+          </h2>
+          <p className="truncate text-ui-xs text-ink-3">
+            Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
+          </p>
         </div>
       </div>
 
       <div
         ref={scrollRef}
-        className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
       >
         {messages.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-primary/40 p-4 text-center">
-            <p className="text-ui-sm font-semibold text-rm-text">
-              No messages yet
-            </p>
-            <p className="mt-1 text-ui-xs text-rm-text-muted">
-              Say hi before this room forgets the conversation in{" "}
-              {DEMO_CHAT_TTL_MINUTES} minutes.
-            </p>
-          </div>
+          <EmptyState
+            size="sm"
+            title="No messages yet"
+            description={`Say hi. This room forgets the conversation after ${DEMO_CHAT_TTL_MINUTES} minutes.`}
+          />
         ) : (
           messages.map((message) => (
-            <article
-              key={message.id}
-              className="group rounded-2xl bg-rm-bg-primary/55 p-3 ring-1 ring-white/5"
-            >
-              <div className="mb-1 flex items-center justify-between gap-3">
-                <span className="truncate text-ui-xs font-semibold text-rm-text">
+            <article key={message.id} className="group">
+              <div className="mb-0.5 flex items-baseline gap-2">
+                <span className="truncate text-ui-sm font-semibold text-ink-1">
                   <InlineEmojiText text={message.author_name} />
                 </span>
                 <time
-                  className="shrink-0 text-ui-2xs font-medium text-rm-text-muted"
+                  className="shrink-0 text-num-xs text-ink-3"
                   dateTime={formatDateTimeAttribute(message.created_at)}
                 >
                   {formatChatTime(message.created_at, formatDate)}
                 </time>
               </div>
               {message.content && (
-                <p className="whitespace-pre-wrap wrap-break-word text-ui-sm leading-relaxed text-rm-text/90">
+                <p className="whitespace-pre-wrap wrap-break-word text-ui-sm text-ink-1">
                   <InlineEmojiText text={message.content} />
                 </p>
               )}
@@ -234,19 +217,14 @@ export function DemoRoomChatPanel({
 
       <form
         onSubmit={handleSubmit}
-        className="relative border-t border-rm-border p-3"
+        className="relative border-t border-line p-3"
       >
-        <div className="mb-2 flex items-center gap-2 rounded-md bg-rm-warning-tint px-3 py-2 text-ui-xs font-medium text-rm-warning-ink">
-          <Icon name="lock" size="sm" className="shrink-0" />
-          Messages and GIFs here are demo-only and expire after{" "}
-          {DEMO_CHAT_TTL_MINUTES} minutes.
-        </div>
-        <div className="flex items-end gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated p-2">
+        <div className="flex items-end gap-1 rounded-lg border border-line bg-ply-2 p-1.5">
           <button
             type="button"
             onClick={onUploadBlocked}
             className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text",
+              "flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-focus",
               PRESS,
               HIT,
             )}
@@ -270,7 +248,7 @@ export function DemoRoomChatPanel({
             maxLength={DEMO_CHAT_MAX_CONTENT_LENGTH}
             aria-label="Message this demo room"
             placeholder="Message this room"
-            className="custom-scrollbar max-h-28 min-h-8 flex-1 resize-none bg-transparent px-1 py-1.5 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted md:text-ui-base"
+            className="max-h-28 min-h-8 flex-1 resize-none bg-transparent px-1 py-1.5 text-ui-md text-ink-1 outline-none placeholder:text-ink-3 md:text-ui-base"
           />
           <button
             type="button"
@@ -278,7 +256,7 @@ export function DemoRoomChatPanel({
             aria-pressed={showGifPicker}
             aria-label="Open GIF picker"
             className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text",
+              "flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-focus aria-pressed:bg-tint-2 aria-pressed:text-ink-1",
               PRESS,
               HIT,
             )}
@@ -289,7 +267,7 @@ export function DemoRoomChatPanel({
             type="submit"
             disabled={!value.trim()}
             className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground",
+              "flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-fill text-on-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
               PRESS,
               HIT,
               DISABLED,
@@ -299,7 +277,7 @@ export function DemoRoomChatPanel({
             <Icon name="send" size="lg" />
           </button>
         </div>
-        <div className="mt-1 flex justify-end px-2 text-ui-xs text-rm-text-muted tabular-nums">
+        <div className="mt-1 flex justify-end px-2 text-num-xs text-ink-3">
           {characterCounter.label}
         </div>
         <GifPickerModal
@@ -355,7 +333,7 @@ function DemoChatGifPreview({ gif }: { gif: DemoChatGif }) {
       href={gif.source_url || gif.url}
       target="_blank"
       rel="noreferrer"
-      className="relative mt-2 block overflow-hidden rounded-xl border border-rm-border bg-black/20"
+      className="relative mt-2 block overflow-hidden rounded-md border border-line bg-ply-2"
     >
       {gif.content_type === "video/mp4" ? (
         <video

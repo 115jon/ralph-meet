@@ -58,7 +58,7 @@ describe("ImageGrid delete", () => {
     const { container } = render(<ImageGrid attachments={attachments} />);
     const grid = container.firstElementChild as HTMLElement;
     expect(grid.className).toContain("aspect-video");
-    expect(grid.className).toContain("max-w-136");
+    expect(grid.className).toContain("max-w-130");
     expect(grid.className).not.toMatch(/h-\[\d+px\]|shadow-xl/);
   });
 });

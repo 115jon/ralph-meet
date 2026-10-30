@@ -9,7 +9,11 @@
  */
 
 import { Icon } from "@/components/ui/icon";
-import { collectionStripArt } from "@/lib/collectible-assets";
+import { Num } from "@/components/ui/num";
+import {
+  collectionStripArt,
+  resizedShopImageUrl,
+} from "@/lib/collectible-assets";
 import {
   collectionStatus,
   type CollectionSection,
@@ -100,9 +104,10 @@ const Option = memo(function Option({
       }}
       onPointerLeave={() => setHovered(false)}
       className={cn(
-        "group/option relative cursor-pointer rounded-xl outline-none [-webkit-tap-highlight-color:transparent]",
-        "transition-transform duration-150 ease-(--rm-ease-out) active:scale-[0.97] motion-reduce:active:scale-100",
-        "focus-visible:ring-2 focus-visible:ring-rm-focus focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary",
+        "group/option relative cursor-pointer rounded-lg outline-none [-webkit-tap-highlight-color:transparent]",
+        "transition-[scale] duration-(--dur-1) ease-out active:scale-(--motion-press)",
+        // Cells touch, so the focused one lifts above its neighbours.
+        "focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         className,
       )}
     >
@@ -125,10 +130,19 @@ function SectionHeader({
   headingId: string;
   count: number;
 }) {
-  const art = collectionStripArt(section.category, 720);
+  // The collection's card block (the same art as the shop's collection
+  // cards); the wide strip only when there is no block.
+  const block = section.category.featuredBlockUrl
+    ? resizedShopImageUrl(section.category.featuredBlockUrl, 160, 72)
+    : null;
+  const art = block
+    ? { src: block }
+    : collectionStripArt(section.category, 240);
   const status = collectionStatus(section.category);
+  // Layout keeps the title off the art: the collection banner is a thumbnail
+  // at the start of the row, the name sits beside it in panel ink.
   return (
-    <div className="relative mb-3 flex min-h-12 items-end overflow-hidden rounded-xl bg-rm-bg-elevated">
+    <div className="mb-2 flex min-h-10 items-center gap-3 px-1">
       {art ? (
         <img
           src={art.src}
@@ -136,50 +150,29 @@ function SectionHeader({
           aria-hidden="true"
           loading="lazy"
           decoding="async"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="aspect-[1037/463] h-9 shrink-0 rounded-sm border border-line bg-ply-2 object-cover"
         />
       ) : null}
-      {art ? (
-        <span
-          aria-hidden="true"
-          className="absolute inset-0 bg-linear-to-r from-black/70 via-black/25 via-70% to-transparent"
-        />
-      ) : null}
-      <div className="relative flex w-full items-center gap-2 px-3 py-2.5">
-        <h3
-          id={headingId}
-          className={cn(
-            "min-w-0 truncate text-ui-sm font-semibold",
-            art ? "text-white" : "text-rm-text",
-          )}
-        >
-          {section.category.name}
-        </h3>
+      <h3
+        id={headingId}
+        className="min-w-0 truncate text-ui-row font-semibold text-ink-1"
+      >
+        {section.category.name}
+      </h3>
+      <Num className="shrink-0 text-ink-3">{count}</Num>
+      {status ? (
         <span
           className={cn(
-            "shrink-0 text-ui-xs tabular-nums",
-            art ? "text-white/70" : "text-rm-text-muted",
+            "ms-auto inline-flex h-5 shrink-0 items-center gap-1 rounded-sm px-1.5 text-ui-xs font-medium",
+            status.tone === "leaving"
+              ? "bg-warning-tint text-warning-ink"
+              : "bg-tint-1 text-ink-2",
           )}
         >
-          {count}
+          <Icon name={status.tone === "leaving" ? "clock" : "lock"} size="xs" />
+          {status.label}
         </span>
-        {status ? (
-          <span
-            className={cn(
-              "ms-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-ui-2xs font-semibold",
-              status.tone === "leaving"
-                ? "bg-rm-warning-ink/90 text-black"
-                : "bg-black/50 text-white/85",
-            )}
-          >
-            <Icon
-              name={status.tone === "leaving" ? "clock" : "lock"}
-              size="xs"
-            />
-            {status.label}
-          </span>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }

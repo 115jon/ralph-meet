@@ -3,18 +3,19 @@
  * ST-20, ST-42): Overview (name, topic, public sharing) and Permissions
  * (per role and member overrides).
  *
- * Both pages keep edits as drafts behind a sticky save bar. Closing with
- * unsaved edits doesn't drop them: the save bar asks to save or reset first.
+ * Both pages keep edits as drafts behind the workbench's shared UnsavedBar
+ * (hidden while clean). Closing with unsaved edits doesn't drop them: it
+ * opens the page that holds them and nudges the bar (overlays issue 7).
  */
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Num } from "@/components/ui/num";
+import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile, WIDE_QUERY } from "@/hooks/useMediaQuery";
 import { apiPatch } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
 import { useClientDateFormatter } from "@/lib/client-date-format";
 import type { Channel } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
 import {
   useEffect,
@@ -22,23 +23,18 @@ import {
   useLayoutEffect,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from "react";
-import ChannelPermissionsTab, {
-  PermissionsSaveBar,
-  SaveBar,
-  SavedText,
-  UnsavedText,
-} from "./ChannelPermissionsTab";
+import ChannelPermissionsTab from "./ChannelPermissionsTab";
 import { usePermissionOverrides } from "./channel-settings/permission-model";
 import InlineEmojiText from "./InlineEmojiText";
+import { FieldRow } from "./server-settings/Field";
 import {
-  RowError,
   SettingsCard,
   SettingsRow,
   SettingsSelect,
 } from "./settings/primitives";
 import { SettingsWorkbench, WorkbenchNav } from "./settings/SettingsWorkbench";
+import { useUnsavedNudge } from "./settings/UnsavedBar";
 import { useWorkbenchNav } from "./settings/useWorkbenchNav";
 
 type ChannelSettingsTab = "overview" | "permissions";
@@ -107,14 +103,13 @@ export default function ChannelSettingsModal({
   const [selectedId, setSelectedId] = useState<string | null>(
     initialOverrideId ?? null,
   );
-  const [closeBlocked, setCloseBlocked] = useState(false);
+  const { nudgeKey, nudge } = useUnsavedNudge();
 
   // Opening on a given page pushes straight into it on phones.
   useLayoutEffect(() => {
     if (!open) return;
     resetNav(initialTab ?? "overview", !initialTab);
     setSelectedId(initialOverrideId ?? null);
-    setCloseBlocked(false);
   }, [open, initialTab, initialOverrideId, resetNav]);
 
   const isVoice = channel.channel_type === "voice";
@@ -166,7 +161,6 @@ export default function ChannelSettingsModal({
   const edited = () => {
     setSaved(false);
     setSaveError(null);
-    setCloseBlocked(false);
   };
 
   const handleSave = async () => {
@@ -192,7 +186,6 @@ export default function ChannelSettingsModal({
         updates,
       );
       setSaved(true);
-      setCloseBlocked(false);
       onUpdated?.({
         name: updated.name,
         description: updated.description,
@@ -220,12 +213,13 @@ export default function ChannelSettingsModal({
   const permissionsDirty = permissions.dirtyIds.length > 0;
 
   /* ---------------- Close guard ---------------- */
+  /** Unsaved edits on either page: open that page and nudge its bar. */
   const handleClose = () => {
     if (overviewDirty || permissionsDirty) {
-      setCloseBlocked(true);
       if (nav.active === "overview" && !overviewDirty) nav.go("permissions");
       if (nav.active === "permissions" && !permissionsDirty) nav.go("overview");
       if (narrow && nav.showList) nav.setShowList(false);
+      nudge();
       return;
     }
     onClose();
@@ -253,28 +247,24 @@ export default function ChannelSettingsModal({
       "Overview"
     );
 
-  const footer: ReactNode = onPermissions ? (
-    permissions.status === "ready" &&
-    (permissionsDirty || permissions.saveError || permissions.justSaved) ? (
-      <PermissionsSaveBar model={permissions} closeBlocked={closeBlocked} />
-    ) : null
-  ) : (
-    <SaveBar
-      status={
-        saveError ? (
-          <RowError className="mt-0">{saveError}</RowError>
-        ) : overviewDirty ? (
-          <UnsavedText blocked={closeBlocked} />
-        ) : saved ? (
-          <SavedText />
-        ) : null
-      }
-      onReset={overviewDirty ? resetOverview : undefined}
-      onSave={() => void handleSave()}
-      saving={saving}
-      canSave={overviewDirty}
-    />
-  );
+  const unsaved = onPermissions
+    ? permissions.status === "ready"
+      ? {
+          dirty: permissionsDirty,
+          saving: permissions.saving,
+          error: permissions.saveError,
+          onReset: permissions.reset,
+          onSave: () => void permissions.save(),
+        }
+      : undefined
+    : {
+        dirty: overviewDirty,
+        saving,
+        error: saveError,
+        onReset: resetOverview,
+        onSave: () => void handleSave(),
+      };
+  const justSaved = onPermissions ? permissions.justSaved : saved;
 
   const createdOn = formatDate(channel.created_at, {
     year: "numeric",
@@ -309,18 +299,18 @@ export default function ChannelSettingsModal({
           : undefined
       }
       width={onPermissions && !stacked ? "full" : "prose"}
-      footer={footer}
+      unsaved={unsaved ? { ...unsaved, nudgeKey, nudge } : undefined}
     >
+      <p role="status" className="sr-only">
+        {justSaved && !unsaved?.dirty ? "Changes saved" : ""}
+      </p>
       {onPermissions ? (
         <ChannelPermissionsTab
           model={permissions}
           isVoice={isVoice}
           channelLabel={channelLabel}
           selectedId={selectedId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setCloseBlocked(false);
-          }}
+          onSelect={setSelectedId}
           split={!stacked}
         />
       ) : (
@@ -328,8 +318,26 @@ export default function ChannelSettingsModal({
           title="Channel details"
           description={`${isVoice ? "Voice" : "Text"} channel, created ${createdOn}.`}
         >
-          <FieldRow>
-            <Label htmlFor={nameFieldId}>Channel name</Label>
+          <FieldRow
+            label="Channel name"
+            htmlFor={nameFieldId}
+            helperId={nameHelpId}
+            error={nameError}
+            helper={
+              !isVoice && previewName !== name ? (
+                <>
+                  Shown as{" "}
+                  <span className="font-medium text-ink-1">
+                    #<InlineEmojiText text={previewName || "channel"} />
+                  </span>
+                </>
+              ) : isVoice ? (
+                "Shown in the channel list as typed."
+              ) : (
+                "Lowercase, with dashes instead of spaces."
+              )
+            }
+          >
             <Input
               id={nameFieldId}
               value={name}
@@ -344,31 +352,17 @@ export default function ChannelSettingsModal({
               aria-describedby={nameHelpId}
               className="max-md:min-h-11"
             />
-            <p
-              id={nameHelpId}
-              className={cn(
-                "text-ui-xs",
-                nameError ? "text-rm-danger-ink" : "text-rm-text-secondary",
-              )}
-            >
-              {nameError ??
-                (!isVoice && previewName !== name ? (
-                  <>
-                    Shown as{" "}
-                    <span className="font-medium text-rm-text">
-                      #<InlineEmojiText text={previewName || "channel"} />
-                    </span>
-                  </>
-                ) : isVoice ? (
-                  "Shown in the channel list as typed."
-                ) : (
-                  "Lowercase, with dashes instead of spaces."
-                ))}
-            </p>
           </FieldRow>
-          <FieldRow>
-            <Label htmlFor={descFieldId}>Topic</Label>
-            <textarea
+          <FieldRow
+            label="Topic"
+            htmlFor={descFieldId}
+            trailing={
+              <Num size="sm">
+                {description.length} / {DESCRIPTION_MAX}
+              </Num>
+            }
+          >
+            <Textarea
               id={descFieldId}
               value={description}
               onChange={(e) => {
@@ -377,11 +371,8 @@ export default function ChannelSettingsModal({
               }}
               rows={3}
               placeholder="What this channel is for"
-              className="min-h-11 w-full min-w-0 resize-y rounded-md border border-rm-field-edge bg-transparent px-3 py-2 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted md:text-ui-sm"
+              className="min-h-11 resize-y"
             />
-            <p className="text-right text-ui-xs tabular-nums text-rm-text-secondary">
-              {description.length} / {DESCRIPTION_MAX}
-            </p>
           </FieldRow>
           <SettingsRow
             id="channel-public-shares"
@@ -416,13 +407,5 @@ export default function ChannelSettingsModal({
         </SettingsCard>
       )}
     </SettingsWorkbench>
-  );
-}
-
-function FieldRow({ children }: { children: ReactNode }) {
-  return (
-    <li className="flex flex-col gap-2 px-4 py-3.5 @min-[560px]:px-5">
-      {children}
-    </li>
   );
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -149,6 +150,19 @@ describe("MemberList tabs", () => {
   });
 
   it("updates the measured nameplate mask boundary on resize", () => {
+    // Drive the row's own ResizeObserver, the path production uses.
+    const resizeCallbacks = new Set<() => void>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          resizeCallbacks.add(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
     let trailingRight = 280;
     const rectSpy = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
@@ -193,11 +207,14 @@ describe("MemberList tabs", () => {
       );
 
       trailingRight = 250;
-      fireEvent(window, new Event("resize"));
+      act(() => {
+        for (const callback of resizeCallbacks) callback();
+      });
 
       expect(maskScale()).toBeCloseTo(1, 6);
     } finally {
       rectSpy.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 });

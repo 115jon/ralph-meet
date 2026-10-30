@@ -69,14 +69,31 @@ describe("ImageViewerToolbar more menu", () => {
     const menu = await screen.findByRole("menu");
     expect(menu.closest('[data-slot="dropdown-menu-content"]')).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "Copy image" })).toBeVisible();
-    const danger = screen.getByRole("menuitem", { name: "Copy attachment ID" });
-    expect(danger.className).toContain("text-rm-danger-ink");
+    // Copying an ID is not destructive: no danger styling.
+    const copyId = screen.getByRole("menuitem", { name: "Copy attachment ID" });
+    expect(copyId.className).not.toContain("text-danger-ink");
 
-    fireEvent.click(danger);
+    fireEvent.click(copyId);
     expect(writeText).toHaveBeenCalledWith("att-1");
     await waitFor(() =>
       expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
     );
+  });
+
+  it("shows filename, size and Download in one toolbar, and no author without context", () => {
+    render(<Viewer onDialogChange={() => {}} />);
+    const toolbar = screen.getByRole("toolbar", { name: "Media actions" });
+    expect(toolbar).toHaveTextContent("one.jpg");
+    expect(toolbar).toHaveTextContent("2 KB");
+    expect(
+      screen.getByRole("link", { name: "Download attachment" }),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: "Close media viewer" })
+        .closest('[role="toolbar"]'),
+    ).toBe(toolbar);
+    expect(screen.queryByText("Unknown user")).toBeNull();
   });
 
   it("Escape closes only the menu, not the viewer", async () => {

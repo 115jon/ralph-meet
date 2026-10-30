@@ -1,5 +1,6 @@
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
 import { Button } from "@/components/ui/button";
+import { Num } from "@/components/ui/num";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 import { clog } from "@/lib/console-logger";
 import { restartDesktopApp } from "@/lib/desktop-restart";
@@ -157,7 +158,7 @@ function UpdatesRow() {
       description={
         <span
           role="status"
-          className={status === "error" ? "text-rm-danger-ink" : undefined}
+          className={status === "error" ? "text-danger-ink" : undefined}
         >
           {statusText}
         </span>
@@ -165,16 +166,16 @@ function UpdatesRow() {
       footer={
         <>
           {status === "available" && updateMeta?.notes ? (
-            <div className="mt-3 rounded-md border border-rm-border p-3">
-              <p className="text-ui-xs font-medium text-rm-text">What's new</p>
-              <p className="rm-settings-scroll mt-1 max-h-32 overflow-y-auto whitespace-pre-line text-ui-xs text-rm-text-secondary">
+            <div className="mt-3 rounded-[2px] border border-line-strong p-3">
+              <p className="text-ui-xs font-medium text-ink-1">What's new</p>
+              <p className="rm-settings-scroll mt-1 max-h-32 overflow-y-auto whitespace-pre-line text-ui-xs text-ink-2">
                 {updateMeta.notes}
               </p>
             </div>
           ) : null}
           {status === "downloading" || status === "installing" ? (
             <div
-              className="mt-3 h-1 w-full overflow-hidden rounded-full bg-rm-tint-2"
+              className="mt-3 h-2 w-full overflow-hidden rounded-[1px] bg-tint-3"
               role="progressbar"
               aria-label="Update progress"
               aria-valuenow={progress}
@@ -182,7 +183,7 @@ function UpdatesRow() {
               aria-valuemax={100}
             >
               <div
-                className="h-full origin-left rounded-full bg-primary transition-transform duration-200"
+                className="h-full origin-left bg-primary-fill transition-transform duration-(--dur-3) ease-out"
                 style={{ transform: `scaleX(${progress / 100})` }}
               />
             </div>
@@ -192,7 +193,11 @@ function UpdatesRow() {
     >
       {() => (
         <>
-          <ValueText>v{appVersion || "1.0.0"}</ValueText>
+          <ValueText>
+            <Num size="sm" className="text-ink-2">
+              v{appVersion || "1.0.0"}
+            </Num>
+          </ValueText>
           {status === "available" ? (
             <Button type="button" onClick={applyUpdate}>
               Install update

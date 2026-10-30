@@ -1,20 +1,22 @@
 import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
 
+/**
+ * Shown over the chat column while files are dragged in. Presence is opacity
+ * only (it mounts transparent and fades in); nothing moves or loops.
+ */
 export function DragDropOverlay({ isDragging }: { isDragging: boolean }) {
   if (!isDragging) return null;
   return (
-    <div className="absolute inset-0 bg-rm-accent/20 z-30 flex items-center justify-center pointer-events-none border-2 border-dashed border-rm-accent/50 m-4 rounded-xl transition-ui animate-in fade-in zoom-in duration-200">
-      <div className="flex flex-col items-center gap-4 bg-rm-bg-elevated p-12 rounded-3xl shadow-2xl border border-rm-border">
-        <div className="w-20 h-20 rounded-full bg-rm-accent/10 flex items-center justify-center text-rm-accent">
-          <Icon
-            name="download"
-            size="3xl"
-            className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]"
-          />
-        </div>
-        <p className="text-ui-xl font-semibold text-rm-text">Drop to upload</p>
-        <p className="text-ui-sm text-rm-text-muted">
-          You can upload files up to 25MB
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-30 m-4 flex items-center justify-center rounded-xl border-2 border-dashed border-line-strong bg-scrim transition-opacity duration-(--dur-2) ease-out starting:opacity-0"
+    >
+      <div className="flex flex-col items-center gap-2 rounded-lg border border-line bg-ply-3 px-8 py-6 text-center shadow-float">
+        <Icon name="upload" size="2xl" className="text-ink-2" />
+        <p className="text-ui-md font-semibold text-ink-1">Drop to upload</p>
+        <p className="text-ui-sm text-ink-3">
+          Files can be up to <Num size="sm">25 MB</Num>.
         </p>
       </div>
     </div>

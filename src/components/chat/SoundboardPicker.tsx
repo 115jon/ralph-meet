@@ -17,19 +17,29 @@ import { cn } from "@/lib/utils";
 import { DeleteSoundDialog } from "./DeleteSoundDialog";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { PickerSurface } from "./PickerSurface";
-import { Icon } from "@/components/ui/icon";
+import { PickerHeader, PickerSearch, PickerSectionLabel } from "./PickerHeader";
+import {
+  PICKER_RING,
+  PICKER_WIDTH,
+  PICKER_WIDTH_CLASS,
+  handlePickerGridKeyDown,
+} from "./picker-grid";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { Led } from "@/components/ui/led";
+import { Num } from "@/components/ui/num";
 import {
   ActionSheet,
   type ActionSheetItem,
 } from "@/components/ui/action-sheet";
-import { Button, Spinner } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/button";
 import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { LONG_PRESS_TARGET, useLongPress } from "@/hooks/useLongPress";
 import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -59,7 +69,11 @@ import {
   toSoundboardCatalogSound,
   type SoundboardCatalogSound,
 } from "@/lib/voice/soundboard-catalog";
-import { createSoundboardPlaybackId } from "@/lib/voice/soundboard-playback-id";
+import {
+  createSoundboardPlaybackId,
+  parseSoundboardPlaybackId,
+} from "@/lib/voice/soundboard-playback-id";
+import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import EmojiToken from "./EmojiToken";
 import InlineEmojiText from "./InlineEmojiText";
 import { HomeIcon } from "./HomeIcon";
@@ -117,12 +131,12 @@ type PickerServer = Pick<Server, "id" | "name" | "icon_url">;
 
 function PickerServerIcon({
   server,
-  large = false,
+  small = false,
 }: {
   server: PickerServer;
-  large?: boolean;
+  small?: boolean;
 }) {
-  const iconClassName = large ? "h-10 w-10" : "h-6 w-6";
+  const iconClassName = small ? "size-4" : "size-6";
   if (server.icon_url) {
     return (
       <img
@@ -130,7 +144,7 @@ function PickerServerIcon({
         alt=""
         className={cn(
           iconClassName,
-          "rounded-full object-cover outline outline-1 outline-black/10 dark:outline-white/10",
+          "rounded-avatar object-cover outline-1 -outline-offset-1 outline-line",
         )}
       />
     );
@@ -140,7 +154,7 @@ function PickerServerIcon({
     <span
       className={cn(
         iconClassName,
-        "flex items-center justify-center rounded-full bg-rm-tint-2 text-ui-2xs font-bold text-rm-text-muted",
+        "flex items-center justify-center rounded-avatar bg-tint-3 font-display text-[11px] font-extrabold text-ink-1",
       )}
     >
       {server.name.slice(0, 1).toUpperCase()}
@@ -214,28 +228,6 @@ interface SoundboardCatalogUpdatedEvent {
   };
 }
 
-/** A sound tile on the theme surface. */
-const TILE =
-  "group relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface p-1.5 pointer-fine:hover:bg-rm-tint-1";
-/** A tile's corner action (preview, favourite, edit, delete) on a theme tile. */
-const TILE_ACTION = cn(
-  "flex size-6 items-center justify-center rounded-full bg-rm-tint-2 text-rm-text",
-  PRESS,
-  HIT,
-);
-/** The same action over a MyInstants colour tile: a media overlay chip (6.5). */
-const TILE_ACTION_MEDIA = cn(
-  "flex size-6 items-center justify-center rounded-full bg-black/60 text-white",
-  PRESS,
-  HIT,
-);
-/** Rail button (favourites, servers, custom, defaults). */
-const RAIL_BUTTON = cn(
-  "flex size-10 items-center justify-center self-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text",
-  PRESS,
-  HIT,
-);
-const RAIL_BUTTON_ON = "bg-rm-tint-2 text-rm-text";
 /** A synthetic event for handlers that only stop propagation. */
 const SHEET_EVENT = {
   stopPropagation: () => {},
@@ -278,40 +270,213 @@ function writeStoredSounds(key: string, sounds: CustomSound[]) {
   localStorage.setItem(key, JSON.stringify(sounds));
 }
 
-function SectionHeader({
-  icon,
-  title,
-  isCollapsed,
-  onToggle,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  isCollapsed: boolean;
-  onToggle: () => void;
-}) {
-  return (
+/** A tile's corner chip (preview, favourite, edit, delete): concentric with the 8px tile at a 4px inset. */
+const TILE_ACTION = cn(
+  "flex size-6 items-center justify-center rounded-xs bg-ply-3 text-ink-2 shadow-float outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+  PRESS,
+  HIT,
+);
+
+type TileAction = {
+  key: string;
+  label: string;
+  tooltip?: string;
+  icon: IconName;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+};
+
+function TileActionButton({ action }: { action: TileAction }) {
+  const button = (
     <button
       type="button"
-      onClick={onToggle}
-      className="mb-2 flex w-full items-center justify-start gap-2 rounded-md px-1 py-1.5 text-left pointer-fine:hover:bg-rm-tint-1"
+      aria-label={action.label}
+      className={cn(TILE_ACTION, action.className)}
+      onClick={action.onClick}
     >
-      <Icon
-        name="chevronDown"
-        size="xs"
-        className={cn(
-          "shrink-0 text-rm-text-muted transition-transform",
-          isCollapsed && "-rotate-90",
-        )}
-      />
-      <div className="flex min-w-0 items-center gap-2">
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-rm-tint-1 text-rm-text-muted">
-          {icon}
-        </div>
-        <div className="truncate text-ui-xs font-semibold text-rm-text">
-          {title}
-        </div>
-      </div>
+      <Icon name={action.icon} size="xs" />
     </button>
+  );
+  if (!action.tooltip) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="right">{action.tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * One sound cell for every source (server, custom, default, MyInstants,
+ * radio): the same tint-1 cell with a 24px glyph and the name in
+ * text-ui-sm, so a favourites row never mixes colour tiles and black tiles.
+ * The whole cell plays; the ring marks keyboard focus. Corner chips sit
+ * inside the radius. A sound that is playing in the room shows the talk LED,
+ * not a loop.
+ */
+function SoundTile({
+  name,
+  glyph,
+  playLabel,
+  onPlay,
+  playing = false,
+  actions,
+  favorite,
+  className,
+  ...rootProps
+}: {
+  name: string;
+  glyph: React.ReactNode;
+  playLabel: string;
+  onPlay: () => void;
+  playing?: boolean;
+  /** Hover-revealed chips on the top-left (preview, edit, delete). */
+  actions: TileAction[];
+  favorite?: {
+    active: boolean;
+    onToggle: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  };
+  className?: string;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, "children">) {
+  return (
+    <div
+      className={cn(
+        "group relative flex aspect-square flex-col items-center justify-center gap-1 overflow-hidden rounded-md bg-tint-1 px-1.5 text-center transition-[background-color] duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-2",
+        className,
+      )}
+      {...rootProps}
+    >
+      <button
+        type="button"
+        data-picker-cell=""
+        className={cn(
+          "absolute inset-0 z-0 h-full w-full cursor-pointer rounded-md active:bg-tint-1",
+          PICKER_RING,
+        )}
+        aria-label={playLabel}
+        onClick={onPlay}
+      />
+      <span className="pointer-events-none z-10 flex size-6 items-center justify-center text-ink-3">
+        {glyph}
+      </span>
+      <span className="pointer-events-none z-10 line-clamp-2 w-full text-ui-sm font-medium text-ink-1 [overflow-wrap:anywhere]">
+        {name}
+      </span>
+      {playing ? (
+        <Led
+          state="talk"
+          label="Playing"
+          className="pointer-events-none absolute bottom-1.5 left-1.5 z-10"
+        />
+      ) : null}
+
+      {actions.length > 0 ? (
+        <div
+          className={cn(
+            "absolute left-1 top-1 z-20 flex flex-col gap-0.5",
+            REVEAL,
+          )}
+        >
+          {actions.map((action) => (
+            <TileActionButton key={action.key} action={action} />
+          ))}
+        </div>
+      ) : null}
+
+      {favorite ? (
+        <div className="absolute right-1 top-1 z-20">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={
+                  favorite.active ? "Remove from favorites" : "Add to favorites"
+                }
+                className={cn(TILE_ACTION, !favorite.active && REVEAL)}
+                onClick={favorite.onToggle}
+              >
+                <Icon
+                  name="star"
+                  state={favorite.active ? "active" : "idle"}
+                  size="xs"
+                  className={favorite.active ? "text-accent-ink" : undefined}
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              {favorite.active ? "Unfavorite" : "Favorite"}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** A sound's glyph: its emoji, or the generic sound mark. */
+function SoundGlyph({ emoji }: { emoji?: string }) {
+  return emoji ? (
+    <EmojiToken
+      value={emoji}
+      className="block size-6 object-contain"
+      fallbackClassName="block text-ui-xl leading-none"
+    />
+  ) : (
+    <Icon name="soundboard" size="lg" />
+  );
+}
+
+/** A station's favicon at glyph size, falling back to the sound mark. */
+function StationGlyph({ favicon }: { favicon?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!favicon || failed) return <Icon name="soundboard" size="lg" />;
+  return (
+    <img
+      src={favicon}
+      alt=""
+      onError={() => setFailed(true)}
+      className="size-6 rounded-xs object-cover"
+    />
+  );
+}
+
+const SOUND_GRID = "grid grid-cols-4 gap-0.5";
+
+function RailButton({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          aria-pressed={active}
+          onClick={onClick}
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-md outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+            PRESS,
+            HIT,
+            active
+              ? "bg-tint-2 text-ink-1"
+              : "text-ink-3 pointer-fine:hover:text-ink-1",
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -452,13 +617,6 @@ export default function SoundboardPicker({
       : storedSoundboardVolume / 100,
   );
 
-  const [collapsedCategories, setCollapsedCategories] = useState<
-    Record<string, boolean>
-  >({
-    [FAVORITES_SECTION_ID]: false,
-    [CUSTOM_SECTION_ID]: false,
-    [DEFAULT_SECTION_ID]: false,
-  });
   const [activeCategory, setActiveCategory] = useState<string>(
     selectionMode ? CUSTOM_SECTION_ID : FAVORITES_SECTION_ID,
   );
@@ -514,6 +672,22 @@ export default function SoundboardPicker({
     previousCatalogServerKeyRef.current = catalogServerKey;
     setServerSounds([]);
   }
+
+  // Sounds playing in this room right now (anyone's), as a stable key so the
+  // picker re-renders only when a playback starts or stops.
+  const playingSoundKey = useVoiceSoundboardStore((state) => {
+    const ids: string[] = [];
+    for (const playback of Object.values(state.activePlaybacks)) {
+      if (playback.paused || playback.serverKey !== serverKey) continue;
+      const parsed = parseSoundboardPlaybackId(playback.playbackId);
+      if (parsed) ids.push(parsed.soundId);
+    }
+    return ids.sort().join("|");
+  });
+  const playingSoundIds = useMemo(
+    () => new Set(playingSoundKey ? playingSoundKey.split("|") : []),
+    [playingSoundKey],
+  );
 
   useEffect(() => {
     setSoundboardMasterVolume(playbackVolume);
@@ -814,10 +988,7 @@ export default function SoundboardPicker({
     const node = sectionRefs.current[pendingJumpId];
     if (!container || !node) return;
     const frame = window.requestAnimationFrame(() => {
-      container.scrollTo({
-        top: Math.max(0, node.offsetTop - 8),
-        behavior: "smooth",
-      });
+      container.scrollTo({ top: Math.max(0, node.offsetTop) });
       pendingJumpIdRef.current = null;
     });
     return () => window.cancelAnimationFrame(frame);
@@ -834,19 +1005,7 @@ export default function SoundboardPicker({
     setActiveView("soundboard");
     setSearch("");
     setActiveCategory(id);
-    setCollapsedCategories((current) => ({
-      ...current,
-      [id]: false,
-    }));
     pendingJumpIdRef.current = id;
-  }, []);
-
-  const toggleSection = useCallback((id: string) => {
-    setCollapsedCategories((current) => ({
-      ...current,
-      [id]: !current[id],
-    }));
-    setActiveCategory(id);
   }, []);
 
   const handleListScroll = useCallback(() => {
@@ -894,7 +1053,7 @@ export default function SoundboardPicker({
       const rect = markerRef.current.getBoundingClientRect();
       const pickerWidth = Math.min(
         window.innerWidth - 24,
-        compact ? 440 : activeView === "listenTogether" ? 980 : 440,
+        activeView === "listenTogether" ? 980 : PICKER_WIDTH,
       );
 
       // The picker recipe caps at 600; Listen Together is a wider workbench.
@@ -1418,9 +1577,83 @@ export default function SoundboardPicker({
 
   if (!mounted) return null;
 
+  const favoriteFor = (
+    sound: Parameters<typeof toggleFavorite>[0],
+    isFav: boolean,
+  ) => ({
+    active: isFav,
+    onToggle: (event: React.MouseEvent<HTMLButtonElement>) =>
+      void toggleFavorite(sound, event),
+  });
+
+  const renderFavoriteTile = (sound: MyInstantsSound) => {
+    const isRadio = sound.soundType === "radio";
+    const previewTarget = {
+      id: sound.id,
+      name: sound.title,
+      mediaUrl: sound.url,
+      soundType: sound.soundType,
+      ...(isRadio
+        ? {}
+        : {
+            serverId: sound.serverId ?? sound.source_server_id,
+            source_server_id: sound.source_server_id,
+          }),
+    };
+    return (
+      <SoundTile
+        key={`fav-${sound.id}`}
+        name={sound.title}
+        glyph={
+          isRadio ? (
+            <StationGlyph favicon={sound.emoji} />
+          ) : sound.soundType === "default" ? (
+            <Icon name="soundboard" size="lg" />
+          ) : sound.soundType === "myinstants" ? (
+            <Icon name="zap" size="lg" />
+          ) : (
+            <SoundGlyph emoji={sound.emoji} />
+          )
+        }
+        playLabel={`Play ${sound.title}`}
+        playing={playingSoundIds.has(sound.id)}
+        onPlay={() =>
+          broadcastSound(
+            isRadio
+              ? {
+                  id: sound.id,
+                  name: sound.title,
+                  mediaUrl: sound.url,
+                  soundType: "radio",
+                  artworkUrl: sound.emoji,
+                }
+              : {
+                  id: sound.id,
+                  name: sound.title,
+                  mediaUrl: sound.url,
+                  soundType: sound.soundType,
+                  serverId: sound.serverId ?? sound.source_server_id,
+                  source_server_id: sound.source_server_id,
+                },
+          )
+        }
+        actions={[
+          {
+            key: "preview",
+            label: isRadio ? "Preview station" : "Preview",
+            tooltip: isRadio ? "Preview station" : "Preview",
+            icon: "play",
+            onClick: (event) => previewSound(previewTarget, event),
+          },
+        ]}
+        favorite={favoriteFor(sound, true)}
+      />
+    );
+  };
+
   return createPortal(
     <>
-      <TooltipProvider delayDuration={100}>
+      <TooltipProvider>
         <PickerSurface
           open={isPickerOpen}
           modal={false}
@@ -1430,6 +1663,8 @@ export default function SoundboardPicker({
           ariaLabel="Soundboard picker"
           contentRef={pickerRef}
           stacked={selectionMode}
+          initialFocusRef={searchInputRef}
+          anchorRef={markerRef}
           onEscapeKeyDown={(event) => {
             const target = event.target;
             if (
@@ -1444,166 +1679,116 @@ export default function SoundboardPicker({
           className={cn(
             activeView === "listenTogether"
               ? "h-[min(820px,calc(100dvh-24px))] max-h-[min(820px,calc(100dvh-24px))] w-[min(980px,calc(100vw-24px))]"
-              : compact
-                ? "w-[min(440px,calc(100vw-24px))]"
-                : selectionMode
-                  ? "w-[min(560px,calc(100vw-24px))]"
-                  : "w-[min(440px,calc(100vw-24px))]",
+              : PICKER_WIDTH_CLASS,
             pickerPositionClasses,
           )}
           style={markerRef ? dynamicStyle : undefined}
         >
-          <div className="shrink-0 border-b border-rm-border p-3">
-            {activeView === "soundboard" ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <Icon
-                      name="search"
-                      size="sm"
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-                    />
-                    <Input
-                      ref={searchInputRef}
-                      type="text"
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      aria-label="Search soundboard sounds"
-                      placeholder="Search soundboard"
-                      className="h-9 pl-9 pointer-coarse:h-11"
-                    />
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-2">
-                    {!selectionMode && !isDirectMessageScope && (
-                      <>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="icon"
-                              onClick={() => setActiveView("listenTogether")}
-                              aria-label="Listen Together"
-                              className="size-9 pointer-coarse:size-11"
-                            >
-                              <Icon name="headphones" size="sm" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" sideOffset={8}>
-                            Listen Together
-                          </TooltipContent>
-                        </Tooltip>
-
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="icon"
-                              onClick={() => setActiveView("radio")}
-                              aria-label="Search radio"
-                              className="size-9 pointer-coarse:size-11"
-                            >
-                              <Icon name="soundboard" size="sm" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" sideOffset={8}>
-                            Search radio
-                          </TooltipContent>
-                        </Tooltip>
-
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="icon"
-                              onClick={() => setActiveView("myinstants")}
-                              aria-label="Search MyInstants"
-                              className="size-9 pointer-coarse:size-11"
-                            >
-                              <Icon name="zap" size="sm" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" sideOffset={8}>
-                            Search MyInstants
-                          </TooltipContent>
-                        </Tooltip>
-                      </>
-                    )}
-                  </div>
+          {activeView === "soundboard" ? (
+            <PickerHeader>
+              <PickerSearch
+                ref={searchInputRef}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    contentRef.current
+                      ?.querySelector<HTMLElement>("[data-picker-cell]")
+                      ?.focus();
+                  }
+                }}
+                aria-label="Search soundboard sounds"
+                placeholder="Search soundboard"
+              />
+              {!selectionMode && !isDirectMessageScope && (
+                <>
+                  <IconButton
+                    icon="headphones"
+                    size={32}
+                    onClick={() => setActiveView("listenTogether")}
+                    aria-label="Listen Together"
+                    tooltip="Listen Together"
+                    tooltipSide="bottom"
+                    className="pointer-coarse:size-11"
+                  />
+                  <IconButton
+                    icon="soundboard"
+                    size={32}
+                    onClick={() => setActiveView("radio")}
+                    aria-label="Search radio"
+                    tooltip="Search radio"
+                    tooltipSide="bottom"
+                    className="pointer-coarse:size-11"
+                  />
+                  <IconButton
+                    icon="zap"
+                    size={32}
+                    onClick={() => setActiveView("myinstants")}
+                    aria-label="Search MyInstants"
+                    tooltip="Search MyInstants"
+                    tooltipSide="bottom"
+                    className="pointer-coarse:size-11"
+                  />
+                </>
+              )}
+            </PickerHeader>
+          ) : activeView === "listenTogether" ? (
+            <PickerHeader>
+              <IconButton
+                icon="back"
+                size={32}
+                onClick={() => setActiveView("soundboard")}
+                aria-label="Back"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-ui-row font-semibold text-ink-1">
+                  Listen Together
                 </div>
-              </>
-            ) : activeView === "listenTogether" ? (
-              <div className="flex items-center justify-between gap-3">
-                <Button
-                  variant="ghost"
-                  onClick={() => setActiveView("soundboard")}
-                >
-                  <Icon name="chevronLeft" size="xs" />
-                  Back
-                </Button>
-                <div className="min-w-0 flex-1 text-right">
-                  <div className="truncate text-ui-sm font-semibold text-rm-text">
-                    Listen Together
-                  </div>
-                  <div className="truncate text-ui-xs text-rm-text-muted">
-                    Synced room playback with a shared queue
-                  </div>
+                <div className="truncate text-ui-xs text-ink-3">
+                  Synced room playback with a shared queue
                 </div>
               </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-3">
-                  <Button
-                    variant="ghost"
-                    onClick={() => setActiveView("soundboard")}
-                  >
-                    <Icon name="chevronLeft" size="xs" />
-                    Back
-                  </Button>
-                  <div className="text-right flex-1 min-w-0 relative">
-                    <Icon
-                      name="search"
-                      size="sm"
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-                    />
-                    <Input
-                      ref={searchInputRef}
-                      type="text"
-                      value={
-                        activeView === "radio" ? radioQuery : myInstantsQuery
-                      }
-                      onChange={(event) =>
-                        activeView === "radio"
-                          ? setRadioQuery(event.target.value)
-                          : setMyInstantsQuery(event.target.value)
-                      }
-                      aria-label={
-                        activeView === "radio"
-                          ? "Search radio stations"
-                          : "Search MyInstants sounds"
-                      }
-                      placeholder={
-                        activeView === "radio"
-                          ? "Search radio Stations..."
-                          : "Search MyInstants..."
-                      }
-                      className="h-9 pl-9 pointer-coarse:h-11"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-            {(uploadError || (activeView === "radio" && roomError)) && (
-              <div
-                role="alert"
-                className="mt-3 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-xs text-rm-danger-ink"
-              >
-                {activeView === "radio" && roomError
-                  ? describeListenTogetherError(roomError, "start the radio")
-                  : uploadError}
-              </div>
-            )}
-          </div>
+            </PickerHeader>
+          ) : (
+            <PickerHeader>
+              <IconButton
+                icon="back"
+                size={32}
+                onClick={() => setActiveView("soundboard")}
+                aria-label="Back"
+              />
+              <PickerSearch
+                ref={searchInputRef}
+                value={activeView === "radio" ? radioQuery : myInstantsQuery}
+                onChange={(event) =>
+                  activeView === "radio"
+                    ? setRadioQuery(event.target.value)
+                    : setMyInstantsQuery(event.target.value)
+                }
+                aria-label={
+                  activeView === "radio"
+                    ? "Search radio stations"
+                    : "Search MyInstants sounds"
+                }
+                placeholder={
+                  activeView === "radio"
+                    ? "Search radio stations"
+                    : "Search MyInstants"
+                }
+              />
+            </PickerHeader>
+          )}
+          {(uploadError || (activeView === "radio" && roomError)) && (
+            <div
+              role="alert"
+              className="mx-2 mt-2 shrink-0 rounded-md bg-danger-tint px-3 py-2 text-ui-xs text-danger-ink"
+            >
+              {activeView === "radio" && roomError
+                ? describeListenTogetherError(roomError, "start the radio")
+                : uploadError}
+            </div>
+          )}
 
           <div className="min-h-0 flex-1 overflow-hidden">
             {activeView === "listenTogether" ? (
@@ -1617,1211 +1802,502 @@ export default function SoundboardPicker({
               />
             ) : activeView === "soundboard" ? (
               <div className="flex h-full">
-                <aside className="flex w-14 shrink-0 flex-col border-r border-rm-border px-2 py-2">
-                  <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
-                    {!selectionMode && (
-                      <>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                jumpToSection(FAVORITES_SECTION_ID)
-                              }
-                              aria-label="Favorites"
-                              aria-pressed={
-                                activeCategory === FAVORITES_SECTION_ID
-                              }
-                              className={cn(
-                                RAIL_BUTTON,
-                                activeCategory === FAVORITES_SECTION_ID &&
-                                  RAIL_BUTTON_ON,
-                              )}
-                            >
-                              <Icon name="star" size="lg" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" sideOffset={10}>
-                            Favorites
-                          </TooltipContent>
-                        </Tooltip>
+                <nav
+                  aria-label="Sound collections"
+                  className="no-scrollbar flex w-10 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-line py-1"
+                >
+                  {!selectionMode && (
+                    <>
+                      <RailButton
+                        label="Favorites"
+                        active={activeCategory === FAVORITES_SECTION_ID}
+                        onClick={() => jumpToSection(FAVORITES_SECTION_ID)}
+                      >
+                        <Icon
+                          name="star"
+                          state={
+                            activeCategory === FAVORITES_SECTION_ID
+                              ? "active"
+                              : "idle"
+                          }
+                          size="lg"
+                        />
+                      </RailButton>
+                      <div className="my-0.5 h-px w-5 shrink-0 bg-line" />
+                    </>
+                  )}
 
-                        <div className="mx-auto my-1 h-px w-8 bg-rm-border" />
-                      </>
+                  {pickerServers.map((server) => {
+                    const sectionId = `server:${server.id}`;
+                    return (
+                      <Tooltip key={server.id}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Jump to ${server.name} server sounds`}
+                            aria-pressed={activeCategory === sectionId}
+                            onClick={() => jumpToSection(sectionId)}
+                            className={cn(
+                              "flex size-8 shrink-0 items-center justify-center rounded-md outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+                              PRESS,
+                              HIT,
+                              activeCategory === sectionId && "bg-tint-2",
+                            )}
+                          >
+                            <PickerServerIcon server={server} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" sideOffset={8}>
+                          <InlineEmojiText text={server.name} />
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+
+                  {!selectionMode &&
+                    !isServerSoundboard &&
+                    !isDirectMessageScope && (
+                      <RailButton
+                        label="Custom sounds"
+                        active={activeCategory === CUSTOM_SECTION_ID}
+                        onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
+                      >
+                        <Icon name="voiceChannel" size="lg" />
+                      </RailButton>
                     )}
 
-                    {pickerServers.length > 0 && (
-                      <>
-                        {pickerServers.map((server) => {
-                          const sectionId = `server:${server.id}`;
-                          return (
-                            <Tooltip key={server.id}>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  aria-label={`Jump to ${server.name} server sounds`}
-                                  aria-pressed={activeCategory === sectionId}
-                                  onClick={() => jumpToSection(sectionId)}
-                                  className={cn(
-                                    RAIL_BUTTON,
-                                    activeCategory === sectionId &&
-                                      RAIL_BUTTON_ON,
-                                  )}
-                                >
-                                  <PickerServerIcon server={server} />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" sideOffset={10}>
-                                <InlineEmojiText text={server.name} />
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })}
-                      </>
-                    )}
-
-                    {!selectionMode &&
-                      !isServerSoundboard &&
-                      !isDirectMessageScope && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              aria-label="Custom sounds"
-                              onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
-                              aria-pressed={
-                                activeCategory === CUSTOM_SECTION_ID
-                              }
-                              className={cn(
-                                RAIL_BUTTON,
-                                activeCategory === CUSTOM_SECTION_ID &&
-                                  RAIL_BUTTON_ON,
-                              )}
-                            >
-                              <Icon name="voiceChannel" size="lg" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" sideOffset={10}>
-                            {isServerSoundboard
-                              ? "Server sounds"
-                              : "Custom sounds"}
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="Ralph sounds"
-                          onClick={() => jumpToSection(DEFAULT_SECTION_ID)}
-                          aria-pressed={activeCategory === DEFAULT_SECTION_ID}
-                          className={cn(
-                            RAIL_BUTTON,
-                            activeCategory === DEFAULT_SECTION_ID &&
-                              RAIL_BUTTON_ON,
-                          )}
-                        >
-                          <HomeIcon className="size-6" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={10}>
-                        Ralph sounds
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </aside>
+                  <RailButton
+                    label="Ralph sounds"
+                    active={activeCategory === DEFAULT_SECTION_ID}
+                    onClick={() => jumpToSection(DEFAULT_SECTION_ID)}
+                  >
+                    <HomeIcon className="size-5" />
+                  </RailButton>
+                </nav>
 
                 <main
                   ref={contentRef}
                   onScroll={handleListScroll}
-                  className="no-scrollbar relative min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 pt-1 max-md:overscroll-contain"
+                  onKeyDown={handlePickerGridKeyDown}
+                  className="no-scrollbar relative min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-1 pb-1 max-md:overscroll-contain"
                 >
-                  {/* Favorites Section */}
+                  {/* Favorites */}
                   {!selectionMode &&
                     (!deferredSearch || visibleFavorites.length > 0) && (
-                      <div
+                      <section
                         ref={setSectionRef(FAVORITES_SECTION_ID)}
-                        className="mb-6 mt-2 relative"
+                        aria-label="Favorites"
                       >
-                        <SectionHeader
-                          icon={
-                            <Icon
-                              name="star"
-                              state="active"
-                              size="sm"
-                              className="text-rm-accent-ink"
-                            />
-                          }
-                          title="Favorites"
-                          isCollapsed={
-                            collapsedCategories[FAVORITES_SECTION_ID]
-                          }
-                          onToggle={() => toggleSection(FAVORITES_SECTION_ID)}
-                        />
-                        {!collapsedCategories[FAVORITES_SECTION_ID] && (
-                          <div className="grid grid-cols-4 gap-2">
-                            {visibleFavorites.length === 0 ? (
-                              <div className="col-span-4 text-center py-4 text-ui-xs text-rm-text-muted">
-                                {isDirectMessageScope
-                                  ? "No member-server favorites yet."
-                                  : "No favorites yet. Search MyInstants to add some!"}
-                              </div>
-                            ) : (
-                              visibleFavorites.map((sound) => {
-                                if (sound.soundType === "myinstants") {
-                                  return (
-                                    <div
-                                      key={`fav-${sound.id}`}
-                                      style={{
-                                        backgroundColor: sound.color,
-                                      }}
-                                      className="group relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg p-1"
-                                    >
-                                      <button
-                                        type="button"
-                                        className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
-                                        aria-label={`Play ${sound.title}`}
-                                        onClick={() =>
-                                          broadcastSound({
-                                            id: sound.id,
-                                            name: sound.title,
-                                            mediaUrl: sound.url,
-                                            soundType: sound.soundType,
-                                            serverId:
-                                              sound.serverId ??
-                                              sound.source_server_id,
-                                            source_server_id:
-                                              sound.source_server_id,
-                                          })
-                                        }
-                                      />
-                                      <div className="absolute inset-1 rounded-full border-2 border-white/20 shadow-inner mix-blend-overlay pointer-events-none z-10" />
-
-                                      <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button
-                                              ref={deleteTriggerRef}
-                                              type="button"
-                                              aria-label="Remove from favorites"
-                                              className={TILE_ACTION_MEDIA}
-                                              onClick={(e) =>
-                                                toggleFavorite(sound, e)
-                                              }
-                                            >
-                                              <Icon
-                                                name="star"
-                                                state="active"
-                                                size="xs"
-                                                className="text-white"
-                                              />
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="left">
-                                            Unfavorite
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </div>
-
-                                      <div
-                                        className={cn(
-                                          "absolute top-1 left-1 z-20 flex flex-col gap-1",
-                                          REVEAL,
-                                        )}
-                                      >
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button
-                                              type="button"
-                                              aria-label="Preview"
-                                              className={TILE_ACTION_MEDIA}
-                                              onClick={(e) =>
-                                                previewSound(
-                                                  {
-                                                    id: sound.id,
-                                                    name: sound.title,
-                                                    mediaUrl: sound.url,
-                                                    soundType: sound.soundType,
-                                                    serverId:
-                                                      sound.serverId ??
-                                                      sound.source_server_id,
-                                                    source_server_id:
-                                                      sound.source_server_id,
-                                                  },
-                                                  e,
-                                                )
-                                              }
-                                            >
-                                              <Icon name="play" size="xs" />
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="right">
-                                            Preview
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </div>
-
-                                      <span className="pointer-events-none z-10 mt-auto w-full rounded-sm bg-black/60 px-1 py-0.5 text-center text-ui-2xs font-semibold leading-tight text-white">
-                                        <span className="line-clamp-2">
-                                          {sound.title}
-                                        </span>
-                                      </span>
-                                    </div>
-                                  );
-                                }
-
-                                if (sound.soundType === "radio") {
-                                  return (
-                                    <div
-                                      key={`fav-${sound.id}`}
-                                      className={cn(TILE, "p-1")}
-                                    >
-                                      <button
-                                        type="button"
-                                        className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
-                                        aria-label={`Play ${sound.title}`}
-                                        onClick={() =>
-                                          broadcastSound({
-                                            id: sound.id,
-                                            name: sound.title,
-                                            mediaUrl: sound.url,
-                                            soundType: "radio",
-                                            artworkUrl: sound.emoji,
-                                          })
-                                        }
-                                      />
-
-                                      <Icon
-                                        name="soundboard"
-                                        size="3xl"
-                                        className={`absolute text-rm-text-muted/40 opacity-30 pointer-fine:group-hover:opacity-40 transition-opacity pointer-events-none ${sound.emoji ? "hidden radio-fallback" : ""}`}
-                                      />
-
-                                      {sound.emoji && (
-                                        <img
-                                          src={sound.emoji}
-                                          onError={(e) => {
-                                            e.currentTarget.style.display =
-                                              "none";
-                                            const fallback =
-                                              e.currentTarget.parentElement?.querySelector(
-                                                ".radio-fallback",
-                                              );
-                                            if (fallback)
-                                              fallback.classList.remove(
-                                                "hidden",
-                                              );
-                                          }}
-                                          className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-fine:group-hover:opacity-40 transition-opacity pointer-events-none"
-                                          alt=""
-                                        />
-                                      )}
-
-                                      <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button
-                                              type="button"
-                                              aria-label="Remove from favorites"
-                                              className={TILE_ACTION}
-                                              onClick={(e) =>
-                                                toggleFavorite(sound, e)
-                                              }
-                                            >
-                                              <Icon
-                                                name="star"
-                                                state="active"
-                                                size="xs"
-                                                className="text-rm-accent-ink"
-                                              />
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="left">
-                                            Unfavorite
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </div>
-                                      <div
-                                        className={cn(
-                                          "absolute top-1 left-1 z-20 flex flex-col gap-1",
-                                          REVEAL,
-                                        )}
-                                      >
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button
-                                              type="button"
-                                              aria-label="Preview station"
-                                              className={TILE_ACTION}
-                                              onClick={(e) =>
-                                                previewSound(
-                                                  {
-                                                    id: sound.id,
-                                                    name: sound.title,
-                                                    mediaUrl: sound.url,
-                                                    soundType: "radio",
-                                                  },
-                                                  e,
-                                                )
-                                              }
-                                            >
-                                              <Icon name="play" size="xs" />
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="right">
-                                            Preview station
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </div>
-
-                                      <span className="pointer-events-none z-10 mt-auto w-full rounded-sm bg-rm-bg-surface/90 px-1 py-0.5 text-center text-ui-2xs font-semibold leading-tight text-rm-text">
-                                        <span className="line-clamp-2">
-                                          {sound.title}
-                                        </span>
-                                      </span>
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <div key={`fav-${sound.id}`} className={TILE}>
-                                    <button
-                                      type="button"
-                                      className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
-                                      aria-label={`Play ${sound.title}`}
-                                      onClick={() =>
-                                        broadcastSound({
-                                          id: sound.id,
-                                          name: sound.title,
-                                          mediaUrl: sound.url,
-                                          soundType: sound.soundType,
-                                          serverId:
-                                            sound.serverId ??
-                                            sound.source_server_id,
-                                          source_server_id:
-                                            sound.source_server_id,
-                                        })
-                                      }
-                                    />
-                                    <div className="pointer-events-none z-10 mb-1 flex items-center justify-center w-6 h-6">
-                                      {sound.soundType === "default" ? (
-                                        <Icon
-                                          name="soundboard"
-                                          size="lg"
-                                          className="text-rm-text-muted"
-                                        />
-                                      ) : sound.emoji ? (
-                                        <EmojiToken
-                                          value={sound.emoji}
-                                          className="h-6 w-6 object-contain block"
-                                          fallbackClassName="text-ui-xl leading-none block"
-                                        />
-                                      ) : (
-                                        <Icon
-                                          name="voiceChannel"
-                                          size="lg"
-                                          className="text-rm-text-muted"
-                                        />
-                                      )}
-                                    </div>
-
-                                    <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <button
-                                            type="button"
-                                            aria-label="Remove from favorites"
-                                            className={TILE_ACTION}
-                                            onClick={(e) =>
-                                              toggleFavorite(sound, e)
-                                            }
-                                          >
-                                            <Icon
-                                              name="star"
-                                              state="active"
-                                              size="xs"
-                                              className="text-rm-accent-ink"
-                                            />
-                                          </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="left">
-                                          Unfavorite
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </div>
-                                    <div
-                                      className={cn(
-                                        "absolute top-1 left-1 z-20 flex flex-col gap-1",
-                                        REVEAL,
-                                      )}
-                                    >
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <button
-                                            type="button"
-                                            aria-label="Preview"
-                                            className={TILE_ACTION}
-                                            onClick={(e) =>
-                                              previewSound(
-                                                {
-                                                  id: sound.id,
-                                                  name: sound.title,
-                                                  mediaUrl: sound.url,
-                                                  soundType: sound.soundType,
-                                                  serverId:
-                                                    sound.serverId ??
-                                                    sound.source_server_id,
-                                                  source_server_id:
-                                                    sound.source_server_id,
-                                                },
-                                                e,
-                                              )
-                                            }
-                                          >
-                                            <Icon name="play" size="xs" />
-                                          </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="right">
-                                          Preview
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </div>
-
-                                    <span className="pointer-events-none z-10 w-full text-center text-ui-2xs font-semibold leading-tight">
-                                      <span className="line-clamp-2">
-                                        {sound.title}
-                                      </span>
-                                    </span>
-                                  </div>
-                                );
-                              })
-                            )}
+                        <PickerSectionLabel>Favorites</PickerSectionLabel>
+                        {visibleFavorites.length === 0 ? (
+                          <div className="px-2 pb-3 pt-1 text-ui-xs text-ink-3">
+                            {isDirectMessageScope
+                              ? "No member-server favorites yet."
+                              : "No favorites yet. Search MyInstants to add some!"}
+                          </div>
+                        ) : (
+                          <div className={SOUND_GRID}>
+                            {visibleFavorites.map(renderFavoriteTile)}
                           </div>
                         )}
-                      </div>
+                      </section>
                     )}
 
                   {/* Server and custom sound sections */}
                   {soundSections.map((section) => (
-                    <div
+                    <section
                       key={section.id}
                       ref={setSectionRef(section.id)}
-                      className="mb-6 relative"
+                      aria-label={section.server?.name ?? "Custom sounds"}
                     >
-                      <SectionHeader
-                        icon={
-                          section.server ? (
-                            <PickerServerIcon server={section.server} />
-                          ) : (
-                            <Icon
-                              name="voiceChannel"
-                              size="sm"
-                              className="text-rm-accent-ink"
-                            />
-                          )
-                        }
-                        title={section.server?.name ?? "Custom sounds"}
-                        isCollapsed={collapsedCategories[section.id]}
-                        onToggle={() => toggleSection(section.id)}
-                      />
-                      {!collapsedCategories[section.id] && (
-                        <div className="grid grid-cols-4 gap-2">
-                          {!deferredSearch &&
+                      <PickerSectionLabel>
+                        {section.server ? (
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <PickerServerIcon server={section.server} small />
+                            <span className="truncate">
+                              <InlineEmojiText text={section.server.name} />
+                            </span>
+                          </span>
+                        ) : (
+                          "Custom sounds"
+                        )}
+                      </PickerSectionLabel>
+                      <div className={SOUND_GRID}>
+                        {!deferredSearch &&
+                          !selectionMode &&
+                          (!section.server ||
+                            section.server.id === serverId) && (
+                            <button
+                              type="button"
+                              data-picker-cell=""
+                              onClick={() => {
+                                setRenderedEditingSound(null);
+                                setIsUploadModalOpen(true);
+                              }}
+                              className={cn(
+                                "flex aspect-square flex-col items-center justify-center gap-1 rounded-md border border-dashed border-line-strong px-1.5 text-ink-3 transition-[background-color,color] duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1",
+                                PICKER_RING,
+                              )}
+                            >
+                              <Icon name="upload" size="lg" />
+                              <span className="text-ui-sm font-medium">
+                                Add sound
+                              </span>
+                            </button>
+                          )}
+                        {section.sounds.map((sound) => {
+                          const isFav = myInstantsFavorites.some(
+                            (f) => f.id === sound.id,
+                          );
+                          const canManage =
                             !selectionMode &&
-                            (!section.server ||
-                              section.server.id === serverId) && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRenderedEditingSound(null);
-                                  setIsUploadModalOpen(true);
-                                }}
-                                className={cn(
-                                  "group flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed border-rm-border p-1.5 text-rm-text-muted pointer-fine:hover:text-rm-text",
-                                  PRESS,
-                                )}
-                              >
-                                <div className="mb-1 flex size-8 items-center justify-center rounded-full bg-rm-tint-1">
-                                  <Icon
-                                    name="upload"
-                                    size="sm"
-                                    className="text-rm-accent-ink"
-                                  />
-                                </div>
-                                <span className="w-full text-center text-ui-2xs font-semibold leading-tight">
-                                  Add sound
-                                </span>
-                              </button>
-                            )}
-                          {section.sounds.map((sound) => {
-                            const isFav = myInstantsFavorites.some(
-                              (f) => f.id === sound.id,
-                            );
-                            return (
-                              <div
-                                key={sound.id}
-                                className={cn(TILE, LONG_PRESS_TARGET)}
-                                {...bindTileLongPress({ sound, isFav })}
-                              >
-                                <button
-                                  type="button"
-                                  className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
-                                  aria-label={`Play ${sound.name}`}
-                                  onClick={() =>
-                                    broadcastSound({
-                                      id: sound.id,
-                                      name: sound.name,
-                                      soundType: "server",
-                                      dataUrl: sound.dataUrl,
-                                      mediaUrl: sound.mediaUrl,
-                                      volume: sound.volume,
-                                      serverId: sound.serverId,
-                                    })
-                                  }
-                                />
-                                <div className="pointer-events-none z-10 mb-1 flex items-center justify-center w-6 h-6">
-                                  {sound.emoji ? (
-                                    <EmojiToken
-                                      value={sound.emoji}
-                                      className="h-6 w-6 object-contain block"
-                                      fallbackClassName="text-ui-xl leading-none block"
-                                    />
-                                  ) : (
-                                    <Icon
-                                      name="voiceChannel"
-                                      size="lg"
-                                      className="text-rm-text-muted"
-                                    />
-                                  )}
-                                </div>
-                                <span className="pointer-events-none z-10 w-full text-center text-ui-2xs font-semibold leading-tight">
-                                  <span className="line-clamp-2">
-                                    {sound.name}
-                                  </span>
-                                </span>
-
-                                <div
-                                  className={cn(
-                                    "absolute top-1 left-1 z-20 flex flex-col gap-1",
-                                    REVEAL,
-                                  )}
-                                >
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        aria-label={`Preview ${sound.name}`}
-                                        className={TILE_ACTION}
-                                        onClick={(e) =>
-                                          previewSound(
-                                            {
-                                              ...sound,
-                                              soundType: "server",
-                                            },
-                                            e,
-                                          )
-                                        }
-                                      >
-                                        <Icon name="play" size="xs" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                      side="right"
-                                      className="flex items-center gap-1.5 max-w-[200px]"
-                                    >
-                                      <span className="shrink-0">Preview</span>
-                                      <span className="flex items-center gap-1 font-bold min-w-0">
-                                        {sound.emoji && (
-                                          <EmojiToken
-                                            value={sound.emoji}
-                                            className="h-4 w-4 shrink-0"
-                                            fallbackClassName="text-ui-sm shrink-0"
-                                          />
-                                        )}
-                                        <span className="truncate">
-                                          {sound.name}
-                                        </span>
-                                      </span>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                  {!selectionMode &&
-                                    (!sound.serverId ||
-                                      sound.serverId === serverId) && (
-                                      <>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button
-                                              type="button"
-                                              aria-label={`Edit ${sound.name}`}
-                                              // Touch: edit and delete live in
-                                              // the tile's long-press sheet.
-                                              className={cn(
-                                                TILE_ACTION,
-                                                "pointer-coarse:hidden",
-                                              )}
-                                              onClick={(e) =>
-                                                openEditModal(sound, e)
-                                              }
-                                            >
-                                              <Icon name="edit" size="xs" />
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="right">
-                                            Edit
-                                          </TooltipContent>
-                                        </Tooltip>
-                                        <button
-                                          type="button"
-                                          aria-label={`Delete ${sound.name}`}
-                                          title="Delete"
-                                          className={cn(
-                                            TILE_ACTION,
-                                            "pointer-coarse:hidden pointer-fine:hover:text-rm-danger-ink",
-                                          )}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            deleteTriggerRef.current =
-                                              e.currentTarget;
-                                            setSoundToDelete(sound);
-                                            setRenderedSoundToDelete(sound);
-                                          }}
-                                        >
-                                          <Icon name="trash" size="xs" />
-                                        </button>
-                                      </>
-                                    )}
-                                </div>
-
-                                <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        aria-label={
-                                          isFav
-                                            ? "Remove from favorites"
-                                            : "Add to favorites"
-                                        }
-                                        className={cn(
-                                          TILE_ACTION,
-                                          !isFav && REVEAL,
-                                        )}
-                                        onClick={(e) =>
-                                          toggleFavorite(sound, e)
-                                        }
-                                      >
-                                        <Icon
-                                          name="star"
-                                          state={isFav ? "active" : "idle"}
-                                          size="xs"
-                                          className={
-                                            isFav
-                                              ? "text-rm-accent-ink"
-                                              : undefined
-                                          }
-                                        />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left">
-                                      {isFav ? "Unfavorite" : "Favorite"}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {!section.server && uploadError && (
-                        <div className="mt-3 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-xs text-rm-danger-ink">
-                          {uploadError}
-                        </div>
-                      )}
-                    </div>
+                            (!sound.serverId || sound.serverId === serverId);
+                          return (
+                            <SoundTile
+                              key={sound.id}
+                              name={sound.name}
+                              glyph={<SoundGlyph emoji={sound.emoji} />}
+                              playLabel={`Play ${sound.name}`}
+                              playing={playingSoundIds.has(sound.id)}
+                              className={LONG_PRESS_TARGET}
+                              {...bindTileLongPress({ sound, isFav })}
+                              onPlay={() =>
+                                broadcastSound({
+                                  id: sound.id,
+                                  name: sound.name,
+                                  soundType: "server",
+                                  dataUrl: sound.dataUrl,
+                                  mediaUrl: sound.mediaUrl,
+                                  volume: sound.volume,
+                                  serverId: sound.serverId,
+                                })
+                              }
+                              actions={[
+                                {
+                                  key: "preview",
+                                  label: `Preview ${sound.name}`,
+                                  tooltip: "Preview",
+                                  icon: "play",
+                                  onClick: (event) =>
+                                    previewSound(
+                                      { ...sound, soundType: "server" },
+                                      event,
+                                    ),
+                                },
+                                ...(canManage
+                                  ? [
+                                      {
+                                        key: "edit",
+                                        label: `Edit ${sound.name}`,
+                                        tooltip: "Edit",
+                                        icon: "edit" as const,
+                                        // Touch: edit and delete live in the
+                                        // tile's long-press sheet.
+                                        className: "pointer-coarse:hidden",
+                                        onClick: (
+                                          event: React.MouseEvent<HTMLButtonElement>,
+                                        ) => openEditModal(sound, event),
+                                      },
+                                      {
+                                        key: "delete",
+                                        label: `Delete ${sound.name}`,
+                                        tooltip: "Delete",
+                                        icon: "trash" as const,
+                                        className:
+                                          "pointer-coarse:hidden pointer-fine:hover:text-danger-ink",
+                                        onClick: (
+                                          event: React.MouseEvent<HTMLButtonElement>,
+                                        ) => {
+                                          event.stopPropagation();
+                                          deleteTriggerRef.current =
+                                            event.currentTarget;
+                                          setSoundToDelete(sound);
+                                          setRenderedSoundToDelete(sound);
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                              favorite={favoriteFor(sound, isFav)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </section>
                   ))}
 
-                  {/* Default Sounds Section */}
+                  {/* Default sounds */}
                   {(!deferredSearch || filteredDefault.length > 0) && (
-                    <div
+                    <section
                       ref={setSectionRef(DEFAULT_SECTION_ID)}
-                      className="mb-6 relative"
+                      aria-label="Ralph sounds"
                     >
-                      <SectionHeader
-                        icon={<HomeIcon className="h-4 w-4" />}
-                        title="Ralph sounds"
-                        isCollapsed={collapsedCategories[DEFAULT_SECTION_ID]}
-                        onToggle={() => toggleSection(DEFAULT_SECTION_ID)}
-                      />
-                      {!collapsedCategories[DEFAULT_SECTION_ID] && (
-                        <div className="grid grid-cols-4 gap-2">
-                          {filteredDefault.map((sound) => {
-                            const isFav = myInstantsFavorites.some(
-                              (f) => f.id === sound.id,
-                            );
-                            return (
-                              <div key={sound.id} className={TILE}>
-                                <button
-                                  type="button"
-                                  className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
-                                  aria-label={`Play ${sound.name}`}
-                                  onClick={() =>
-                                    broadcastSound({
-                                      ...sound,
-                                      soundType: "default",
-                                    })
-                                  }
-                                />
-                                <Icon
-                                  name="soundboard"
-                                  size="lg"
-                                  className="pointer-events-none z-10 mb-1 text-rm-text-muted"
-                                />
-                                <span className="pointer-events-none z-10 w-full text-center text-ui-2xs font-semibold leading-tight">
-                                  <span className="line-clamp-2">
-                                    {sound.name}
-                                  </span>
-                                </span>
-
-                                <div
-                                  className={cn(
-                                    "absolute top-1 left-1 z-20 flex flex-col gap-1",
-                                    REVEAL,
-                                  )}
-                                >
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        aria-label="Preview"
-                                        className={TILE_ACTION}
-                                        onClick={(e) =>
-                                          previewSound(
-                                            {
-                                              ...sound,
-                                              soundType: "default",
-                                            },
-                                            e,
-                                          )
-                                        }
-                                      >
-                                        <Icon name="play" size="xs" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right">
-                                      Preview
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </div>
-
-                                <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        aria-label={
-                                          isFav
-                                            ? "Remove from favorites"
-                                            : "Add to favorites"
-                                        }
-                                        className={cn(
-                                          TILE_ACTION,
-                                          !isFav && REVEAL,
-                                        )}
-                                        onClick={(e) =>
-                                          toggleFavorite(sound, e)
-                                        }
-                                      >
-                                        <Icon
-                                          name="star"
-                                          state={isFav ? "active" : "idle"}
-                                          size="xs"
-                                          className={
-                                            isFav
-                                              ? "text-rm-accent-ink"
-                                              : undefined
-                                          }
-                                        />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left">
-                                      {isFav ? "Unfavorite" : "Favorite"}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </main>
-              </div>
-            ) : activeView === "myinstants" ? (
-              <div className="flex h-full flex-col p-4 overflow-hidden">
-                <div className="flex-1 overflow-y-auto no-scrollbar pb-4 max-md:min-h-0 max-md:overscroll-contain">
-                  {isSearchingMyInstants && myInstantsResults.length === 0 ? (
-                    <div
-                      role="status"
-                      className="flex items-center justify-center py-12 text-rm-text-muted"
-                    >
-                      <Spinner className="size-6" />
-                      <span className="sr-only">Searching</span>
-                    </div>
-                  ) : myInstantsResults.length === 0 ? (
-                    <div className="text-center py-12 text-ui-sm text-rm-text-muted">
-                      No sounds found for "{myInstantsQuery}"
-                    </div>
-                  ) : (
-                    <div>
-                      {!myInstantsQuery && myInstantsFavorites.length > 0 && (
-                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-3 text-rm-text-muted">
-                          Trending
-                        </div>
-                      )}
-                      <div className="grid grid-cols-4 gap-2 md:grid-cols-5">
-                        {myInstantsResults.map((sound) => {
+                      <PickerSectionLabel>Ralph sounds</PickerSectionLabel>
+                      <div className={SOUND_GRID}>
+                        {filteredDefault.map((sound) => {
                           const isFav = myInstantsFavorites.some(
                             (f) => f.id === sound.id,
                           );
                           return (
-                            <div
+                            <SoundTile
                               key={sound.id}
-                              style={{ backgroundColor: sound.color }}
-                              className="group relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg p-1"
-                            >
-                              <button
-                                type="button"
-                                className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
-                                aria-label={`Play ${sound.title}`}
-                                onClick={() =>
-                                  broadcastSound({
-                                    id: sound.id,
-                                    name: sound.title,
-                                    mediaUrl: sound.url,
-                                  })
-                                }
-                              />
-                              <div className="absolute inset-1 rounded-full border-2 border-white/20 shadow-inner mix-blend-overlay pointer-events-none z-10" />
-
-                              <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      aria-label={
-                                        isFav
-                                          ? "Remove from favorites"
-                                          : "Add to favorites"
-                                      }
-                                      className={cn(
-                                        TILE_ACTION_MEDIA,
-                                        !isFav && REVEAL,
-                                      )}
-                                      onClick={(e) => toggleFavorite(sound, e)}
-                                    >
-                                      <Icon
-                                        name="star"
-                                        state={isFav ? "active" : "idle"}
-                                        size="xs"
-                                        className={undefined}
-                                      />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="left">
-                                    {isFav ? "Unfavorite" : "Favorite"}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-
-                              <div
-                                className={cn(
-                                  "absolute top-1 left-1 z-20 flex flex-col gap-1",
-                                  REVEAL,
-                                )}
-                              >
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      aria-label="Preview"
-                                      className={TILE_ACTION_MEDIA}
-                                      onClick={(e) =>
-                                        previewSound(
-                                          {
-                                            id: sound.id,
-                                            name: sound.title,
-                                            mediaUrl: sound.url,
-                                            soundType: "myinstants",
-                                          },
-                                          e,
-                                        )
-                                      }
-                                    >
-                                      <Icon name="play" size="xs" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right">
-                                    Preview
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-
-                              <span className="pointer-events-none z-10 mt-auto w-full rounded-sm bg-black/60 px-1 py-0.5 text-center text-ui-2xs font-semibold leading-tight text-white">
-                                <span className="line-clamp-2">
-                                  {sound.title}
-                                </span>
-                              </span>
-                            </div>
+                              name={sound.name}
+                              glyph={<Icon name="soundboard" size="lg" />}
+                              playLabel={`Play ${sound.name}`}
+                              playing={playingSoundIds.has(sound.id)}
+                              onPlay={() =>
+                                broadcastSound({
+                                  ...sound,
+                                  soundType: "default",
+                                })
+                              }
+                              actions={[
+                                {
+                                  key: "preview",
+                                  label: "Preview",
+                                  tooltip: "Preview",
+                                  icon: "play",
+                                  onClick: (event) =>
+                                    previewSound(
+                                      { ...sound, soundType: "default" },
+                                      event,
+                                    ),
+                                },
+                              ]}
+                              favorite={favoriteFor(sound, isFav)}
+                            />
                           );
                         })}
                       </div>
-                    </div>
+                    </section>
                   )}
-                </div>
+                </main>
+              </div>
+            ) : activeView === "myinstants" ? (
+              <div
+                className="h-full overflow-y-auto overscroll-contain px-1 pb-1"
+                onKeyDown={handlePickerGridKeyDown}
+              >
+                {isSearchingMyInstants && myInstantsResults.length === 0 ? (
+                  <div
+                    role="status"
+                    className="flex items-center justify-center py-12 text-ink-3"
+                  >
+                    <Spinner className="size-5" />
+                    <span className="sr-only">Searching</span>
+                  </div>
+                ) : myInstantsResults.length === 0 ? (
+                  <div className="px-6 py-12 text-center text-ui-sm text-ink-3">
+                    No sounds found for "{myInstantsQuery}"
+                  </div>
+                ) : (
+                  <section aria-label="MyInstants sounds">
+                    {!myInstantsQuery && myInstantsFavorites.length > 0 ? (
+                      <PickerSectionLabel>Trending</PickerSectionLabel>
+                    ) : (
+                      <div className="h-1" />
+                    )}
+                    <div className={SOUND_GRID}>
+                      {myInstantsResults.map((sound) => {
+                        const isFav = myInstantsFavorites.some(
+                          (f) => f.id === sound.id,
+                        );
+                        return (
+                          <SoundTile
+                            key={sound.id}
+                            name={sound.title}
+                            glyph={<Icon name="zap" size="lg" />}
+                            playLabel={`Play ${sound.title}`}
+                            playing={playingSoundIds.has(sound.id)}
+                            onPlay={() =>
+                              broadcastSound({
+                                id: sound.id,
+                                name: sound.title,
+                                mediaUrl: sound.url,
+                              })
+                            }
+                            actions={[
+                              {
+                                key: "preview",
+                                label: "Preview",
+                                tooltip: "Preview",
+                                icon: "play",
+                                onClick: (event) =>
+                                  previewSound(
+                                    {
+                                      id: sound.id,
+                                      name: sound.title,
+                                      mediaUrl: sound.url,
+                                      soundType: "myinstants",
+                                    },
+                                    event,
+                                  ),
+                              },
+                            ]}
+                            favorite={favoriteFor(sound, isFav)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
               </div>
             ) : (
-              <div className="flex h-full flex-col p-4 overflow-hidden">
-                <div className="flex-1 overflow-y-auto no-scrollbar pb-4 max-md:min-h-0 max-md:overscroll-contain">
-                  {isSearchingRadio && radioResults.length === 0 ? (
-                    <div
-                      role="status"
-                      className="flex items-center justify-center py-12 text-rm-text-muted"
-                    >
-                      <Spinner className="size-6" />
-                      <span className="sr-only">Searching</span>
-                    </div>
-                  ) : radioResults.length === 0 ? (
-                    <div className="text-center py-12 text-ui-sm text-rm-text-muted">
-                      No stations found for "{radioQuery}"
-                    </div>
-                  ) : (
-                    <div>
-                      {!radioQuery && (
-                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-3 text-rm-text-muted">
-                          Top stations
-                        </div>
-                      )}
-                      <div className="grid grid-cols-4 gap-2 md:grid-cols-5">
-                        {radioResults.map((station) => {
-                          const isFav = myInstantsFavorites.some(
-                            (f) => f.id === station.stationuuid,
-                          );
-                          const soundObj = {
-                            id: station.stationuuid,
-                            title: station.name,
-                            url: station.url_resolved,
-                            color: "#10b981",
-                            soundType: "radio" as const,
-                            emoji: station.favicon || undefined,
-                          };
+              <div
+                className="h-full overflow-y-auto overscroll-contain px-1 pb-1"
+                onKeyDown={handlePickerGridKeyDown}
+              >
+                {isSearchingRadio && radioResults.length === 0 ? (
+                  <div
+                    role="status"
+                    className="flex items-center justify-center py-12 text-ink-3"
+                  >
+                    <Spinner className="size-5" />
+                    <span className="sr-only">Searching</span>
+                  </div>
+                ) : radioResults.length === 0 ? (
+                  <div className="px-6 py-12 text-center text-ui-sm text-ink-3">
+                    No stations found for "{radioQuery}"
+                  </div>
+                ) : (
+                  <section aria-label="Stations">
+                    {!radioQuery ? (
+                      <PickerSectionLabel>Top stations</PickerSectionLabel>
+                    ) : (
+                      <div className="h-1" />
+                    )}
+                    <div className={SOUND_GRID}>
+                      {radioResults.map((station) => {
+                        const isFav = myInstantsFavorites.some(
+                          (f) => f.id === station.stationuuid,
+                        );
+                        const soundObj = {
+                          id: station.stationuuid,
+                          title: station.name,
+                          url: station.url_resolved,
+                          color: "#10b981",
+                          soundType: "radio" as const,
+                          emoji: station.favicon || undefined,
+                        };
 
-                          return (
-                            <div
-                              key={station.stationuuid}
-                              className={cn(TILE, "p-1")}
-                            >
-                              <button
-                                type="button"
-                                className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
-                                aria-label={`Play ${station.name}`}
-                                onClick={() =>
-                                  broadcastSound({
-                                    id: station.stationuuid,
-                                    name: station.name,
-                                    mediaUrl: station.url_resolved,
-                                    soundType: "radio",
-                                    artworkUrl: station.favicon || undefined,
-                                  })
-                                }
+                        return (
+                          <SoundTile
+                            key={station.stationuuid}
+                            name={station.name}
+                            glyph={
+                              <StationGlyph
+                                favicon={station.favicon || undefined}
                               />
-
-                              <Icon
-                                name="soundboard"
-                                size="3xl"
-                                className={`absolute text-rm-text-muted/40 opacity-30 pointer-fine:group-hover:opacity-40 transition-opacity pointer-events-none ${station.favicon ? "hidden radio-fallback" : ""}`}
-                              />
-
-                              {station.favicon && (
-                                <img
-                                  src={station.favicon}
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = "none";
-                                    const fallback =
-                                      e.currentTarget.parentElement?.querySelector(
-                                        ".radio-fallback",
-                                      );
-                                    if (fallback)
-                                      fallback.classList.remove("hidden");
-                                  }}
-                                  className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-fine:group-hover:opacity-40 transition-opacity pointer-events-none"
-                                  alt=""
-                                />
-                              )}
-
-                              <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      aria-label={
-                                        isFav
-                                          ? "Remove from favorites"
-                                          : "Add to favorites"
-                                      }
-                                      className={cn(
-                                        TILE_ACTION,
-                                        !isFav && REVEAL,
-                                      )}
-                                      onClick={(e) =>
-                                        toggleFavorite(soundObj, e)
-                                      }
-                                    >
-                                      <Icon
-                                        name="star"
-                                        state={isFav ? "active" : "idle"}
-                                        size="xs"
-                                        className={
-                                          isFav
-                                            ? "text-rm-accent-ink"
-                                            : undefined
-                                        }
-                                      />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="left">
-                                    {isFav ? "Unfavorite" : "Favorite"}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-
-                              <div
-                                className={cn(
-                                  "absolute top-1 left-1 z-20 flex flex-col gap-1",
-                                  REVEAL,
-                                )}
-                              >
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      aria-label="Preview station"
-                                      className={TILE_ACTION}
-                                      onClick={(e) =>
-                                        previewSound(
-                                          {
-                                            id: station.stationuuid,
-                                            name: station.name,
-                                            mediaUrl: station.url_resolved,
-                                            soundType: "radio",
-                                          },
-                                          e,
-                                        )
-                                      }
-                                    >
-                                      <Icon name="play" size="xs" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right">
-                                    Preview station
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-
-                              <span className="pointer-events-none z-10 mt-auto w-full rounded-sm bg-rm-bg-surface/90 px-1 py-0.5 text-center text-ui-2xs font-semibold leading-tight text-rm-text">
-                                <span className="line-clamp-2">
-                                  {station.name}
-                                </span>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                            }
+                            playLabel={`Play ${station.name}`}
+                            onPlay={() =>
+                              broadcastSound({
+                                id: station.stationuuid,
+                                name: station.name,
+                                mediaUrl: station.url_resolved,
+                                soundType: "radio",
+                                artworkUrl: station.favicon || undefined,
+                              })
+                            }
+                            actions={[
+                              {
+                                key: "preview",
+                                label: "Preview station",
+                                tooltip: "Preview station",
+                                icon: "play",
+                                onClick: (event) =>
+                                  previewSound(
+                                    {
+                                      id: station.stationuuid,
+                                      name: station.name,
+                                      mediaUrl: station.url_resolved,
+                                      soundType: "radio",
+                                    },
+                                    event,
+                                  ),
+                              },
+                            ]}
+                            favorite={favoriteFor(soundObj, isFav)}
+                          />
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
+                  </section>
+                )}
               </div>
             )}
           </div>
 
-          {/* Bottom volume controls */}
+          {/* Volumes: what the room hears, and what you hear. */}
           {!compact && activeView === "soundboard" && (
-            <div className="shrink-0 border-t border-rm-border p-3">
-              <div className="flex gap-2 md:gap-3 items-center w-full">
-                <label className="flex w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border border-rm-border px-2 py-2 text-ui-xs font-medium text-rm-text-muted">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex shrink-0 cursor-help items-center rounded-full bg-rm-tint-1 p-1">
-                        <Icon
-                          name="voiceChannel"
-                          size="xs"
-                          className="text-rm-accent-ink"
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[200px]">
-                      <p className="font-bold">Send volume</p>
-                      <p className="opacity-80 mt-1">
-                        Adjusts how loud your soundboard plays for everyone else
-                        in the voice channel.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className="whitespace-nowrap hidden md:inline">
-                    Send
-                  </span>
-                  <input
-                    type="range"
-                    aria-label="Soundboard volume"
-                    min={0}
-                    max={100}
-                    value={Math.round(sendVolume * 100)}
-                    onChange={(event) =>
-                      setSendVolume(Number(event.currentTarget.value) / 100)
+            <div className="flex h-11 shrink-0 items-center gap-4 border-t border-line px-3">
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-ui-xs font-medium text-ink-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex shrink-0 cursor-help items-center">
+                      <Icon name="voiceChannel" size="sm" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-52">
+                    <p className="font-semibold">Send volume</p>
+                    <p className="mt-1">
+                      Adjusts how loud your soundboard plays for everyone else
+                      in the voice channel.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+                <span className="hidden whitespace-nowrap md:inline">Send</span>
+                <input
+                  type="range"
+                  aria-label="Soundboard volume"
+                  min={0}
+                  max={100}
+                  value={Math.round(sendVolume * 100)}
+                  onChange={(event) =>
+                    setSendVolume(Number(event.currentTarget.value) / 100)
+                  }
+                  className="h-1 w-full min-w-0 cursor-pointer accent-primary-fill"
+                />
+                <Num className="w-8 shrink-0 text-right text-ink-2">
+                  {Math.round(sendVolume * 100)}
+                </Num>
+              </label>
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-ui-xs font-medium text-ink-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex shrink-0 cursor-help items-center">
+                      <Icon name="headphones" size="sm" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-52">
+                    <p className="font-semibold">Soundboard volume</p>
+                    <p className="mt-1">
+                      Adjusts how loud soundboard playback is locally for you.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+                <span className="hidden whitespace-nowrap md:inline">
+                  Soundboard
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(playbackVolume * 100)}
+                  onChange={(event) => {
+                    const nextVolume = Number(event.currentTarget.value) / 100;
+                    setPlaybackVolume(nextVolume);
+                    setSoundboardMasterVolume(nextVolume);
+                    if (localUserId) {
+                      scheduleVolumePersistence(nextVolume);
                     }
-                    className="h-1 w-full min-w-0 cursor-pointer"
-                  />
-                </label>
-                <label className="flex w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border border-rm-border px-2 py-2 text-ui-xs font-medium text-rm-text-muted">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex shrink-0 cursor-help items-center rounded-full bg-rm-tint-1 p-1">
-                        <Icon
-                          name="headphones"
-                          size="xs"
-                          className="text-rm-accent-ink"
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[200px]">
-                      <p className="font-bold">Soundboard volume</p>
-                      <p className="opacity-80 mt-1">
-                        Adjusts how loud soundboard playback is locally for you.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className="whitespace-nowrap hidden md:inline">
-                    Soundboard
-                  </span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round(playbackVolume * 100)}
-                    onChange={(event) => {
-                      const nextVolume =
-                        Number(event.currentTarget.value) / 100;
-                      setPlaybackVolume(nextVolume);
-                      setSoundboardMasterVolume(nextVolume);
-                      if (localUserId) {
-                        scheduleVolumePersistence(nextVolume);
-                      }
-                    }}
-                    className="h-1 w-full min-w-0 cursor-pointer"
-                  />
-                </label>
-              </div>
+                  }}
+                  className="h-1 w-full min-w-0 cursor-pointer accent-primary-fill"
+                />
+                <Num className="w-8 shrink-0 text-right text-ink-2">
+                  {Math.round(playbackVolume * 100)}
+                </Num>
+              </label>
             </div>
           )}
         </PickerSurface>

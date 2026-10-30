@@ -4,7 +4,7 @@ import { useShallow } from "zustand/shallow";
 
 /**
  * The phone Messages tab: the DM list as a phone page (48px header, 44px
- * search, 12.4 rows), reachable without switching servers first.
+ * search, grouped-card rows), reachable without switching servers first.
  */
 export function MobileMessagesTab({
   onSelectDm,
@@ -31,7 +31,7 @@ export function MobileMessagesTab({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-rm-bg-primary">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-ply-0">
       <DMSidebar
         variant="phone"
         activeChannelId={activeServerId === "@me" ? activeChannelId : null}

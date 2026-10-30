@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -89,7 +89,7 @@ describe("dialog positioning regression guard", () => {
     ).not.toBeNull();
   });
 
-  it("keeps the desktop picker open when the quality select opens", async () => {
+  it("keeps the desktop picker open while quality chips are used", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(
@@ -101,20 +101,12 @@ describe("dialog positioning regression guard", () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole("combobox", { name: "Select stream quality" }),
-    );
+    // The quality control is two rows of chips in the dialog itself, so
+    // choosing a preset is an inside press.
+    await user.click(screen.getByRole("radio", { name: "1080p" }));
+    expect(screen.getByRole("radio", { name: "1080p" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "60 fps" })).toBeChecked();
 
-    expect(onClose).not.toHaveBeenCalled();
-    expect(
-      document.querySelector('[data-slot="dialog-content"][data-state="open"]'),
-    ).not.toBeNull();
-    const listbox = screen.getByRole("listbox");
-    expect(listbox).toHaveClass("z-60");
-    expect(screen.getByRole("option", { name: /1080p/i })).toBeVisible();
-
-    // Tapping the select's own listbox must not read as an outside press.
-    fireEvent.pointerDown(listbox);
     expect(onClose).not.toHaveBeenCalled();
     expect(
       document.querySelector('[data-slot="dialog-content"][data-state="open"]'),

@@ -21,7 +21,7 @@ describe("AvatarFrameEditor", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders as a dialog on the stacked layer over settings", () => {
+  it("renders as a top-placed medium dialog with a scrim", () => {
     render(
       <AvatarFrameEditor
         image={{ src: "blob:test-avatar" }}
@@ -32,9 +32,11 @@ describe("AvatarFrameEditor", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Frame your avatar" });
-    expect(dialog).toHaveClass("z-60");
+    expect(dialog).toHaveAttribute("data-size", "md");
+    expect(dialog).toHaveAttribute("data-placement", "top");
+    expect(dialog).not.toHaveClass("z-60");
     expect(
       document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
-    ).toContain("bg-rm-scrim");
+    ).toContain("bg-scrim");
   });
 });

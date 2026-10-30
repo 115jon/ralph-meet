@@ -147,6 +147,39 @@ describe("SettingsModal (Studio)", () => {
       await user.keyboard("{Escape}");
       expect(onClose).toHaveBeenCalledOnce();
     });
+
+    it("opens on the nav, not the search; / and Ctrl+F focus the search", async () => {
+      const user = userEvent.setup();
+      render(<SettingsModal open onClose={() => {}} initialTab="account" />);
+      const search = screen.getByRole("searchbox", { name: "Search settings" });
+      expect(search).not.toHaveFocus();
+
+      within(nav()).getByRole("button", { name: "Account" }).focus();
+      await user.keyboard("/");
+      expect(search).toHaveFocus();
+      expect(search).toHaveValue("");
+
+      within(nav()).getByRole("button", { name: "Account" }).focus();
+      await user.keyboard("{Control>}f{/Control}");
+      expect(search).toHaveFocus();
+    });
+
+    it("shows the empty state with Clear search when nothing matches", async () => {
+      const user = userEvent.setup();
+      render(<SettingsModal open onClose={() => {}} initialTab="account" />);
+      const search = screen.getByRole("searchbox", { name: "Search settings" });
+      await user.type(search, "zzzz");
+
+      const content = screen.getByRole("region", { name: "Settings content" });
+      expect(
+        within(content).getByText("No settings match “zzzz”"),
+      ).toBeInTheDocument();
+      await user.click(
+        within(content).getByRole("button", { name: "Clear search" }),
+      );
+      expect(search).toHaveValue("");
+      expect(search).toHaveFocus();
+    });
   });
 
   describe("deep links", () => {

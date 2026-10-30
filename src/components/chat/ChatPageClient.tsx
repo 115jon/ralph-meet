@@ -2,6 +2,8 @@ import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import { SidePanel } from "@/components/ui/side-panel";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
+import { AppConnectionBanner } from "@/components/chat/ConnectionBanner";
+import { EmptyState } from "@/components/ui/empty-state";
 import ChatArea from "@/components/chat/ChatArea";
 import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailToolbarSync";
 import DMSidebar from "@/components/chat/DMSidebar";
@@ -102,11 +104,11 @@ const VoiceMediaManager = lazy(() =>
 
 const EMPTY_GRID_ITEMS: never[] = [];
 const TAILWIND_SPACING_UNIT_PX = 4;
-const SERVER_RAIL_SPACING_UNITS = 18;
+const SERVER_RAIL_SPACING_UNITS = 15;
 const SERVER_RAIL_WIDTH_PX =
   SERVER_RAIL_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
 const CHANNEL_SIDEBAR_MIN_SPACING_UNITS = 52;
-const CHANNEL_SIDEBAR_DEFAULT_SPACING_UNITS = 60;
+const CHANNEL_SIDEBAR_DEFAULT_SPACING_UNITS = 66;
 const CHANNEL_SIDEBAR_MAX_SPACING_UNITS = 92;
 const CHANNEL_SIDEBAR_RESIZE_STEP_PX = TAILWIND_SPACING_UNIT_PX * 2;
 const CHANNEL_SIDEBAR_MIN_WIDTH_PX =
@@ -415,6 +417,16 @@ export default function ChatPage() {
   const showVoiceAsMain =
     !!(isVoiceChannel && activeChannelId && activeServerId && !callActive) &&
     (!voiceState.joined || isViewingCurrentVoiceChannel);
+  // Whether the current call's stage is the main view, so the call strip
+  // collapses to its status line: a DM call's tiles sit in its conversation,
+  // a channel call's on its stage.
+  const callChannelId = useCallStore((s) => s.channelId);
+  const callRemoteName = useCallStore(
+    (s) => s.remoteUser?.display_name || s.remoteUser?.username || null,
+  );
+  const callStageOnScreen = callActive
+    ? !!activeChannelId && activeChannelId === callChannelId
+    : !!showVoiceAsMain && voiceState.joined;
   const shouldAutoJoinVoice =
     !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
   const persistentVoiceViewIdentity = getPersistentVoiceViewIdentity({
@@ -1024,10 +1036,13 @@ export default function ChatPage() {
 
     if (!activeServerId) {
       return (
-        <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
-          <div className="p-4 text-ui-sm text-rm-text-muted">
-            Select a server to get started
-          </div>
+        <div className="flex h-full flex-col bg-ply-1">
+          <EmptyState
+            size="sm"
+            className="flex-1"
+            title="No server open"
+            description="Pick a server from the rail, or open Direct messages."
+          />
         </div>
       );
     }
@@ -1095,7 +1110,7 @@ export default function ChatPage() {
 
   return (
     <div
-      className="flex h-full flex-col overflow-hidden bg-rm-bg-primary"
+      className="flex h-full flex-col overflow-hidden bg-ply-0"
       data-app-layout="true"
     >
       {!isTauri() && <WebAppTitleBar />}
@@ -1103,138 +1118,99 @@ export default function ChatPage() {
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}
       >
-        <div className="hidden h-full shrink-0 flex-col bg-rm-bg-secondary md:flex md:w-[var(--left-nav-width)]">
-          <div className="flex min-h-0 flex-1">
-            {/* Desktop server icon strip */}
-            <div className="z-10 hidden w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none md:flex">
-              <ServerList
-                servers={servers}
-                activeServerId={activeServerId}
-                activeChannelId={activeChannelId}
-                onSelect={handleSelectServer}
-                channels={railChannels}
-                channelsByServerId={channelsByServerId}
-                readStates={readStates}
-                lastMessageAt={lastMessageAt}
-                voiceChannelStates={voiceChannelStates}
-                localVoiceServerId={
-                  voiceState.joined ? voiceState.serverId : null
+        {/* Desktop shell grid (talk-tree-spec §3): a 60px rail on ply-0 that
+            runs the full height, then the 264px tree panel on ply-1 with a
+            1px seam on its right. The account row (and the call strip above
+            it during a call) docks at the bottom of the tree panel. */}
+        <div className="hidden h-full shrink-0 md:flex md:w-[var(--left-nav-width)]">
+          <div className="z-10 hidden w-15 shrink-0 flex-col items-center overflow-y-auto bg-ply-0 scrollbar-none md:flex">
+            <ServerList
+              servers={servers}
+              activeServerId={activeServerId}
+              activeChannelId={activeChannelId}
+              onSelect={handleSelectServer}
+              channels={railChannels}
+              channelsByServerId={channelsByServerId}
+              readStates={readStates}
+              lastMessageAt={lastMessageAt}
+              voiceChannelStates={voiceChannelStates}
+              localVoiceServerId={
+                voiceState.joined ? voiceState.serverId : null
+              }
+              serverMentionCounts={serverMentionCounts}
+              homeBadgeCount={homeBadgeCount}
+              unreadDms={unreadDms}
+              onSelectDm={onSelectDm}
+              onMarkServerRead={(serverId) => {
+                // Mark all channels in this server as read
+                const serverChannels = channels.filter(
+                  (c) => c.server_id === serverId,
+                );
+                for (const ch of serverChannels) {
+                  const lastMsg = lastMessageAt[ch.id];
+                  const lastRead = readStates[ch.id];
+                  if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                    markChannelRead(ch.id);
+                  }
                 }
-                serverMentionCounts={serverMentionCounts}
-                homeBadgeCount={homeBadgeCount}
-                unreadDms={unreadDms}
-                onSelectDm={onSelectDm}
-                onMarkServerRead={(serverId) => {
-                  // Mark all channels in this server as read
-                  const serverChannels = channels.filter(
-                    (c) => c.server_id === serverId,
-                  );
-                  for (const ch of serverChannels) {
-                    const lastMsg = lastMessageAt[ch.id];
-                    const lastRead = readStates[ch.id];
-                    if (lastMsg && (!lastRead || lastMsg > lastRead)) {
-                      markChannelRead(ch.id);
-                    }
+                // Mark server notifications as read
+                const serverNotifIds = collectUnreadNotificationIds(
+                  notifications,
+                  (notification) => notification.server_id === serverId,
+                );
+                if (serverNotifIds.length > 0) {
+                  markNotificationsRead(serverNotifIds);
+                }
+              }}
+              onMarkAllRead={() => {
+                markNotificationsRead();
+                // Mark all channels as read
+                for (const ch of channels) {
+                  const lastMsg = lastMessageAt[ch.id];
+                  const lastRead = readStates[ch.id];
+                  if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                    markChannelRead(ch.id);
                   }
-                  // Mark server notifications as read
-                  const serverNotifIds = collectUnreadNotificationIds(
-                    notifications,
-                    (notification) => notification.server_id === serverId,
-                  );
-                  if (serverNotifIds.length > 0) {
-                    markNotificationsRead(serverNotifIds);
+                }
+                for (const dm of dmChannels) {
+                  const lastMsg = lastMessageAt[dm.id];
+                  const lastRead = readStates[dm.id];
+                  if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                    markChannelRead(dm.id);
                   }
-                }}
-                onMarkAllRead={() => {
-                  markNotificationsRead();
-                  // Mark all channels as read
-                  for (const ch of channels) {
-                    const lastMsg = lastMessageAt[ch.id];
-                    const lastRead = readStates[ch.id];
-                    if (lastMsg && (!lastRead || lastMsg > lastRead)) {
-                      markChannelRead(ch.id);
-                    }
-                  }
-                  for (const dm of dmChannels) {
-                    const lastMsg = lastMessageAt[dm.id];
-                    const lastRead = readStates[dm.id];
-                    if (lastMsg && (!lastRead || lastMsg > lastRead)) {
-                      markChannelRead(dm.id);
-                    }
-                  }
-                }}
-              />
-            </div>
-
-            {/* Desktop channel sidebar */}
-            <div
-              className={cn(
-                "relative hidden h-full min-w-0 shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans md:flex md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)]",
-              )}
-            >
-              <div className="min-h-0 flex-1 overflow-hidden">
-                {renderNavigationContent()}
-              </div>
-
-              <button
-                type="button"
-                className={cn(
-                  "group absolute inset-y-0 right-0 z-20 hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
-                  isChannelSidebarResizing && "translate-x-1/2",
-                )}
-                onPointerDown={handleChannelSidebarResizeStart}
-                onKeyDown={handleChannelSidebarResizeKeyDown}
-                role="separator"
-                aria-label="Resize sidebar"
-                aria-orientation="vertical"
-                aria-valuemin={CHANNEL_SIDEBAR_MIN_WIDTH_PX}
-                aria-valuemax={CHANNEL_SIDEBAR_MAX_WIDTH_PX}
-                aria-valuenow={channelSidebarWidth}
-              >
-                <span
-                  className={cn(
-                    // Grows with scaleY, not height (10.2).
-                    "pointer-events-none h-20 w-px origin-center rounded-full transition-[transform,background-color] duration-150 ease-(--rm-ease-out)",
-                    isChannelSidebarResizing
-                      ? "scale-y-140 bg-rm-accent-ink"
-                      : "bg-rm-border-strong pointer-fine:group-hover:scale-y-140 pointer-fine:group-hover:bg-rm-text-ghost group-focus-visible:scale-y-140 group-focus-visible:bg-rm-accent-ink",
-                  )}
-                />
-              </button>
-            </div>
+                }
+              }}
+            />
           </div>
 
-          <div className="shrink-0 bg-rm-bg-secondary">
-            <UserPanel
-              user={user}
-              serverId={voiceState.serverId ?? activeServerId}
-              serverName={voiceServerName}
-              voiceConnected={voiceState.joined}
-              voiceChannelId={voiceState.channelId}
-              voiceChannelName={voiceChannelName}
-              onVoiceDisconnect={handleVoiceDisconnect}
-              onVoiceNavigate={handleVoiceNavigate}
-              isScreenSharing={localStreamState?.isScreenSharing}
-              isStreamingAudio={localStreamState?.isStreamingAudio}
-              screenQuality={localStreamState?.screenQuality}
-              currentScreenSource={localStreamState?.currentScreenSource}
-              availableQualities={localStreamState?.availableQualities}
-              onStopStreaming={() => localStreamState?.toggleScreenShare()}
-              onToggleStreamAudio={() => localStreamState?.toggleStreamAudio()}
-              onChangeStreamSource={() => {
-                localStreamState?.openScreenShareModal();
-              }}
-              onStartScreenShare={({
-                quality,
-                withAudio,
-                sourceId,
-                captureId,
-                sourceName,
-                sourceKind,
-                sourceAppName,
-                sourceIcon,
-              }) =>
-                localStreamState?.toggleScreenShare({
+          <div className="relative hidden h-full min-w-0 shrink-0 flex-col overflow-hidden border-r border-line bg-ply-1 md:flex md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)]">
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {renderNavigationContent()}
+            </div>
+
+            <div className="shrink-0">
+              <UserPanel
+                user={user}
+                serverId={voiceState.serverId ?? activeServerId}
+                serverName={voiceServerName}
+                voiceConnected={voiceState.joined}
+                voiceChannelId={voiceState.channelId}
+                voiceChannelName={voiceChannelName}
+                onVoiceDisconnect={handleVoiceDisconnect}
+                onVoiceNavigate={handleVoiceNavigate}
+                isScreenSharing={localStreamState?.isScreenSharing}
+                isStreamingAudio={localStreamState?.isStreamingAudio}
+                screenQuality={localStreamState?.screenQuality}
+                currentScreenSource={localStreamState?.currentScreenSource}
+                availableQualities={localStreamState?.availableQualities}
+                onStopStreaming={() => localStreamState?.toggleScreenShare()}
+                onToggleStreamAudio={() =>
+                  localStreamState?.toggleStreamAudio()
+                }
+                onChangeStreamSource={() => {
+                  localStreamState?.openScreenShareModal();
+                }}
+                onStartScreenShare={({
                   quality,
                   withAudio,
                   sourceId,
@@ -1243,36 +1219,74 @@ export default function ChatPage() {
                   sourceKind,
                   sourceAppName,
                   sourceIcon,
-                  changeSource: true,
-                })
-              }
-              onStreamQualityChange={(q: string) =>
-                localStreamState?.toggleScreenShare({ quality: q })
-              }
-              isCameraActive={localStreamState?.isCameraActive}
-              hasCamera={localStreamState?.hasCamera}
-              hasMicrophone={localStreamState?.hasMicrophone}
-              onToggleCamera={() => localStreamState?.toggleCamera()}
-              sfu={localStreamState?.sfu ?? null}
-              gridItems={localStreamState?.gridItems ?? []}
-              watchersByStreamer={localStreamState?.watchersByStreamer ?? {}}
-              spatialAudioState={localStreamState?.spatialAudioState}
-              onUpdateSpatialAudioState={
-                localStreamState?.updateSharedSpatialAudioState
-              }
-              voiceSettingsUserId={localStreamState?.settingsUserId}
-              roomSlug={localStreamState?.roomSlug}
-              voiceSessionId={localStreamState?.voiceSessionId}
-              onOpenActivities={() => setVoiceAppsModal("activities")}
-              sidebarWidthPx={channelSidebarWidth}
-            />
-            <div
-              className="shrink-0 bg-rm-bg-secondary"
-              style={{
-                height: "calc(8px + var(--safe-area-bottom, 0px))",
-              }}
-              aria-hidden="true"
-            />
+                }) =>
+                  localStreamState?.toggleScreenShare({
+                    quality,
+                    withAudio,
+                    sourceId,
+                    captureId,
+                    sourceName,
+                    sourceKind,
+                    sourceAppName,
+                    sourceIcon,
+                    changeSource: true,
+                  })
+                }
+                onStreamQualityChange={(q: string) =>
+                  localStreamState?.toggleScreenShare({ quality: q })
+                }
+                isCameraActive={localStreamState?.isCameraActive}
+                hasCamera={localStreamState?.hasCamera}
+                hasMicrophone={localStreamState?.hasMicrophone}
+                onToggleCamera={() => localStreamState?.toggleCamera()}
+                sfu={localStreamState?.sfu ?? null}
+                gridItems={localStreamState?.gridItems ?? []}
+                watchersByStreamer={localStreamState?.watchersByStreamer ?? {}}
+                spatialAudioState={localStreamState?.spatialAudioState}
+                onUpdateSpatialAudioState={
+                  localStreamState?.updateSharedSpatialAudioState
+                }
+                voiceSettingsUserId={localStreamState?.settingsUserId}
+                roomSlug={localStreamState?.roomSlug}
+                voiceSessionId={localStreamState?.voiceSessionId}
+                onOpenActivities={() => setVoiceAppsModal("activities")}
+                sidebarWidthPx={channelSidebarWidth}
+                stageOnScreen={callStageOnScreen}
+              />
+              <div
+                className="shrink-0"
+                style={{
+                  height: "calc(8px + var(--safe-area-bottom, 0px))",
+                }}
+                aria-hidden="true"
+              />
+            </div>
+
+            <button
+              type="button"
+              className={cn(
+                "group absolute inset-y-0 right-0 z-20 hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
+                isChannelSidebarResizing && "translate-x-1/2",
+              )}
+              onPointerDown={handleChannelSidebarResizeStart}
+              onKeyDown={handleChannelSidebarResizeKeyDown}
+              role="separator"
+              aria-label="Resize sidebar"
+              aria-orientation="vertical"
+              aria-valuemin={CHANNEL_SIDEBAR_MIN_WIDTH_PX}
+              aria-valuemax={CHANNEL_SIDEBAR_MAX_WIDTH_PX}
+              aria-valuenow={channelSidebarWidth}
+            >
+              <span
+                className={cn(
+                  // Grows with scaleY, not height (10.2).
+                  "pointer-events-none h-20 w-px origin-center rounded-full transition-[scale,background-color] duration-(--dur-2) ease-out",
+                  isChannelSidebarResizing
+                    ? "scale-y-140 bg-accent-ink"
+                    : "bg-line-strong pointer-fine:group-hover:scale-y-140 pointer-fine:group-hover:bg-ink-3 group-focus-visible:scale-y-140 group-focus-visible:bg-accent-ink",
+                )}
+              />
+            </button>
           </div>
         </div>
 
@@ -1315,14 +1329,19 @@ export default function ChatPage() {
             />
           }
           current={
-            <div className="h-full min-h-0 overflow-hidden bg-rm-bg-secondary">
+            <div className="h-full min-h-0 overflow-hidden bg-ply-1">
               {renderNavigationContent()}
             </div>
           }
         />
 
         {/* Main content */}
-        <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative chat-main-content">
+        <div className="flex-1 flex flex-col min-w-0 bg-ply-0 overflow-hidden relative chat-main-content">
+          {/* Connection drops (chat link, DM call): one strip in the flow,
+              never a full-screen overlay (talk-tree-spec §3 rule 4). It
+              renders in ChatArea's slot under the header; here only for a
+              view without one. On the voice stage its slot carries both. */}
+          <AppConnectionBanner stageOnScreen={!!showVoiceAsMain} />
           {/* Unified Voice Session: survives navigation by staying mounted (hidden when not active) */}
           {(voiceState.joined || showVoiceAsMain) && (
             <div
@@ -1690,6 +1709,15 @@ export default function ChatPage() {
                   "call")
             }
             currentType={callActive ? "call" : "voice"}
+            currentName={
+              callActive
+                ? callRemoteName
+                  ? `the call with ${callRemoteName}`
+                  : undefined
+                : voiceState.joined
+                  ? (voiceState.channelName ?? undefined)
+                  : undefined
+            }
             onConfirm={handleSwitchConfirm}
             onCancel={handleSwitchCancel}
           />

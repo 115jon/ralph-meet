@@ -35,7 +35,9 @@ export function MessageInputPlaceholder({
   return (
     <InlineEmojiText
       text={text}
-      className={cn("block whitespace-pre-wrap wrap-break-word", className)}
+      // One line, ellipsised: a long channel or person name must never wrap
+      // the prompt past the 48px row (it was clipped mid-glyph on phones).
+      className={cn("block truncate", className)}
     />
   );
 }

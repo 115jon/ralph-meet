@@ -17,9 +17,9 @@ import { AudioCompatibilityHint } from "../AudioCompatibilityHint";
 import { InputSensitivityMeter } from "../InputSensitivityMeter";
 import CameraCard from "./CameraCard";
 import {
-  RadioList,
   RangeControl,
   RowError,
+  SegmentedField,
   SettingsCard,
   SettingsRow,
   SettingsSelect,
@@ -83,6 +83,11 @@ export function useVoiceSettingsForSettings(override?: string | null) {
   };
 }
 
+/** "Default - Shure MV7" -> "Shure MV7" (also "Communications - …"). */
+export function stripDefaultPrefix(label: string): string {
+  return label.replace(/^(default|communications)\s*[-–—]\s*/i, "").trim();
+}
+
 /**
  * Device lists without the entries a browser reports before permission is
  * granted (empty id), which no picker can select, and without "default",
@@ -98,8 +103,18 @@ export function useDeviceOptions() {
       icon: SelectOption["icon"],
     ): SelectOption[] => {
       const defaultDevice = devices.find((d) => d.deviceId === "default");
+      // Browsers name it "Default - Shure MV7 (USB Audio)": show the device's
+      // own name and move "System default" to a meta line.
+      const defaultName = defaultDevice?.label
+        ? stripDefaultPrefix(defaultDevice.label)
+        : "";
       return [
-        { value: "default", label: defaultDevice?.label || fallback, icon },
+        {
+          value: "default",
+          label: defaultName || fallback,
+          meta: defaultName ? "System default" : undefined,
+          icon,
+        },
         ...devices
           .filter((d) => d.deviceId && d.deviceId !== "default")
           .map((device) => ({
@@ -193,7 +208,6 @@ function MicrophoneRows({
           <Button
             type="button"
             variant="secondary"
-            size="sm"
             onClick={() => void mic.rescan()}
           >
             Retry
@@ -216,7 +230,6 @@ function MicrophoneRows({
           {() => (
             <Button
               type="button"
-              size="sm"
               loading={mic.requesting}
               onClick={() => void mic.request()}
             >
@@ -226,12 +239,12 @@ function MicrophoneRows({
           )}
         </SettingsRow>
       ) : null}
-      <SettingsRow id="microphone">
+      <SettingsRow id="microphone" layout="field">
         {(ids) =>
           mic.status === "loading" ? (
             <span
               role="status"
-              className="block h-9 w-full animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none @min-[560px]:w-[260px]"
+              className="block h-12 w-full animate-pulse rounded-[2px] bg-tint-1 motion-reduce:animate-none"
             >
               <span className="sr-only">Loading microphones</span>
             </span>
@@ -276,6 +289,8 @@ export default function VoiceVideoPanel({
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const setInputProfileStore = useVoiceSettingsStore((s) => s.setInputProfile);
   const custom = vSettings.inputProfile === "custom";
+  // Rooms give the camera its own page, so it isn't a section here.
+  const excludeSections = includeCamera ? undefined : ["camera"];
 
   const handleVoiceToggle = (key: string) => {
     updateVoiceSettings((s: any) => {
@@ -348,14 +363,14 @@ export default function VoiceVideoPanel({
 
   return (
     <>
-      <SettingsCard id="input">
+      <SettingsCard id="input" excludeSections={excludeSections}>
         <MicrophoneRows
           value={vSettings.inputDeviceId}
           options={devices.input}
           onSelect={(value) => selectDevice("input", value)}
           renderLabel={renderDeviceLabel}
         />
-        <SettingsRow id="input-volume">
+        <SettingsRow id="input-volume" layout="block">
           {(ids) => (
             <RangeControl
               ids={ids}
@@ -367,9 +382,8 @@ export default function VoiceVideoPanel({
         </SettingsRow>
         <SettingsRow id="input-profile" layout="block">
           {(ids) => (
-            <RadioList
+            <SegmentedField
               ids={ids}
-              name="voice-input-profile"
               value={vSettings.inputProfile}
               options={INPUT_PROFILES}
               onChange={(profile) =>
@@ -382,6 +396,7 @@ export default function VoiceVideoPanel({
 
       <SettingsCard
         id="processing"
+        excludeSections={excludeSections}
         description={
           custom
             ? "Changes apply to your mic right away."
@@ -435,7 +450,7 @@ export default function VoiceVideoPanel({
                     href="https://github.com/xiph/rnnoise"
                     target="_blank"
                     rel="noreferrer"
-                    className="text-rm-accent-ink underline-offset-[3px] pointer-fine:hover:underline"
+                    className="text-accent-ink underline-offset-[3px] pointer-fine:hover:underline"
                   >
                     RNNoise
                     <Icon
@@ -550,8 +565,8 @@ export default function VoiceVideoPanel({
         </SettingsRow>
       </SettingsCard>
 
-      <SettingsCard id="output">
-        <SettingsRow id="speaker">
+      <SettingsCard id="output" excludeSections={excludeSections}>
+        <SettingsRow id="speaker" layout="field">
           {(ids) => (
             <SettingsSelect
               ids={ids}
@@ -563,7 +578,7 @@ export default function VoiceVideoPanel({
             />
           )}
         </SettingsRow>
-        <SettingsRow id="output-volume">
+        <SettingsRow id="output-volume" layout="block">
           {(ids) => (
             <RangeControl
               ids={ids}
@@ -579,7 +594,7 @@ export default function VoiceVideoPanel({
         <CameraCard settingsUserId={settingsUserIdProp} />
       ) : null}
 
-      <SettingsCard id="screen-share">
+      <SettingsCard id="screen-share" excludeSections={excludeSections}>
         <SettingsRow id="stream-preview" layout="inline">
           {(ids) => (
             <SwitchControl

@@ -1,33 +1,44 @@
+import { useEffect, useState } from "react";
+
+import { TypingDots } from "./TypingDots";
+
+/**
+ * The dots stop animating this long after the last typing event, even if the
+ * name stays (see TypingDots for the single-SVG, reduced-motion and
+ * inactive-app handling).
+ */
+const TYPING_ANIMATION_MS = 6000;
+
 export function ChatTypingIndicator({
   typingUsers,
 }: {
   typingUsers: string[];
 }) {
+  // Each typing event yields a new array from the store; the dots run until
+  // six seconds pass without one.
+  const [stoppedFor, setStoppedFor] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (typingUsers.length === 0) return;
+    const timer = setTimeout(
+      () => setStoppedFor(typingUsers),
+      TYPING_ANIMATION_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [typingUsers]);
+
   if (typingUsers.length === 0) return null;
+  const animate = stoppedFor !== typingUsers;
 
   return (
     <div
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className="pointer-events-none flex h-6 min-w-0 items-center gap-2 animate-in fade-in-0 duration-150"
+      className="pointer-events-none flex h-6 min-w-0 items-center gap-2 transition-opacity duration-(--dur-2) ease-out starting:opacity-0"
     >
-      <div role="presentation" className="flex gap-1">
-        <span
-          aria-hidden="true"
-          className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:-300ms] motion-reduce:animate-none"
-        />
-        <span
-          aria-hidden="true"
-          className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:-150ms] motion-reduce:animate-none"
-        />
-        <span
-          aria-hidden="true"
-          className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] motion-reduce:animate-none"
-        />
-      </div>
-      <p className="truncate text-ui-xs text-rm-text-secondary">
-        <span className="font-semibold text-rm-text">
+      <TypingDots animate={animate} />
+      <p className="truncate text-ui-xs text-ink-3">
+        <span className="font-semibold text-ink-2">
           {typingUsers.length <= 3
             ? typingUsers.join(", ")
             : `${typingUsers.length} people`}

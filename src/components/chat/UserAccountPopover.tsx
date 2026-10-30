@@ -1,14 +1,21 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
-import { AvatarImage } from "@/components/chat/AvatarImage";
-import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import {
+  ProfileCard,
+  resolveProfileCardTheme,
+} from "@/components/chat/ProfileCard";
 import {
   UserStatusDot,
   type UserStatus,
 } from "@/components/chat/UserStatusDot";
-import { IconButton } from "@/components/ui/IconButton";
+import { lastInputWasKeyboard } from "@/components/ui/dialog-stack";
 import { Icon } from "@/components/ui/icon";
 import {
   MENU_ICON,
@@ -19,11 +26,6 @@ import {
 } from "@/components/ui/menu";
 import { ResponsivePopover } from "@/components/ui/popover";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { getAuthAssetUrl } from "@/lib/platform";
-import {
-  PROFILE_BANNER_CHIP_STYLE,
-  resolveProfileTheme,
-} from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -44,55 +46,119 @@ const STATUS_OPTIONS = [
   { value: "online" as const, label: "Online" },
   { value: "idle" as const, label: "Idle" },
   { value: "dnd" as const, label: "Do not disturb" },
-  {
-    value: "offline" as const,
-    label: "Invisible",
-  },
+  { value: "offline" as const, label: "Invisible" },
 ];
 
 const CUSTOM_STATUS_PLACEHOLDER = "Set a custom status";
 
-/** Menu rows on the profile surface keep the profile's own ink. */
-const ROW = cn(
-  MENU_ITEM,
-  MENU_ITEM_DEFAULT,
-  "text-[color:var(--rm-profile-custom-text)]",
-);
-const ROW_ICON = cn(
-  MENU_ICON,
-  "flex size-4 items-center justify-center text-[color:var(--rm-profile-custom-muted)]",
-);
+const ROW = cn(MENU_ITEM, MENU_ITEM_DEFAULT);
 
-function ActionRow({
+/**
+ * Menu keyboard model for the rows (role="menu"): arrows, Home/End and
+ * typeahead move focus between items; Tab leaves the menu.
+ */
+function useMenuKeys({
+  onForward,
+  onBack,
+}: {
+  /** ArrowRight on an item with a submenu view. */
+  onForward?: (item: HTMLElement) => boolean;
+  /** ArrowLeft (back out of a submenu view). */
+  onBack?: () => void;
+}) {
+  const typeahead = useRef({ text: "", at: 0 });
+  return (event: KeyboardEvent<HTMLElement>) => {
+    const items = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>('[role^="menuitem"]'),
+    );
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    let next = -1;
+    if (event.key === "ArrowDown") next = (current + 1) % items.length;
+    else if (event.key === "ArrowUp")
+      next = (current - 1 + items.length) % items.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    else if (event.key === "ArrowRight" && current >= 0 && onForward) {
+      if (onForward(items[current]!)) event.preventDefault();
+      return;
+    } else if (event.key === "ArrowLeft" && onBack) {
+      event.preventDefault();
+      onBack();
+      return;
+    } else if (
+      event.key.length === 1 &&
+      event.key.trim() &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      const now = Date.now();
+      const state = typeahead.current;
+      state.text = now - state.at > 500 ? event.key : state.text + event.key;
+      state.at = now;
+      const query = state.text.toLowerCase();
+      const ordered = [
+        ...items.slice(current + 1),
+        ...items.slice(0, current + 1),
+      ];
+      const match = ordered.find((item) =>
+        (item.textContent ?? "").trim().toLowerCase().startsWith(query),
+      );
+      if (match) next = items.indexOf(match);
+    }
+    if (next >= 0) {
+      event.preventDefault();
+      items[next]!.focus();
+    }
+  };
+}
+
+function MenuRow({
   icon,
   label,
   onClick,
   trailing,
   buttonRef,
+  first = false,
+  ...props
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
   trailing?: ReactNode;
   buttonRef?: React.Ref<HTMLButtonElement>;
-}) {
+  /** The roving tab stop. */
+  first?: boolean;
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">) {
   return (
-    <button ref={buttonRef} type="button" onClick={onClick} className={ROW}>
-      <span aria-hidden="true" className={ROW_ICON}>
+    <button
+      ref={buttonRef}
+      type="button"
+      role="menuitem"
+      tabIndex={first ? 0 : -1}
+      onClick={onClick}
+      className={ROW}
+      {...props}
+    >
+      <span aria-hidden="true" className={MENU_ICON}>
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {trailing ? (
-        <span
-          aria-hidden="true"
-          className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
-        >
+        <span aria-hidden="true" className="shrink-0 text-ink-3">
           {trailing}
         </span>
       ) : null}
     </button>
   );
 }
+
+/** The two stacked views share one grid cell, so the height never jumps. */
+const VIEW =
+  "col-start-1 row-start-1 flex flex-col transition-[opacity,translate] ease-out";
+const VIEW_ON = "opacity-100 translate-x-0 duration-(--dur-2) delay-75";
+const VIEW_OFF = "pointer-events-none opacity-0 duration-75";
 
 export default function UserAccountPopover({
   user,
@@ -106,7 +172,12 @@ export default function UserAccountPopover({
   const currentUser = useChatStore((state) =>
     state.user?.id === user.id ? state.user : null,
   );
-  const profileDisplay = currentUser?.avatar_display ?? user.avatar_display;
+  const profileUser = currentUser
+    ? {
+        ...user,
+        avatar_display: currentUser.avatar_display ?? user.avatar_display,
+      }
+    : user;
   const [showStatusMenu, setShowStatusMenu] = useState(
     initialView === "status",
   );
@@ -114,18 +185,20 @@ export default function UserAccountPopover({
   const [customStatusInput, setCustomStatusInput] = useState(
     user.custom_status || "",
   );
+  // Read once, at open: keyboard opens focus the first row.
+  const [openedByKeyboard] = useState(() => lastInputWasKeyboard());
   const statusRowRef = useRef<HTMLButtonElement>(null);
   const statusBackRef = useRef<HTMLButtonElement>(null);
   const firstRowRef = useRef<HTMLButtonElement>(null);
   const viewChangedRef = useRef(false);
-  const statusLabelId = useId();
 
   const currentStatus = user.status ?? "online";
   const displayName = user.display_name?.trim() || user.username;
-  const profileTheme = resolveProfileTheme(user);
+  const theme = resolveProfileCardTheme(user);
   const currentStatusLabel =
     STATUS_OPTIONS.find((option) => option.value === currentStatus)?.label ??
     "Online";
+  const customStatus = user.custom_status?.trim() ?? "";
 
   useEffect(() => {
     if (!isEditingCustomStatus) {
@@ -137,7 +210,7 @@ export default function UserAccountPopover({
     }
   }, [user.custom_status, isEditingCustomStatus]);
 
-  // Keyboard users land on the view they just switched to.
+  // Focus follows the view it just switched to.
   useEffect(() => {
     if (!viewChangedRef.current) return;
     viewChangedRef.current = false;
@@ -149,6 +222,15 @@ export default function UserAccountPopover({
     setShowStatusMenu(status);
   };
 
+  const mainKeys = useMenuKeys({
+    onForward: (item) => {
+      if (item !== statusRowRef.current) return false;
+      switchView(true);
+      return true;
+    },
+  });
+  const statusKeys = useMenuKeys({ onBack: () => switchView(false) });
+
   const handleCustomStatusSave = () => {
     const value = customStatusInput.trim();
 
@@ -158,6 +240,55 @@ export default function UserAccountPopover({
 
     setIsEditingCustomStatus(false);
   };
+
+  // The custom status sits under the name as a 13px row (overlays §4).
+  const statusLine = isEditingCustomStatus ? (
+    <input
+      type="text"
+      className="h-8 w-full rounded-md border border-line-field bg-ply-2 px-2.5 text-ui-sm text-ink-1 outline-none placeholder:text-ink-3 focus:border-(--focus)"
+      aria-label="Custom status"
+      value={customStatusInput}
+      onChange={(event) => setCustomStatusInput(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") handleCustomStatusSave();
+        if (event.key === "Escape") {
+          // Cancel the edit; the popover stays open.
+          event.stopPropagation();
+          setCustomStatusInput(user.custom_status || "");
+          setIsEditingCustomStatus(false);
+        }
+      }}
+      onBlur={handleCustomStatusSave}
+      placeholder={CUSTOM_STATUS_PLACEHOLDER}
+      maxLength={128}
+      autoFocus
+    />
+  ) : (
+    <button
+      type="button"
+      aria-label="Edit custom status"
+      onClick={() => setIsEditingCustomStatus(true)}
+      className="-mx-1.5 flex h-7 min-w-0 items-center gap-1.5 self-start rounded-sm px-1.5 text-left text-ui-sm outline-none pointer-fine:hover:bg-tint-1 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-(--focus)"
+    >
+      <Icon
+        name={customStatus ? "emoji" : "add"}
+        size="sm"
+        className="shrink-0 text-ink-3"
+      />
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          customStatus ? "text-ink-1" : "text-ink-3",
+        )}
+      >
+        {customStatus ? (
+          <InlineEmojiText text={customStatus} />
+        ) : (
+          CUSTOM_STATUS_PLACEHOLDER
+        )}
+      </span>
+    </button>
+  );
 
   return (
     <ResponsivePopover
@@ -169,231 +300,135 @@ export default function UserAccountPopover({
       anchor={anchorEl}
       side="top"
       align="start"
-      variant="rich"
-      // Land on the first menu row, not the custom-status pill above it.
-      initialFocus={showStatusMenu ? statusBackRef : firstRowRef}
-      // The profile surface is the panel: it carries the radius, border and
+      sideOffset={8}
+      collisionPadding={12}
+      variant="panel"
+      // Pointer opens land on the surface (no ring); keyboard opens on the
+      // first row of the current view.
+      initialFocus={() => {
+        const row = (showStatusMenu ? statusBackRef : firstRowRef).current;
+        return openedByKeyboard
+          ? row
+          : (row?.closest<HTMLElement>('[data-slot="popover-content"]') ??
+              true);
+      }}
+      // The profile card is the panel: it carries the radius, line and
       // shadow, and its frame art may overhang the edge.
-      className="overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
+      className="overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none"
     >
-      <ProfileSurfaceShell
-        variant="popover"
-        display={profileDisplay}
+      <ProfileCard
+        size="popover"
+        user={profileUser}
+        theme={theme}
+        name={displayName}
+        statusLine={statusLine}
         className="w-full"
         surfaceClassName={cn(isMobile && "shadow-none")}
-        style={profileTheme.variables}
+        scrollClassName="max-h-[calc(min(620px,var(--available-height,100dvh))-var(--rm-profile-frame-reserve-y,0px))]"
       >
-        <div className="max-h-[calc(min(620px,var(--available-height,100dvh))-var(--rm-profile-frame-reserve-y,0px))] overflow-y-auto custom-scrollbar">
+        <div className="-mx-2 -mb-2 grid">
+          {/* Main view */}
           <div
-            className="relative h-28 overflow-hidden"
-            style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
+            role="menu"
+            aria-label="Account"
+            aria-orientation="vertical"
+            inert={showStatusMenu}
+            onKeyDown={mainKeys}
+            className={cn(
+              VIEW,
+              showStatusMenu ? VIEW_OFF : VIEW_ON,
+              showStatusMenu && "motion-safe:-translate-x-2",
+            )}
           >
-            <ProfileAssetLayer
-              url={user.banner_url}
-              contentType={user.banner_content_type}
-              alt="Profile banner"
-              className="opacity-95"
+            <MenuRow
+              buttonRef={firstRowRef}
+              first
+              icon={<Icon name="edit" size="sm" />}
+              label="Edit profile"
+              onClick={() => {
+                onClose();
+                onOpenProfileEditor(anchorEl);
+              }}
             />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: "var(--rm-profile-custom-banner-overlay)",
+            <MenuRow
+              buttonRef={statusRowRef}
+              aria-haspopup="menu"
+              aria-expanded={showStatusMenu}
+              icon={
+                <UserStatusDot status={currentStatus} className="size-2.5" />
+              }
+              label={currentStatusLabel}
+              onClick={() => switchView(true)}
+              trailing={<Icon name="chevronRight" size="xs" />}
+            />
+            <div role="separator" className={cn(MENU_SEPARATOR, "mx-1")} />
+            <MenuRow
+              icon={<Icon name="copyId" size="sm" />}
+              label="Copy user ID"
+              onClick={() => {
+                void navigator.clipboard?.writeText(user.id);
+                onClose();
               }}
             />
           </div>
 
-          <div className="relative z-20 px-4 pb-4">
-            <div className="-mt-10 flex items-end gap-3">
-              <div className="relative shrink-0">
-                <div className="relative z-30 flex size-20 items-center justify-center overflow-visible rounded-full border-4 border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-ui-xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
-                  {user.avatar_url ? (
-                    <AvatarImage
-                      src={getAuthAssetUrl(user.avatar_url)}
-                      alt={displayName}
-                      display={profileDisplay}
-                    />
-                  ) : (
-                    displayName[0]?.toUpperCase()
-                  )}
-                </div>
-                <div className="absolute right-0.5 bottom-0.5 z-30 flex size-5 items-center justify-center rounded-full border-4 border-rm-bg-elevated bg-rm-bg-elevated">
-                  <UserStatusDot status={currentStatus} className="size-full" />
-                </div>
-              </div>
-
-              <div className="mb-6 min-w-0 flex-1 pb-1">
-                {isEditingCustomStatus ? (
-                  <input
-                    type="text"
-                    className="h-9 w-full rounded-md border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-ui-sm text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                    aria-label="Custom status"
-                    value={customStatusInput}
-                    onChange={(event) =>
-                      setCustomStatusInput(event.target.value)
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") handleCustomStatusSave();
-                      if (event.key === "Escape") {
-                        // Cancel the edit; the popover stays open.
-                        event.stopPropagation();
-                        setCustomStatusInput(user.custom_status || "");
-                        setIsEditingCustomStatus(false);
-                      }
-                    }}
-                    onBlur={handleCustomStatusSave}
-                    placeholder={CUSTOM_STATUS_PLACEHOLDER}
-                    maxLength={128}
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] px-3 py-1.5 text-left transition-opacity pointer-fine:hover:opacity-90 outline-none"
-                    style={PROFILE_BANNER_CHIP_STYLE}
-                    aria-label="Edit custom status"
-                    onClick={() => setIsEditingCustomStatus(true)}
-                  >
-                    <Icon
-                      name="add"
-                      size="sm"
-                      className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
-                    />
-                    <span
-                      className={cn(
-                        "truncate text-ui-sm font-medium",
-                        user.custom_status
-                          ? "text-[color:var(--rm-profile-custom-text)]"
-                          : "text-[color:var(--rm-profile-custom-muted)]",
-                      )}
-                    >
-                      {user.custom_status || CUSTOM_STATUS_PLACEHOLDER}
-                    </span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <ProfileDisplayName
-                text={displayName}
-                displayNameStyle={user.display_name_style}
-                className="truncate text-ui-lg font-semibold text-[color:var(--rm-profile-custom-text)]"
-                backgroundColor={profileTheme.backgroundColor}
-                readableFallbackColor={profileTheme.textColor}
-              />
-              <p className="mt-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-                @{user.username}
-              </p>
-            </div>
-
-            <div className="-mx-2 mt-4 flex flex-col">
-              {showStatusMenu ? (
-                <>
-                  <div className="flex items-center gap-1 px-1 pb-1">
-                    <IconButton
-                      ref={statusBackRef}
-                      icon="chevronLeft"
-                      size="xs"
-                      variant="muted"
-                      aria-label="Back to account options"
-                      onClick={() => switchView(false)}
-                      className="text-[color:var(--rm-profile-custom-muted)] pointer-fine:hover:text-[color:var(--rm-profile-custom-text)]"
-                    />
-                    <span
-                      id={statusLabelId}
-                      className={cn(
-                        MENU_LABEL,
-                        "px-1 pt-0 pb-0 text-[color:var(--rm-profile-custom-muted)]",
-                      )}
-                    >
-                      Status
-                    </span>
-                  </div>
-                  <div
-                    role="radiogroup"
-                    aria-labelledby={statusLabelId}
-                    className="flex flex-col"
-                  >
-                    {STATUS_OPTIONS.map((option) => {
-                      const selected = currentStatus === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          role="radio"
-                          aria-checked={selected}
-                          // Selected (14.5): tint + weight, plus the check.
-                          className={cn(
-                            ROW,
-                            selected &&
-                              "bg-[var(--rm-profile-custom-card-bg-strong)] font-semibold",
-                          )}
-                          onClick={() => {
-                            updateStatus(option.value, user.custom_status);
-                            switchView(false);
-                          }}
-                        >
-                          <span aria-hidden="true" className={ROW_ICON}>
-                            <UserStatusDot
-                              status={option.value}
-                              className="size-3"
-                            />
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">
-                            {option.label}
-                          </span>
-                          {selected ? (
-                            <Icon name="check" size="sm" className="shrink-0" />
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <ActionRow
-                    buttonRef={firstRowRef}
-                    icon={<Icon name="edit" size="sm" />}
-                    label="Edit profile"
-                    onClick={() => {
-                      onClose();
-                      onOpenProfileEditor(anchorEl);
-                    }}
-                  />
-                  <ActionRow
-                    buttonRef={statusRowRef}
-                    icon={
-                      <UserStatusDot
-                        status={currentStatus}
-                        className="size-3"
-                      />
-                    }
-                    label={currentStatusLabel}
-                    onClick={() => switchView(true)}
-                    trailing={<Icon name="chevronRight" size="xs" />}
-                  />
-                  <div
-                    role="separator"
-                    className={cn(
-                      MENU_SEPARATOR,
-                      "mx-2 bg-[color:var(--rm-profile-custom-card-border)]",
-                    )}
-                  />
-                  <ActionRow
-                    icon={<Icon name="copy" size="sm" />}
-                    label="Copy user ID"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(user.id);
-                      onClose();
-                    }}
-                  />
-                </>
-              )}
-            </div>
+          {/* Status view */}
+          <div
+            role="menu"
+            aria-label="Status"
+            aria-orientation="vertical"
+            inert={!showStatusMenu}
+            onKeyDown={statusKeys}
+            className={cn(
+              VIEW,
+              showStatusMenu ? VIEW_ON : VIEW_OFF,
+              !showStatusMenu && "motion-safe:translate-x-2",
+            )}
+          >
+            <button
+              ref={statusBackRef}
+              type="button"
+              role="menuitem"
+              tabIndex={0}
+              aria-label="Back to account options"
+              onClick={() => switchView(false)}
+              className={cn(ROW, "text-ink-2")}
+            >
+              <span aria-hidden="true" className={MENU_ICON}>
+                <Icon name="chevronLeft" size="sm" />
+              </span>
+              <span className={cn(MENU_LABEL, "p-0 text-ink-2")}>Status</span>
+            </button>
+            {STATUS_OPTIONS.map((option) => {
+              const selected = currentStatus === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="menuitemradio"
+                  tabIndex={-1}
+                  aria-checked={selected}
+                  className={cn(ROW, selected && "bg-tint-1")}
+                  onClick={() => {
+                    updateStatus(option.value, user.custom_status);
+                    switchView(false);
+                  }}
+                >
+                  <span aria-hidden="true" className={MENU_ICON}>
+                    <UserStatusDot status={option.value} className="size-2.5" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {option.label}
+                  </span>
+                  {selected ? (
+                    <Icon name="check" size="sm" className="shrink-0" />
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
-      </ProfileSurfaceShell>
+      </ProfileCard>
     </ResponsivePopover>
   );
 }

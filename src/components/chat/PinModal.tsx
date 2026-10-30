@@ -1,6 +1,5 @@
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
-import { getAuthAssetUrl } from "@/lib/platform";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -11,14 +10,9 @@ import {
 } from "@/components/ui/responsive-dialog";
 import type { Message } from "@/lib/types";
 
-import { isPlayableVideo } from "@/lib/media";
 import React from "react";
-import { AvatarImage } from "./AvatarImage";
-import { ImageGrid } from "./ImageGrid";
 import InlineEmojiText from "./InlineEmojiText";
-import { MarkdownRenderer } from "./MarkdownRenderer";
-import { UserDisplayName } from "./UserDisplayName";
-import VideoAttachment from "./VideoAttachment";
+import { MessagePreviewCard } from "./MessagePreviewCard";
 
 interface PinModalProps {
   isOpen: boolean;
@@ -29,6 +23,12 @@ interface PinModalProps {
   channelName: string;
 }
 
+/**
+ * Confirm for pinning or unpinning a message. Both are reversible, so the
+ * confirm is the primary button for pin and the soft `destructive` tint for
+ * unpin; solid `danger` is kept for irreversible deletes. Shift on the unpin
+ * action skips this; the caller owns that bypass.
+ */
 export const PinModal: React.FC<PinModalProps> = ({
   isOpen,
   onClose,
@@ -40,123 +40,53 @@ export const PinModal: React.FC<PinModalProps> = ({
   if (!message) return null;
 
   const isPin = mode === "pin";
-  const authorDisplayName = getDisplayName(message.author);
-  const imageAttachments: typeof message.attachments = [];
-  const videoAttachments: typeof message.attachments = [];
-
-  for (const attachment of message.attachments ?? []) {
-    if (attachment.content_type?.startsWith("image/")) {
-      imageAttachments.push(attachment);
-      continue;
-    }
-    if (isPlayableVideo(attachment.content_type)) {
-      videoAttachments.push(attachment);
-    }
-  }
 
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ResponsiveDialogContent className="md:max-w-sm">
+      <ResponsiveDialogContent size="sm">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>
-            {isPin ? "Pin It. Pin It Good." : "Unpin message"}
+            {isPin ? "Pin message" : "Unpin message"}
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             {isPin ? (
               <InlineEmojiText
-                text={`Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`}
+                text={`Pin this message to #${channelName}. Everyone in the channel can find it in Pinned messages.`}
               />
             ) : (
-              "You sure you want to remove this pinned message?"
+              <InlineEmojiText
+                text={`Remove this message from the pins in #${channelName}.`}
+              />
             )}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        {/* Message preview */}
-        <div className="rounded-lg border border-rm-border p-3">
-          <div className="flex gap-3">
-            <div className="relative flex size-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-tint-2 text-ui-sm font-semibold text-rm-text-secondary">
-              {message.author?.avatar_url ? (
-                <AvatarImage
-                  src={getAuthAssetUrl(message.author.avatar_url)}
-                  alt={authorDisplayName}
-                  display={message.author.avatar_display}
-                />
-              ) : (
-                getDisplayInitial(message.author)
-              )}
-            </div>
-            <div className="flex min-w-0 flex-col">
-              <div className="flex items-center gap-2">
-                <UserDisplayName
-                  user={message.author}
-                  className="block truncate text-ui-sm font-semibold text-rm-text"
-                />
-                <span className="text-ui-2xs font-medium text-rm-text-muted">
-                  {new Date(message.created_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-              <div className="text-ui-sm leading-relaxed wrap-break-word text-rm-text-secondary">
-                <MarkdownRenderer content={message.content} />
-                {message.updated_at && (
-                  <span className="ml-1 text-ui-2xs text-rm-text-muted">
-                    (edited)
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {message.attachments && message.attachments.length > 0 && (
-            <div className="mt-3 space-y-2 pl-13">
-              {imageAttachments.length > 0 && (
-                <ImageGrid
-                  attachments={imageAttachments}
-                  username={message.author?.username}
-                  displayName={message.author?.display_name}
-                  avatarUrl={message.author?.avatar_url}
-                  avatarDisplay={message.author?.avatar_display}
-                  createdAt={message.created_at}
-                />
-              )}
-              {videoAttachments.map((att) => (
-                <VideoAttachment
-                  key={att.id}
-                  src={att.url || `/api/${att.file_key}`}
-                  filename={att.filename}
-                  maxWidth={350}
-                  maxHeight={200}
-                />
-              ))}
-            </div>
-          )}
+        <div
+          inert
+          aria-hidden="true"
+          className="pointer-events-none select-none"
+        >
+          <MessagePreviewCard message={message} />
         </div>
 
         {!isPin && (
-          <p className="text-ui-xs text-rm-text-secondary">
-            Protip: you can hold down{" "}
-            <span className="font-semibold text-rm-text">shift</span> when
-            clicking{" "}
-            <span className="font-semibold text-rm-text">unpin message</span> to
-            bypass this confirmation entirely.
+          <p className="text-ui-xs text-pretty text-ink-3">
+            Hold <Kbd>Shift</Kbd> when you click Unpin to skip this.
           </p>
         )}
 
         <ResponsiveDialogFooter>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button
-            variant={isPin ? "default" : "destructive"}
+            variant={isPin ? "primary" : "destructive"}
             onClick={() => {
               onConfirm();
               onClose();
             }}
           >
-            {isPin ? "Oh yeah. Pin it" : "Remove it please!"}
+            {isPin ? "Pin" : "Unpin"}
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

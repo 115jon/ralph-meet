@@ -1,6 +1,7 @@
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { Button, Spinner } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { LedLabel, type LedState } from "@/components/ui/led";
 import { Tabs, tabId } from "@/components/ui/tabs";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
@@ -8,19 +9,19 @@ import {
   MEDIA_CONTENT_FILTER_OPTIONS,
   type MediaContentFilter,
 } from "@/lib/media-content-filter";
-import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useUser } from "@kova/react";
 import { useCallback, useEffect, useId, useState } from "react";
 import {
   ConfirmStrip,
-  RadioList,
   RowError,
+  SegmentedField,
   SettingsCard,
   SettingsRow,
   useConfirm,
 } from "./primitives";
+import { isSessionEnded, RecoverButton } from "./session-ended";
 
 /* ------------------------------------------------------------------ */
 /* Media filter                                                         */
@@ -50,6 +51,7 @@ function MediaFilterRow() {
     null,
   );
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSessionEnded, setSaveSessionEnded] = useState(false);
 
   useEffect(() => {
     setCurrentUser(settingsUserId);
@@ -74,6 +76,7 @@ function MediaFilterRow() {
 
     const previousFilter = mediaSafetySettings.contentFilter;
     setSaveError(null);
+    setSaveSessionEnded(false);
     setSavingFilter(nextFilter);
     updateMediaSafetySettings({ contentFilter: nextFilter }, settingsUserId);
 
@@ -96,6 +99,7 @@ function MediaFilterRow() {
       );
       await loadCurrentUser();
       setSaveError(describeApiError(error, "save your media filter"));
+      setSaveSessionEnded(isSessionEnded(error));
     } finally {
       setSavingFilter(null);
     }
@@ -105,12 +109,22 @@ function MediaFilterRow() {
     <SettingsRow
       id="media-filter"
       layout="block"
-      footer={saveError ? <RowError>{saveError}</RowError> : null}
+      footer={
+        saveError ? (
+          <>
+            <RowError>{saveError}</RowError>
+            {saveSessionEnded ? (
+              <div className="mt-2">
+                <RecoverButton sessionEnded onRetry={() => {}} />
+              </div>
+            ) : null}
+          </>
+        ) : null
+      }
     >
       {(ids) => (
-        <RadioList
+        <SegmentedField
           ids={ids}
-          name="media-content-filter"
           value={mediaSafetySettings.contentFilter}
           options={MEDIA_CONTENT_FILTER_OPTIONS.map((option) => ({
             value: option.value,
@@ -171,6 +185,14 @@ const STATUS_LABEL: Record<ShareListItem["status"], string> = {
   expired: "Expired",
 };
 
+/** The LED a link's status lights: only a live link is lit. */
+const STATUS_LED: Record<ShareListItem["status"], LedState> = {
+  active: "live",
+  revoked: "off",
+  deleted: "off",
+  expired: "idle",
+};
+
 const viewsFormat = new Intl.PluralRules(undefined);
 function formatViews(count: number) {
   return viewsFormat.select(count) === "one"
@@ -209,23 +231,18 @@ function ShareItem({
     <li className="py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <p className="text-ui-sm font-medium text-rm-text">
+          <p className="text-[15px] leading-5 font-medium text-ink-1">
             <InlineEmojiText
               text={share.author.display_name ?? share.author.username}
             />
           </p>
-          <p className="mt-0.5 line-clamp-2 text-ui-sm text-rm-text-secondary">
+          <p className="mt-0.5 line-clamp-2 text-ui-sm text-ink-2">
             <InlineEmojiText text={share.content || "(Attachment only)"} />
           </p>
-          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-ui-xs text-rm-text-secondary">
-            <span
-              className={cn(
-                "font-medium",
-                active ? "text-rm-success-ink" : "text-rm-text-secondary",
-              )}
-            >
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-ui-xs text-ink-2">
+            <LedLabel state={STATUS_LED[status]}>
               {STATUS_LABEL[status]}
-            </span>
+            </LedLabel>
             <span>Shared {formatDate(share.created_at)}</span>
             <span>Expires {formatDate(share.expires_at)}</span>
             <span>{formatViews(share.view_count)}</span>
@@ -291,6 +308,7 @@ function SharedMessagesRow() {
   const [shares, setShares] = useState<ShareListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
   const [filter, setFilter] = useState<"current" | "all">("current");
   const tabsId = useId();
   const panelId = useId();
@@ -305,6 +323,7 @@ function SharedMessagesRow() {
         if (!cancelled) {
           setShares([]);
           setError(describeApiError(err, "load your shared messages"));
+          setSessionEnded(isSessionEnded(err));
         }
       })
       .finally(() => {
@@ -387,21 +406,26 @@ function SharedMessagesRow() {
             {loading ? (
               <p
                 role="status"
-                className="flex items-center gap-2 text-ui-sm text-rm-text-secondary"
+                className="flex items-center gap-2 text-ui-sm text-ink-2"
               >
                 <Spinner className="size-4" />
                 Loading shared messages…
               </p>
             ) : error ? (
-              <RowError>{error}</RowError>
+              <div className="flex flex-col items-start gap-2">
+                <RowError className="mt-0 self-stretch">{error}</RowError>
+                {sessionEnded ? (
+                  <RecoverButton sessionEnded onRetry={() => {}} />
+                ) : null}
+              </div>
             ) : visibleShares.length === 0 ? (
-              <p className="text-ui-sm text-rm-text-secondary">
+              <p className="text-ui-sm text-ink-2">
                 {filter === "current"
                   ? "No live links. Share a message from its menu to make one."
                   : "You haven't shared any messages yet."}
               </p>
             ) : (
-              <ul className="divide-y divide-rm-border">
+              <ul className="divide-y divide-line">
                 {visibleShares.map((share) => (
                   <ShareItem key={share.id} share={share} onRevoke={revoke} />
                 ))}
@@ -416,7 +440,7 @@ function SharedMessagesRow() {
 
 function TabCount({ children }: { children: number }) {
   return (
-    <span className="min-w-5 rounded-sm bg-rm-tint-2 px-1.5 text-center text-ui-2xs font-semibold leading-5 tabular-nums text-rm-text-secondary">
+    <span className="min-w-5 rounded-[2px] bg-tint-2 px-1.5 text-center text-num-xs leading-5 font-semibold text-ink-2">
       {children}
     </span>
   );

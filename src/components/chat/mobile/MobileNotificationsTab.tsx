@@ -15,7 +15,7 @@ export function MobileNotificationsTab({
   }, [loadNotifications]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-rm-bg-primary">
+    <div className="flex h-full min-h-0 flex-col bg-ply-0">
       <NotificationInbox variant="page" onNavigate={onNavigate} />
     </div>
   );

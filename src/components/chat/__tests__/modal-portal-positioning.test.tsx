@@ -26,7 +26,7 @@ describe("modal portal positioning", () => {
     cleanup();
   });
 
-  it("renders the avatar picker as a stacked form-width dialog", () => {
+  it("renders the avatar picker as a top-anchored form-width dialog", () => {
     render(
       <AvatarPickerModal
         open
@@ -36,11 +36,12 @@ describe("modal portal positioning", () => {
       />,
     );
     const surface = document.body.querySelector('[data-slot="dialog-content"]');
-    expect(surface?.className).toContain("z-60");
-    expect(surface?.className).toContain("md:max-w-md");
+    // Stacking over settings is automatic (data-stacked), not a class.
+    expect(surface?.getAttribute("data-size")).toBe("md");
+    expect(surface?.getAttribute("data-placement")).toBe("top");
     expect(
       document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
-    ).toContain("bg-rm-scrim");
+    ).toContain("bg-scrim");
   });
 
   it("keeps profile editor content inside its fixed layer", () => {
@@ -53,7 +54,7 @@ describe("modal portal positioning", () => {
     expect(surface).toHaveTextContent("Profile settings");
     expect(
       document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
-    ).toContain("bg-rm-scrim");
+    ).toContain("bg-scrim");
   });
 
   it("renders upload sound as a form-width dialog over the shared scrim", () => {
@@ -70,6 +71,6 @@ describe("modal portal positioning", () => {
     expect(surface?.className).toContain("md:max-w-md");
     expect(
       document.body.querySelector('[data-slot="dialog-overlay"]')?.className,
-    ).toContain("bg-rm-scrim");
+    ).toContain("bg-scrim");
   });
 });

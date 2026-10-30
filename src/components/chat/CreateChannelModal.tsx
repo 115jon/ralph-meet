@@ -2,23 +2,107 @@ import { Button } from "@/components/ui/button";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
-  ResponsiveDialogDescription,
   ResponsiveDialogFooter,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { describeApiError } from "@/lib/api-errors";
 import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
-import { useChatActions } from "@/stores/chat-store";
-import { useCallback, useRef, useState } from "react";
-import { Icon } from "@/components/ui/icon";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useCallback, useId, useRef, useState } from "react";
+
 interface Props {
   open: boolean;
   serverId: string;
   defaultCategoryId?: string | null;
   onClose: () => void;
+}
+
+type ChannelType = "text" | "voice";
+
+const TYPE_CHOICES: Array<{
+  value: ChannelType;
+  label: string;
+  description: string;
+  icon: IconName;
+}> = [
+  {
+    value: "text",
+    label: "Text",
+    description: "Send messages, images, GIFs, and more.",
+    icon: "textChannel",
+  },
+  {
+    value: "voice",
+    label: "Voice",
+    description: "Hang out with voice, video, and screen share.",
+    icon: "voiceChannel",
+  },
+];
+
+/**
+ * A text choice card (the settings ChoiceCard recipe): 16 radio, 14/500
+ * label, 13 ink-2 description, padding 12, radius 8. Selected takes the
+ * accent ring and accent tint, and the radio fills.
+ */
+function ChoiceCard({
+  name,
+  checked,
+  onSelect,
+  icon,
+  label,
+  description,
+}: {
+  name: string;
+  checked: boolean;
+  onSelect: () => void;
+  icon: IconName;
+  label: string;
+  description: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "relative flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors duration-(--dur-1) ease-out",
+        "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus",
+        checked
+          ? "border-transparent bg-accent-tint ring-2 ring-accent-ink ring-inset"
+          : "border-line pointer-fine:hover:bg-tint-1",
+      )}
+    >
+      <input
+        type="radio"
+        name={name}
+        className="sr-only"
+        checked={checked}
+        onChange={onSelect}
+      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+          checked ? "border-accent-ink bg-accent-ink" : "border-line-strong",
+        )}
+      >
+        {checked ? <span className="size-1.5 rounded-full bg-ply-0" /> : null}
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex items-center gap-1.5 text-ui-row font-medium text-ink-1">
+          <Icon
+            name={icon}
+            size="sm"
+            className={checked ? "text-accent-ink" : "text-ink-3"}
+          />
+          {label}
+        </span>
+        <span className="text-ui-sm text-pretty text-ink-2">{description}</span>
+      </span>
+    </label>
+  );
 }
 
 export default function CreateChannelModal({
@@ -28,45 +112,51 @@ export default function CreateChannelModal({
   onClose,
 }: Props) {
   const { createChannel, dispatch } = useChatActions();
+  const categoryName = useChatStore((state) =>
+    defaultCategoryId
+      ? state.categories.find((category) => category.id === defaultCategoryId)
+          ?.name
+      : undefined,
+  );
   const [name, setName] = useState("");
-  const [type, setType] = useState<"text" | "voice">("text");
+  const [type, setType] = useState<ChannelType>("text");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const ids = useId();
+  const helperId = `${ids}-helper`;
+  const errorId = `${ids}-error`;
 
+  // Create stays enabled; an empty name is caught here, inline.
   const handleCreate = useCallback(async () => {
     if (creating) return;
 
     const finalName = sanitizeChannelName(name, type, true);
     if (!finalName) {
-      setError("Name is required");
+      setError("Give the channel a name.");
+      inputRef.current?.focus();
       return;
     }
 
     setCreating(true);
-    // The createChannel action handles optimistic UI dispatch internally
-    const channelPromise = createChannel(
+    setCreateError(null);
+    // createChannel adds the channel optimistically and resolves with the
+    // real one; navigate only once the real id is known.
+    const channel = await createChannel(
       serverId,
       finalName,
       type,
       defaultCategoryId || undefined,
     );
-
-    // Optimistic UI for immediate navigation (we guess the temp ID will be set by the action)
-    // Actually, createChannel doesn't expose the tempId to us.
-    // Wait, the action handles the optimistic creation but `createChannel` returns the *real* channel promise.
-    // For true optimistic UI on the *client* side of this modal, we can let the Action handle the transition
-    // Wait, let's just await the promise and then navigate, or have the modal close immediately.
-    // If the modal closes immediately, the optimistic channel appears on the left side but the user isn't navigated to it yet.
-    // To navigate to it optimistically, the action itself should technically handle `SET_ACTIVE_CHANNEL` optionally, OR we just wait.
-    // Since channel creation is usually fast, and our optimistic UI adds it to the list, we'll wait for the real ID for navigation to avoid race conditions.
-    const channel = await channelPromise;
     if (channel) {
       if (type === "text") {
         dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: channel.id });
       }
       onClose();
+    } else {
+      setCreateError(describeApiError(null, "create the channel"));
     }
     setCreating(false);
   }, [
@@ -82,137 +172,61 @@ export default function CreateChannelModal({
 
   const fields = (
     <div className="flex flex-col gap-4">
-      {/* Channel type Selection */}
       <fieldset className="flex flex-col gap-2">
-        <legend
-          id="channel-type-label"
-          className="mb-2 text-ui-sm font-medium text-rm-text"
-        >
+        <legend className="mb-2 text-ui-sm font-medium text-ink-1">
           Channel type
         </legend>
-        <div className="space-y-2" aria-labelledby="channel-type-label">
-          <label
-            className={cn(
-              "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-ui group outline-none focus:ring-2 focus:ring-primary/20",
-              type === "text"
-                ? "bg-rm-bg-active border-primary/50"
-                : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:bg-rm-bg-hover",
-            )}
-          >
-            <input
-              type="radio"
-              name="channel-type"
-              className="sr-only"
-              checked={type === "text"}
-              onChange={() => setType("text")}
-            />
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Icon
-                name="textChannel"
-                size="xl"
-                className="text-primary transition-transform"
-              />
-            </div>
-            <div className="flex-1">
-              <div className="text-rm-text font-semibold">Text</div>
-              <div className="text-rm-text-muted text-ui-xs">
-                Send messages, images, GIFs, and more.
-              </div>
-            </div>
-            <div
-              className={cn(
-                "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-ui",
-                type === "text"
-                  ? "border-primary"
-                  : "border-rm-border pointer-fine:group-hover:border-rm-text-muted/20",
-              )}
-            >
-              {type === "text" && (
-                <div className="w-2.5 h-2.5 bg-primary rounded-full" />
-              )}
-            </div>
-          </label>
-
-          <label
-            className={cn(
-              "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-ui group outline-none focus:ring-2 focus:ring-primary/20",
-              type === "voice"
-                ? "bg-rm-bg-active border-primary/50"
-                : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:bg-rm-bg-hover",
-            )}
-          >
-            <input
-              type="radio"
-              name="channel-type"
-              className="sr-only"
-              checked={type === "voice"}
-              onChange={() => setType("voice")}
-            />
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Icon
-                name="voiceChannel"
-                size="xl"
-                className="text-primary transition-transform"
-              />
-            </div>
-            <div className="flex-1">
-              <div className="text-rm-text font-semibold">Voice</div>
-              <div className="text-rm-text-muted text-ui-xs">
-                Hang out with voice, video, and screen share.
-              </div>
-            </div>
-            <div
-              className={cn(
-                "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-ui",
-                type === "voice"
-                  ? "border-primary"
-                  : "border-rm-border pointer-fine:group-hover:border-rm-text-muted/20",
-              )}
-            >
-              {type === "voice" && (
-                <div className="w-2.5 h-2.5 bg-primary rounded-full" />
-              )}
-            </div>
-          </label>
-        </div>
+        {TYPE_CHOICES.map((choice) => (
+          <ChoiceCard
+            key={choice.value}
+            name="channel-type"
+            checked={type === choice.value}
+            onSelect={() => setType(choice.value)}
+            icon={choice.icon}
+            label={choice.label}
+            description={choice.description}
+          />
+        ))}
       </fieldset>
 
-      {/* Channel name */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="channel-name">Channel name</Label>
         <div className="relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rm-text-muted">
-            {type === "text" ? (
-              <Icon name="textChannel" size="sm" />
-            ) : (
-              <Icon name="voiceChannel" size="sm" />
-            )}
-          </div>
+          <Icon
+            name={type === "text" ? "textChannel" : "voiceChannel"}
+            size="sm"
+            className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-ink-3"
+          />
           <Input
             id="channel-name"
             ref={inputRef}
             value={name}
             onChange={(e) => {
-              const val = e.target.value;
-              setName(sanitizeChannelName(val, type));
+              setName(sanitizeChannelName(e.target.value, type));
               setError(null);
             }}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             placeholder={type === "text" ? "new-channel" : "General Voice"}
             aria-invalid={error ? true : undefined}
-            aria-describedby={error ? "channel-name-error" : undefined}
-            className="pl-10 max-md:min-h-11"
+            aria-describedby={error ? `${errorId} ${helperId}` : helperId}
+            className="ps-8 max-md:min-h-11"
           />
         </div>
-        {error && (
-          <p
-            id="channel-name-error"
-            className="text-ui-xs font-medium text-rm-danger-ink"
-          >
+        {error ? (
+          <p id={errorId} className="text-ui-xs text-danger-ink">
             {error}
           </p>
-        )}
+        ) : null}
+        <p id={helperId} className="text-ui-sm text-ink-3">
+          {categoryName ? `In ${categoryName}` : "Not in a category"}
+        </p>
       </div>
+
+      {createError ? (
+        <p role="alert" className="text-ui-xs text-danger-ink">
+          {createError}
+        </p>
+      ) : null}
     </div>
   );
 
@@ -222,7 +236,8 @@ export default function CreateChannelModal({
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
       <ResponsiveDialogContent
-        className="md:max-w-md"
+        size="md"
+        placement="top"
         // Desktop only: the drawer keeps focus on its surface so the phone
         // keyboard does not jump up on open.
         onOpenAutoFocus={(event) => {
@@ -231,28 +246,14 @@ export default function CreateChannelModal({
         }}
       >
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle className="flex items-center gap-2">
-            <Icon
-              name={type === "text" ? "textChannel" : "voiceChannel"}
-              size="xl"
-              className="text-rm-text-muted"
-            />
-            Create channel
-          </ResponsiveDialogTitle>
-          <ResponsiveDialogDescription>
-            in {type === "text" ? "Text channels" : "Voice channels"}
-          </ResponsiveDialogDescription>
+          <ResponsiveDialogTitle>Create channel</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
         {fields}
         <ResponsiveDialogFooter>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={!name.trim() || creating}
-            loading={creating}
-          >
+          <Button onClick={handleCreate} loading={creating}>
             Create channel
           </Button>
         </ResponsiveDialogFooter>

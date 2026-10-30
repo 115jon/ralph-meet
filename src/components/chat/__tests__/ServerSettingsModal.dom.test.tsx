@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_PERMISSIONS, PERMISSIONS } from "@/lib/permissions";
 import type { Role } from "@/lib/types";
@@ -189,7 +189,9 @@ describe("ServerSettingsModal", () => {
     expect(
       screen.getByText(/Unban free_nitro_bot\? They can rejoin/),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Unban" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Unban free_nitro_bot" }),
+    );
     await flush();
     expect(
       screen.getByText("You don't have permission to unban free_nitro_bot."),
@@ -253,23 +255,166 @@ describe("ServerSettingsModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("saves the overview from the footer and reports it", async () => {
+  it("shows the save bar only while dirty, saves from it and reports it", async () => {
     setWidth(1280);
     const onUpdated = vi.fn();
     api.apiPatch.mockResolvedValueOnce({});
     renderModal({ onUpdated });
-    const save = screen.getByRole("button", { name: "Save changes" });
-    expect(save).toBeDisabled();
+    // Clean: no always-on disabled Save.
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     fireEvent.click(
       screen.getByRole("switch", { name: "Let search engines index shares" }),
     );
-    fireEvent.click(save);
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await flush();
     expect(api.apiPatch).toHaveBeenCalledWith(
       "/api/servers/s-1/settings",
       expect.objectContaining({ allow_share_indexing: true }),
     );
     expect(onUpdated).toHaveBeenCalled();
-    expect(screen.getByText("Saved")).toBeInTheDocument();
+    expect(screen.getByText("Changes saved")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("resets the overview draft from the bar", () => {
+    setWidth(1280);
+    renderModal();
+    const name = screen.getByLabelText("Server name");
+    fireEvent.change(name, { target: { value: "Ralph Lab" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(name).toHaveValue("Ralph HQ");
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("nudges instead of closing or switching page while dirty", () => {
+    setWidth(1280);
+    const onClose = vi.fn();
+    renderModal({ onClose });
+    fireEvent.change(screen.getByLabelText("Server name"), {
+      target: { value: "Ralph Lab" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close server settings" }),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    const nav = screen.getByRole("navigation", {
+      name: "Server settings navigation",
+    });
+    fireEvent.click(within(nav).getByRole("button", { name: "Bans" }));
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Overview" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("saves a role from the shared bar, not the role header", async () => {
+    setWidth(1280);
+    api.apiPatch.mockResolvedValueOnce({});
+    renderModal({ initialTab: "roles", initialRoleId: "r-mod" });
+    await flush();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "Ban members" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await flush();
+    expect(api.apiPatch).toHaveBeenCalledWith(
+      "/api/servers/s-1/roles/r-mod",
+      expect.objectContaining({
+        permissions: PERMISSIONS.KICK_MEMBERS | PERMISSIONS.BAN_MEMBERS,
+      }),
+    );
+  });
+
+  it("shows @everyone without name and colour fields", async () => {
+    setWidth(1280);
+    renderModal({ initialTab: "roles", initialRoleId: "r-everyone" });
+    await flush();
+    expect(
+      screen.getByText(
+        "Everyone has this role. Its name and colour are fixed.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Role name")).toBeNull();
+    expect(screen.queryByLabelText("Colour")).toBeNull();
+  });
+
+  it("writes audit entries as sentences with names, not IDs or bits", async () => {
+    setWidth(1280);
+    const actor = { id: "u-me", username: "jon", display_name: "Jon" };
+    routeGets({
+      "/audit-logs": () =>
+        Promise.resolve([
+          {
+            id: "a-2",
+            server_id: "s-1",
+            actor_id: "u-me",
+            actor,
+            action_type: "ROLE_UPDATE",
+            target_id: "r-mod",
+            changes: {
+              permissions:
+                PERMISSIONS.KICK_MEMBERS | PERMISSIONS.MANAGE_MESSAGES,
+            },
+            created_at: "2026-01-02T00:00:00Z",
+          },
+          {
+            id: "a-1",
+            server_id: "s-1",
+            actor_id: "u-me",
+            actor,
+            action_type: "ROLE_CREATE",
+            target_id: "r-mod",
+            changes: {
+              name: "Moderator",
+              permissions: PERMISSIONS.KICK_MEMBERS,
+            },
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ]),
+    });
+    renderModal({ initialTab: "audit" });
+    await flush();
+    const card = screen.getByRole("region", { name: "Recent activity" });
+    const first = within(card).getAllByRole("listitem")[0]!;
+    expect(first).toHaveTextContent("Jon updated role Moderator");
+    expect(first).toHaveTextContent("Allowed Manage messages");
+    expect(first).not.toHaveTextContent("Kick members");
+    expect(first).not.toHaveTextContent("r-mod");
+    expect(first).not.toHaveTextContent(
+      String(PERMISSIONS.KICK_MEMBERS | PERMISSIONS.MANAGE_MESSAGES),
+    );
+  });
+
+  it("dims invite rows under a Paused badge while invites are paused", async () => {
+    setWidth(1280);
+    routeGets({
+      "/settings": () => Promise.resolve({ invites_paused: 1 }),
+      "/invites": () =>
+        Promise.resolve([
+          {
+            code: "hq-crew-7k2",
+            server_id: "s-1",
+            inviter_id: "u-me",
+            uses: 1,
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ]),
+    });
+    renderModal({ initialTab: "invites" });
+    await flush();
+    expect(screen.getByText("Paused")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Stops every link from working until you turn this off.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Copy link for hq-crew-7k2" }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke hq-crew-7k2" }));
+    expect(api.apiDelete).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Revoke link" }),
+    ).toBeInTheDocument();
   });
 });

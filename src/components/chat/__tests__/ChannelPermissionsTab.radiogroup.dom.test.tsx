@@ -127,7 +127,7 @@ describe("ChannelPermissionsTab tri-state rows", () => {
     fireEvent.click(radios("Send messages").allow);
     expect(radios("Send messages").allow).toBeChecked();
     expect(radios("Send messages").inherit).not.toBeChecked();
-    expect(screen.getByText("You have unsaved changes.")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
 
     // Arrow keys move within a native radio group; the browser does it, so
     // here we check every option is a focusable native radio in one group.
@@ -150,6 +150,7 @@ describe("ChannelPermissionsTab tri-state rows", () => {
         deny: PERMISSIONS.ADD_REACTIONS,
       },
     );
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(await screen.findByText("Changes saved")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
   });
 });

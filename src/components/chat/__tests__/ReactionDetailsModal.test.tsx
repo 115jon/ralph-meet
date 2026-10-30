@@ -138,4 +138,23 @@ describe("ReactionDetailsModal", () => {
       "true",
     );
   });
+
+  it("says how many others reacted when the user list is partial", () => {
+    render(
+      <ReactionDetailsModal
+        message={makeMessage([
+          { emoji: "🔥", count: 5, users: ["user-1", "user-2"] },
+        ])}
+        initialEmoji="🔥"
+        canManageReactions={false}
+        customEmojiMap={{}}
+        onRemoveReaction={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Alex")).toBeVisible();
+    expect(screen.getByText("Sam")).toBeVisible();
+    expect(screen.getByRole("dialog")).toHaveTextContent(/and\s*3\s*others/);
+  });
 });

@@ -4,12 +4,12 @@ import { cn } from "@/lib/utils";
 
 export type UserStatus = "online" | "idle" | "dnd" | "offline";
 
-/** Presence fills from the theme's `--rm-status-*` tokens (never accent). */
+/** Presence fills from the theme's `--status-*` tokens (never accent). */
 export const USER_STATUS_COLOR_CLASSES: Record<UserStatus, string> = {
-  online: "bg-rm-status-online",
-  idle: "bg-rm-status-idle",
-  dnd: "bg-rm-status-dnd",
-  offline: "bg-rm-status-offline",
+  online: "bg-status-online",
+  idle: "bg-status-idle",
+  dnd: "bg-status-dnd",
+  offline: "bg-status-offline",
 };
 
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {
@@ -57,7 +57,7 @@ export function UserStatusDot({
   className?: string;
   /**
    * Background class(es) of the surface behind the dot, e.g.
-   * `"bg-rm-sidebar"` or `"bg-rm-bg-surface dark:bg-rm-bg-elevated"`. Draws a
+   * `"bg-ply-0"` or `"bg-ply-2 md:bg-ply-0"`. Draws a
    * 2px ring in that colour where the dot overlaps an avatar. Omit when the
    * dot sits on its own (menu rows) or inside a ringed wrapper.
    */

@@ -1,3 +1,4 @@
+import { CountBadge } from "@/components/ui/badge";
 import { Icon, type StatefulIconName } from "@/components/ui/icon";
 import { PRESS } from "@/components/ui/interaction";
 import { useSoftKeyboardOpen } from "@/hooks/useSoftKeyboardOpen";
@@ -32,6 +33,7 @@ function useUnreadDmCount() {
   );
 }
 
+/** Matches CountBadge's own cap, so the spoken name and the badge agree. */
 function formatBadge(count: number) {
   return count > 99 ? "99+" : String(count);
 }
@@ -60,7 +62,7 @@ export function MobileTabBar({ className }: { className?: string }) {
       aria-label="Primary"
       data-floating-avoid=""
       className={cn(
-        "shrink-0 border-t border-rm-border bg-rm-bg-secondary pb-[var(--safe-area-bottom,0px)]",
+        "shrink-0 border-t border-line bg-ply-1 pb-[var(--safe-area-bottom,0px)]",
         className,
       )}
     >
@@ -81,9 +83,9 @@ export function MobileTabBar({ className }: { className?: string }) {
                 data-tab={item.id}
                 onClick={() => setTab(item.id)}
                 className={cn(
-                  "flex min-h-11 w-full flex-col items-center justify-center gap-0.5 rounded-lg outline-offset-[-4px] [--hover-o:0] [--press-o:0.06]",
+                  "flex min-h-11 w-full flex-col items-center justify-center gap-0.5 rounded-md outline-offset-[-4px] [--hover-o:0] [--press-o:0.06]",
                   PRESS,
-                  active ? "text-rm-text" : "text-rm-text-muted",
+                  active ? "text-ink-1" : "text-ink-3",
                 )}
               >
                 <span className="relative">
@@ -92,18 +94,16 @@ export function MobileTabBar({ className }: { className?: string }) {
                     state={active ? "active" : "idle"}
                     size="xl"
                   />
-                  {badge > 0 ? (
-                    <span
-                      aria-hidden="true"
-                      className="badge-count absolute -top-1 left-1/2 ml-1.5 ring-2 ring-rm-bg-secondary"
-                    >
-                      {formatBadge(badge)}
-                    </span>
-                  ) : null}
+                  <CountBadge
+                    count={badge}
+                    ring="ply-1"
+                    aria-hidden="true"
+                    className="absolute -top-1 left-1/2 ml-1.5"
+                  />
                 </span>
                 <span
                   className={cn(
-                    "max-w-full truncate px-1 text-ui-2xs",
+                    "max-w-full truncate px-1 text-ui-2xs tracking-normal",
                     active ? "font-semibold" : "font-medium",
                   )}
                 >

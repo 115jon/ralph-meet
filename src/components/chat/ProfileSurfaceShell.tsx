@@ -4,6 +4,7 @@ import { forwardRef } from "react";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import type { ProfileEffectPlaybackMode } from "@/lib/profile-effect-playback";
 import {
   getProfileFrameReserveY,
   getProfileFrameSurfaceMarginStyle,
@@ -22,23 +23,29 @@ interface ProfileSurfaceShellProps extends React.HTMLAttributes<HTMLDivElement> 
   effectOpacity?: number;
   fit?: "contain" | "cover";
   playAnimation?: boolean;
+  /** Effect playback: `once` per open (profiles) or `loop` (shop stages). */
+  effectPlayback?: ProfileEffectPlaybackMode;
+  /** Change it to replay the effect once its pass has ended. */
+  effectReplayKey?: number;
   renderFrame?: boolean;
   children: ReactNode;
 }
 
 const SURFACE_CLASSES: Record<ProfileSurfaceVariant, string> = {
-  // Dialog-sized profile card (modal, editor preview): radius 16, no shadow
-  // of its own; the dialog that hosts it owns elevation.
-  card: "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)]",
-  // MENU_PANEL geometry (12.7): radius 12 and the one floating shadow.
+  // Dialog-sized profile card (the profile modal): radius 12, the dialog
+  // ladder's shape. Its host adds the modal shadow.
+  card: "rounded-xl border border-line bg-[var(--rm-profile-custom-background)]",
+  // Popover geometry (talk-tree-spec §7): radius 10 and the float shadow.
   popover:
-    "rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-lg",
-  sheet: "bg-rm-bg-primary bg-[var(--rm-profile-custom-background)]",
+    "rounded-lg border border-line bg-[var(--rm-profile-custom-background)] shadow-float",
+  sheet: "bg-[var(--rm-profile-custom-background)]",
 };
 
 /**
- * The profile card every profile surface draws (popover, account menu,
- * sheet, settings preview, picker previews), with its collectibles.
+ * The shell every profile surface draws (ProfileCard, picker previews), with
+ * its collectibles. The card colour is `--rm-profile-custom-background`
+ * (ProfileCard points it at ply-3 for profiles without custom colours);
+ * borders read `--line`, which a custom colourway re-points.
  *
  * Layering, back to front: back frame art (z-0), the card (z-10: theme
  * overlay, content, then the profile effect over the content), front frame
@@ -64,6 +71,8 @@ export const ProfileSurfaceShell = forwardRef<
     effectOpacity = 1,
     fit = "contain",
     playAnimation = true,
+    effectPlayback = "once",
+    effectReplayKey,
     renderFrame = true,
     children,
     ...props
@@ -79,7 +88,7 @@ export const ProfileSurfaceShell = forwardRef<
       className={cn(
         "relative isolate flex flex-col [container-type:inline-size]",
         variant === "sheet"
-          ? "overflow-hidden bg-rm-bg-primary bg-[var(--rm-profile-custom-background)]"
+          ? "overflow-hidden bg-[var(--rm-profile-custom-background)]"
           : "overflow-visible",
         className,
       )}
@@ -129,6 +138,8 @@ export const ProfileSurfaceShell = forwardRef<
             effectOpacity={effectOpacity}
             fit={fit}
             playAnimation={playAnimation}
+            playback={effectPlayback}
+            replayKey={effectReplayKey}
           />
         </div>
         <div className="relative z-20 h-full">{children}</div>

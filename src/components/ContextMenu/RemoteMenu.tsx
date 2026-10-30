@@ -33,7 +33,7 @@ export interface RemoteMenuOptions {
 }
 
 const ID_BADGE = (
-  <span className="rounded-sm bg-rm-bg-active px-1 text-ui-2xs font-semibold text-rm-text-muted">
+  <span className="rounded-xs bg-tint-2 px-1 text-ui-2xs font-semibold text-ink-3">
     ID
   </span>
 );
@@ -177,22 +177,9 @@ export function buildRemoteMenu({
         entries: [
           profile,
           message,
-          divider("message"),
-          {
-            type: "submenu",
-            key: "streaming-apps",
-            label: "Apps",
-            entries: [
-              {
-                type: "item",
-                key: "no-apps",
-                label: "No apps",
-                disabled: true,
-              },
-            ],
-          },
-          divider("apps"),
-          ...moderatorItems,
+          ...(moderatorItems.length > 0
+            ? [divider("message"), ...moderatorItems]
+            : []),
         ],
       },
     ];
@@ -213,15 +200,6 @@ export function buildRemoteMenu({
     mute,
     muteSoundboard,
     divider("mute"),
-    {
-      type: "submenu",
-      key: "apps",
-      label: "Apps",
-      entries: [
-        { type: "item", key: "no-apps", label: "No apps", disabled: true },
-      ],
-    },
-    divider("apps"),
     ...(moderatorItems.length > 0
       ? [...moderatorItems, divider("moderator")]
       : []),

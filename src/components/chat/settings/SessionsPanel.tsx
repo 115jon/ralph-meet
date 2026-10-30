@@ -11,6 +11,7 @@ import {
   SettingsRow,
   useConfirm,
 } from "./primitives";
+import { isSessionEnded, RecoverButton } from "./session-ended";
 
 function normalizeTimestamp(value: unknown): number | null {
   if (typeof value === "number") {
@@ -73,14 +74,14 @@ function SessionItem({
   return (
     <li className="py-3 first:pt-0 last:pb-0">
       <div className="flex items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-rm-tint-2 text-rm-text">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[2px] bg-tint-2 text-ink-1">
           <Icon name={isMobile ? "mobile" : "monitor"} size="md" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ui-sm font-medium text-rm-text">
+          <p className="truncate text-[15px] leading-5 font-medium text-ink-1">
             {title}
           </p>
-          <p className="truncate text-ui-sm text-rm-text-secondary">
+          <p className="truncate text-ui-sm text-ink-2">
             {session.isCurrent
               ? `${location} · Active now`
               : `${location} · ${timeAgo}`}
@@ -132,10 +133,10 @@ function SessionSkeleton() {
       <span className="sr-only">Loading sessions</span>
       {[0, 1].map((index) => (
         <div key={index} aria-hidden="true" className="flex items-center gap-3">
-          <span className="size-10 shrink-0 animate-pulse rounded-full bg-rm-tint-1 motion-reduce:animate-none" />
+          <span className="size-10 shrink-0 animate-pulse rounded-[2px] bg-tint-1 motion-reduce:animate-none" />
           <span className="flex flex-1 flex-col gap-1.5">
-            <span className="h-4 w-40 max-w-full animate-pulse rounded-xs bg-rm-tint-1 motion-reduce:animate-none" />
-            <span className="h-3 w-56 max-w-full animate-pulse rounded-xs bg-rm-tint-1 motion-reduce:animate-none" />
+            <span className="h-4 w-40 max-w-full animate-pulse rounded-[1px] bg-tint-1 motion-reduce:animate-none" />
+            <span className="h-3 w-56 max-w-full animate-pulse rounded-[1px] bg-tint-1 motion-reduce:animate-none" />
           </span>
         </div>
       ))}
@@ -147,16 +148,19 @@ export default function SessionsPanel() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
   const referenceTime = useClientReferenceTime();
 
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
     setLoadError(null);
+    setSessionEnded(false);
     try {
       const data = await apiGet<{ sessions: any[] }>("/api/sessions");
       setSessions(data.sessions);
     } catch (err: unknown) {
       setLoadError(describeApiError(err, "load your sessions"));
+      setSessionEnded(isSessionEnded(err));
     } finally {
       setSessionsLoading(false);
     }
@@ -188,16 +192,11 @@ export default function SessionsPanel() {
             ) : loadError ? (
               <div className="flex flex-col items-start gap-2">
                 <RowError className="mt-0 self-stretch">{loadError}</RowError>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
+                <RecoverButton
+                  sessionEnded={sessionEnded}
                   loading={sessionsLoading}
-                  onClick={() => void fetchSessions()}
-                >
-                  <Icon name="refresh" size="sm" />
-                  Try again
-                </Button>
+                  onRetry={() => void fetchSessions()}
+                />
               </div>
             ) : currentSessions.length > 0 ? (
               <ul>
@@ -212,7 +211,7 @@ export default function SessionsPanel() {
               </ul>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-ui-sm text-rm-text-secondary">
+                <p className="text-ui-sm text-ink-2">
                   We couldn't find this device's session.
                 </p>
                 <Button
@@ -237,12 +236,12 @@ export default function SessionsPanel() {
               loadingFirst ? (
                 <SessionSkeleton />
               ) : (
-                <p className="text-ui-sm text-rm-text-secondary">
+                <p className="text-ui-sm text-ink-2">
                   Your other devices show here once your sessions load.
                 </p>
               )
             ) : otherSessions.length > 0 ? (
-              <ul className="divide-y divide-rm-border">
+              <ul className="divide-y divide-line">
                 {otherSessions.map((session) => (
                   <SessionItem
                     key={session.id}
@@ -253,7 +252,7 @@ export default function SessionsPanel() {
                 ))}
               </ul>
             ) : (
-              <p className="text-ui-sm text-rm-text-secondary">
+              <p className="text-ui-sm text-ink-2">
                 No other devices are signed in.
               </p>
             )

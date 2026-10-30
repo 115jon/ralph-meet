@@ -13,10 +13,7 @@ function Keys({ keys, label }: { keys: string[]; label: string }) {
       {keys.map((key, index) => (
         <Fragment key={key}>
           {index > 0 ? (
-            <span
-              aria-hidden="true"
-              className="text-ui-xs text-rm-text-secondary"
-            >
+            <span aria-hidden="true" className="text-ui-xs text-ink-2">
               +
             </span>
           ) : null}

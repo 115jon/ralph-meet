@@ -28,7 +28,7 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
   const badgeContent = isInputOverlay ? (
     <span
       className={cn(
-        "relative rounded px-1 font-medium transition-colors bg-transparent pointer-fine:hover:bg-transparent text-transparent pointer-events-auto cursor-pointer",
+        "relative rounded-xs px-0.5 font-medium bg-transparent text-transparent pointer-events-auto cursor-pointer",
       )}
     >
       @{username}
@@ -39,10 +39,10 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
       ref={setBadgeEl}
       onClick={handleClick}
       className={cn(
-        "relative rounded border-0 bg-transparent px-1 font-medium transition-colors cursor-pointer",
+        "relative rounded-xs border-0 px-0.5 font-medium transition-colors duration-(--dur-1) ease-out",
         member
-          ? "bg-rm-accent/20 text-rm-accent pointer-fine:hover:bg-rm-accent/30"
-          : "bg-rm-text-muted/10 text-rm-text-muted",
+          ? "cursor-pointer bg-accent-tint text-accent-ink underline-offset-3 pointer-fine:hover:underline"
+          : "cursor-default bg-tint-1 text-ink-2",
       )}
     >
       @{username}

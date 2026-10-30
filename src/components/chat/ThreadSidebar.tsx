@@ -1,4 +1,7 @@
-import { Button, Spinner } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
 import { describeApiError } from "@/lib/api-errors";
 import { SidePanel, type SidePanelMode } from "@/components/ui/side-panel";
 import { apiGet, apiPost } from "@/lib/api-client";
@@ -22,23 +25,6 @@ interface Props {
   open?: boolean;
   /** Force one panel form (fixtures, tests). */
   forceMode?: SidePanelMode;
-}
-
-function _formatDate(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  const time = d.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  if (d.toDateString() === today.toDateString()) return `Today at ${time}`;
-  if (d.toDateString() === yesterday.toDateString())
-    return `Yesterday at ${time}`;
-  return `${d.toLocaleDateString([], { month: "2-digit", day: "2-digit", year: "numeric" })} ${time}`;
 }
 
 export default function ThreadSidebar({
@@ -179,31 +165,46 @@ export default function ThreadSidebar({
       }}
       title="Thread"
       titleAdornment={
-        <span className="shrink-0 text-ui-xs text-rm-text-muted">
-          {replies.length} {replies.length === 1 ? "reply" : "replies"}
-        </span>
+        loading || error ? null : (
+          <span className="shrink-0 text-ui-xs text-ink-3">
+            <Num>{replies.length}</Num>{" "}
+            {replies.length === 1 ? "reply" : "replies"}
+          </span>
+        )
       }
       forceMode={forceMode}
     >
       {/* Thread body */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 custom-scrollbar">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {loading ? (
-          <div className="flex h-full items-center justify-center text-rm-text-muted">
-            <Spinner className="size-6" />
-            <span className="sr-only">Loading</span>
-          </div>
+          <EmptyState
+            size="sm"
+            loading
+            className="h-full"
+            title="Loading thread"
+          />
         ) : error ? (
-          <div
-            role="alert"
-            className="mx-4 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink"
-          >
-            {error}
+          <div className="flex flex-col items-start gap-3 p-4">
+            <p
+              role="alert"
+              className="flex w-full items-start gap-2 rounded-md bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink"
+            >
+              <Icon name="warning" size="sm" className="mt-px shrink-0" />
+              <span className="min-w-0">{error}</span>
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void fetchThread()}
+            >
+              Try again
+            </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-1 pb-4">
-            {/* Root message */}
+          <div className="flex flex-col pb-4">
+            {/* Root message: the thread's trunk, on the panel ply with a seam below */}
             {root && (
-              <div className="mx-4 mb-2 rounded-lg border border-rm-border bg-rm-bg-surface py-2">
+              <div className="border-b border-line py-3">
                 <MessageItem
                   id={`thread-root-${root.id}`}
                   message={root}
@@ -221,16 +222,17 @@ export default function ThreadSidebar({
               </div>
             )}
 
-            {/* Divider */}
-            {replies.length > 0 && (
-              <div className="my-2 flex items-center gap-2 px-4">
-                <div className="h-px flex-1 bg-rm-border" />
-                <span className="text-ui-xs font-medium text-rm-text-muted">
-                  {replies.length} {replies.length === 1 ? "Reply" : "Replies"}
-                </span>
-                <div className="h-px flex-1 bg-rm-border" />
-              </div>
-            )}
+            {/* Replies label */}
+            {replies.length > 0 ? (
+              <p className="px-4 pt-3 pb-1 text-ui-xs text-ink-3">
+                <Num>{replies.length}</Num>{" "}
+                {replies.length === 1 ? "reply" : "replies"}
+              </p>
+            ) : root ? (
+              <p className="px-4 py-6 text-center text-ui-sm text-ink-3">
+                No replies yet. Start the thread below.
+              </p>
+            ) : null}
 
             {/* Replies */}
             {replies.map((reply, idx) => {
@@ -294,8 +296,8 @@ function ThreadReplyInput({
   };
 
   return (
-    <div className="shrink-0 border-t border-rm-border px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] max-md:px-2">
-      <div className="flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 focus-within:border-rm-border-strong">
+    <div className="shrink-0 border-t border-line px-3 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))]">
+      <div className="flex min-h-11 items-center gap-2 rounded-lg border border-line bg-ply-2 py-1.5 pr-1.5 pl-3 transition-colors duration-(--dur-1) focus-within:border-line-strong">
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -307,7 +309,7 @@ function ThreadReplyInput({
             }
           }}
           placeholder="Reply to thread…"
-          className="min-w-0 flex-1 bg-transparent text-ui-base text-rm-text outline-none placeholder:text-rm-text-muted max-md:text-ui-md"
+          className="min-w-0 flex-1 bg-transparent text-ui-base text-ink-1 outline-none placeholder:text-ink-3 max-md:text-ui-md"
         />
         <Button
           size="sm"

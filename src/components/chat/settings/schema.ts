@@ -52,6 +52,8 @@ export type SettingsPanelDef = {
   icon: IconName;
   /** One line under the page title: what the page is for. */
   blurb: string;
+  /** The page's poster line (36-44px): the blurb's gist, a few words. */
+  headline: string;
   desktopOnly?: boolean;
   /** Hidden on touch-only devices (keyboard shortcuts). */
   keyboardOnly?: boolean;
@@ -65,6 +67,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "account",
     title: "Account",
     icon: "account",
+    headline: "Who you are, and how you sign in.",
     blurb: "Who you are on Ralph Meet and how you sign in.",
     sections: [
       {
@@ -135,6 +138,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "sessions",
     title: "Sessions",
     icon: "sessions",
+    headline: "Where you're signed in.",
     blurb:
       "Devices signed in to your account. Sign out of any you don't recognize.",
     sections: [
@@ -176,6 +180,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "privacy",
     title: "Privacy & safety",
     icon: "privacy",
+    headline: "What you see and what you share.",
     blurb: "The media you see, and the messages you've shared publicly.",
     sections: [
       {
@@ -227,6 +232,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "voice",
     title: "Voice & video",
     icon: "mic",
+    headline: "Your mic, speakers and camera.",
     blurb: "Your mic, speakers and camera, and how you sound to others.",
     railRows: [
       {
@@ -377,6 +383,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "soundboard",
     title: "Soundboard",
     icon: "soundboard",
+    headline: "Sounds for joining and leaving.",
     blurb: "Sounds that play when you join or leave a voice channel.",
     sections: [
       {
@@ -421,6 +428,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     title: "Keybinds",
     icon: "keyboard",
     keyboardOnly: true,
+    headline: "Keys you can use today.",
     blurb: "Keyboard shortcuts you can use today, and call keys on the way.",
     sections: [
       {
@@ -486,6 +494,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "appearance",
     title: "Appearance",
     icon: "appearance",
+    headline: "Theme and motion.",
     blurb: "Theme and motion. Changes apply as you pick them.",
     sections: [
       {
@@ -537,6 +546,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "notifications",
     title: "Notifications",
     icon: "bell",
+    headline: "Alerts and sounds.",
     blurb: "Desktop alerts and the sounds Ralph Meet plays.",
     sections: [
       {
@@ -617,6 +627,7 @@ export const SETTINGS_PANELS: SettingsPanelDef[] = [
     id: "desktop",
     title: "Desktop app",
     icon: "monitor",
+    headline: "How the app starts and updates.",
     blurb:
       "How the Ralph Meet app starts, closes and updates on this computer.",
     desktopOnly: true,
@@ -808,6 +819,26 @@ export function searchSettings(
     }
   }
   return hits;
+}
+
+/**
+ * A section's place on its page ("2 of 4"), among the sections this device
+ * can show, for the rule card's "02 / 04" index. Search doesn't change it.
+ */
+export function getSectionPosition(
+  sectionId: string,
+  env: SettingsEnvironment,
+  /** Sections the host leaves out (rooms drop the camera card). */
+  exclude: readonly string[] = [],
+): { index: number; total: number } | null {
+  const entry = SECTION_INDEX.get(sectionId);
+  if (!entry) return null;
+  const sections = entry.panel.sections.filter(
+    (section) =>
+      (!section.desktopOnly || env.desktop) && !exclude.includes(section.id),
+  );
+  const at = sections.findIndex((section) => section.id === sectionId);
+  return at < 0 ? null : { index: at + 1, total: sections.length };
 }
 
 /** Visible rows of a section after environment and search filtering. */

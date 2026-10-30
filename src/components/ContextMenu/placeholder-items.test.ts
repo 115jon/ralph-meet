@@ -12,7 +12,23 @@ function keys(entries: StreamMenuEntry[]): string[] {
   });
 }
 
-const REMOVED = ["server-mute", "server-deafen", "move-to"];
+const REMOVED = [
+  "server-mute",
+  "server-deafen",
+  "move-to",
+  // "Apps → No apps" was a dead end with nothing behind it.
+  "apps",
+  "streaming-apps",
+  "no-apps",
+];
+
+/** Every label in a menu, submenus included. */
+function labels(entries: StreamMenuEntry[]): string[] {
+  return entries.flatMap((e) => {
+    const own = "label" in e && typeof e.label === "string" ? [e.label] : [];
+    return e.type === "submenu" ? [...own, ...labels(e.entries)] : own;
+  });
+}
 
 const peerSetting = {
   volume: 100,
@@ -34,6 +50,28 @@ describe("stream menus drop the 'coming soon' moderator items (blocker 3)", () =
     expect(keys(entries)).toEqual(expect.not.arrayContaining(REMOVED));
     expect(keys(entries)).toContain("copy-id");
   });
+
+  for (const isStreaming of [false, true]) {
+    it(`local menu names the leave action plainly (streaming: ${isStreaming})`, () => {
+      const onLeave = vi.fn();
+      const entries = buildLocalMenu({
+        isStreaming,
+        onClose: vi.fn(),
+        onLeave,
+        availableQualities: [],
+        handleProfile: vi.fn(),
+        handleCopyId: vi.fn(),
+      });
+      expect(labels(entries)).toContain("Leave call");
+      expect(labels(entries)).not.toContain("Disconnect");
+      const leave = entries.find(
+        (e) => e.type === "item" && e.key === "disconnect",
+      );
+      if (leave?.type !== "item") throw new Error("no leave item");
+      leave.onSelect?.();
+      expect(onLeave).toHaveBeenCalledOnce();
+    });
+  }
 
   for (const isStreaming of [false, true]) {
     it(`remote menu for a moderator has none of them (streaming: ${isStreaming})`, () => {

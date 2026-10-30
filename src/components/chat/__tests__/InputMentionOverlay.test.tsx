@@ -47,8 +47,12 @@ describe("InputMentionOverlay", () => {
     const markup = renderToStaticMarkup(<InputMentionOverlay text="@ralph" />);
 
     expect(markup).toContain('data-mention="ralph"');
-    expect(markup).toContain("rounded-sm");
+    expect(markup).toContain("rounded-xs");
+    expect(markup).toContain("bg-accent-tint");
+    expect(markup).toContain("text-accent-ink");
+    // Same glyph boxes as the textarea's own text: no padding, no weight.
     expect(markup).not.toContain("px-1");
+    expect(markup).not.toContain("font-medium");
   });
 
   it("renders native emoji characters with the shared asset style inside the composer overlay", () => {

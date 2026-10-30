@@ -41,12 +41,12 @@ function ServerIcon({ server }: { server?: Server }) {
       <img
         src={getAuthAssetUrl(server.icon_url)}
         alt=""
-        className="size-5 rounded-md object-cover"
+        className="size-5 rounded-[2px] object-cover"
       />
     );
   }
   return (
-    <span className="flex size-5 items-center justify-center rounded-md bg-rm-tint-2 text-ui-2xs font-semibold text-rm-text-secondary">
+    <span className="flex size-5 items-center justify-center rounded-[2px] bg-tint-2 text-ui-2xs font-semibold text-ink-2">
       {server.name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -126,9 +126,7 @@ function TriggerRow({
             className="truncate"
           />
           {inherited ? (
-            <span className="shrink-0 text-rm-text-secondary">
-              · From All servers
-            </span>
+            <span className="shrink-0 text-ink-2">· From All servers</span>
           ) : null}
         </span>
       }
@@ -269,7 +267,7 @@ export function SoundboardSettings({
   return (
     <>
       <SettingsCard id="soundboard-playback">
-        <SettingsRow id="soundboard-volume">
+        <SettingsRow id="soundboard-volume" layout="block">
           {(ids) => (
             <RangeControl
               ids={ids}

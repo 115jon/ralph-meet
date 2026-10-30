@@ -1,10 +1,13 @@
 /**
- * Settings row anatomy, shared by every panel.
+ * Settings row anatomy, shared by every panel (component kit, direction C).
  *
- *   card  ─ title, optional description, a list of rows divided by hairlines
+ *   card  ─ a C2 rule card: a 2px ink rule, the section's silkscreen legend
+ *           and "02 / 04" index on it, an optional description, then rows
  *   row   ─ label + description on the leading side, control on the trailing
- *           side; "stack" rows drop the control under the text when narrow,
- *           "block" rows always put it under (pickers, lists, meters)
+ *           side, a hairline under each; "stack" rows drop the control under
+ *           the text when narrow, "block" rows always put it under (sliders,
+ *           meters, segmented rails), "field" rows print the label across the
+ *           top edge of the control (device pickers)
  *
  * Labels and descriptions come from schema.ts. Every control is named by its
  * row: render functions receive the row's label and description ids.
@@ -12,6 +15,11 @@
 
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { FieldPlate } from "@/components/ui/input";
+import { Kbd as UiKbd } from "@/components/ui/kbd";
+import { LedLabel } from "@/components/ui/led";
+import { Num } from "@/components/ui/num";
+import { RuleCard } from "@/components/ui/plate";
 import {
   Select,
   SelectContent,
@@ -19,6 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import {
   createContext,
@@ -34,12 +44,15 @@ import {
 import {
   getRowLocation,
   getSectionDef,
+  getSectionPosition,
   isRowAvailable,
   rowMatches,
   searchTokens,
   visibleSectionRows,
   type SettingsEnvironment,
 } from "./schema";
+
+const pad = (n: number) => String(n).padStart(2, "0");
 
 /* ------------------------------------------------------------------ */
 /* Context                                                              */
@@ -110,7 +123,7 @@ export function Highlight({ text, query }: { text: string; query: string }) {
         index % 2 === 1 ? (
           <mark
             key={index}
-            className="rounded-xs bg-rm-accent-tint px-px text-inherit underline decoration-rm-accent-ink decoration-2 underline-offset-2"
+            className="rounded-xs bg-accent-tint px-px text-inherit underline decoration-accent-ink decoration-2 underline-offset-2"
           >
             {part}
           </mark>
@@ -131,6 +144,7 @@ export function SettingsCard({
   title,
   description,
   actions,
+  excludeSections,
   children,
   className,
 }: {
@@ -145,6 +159,8 @@ export function SettingsCard({
   description?: ReactNode;
   /** Trailing header control (an "Add" button). */
   actions?: ReactNode;
+  /** Sections the host leaves out, so the "02 / 04" index stays honest. */
+  excludeSections?: readonly string[];
   children: ReactNode;
   className?: string;
 }) {
@@ -157,32 +173,44 @@ export function SettingsCard({
   }
   const heading = title ?? entry?.section.title;
   const desc = description ?? entry?.section.desc;
+  const position = entry
+    ? getSectionPosition(entry.section.id, env, excludeSections)
+    : null;
+  const index = position
+    ? `${pad(position.index)} / ${pad(position.total)}`
+    : null;
   return (
-    <section
-      aria-labelledby={titleId}
+    <RuleCard
       data-section={id}
-      className={cn(
-        "rounded-lg border border-rm-border bg-rm-bg-surface",
-        className,
-      )}
+      aria-labelledby={titleId}
+      // The legend is the section's heading; its text stays real, the
+      // silkscreen only prints it in capitals.
+      legend={
+        <span id={titleId} role="heading" aria-level={3}>
+          {heading}
+        </span>
+      }
+      index={
+        actions ? (
+          <span className="inline-flex items-center gap-3">
+            <span className="flex items-center gap-2 tracking-normal normal-case [font-stretch:100%]">
+              {actions}
+            </span>
+            {index}
+          </span>
+        ) : (
+          index
+        )
+      }
+      className={className}
     >
-      <div className="flex items-start gap-3 px-4 pb-1 pt-4 @min-[560px]:px-5">
-        <div className="min-w-0 flex-1">
-          <h4 id={titleId} className="text-ui-md font-semibold text-rm-text">
-            {heading}
-          </h4>
-          {desc ? (
-            <p className="mt-1 max-w-[62ch] text-pretty text-ui-sm text-rm-text-secondary">
-              {desc}
-            </p>
-          ) : null}
+      {desc ? (
+        <div className="max-w-[62ch] text-pretty text-ui-sm text-ink-2">
+          {desc}
         </div>
-        {actions ? (
-          <div className="flex shrink-0 items-center gap-2">{actions}</div>
-        ) : null}
-      </div>
-      <ul className="divide-y divide-rm-border">{children}</ul>
-    </section>
+      ) : null}
+      <ul>{children}</ul>
+    </RuleCard>
   );
 }
 
@@ -190,7 +218,16 @@ export function SettingsCard({
 /* Row                                                                  */
 /* ------------------------------------------------------------------ */
 
-export type RowIds = { labelId: string; descId?: string };
+export type RowIds = {
+  labelId: string;
+  descId?: string;
+  /** The row's label as text, for controls that take a string name. */
+  label?: string;
+  /** Put this on the control a "field" row's legend labels. */
+  controlId?: string;
+  /** The control sits in a legend plate: fill the width at 48px. */
+  field?: boolean;
+};
 
 export function SettingsRow({
   id,
@@ -201,6 +238,7 @@ export function SettingsRow({
   description,
   footer,
   leading,
+  ground = "ply-0",
   children,
 }: {
   /** Row id from schema.ts (or any stable id when `label` is given). */
@@ -214,8 +252,10 @@ export function SettingsRow({
    * inline: control always on the trailing side (switches, badges, buttons).
    * stack: control moves under the text when the page is narrow.
    * block: control always sits under the text, full width.
+   * field: the label is printed on the control's top edge (a legend plate);
+   *   the description sits under it.
    */
-  layout?: "inline" | "stack" | "block";
+  layout?: "inline" | "stack" | "block" | "field";
   disabled?: boolean;
   /** Keep the label for assistive tech only (self-describing controls). */
   hideLabel?: boolean;
@@ -225,11 +265,14 @@ export function SettingsRow({
   footer?: ReactNode;
   /** Decorative media before the label (an avatar). */
   leading?: ReactNode;
+  /** The ground a "field" row's legend plate sits on (ply-3 in a dialog). */
+  ground?: "ply-0" | "ply-1" | "ply-2" | "ply-3";
   children?: (ids: RowIds) => ReactNode;
 }) {
   const { env, query, target } = useSettings();
   const labelId = useId();
   const descId = useId();
+  const controlId = useId();
   const location = label === undefined ? getRowLocation(id) : null;
   if (
     label === undefined &&
@@ -239,77 +282,114 @@ export function SettingsRow({
   }
   const row = location?.row;
   const desc = description ?? row?.desc;
-  const ids: RowIds = { labelId, descId: desc ? descId : undefined };
+  const field = layout === "field" && !hideLabel;
+  const ids: RowIds = {
+    labelId,
+    descId: desc ? descId : undefined,
+    label: typeof label === "string" ? label : row?.label,
+    controlId: field ? controlId : undefined,
+    field: field || undefined,
+  };
   const isTarget = target === id;
+  const labelNode = label ?? (
+    <Highlight text={row?.label ?? ""} query={query} />
+  );
+  const descNode = desc ? (
+    typeof desc === "string" ? (
+      <Highlight text={desc} query={query} />
+    ) : (
+      desc
+    )
+  ) : null;
 
   return (
     <li
       data-row={id}
       data-target={isTarget || undefined}
       tabIndex={isTarget ? -1 : undefined}
-      className="rm-settings-target scroll-my-6 px-4 py-3.5 outline-none @min-[560px]:px-5"
+      // The landing tint bleeds 12px past the column so the text keeps its
+      // edge; the hairline lives on the inner block and stays in the column.
+      className="rm-settings-target group/row -mx-3 scroll-my-6 px-3 outline-none"
     >
-      <div
-        className={cn(
-          "flex gap-x-6 gap-y-3",
-          layout === "block"
-            ? "flex-col"
-            : layout === "inline"
-              ? "flex-row items-center justify-between"
-              : "flex-col @min-[560px]:flex-row @min-[560px]:items-center @min-[560px]:justify-between",
-        )}
-      >
-        <div
-          className={cn(
-            "flex min-w-0 items-center gap-3",
-            hideLabel && "sr-only",
-          )}
-        >
-          {leading ? (
-            <span aria-hidden="true" className="shrink-0">
-              {leading}
-            </span>
-          ) : null}
-          <div className="min-w-0">
-            <p
-              id={labelId}
-              className={cn(
-                "text-ui-base font-medium",
-                disabled ? "text-rm-text-secondary" : "text-rm-text",
-              )}
+      <div className="border-b border-line py-4 group-last/row:border-b-0">
+        {field ? (
+          <>
+            <FieldPlate
+              label={<span id={labelId}>{labelNode}</span>}
+              htmlFor={controlId}
+              ground={ground}
             >
-              {label ?? <Highlight text={row?.label ?? ""} query={query} />}
-            </p>
-            {desc ? (
+              {children ? children(ids) : null}
+            </FieldPlate>
+            {descNode ? (
               <div
                 id={descId}
-                className="mt-0.5 max-w-[56ch] text-pretty text-ui-sm text-rm-text-secondary"
+                className="mt-2 max-w-[62ch] text-pretty text-ui-sm text-ink-2"
               >
-                {typeof desc === "string" ? (
-                  <Highlight text={desc} query={query} />
-                ) : (
-                  desc
+                {descNode}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div
+            className={cn(
+              "flex gap-x-4 gap-y-3",
+              layout === "block"
+                ? "flex-col"
+                : layout === "inline"
+                  ? "flex-row items-center justify-between"
+                  : "flex-col @min-[560px]:flex-row @min-[560px]:items-center @min-[560px]:justify-between",
+            )}
+          >
+            <div
+              className={cn(
+                "flex min-w-0 items-center gap-3",
+                hideLabel && "sr-only",
+              )}
+            >
+              {leading ? (
+                <span aria-hidden="true" className="shrink-0">
+                  {leading}
+                </span>
+              ) : null}
+              <div className="min-w-0">
+                <p
+                  id={labelId}
+                  className={cn(
+                    "text-[15px] leading-5 font-medium",
+                    disabled ? "text-ink-2" : "text-ink-1",
+                  )}
+                >
+                  {labelNode}
+                </p>
+                {descNode ? (
+                  <div
+                    id={descId}
+                    className="mt-0.5 max-w-[60ch] text-pretty text-ui-sm text-ink-2"
+                  >
+                    {descNode}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            {children ? (
+              <div
+                className={cn(
+                  "min-w-0",
+                  layout === "block"
+                    ? "w-full"
+                    : layout === "inline"
+                      ? "flex shrink-0 items-center justify-end gap-2"
+                      : "flex w-full shrink-0 items-center gap-2 @min-[560px]:w-auto @min-[560px]:justify-end",
                 )}
+              >
+                {children(ids)}
               </div>
             ) : null}
           </div>
-        </div>
-        {children ? (
-          <div
-            className={cn(
-              "min-w-0",
-              layout === "block"
-                ? "w-full"
-                : layout === "inline"
-                  ? "flex shrink-0 items-center justify-end gap-2"
-                  : "flex w-full shrink-0 items-center gap-2 @min-[560px]:w-auto @min-[560px]:justify-end",
-            )}
-          >
-            {children(ids)}
-          </div>
-        ) : null}
+        )}
+        {footer}
       </div>
-      {footer}
     </li>
   );
 }
@@ -322,8 +402,18 @@ export type SelectOption = {
   value: string;
   label: string;
   icon?: IconName;
+  /**
+   * A 12px meta line under the label in the open list ("System default").
+   * The trigger shows the label alone.
+   */
+  meta?: string;
 };
 
+/**
+ * The select for a row. In a "field" row (`ids.field`) it is the 48px legend
+ * plate control, full width; in any other row it is a 40px trigger on the
+ * trailing side.
+ */
 export function SettingsSelect({
   ids,
   value,
@@ -341,14 +431,36 @@ export function SettingsSelect({
   placeholder?: string;
   renderLabel?: (option: SelectOption) => ReactNode;
 }) {
+  const selected = options.find((option) => option.value === value);
   return (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger
+        id={ids.controlId}
+        size={ids.field ? "lg" : "default"}
         aria-labelledby={ids.labelId}
         aria-describedby={ids.descId}
-        className="h-9 w-full min-w-0 @min-[560px]:w-[260px] [&>span]:min-w-0 [&>span]:truncate"
+        title={selected?.label}
+        className={cn(
+          "w-full min-w-0 [&>span]:min-w-0 [&>span]:truncate",
+          !ids.field && "@min-[560px]:w-[240px]",
+        )}
       >
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder}>
+          {selected ? (
+            <span className="flex min-w-0 items-center gap-2">
+              {selected.icon ? (
+                <Icon
+                  name={selected.icon}
+                  size="sm"
+                  className="shrink-0 text-ink-3"
+                />
+              ) : null}
+              <span className="truncate">
+                {renderLabel ? renderLabel(selected) : selected.label}
+              </span>
+            </span>
+          ) : undefined}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent position="popper" align="end" className="max-w-[320px]">
         {options.map((option) => (
@@ -362,11 +474,18 @@ export function SettingsSelect({
                 <Icon
                   name={option.icon}
                   size="sm"
-                  className="shrink-0 text-rm-text-secondary"
+                  className="shrink-0 text-ink-3"
                 />
               ) : null}
-              <span className="truncate">
-                {renderLabel ? renderLabel(option) : option.label}
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate">
+                  {renderLabel ? renderLabel(option) : option.label}
+                </span>
+                {option.meta ? (
+                  <span className="truncate text-ui-xs font-normal text-ink-3">
+                    {option.meta}
+                  </span>
+                ) : null}
               </span>
             </span>
           </SelectItem>
@@ -376,6 +495,11 @@ export function SettingsSelect({
   );
 }
 
+/**
+ * A value fader: the C1 dither slider with a Martian readout. The thumb is
+ * the focusable `role="slider"`, so it takes the row's label and description
+ * ids directly (the primitive only forwards `aria-label` to it).
+ */
 export function RangeControl({
   ids,
   value,
@@ -397,33 +521,40 @@ export function RangeControl({
   unit?: string;
   className?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const thumb = ref.current?.querySelector<HTMLElement>('[role="slider"]');
+    if (!thumb) return;
+    thumb.setAttribute("aria-labelledby", ids.labelId);
+    if (ids.descId) thumb.setAttribute("aria-describedby", ids.descId);
+    else thumb.removeAttribute("aria-describedby");
+  }, [ids.labelId, ids.descId]);
   return (
-    <div
-      className={cn(
-        "flex w-full items-center gap-3 @min-[560px]:w-[260px]",
-        className,
-      )}
-    >
-      <input
-        type="range"
+    <div ref={ref} className={cn("flex w-full items-center gap-4", className)}>
+      <Slider
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={[value]}
         disabled={disabled}
-        aria-labelledby={ids.labelId}
-        aria-describedby={ids.descId}
-        aria-valuetext={`${value}${unit}`}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-        className="rm-settings-range min-w-0 flex-1"
+        aria-label={ids.label}
+        getAriaValueText={(next) => `${next}${unit}`}
+        onValueChange={([next]) => {
+          if (next !== undefined) onChange(next);
+        }}
+        className="min-w-0 flex-1"
       />
-      <output
+      <Num
+        size="sm"
         aria-hidden="true"
-        className="w-11 shrink-0 text-right text-ui-sm tabular-nums text-rm-text-secondary"
+        className={cn(
+          "w-12 shrink-0 text-right font-semibold",
+          disabled ? "text-ink-3" : "text-ink-1",
+        )}
       >
         {value}
         {unit}
-      </output>
+      </Num>
     </div>
   );
 }
@@ -436,8 +567,118 @@ export type RadioOption<V extends string> = {
 };
 
 /**
- * Native radios in a fieldset-like group: arrow keys move and select, the
- * browser handles focus. Named by the row label.
+ * A selectable card: a 2px corner, a line edge, a tint-1 hover. Selected:
+ * a 2px ink-1 edge and the Fill weight of its icon. Text cards lead with a
+ * 16px radio; pass `icon` for a glyph instead. It wraps a native input, so
+ * arrow keys, focus and forms behave as the browser's own radio or checkbox.
+ * (Studio's own choices use `SegmentedField`; this stays for dialogs that
+ * list options with long descriptions.)
+ */
+export function ChoiceCard({
+  type = "radio",
+  name,
+  value,
+  checked,
+  disabled = false,
+  onChange,
+  label,
+  description,
+  badge,
+  icon,
+  status,
+  className,
+}: {
+  type?: "radio" | "checkbox";
+  name?: string;
+  value?: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+  label: ReactNode;
+  description?: ReactNode;
+  /** A short tag after the label ("Recommended"). */
+  badge?: ReactNode;
+  /** A leading glyph in place of the radio (drawn Fill when selected). */
+  icon?: IconName;
+  /** Trailing status after the label ("Saving…"). */
+  status?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label
+      data-slot="choice-card"
+      data-checked={checked || undefined}
+      className={cn(
+        "relative flex cursor-pointer gap-2.5 rounded-[2px] border p-3 transition-[background-color,border-color] duration-(--dur-1) ease-out has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus",
+        checked
+          ? "border-ink-1 bg-tint-1 shadow-[inset_0_0_0_1px_var(--ink-1)]"
+          : "border-line-strong pointer-fine:hover:bg-tint-1",
+        disabled && "cursor-not-allowed opacity-45",
+        className,
+      )}
+    >
+      <input
+        type={type}
+        name={name}
+        value={value}
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        className="peer sr-only"
+      />
+      {icon ? (
+        <Icon
+          name={icon}
+          size="sm"
+          state={checked ? ("active" as never) : undefined}
+          className={cn(
+            "mt-0.5 shrink-0",
+            checked ? "text-ink-1" : "text-ink-2",
+          )}
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "mt-0.5 flex size-4 shrink-0 items-center justify-center border-2",
+            type === "checkbox" ? "rounded-[2px]" : "rounded-full",
+            checked ? "border-ink-1" : "border-ink-2",
+          )}
+        >
+          <span
+            className={cn(
+              "size-1.5 bg-ink-1 transition-[scale] duration-(--dur-2) ease-out",
+              type === "checkbox" ? "rounded-[1px]" : "rounded-full",
+              checked ? "scale-100" : "scale-0",
+            )}
+          />
+        </span>
+      )}
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-ui-row font-medium text-ink-1">{label}</span>
+          {badge ? (
+            <span className="silkscreen inline-flex h-5 items-center border border-line-strong px-1.5 text-ink-2">
+              {badge}
+            </span>
+          ) : null}
+          {status ? (
+            <span className="text-ui-xs text-ink-3">{status}</span>
+          ) : null}
+        </span>
+        {description ? (
+          <span className="mt-0.5 block text-pretty text-ui-xs text-ink-2">
+            {description}
+          </span>
+        ) : null}
+      </span>
+    </label>
+  );
+}
+
+/**
+ * Native radios as choice cards: arrow keys move and select, the browser
+ * handles focus. Named by the row label.
  */
 export function RadioList<V extends string>({
   ids,
@@ -458,98 +699,126 @@ export function RadioList<V extends string>({
   busyValue?: V | null;
 }) {
   return (
-    <div
-      role="radiogroup"
-      aria-labelledby={ids.labelId}
-      aria-describedby={ids.descId}
-      className="grid gap-2 @min-[560px]:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]"
-    >
-      {options.map((option) => {
-        const checked = option.value === value;
-        return (
-          <label
+    // Its own container: three across once the row itself is 560 wide (no
+    // orphan third card), one column below, whatever the page width.
+    <div className="@container/choices">
+      <div
+        role="radiogroup"
+        aria-labelledby={ids.labelId}
+        aria-describedby={ids.descId}
+        className={cn(
+          "grid grid-cols-1 gap-2",
+          // Whole rows only: two or four options pair up, the rest go three
+          // across, so no card sits alone on its own row.
+          options.length === 2 || options.length === 4
+            ? "@min-[560px]/choices:grid-cols-2"
+            : "@min-[560px]/choices:grid-cols-3",
+        )}
+      >
+        {options.map((option) => (
+          <ChoiceCard
             key={option.value}
-            className={cn(
-              "relative flex cursor-pointer gap-3 rounded-md border px-3 py-2.5 transition-[background-color,border-color] duration-150 ease-(--rm-ease-out) has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-(--rm-focus)",
-              checked
-                ? "border-rm-accent-ink/60 bg-rm-accent-tint"
-                : "border-rm-border-strong pointer-fine:hover:bg-rm-tint-1",
-              disabled && "cursor-not-allowed opacity-45",
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={option.value}
-              checked={checked}
-              disabled={disabled}
-              onChange={() => onChange(option.value)}
-              className="peer sr-only"
-            />
-            <span
-              aria-hidden="true"
-              className={cn(
-                "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
-                checked ? "border-primary bg-primary" : "border-rm-field-edge",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-1.5 rounded-full bg-primary-foreground transition-transform duration-150 ease-(--rm-ease-out)",
-                  checked ? "scale-100" : "scale-0",
-                )}
-              />
-            </span>
-            <span className="min-w-0">
-              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-ui-sm font-medium text-rm-text">
-                  {option.label}
-                </span>
-                {option.badge ? (
-                  <span className="rounded-sm bg-rm-tint-2 px-1.5 text-ui-2xs font-medium leading-5 text-rm-text-secondary">
-                    {option.badge}
-                  </span>
-                ) : null}
-                {busyValue === option.value ? (
-                  <span className="text-ui-xs text-rm-text-secondary">
-                    Saving…
-                  </span>
-                ) : null}
-              </span>
-              {option.desc ? (
-                <span className="mt-0.5 block text-ui-xs text-rm-text-secondary">
-                  {option.desc}
-                </span>
-              ) : null}
-            </span>
-          </label>
-        );
-      })}
+            name={name}
+            value={option.value}
+            checked={option.value === value}
+            disabled={disabled}
+            onChange={() => onChange(option.value)}
+            label={option.label}
+            description={option.desc}
+            badge={option.badge}
+            status={busyValue === option.value ? "Saving…" : undefined}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-export function ComingLater() {
+/**
+ * Two to four choices as the C1 segmented rail, with the chosen option's
+ * description (and tag) printed under it. Named by the row label; the
+ * description under the rail is the group's accessible description.
+ */
+export function SegmentedField<V extends string>({
+  ids,
+  value,
+  options,
+  onChange,
+  disabled,
+  busyValue,
+  className,
+}: {
+  ids: RowIds;
+  value: V;
+  options: readonly RadioOption<V>[];
+  onChange: (value: V) => void;
+  disabled?: boolean;
+  /** Shows a saving state next to the chosen option's description. */
+  busyValue?: V | null;
+  className?: string;
+}) {
+  const noteId = useId();
+  const chosen = options.find((option) => option.value === value);
+  const describedBy =
+    [ids.descId, chosen?.desc ? noteId : undefined].filter(Boolean).join(" ") ||
+    undefined;
   return (
-    <span className="inline-flex h-6 items-center rounded-full border border-rm-border-strong px-2.5 text-ui-xs font-medium text-rm-text-secondary">
-      Coming later
-    </span>
+    <div className={cn("flex w-full flex-col gap-3", className)}>
+      <SegmentedControl
+        label={ids.label ?? ""}
+        items={options.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        aria-describedby={describedBy}
+        // `text-control` is dropped when the cell's ink colour merges in
+        // (tailwind-merge reads it as a colour), so the cells' Bricolage 600
+        // label is restated here.
+        className="w-full [&_[role=radio]]:font-display [&_[role=radio]]:text-[15px] [&_[role=radio]]:leading-none [&_[role=radio]]:font-semibold [&_[role=radio]]:[font-optical-sizing:auto]"
+      />
+      {chosen?.desc || chosen?.badge || busyValue ? (
+        <p
+          id={noteId}
+          aria-live="polite"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-pretty text-ui-sm text-ink-2"
+        >
+          {chosen?.badge ? (
+            <span className="silkscreen inline-flex h-5 items-center border border-line-strong px-1.5 text-ink-2">
+              {chosen.badge}
+            </span>
+          ) : null}
+          {chosen?.desc ? <span>{chosen.desc}</span> : null}
+          {busyValue ? (
+            <LedLabel state="idle" className="h-5">
+              Saving…
+            </LedLabel>
+          ) : null}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
-export function Kbd({ children }: { children: ReactNode }) {
+/** A status word for rows whose control hasn't shipped yet. */
+export function ComingLater() {
   return (
-    <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-sm border border-rm-border-strong bg-rm-tint-1 shadow-[inset_0_-1px_0_var(--rm-border-strong)] px-1.5 font-[inherit] text-ui-xs font-medium text-rm-text">
-      {children}
-    </kbd>
+    <LedLabel state="off" tone="plain">
+      Coming later
+    </LedLabel>
   );
+}
+
+/** A key cap: the foundation `Kbd` (text-num-xs, h-5, radius 4, tint-2). */
+export function Kbd({ children }: { children: ReactNode }) {
+  return <UiKbd>{children}</UiKbd>;
 }
 
 export function ValueText({ children }: { children: ReactNode }) {
   return (
-    <span className="min-w-0 truncate text-ui-sm text-rm-text-secondary">
-      {children}
-    </span>
+    <span className="min-w-0 truncate text-ui-row text-ink-2">{children}</span>
   );
 }
 
@@ -565,7 +834,7 @@ export function RowError({
     <p
       role="alert"
       className={cn(
-        "mt-3 flex items-start gap-2 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink",
+        "mt-3 flex items-start gap-2 rounded-[2px] border-l-2 border-danger-ink bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink",
         className,
       )}
     >
@@ -630,12 +899,17 @@ export function ConfirmStrip({
     <div
       role="group"
       aria-labelledby={messageId}
-      className="rm-settings-confirm-in mt-3 flex flex-col gap-3 rounded-md border border-rm-border-strong bg-rm-tint-1 p-3 @min-[560px]:flex-row @min-[560px]:flex-wrap @min-[560px]:items-center @min-[560px]:justify-between"
+      className={cn(
+        "rm-settings-confirm-in mt-3 flex flex-col gap-3 rounded-[2px] border-l-2 bg-tint-1 p-3 @min-[560px]:flex-row @min-[560px]:flex-wrap @min-[560px]:items-center @min-[560px]:justify-between",
+        irreversible ? "border-danger-ink" : "border-ink-1",
+      )}
     >
-      <p id={messageId} className="text-pretty text-ui-sm text-rm-text">
+      <p id={messageId} className="text-pretty text-ui-sm text-ink-1">
         {consequence}
       </p>
-      <div className="flex shrink-0 justify-end gap-2">
+      {/* ms-auto keeps the buttons right-aligned when they wrap under a
+          long consequence or a confirm field. */}
+      <div className="ms-auto flex shrink-0 justify-end gap-2">
         <Button
           ref={cancelRef}
           type="button"

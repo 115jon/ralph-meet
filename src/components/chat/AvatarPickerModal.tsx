@@ -1,11 +1,12 @@
 import { RowError } from "@/components/chat/settings/primitives";
-import { Spinner } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { DISABLED, HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
@@ -89,15 +90,15 @@ async function gifToFile(item: GifPickerItem): Promise<File> {
 
 /** A large choice tile (upload / GIF). */
 const TILE = cn(
-  "flex min-h-36 flex-col items-center justify-center gap-1 rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-6 text-center outline-none",
+  "flex min-h-28 flex-col items-center justify-center gap-1 rounded-md border border-line bg-tint-1 px-4 py-4 text-center outline-none pointer-fine:hover:bg-tint-2",
   PRESS,
   DISABLED,
 );
 
 /**
  * Avatar (or banner) picker: upload, GIF, or a recent upload. A form-width
- * dialog on desktop, a bottom drawer on phones; opened from settings, so the
- * dialog sits on the stacked layer.
+ * dialog on desktop, a bottom drawer on phones. Stacks over settings
+ * automatically.
  */
 export function AvatarPickerModal({
   open,
@@ -190,8 +191,10 @@ export function AvatarPickerModal({
       }}
     >
       <ResponsiveDialogContent
-        // Opened from settings: the stacked layer (11.1).
-        dialogClassName="z-60 max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain md:max-w-md"
+        size="md"
+        placement="top"
+        initialFocus="surface"
+        dialogClassName="overflow-y-auto"
       >
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
@@ -207,17 +210,11 @@ export function AvatarPickerModal({
             disabled={Boolean(busyId)}
             className={TILE}
           >
-            <Icon
-              name="image"
-              size="xl"
-              className="mb-2 text-rm-text-secondary"
-            />
-            <span className="text-ui-base font-medium text-rm-text">
+            <Icon name="image" size="xl" className="mb-1 text-ink-2" />
+            <span className="text-ui-row font-medium text-ink-1">
               Upload image
             </span>
-            <span className="text-ui-xs text-rm-text-secondary">
-              From your device
-            </span>
+            <span className="text-ui-xs text-ink-2">From your device</span>
           </button>
 
           <button
@@ -226,17 +223,11 @@ export function AvatarPickerModal({
             disabled={Boolean(busyId)}
             className={TILE}
           >
-            <Icon
-              name="gif"
-              size="xl"
-              className="mb-2 text-rm-text-secondary"
-            />
-            <span className="text-ui-base font-medium text-rm-text">
+            <Icon name="gif" size="xl" className="mb-1 text-ink-2" />
+            <span className="text-ui-row font-medium text-ink-1">
               Choose GIF
             </span>
-            <span className="text-ui-xs text-rm-text-secondary">
-              Search for a GIF
-            </span>
+            <span className="text-ui-xs text-ink-2">Search for a GIF</span>
           </button>
         </div>
 
@@ -267,16 +258,16 @@ export function AvatarPickerModal({
               <div>
                 <h3
                   id="avatar-picker-recent"
-                  className="text-ui-md font-semibold text-rm-text"
+                  className="text-ui-sm font-semibold text-ink-1"
                 >
                   Recent avatars
                 </h3>
-                <p className="mt-1 text-ui-sm text-rm-text-secondary">
+                <p className="mt-0.5 text-ui-xs text-ink-3">
                   Your last 6 uploads.
                 </p>
               </div>
               {loading ? (
-                <span className="text-rm-text-muted">
+                <span className="text-ink-3">
                   <Spinner />
                   <span className="sr-only">Loading</span>
                 </span>
@@ -301,11 +292,11 @@ export function AvatarPickerModal({
                             : "Use this recent avatar"
                         }
                         className={cn(
-                          "size-14 overflow-hidden rounded-full bg-rm-tint-2 outline-none",
+                          "size-14 overflow-hidden rounded-avatar bg-tint-3 outline-none",
                           PRESS,
                           DISABLED,
                           isCurrent &&
-                            "ring-2 ring-rm-accent-ink ring-offset-2 ring-offset-rm-bg-surface dark:ring-offset-rm-bg-elevated",
+                            "ring-2 ring-accent-ink ring-offset-2 ring-offset-ply-3",
                         )}
                       >
                         <img
@@ -328,7 +319,7 @@ export function AvatarPickerModal({
                           disabled={Boolean(busyId)}
                           aria-label="Delete this recent avatar"
                           className={cn(
-                            "flex size-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-surface text-rm-text-secondary outline-none pointer-fine:hover:text-rm-danger-ink dark:bg-rm-bg-elevated",
+                            "flex size-6 items-center justify-center rounded-[2px] border border-line-strong bg-ply-3 text-ink-2 outline-none pointer-fine:hover:text-danger-ink",
                             PRESS,
                             HIT,
                             DISABLED,
@@ -345,7 +336,7 @@ export function AvatarPickerModal({
                 })}
               </ul>
             ) : !loading && !error ? (
-              <p className="text-ui-sm text-rm-text-secondary">
+              <p className="text-ui-sm text-ink-2">
                 Avatars you upload will show up here.
               </p>
             ) : null}
@@ -353,6 +344,12 @@ export function AvatarPickerModal({
         ) : null}
 
         {error ? <RowError className="mt-0">{error}</RowError> : null}
+
+        <ResponsiveDialogFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+        </ResponsiveDialogFooter>
       </ResponsiveDialogContent>
 
       <Suspense fallback={null}>

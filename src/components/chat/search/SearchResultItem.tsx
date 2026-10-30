@@ -3,10 +3,12 @@ import { formatMessageDate } from "@/components/chat/MessageItem";
 import { MiniAvatar } from "@/components/chat/MiniAvatar";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import {
   useClientDateFormatter,
   useClientReferenceTime,
+  type ClientDateFormatter,
 } from "@/lib/client-date-format";
 import { getFileIcon } from "@/lib/file-icons";
 import {
@@ -28,10 +30,7 @@ function TextWithMentions({ text }: { text: string }) {
     <>
       {parts.map((part, i) =>
         i % 2 === 1 ? (
-          <span
-            key={i}
-            className="rounded-xs bg-rm-accent-dim px-0.5 font-medium text-rm-accent-ink"
-          >
+          <span key={i} className="font-medium text-accent-ink">
             {part}
           </span>
         ) : part ? (
@@ -59,7 +58,7 @@ export function HighlightedExcerpt({
         segment.match ? (
           <mark
             key={i}
-            className="rounded-xs bg-[color-mix(in_oklab,var(--rm-accent)_30%,transparent)] px-px text-rm-text [box-decoration-break:clone]"
+            className="rounded-xs bg-accent-tint px-px text-ink-1 [box-decoration-break:clone]"
           >
             {segment.text}
           </mark>
@@ -69,6 +68,34 @@ export function HighlightedExcerpt({
       )}
     </>
   );
+}
+
+const ATTACHMENT_PILL =
+  "inline-flex h-6 max-w-[200px] items-center gap-1.5 rounded-sm border border-line bg-ply-2 px-1.5 text-ui-xs text-ink-2";
+
+/**
+ * The visible stamp: the time today, the date and time otherwise (the year
+ * only when it isn't this one). Numbers, so it sets in Num; the aria-label
+ * keeps the spoken "Today at" form.
+ */
+function shortStamp(
+  iso: string,
+  formatDate: ClientDateFormatter,
+  referenceTime: number | null,
+): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "";
+  const time = formatDate(date, { hour: "numeric", minute: "2-digit" });
+  if (referenceTime === null) return time;
+  const ref = new Date(referenceTime);
+  if (date.toDateString() === ref.toDateString()) return time;
+  const sameYear = date.getFullYear() === ref.getFullYear();
+  const day = formatDate(date, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  return `${day}, ${time}`;
 }
 
 function attachmentKind(contentType: string | null): string {
@@ -104,6 +131,7 @@ export const SearchResultItem = memo(function SearchResultItem({
   const referenceTime = useClientReferenceTime();
   const excerptId = useId();
   const when = formatMessageDate(message.created_at, formatDate, referenceTime);
+  const shortWhen = shortStamp(message.created_at, formatDate, referenceTime);
   const attachments = message.attachments;
   const shownAttachments = attachments.slice(0, 2);
   const hiddenAttachments = attachments.length - shownAttachments.length;
@@ -120,10 +148,9 @@ export const SearchResultItem = memo(function SearchResultItem({
       aria-describedby={excerptId}
       aria-current={active ? "true" : undefined}
       className={cn(
-        "group/result relative flex w-full gap-3 rounded-lg px-3 py-2.5 text-left outline-none select-none [-webkit-tap-highlight-color:transparent]",
-        "transition-[background-color] duration-150 ease-(--rm-ease-out)",
-        "bg-rm-tint-1 pointer-fine:hover:bg-rm-tint-2 active:bg-rm-tint-2",
-        active && "bg-rm-tint-2 ring-1 ring-inset ring-rm-border-strong",
+        "group/result relative flex w-full gap-2.5 rounded-sm px-2 py-2 text-left outline-none select-none [-webkit-tap-highlight-color:transparent]",
+        "transition-colors duration-(--dur-1) ease-out focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+        active ? "bg-tint-2" : "pointer-fine:hover:bg-tint-1 active:bg-tint-2",
       )}
     >
       <MiniAvatar
@@ -131,16 +158,16 @@ export const SearchResultItem = memo(function SearchResultItem({
         avatarDisplay={author.avatarDisplay}
         displayName={author.displayName}
         username={author.username}
-        size={36}
-        className="mt-0.5 max-md:size-10"
+        size={24}
+        className="max-md:size-8"
       />
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="flex min-w-0 items-baseline gap-2 pr-12 pointer-coarse:pr-0">
+        <span className="flex h-5 min-w-0 items-center gap-2 pr-12 pointer-coarse:pr-0">
           <ProfileDisplayName
             text={author.displayName}
             displayNameStyle={author.displayNameStyle}
             className={cn(
-              "block min-w-0 truncate text-ui-sm font-semibold text-rm-text max-md:text-ui-base",
+              "block min-w-0 truncate text-ui-sm font-semibold text-ink-1 max-md:text-ui-base",
               nameColor && "rm-role-name",
             )}
             style={
@@ -152,27 +179,24 @@ export const SearchResultItem = memo(function SearchResultItem({
                 : undefined
             }
           />
-          <time
-            dateTime={message.created_at}
-            className="shrink-0 text-ui-2xs text-rm-text-muted tabular-nums max-md:text-ui-xs"
-          >
-            {when}
-          </time>
+          <Num className="shrink-0 text-ink-3">
+            <time dateTime={message.created_at}>{shortWhen}</time>
+          </Num>
           {message.is_pinned && (
             <Icon
               name="pin"
               state="active"
               size="xs"
               label="Pinned"
-              className="shrink-0 self-center text-rm-text-muted"
+              className="shrink-0 text-ink-3"
             />
           )}
         </span>
         <span
           id={excerptId}
           className={cn(
-            "mt-0.5 block text-ui-sm leading-[1.45] text-rm-text-secondary [overflow-wrap:anywhere] line-clamp-5 max-md:text-ui-base max-md:leading-[1.4]",
-            !hasText && "italic text-rm-text-muted",
+            "block text-ui-sm text-ink-2 [overflow-wrap:anywhere] line-clamp-4 max-md:text-ui-base",
+            !hasText && "text-ink-3",
           )}
         >
           {hasText ? (
@@ -184,22 +208,15 @@ export const SearchResultItem = memo(function SearchResultItem({
           )}
         </span>
         {(attachments.length > 0 || message.embed_count > 0) && (
-          <span className="mt-2 flex flex-wrap gap-1.5">
+          <span className="mt-1.5 flex flex-wrap gap-1">
             {shownAttachments.map((attachment) => {
               const { icon } = getFileIcon(
                 attachment.filename,
                 attachment.content_type ?? undefined,
               );
               return (
-                <span
-                  key={attachment.id}
-                  className="inline-flex h-6 max-w-[200px] items-center gap-1.5 rounded-md border border-rm-border bg-rm-bg-primary px-1.5 text-ui-xs text-rm-text-secondary"
-                >
-                  <Icon
-                    name={icon}
-                    size="xs"
-                    className="shrink-0 text-rm-text-muted"
-                  />
+                <span key={attachment.id} className={ATTACHMENT_PILL}>
+                  <Icon name={icon} size="xs" className="shrink-0 text-ink-3" />
                   <span className="sr-only">
                     {attachmentKind(attachment.content_type)}:
                   </span>
@@ -208,20 +225,20 @@ export const SearchResultItem = memo(function SearchResultItem({
               );
             })}
             {hiddenAttachments > 0 && (
-              <span className="inline-flex h-6 items-center rounded-md border border-rm-border bg-rm-bg-primary px-1.5 text-ui-xs text-rm-text-muted tabular-nums">
-                +{hiddenAttachments} more
+              <span className={cn(ATTACHMENT_PILL, "text-ink-3")}>
+                <Num>+{hiddenAttachments}</Num> more
               </span>
             )}
             {message.embed_count > 0 && (
-              <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-rm-border bg-rm-bg-primary px-1.5 text-ui-xs text-rm-text-secondary">
-                <Icon
-                  name="link"
-                  size="xs"
-                  className="shrink-0 text-rm-text-muted"
-                />
-                {message.embed_count === 1
-                  ? "Link preview"
-                  : `${message.embed_count} link previews`}
+              <span className={ATTACHMENT_PILL}>
+                <Icon name="link" size="xs" className="shrink-0 text-ink-3" />
+                {message.embed_count === 1 ? (
+                  "Link preview"
+                ) : (
+                  <>
+                    <Num>{message.embed_count}</Num> link previews
+                  </>
+                )}
               </span>
             )}
           </span>
@@ -229,7 +246,7 @@ export const SearchResultItem = memo(function SearchResultItem({
       </span>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute top-2 right-2 hidden h-6 items-center rounded-md bg-rm-bg-primary px-2 text-ui-xs font-medium text-rm-text-secondary opacity-0 shadow-[var(--rm-shadow-1)] transition-opacity duration-150 ease-(--rm-ease-out) pointer-fine:inline-flex pointer-fine:group-hover/result:opacity-100 pointer-fine:group-focus-visible/result:opacity-100"
+        className="pointer-events-none absolute top-1.5 right-1.5 hidden h-6 items-center rounded-sm bg-tint-2 px-2 text-ui-xs font-medium text-ink-1 opacity-0 transition-opacity duration-(--dur-1) ease-out pointer-fine:inline-flex pointer-fine:group-hover/result:opacity-100 pointer-fine:group-focus-visible/result:opacity-100"
       >
         Jump
       </span>

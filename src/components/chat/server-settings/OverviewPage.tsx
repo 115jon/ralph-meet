@@ -1,7 +1,8 @@
 /**
  * Server settings → Overview: icon, name, public sharing and the danger zone,
- * on the Studio card/row recipe (design-system 12.6). The form state lives in
- * `useOverviewForm` so the shell can put Save in the workbench footer.
+ * on the settings card/row recipe. The form state lives in `useOverviewForm`
+ * so the shell can feed the workbench's shared UnsavedBar (hidden while
+ * clean, Reset + Save while dirty; overlays audit issue 7).
  */
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { SettingsSwitch } from "../SettingsSwitch";
+import { FieldRow } from "./Field";
 import {
   ConfirmStrip,
   RowError,
@@ -115,11 +117,27 @@ export function useOverviewForm({
     setRemoveIcon(true);
   };
 
+  const reset = () => {
+    touch();
+    setName(saved.name);
+    setNameError(null);
+    setShares({
+      allowPublicShares: saved.allowPublicShares,
+      showSourceInShares: saved.showSourceInShares,
+      allowShareIndexing: saved.allowShareIndexing,
+    });
+    setIconFile(null);
+    setIconPreview(null);
+    setRemoveIcon(false);
+    setIconError(null);
+  };
+
   const save = async () => {
     if (saving) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setNameError("Enter a server name.");
+      document.getElementById(SERVER_NAME_ID)?.focus();
       return;
     }
     setNameError(null);
@@ -194,47 +212,18 @@ export function useOverviewForm({
     justSaved,
     dirty,
     save,
+    reset,
   };
 }
 
 export type OverviewForm = ReturnType<typeof useOverviewForm>;
 
-/** Sticky footer: save status on the leading side, Save on the trailing. */
-export function OverviewSaveBar({ form }: { form: OverviewForm }) {
+/** Screen-reader confirmation once the save bar slides away. */
+export function OverviewSavedStatus({ form }: { form: OverviewForm }) {
   return (
-    <div className="flex flex-col gap-3">
-      {form.saveError ? (
-        <RowError className="mt-0">{form.saveError}</RowError>
-      ) : null}
-      <div className="flex items-center justify-end gap-3">
-        <p
-          role="status"
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-ui-sm"
-        >
-          {form.justSaved && !form.dirty ? (
-            <>
-              <Icon
-                name="success"
-                size="sm"
-                className="shrink-0 text-rm-success-ink"
-              />
-              <span className="text-rm-success-ink">Saved</span>
-            </>
-          ) : form.dirty ? (
-            <span className="text-rm-text-secondary">Unsaved changes</span>
-          ) : null}
-        </p>
-        <Button
-          type="button"
-          className="max-md:min-h-11"
-          loading={form.saving}
-          disabled={!form.dirty}
-          onClick={() => void form.save()}
-        >
-          Save changes
-        </Button>
-      </div>
-    </div>
+    <p role="status" className="sr-only">
+      {form.justSaved && !form.dirty ? "Changes saved" : ""}
+    </p>
   );
 }
 
@@ -250,11 +239,11 @@ function IconRow({ form }: { form: OverviewForm }) {
       layout="stack"
       description="A square image at least 512 × 512. PNG, JPG, GIF, WebP or AVIF, up to 8 MB."
       leading={
-        <span className="flex size-16 items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-tint-1">
+        <span className="flex size-16 items-center justify-center overflow-hidden rounded-avatar border border-line bg-tint-1">
           {shown ? (
             <img src={shown} alt="" className="size-full object-cover" />
           ) : (
-            <Icon name="image" size="xl" className="text-rm-text-muted" />
+            <Icon name="image" size="xl" className="text-ink-3" />
           )}
         </span>
       }
@@ -303,49 +292,36 @@ function IconRow({ form }: { form: OverviewForm }) {
   );
 }
 
+const SERVER_NAME_ID = "server-settings-name";
+
 function NameRow({ form, canEdit }: { form: OverviewForm; canEdit: boolean }) {
-  const errorId = "server-name-error";
+  const helpId = "server-name-help";
   return (
-    <SettingsRow
-      id="server-name"
+    <FieldRow
       label="Server name"
-      layout="block"
-      description={
+      htmlFor={SERVER_NAME_ID}
+      helperId={helpId}
+      error={form.nameError}
+      helper={
         canEdit
-          ? undefined
+          ? "Shown in the server list and on invites."
           : "Only people with the Manage server permission can change it."
       }
     >
-      {({ labelId, descId }) => (
-        <div className="flex flex-col gap-2">
-          <Input
-            value={form.name}
-            readOnly={!canEdit}
-            maxLength={100}
-            aria-labelledby={labelId}
-            aria-describedby={
-              [descId, form.nameError ? errorId : null]
-                .filter(Boolean)
-                .join(" ") || undefined
-            }
-            aria-invalid={form.nameError ? true : undefined}
-            onChange={(event) => form.setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && canEdit) void form.save();
-            }}
-            className={cn(
-              "max-md:min-h-11 md:max-w-[360px]",
-              !canEdit && "bg-rm-tint-1",
-            )}
-          />
-          {form.nameError ? (
-            <p id={errorId} className="text-ui-xs text-rm-danger-ink">
-              {form.nameError}
-            </p>
-          ) : null}
-        </div>
-      )}
-    </SettingsRow>
+      <Input
+        id={SERVER_NAME_ID}
+        value={form.name}
+        readOnly={!canEdit}
+        maxLength={100}
+        aria-describedby={helpId}
+        aria-invalid={form.nameError ? true : undefined}
+        onChange={(event) => form.setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && canEdit && form.dirty) void form.save();
+        }}
+        className={cn("max-md:min-h-11", !canEdit && "bg-tint-1")}
+      />
+    </FieldRow>
   );
 }
 
@@ -451,7 +427,7 @@ function DeleteServerCard({
                   </strong>{" "}
                   Every member loses access and its messages are gone for good.
                   Type the server name to confirm.
-                  <input
+                  <Input
                     ref={inputRef}
                     value={typed}
                     aria-label={`Type ${serverName} to confirm`}
@@ -465,7 +441,7 @@ function DeleteServerCard({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void confirm();
                     }}
-                    className="mt-2 block h-9 w-full rounded-md border border-rm-field-edge bg-rm-bg-surface px-3 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted max-md:min-h-11 md:max-w-[360px] md:text-ui-sm"
+                    className="mt-2 block max-md:min-h-11"
                   />
                 </>
               }

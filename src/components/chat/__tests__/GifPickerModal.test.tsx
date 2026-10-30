@@ -86,8 +86,8 @@ describe("GifPickerModal recent queries rendering", () => {
     // on the same layer (later in the DOM, so above it).
     const overlay = document.querySelector('[data-slot="dialog-overlay"]');
     const surface = screen.getByRole("dialog", { name: "GIF picker" });
-    expect(overlay).toHaveClass("z-50", "bg-rm-scrim");
-    expect(surface).toHaveClass("z-50", "rounded-lg", "shadow-lg");
+    expect(overlay).toHaveClass("z-50", "bg-scrim");
+    expect(surface).toHaveClass("z-50", "rounded-[2px]", "shadow-float");
     expect(
       overlay!.compareDocumentPosition(surface) &
         Node.DOCUMENT_POSITION_FOLLOWING,

@@ -109,12 +109,52 @@ describe("PinnedMessagesSidebar", () => {
     const region = screen.getByRole("complementary", {
       name: "Pinned messages",
     });
-    fireEvent.click(screen.getByRole("button", { name: "Jump" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Jump to message from Linus: Ship it",
+      }),
+    );
     expect(onJump).toHaveBeenCalledWith("m-1");
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(region).not.toBeInTheDocument();
+  });
+
+  it("names every row's Jump and Unpin keys after its author and text", () => {
+    const second = {
+      ...(message as object),
+      id: "m-2",
+      content: "x".repeat(80),
+    } as never;
+    const attachmentOnly = {
+      ...(message as object),
+      id: "m-3",
+      content: "",
+      attachments: [{ id: "a", filename: "a.png", content_type: "text/plain" }],
+    } as never;
+    render(
+      <PinnedMessagesSidebar
+        open
+        messages={[message, second, attachmentOnly]}
+        isLoading={false}
+        onClose={() => {}}
+        onJumpToMessage={() => {}}
+        onUnpin={() => {}}
+        canUnpin
+        forceMode="dock"
+      />,
+    );
+    const jumps = screen.getAllByRole("button", { name: /^Jump to message/ });
+    expect(jumps.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Jump to message from Linus: Ship it",
+      `Jump to message from Linus: ${"x".repeat(60)}...`,
+      "Jump to message from Linus: attachment",
+    ]);
+    const unpins = screen.getAllByRole("button", { name: /^Unpin message/ });
+    expect(new Set(unpins.map((b) => b.getAttribute("aria-label"))).size).toBe(
+      3,
+    );
   });
 
   it("shows the empty and loading states", () => {

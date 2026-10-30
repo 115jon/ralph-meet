@@ -5,9 +5,9 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 const SIZES = {
-  16: "size-4 text-ui-2xs",
-  20: "size-5 text-ui-2xs",
-  24: "size-6 text-ui-2xs",
+  16: "size-4 text-[11px]",
+  20: "size-5 text-[11px]",
+  24: "size-6 text-[11px]",
   32: "size-8 text-ui-xs",
   36: "size-9 text-ui-sm",
   40: "size-10 text-ui-sm",
@@ -39,7 +39,7 @@ export function MiniAvatar({
     <span
       aria-hidden="true"
       className={cn(
-        "relative flex shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-tint-2 font-semibold text-rm-text-secondary select-none",
+        "relative flex shrink-0 items-center justify-center overflow-visible rounded-avatar bg-tint-3 font-display font-extrabold text-ink-1 select-none",
         SIZES[size],
         className,
       )}

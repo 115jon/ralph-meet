@@ -65,7 +65,7 @@ export function MobileNavigationSheet({
       onBackButton={handleBack}
     >
       <DrawerContent
-        className="w-full max-w-none gap-0 border-r-0 bg-rm-bg-primary pt-[var(--safe-area-top,0px)] shadow-none dark:bg-rm-bg-primary md:hidden"
+        className="w-full max-w-none gap-0 border-r-0 bg-ply-0 pt-[var(--safe-area-top,0px)] shadow-none md:hidden"
         overlayClassName="md:hidden"
       >
         <DrawerTitle className="sr-only">{TAB_TITLES[tab]}</DrawerTitle>
@@ -76,10 +76,10 @@ export function MobileNavigationSheet({
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {tab === "servers" ? (
             <>
-              <div className="w-[72px] shrink-0 overflow-hidden border-r border-rm-border bg-rm-bg-floating">
+              <div className="w-[72px] shrink-0 overflow-hidden border-r border-line bg-ply-0">
                 {serverList}
               </div>
-              <div className="min-w-0 flex-1 overflow-hidden bg-rm-sidebar">
+              <div className="min-w-0 flex-1 overflow-hidden bg-ply-1">
                 {current}
               </div>
             </>

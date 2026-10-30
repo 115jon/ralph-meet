@@ -27,22 +27,20 @@ export function RemoveEmbedsDialog({
 }: RemoveEmbedsDialogProps) {
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="md:max-w-sm">
+      <ResponsiveDialogContent size="sm">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Are you sure?</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Remove embeds?</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
-            This will remove all embeds on this message for everyone.
+            This removes the previews from this message for everyone.
+            Shift-click the × to skip this.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        <p className="text-ui-xs text-rm-text-secondary">
-          Hold shift when clearing embeds to skip this modal.
-        </p>
         <ResponsiveDialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="danger" onClick={onConfirm}>
-            Remove all embeds
+            Remove
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

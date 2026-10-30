@@ -45,3 +45,54 @@ export function commandFilter(
   const text = value.slice(value.indexOf(" ") + 1);
   return defaultFilter(text, query, keywords);
 }
+
+// ── Recent places ─────────────────────────────────────────────────────────
+// The idle switcher leads with where you were last. A small list in
+// localStorage, newest first; DMs use the "@me" server id.
+
+export type RecentTarget = { serverId: string; channelId: string };
+
+const RECENT_KEY = "rm:quick-switcher:recent";
+/** One more than the menu shows, so the current place can be dropped. */
+const RECENT_KEEP = 6;
+export const RECENT_SHOWN = 5;
+
+function isTarget(value: unknown): value is RecentTarget {
+  const v = value as Partial<RecentTarget> | null;
+  return (
+    !!v && typeof v.serverId === "string" && typeof v.channelId === "string"
+  );
+}
+
+export function loadRecentTargets(): RecentTarget[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter(isTarget).slice(0, RECENT_KEEP)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** `target` first, without duplicates, capped. Pure. */
+export function pushRecentTarget(
+  list: readonly RecentTarget[],
+  target: RecentTarget,
+): RecentTarget[] {
+  return [
+    target,
+    ...list.filter((t) => t.channelId !== target.channelId),
+  ].slice(0, RECENT_KEEP);
+}
+
+/** Records a visit (called when the active channel changes). */
+export function recordRecentTarget(target: RecentTarget): void {
+  try {
+    const next = pushRecentTarget(loadRecentTargets(), target);
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // Storage full or blocked: the switcher just has no Recent group.
+  }
+}

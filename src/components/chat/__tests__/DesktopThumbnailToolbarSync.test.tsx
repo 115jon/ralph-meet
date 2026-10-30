@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
     listener: null as
       | ((event: { action: ToolbarAction }) => void | Promise<void>)
       | null,
+    livePosition: vi.fn(() => 12_000),
     sendAppEvent: vi.fn(),
     setLocalPlayback: vi.fn(),
     syncToolbar: vi.fn(),
@@ -69,14 +70,17 @@ vi.mock("@/stores/useVoiceSettingsStore", () => ({
     selector({ getSettings: () => ({ alwaysPreviewVideo: false }) }),
 }));
 vi.mock("../listen-together-playback", () => ({
-  useListenTogetherPlaybackState: () => ({
-    currentEntry: { entryId: "entry-1" },
-    effectiveSeekValue: 12_000,
-    isPaused: false,
-    localPlayback: null,
-    setLocalPlayback: mocks.setLocalPlayback,
-    snapshot: { revision: 4 },
-  }),
+  getListenTogetherLivePositionMs: mocks.livePosition,
+  useListenTogetherPlaybackState: () => {
+    return {
+      currentEntry: { entryId: "entry-1" },
+      effectiveSeekValue: 12_000,
+      isPaused: false,
+      localPlayback: null,
+      setLocalPlayback: mocks.setLocalPlayback,
+      snapshot: { revision: 4 },
+    };
+  },
 }));
 
 import { DesktopThumbnailToolbarSync } from "../DesktopThumbnailToolbarSync";
@@ -88,6 +92,28 @@ describe("DesktopThumbnailToolbarSync media controls", () => {
     mocks.sendAppEvent.mockReset();
     mocks.setLocalPlayback.mockReset();
     mocks.syncToolbar.mockReset();
+    mocks.livePosition.mockReset().mockReturnValue(12_000);
+  });
+
+  it("pins a pause at the live position", async () => {
+    mocks.sendAppEvent.mockReturnValue(true);
+    render(
+      <DesktopThumbnailToolbarSync
+        currentUserId="user-1"
+        localStreamState={null}
+        voiceJoined={false}
+      />,
+    );
+    await waitFor(() => expect(mocks.listener).not.toBeNull());
+
+    mocks.livePosition.mockReturnValue(47_500);
+    await act(async () => {
+      await mocks.listener?.({ action: "toggle-media-playback" });
+    });
+    expect(mocks.setLocalPlayback).toHaveBeenLastCalledWith(
+      "room-1",
+      expect.objectContaining({ paused: true, positionMs: 47_500 }),
+    );
   });
 
   it("inverts the latest optimistic state and preserves ordered pending toggles", () => {

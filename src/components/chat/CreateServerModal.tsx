@@ -12,8 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useId, useReducer, useRef } from "react";
 import { Icon } from "@/components/ui/icon";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -21,6 +22,8 @@ interface Props {
 
 interface State {
   name: string;
+  /** Shown under the name field after a submit with no name. */
+  nameError: string | null;
   creating: boolean;
   iconFile: File | null;
   iconPreview: string | null;
@@ -29,6 +32,7 @@ interface State {
 
 type Action =
   | { type: "SET_NAME"; payload: string }
+  | { type: "SET_NAME_ERROR"; payload: string | null }
   | { type: "SET_CREATING"; payload: boolean }
   | { type: "SET_ICON"; file: File; preview: string }
   | { type: "SET_UPLOAD_ERROR"; payload: string | null }
@@ -37,7 +41,9 @@ type Action =
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "SET_NAME":
-      return { ...state, name: action.payload };
+      return { ...state, name: action.payload, nameError: null };
+    case "SET_NAME_ERROR":
+      return { ...state, nameError: action.payload };
     case "SET_CREATING":
       return { ...state, creating: action.payload };
     case "SET_ICON":
@@ -60,6 +66,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
   const { createServer, dispatch: chatDispatch } = useChatActions();
   const [state, dispatch] = useReducer(reducer, {
     name: "",
+    nameError: null,
     creating: false,
     iconFile: null,
     iconPreview: null,
@@ -68,6 +75,10 @@ export default function CreateServerModal({ open, onClose }: Props) {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ids = useId();
+  const iconLabelId = `${ids}-icon-label`;
+  const iconHelpId = `${ids}-icon-help`;
+  const nameErrorId = `${ids}-name-error`;
 
   // Clean up object URL on unmount
   useEffect(() => {
@@ -111,8 +122,14 @@ export default function CreateServerModal({ open, onClose }: Props) {
     [handleIconSelect],
   );
 
+  // Create stays enabled; an empty name is caught here, inline.
   const handleCreate = useCallback(async () => {
-    if (!state.name.trim() || state.creating) return;
+    if (state.creating) return;
+    if (!state.name.trim()) {
+      dispatch({ type: "SET_NAME_ERROR", payload: "Give your server a name." });
+      inputRef.current?.focus();
+      return;
+    }
     dispatch({ type: "SET_CREATING", payload: true });
     dispatch({ type: "SET_UPLOAD_ERROR", payload: null });
 
@@ -168,14 +185,16 @@ export default function CreateServerModal({ open, onClose }: Props) {
 
   const fields = (
     <>
-      {/* Icon upload */}
-      <div className="flex justify-center">
+      {/* Icon upload: a labelled field, with Remove once an image is set. */}
+      <div className="flex items-center gap-4">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
-          className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-ui pointer-fine:hover:border-primary/50 pointer-fine:hover:bg-rm-bg-elevated"
+          aria-labelledby={iconLabelId}
+          aria-describedby={iconHelpId}
+          className="group relative flex size-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-avatar border border-dashed border-line-strong bg-ply-2 text-ink-3 outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
           {state.iconPreview ? (
             <>
@@ -184,28 +203,50 @@ export default function CreateServerModal({ open, onClose }: Props) {
                 alt="Server icon preview"
                 className="h-full w-full object-cover"
               />
-              {/* Media overlay over the chosen image (6.5). A strip along
-                  the bottom on touch, where there is no hover; the full
-                  hover scrim on fine pointers. */}
-              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/60 py-1 pointer-fine:inset-0 pointer-fine:bg-black/40 pointer-fine:py-0 pointer-fine:opacity-0 pointer-fine:transition-opacity pointer-fine:duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100">
-                <span className="text-ui-2xs font-semibold text-white">
-                  Change
-                </span>
+              {/* Media overlay over the chosen image: a hover scrim on fine
+                  pointers only (touch uses the Change button beside it). */}
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 flex items-center justify-center bg-black/48 opacity-0 transition-opacity duration-(--dur-1) ease-out pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100"
+              >
+                <Icon name="image" size="lg" className="text-white" />
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center gap-0.5">
-              <Icon
-                name="add"
-                size="lg"
-                className="text-rm-text-muted/40 transition-colors pointer-fine:group-hover:text-primary"
-              />
-              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 pointer-fine:group-hover:text-primary">
-                Icon
-              </span>
-            </div>
+            <Icon name="image" size="lg" />
           )}
         </button>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span id={iconLabelId} className="text-ui-sm font-medium text-ink-1">
+            Server icon, optional
+          </span>
+          <span id={iconHelpId} className="text-ui-xs text-ink-3">
+            PNG, JPG, GIF or WebP, up to 8 MB.
+          </span>
+          <div className="mt-1.5 flex items-center gap-1">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {state.iconPreview ? "Change" : "Upload image"}
+            </Button>
+            {state.iconPreview ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (state.iconPreview) URL.revokeObjectURL(state.iconPreview);
+                  dispatch({ type: "RESET_ICON" });
+                }}
+              >
+                Remove
+              </Button>
+            ) : null}
+          </div>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -221,15 +262,12 @@ export default function CreateServerModal({ open, onClose }: Props) {
       </div>
 
       {state.uploadError && (
-        <p
-          role="alert"
-          className="text-center text-ui-xs font-medium text-rm-danger-ink"
-        >
+        <p role="alert" className="text-ui-xs text-danger-ink">
           {state.uploadError}
         </p>
       )}
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="server-name">Server name</Label>
         <Input
           id="server-name"
@@ -240,8 +278,15 @@ export default function CreateServerModal({ open, onClose }: Props) {
           }
           onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           placeholder="My Awesome Server"
+          aria-invalid={state.nameError ? true : undefined}
+          aria-describedby={state.nameError ? nameErrorId : undefined}
           className="max-md:min-h-11"
         />
+        {state.nameError ? (
+          <p id={nameErrorId} className="text-ui-xs text-danger-ink">
+            {state.nameError}
+          </p>
+        ) : null}
       </div>
     </>
   );
@@ -252,7 +297,8 @@ export default function CreateServerModal({ open, onClose }: Props) {
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
       <ResponsiveDialogContent
-        className="md:max-w-md"
+        size="md"
+        placement="top"
         // Desktop only: the drawer keeps focus on its surface so the phone
         // keyboard does not jump up on open.
         onOpenAutoFocus={(event) => {
@@ -268,14 +314,10 @@ export default function CreateServerModal({ open, onClose }: Props) {
         </ResponsiveDialogHeader>
         {fields}
         <ResponsiveDialogFooter>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={!state.name.trim() || state.creating}
-            loading={state.creating}
-          >
+          <Button onClick={handleCreate} loading={state.creating}>
             Create server
           </Button>
         </ResponsiveDialogFooter>

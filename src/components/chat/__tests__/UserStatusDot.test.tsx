@@ -15,7 +15,7 @@ describe("UserStatusDot", () => {
     const dot = container.firstElementChild as HTMLElement;
 
     expect(dot).toHaveClass(
-      "bg-rm-status-offline",
+      "bg-status-offline",
       "aspect-square",
       "rounded-full",
     );
@@ -30,7 +30,7 @@ describe("UserStatusDot", () => {
     const offline = render(<UserStatusDot status="offline" />).container
       .firstElementChild as HTMLElement;
 
-    expect(dnd).toHaveClass("bg-rm-status-dnd");
+    expect(dnd).toHaveClass("bg-status-dnd");
     expect(dnd.childElementCount).toBe(0);
     expect(dnd.style.maskImage).toContain("data:image/svg+xml");
     expect(dnd.style.maskImage).not.toBe(offline.style.maskImage);
@@ -48,9 +48,9 @@ describe("UserStatusDot", () => {
     const idle = render(<UserStatusDot status="idle" />).container
       .firstElementChild;
 
-    expect(online).toHaveClass("bg-rm-status-online");
+    expect(online).toHaveClass("bg-status-online");
     expect(online).not.toHaveClass("bg-primary");
-    expect(idle).toHaveClass("bg-rm-status-idle");
+    expect(idle).toHaveClass("bg-status-idle");
   });
 
   it("is decorative by default and announces a label when given one", () => {
@@ -63,7 +63,7 @@ describe("UserStatusDot", () => {
 
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
     expect(getByRole("img", { name: "Do not disturb" })).toHaveClass(
-      "bg-rm-status-dnd",
+      "bg-status-dnd",
     );
   });
 
@@ -79,7 +79,7 @@ describe("UserStatusDot", () => {
     const ring = container.firstElementChild;
     expect(ring).toHaveClass("bg-rm-sidebar", "p-0.5", "size-3");
     expect(ring?.firstElementChild).toHaveClass(
-      "bg-rm-status-offline",
+      "bg-status-offline",
       "size-full",
     );
     // The ring carries the name so the dot is announced once.

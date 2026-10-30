@@ -8,8 +8,10 @@
  * layer it owns scroll lock, focus, Escape and the back button.
  *
  * Phones: full screen, header, sticky preview band, one scrolling list,
- * Apply in a bottom bar above the home indicator. md+: preview pane on the
- * left, list on the right.
+ * Apply in a bottom bar above the home indicator. md+: the workbench shell
+ * (WORKBENCH_SURFACE): header across the top, preview pane left, list right,
+ * and a footer along the whole bottom edge (preview name left, Cancel and
+ * Apply right).
  */
 
 import { Button } from "@/components/ui/button";
@@ -22,8 +24,13 @@ import {
   DialogSurface,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { WORKBENCH_SURFACE } from "@/components/chat/settings/SettingsWorkbench";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
+import { Num } from "@/components/ui/num";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import {
   applyCollectible,
@@ -51,7 +58,6 @@ import {
   useDeferredValue,
   useId,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -85,64 +91,69 @@ export type CollectiblePickerProps = {
   ) => void | Promise<void>;
 };
 
+/** Whole cells packed edge to edge; the selected cell takes the ring. */
 const GRID_CLASS: Record<CollectibleKind, string> = {
-  avatar_decoration:
-    "grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-x-1.5 gap-y-2",
-  profile_effect:
-    "grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-x-1.5 gap-y-2",
-  nameplate: "grid grid-cols-1 gap-2 md:grid-cols-2",
-  profile_frame:
-    "grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-4",
+  avatar_decoration: "grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))]",
+  profile_effect: "grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))]",
+  nameplate: "grid grid-cols-1 md:grid-cols-2",
+  profile_frame: "grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))]",
 };
 
-function SelectionMarks({
-  selected,
-  equipped,
-}: Pick<OptionVisualState, "selected" | "equipped">) {
+/** The check disc on the chosen cell (accent fill, Bold glyph). */
+function SelectedMark() {
   return (
-    <>
-      {selected ? (
-        <span
-          aria-hidden="true"
-          className="absolute end-1.5 top-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-rm-accent-solid text-rm-on-accent shadow-(--rm-shadow-1)"
-        >
-          <Icon name="check" size="xs" />
-        </span>
-      ) : null}
-      {equipped ? (
-        <span className="absolute start-1.5 top-1.5 z-10 rounded-full bg-rm-bg-floating/90 px-1.5 py-0.5 text-ui-2xs font-semibold text-rm-text-secondary shadow-(--rm-shadow-1)">
-          Equipped
-        </span>
-      ) : null}
-    </>
+    <span
+      aria-hidden="true"
+      className="absolute end-1.5 top-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-accent-ink text-ply-0"
+    >
+      <Icon name="check" size="xs" />
+    </span>
   );
 }
 
-function tileFrameClass(selected: boolean) {
+/**
+ * One cell: hover is tint-1, the chosen cell gets the accent ring and the
+ * check disc. No per-cell card, border or pill.
+ */
+function cellClass(selected: boolean, extra?: string) {
   return cn(
-    "relative flex h-full flex-col rounded-xl p-1.5 transition-colors duration-150",
+    "relative flex h-full flex-col rounded-lg p-2 transition-colors duration-(--dur-1) ease-out",
     selected
-      ? "bg-rm-accent-tint ring-2 ring-rm-accent ring-inset"
-      : "pointer-fine:group-hover/option:bg-rm-tint-1",
+      ? "ring-2 ring-accent-ink ring-inset"
+      : "pointer-fine:group-hover/option:bg-tint-1",
+    extra,
   );
 }
 
-function TileCaption({ children }: { children: ReactNode }) {
+function CellCaption({
+  children,
+  equipped,
+}: {
+  children: ReactNode;
+  equipped: boolean;
+}) {
   return (
-    <span className="mt-1.5 line-clamp-2 px-0.5 text-center text-ui-xs leading-snug text-rm-text-secondary">
-      {children}
+    <span className="mt-1.5 flex flex-col items-center px-0.5 text-center">
+      <span className="line-clamp-2 text-ui-xs text-ink-2">{children}</span>
+      {equipped ? (
+        <span className="text-ui-xs font-medium text-ink-3">Equipped</span>
+      ) : null}
     </span>
   );
 }
 
 function NoneGlyph() {
   return (
-    <span className="absolute inset-0 flex items-center justify-center text-rm-text-muted">
+    <span className="absolute inset-0 flex items-center justify-center text-ink-3">
       <Icon name="close" size="lg" />
     </span>
   );
 }
 
+/**
+ * Cells render stills at rest. Animated art plays only for the cell under
+ * the pointer or keyboard focus; the chosen item plays in the preview pane.
+ */
 function useRenderOption(
   kind: CollectibleKind,
   identity: PreviewIdentity,
@@ -151,62 +162,56 @@ function useRenderOption(
   return useCallback(
     (item: CollectibleCatalogItem | null, state: OptionVisualState) => {
       const caption = item ? item.name : noneLabel;
+      const mark = state.selected ? <SelectedMark /> : null;
       if (kind === "avatar_decoration") {
         return (
-          <span className={tileFrameClass(state.selected)}>
-            <SelectionMarks {...state} />
+          <span className={cellClass(state.selected)}>
+            {mark}
             <span className="mx-auto w-full max-w-[76px] p-[12%]">
               <DecorationAvatar
                 item={item}
                 identity={identity}
-                animate={state.active || (state.selected && state.visible)}
+                animate={state.active}
               />
             </span>
-            <TileCaption>{caption}</TileCaption>
+            <CellCaption equipped={state.equipped}>{caption}</CellCaption>
           </span>
         );
       }
       if (kind === "profile_effect") {
         return (
-          <span className={tileFrameClass(state.selected)}>
-            <SelectionMarks {...state} />
+          <span className={cellClass(state.selected)}>
+            {mark}
             <span className="relative">
               <EffectThumb item={item} />
               {item ? null : <NoneGlyph />}
             </span>
-            <TileCaption>{caption}</TileCaption>
+            <CellCaption equipped={state.equipped}>{caption}</CellCaption>
           </span>
         );
       }
       if (kind === "profile_frame") {
         return (
-          <span className={tileFrameClass(state.selected)}>
-            <SelectionMarks {...state} />
+          <span className={cellClass(state.selected)}>
+            {mark}
             <span className="relative px-[10%] pt-[14%] pb-[8%]">
               <FrameThumb item={item} identity={identity} />
             </span>
-            <TileCaption>{caption}</TileCaption>
+            <CellCaption equipped={state.equipped}>{caption}</CellCaption>
           </span>
         );
       }
       return (
-        <span
-          className={cn(
-            "relative flex min-h-[72px] flex-col gap-1.5 rounded-xl p-1.5 transition-colors duration-150",
-            state.selected
-              ? "bg-rm-accent-tint ring-2 ring-rm-accent ring-inset"
-              : "pointer-fine:group-hover/option:bg-rm-tint-1",
-          )}
-        >
+        <span className={cellClass(state.selected, "min-h-[72px] gap-1.5")}>
           <NameplateRow
             item={item}
             identity={identity}
-            animate={state.active || (state.selected && state.visible)}
+            animate={state.active}
           />
-          <span className="flex items-center gap-2 px-1 text-ui-xs text-rm-text-secondary">
+          <span className="flex items-center gap-2 px-1 text-ui-xs text-ink-2">
             <span className="min-w-0 truncate">{caption}</span>
             {state.equipped ? (
-              <span className="ms-auto shrink-0 font-semibold text-rm-text-muted">
+              <span className="ms-auto shrink-0 font-medium text-ink-3">
                 Equipped
               </span>
             ) : null}
@@ -214,7 +219,7 @@ function useRenderOption(
               <span
                 aria-hidden="true"
                 className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full bg-rm-accent-solid text-rm-on-accent",
+                  "flex size-4 shrink-0 items-center justify-center rounded-full bg-accent-ink text-ply-0",
                   !state.equipped && "ms-auto",
                 )}
               >
@@ -226,6 +231,29 @@ function useRenderOption(
       );
     },
     [identity, kind, noneLabel],
+  );
+}
+
+/** Name, collection and status of the previewed item. */
+function PreviewCaption({
+  name,
+  meta,
+  status,
+  className,
+}: {
+  name: string;
+  meta: string;
+  status: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-w-0", className)} aria-live="polite">
+      <p className="truncate text-ui-row font-medium text-ink-1">{name}</p>
+      <p className="truncate text-ui-xs text-ink-3">
+        {meta}
+        {status ? <span className="text-warning-ink"> · {status}</span> : null}
+      </p>
+    </div>
   );
 }
 
@@ -248,7 +276,6 @@ export function CollectiblePicker({
   const [draftId, setDraftId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
-  const surfaceRef = useRef<HTMLDivElement | null>(null);
 
   const equippedSku = selectedSkuForKind(currentDisplay, kind) ?? null;
   const equippedItem = findItemBySku(catalog, kind, equippedSku);
@@ -321,191 +348,192 @@ export function CollectiblePicker({
       ?.scrollIntoView({ block: "start" });
   };
 
+  const previewName = previewItem ? previewItem.name : copy.noneLabel;
+  const previewMeta = previewItem
+    ? previewItem.categoryName
+    : "Your profile without one";
+  const total = allSections.length ? countSectionItems(allSections) : 0;
+
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogPortal>
-        <DialogOverlay className="z-70 max-md:hidden" />
+        {/* Opened over the profile editor, the primitive stacks it: the light
+            scrim and z-60 here, and the editor recedes. */}
+        <DialogOverlay className="max-md:hidden" />
         <DialogSurface
           showCloseButton={false}
-          ref={surfaceRef}
-          tabIndex={-1}
-          onOpenAutoFocus={(event) => {
-            // Land on the surface, not the first button: no stray focus ring
-            // and no keyboard popping up on phones. Tab goes to Back/Search.
-            event.preventDefault();
-            surfaceRef.current?.focus({ preventScroll: true });
-          }}
-          className={cn(
-            "fixed inset-0 z-70 grid overflow-hidden bg-rm-bg-primary outline-none",
-            "grid-rows-[auto_auto_minmax(0,1fr)_auto] [grid-template-areas:'header'_'preview'_'list'_'footer']",
-            "md:inset-auto md:top-1/2 md:left-1/2 md:h-[min(760px,calc(100dvh-48px))] md:w-[min(1080px,calc(100vw-48px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-rm-border md:shadow-(--rm-shadow-3)",
-            "md:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] md:grid-rows-[auto_minmax(0,1fr)_auto] md:[grid-template-areas:'preview_header'_'preview_list'_'footer_list']",
-            "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-200 max-md:data-[state=open]:slide-in-from-bottom-6 md:data-[state=open]:zoom-in-[0.97]",
-            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-150 max-md:data-[state=closed]:slide-out-to-bottom-6 md:data-[state=closed]:zoom-out-[0.97]",
-            "motion-reduce:slide-in-from-bottom-0 motion-reduce:slide-out-to-bottom-0 motion-reduce:zoom-in-100 motion-reduce:zoom-out-100",
-          )}
+          initialFocus="surface"
+          className={cn(WORKBENCH_SURFACE, "z-50 flex-col")}
         >
-          {/* Header */}
-          <header className="flex items-center gap-2 border-b border-rm-border px-2 pt-[calc(var(--safe-area-top,env(safe-area-inset-top,0px))+0.5rem)] pb-2 [grid-area:header] md:px-5 md:pt-4 md:pb-3">
+          {/* Header: title 16/600, close 28/16 inline at the end. */}
+          <header className="flex shrink-0 items-center gap-2 border-b border-line px-2 pt-[calc(var(--safe-area-top,env(safe-area-inset-top,0px))+0.5rem)] pb-2 md:h-14 md:px-5 md:py-0">
             <IconButton
               icon="back"
               aria-label="Back to profile"
               variant="ghost"
-              size="md"
+              size={40}
               onClick={onClose}
               className="md:hidden"
             />
             <div className="min-w-0 flex-1">
-              <DialogTitle className="truncate text-ui-lg">
-                {copy.pickerTitle}
-              </DialogTitle>
-              <DialogDescription className="truncate text-ui-xs">
-                {catalog
-                  ? `${(allSections.length ? countSectionItems(allSections) : 0).toLocaleString()} to choose from`
-                  : "Loading the catalog"}
+              <DialogTitle className="truncate">{copy.pickerTitle}</DialogTitle>
+              <DialogDescription className="truncate text-ui-xs text-ink-3">
+                {catalog ? (
+                  <>
+                    <Num>{total.toLocaleString()}</Num> to choose from
+                  </>
+                ) : (
+                  "Loading the catalog"
+                )}
               </DialogDescription>
             </div>
             <IconButton
               icon="close"
               aria-label="Close"
               variant="ghost"
-              size="md"
+              size={28}
               onClick={onClose}
               className="max-md:hidden"
             />
           </header>
 
-          {/* Preview */}
-          <aside
-            aria-label="Preview"
-            className="flex items-center gap-4 border-b border-rm-border bg-rm-bg-secondary px-4 py-3 [grid-area:preview] md:flex-col md:justify-center md:gap-6 md:border-e md:border-b-0 md:px-6 md:py-8"
-          >
-            <div className="flex shrink-0 items-center justify-center md:min-h-0 md:w-full md:flex-1">
-              <CollectibleStage
-                kind={kind}
-                identity={identity}
-                item={previewItem}
-                display={previewDisplay}
-              />
-            </div>
-            <div
-              className={cn(
-                "min-w-0 flex-1 md:w-full md:flex-none md:text-center",
-                kind === "nameplate" && "max-md:hidden",
-              )}
-              aria-live="polite"
+          <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+            {/* Preview: a band on phones, the left pane on desktop. */}
+            <aside
+              aria-label="Preview"
+              className="flex shrink-0 items-center gap-4 border-b border-line bg-ply-1 px-4 py-3 md:w-[340px] md:flex-col md:justify-center md:border-e md:border-b-0 md:px-6 md:py-8"
             >
-              <p className="truncate text-ui-md font-semibold text-rm-text">
-                {previewItem ? previewItem.name : copy.noneLabel}
-              </p>
-              <p className="truncate text-ui-xs text-rm-text-muted">
-                {previewItem
-                  ? previewItem.categoryName
-                  : "Your profile without one"}
-              </p>
-              {previewStatus ? (
-                <p className="mt-1 text-ui-2xs font-semibold text-rm-warning-ink">
-                  {previewStatus.label}
-                </p>
-              ) : null}
-            </div>
-          </aside>
-
-          {/* List */}
-          <div className="min-h-0 overflow-y-auto overscroll-contain [grid-area:list] [touch-action:pan-y] [scroll-padding-top:7rem]">
-            <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-rm-border bg-rm-bg-primary/95 px-3 py-2.5 md:px-5">
-              <label htmlFor={searchId} className="sr-only">
-                Search {copy.many.toLowerCase()}
-              </label>
-              <div className="relative">
-                <Icon
-                  name="search"
-                  size="sm"
-                  className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-                />
-                <input
-                  id={searchId}
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={`Search ${copy.many.toLowerCase()}`}
-                  enterKeyHint="search"
-                  autoComplete="off"
-                  className="h-11 w-full rounded-lg border border-rm-field-edge bg-rm-bg-surface ps-9 pe-3 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted focus-visible:border-rm-focus md:h-9 md:text-ui-sm"
+              <div className="flex shrink-0 items-center justify-center md:min-h-0 md:w-full md:flex-1">
+                <CollectibleStage
+                  kind={kind}
+                  identity={identity}
+                  item={previewItem}
+                  display={previewDisplay}
                 />
               </div>
-              {!deferredQuery && allSections.length > 1 ? (
-                <nav
-                  aria-label="Collections"
-                  className="-mx-3 flex snap-x gap-1.5 overflow-x-auto px-3 pb-0.5 [scrollbar-width:none] [touch-action:pan-x] md:-mx-5 md:px-5"
-                >
-                  {allSections.map((section) => (
-                    <button
-                      key={section.category.id}
-                      type="button"
-                      onClick={() => jumpTo(section.category.id)}
-                      className={cn(
-                        "h-8 shrink-0 snap-start rounded-full bg-rm-tint-1 px-3 text-ui-xs font-medium whitespace-nowrap text-rm-text-secondary pointer-fine:hover:text-rm-text max-md:h-9",
-                        PRESS,
-                        HIT,
-                      )}
-                    >
-                      {section.category.name}
-                    </button>
-                  ))}
-                </nav>
-              ) : null}
-              <p className="sr-only" role="status">
-                {deferredQuery
-                  ? `${resultCount} ${resultCount === 1 ? "result" : "results"}`
-                  : ""}
-              </p>
-            </div>
-
-            <div className="px-3 pt-3 pb-6 md:px-5">
-              {loading ? (
-                <div className={GRID_CLASS[kind]} aria-hidden="true">
-                  {Array.from({ length: 12 }, (_, index) => (
-                    <span
-                      key={index}
-                      className={cn(
-                        "animate-pulse rounded-xl bg-rm-tint-1",
-                        kind === "nameplate" ? "h-[72px]" : "aspect-[3/4]",
-                      )}
-                    />
-                  ))}
-                </div>
-              ) : !catalog ? (
-                <p className="py-12 text-center text-ui-sm text-rm-text-muted">
-                  {loadError ?? "Couldn't load collectibles."}
-                </p>
-              ) : (
-                <CollectibleListbox
-                  label={copy.many}
-                  sections={sections}
-                  noneLabel={deferredQuery ? undefined : copy.noneLabel}
-                  selectedId={selectedId}
-                  equippedId={equippedId}
-                  onChoose={handleChoose}
-                  renderOption={renderOption}
-                  gridClassName={GRID_CLASS[kind]}
-                  sectionIdPrefix={sectionIdPrefix}
-                  emptyState={
-                    <p className="py-12 text-center text-ui-sm text-rm-text-muted">
-                      Nothing matches “{deferredQuery}”.
-                    </p>
-                  }
+              {kind === "nameplate" ? null : (
+                <PreviewCaption
+                  name={previewName}
+                  meta={previewMeta}
+                  status={previewStatus?.label ?? null}
+                  className="flex-1 md:hidden"
                 />
               )}
+            </aside>
+
+            {/* List */}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [touch-action:pan-y] [scroll-padding-top:7rem]">
+              <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-line bg-ply-0 px-3 py-3 md:px-5">
+                <label htmlFor={searchId} className="sr-only">
+                  Search {copy.many.toLowerCase()}
+                </label>
+                <div className="relative">
+                  <Icon
+                    name="search"
+                    size="sm"
+                    className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-ink-3"
+                  />
+                  <Input
+                    id={searchId}
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={`Search ${copy.many.toLowerCase()}`}
+                    enterKeyHint="search"
+                    autoComplete="off"
+                    className="ps-8 max-md:h-10"
+                  />
+                </div>
+                {!deferredQuery && allSections.length > 1 ? (
+                  <nav
+                    aria-label="Collections"
+                    className="-mx-3 flex snap-x gap-1 overflow-x-auto px-3 [scrollbar-width:none] [touch-action:pan-x] md:-mx-5 md:px-5"
+                  >
+                    {allSections.map((section) => (
+                      <button
+                        key={section.category.id}
+                        type="button"
+                        onClick={() => jumpTo(section.category.id)}
+                        className={cn(
+                          "h-7 shrink-0 snap-start rounded-sm bg-tint-1 px-2.5 text-ui-sm font-medium whitespace-nowrap text-ink-2 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+                          PRESS,
+                          HIT,
+                        )}
+                      >
+                        {section.category.name}
+                      </button>
+                    ))}
+                  </nav>
+                ) : null}
+                <p className="sr-only" role="status">
+                  {deferredQuery
+                    ? `${resultCount} ${resultCount === 1 ? "result" : "results"}`
+                    : ""}
+                </p>
+              </div>
+
+              <div className="px-3 pt-3 pb-6 md:px-5">
+                {loading ? (
+                  <div
+                    className={cn(GRID_CLASS[kind], "gap-2")}
+                    aria-hidden="true"
+                  >
+                    {Array.from({ length: 12 }, (_, index) => (
+                      <Skeleton
+                        key={index}
+                        className={cn(
+                          "rounded-lg",
+                          kind === "nameplate" ? "h-[72px]" : "aspect-[3/4]",
+                        )}
+                      />
+                    ))}
+                  </div>
+                ) : !catalog ? (
+                  <EmptyState
+                    size="sm"
+                    className="pt-12"
+                    title="The catalog didn't load"
+                    description={
+                      loadError ?? "Check your connection, then open it again."
+                    }
+                  />
+                ) : (
+                  <CollectibleListbox
+                    label={copy.many}
+                    sections={sections}
+                    noneLabel={deferredQuery ? undefined : copy.noneLabel}
+                    selectedId={selectedId}
+                    equippedId={equippedId}
+                    onChoose={handleChoose}
+                    renderOption={renderOption}
+                    gridClassName={GRID_CLASS[kind]}
+                    sectionIdPrefix={sectionIdPrefix}
+                    emptyState={
+                      <EmptyState
+                        size="sm"
+                        art={null}
+                        title={`Nothing matches “${deferredQuery}”`}
+                        description="Try a collection name or a shorter word."
+                      />
+                    }
+                  />
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <footer className="flex items-center gap-2 border-t border-rm-border bg-rm-bg-primary px-3 pt-3 pb-[calc(var(--safe-area-bottom,env(safe-area-inset-bottom,0px))+0.75rem)] [grid-area:footer] md:border-e md:bg-rm-bg-secondary md:px-6 md:pb-6">
+          {/* Footer: the whole bottom edge. Preview left, actions right. */}
+          <footer className="flex shrink-0 items-center gap-2 border-t border-line bg-ply-0 px-3 pt-3 pb-[calc(var(--safe-area-bottom,env(safe-area-inset-bottom,0px))+0.75rem)] md:px-5 md:py-3">
+            <PreviewCaption
+              name={previewName}
+              meta={previewMeta}
+              status={previewStatus?.label ?? null}
+              className="me-auto max-md:hidden"
+            />
             {applyError ? (
               <p
                 role="alert"
-                className="me-auto min-w-0 text-ui-xs text-rm-danger-ink"
+                className="min-w-0 text-ui-xs text-danger-ink max-md:me-auto md:max-w-80 md:text-end"
               >
                 {applyError}
               </p>
@@ -514,10 +542,7 @@ export function CollectiblePicker({
               type="button"
               variant="ghost"
               onClick={onClose}
-              className={cn(
-                "h-11 px-4 md:h-9",
-                !applyError && "me-auto md:me-0 md:flex-1",
-              )}
+              className={cn("max-md:h-11", !applyError && "max-md:me-auto")}
             >
               Cancel
             </Button>
@@ -526,7 +551,7 @@ export function CollectiblePicker({
               onClick={handleApply}
               disabled={!changed}
               loading={applying}
-              className="h-11 flex-1 px-5 md:h-9"
+              className="max-md:h-11 max-md:flex-1"
             >
               {selectedId === NONE_OPTION_ID && changed ? "Remove" : "Apply"}
             </Button>

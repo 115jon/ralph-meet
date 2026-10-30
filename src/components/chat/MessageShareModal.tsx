@@ -12,10 +12,10 @@ import { RadioList, RowError } from "@/components/chat/settings/primitives";
 import { describeApiError } from "@/lib/api-errors";
 import type { Message } from "@/lib/types";
 import { isPlayableVideo } from "@/lib/media";
-import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
+import { lastInputWasKeyboard } from "@/components/ui/dialog-stack";
 import { Icon } from "@/components/ui/icon";
 import { useEffect, useId, useState } from "react";
-import ShareSnapshotPreview from "./ShareSnapshotPreview";
+import { MessagePreviewCard } from "./MessagePreviewCard";
 
 type ShareExpiry = "7d" | "30d" | "90d" | "never";
 
@@ -34,6 +34,12 @@ const expiryOptions: Array<{ value: ShareExpiry; label: string }> = [
   { value: "never", label: "Never" },
 ];
 
+function focusSurfaceUnlessKeyboard(event: Event) {
+  if (lastInputWasKeyboard()) return;
+  event.preventDefault();
+  (event.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
+}
+
 export default function MessageShareModal({
   open,
   message,
@@ -50,9 +56,6 @@ export default function MessageShareModal({
   const expiryName = useId();
   const shareUrlId = useId();
 
-  const avatarUrl = message.author?.avatar_url
-    ? getAuthAssetUrl(message.author.avatar_url)
-    : null;
   const omittedAttachmentCount = (message.attachments ?? []).filter(
     (attachment) =>
       !attachment.content_type?.startsWith("image/") &&
@@ -93,7 +96,14 @@ export default function MessageShareModal({
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      <ResponsiveDialogContent dialogClassName="flex max-h-[min(760px,calc(100dvh-48px))] flex-col">
+      <ResponsiveDialogContent
+        size="md"
+        placement="top"
+        dialogClassName="flex flex-col"
+        // Keyboard opens land on the first expiry option. A pointer open
+        // lands on the surface, so no ring shows on an option nobody chose.
+        onOpenAutoFocus={focusSurfaceUnlessKeyboard}
+      >
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Share message</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
@@ -101,44 +111,28 @@ export default function MessageShareModal({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain md:-mx-6 md:px-6">
-          <div>
-            <p className="mb-2 text-ui-sm font-medium text-rm-text">
-              Snapshot preview
-            </p>
-            <ShareSnapshotPreview
-              content={message.content}
-              author={{
-                username: message.author?.username ?? "Unknown",
-                display_name: message.author?.display_name ?? null,
-                avatar_url: message.author?.avatar_url ?? null,
-                avatar_display: message.author?.avatar_display ?? null,
-              }}
-              createdAt={message.created_at}
-              attachments={message.attachments ?? []}
-              omittedAttachmentCount={omittedAttachmentCount}
-              embeds={message.embeds ?? []}
-              reactions={
-                message.reactions?.map((reaction) => ({
-                  emoji: reaction.emoji,
-                  count: reaction.count,
-                })) ?? []
-              }
-              replyCount={message.reply_count ?? 0}
-              avatarUrl={avatarUrl}
-              mediaUrlForAttachment={(attachment) =>
-                getMediaUrl(attachment.url || `/api/${attachment.file_key}`)
-              }
-              compact
-              previewMedia
-            />
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain md:-mx-5 md:px-5">
+          <div
+            inert
+            aria-hidden="true"
+            className="pointer-events-none select-none"
+          >
+            <MessagePreviewCard message={message}>
+              {omittedAttachmentCount > 0 ? (
+                <p className="mt-2 text-ui-xs text-pretty text-ink-3">
+                  {omittedAttachmentCount === 1
+                    ? "1 file isn't included in the public link."
+                    : `${omittedAttachmentCount} files aren't included in the public link.`}
+                </p>
+              ) : null}
+            </MessagePreviewCard>
           </div>
 
           {!shareUrl && (
             <div>
               <p
                 id={expiryLabelId}
-                className="mb-2 text-ui-sm font-medium text-rm-text"
+                className="mb-2 text-ui-sm font-medium text-ink-1"
               >
                 Link expiry
               </p>
@@ -158,7 +152,7 @@ export default function MessageShareModal({
             <div className="flex flex-col gap-2">
               <label
                 htmlFor={shareUrlId}
-                className="text-ui-sm font-medium text-rm-text"
+                className="text-ui-sm font-medium text-ink-1"
               >
                 Public link
               </label>
@@ -170,7 +164,7 @@ export default function MessageShareModal({
                   className="flex-1"
                   onFocus={(event) => event.target.select()}
                 />
-                <Button onClick={copyLink} className="h-9">
+                <Button variant="secondary" onClick={copyLink}>
                   {copyState === "copied" ? (
                     <Icon name="check" size="sm" />
                   ) : (
@@ -184,13 +178,14 @@ export default function MessageShareModal({
         </div>
 
         <ResponsiveDialogFooter>
-          <Button variant={shareUrl ? "ghost" : "secondary"} onClick={onClose}>
-            Close
-          </Button>
           {shareUrl ? (
             <>
               {onManageShares && (
-                <Button variant="secondary" onClick={onManageShares}>
+                <Button
+                  variant="ghost"
+                  onClick={onManageShares}
+                  className="md:mr-auto"
+                >
                   Manage shares
                 </Button>
               )}
@@ -200,16 +195,25 @@ export default function MessageShareModal({
                   Open
                 </a>
               </Button>
+              <Button variant="primary" onClick={onClose}>
+                Done
+              </Button>
             </>
           ) : (
-            <Button
-              onClick={createShare}
-              disabled={creating}
-              loading={creating}
-            >
-              <Icon name="share" size="sm" />
-              Create link
-            </Button>
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={createShare}
+                disabled={creating}
+                loading={creating}
+              >
+                <Icon name="share" size="sm" />
+                Create link
+              </Button>
+            </>
           )}
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

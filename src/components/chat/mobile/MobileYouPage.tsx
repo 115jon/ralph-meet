@@ -1,4 +1,3 @@
-import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { openSettings } from "@/components/chat/settings/settings-links";
@@ -8,10 +7,13 @@ import {
   UserStatusDot,
   type UserStatus,
 } from "@/components/chat/UserStatusDot";
+import { AvatarImage } from "@/components/chat/AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { DISABLED, PRESS } from "@/components/ui/interaction";
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { resolveProfileTheme } from "@/lib/profile-customization";
@@ -55,14 +57,16 @@ const SHORTCUTS: ReadonlyArray<{
 ];
 
 const ROW =
-  "flex min-h-12 w-full items-center gap-3 px-4 text-start text-ui-base text-rm-text outline-offset-[-2px]";
-/** Tinted list group; rows are split by hairlines, not borders per row. */
+  "flex min-h-12 w-full items-center gap-3 px-4 text-start text-ui-base text-ink-1 outline-offset-[-2px]";
+/** Phone list grammar: inset grouped card, rows split by hairlines. */
 const GROUP =
-  "mx-4 overflow-hidden rounded-lg bg-rm-tint-1 divide-y divide-rm-border";
+  "mx-4 overflow-hidden rounded-lg border border-line bg-ply-2 divide-y divide-line";
+/** The one phone section label: sentence case, never an uppercase eyebrow. */
+const SECTION_LABEL = "px-4 pb-2 pt-6 text-ui-xs font-semibold text-ink-2";
 /** Fixed leading slot, so status dots and icons share one label edge. */
 const LEADING = "flex size-5 shrink-0 items-center justify-center";
 const TILE =
-  "flex min-h-14 items-center gap-3 rounded-lg px-4 text-start text-ui-base font-medium";
+  "flex min-h-14 items-center gap-3 rounded-lg border px-4 text-start text-ui-base font-medium";
 
 /** Mic and deafen for yourself, routed through the call when one is live. */
 function useSelfVoiceToggles(userId: string | undefined) {
@@ -112,7 +116,7 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
   const status = normalizeUserStatus(user.status ?? "online");
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain bg-rm-bg-primary pb-6">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain bg-ply-0 pb-6">
       <section aria-labelledby={titleId} style={theme.variables}>
         <div
           className="relative h-28 overflow-hidden"
@@ -130,42 +134,54 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
         </div>
         <div className="px-4">
           <div className="relative -mt-10 inline-block">
-            <div className="relative flex size-20 items-center justify-center overflow-visible rounded-full bg-rm-bg-elevated text-ui-2xl font-semibold text-rm-text ring-4 ring-rm-bg-primary">
-              {user.avatar_url ? (
+            {user.avatar_url ? (
+              // AvatarImage honours the member's crop (avatar_display); the
+              // ui Avatar is the fallback for everyone without a picture.
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "relative flex size-20 bg-ply-2 ring-4 ring-ply-0",
+                  avatarShape(user.avatar_display),
+                )}
+              >
                 <AvatarImage
                   src={getAuthAssetUrl(user.avatar_url)}
                   alt=""
                   display={user.avatar_display}
                 />
-              ) : (
-                getDisplayInitial(user)
-              )}
-            </div>
-            <span className="absolute right-0 bottom-0 rounded-full bg-rm-bg-primary p-1">
+              </span>
+            ) : (
+              <Avatar
+                name={displayName}
+                size={80}
+                ring="ply-0"
+                className="ring-4 ring-ply-0"
+                aria-hidden="true"
+              />
+            )}
+            <span className="absolute right-0 bottom-0 z-20 rounded-[2px] bg-ply-0 p-1">
               <UserStatusDot status={status} className="size-4" />
             </span>
           </div>
-          <h1 id={titleId} className="mt-2 text-ui-xl font-semibold">
+          <h1 id={titleId} className="mt-2 truncate text-ui-xl font-semibold">
             <ProfileDisplayName
               text={displayName}
               displayNameStyle={user.display_name_style}
-              className="text-rm-text"
+              className="text-ink-1"
               backgroundColor={theme.backgroundColor}
               readableFallbackColor={theme.textColor}
             />
           </h1>
-          <p className="text-ui-sm text-rm-text-secondary">@{user.username}</p>
+          <p className="text-ui-sm text-ink-2">@{user.username}</p>
           {user.custom_status ? (
-            <p className="mt-1 text-ui-sm text-rm-text-secondary">
-              {user.custom_status}
-            </p>
+            <p className="mt-1 text-ui-sm text-ink-2">{user.custom_status}</p>
           ) : null}
           <div className="mt-4 flex gap-3">
             <Button
               type="button"
               variant="secondary"
               size="lg"
-              className="min-w-0 flex-1"
+              className="min-h-11 min-w-0 flex-1"
               onClick={(event) =>
                 dispatchOpenProfileEditorEvent(event.currentTarget)
               }
@@ -176,7 +192,7 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
             <Button
               type="button"
               size="lg"
-              className="min-w-0 flex-1"
+              className="min-h-11 min-w-0 flex-1"
               onClick={() => openSettings()}
             >
               <Icon name="settings" size="md" />
@@ -186,11 +202,8 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
         </div>
       </section>
 
-      <section aria-labelledby={statusId} className="mt-6">
-        <h2
-          id={statusId}
-          className="px-4 pb-2 text-ui-xs font-semibold text-rm-text-secondary"
-        >
+      <section aria-labelledby={statusId}>
+        <h2 id={statusId} className={SECTION_LABEL}>
           Status
         </h2>
         <div role="radiogroup" aria-labelledby={statusId} className={GROUP}>
@@ -209,7 +222,7 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
                   PRESS,
                   // Full-width rows in a group don't shrink on press.
                   "enabled:active:scale-100",
-                  checked && "bg-rm-tint-2",
+                  checked && "bg-tint-2",
                 )}
               >
                 <span className={LEADING}>
@@ -220,16 +233,14 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
                     {option.label}
                   </span>
                   {option.hint ? (
-                    <span className="text-ui-xs text-rm-text-secondary">
-                      {option.hint}
-                    </span>
+                    <span className="text-ui-xs text-ink-2">{option.hint}</span>
                   ) : null}
                 </span>
                 {checked ? (
                   <Icon
                     name="check"
                     size="md"
-                    className="shrink-0 text-rm-accent-ink"
+                    className="shrink-0 text-accent-ink"
                   />
                 ) : null}
               </button>
@@ -238,14 +249,11 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
         </div>
       </section>
 
-      <section aria-labelledby={voiceId} className="mt-6 px-4">
-        <h2
-          id={voiceId}
-          className="pb-2 text-ui-xs font-semibold text-rm-text-secondary"
-        >
+      <section aria-labelledby={voiceId}>
+        <h2 id={voiceId} className={SECTION_LABEL}>
           Voice
         </h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="mx-4 grid grid-cols-2 gap-3">
           <button
             type="button"
             aria-pressed={voice.muted}
@@ -256,8 +264,8 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
               PRESS,
               DISABLED,
               voice.muted
-                ? "bg-rm-danger-tint text-rm-danger-ink"
-                : "bg-rm-tint-1 text-rm-text",
+                ? "border-transparent bg-danger-tint text-danger-ink"
+                : "border-line bg-ply-2 text-ink-1",
             )}
           >
             <Icon
@@ -282,8 +290,8 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
               TILE,
               PRESS,
               voice.deafened
-                ? "bg-rm-danger-tint text-rm-danger-ink"
-                : "bg-rm-tint-1 text-rm-text",
+                ? "border-transparent bg-danger-tint text-danger-ink"
+                : "border-line bg-ply-2 text-ink-1",
             )}
           >
             <Icon
@@ -299,11 +307,8 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
         </div>
       </section>
 
-      <section aria-labelledby={moreId} className="mt-6">
-        <h2
-          id={moreId}
-          className="px-4 pb-2 text-ui-xs font-semibold text-rm-text-secondary"
-        >
+      <section aria-labelledby={moreId}>
+        <h2 id={moreId} className={SECTION_LABEL}>
           Shortcuts
         </h2>
         <ul className={GROUP}>
@@ -319,18 +324,10 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
               }}
             >
               <span className={LEADING}>
-                <Icon
-                  name="members"
-                  size="md"
-                  className="text-rm-text-secondary"
-                />
+                <Icon name="members" size="md" className="text-ink-2" />
               </span>
               <span className="flex-1">Friends</span>
-              <Icon
-                name="chevronRight"
-                size="xs"
-                className="text-rm-text-muted"
-              />
+              <Icon name="chevronRight" size="xs" className="text-ink-3" />
             </button>
           </li>
           {SHORTCUTS.map((item) => (
@@ -341,18 +338,10 @@ export function MobileYouPage({ onNavigate }: { onNavigate: () => void }) {
                 onClick={() => openSettings({ panel: item.panel })}
               >
                 <span className={LEADING}>
-                  <Icon
-                    name={item.icon}
-                    size="md"
-                    className="text-rm-text-secondary"
-                  />
+                  <Icon name={item.icon} size="md" className="text-ink-2" />
                 </span>
                 <span className="flex-1">{item.label}</span>
-                <Icon
-                  name="chevronRight"
-                  size="xs"
-                  className="text-rm-text-muted"
-                />
+                <Icon name="chevronRight" size="xs" className="text-ink-3" />
               </button>
             </li>
           ))}

@@ -24,7 +24,7 @@ export function DontAskAgainCheckbox({
     <label
       htmlFor={id}
       className={cn(
-        "flex w-fit cursor-pointer items-center gap-2 text-ui-sm text-rm-text-secondary transition-colors duration-150 select-none pointer-coarse:min-h-11 pointer-fine:hover:text-rm-text",
+        "flex w-fit cursor-pointer items-center gap-2 text-ui-sm text-ink-2 transition-colors duration-150 select-none pointer-coarse:min-h-11 pointer-fine:hover:text-ink-1",
         className,
       )}
     >

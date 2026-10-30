@@ -1,6 +1,9 @@
 import type { User } from "@/lib/types";
 
-import { ProfileAssetLayer } from "./ProfileAssetLayer";
+import {
+  ProfileAssetLayer,
+  type DecorationPlayback,
+} from "./ProfileAssetLayer";
 import {
   getUserNameplatePresentation,
   shouldUseNameplateIdentityFade,
@@ -22,7 +25,11 @@ interface UserNameplateLayerProps {
   seedId?: string | null;
   alt: string;
   className?: string;
-  playVideo?: boolean;
+  /**
+   * `"hover"` (default): a nameplate is a still frame in its row and plays
+   * while the row is hovered or focused. `true` plays while mounted.
+   */
+  playVideo?: DecorationPlayback;
   maskFullOpacityStartPercent?: number;
   useMeasuredMask?: boolean;
 }
@@ -35,7 +42,7 @@ export function UserNameplateLayer({
   seedId,
   alt,
   className,
-  playVideo = true,
+  playVideo = "hover",
   maskFullOpacityStartPercent,
   useMeasuredMask,
 }: UserNameplateLayerProps) {

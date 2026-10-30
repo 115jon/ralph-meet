@@ -3,6 +3,34 @@ import type { CSSProperties } from "react";
 /** Shared sizing and URL helpers for LinkEmbed (kept out of the component
  * module so it only exports components). */
 
+/**
+ * The three embed widths (talk-tree-spec §8, Messages). Every provider card
+ * and every inline media box resolves to one of these; nothing else sets a
+ * width.
+ *
+ *   compact  400  text links, link thumbnails, Spotify, unavailable posts,
+ *                 direct-media fallbacks, portrait social (TikTok,
+ *                 Instagram, YouTube Shorts)
+ *   standard 520  links with a large image, rich and generic video cards,
+ *                 X posts, multi-image grids
+ *   media    640  YouTube landscape, direct images/GIFs/videos, single
+ *                 image and video attachments (as a maximum: media never
+ *                 upscales)
+ */
+export const EMBED_WIDTH = {
+  compact: 400,
+  standard: 520,
+  media: 640,
+} as const;
+
+export type EmbedWidth = keyof typeof EMBED_WIDTH;
+
+/**
+ * Portrait media inside a compact card stops growing at this height and
+ * pillarboxes, so a 9:16 post does not push the message list a full screen.
+ */
+export const EMBED_PORTRAIT_MAX_HEIGHT = 560;
+
 /** Shown in place of a post that no longer exists (public/). */
 export const SOCIAL_UNAVAILABLE_IMAGE = "/tiktok-unavailable.webp";
 
@@ -34,17 +62,20 @@ export function getXSingleImageBoxStyle(
 ): CSSProperties | undefined {
   if (!width || !height || width <= 0 || height <= 0) return undefined;
   const aspectRatio = width / height;
-  const boxWidth = Math.round(Math.min(width, 520, 420 * aspectRatio));
+  const boxWidth = Math.round(
+    Math.min(width, EMBED_WIDTH.standard, 420 * aspectRatio),
+  );
   return {
     aspectRatio: `${width} / ${height}`,
     width: `min(100%, ${boxWidth}px)`,
   };
 }
 
-export const DIRECT_MEDIA_MAX_WIDTH = 400;
-export const DIRECT_MEDIA_MAX_HEIGHT = 300;
+/** Inline media (direct links, single attachments) fits this box. */
+export const DIRECT_MEDIA_MAX_WIDTH = EMBED_WIDTH.media;
+export const DIRECT_MEDIA_MAX_HEIGHT = 400;
 
-/** Box for a direct image/video: fits 400x300, never upscales. */
+/** Box for a direct image/video: fits 640x400, never upscales. */
 export function getDirectMediaBox(
   width?: number,
   height?: number,

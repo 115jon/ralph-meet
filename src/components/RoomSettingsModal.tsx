@@ -4,6 +4,8 @@
  *
  *   <RoomSettingsModal open onClose={close} settingsUserId={id} />
  *
+ * Nav groups match Studio (Calls, App) so the two read as one place.
+ *
  * Nothing here is room-only; the panels are the same ones Studio shows, so a
  * fix to one shows up in both.
  */
@@ -39,14 +41,14 @@ interface RoomSettingsModalProps {
 
 const NAV_GROUPS: WorkbenchNavGroup[] = [
   {
-    title: "Audio & video",
+    title: "Calls",
     items: [
       { id: "voice", label: "Voice", icon: "mic" },
       { id: "camera", label: "Camera", icon: "camera" },
     ],
   },
   {
-    title: "Look",
+    title: "App",
     items: [{ id: "appearance", label: "Appearance", icon: "appearance" }],
   },
 ];
@@ -106,7 +108,7 @@ export default function RoomSettingsModal({
 
   return (
     <SettingsContext.Provider value={contextValue}>
-      <TooltipProvider delayDuration={300}>
+      <TooltipProvider>
         <SettingsWorkbench
           open={open}
           onClose={onClose}
@@ -126,7 +128,7 @@ export default function RoomSettingsModal({
           // Hidden, not unmounted, while the theme preview is up.
           hidden={previewOpen}
         >
-          <p className="text-pretty text-ui-sm text-rm-text-secondary">
+          <p className="max-w-[72ch] text-pretty text-ui-sm text-ink-2">
             {page.blurb}
           </p>
           {nav.active === "voice" ? (

@@ -39,7 +39,14 @@ export function AvatarImage({
         className,
       )}
     >
-      <span className="absolute inset-0 block overflow-hidden rounded-[inherit]">
+      {/* Avatars are square keys; a decoration's ring art is drawn for a
+          circle, so a decorated avatar keeps a round crop under its ring. */}
+      <span
+        className={cn(
+          "absolute inset-0 block overflow-hidden",
+          avatarDecoration ? "rounded-full" : "rounded-[inherit]",
+        )}
+      >
         <img
           src={src}
           alt={alt}

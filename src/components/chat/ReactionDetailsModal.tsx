@@ -1,4 +1,3 @@
-import { AvatarImage } from "@/components/chat/AvatarImage";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -6,15 +5,16 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { IconButton } from "@/components/ui/IconButton";
-import { PRESS } from "@/components/ui/interaction";
+import { REVEAL } from "@/components/ui/interaction";
+import { Num } from "@/components/ui/num";
 import { useUserResolution } from "@/hooks/useUserResolution";
-import { getDisplayInitial } from "@/lib/display-name";
 import { getNextReactionEmoji } from "@/lib/reaction-details";
 import type { Message, Reaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import EmojiToken from "./EmojiToken";
 import InlineEmojiText from "./InlineEmojiText";
+import { PreviewAvatar } from "./MessagePreviewCard";
 
 type CustomEmojiMap = Record<string, { image_url?: string | null }>;
 const EMPTY_REACTIONS: Reaction[] = [];
@@ -29,6 +29,7 @@ interface ReactionDetailsModalProps {
   onClose: () => void;
 }
 
+/** 36px row: avatar 24, name 13/18 at 500, @handle ink-3, remove on hover. */
 function ReactionUserRow({
   userId,
   canManageReactions,
@@ -42,40 +43,38 @@ function ReactionUserRow({
     useUserResolution(userId);
 
   return (
-    <div className="group flex items-center gap-3 rounded-md px-2 py-2 transition-colors pointer-fine:hover:bg-rm-tint-1">
-      <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-ui-sm font-semibold text-rm-text-muted">
-        {avatarUrl ? (
-          <AvatarImage
-            src={avatarUrl}
-            alt={`${displayName} avatar`}
-            display={avatarDisplay}
-          />
-        ) : (
-          getDisplayInitial({ display_name: displayName, username })
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-ui-sm font-semibold text-rm-text">
+    <li className="group relative flex h-9 items-center gap-2.5 rounded-sm px-2 pointer-fine:hover:bg-tint-1">
+      <PreviewAvatar
+        name={displayName}
+        src={avatarUrl}
+        display={avatarDisplay}
+        size={24}
+      />
+      <p className="flex min-w-0 flex-1 items-baseline gap-1.5">
+        <span className="min-w-0 truncate text-ui-sm font-medium text-ink-1">
           <InlineEmojiText text={displayName} />
-        </p>
-        <p className="truncate text-ui-xs text-rm-text-muted">@{username}</p>
-      </div>
+        </span>
+        <span className="min-w-0 shrink truncate text-ui-xs text-ink-3">
+          @{username}
+        </span>
+      </p>
       {canManageReactions && (
         <IconButton
           icon="close"
-          iconSize="sm"
+          size={24}
           variant="destructive"
           type="button"
           onClick={onRemove}
-          className="pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className={cn("shrink-0", REVEAL)}
           aria-label={`Remove reaction from ${displayName}`}
         />
       )}
-    </div>
+    </li>
   );
 }
 
-function ReactionGroupButton({
+/** One emoji tab: emoji 20 plus its count in `Num`, underline when selected. */
+function ReactionTab({
   reaction,
   selected,
   customEmojiMap,
@@ -93,27 +92,32 @@ function ReactionGroupButton({
       aria-pressed={selected}
       aria-label={`${reaction.emoji} ${reaction.count}`}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left",
-        PRESS,
+        "relative flex h-9 shrink-0 items-center gap-1.5 rounded-sm px-2 transition-colors duration-(--dur-1) ease-out focus-visible:-outline-offset-2",
+        "after:absolute after:inset-x-1 after:-bottom-px after:h-0.5 after:rounded-full after:bg-ink-1 after:opacity-0 after:transition-opacity after:duration-(--dur-2)",
         selected
-          ? "bg-rm-accent-tint text-rm-accent-ink"
-          : "text-rm-text-muted pointer-fine:hover:text-rm-text",
+          ? "text-ink-1 after:opacity-100"
+          : "text-ink-3 pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1",
       )}
     >
       <EmojiToken
         value={reaction.emoji}
         customEmojiMap={customEmojiMap}
-        size="large"
-        className="size-8 shrink-0"
-        fallbackClassName="text-ui-2xl leading-none"
+        className="size-5 shrink-0"
+        fallbackClassName="max-w-24 truncate text-ui-sm leading-none"
       />
-      <span className="tabular-nums text-ui-sm font-semibold">
+      <Num className={selected ? "font-semibold" : undefined}>
         {reaction.count}
-      </span>
+      </Num>
     </button>
   );
 }
 
+/**
+ * Who reacted (messages audit flows 8 and 9): a compact 400px dialog (a
+ * drawer on phones) with emoji tabs across the top and 36px people rows
+ * below. When the server sent fewer user ids than the count, the list says
+ * "and N others" instead of silently looking complete.
+ */
 export default function ReactionDetailsModal({
   open = true,
   message,
@@ -132,6 +136,9 @@ export default function ReactionDetailsModal({
     reactions.find((reaction) => reaction.emoji === activeSelectedEmoji) ??
     null;
   const selectedUsers = selectedReaction?.users ?? [];
+  const others = selectedReaction
+    ? Math.max(0, selectedReaction.count - selectedUsers.length)
+    : 0;
 
   useEffect(() => {
     if (!activeSelectedEmoji) {
@@ -144,48 +151,64 @@ export default function ReactionDetailsModal({
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      <ResponsiveDialogContent>
+      <ResponsiveDialogContent
+        size="sm"
+        initialFocus="surface"
+        className="gap-3"
+      >
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Reactions</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
-        <div className="grid h-[min(420px,55dvh)] min-h-0 grid-cols-[112px_minmax(0,1fr)] md:grid-cols-[148px_minmax(0,1fr)]">
-          <aside className="custom-scrollbar min-h-0 overflow-y-auto overscroll-contain border-r border-rm-border pr-3">
-            <div className="space-y-1">
-              {reactions.map((reaction) => (
-                <ReactionGroupButton
-                  key={reaction.emoji}
-                  reaction={reaction}
-                  selected={reaction.emoji === activeSelectedEmoji}
-                  customEmojiMap={customEmojiMap}
-                  onClick={() => setSelectedEmoji(reaction.emoji)}
-                />
-              ))}
-            </div>
-          </aside>
 
-          <section className="custom-scrollbar min-h-0 overflow-y-auto overscroll-contain pl-3">
-            {selectedReaction ? (
-              <div className="space-y-1">
-                {selectedUsers.length > 0 ? (
-                  selectedUsers.map((userId) => (
-                    <ReactionUserRow
-                      key={userId}
-                      userId={userId}
-                      canManageReactions={canManageReactions}
-                      onRemove={() =>
-                        onRemoveReaction(selectedReaction.emoji, userId)
-                      }
-                    />
-                  ))
-                ) : (
-                  <p className="py-4 text-center text-ui-sm text-rm-text-muted">
-                    No users found for this reaction.
-                  </p>
-                )}
-              </div>
-            ) : null}
-          </section>
+        <div
+          role="group"
+          aria-label="Reactions by emoji"
+          className="-mx-5 flex gap-0.5 overflow-x-auto overscroll-contain border-b border-line px-4 [scrollbar-width:none] max-md:-mx-4 max-md:px-3"
+        >
+          {reactions.map((reaction) => (
+            <ReactionTab
+              key={reaction.emoji}
+              reaction={reaction}
+              selected={reaction.emoji === activeSelectedEmoji}
+              customEmojiMap={customEmojiMap}
+              onClick={() => setSelectedEmoji(reaction.emoji)}
+            />
+          ))}
         </div>
+
+        {selectedReaction ? (
+          <div className="-mx-3 max-h-[min(324px,50dvh)] min-h-0 overflow-y-auto overscroll-contain px-1 py-1">
+            {selectedUsers.length > 0 ? (
+              <ul className="flex flex-col">
+                {selectedUsers.map((userId) => (
+                  <ReactionUserRow
+                    key={userId}
+                    userId={userId}
+                    canManageReactions={canManageReactions}
+                    onRemove={() =>
+                      onRemoveReaction(selectedReaction.emoji, userId)
+                    }
+                  />
+                ))}
+              </ul>
+            ) : null}
+            {others > 0 ? (
+              <p className="flex h-9 items-center px-2 text-ui-sm text-ink-3">
+                <span>
+                  {selectedUsers.length > 0 ? "and " : ""}
+                  <Num className="text-ink-2">{others}</Num>
+                  {selectedUsers.length > 0
+                    ? others === 1
+                      ? " other"
+                      : " others"
+                    : others === 1
+                      ? " person reacted"
+                      : " people reacted"}
+                </span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );

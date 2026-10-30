@@ -181,6 +181,9 @@ describe("CameraCard states", () => {
     render(<CameraCard settingsUserId="u-1" bare />);
     expect(await screen.findByText("No camera found")).toBeVisible();
     expect(screen.getByText("Plug in a camera, then try again.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    // The background tiles stay visible, disabled, with the reason.
+    expect(screen.getByRole("radio", { name: "Blur" })).toBeDisabled();
+    expect(screen.getByText("Plug in a camera first.")).toBeVisible();
   });
 });

@@ -9,10 +9,12 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import {
+  getAvatarDecoration,
   normalizeAvatarDisplay,
   type AvatarDisplay,
   type AvatarCropRect,
 } from "@/lib/avatar-display";
+import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
@@ -296,6 +298,13 @@ export function AvatarFrameEditor({
     }
   }, []);
 
+  // Avatars are square keys, so the crop is a square. A decoration's ring art
+  // is drawn for a circle and keeps a round crop (AvatarImage's rule), so while
+  // one is equipped the frame shows the circle the avatar will be cut to.
+  const maskClass = getAvatarDecoration(initialDisplay)
+    ? "rounded-full"
+    : "rounded-avatar";
+
   const handleConfirm = () => {
     if (!currentDisplay) return;
     const existing = normalizeAvatarDisplay(initialDisplay);
@@ -307,7 +316,7 @@ export function AvatarFrameEditor({
 
   return (
     // Always a centred dialog: dragging the image to frame it would fight a
-    // phone drawer's swipe-to-dismiss. Stacked over settings (11.1).
+    // phone drawer's swipe-to-dismiss. Stacks over settings automatically.
     <ResponsiveDialog
       open
       forceMode="dialog"
@@ -315,7 +324,12 @@ export function AvatarFrameEditor({
         if (!next) onCancel();
       }}
     >
-      <ResponsiveDialogContent className="z-60 max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain md:max-w-md">
+      <ResponsiveDialogContent
+        size="md"
+        placement="top"
+        initialFocus="surface"
+        className="overflow-y-auto"
+      >
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Frame your avatar</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
@@ -324,12 +338,15 @@ export function AvatarFrameEditor({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <div className="rounded-lg bg-rm-tint-1 p-4">
+        <div className="rounded-lg bg-tint-1 p-4">
           <div
             ref={viewportRef}
             role="img"
             aria-label={`${displayName}'s avatar crop`}
-            className="relative mx-auto aspect-square w-full max-w-80 cursor-grab touch-none overflow-hidden rounded-full bg-rm-tint-2 active:cursor-grabbing"
+            className={cn(
+              "relative mx-auto aspect-square w-full max-w-80 cursor-grab touch-none overflow-hidden bg-tint-2 active:cursor-grabbing",
+              maskClass,
+            )}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={stopDrag}
@@ -348,22 +365,23 @@ export function AvatarFrameEditor({
                 }}
               />
             ) : (
-              <div className="flex size-full items-center justify-center text-ui-sm text-rm-text-muted">
+              <div className="flex size-full items-center justify-center text-ui-sm text-ink-3">
                 Loading image…
               </div>
             )}
-            <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-rm-accent-ink ring-inset" />
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0 ring-2 ring-accent-ink ring-inset",
+                maskClass,
+              )}
+            />
           </div>
         </div>
 
         {/* Phones: gap-2 so the 40px preview never crowds the content edge
             at 360; the range is the one flexible child. */}
         <div className="flex min-w-0 items-center gap-2 md:gap-3">
-          <Icon
-            name="image"
-            size="sm"
-            className="shrink-0 text-rm-text-muted"
-          />
+          <Icon name="image" size="sm" className="shrink-0 text-ink-3" />
           <input
             type="range"
             min={MIN_ZOOM}
@@ -376,13 +394,14 @@ export function AvatarFrameEditor({
             aria-label="Zoom"
             aria-valuetext={`${Math.round(zoom * 100)}%`}
           />
-          <Icon
-            name="image"
-            size="lg"
-            className="shrink-0 text-rm-text-secondary"
-          />
+          <Icon name="image" size="lg" className="shrink-0 text-ink-2" />
           {currentDisplay ? (
-            <div className="size-10 shrink-0 overflow-hidden rounded-full bg-rm-tint-2">
+            <div
+              className={cn(
+                "size-10 shrink-0 overflow-hidden bg-tint-2",
+                maskClass,
+              )}
+            >
               <AvatarImage
                 src={image.src}
                 alt={`${displayName} preview`}
@@ -398,7 +417,7 @@ export function AvatarFrameEditor({
             Reset
           </Button>
           <div className="flex flex-col-reverse gap-2 md:flex-row">
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button type="button" variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
             <Button

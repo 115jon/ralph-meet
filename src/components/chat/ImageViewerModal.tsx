@@ -31,11 +31,21 @@ import { ImageViewerNavigation } from "./ImageViewerNavigation";
 import { ImageViewerThumbnails } from "./ImageViewerThumbnails";
 import { ImageViewerToolbar } from "./ImageViewerToolbar";
 import ContextMenu from "./ContextMenu";
-import { VIEWER_BUTTON } from "./ImageViewerToolbar";
+import { VIEWER_BAR, VIEWER_BUTTON } from "./ImageViewerToolbar";
 import type { ContextMenuItem } from "./ContextMenu";
 import { useImageViewerState } from "./useImageViewerState";
 
+/**
+ * Image open and close (messages audit, motion plan): the media scales
+ * .96 -> 1 with a fade over 200ms on the way in and to .98 over 150ms on the
+ * way out, from the centre. Keyboard opens skip the scale. Reduced motion
+ * zeroes the scale globally.
+ */
+const MEDIA_PRESENCE =
+  "ease-out group-data-[state=open]/viewer:animate-in group-data-[state=open]/viewer:fade-in-0 group-data-[state=open]/viewer:zoom-in-[0.96] group-data-[state=open]/viewer:duration-(--dur-3) group-data-[state=closed]/viewer:animate-out group-data-[state=closed]/viewer:fade-out-0 group-data-[state=closed]/viewer:zoom-out-[0.98] group-data-[state=closed]/viewer:duration-(--dur-2) group-data-keyboard/viewer:zoom-in-100 group-data-keyboard/viewer:zoom-out-100";
+
 export const ImageViewerModal: React.FC = () => {
+  // The store keeps its images through the exit animation.
   const { isOpen, images, initialIndex, context } = useImageViewerStore();
   const { close } = useImageViewerActions();
   const {
@@ -103,7 +113,11 @@ export const ImageViewerModal: React.FC = () => {
     isOpen &&
     (!lastIsOpen.current || lastInitialIndex.current !== initialIndex)
   ) {
-    setLocalState({ currentIndex: initialIndex, isLoaded: false });
+    setLocalState({
+      currentIndex: initialIndex,
+      isLoaded: false,
+      dimensions: null,
+    });
     lastInitialIndex.current = initialIndex;
     lastIsOpen.current = isOpen;
   } else if (!isOpen && lastIsOpen.current) {
@@ -526,12 +540,22 @@ export const ImageViewerModal: React.FC = () => {
       <DialogPortal>
         <DialogSurface
           showCloseButton={false}
+          initialFocus="surface"
           onEscapeKeyDown={(event) => {
             if (menu.isOpen || confirmation) event.preventDefault();
           }}
           className={cn(
-            "fixed inset-0 z-50 flex flex-col items-center justify-center bg-rm-bg-primary/95 duration-200",
-            "animate-in fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out",
+            // The surface is the scrim (no Radix overlay: its scroll lock
+            // fights the stage's own touch and wheel handling). Media needs a
+            // quieter backdrop than a confirm, so the scrim is laid twice
+            // (about .8 in dark): the chat behind stops competing with the
+            // image while staying recognisable.
+            "group/viewer fixed inset-0 z-50 flex flex-col items-center justify-center bg-scrim outline-none before:pointer-events-none before:absolute before:inset-0 before:bg-scrim before:content-['']",
+            // Phones: the viewer takes the whole screen on solid ply-0. A
+            // see-through scrim let the channel header and the sticky day
+            // label read through the viewer's header bar.
+            "max-md:bg-ply-0 max-md:before:hidden",
+            "ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-(--dur-3) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-(--dur-2)",
           )}
         >
           {/* Names the dialog after the attachment (else Radix's "Dialog"). */}
@@ -555,7 +579,12 @@ export const ImageViewerModal: React.FC = () => {
 
           {/* Floating X button when clean mode active */}
           {hideUi && (
-            <div className="absolute top-[calc(16px+var(--safe-area-top,0px))] right-4 z-60 bg-rm-bg-elevated/80 border border-rm-border rounded-xl p-1 shadow-lg">
+            <div
+              className={cn(
+                VIEWER_BAR,
+                "absolute top-[calc(12px+var(--safe-area-top,0px))] right-3 z-60 max-md:border max-md:border-line max-md:bg-ply-3 md:top-[calc(16px+var(--safe-area-top,0px))] md:right-4",
+              )}
+            >
               <button
                 type="button"
                 onClick={close}
@@ -575,7 +604,7 @@ export const ImageViewerModal: React.FC = () => {
               "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
               hideUi
                 ? "p-0"
-                : "pt-[calc(56px+var(--safe-area-top,0px))] pb-24 px-4 md:pt-[calc(64px+var(--safe-area-top,0px))] md:pb-32 md:px-8",
+                : "pt-[calc(64px+var(--safe-area-top,0px))] pb-24 px-4 md:pt-[calc(72px+var(--safe-area-top,0px))] md:pb-28 md:px-20",
               isItemVideo
                 ? "cursor-default"
                 : isZoomed
@@ -595,21 +624,28 @@ export const ImageViewerModal: React.FC = () => {
             }}
             role="presentation"
           >
-            <ImageViewerContent
-              currentImage={currentImage}
-              isVideo={!!isItemVideo}
-              isAnimatedMedia={isItemAnimatedMedia}
-              blurSensitiveMedia={blurSensitiveMedia}
-              isLoaded={isLoaded}
-              viewState={viewState}
-              imageRef={imageRef}
-              handleImageClick={handleContentImageClick}
-              setLocalState={setLocalState}
-              getUrl={getUrl}
-              getPosterUrl={getPosterUrl}
-              swipeOffset={swipeOffset}
-              isSwipeDragging={isSwipeDragging}
-            />
+            <div
+              className={cn(
+                "pointer-events-none flex max-h-full max-w-full items-center justify-center *:pointer-events-auto",
+                MEDIA_PRESENCE,
+              )}
+            >
+              <ImageViewerContent
+                currentImage={currentImage}
+                isVideo={!!isItemVideo}
+                isAnimatedMedia={isItemAnimatedMedia}
+                blurSensitiveMedia={blurSensitiveMedia}
+                isLoaded={isLoaded}
+                viewState={viewState}
+                imageRef={imageRef}
+                handleImageClick={handleContentImageClick}
+                setLocalState={setLocalState}
+                getUrl={getUrl}
+                getPosterUrl={getPosterUrl}
+                swipeOffset={swipeOffset}
+                isSwipeDragging={isSwipeDragging}
+              />
+            </div>
 
             {/* Navigation Arrows */}
             {!hideUi && images.length > 1 && (

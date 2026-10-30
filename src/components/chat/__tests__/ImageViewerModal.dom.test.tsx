@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 Object.defineProperty(globalThis, "localStorage", {
@@ -19,7 +25,15 @@ vi.mock("@/hooks/useBackButton", () => ({
 }));
 
 vi.mock("@/components/chat/ImageViewerToolbar", () => ({
-  ImageViewerToolbar: () => null,
+  ImageViewerToolbar: ({
+    dimensions,
+  }: {
+    dimensions: { width: number; height: number } | null;
+  }) => (
+    <output data-testid="viewer-dimensions">
+      {dimensions ? `${dimensions.width}x${dimensions.height}` : "none"}
+    </output>
+  ),
 }));
 
 vi.mock("@/components/chat/ImageViewerThumbnails", () => ({
@@ -132,7 +146,7 @@ describe("ImageViewerModal drag navigation", () => {
     );
   });
 
-  it("opens the media context menu for the current remote image", () => {
+  it("opens the media context menu for the current remote image", async () => {
     render(<ImageViewerModal />);
 
     fireEvent.contextMenu(screen.getByTestId("image-viewer-image"), {
@@ -140,7 +154,12 @@ describe("ImageViewerModal drag navigation", () => {
       clientY: 80,
     });
 
-    expect(screen.getByRole("menuitem", { name: "Save image" })).toBeVisible();
+    // The menu is a Base UI popup: it shows once its positioner has placed it.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("menuitem", { name: "Save image" }),
+      ).toBeVisible(),
+    );
     expect(
       screen.getByRole("menuitem", { name: "Copy media link" }),
     ).toBeVisible();
@@ -185,5 +204,34 @@ describe("ImageViewerModal drag navigation", () => {
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining("/api/attachments/internal.jpg"),
     );
+  });
+
+  it("drops the previous image's dimensions when the viewer reopens", () => {
+    render(<ImageViewerModal />);
+    const img = screen.getByTestId("image-viewer-image");
+    Object.defineProperty(img, "naturalWidth", {
+      configurable: true,
+      value: 640,
+    });
+    Object.defineProperty(img, "naturalHeight", {
+      configurable: true,
+      value: 480,
+    });
+    fireEvent.load(img);
+    expect(screen.getByTestId("viewer-dimensions")).toHaveTextContent(
+      "640x480",
+    );
+
+    act(() => {
+      useImageViewerStore.setState({ isOpen: false });
+    });
+    act(() => {
+      useImageViewerStore.setState({
+        isOpen: true,
+        initialIndex: 0,
+        images: [{ ...viewerImages[1]!, id: "other" }],
+      });
+    });
+    expect(screen.getByTestId("viewer-dimensions")).toHaveTextContent("none");
   });
 });

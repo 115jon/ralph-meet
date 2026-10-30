@@ -7,7 +7,10 @@
  *          phones and wherever the page is too narrow for two columns.
  *
  * The shell owns `editorOpen` so its header back button and Escape ladder
- * can close the editor.
+ * can close the editor. Save and Reset live in the workbench's shared
+ * UnsavedBar: the editor reports its draft through `onUnsavedChange`, and
+ * while it is dirty the shell refuses to switch role or page (`blocked`),
+ * nudging the bar instead (overlays audit issue 7, flow 3).
  */
 
 import { Button } from "@/components/ui/button";
@@ -19,17 +22,24 @@ import { describeApiError } from "@/lib/api-errors";
 import { PERMISSIONS } from "@/lib/permissions";
 import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
 import { SettingsSwitch } from "./SettingsSwitch";
+import type { UnsavedBarProps } from "./settings/UnsavedBar";
 import {
   ConfirmStrip,
-  RowError,
   SettingsCard,
   SettingsRow,
   useConfirm,
 } from "./settings/primitives";
+import { FieldRow } from "./server-settings/Field";
 import { LoadError, SkeletonRows } from "./server-settings/states";
+
+/** What the role editor hands the workbench's save bar. */
+export type RoleUnsaved = Pick<
+  UnsavedBarProps,
+  "dirty" | "saving" | "error" | "onReset" | "onSave" | "saveLabel"
+>;
 
 interface RoleManagementProps {
   serverId: string;
@@ -42,10 +52,15 @@ interface RoleManagementProps {
   onEditorOpenChange: (open: boolean) => void;
   /** Push layout: the page title for the open editor. */
   onEditorTitle?: (title: string | null) => void;
+  /** The open editor's draft state for the save bar (null when none). */
+  onUnsavedChange?: (state: RoleUnsaved | null) => void;
+  /** The draft is dirty: switching role calls `onBlocked` instead. */
+  blocked?: boolean;
+  onBlocked?: () => void;
 }
 
 /** Token fallback for a role with no colour of its own. */
-const NO_COLOR = "var(--rm-text-muted)";
+const NO_COLOR = "var(--ink-3)";
 /** <input type="color"> only accepts #rrggbb, so it needs a hex start. */
 const PICKER_START = "#99aab5"; // ds-allow:raw-color native colour input needs a hex value
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -154,7 +169,7 @@ function RoleList({
   return (
     <section aria-label="Roles" className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-ui-sm text-rm-text-secondary">
+        <p className="text-ui-sm text-ink-2">
           {roles.length === 1 ? "1 role" : `${roles.length} roles`}
         </p>
         <Button
@@ -172,7 +187,7 @@ function RoleList({
         className={cn(
           "flex flex-col",
           narrow
-            ? "divide-y divide-rm-border rounded-lg border border-rm-border bg-rm-bg-surface"
+            ? "divide-y divide-line rounded-lg border border-line bg-ply-2"
             : "gap-px",
         )}
       >
@@ -185,14 +200,14 @@ function RoleList({
                 aria-current={current ? "true" : undefined}
                 onClick={() => onSelect(role)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-md text-left transition-colors duration-150 ease-(--rm-ease-out)",
+                  "flex w-full items-center gap-2.5 rounded-sm text-left transition-colors duration-(--dur-1) ease-out",
                   PRESS,
                   HIT,
-                  narrow ? "min-h-12 px-4 text-ui-base" : "h-8 px-2 text-ui-sm",
+                  narrow ? "min-h-12 px-4 text-ui-row" : "h-8 px-2 text-ui-sm",
                   current
-                    ? "bg-rm-tint-2 font-semibold text-rm-text"
-                    : "font-medium text-rm-text-secondary pointer-fine:hover:bg-rm-tint-1 pointer-fine:hover:text-rm-text",
-                  narrow && "rounded-none text-rm-text",
+                    ? "bg-tint-2 font-semibold text-ink-1"
+                    : "font-medium text-ink-2 pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1",
+                  narrow && "rounded-none text-ink-1",
                 )}
               >
                 <Swatch color={role.color} />
@@ -201,7 +216,7 @@ function RoleList({
                   className="min-w-0 flex-1 truncate"
                 />
                 {role.is_default ? (
-                  <span className="text-ui-xs font-medium text-rm-text-muted">
+                  <span className="text-ui-xs font-medium text-ink-3">
                     Everyone
                   </span>
                 ) : null}
@@ -209,7 +224,7 @@ function RoleList({
                   <Icon
                     name="chevronRight"
                     size="xs"
-                    className="shrink-0 text-rm-text-muted"
+                    className="shrink-0 text-ink-3"
                   />
                 ) : null}
               </button>
@@ -218,7 +233,7 @@ function RoleList({
         })}
         {creating && !narrow ? (
           <li>
-            <span className="flex h-8 items-center gap-3 rounded-md bg-rm-tint-2 px-2 text-ui-sm font-semibold text-rm-text">
+            <span className="flex h-8 items-center gap-2.5 rounded-sm bg-tint-2 px-2 text-ui-sm font-semibold text-ink-1">
               <Swatch color={null} />
               New role
             </span>
@@ -229,6 +244,12 @@ function RoleList({
   );
 }
 
+const draftOf = (role: Role | null): Draft => ({
+  name: role?.name ?? "New role",
+  color: role?.color ?? "",
+  permissions: role?.permissions ?? 0,
+});
+
 function RoleEditor({
   serverId,
   role,
@@ -236,6 +257,8 @@ function RoleEditor({
   titled,
   onSaved,
   onDeleted,
+  onCancelCreate,
+  onUnsavedChange,
 }: {
   serverId: string;
   role: Role | null;
@@ -244,12 +267,11 @@ function RoleEditor({
   titled: boolean;
   onSaved: (savedId: string | null) => Promise<void>;
   onDeleted: (roleId: string) => Promise<void>;
+  /** Reset on a new-role draft drops the draft. */
+  onCancelCreate: () => void;
+  onUnsavedChange?: (state: RoleUnsaved | null) => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(() => ({
-    name: role?.name ?? "New role",
-    color: role?.color ?? "",
-    permissions: role?.permissions ?? 0,
-  }));
+  const [draft, setDraft] = useState<Draft>(() => draftOf(role));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -258,6 +280,10 @@ function RoleEditor({
   const { armed, arm, cancel, done, triggerRef } = useConfirm();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const nameId = useId();
+  const nameHelpId = useId();
+  const colorId = useId();
+  const colorHelpId = useId();
 
   const isDefault = Boolean(role?.is_default);
   const isAdmin = has(draft.permissions, PERMISSIONS.ADMINISTRATOR);
@@ -274,6 +300,17 @@ function RoleEditor({
     setDraft((prev) => ({ ...prev, ...patch }));
   };
 
+  const reset = () => {
+    if (creating) {
+      onCancelCreate();
+      return;
+    }
+    setDraft(draftOf(role));
+    setSaveError(null);
+    setNameError(null);
+    setColorError(null);
+  };
+
   const save = async () => {
     if (saving) return;
     const name = draft.name.trim();
@@ -284,7 +321,10 @@ function RoleEditor({
     setColorError(
       badColor ? "Enter a colour as # and six hex digits, like #3e9b4f." : null,
     );
-    if (badName || badColor) return;
+    if (badName || badColor) {
+      document.getElementById(badName ? nameId : colorId)?.focus();
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -313,6 +353,24 @@ function RoleEditor({
     }
   };
 
+  /* Report the draft to the workbench save bar. The handlers go through a
+     ref so the report only changes when the visible state does. */
+  const handlers = useRef({ save, reset });
+  useEffect(() => {
+    handlers.current = { save, reset };
+  });
+  useEffect(() => {
+    onUnsavedChange?.({
+      dirty,
+      saving,
+      error: saveError,
+      saveLabel: creating ? "Create role" : "Save changes",
+      onSave: () => void handlers.current.save(),
+      onReset: () => handlers.current.reset(),
+    });
+  }, [creating, dirty, onUnsavedChange, saveError, saving]);
+  useEffect(() => () => onUnsavedChange?.(null), [onUnsavedChange]);
+
   const confirmDelete = async () => {
     if (!role) return;
     setDeleting(true);
@@ -328,35 +386,21 @@ function RoleEditor({
     }
   };
 
+  const canDelete = !isDefault && !creating;
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {titled ? (
-          <h3 className="flex min-w-0 flex-1 items-center gap-2 text-ui-lg font-semibold text-rm-text">
-            <Swatch color={draft.color || role?.color} />
-            <InlineEmojiText text={roleName} className="truncate" />
-          </h3>
-        ) : null}
-        <p
-          role="status"
-          className={cn(
-            "flex items-center gap-1.5 text-ui-sm",
-            !titled && "flex-1",
+      {titled || (canDelete && !armed) ? (
+        <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
+          {titled ? (
+            <h3 className="flex min-w-0 flex-1 items-center gap-2 text-ui-lg font-semibold text-ink-1">
+              <Swatch color={draft.color || role?.color} />
+              <InlineEmojiText text={roleName} className="truncate" />
+            </h3>
+          ) : (
+            <span className="flex-1" />
           )}
-        >
-          {justSaved && !dirty ? (
-            <>
-              <Icon
-                name="success"
-                size="sm"
-                className="shrink-0 text-rm-success-ink"
-              />
-              <span className="text-rm-success-ink">Saved</span>
-            </>
-          ) : null}
-        </p>
-        <div className="flex items-center gap-2">
-          {!isDefault && !creating && !armed ? (
+          {canDelete && !armed ? (
             <Button
               ref={triggerRef}
               type="button"
@@ -371,17 +415,11 @@ function RoleEditor({
               Delete
             </Button>
           ) : null}
-          <Button
-            type="button"
-            className="max-md:min-h-11"
-            loading={saving}
-            disabled={!dirty}
-            onClick={() => void save()}
-          >
-            {creating ? "Create role" : "Save changes"}
-          </Button>
         </div>
-      </div>
+      ) : null}
+      <p role="status" className="sr-only">
+        {justSaved && !dirty ? "Role saved" : ""}
+      </p>
       {armed && role ? (
         <ConfirmStrip
           irreversible
@@ -404,121 +442,85 @@ function RoleEditor({
           onConfirm={() => void confirmDelete()}
         />
       ) : null}
-      {saveError ? <RowError className="mt-0">{saveError}</RowError> : null}
 
-      <SettingsCard
-        title="Display"
-        description={
-          isDefault
-            ? "@everyone applies to every member. Its name and colour can't change."
-            : undefined
-        }
-      >
-        <SettingsRow id="role-name" label="Role name" layout="block">
-          {({ labelId }) => (
-            <div className="flex flex-col gap-2">
-              <Input
-                value={draft.name}
-                readOnly={isDefault}
-                maxLength={100}
-                aria-labelledby={labelId}
-                aria-invalid={nameError ? true : undefined}
-                aria-describedby={nameError ? "role-name-error" : undefined}
+      {isDefault ? (
+        <p className="text-pretty text-ui-sm text-ink-2">
+          Everyone has this role. Its name and colour are fixed.
+        </p>
+      ) : (
+        <SettingsCard title="Display">
+          <FieldRow
+            label="Role name"
+            htmlFor={nameId}
+            helperId={nameHelpId}
+            error={nameError}
+          >
+            <Input
+              id={nameId}
+              value={draft.name}
+              maxLength={100}
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? nameHelpId : undefined}
+              onChange={(event) => {
+                setNameError(null);
+                edit({ name: event.target.value });
+              }}
+              className="max-md:min-h-11"
+            />
+          </FieldRow>
+          <FieldRow
+            label="Colour"
+            htmlFor={colorId}
+            helperId={colorHelpId}
+            helper="Names with this role show in this colour. Leave empty for none."
+            error={colorError}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={HEX.test(draft.color) ? draft.color : PICKER_START}
+                aria-label="Pick a role colour"
                 onChange={(event) => {
-                  setNameError(null);
-                  edit({ name: event.target.value });
+                  setColorError(null);
+                  edit({ color: event.target.value });
                 }}
-                className={cn(
-                  "max-md:min-h-11 md:max-w-[360px]",
-                  isDefault && "bg-rm-tint-1",
-                )}
+                className="size-8 shrink-0 cursor-pointer rounded-md border border-line-field bg-transparent p-0.5 max-md:size-11"
               />
-              {nameError ? (
-                <p
-                  id="role-name-error"
-                  className="text-ui-xs text-rm-danger-ink"
+              <Input
+                id={colorId}
+                value={draft.color}
+                placeholder="#3e9b4f"
+                spellCheck={false}
+                aria-invalid={colorError ? true : undefined}
+                aria-describedby={colorHelpId}
+                onChange={(event) => {
+                  setColorError(null);
+                  edit({ color: event.target.value });
+                }}
+                className="max-w-40 font-mono max-md:min-h-11"
+              />
+              {draft.color ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="max-md:min-h-11"
+                  onClick={() => edit({ color: "" })}
                 >
-                  {nameError}
-                </p>
+                  Clear
+                </Button>
               ) : null}
             </div>
-          )}
-        </SettingsRow>
-        <SettingsRow
-          id="role-color"
-          label="Colour"
-          description="Names with this role show in this colour. Leave empty for none."
-          layout="block"
-        >
-          {({ labelId, descId }) => (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={HEX.test(draft.color) ? draft.color : PICKER_START}
-                  disabled={isDefault}
-                  aria-label="Pick a role colour"
-                  onChange={(event) => {
-                    setColorError(null);
-                    edit({ color: event.target.value });
-                  }}
-                  className="size-9 shrink-0 cursor-pointer rounded-md border border-rm-field-edge bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-45 max-md:size-11"
-                />
-                <Input
-                  value={draft.color}
-                  readOnly={isDefault}
-                  placeholder="#3e9b4f"
-                  spellCheck={false}
-                  aria-labelledby={labelId}
-                  aria-invalid={colorError ? true : undefined}
-                  aria-describedby={
-                    [descId, colorError ? "role-color-error" : null]
-                      .filter(Boolean)
-                      .join(" ") || undefined
-                  }
-                  onChange={(event) => {
-                    setColorError(null);
-                    edit({ color: event.target.value });
-                  }}
-                  className={cn(
-                    "max-w-[160px] font-mono max-md:min-h-11",
-                    isDefault && "bg-rm-tint-1",
-                  )}
-                />
-                {draft.color && !isDefault ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="max-md:min-h-11"
-                    onClick={() => edit({ color: "" })}
-                  >
-                    Clear
-                  </Button>
-                ) : null}
-              </div>
-              {colorError ? (
-                <p
-                  id="role-color-error"
-                  className="text-ui-xs text-rm-danger-ink"
-                >
-                  {colorError}
-                </p>
-              ) : null}
-            </div>
-          )}
-        </SettingsRow>
-      </SettingsCard>
+          </FieldRow>
+        </SettingsCard>
+      )}
 
       {PERMISSION_GROUPS.map((group, index) => (
         <SettingsCard
           key={group.title}
           title={group.title}
           description={
-            index === 0
-              ? isAdmin
-                ? "Administrator is on, so this role has every permission."
-                : undefined
+            index === 0 && isAdmin
+              ? "Administrator is on, so this role has every permission."
               : undefined
           }
         >
@@ -561,6 +563,9 @@ export default function RoleManagement({
   editorOpen,
   onEditorOpenChange,
   onEditorTitle,
+  onUnsavedChange,
+  blocked = false,
+  onBlocked,
 }: RoleManagementProps) {
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -606,12 +611,20 @@ export default function RoleManagement({
   }, [editorOpen, editorTitle, onEditorTitle, split]);
 
   const select = (role: Role) => {
+    if (blocked && (creating || role.id !== selectedId)) {
+      onBlocked?.();
+      return;
+    }
     setCreating(false);
     setSelectedId(role.id);
     if (!split) onEditorOpenChange(true);
   };
 
   const startCreate = () => {
+    if (blocked) {
+      onBlocked?.();
+      return;
+    }
     setCreating(true);
     if (!split) onEditorOpenChange(true);
   };
@@ -627,7 +640,14 @@ export default function RoleManagement({
     );
   }
   if (!roles)
-    return <SkeletonRows label="Loading roles" rows={4} avatar={false} />;
+    return (
+      <SkeletonRows
+        label="Loading roles"
+        rows={4}
+        avatar={false}
+        rowClass="h-12"
+      />
+    );
 
   const editor =
     selected || creating ? (
@@ -637,6 +657,11 @@ export default function RoleManagement({
         role={creating ? null : selected}
         creating={creating}
         titled={split}
+        onUnsavedChange={onUnsavedChange}
+        onCancelCreate={() => {
+          setCreating(false);
+          if (!split) onEditorOpenChange(false);
+        }}
         onSaved={async (savedId) => {
           const data = await fetchRoles();
           if (creating) {
@@ -685,7 +710,7 @@ export default function RoleManagement({
         />
       </div>
       {editor ?? (
-        <p className="flex-1 py-12 text-center text-ui-sm text-rm-text-secondary">
+        <p className="flex-1 py-12 text-center text-ui-sm text-ink-2">
           Choose a role to edit it.
         </p>
       )}

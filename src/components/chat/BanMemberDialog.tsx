@@ -25,6 +25,9 @@ export function BanMemberDialog({
 }) {
   const reasonId = useId();
   const [reason, setReason] = useState("");
+  // Keep the name through the exit animation, after `target` clears.
+  const [name, setName] = useState(target?.username ?? "");
+  if (target && target.username !== name) setName(target.username);
 
   return (
     <ConfirmDialog
@@ -36,16 +39,18 @@ export function BanMemberDialog({
         onClose();
       }}
       title="Ban member"
-      description={`${target?.username ?? ""} will be removed from this server and can't rejoin until unbanned.`}
-      confirmLabel="Ban"
-      // Reversible from Server settings > Bans, so the red tint (13.2).
+      description={`${name} will be removed from this server and can't rejoin until unbanned.`}
+      // The confirm names who it bans ("Ban grace"). A ban removes them at
+      // once and holds until someone unbans them: an irreversible confirm,
+      // so the solid danger fill, not the reversible red tint.
+      confirmLabel={`Ban ${name}`}
+      irreversible
       errorAction="ban this member"
       onConfirm={() => (target ? onBan(target, reason.trim()) : undefined)}
     >
       <div className="flex flex-col gap-2">
         <Label htmlFor={reasonId}>
-          Reason{" "}
-          <span className="font-normal text-rm-text-muted">(optional)</span>
+          Reason <span className="font-normal text-ink-3">(optional)</span>
         </Label>
         <Input
           id={reasonId}

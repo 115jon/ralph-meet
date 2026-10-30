@@ -1,6 +1,7 @@
 import type { MediaContentFilter } from "@/lib/media-content-filter";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { isAnimatedMedia, isVideo } from "@/lib/media";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import React from "react";
 
@@ -26,12 +27,16 @@ export function ImageViewerThumbnails({
   const isWide =
     typeof window !== "undefined" &&
     window.matchMedia("(min-width: 768px)").matches;
-  const thumbH = isWide ? 56 : 44;
-  const baseW = isWide ? 56 : 30; // square on desktop, portrait on mobile
+  const thumbH = isWide ? 48 : 40;
+  const baseW = thumbH; // whole square cells; the selected one takes its aspect
 
   return (
-    <div className="absolute bottom-3 md:bottom-6 left-1/2 -translate-x-1/2 max-w-[92vw] md:max-w-[90vw] z-50">
-      <div className="flex items-center gap-2 p-2 bg-rm-bg-primary/40 rounded-2xl border border-rm-border overflow-x-auto shadow-2xl custom-scrollbar no-scrollbar">
+    <div className="absolute bottom-[calc(12px+var(--safe-area-bottom,0px))] left-1/2 z-50 max-w-[calc(100vw-24px)] -translate-x-1/2 md:bottom-5">
+      <div
+        role="group"
+        aria-label="Media in this message"
+        className="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-lg border border-line bg-ply-3 p-1.5 shadow-float"
+      >
         {images.map((img, idx) => {
           const isSelected = idx === currentIndex;
           const isAnimated = isAnimatedMedia(
@@ -57,6 +62,7 @@ export function ImageViewerThumbnails({
                 e.stopPropagation();
                 setLocalState({ currentIndex: idx, isLoaded: false });
               }}
+              aria-current={isSelected ? "true" : undefined}
               aria-label={
                 shouldBlur
                   ? `Sensitive media thumbnail ${idx + 1}`
@@ -64,10 +70,10 @@ export function ImageViewerThumbnails({
               }
               title={shouldBlur ? "Sensitive media" : undefined}
               className={cn(
-                "relative rounded-lg overflow-hidden shrink-0 group will-change-transform transition-[transform,opacity] duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]",
+                "group relative shrink-0 overflow-hidden rounded-md bg-tint-1 transition-opacity duration-(--dur-1) ease-out",
                 isSelected
-                  ? "ring-2 ring-rm-accent opacity-100"
-                  : "opacity-50 pointer-fine:hover:opacity-100",
+                  ? "opacity-100 ring-2 ring-accent-ink ring-offset-2 ring-offset-ply-3"
+                  : "opacity-55 pointer-fine:hover:opacity-100",
               )}
               style={{
                 height: thumbH,
@@ -109,8 +115,6 @@ export function ImageViewerThumbnails({
                       aria-label="Media thumbnail preview"
                       data-rm-preserve-blur={shouldBlur ? "true" : undefined}
                       muted
-                      autoPlay={isAnimated}
-                      loop={isAnimated}
                       playsInline
                       preload="metadata"
                       className={cn(
@@ -136,15 +140,11 @@ export function ImageViewerThumbnails({
                     />
                   )}
                   {!isAnimated && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-3.5 h-3.5 text-white drop-shadow-md"
-                        fill="currentColor"
-                      >
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </div>
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-ply-3 text-ink-1 shadow-float">
+                        <Icon name="play" size="xs" state="active" />
+                      </span>
+                    </span>
                   )}
                 </>
               ) : (
@@ -176,7 +176,7 @@ export function ImageViewerThumbnails({
                 />
               )}
               {shouldBlur && (
-                <div className="pointer-events-none absolute inset-0 bg-black/30" />
+                <div className="pointer-events-none absolute inset-0 bg-scrim" />
               )}
             </button>
           );

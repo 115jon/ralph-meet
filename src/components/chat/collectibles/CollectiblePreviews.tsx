@@ -7,7 +7,7 @@
 
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
-import type { AvatarDisplay } from "@/lib/avatar-display";
+import { getAvatarDecoration, type AvatarDisplay } from "@/lib/avatar-display";
 import {
   decorationMotionUrl,
   decorationStillUrl,
@@ -27,6 +27,8 @@ import { getDisplayInitial } from "@/lib/display-name";
 import { cn } from "@/lib/utils";
 import { useState, type CSSProperties } from "react";
 
+import { useAppActive } from "@/hooks/useAppActive";
+
 import { usePrefersReducedMotion } from "./hooks";
 
 export type PreviewIdentity = {
@@ -37,21 +39,29 @@ export type PreviewIdentity = {
   display?: AvatarDisplay | string | null;
 };
 
+/**
+ * The avatar under a preview. Avatars are square keys (`rounded-avatar`); a
+ * decoration's ring art is drawn for a circle, so a face wearing one keeps the
+ * round crop (the same rule as AvatarImage). `round` is that case.
+ */
 function AvatarFace({
   avatarSrc,
   displayName,
   display,
+  round = false,
   className,
 }: {
   avatarSrc?: string;
   displayName: string;
   display?: AvatarDisplay | string | null;
+  round?: boolean;
   className?: string;
 }) {
   return (
     <span
       className={cn(
-        "absolute inset-0 overflow-hidden rounded-full bg-rm-bg-elevated",
+        "absolute inset-0 overflow-hidden bg-ply-2",
+        round ? "rounded-full" : "rounded-avatar",
         className,
       )}
     >
@@ -63,7 +73,7 @@ function AvatarFace({
           loading="lazy"
         />
       ) : (
-        <span className="flex h-full w-full items-center justify-center bg-primary font-semibold text-primary-foreground [font-size:40cqw]">
+        <span className="flex h-full w-full items-center justify-center bg-tint-3 font-display font-extrabold text-ink-1 [font-size:40cqw]">
           {getDisplayInitial({ name: displayName })}
         </span>
       )}
@@ -89,9 +99,11 @@ export function DecorationAvatar({
   className?: string;
 }) {
   const reduceMotion = usePrefersReducedMotion();
+  // Behind a game or in a hidden tab the APNG stops decoding (spec §5f).
+  const appActive = useAppActive();
   const motionSrc = item ? decorationMotionUrl(item) : undefined;
   const [loadedMotion, setLoadedMotion] = useState<string | null>(null);
-  const playing = animate && !reduceMotion && Boolean(motionSrc);
+  const playing = animate && appActive && !reduceMotion && Boolean(motionSrc);
   const motionVisible = playing && loadedMotion === motionSrc;
 
   return (
@@ -105,6 +117,7 @@ export function DecorationAvatar({
         avatarSrc={identity.avatarSrc}
         displayName={identity.displayName}
         display={identity.display}
+        round={Boolean(item)}
       />
       {item ? (
         <>
@@ -146,15 +159,15 @@ function CardSilhouette({ className }: { className?: string }) {
     <span
       aria-hidden="true"
       className={cn(
-        "absolute inset-0 overflow-hidden rounded-[inherit] bg-rm-bg-elevated [container-type:inline-size]",
+        "absolute inset-0 overflow-hidden rounded-[inherit] bg-ply-2 [container-type:inline-size]",
         className,
       )}
     >
-      <span className="absolute inset-x-0 top-0 h-[42cqw] bg-rm-tint-2" />
-      <span className="absolute left-[7cqw] top-[30cqw] aspect-square w-[30cqw] rounded-full border-[2cqw] border-rm-bg-elevated bg-rm-tint-3" />
-      <span className="absolute left-[7cqw] top-[66cqw] h-[5cqw] w-[46cqw] rounded-full bg-rm-tint-3" />
-      <span className="absolute left-[7cqw] top-[75cqw] h-[4cqw] w-[30cqw] rounded-full bg-rm-tint-2" />
-      <span className="absolute inset-x-[7cqw] top-[88cqw] h-[30cqw] rounded-[5cqw] bg-rm-tint-1" />
+      <span className="absolute inset-x-0 top-0 h-[42cqw] bg-tint-2" />
+      <span className="absolute left-[7cqw] top-[30cqw] aspect-square w-[30cqw] rounded-avatar border-[2cqw] border-ply-2 bg-tint-3" />
+      <span className="absolute left-[7cqw] top-[66cqw] h-[5cqw] w-[46cqw] rounded-full bg-tint-3" />
+      <span className="absolute left-[7cqw] top-[75cqw] h-[4cqw] w-[30cqw] rounded-full bg-tint-2" />
+      <span className="absolute inset-x-[7cqw] top-[88cqw] h-[30cqw] rounded-[5cqw] bg-tint-1" />
     </span>
   );
 }
@@ -171,7 +184,7 @@ export function EffectThumb({
   return (
     <span
       className={cn(
-        "relative block aspect-[450/880] w-full overflow-hidden rounded-lg",
+        "relative block aspect-[450/880] w-full overflow-hidden rounded-md",
         className,
       )}
     >
@@ -193,8 +206,8 @@ export function EffectThumb({
 
 /** Neutral stand-ins for the profile-theme variables ProfileSurfaceShell reads. */
 const NEUTRAL_PROFILE_THEME = {
-  "--rm-profile-custom-background": "var(--color-rm-bg-elevated)",
-  "--rm-profile-custom-card-border": "var(--color-rm-border)",
+  "--rm-profile-custom-background": "var(--color-ply-2)",
+  "--rm-profile-custom-card-border": "var(--color-line)",
   "--rm-profile-custom-surface": "none",
   "--rm-profile-custom-surface-overlay-strong": "none",
 } as CSSProperties;
@@ -217,6 +230,7 @@ export function ProfileCardPreview({
   className?: string;
   style?: CSSProperties;
 }) {
+  const roundAvatar = Boolean(getAvatarDecoration(display));
   return (
     <div
       className={cn(
@@ -231,16 +245,31 @@ export function ProfileCardPreview({
           variant="card"
           fit="cover"
           playAnimation={playAnimation}
+          // A shop / picker stage is a preview on demand: the authored loop.
+          effectPlayback="loop"
           className="h-full w-full"
           surfaceClassName="rounded-[7cqw]"
         >
           <div className="relative h-full [container-type:inline-size]">
-            <div className="h-[42cqw] bg-rm-tint-2 bg-[linear-gradient(135deg,var(--rm-accent-dim),transparent)]" />
+            <div className="h-[42cqw] bg-tint-2" />
             <div className="absolute left-[7cqw] top-[26cqw] aspect-square w-[30cqw]">
-              <span className="absolute -inset-[4%] rounded-full bg-rm-bg-elevated" />
+              {/* Square like the real card's avatar; a decoration's ring art
+                  is drawn for a circle, so a decorated one keeps the round
+                  halo and crop. */}
+              <span
+                className={cn(
+                  "absolute -inset-[4%] bg-ply-2",
+                  roundAvatar ? "rounded-full" : "rounded-avatar",
+                )}
+              />
               <span className="absolute inset-0">
                 {identity.avatarSrc ? (
-                  <span className="absolute inset-0 rounded-full">
+                  <span
+                    className={cn(
+                      "absolute inset-0",
+                      roundAvatar ? "rounded-full" : "rounded-avatar",
+                    )}
+                  >
                     <AvatarImage
                       src={identity.avatarSrc}
                       alt=""
@@ -248,25 +277,30 @@ export function ProfileCardPreview({
                     />
                   </span>
                 ) : (
-                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground [font-size:12cqw]">
+                  <span
+                    className={cn(
+                      "absolute inset-0 flex items-center justify-center bg-tint-3 font-display font-extrabold text-ink-1 [font-size:12cqw]",
+                      roundAvatar ? "rounded-full" : "rounded-avatar",
+                    )}
+                  >
                     {getDisplayInitial({ name: identity.displayName })}
                   </span>
                 )}
               </span>
             </div>
             <div className="px-[7cqw] pt-[18cqw]">
-              <p className="truncate font-semibold leading-tight text-rm-text [font-size:7.5cqw]">
+              <p className="truncate font-semibold leading-tight text-ink-1 [font-size:7.5cqw]">
                 {identity.displayName}
               </p>
               {identity.username ? (
-                <p className="truncate leading-tight text-rm-text-muted [font-size:5cqw]">
+                <p className="truncate leading-tight text-ink-3 [font-size:5cqw]">
                   {identity.username}
                 </p>
               ) : null}
-              <div className="mt-[6cqw] space-y-[2.5cqw] rounded-[4cqw] bg-rm-tint-1 p-[4cqw]">
-                <span className="block h-[2.4cqw] w-[38%] rounded-full bg-rm-tint-3" />
-                <span className="block h-[2cqw] w-[82%] rounded-full bg-rm-tint-2" />
-                <span className="block h-[2cqw] w-[64%] rounded-full bg-rm-tint-2" />
+              <div className="mt-[6cqw] space-y-[2.5cqw] rounded-[4cqw] bg-tint-1 p-[4cqw]">
+                <span className="block h-[2.4cqw] w-[38%] rounded-full bg-tint-3" />
+                <span className="block h-[2cqw] w-[82%] rounded-full bg-tint-2" />
+                <span className="block h-[2cqw] w-[64%] rounded-full bg-tint-2" />
               </div>
             </div>
           </div>
@@ -314,14 +348,15 @@ export function NameplateRow({
   className?: string;
 }) {
   const reduceMotion = usePrefersReducedMotion();
+  const appActive = useAppActive();
   const still = item ? nameplateStillUrl(item) : undefined;
   const motion = item ? nameplateMotionUrl(item) : undefined;
-  const playing = animate && !reduceMotion && Boolean(motion);
+  const playing = animate && appActive && !reduceMotion && Boolean(motion);
 
   return (
     <span
       className={cn(
-        "relative flex h-12 w-full items-center gap-3 overflow-hidden rounded-lg bg-rm-bg-elevated px-3",
+        "relative flex h-12 w-full items-center gap-3 overflow-hidden rounded-md bg-ply-2 px-3",
         className,
       )}
     >
@@ -358,7 +393,7 @@ export function NameplateRow({
       <span
         // Plate art fades out toward the leading edge where the name sits,
         // so the row's own text colour stays readable in both themes.
-        className="relative min-w-0 truncate text-ui-sm font-semibold text-rm-text"
+        className="relative min-w-0 truncate text-ui-sm font-semibold text-ink-1"
       >
         {identity.displayName}
       </span>
@@ -402,16 +437,16 @@ export function CollectibleStage({
     return (
       <div
         aria-hidden="true"
-        className="flex w-full max-w-72 flex-col gap-1 rounded-xl bg-rm-bg-secondary p-2"
+        className="flex w-full max-w-72 flex-col gap-1 rounded-lg border border-line bg-ply-1 p-2"
       >
         <span className="flex h-10 items-center gap-3 px-3 opacity-50">
-          <span className="size-7 rounded-full bg-rm-tint-3" />
-          <span className="h-2 w-20 rounded-full bg-rm-tint-3" />
+          <span className="size-7 rounded-avatar bg-tint-3" />
+          <span className="h-2 w-20 rounded-full bg-tint-3" />
         </span>
         <NameplateRow item={item} identity={identity} animate />
         <span className="flex h-10 items-center gap-3 px-3 opacity-50">
-          <span className="size-7 rounded-full bg-rm-tint-3" />
-          <span className="h-2 w-28 rounded-full bg-rm-tint-3" />
+          <span className="size-7 rounded-avatar bg-tint-3" />
+          <span className="h-2 w-28 rounded-full bg-tint-3" />
         </span>
       </div>
     );

@@ -7,6 +7,7 @@ import {
   splitTextByNativeEmoji,
 } from "@/lib/emoji";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
+import { useEmojiDataReady } from "@/hooks/useEmojiDataReady";
 
 import EmojiToken from "./EmojiToken";
 import type { ComposerCustomEmojiMap } from "./message-input-utils";
@@ -26,6 +27,8 @@ export function InputMentionOverlay({
   text,
   composerCustomEmojiMap = EMPTY_COMPOSER_CUSTOM_EMOJI_MAP,
 }: Props) {
+  // Re-render once the lazily loaded emoji set lands (desktop).
+  useEmojiDataReady();
   const placeholderPattern = React.useMemo(() => {
     const placeholders = Object.keys(composerCustomEmojiMap);
     if (placeholders.length === 0) return null;
@@ -116,11 +119,11 @@ export function InputMentionOverlay({
     }
 
     if (isUrl) {
-      // Render URL with primary/link color
+      // Links read in accent ink, like in a sent message.
       parts.push(
         <span
           key={`url-${match.index}`}
-          className="text-primary pointer-events-none"
+          className="text-accent-ink pointer-events-none"
         >
           {match[0]}
         </span>,
@@ -173,11 +176,13 @@ export function InputMentionOverlay({
         );
       }
     } else if (isMention) {
+      // The chip tints the glyph boxes only: no padding and no weight change,
+      // so every character sits exactly under the textarea's own text (15/22).
       parts.push(
         <span
           key={`mention-${match.index}`}
           data-mention={match[5]}
-          className="rounded-sm font-medium select-none pointer-events-auto bg-rm-accent/20 text-rm-accent"
+          className="pointer-events-auto rounded-xs bg-accent-tint text-accent-ink select-none"
         >
           {match[0]}
         </span>,

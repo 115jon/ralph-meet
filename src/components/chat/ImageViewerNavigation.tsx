@@ -1,9 +1,22 @@
 import { Icon } from "@/components/ui/icon";
+import { HIT, PRESS, PRESS_ICON } from "@/components/ui/interaction";
+import { cn } from "@/lib/utils";
 
 interface ImageViewerNavigationProps {
   onPrev: () => void;
   onNext: () => void;
 }
+
+/**
+ * 40px square keys on ply-3 at the stage edges. Desktop only: phones swipe
+ * and have the thumbnail strip, and the keys would sit on the image.
+ */
+const NAV_BUTTON = cn(
+  "absolute top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-md border max-md:hidden border-line bg-ply-3 text-ink-2 shadow-float pointer-fine:hover:text-ink-1 md:size-10",
+  PRESS,
+  PRESS_ICON,
+  HIT,
+);
 
 export function ImageViewerNavigation({
   onPrev,
@@ -14,26 +27,26 @@ export function ImageViewerNavigation({
       <button
         type="button"
         aria-label="Previous media"
+        title="Previous (←)"
         onClick={(e) => {
           e.stopPropagation();
           onPrev();
         }}
-        className="absolute left-1 md:left-4 p-2 md:p-4 text-rm-text-muted/40 pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-full transition-ui z-10 outline-none"
+        className={cn(NAV_BUTTON, "absolute left-2 md:left-6")}
       >
-        <Icon name="chevronLeft" size="2xl" className="md:hidden" />
-        <Icon name="chevronLeft" size="3xl" className="hidden md:block" />
+        <Icon name="chevronLeft" size="lg" />
       </button>
       <button
         type="button"
         aria-label="Next media"
+        title="Next (→)"
         onClick={(e) => {
           e.stopPropagation();
           onNext();
         }}
-        className="absolute right-1 md:right-4 p-2 md:p-4 text-rm-text-muted/40 pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-full transition-ui z-10 outline-none"
+        className={cn(NAV_BUTTON, "absolute right-2 md:right-6")}
       >
-        <Icon name="chevronRight" size="2xl" className="md:hidden" />
-        <Icon name="chevronRight" size="3xl" className="hidden md:block" />
+        <Icon name="chevronRight" size="lg" />
       </button>
     </>
   );

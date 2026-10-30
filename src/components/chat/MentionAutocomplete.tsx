@@ -88,7 +88,7 @@ export function MentionAutocomplete({
             anchor={anchor ?? hostRef}
             side="top"
             align="start"
-            sideOffset={8}
+            sideOffset={4}
             collisionPadding={8}
             className="z-50 outline-none"
           >
@@ -97,8 +97,9 @@ export function MentionAutocomplete({
               finalFocus={false}
               className={cn(
                 MENU_PANEL,
-                "flex max-h-[min(320px,var(--available-height))] w-64 max-w-(--available-width) flex-col overflow-y-auto text-rm-text outline-none",
-                "origin-(--transform-origin) transition-[opacity,scale] duration-150 ease-(--rm-ease-out) data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-opacity",
+                "flex max-h-[min(320px,var(--available-height))] w-72 max-w-(--available-width) flex-col overflow-y-auto text-ink-1 outline-none",
+                // Typing `@` is a keyboard open: opacity only, 100ms, no scale.
+                "transition-opacity duration-(--dur-1) ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
               )}
             >
               <p id={labelId} className={MENU_LABEL}>
@@ -123,10 +124,10 @@ export function MentionAutocomplete({
                       className={cn(
                         MENU_ITEM,
                         "cursor-default",
-                        active ? MENU_ITEM_DEFAULT_ON : "text-rm-text",
+                        active ? MENU_ITEM_DEFAULT_ON : "text-ink-1",
                       )}
                     >
-                      <span className="flex size-6 shrink-0 items-center justify-center overflow-visible rounded-full border border-rm-border bg-rm-bg-surface text-ui-2xs font-semibold text-rm-text-muted">
+                      <span className="flex size-6 shrink-0 items-center justify-center overflow-visible rounded-avatar bg-tint-3 font-display text-[11px] font-extrabold text-ink-1">
                         {user.avatar_url ? (
                           <AvatarImage
                             src={getAuthAssetUrl(user.avatar_url)}
@@ -139,8 +140,11 @@ export function MentionAutocomplete({
                       </span>
                       <UserDisplayName
                         user={user}
-                        className="block min-w-0 truncate"
+                        className="block min-w-0 truncate text-ui-row"
                       />
+                      <span className="ms-auto shrink-0 pl-3 text-ui-xs font-normal text-ink-3">
+                        @{user.username}
+                      </span>
                     </div>
                   );
                 })}

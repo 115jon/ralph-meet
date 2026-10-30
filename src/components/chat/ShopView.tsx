@@ -12,8 +12,12 @@ import { ShopItemDetail } from "@/components/chat/collectibles/ShopItemDetail";
 import type { PreviewIdentity } from "@/components/chat/collectibles/CollectiblePreviews";
 import { useCollectiblesCatalog } from "@/components/chat/collectibles/hooks";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
+import { Num } from "@/components/ui/num";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, tabId } from "@/components/ui/tabs";
 import { applyCollectible } from "@/lib/collectible-apply-client";
 import {
@@ -39,6 +43,7 @@ import type {
   CollectiblesCatalog,
 } from "@/lib/collectibles-catalog";
 import { getDisplayName } from "@/lib/display-name";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -60,8 +65,9 @@ type ShopTab = "featured" | CollectibleKind;
 
 const FEATURED_ROWS = 6;
 const RAIL_ITEMS = 12;
+/** Whole-cell tiles, packed tight: the tile edge is the only divider. */
 const GRID_CLASS =
-  "grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fill,minmax(176px,1fr))] lg:gap-4";
+  "grid grid-cols-2 gap-2 md:grid-cols-[repeat(auto-fill,minmax(176px,1fr))]";
 
 function relativeAge(iso: string | undefined) {
   if (!iso) return null;
@@ -89,14 +95,8 @@ function StatusChip({ category }: { category: CollectibleCatalogCategory }) {
   const status = collectionStatus(category);
   if (!status) return null;
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-ui-2xs font-semibold",
-        status.tone === "leaving"
-          ? "bg-rm-warning-ink/90 text-black"
-          : "bg-black/55 text-white/85",
-      )}
-    >
+    // Sits on collection art, so it carries its own media scrim and ink.
+    <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-sm bg-black/64 px-1.5 text-ui-xs font-medium text-white">
       <Icon name={status.tone === "leaving" ? "clock" : "lock"} size="xs" />
       {status.label}
     </span>
@@ -121,7 +121,7 @@ function CollectionHero({
   return (
     <section
       aria-label={category.name}
-      className="relative isolate overflow-hidden rounded-2xl bg-rm-bg-elevated"
+      className="relative isolate overflow-hidden rounded-lg border border-line bg-ply-2"
       style={
         category.background ? { background: category.background } : undefined
       }
@@ -142,8 +142,8 @@ function CollectionHero({
       <div className="flex min-h-64 flex-col justify-end gap-3 p-5 md:min-h-[300px] md:max-w-[52%] md:justify-center md:p-8">
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip category={category} />
-          <span className="text-ui-xs font-medium text-white/75">
-            {itemCount} {itemCount === 1 ? "item" : "items"}
+          <span className="text-ui-xs font-medium text-white/80">
+            <Num>{itemCount}</Num> {itemCount === 1 ? "item" : "items"}
           </span>
         </div>
         {logo ? (
@@ -157,7 +157,7 @@ function CollectionHero({
         ) : null}
         <Heading
           className={cn(
-            "text-ui-2xl font-semibold text-balance text-white",
+            "text-ui-xl font-semibold text-balance text-white",
             logo && "sr-only",
           )}
         >
@@ -169,11 +169,7 @@ function CollectionHero({
           </p>
         ) : null}
         {onBrowse ? (
-          <Button
-            type="button"
-            onClick={onBrowse}
-            className="mt-1 h-11 self-start px-5 md:h-9"
-          >
+          <Button type="button" onClick={onBrowse} className="mt-1 self-start">
             Browse collection
             <Icon name="arrowRight" size="sm" />
           </Button>
@@ -198,10 +194,10 @@ function CollectionCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group/collection flex w-[220px] shrink-0 snap-start flex-col gap-2 text-start outline-none [-webkit-tap-highlight-color:transparent] md:w-[260px]"
+      className="group/collection flex w-[220px] shrink-0 snap-start flex-col gap-2 rounded-lg text-start outline-none [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:w-[260px]"
     >
       <span
-        className="relative block aspect-[1037/463] w-full overflow-hidden rounded-xl bg-rm-bg-elevated ring-rm-focus ring-offset-2 ring-offset-rm-bg-primary transition-transform duration-150 ease-(--rm-ease-out) group-active/collection:scale-[0.98] group-focus-visible/collection:ring-2 motion-reduce:group-active/collection:scale-100"
+        className="relative block aspect-[1037/463] w-full overflow-hidden rounded-lg border border-line bg-ply-2 transition-[scale] duration-(--dur-1) ease-out group-active/collection:scale-(--motion-press)"
         style={
           category.background ? { background: category.background } : undefined
         }
@@ -220,7 +216,7 @@ function CollectionCard({
           <StatusChip category={category} />
         </span>
       </span>
-      <span className="truncate px-0.5 text-ui-sm font-medium text-rm-text pointer-fine:group-hover/collection:underline">
+      <span className="truncate px-0.5 text-ui-row font-medium text-ink-1 underline-offset-[3px] pointer-fine:group-hover/collection:underline">
         {category.name}
       </span>
     </button>
@@ -242,15 +238,11 @@ function SectionHeading({
     <div className="mb-3 flex items-center gap-2">
       <h2
         id={id}
-        className="min-w-0 truncate text-ui-md font-semibold text-rm-text"
+        className="min-w-0 truncate text-ui-md font-semibold text-ink-1"
       >
         {title}
       </h2>
-      {count != null ? (
-        <span className="text-ui-xs text-rm-text-muted tabular-nums">
-          {count}
-        </span>
-      ) : null}
+      {count != null ? <Num className="text-ink-3">{count}</Num> : null}
       {action ? <span className="ms-auto shrink-0">{action}</span> : null}
     </div>
   );
@@ -260,14 +252,15 @@ function LoadingGrid() {
   return (
     <div className={GRID_CLASS} aria-hidden="true">
       {Array.from({ length: 8 }, (_, index) => (
+        // Static placeholders at the real tile size; nothing pulses.
         <span
           key={index}
-          className="flex flex-col overflow-hidden rounded-xl border border-rm-border"
+          className="flex flex-col overflow-hidden rounded-lg border border-line bg-ply-2"
         >
-          <span className="aspect-[4/3] animate-pulse bg-rm-tint-1" />
-          <span className="flex flex-col gap-2 p-3">
-            <span className="h-3 w-2/3 animate-pulse rounded-full bg-rm-tint-2" />
-            <span className="h-2.5 w-1/3 animate-pulse rounded-full bg-rm-tint-1" />
+          <Skeleton className="aspect-[4/3] rounded-none" />
+          <span className="flex flex-col gap-1.5 px-3 pt-2.5 pb-3">
+            <Skeleton className="h-3.5 w-2/3 rounded-xs" />
+            <Skeleton className="h-3 w-1/3 rounded-xs" />
           </span>
         </span>
       ))}
@@ -287,6 +280,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isMobile = useIsMobile();
   const tabsId = useId();
   const panelId = `${tabsId}-panel`;
   const searchId = `${tabsId}-search`;
@@ -458,7 +452,6 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               variant="ghost"
               size="sm"
               onClick={() => openCollection(section.category.id)}
-              className="max-md:h-9"
             >
               View collection
             </Button>
@@ -473,12 +466,13 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     body = <LoadingGrid />;
   } else if (!catalog) {
     body = (
-      <div className="flex flex-col items-center gap-3 py-16 text-center">
-        <Icon name="shop" size="xl" className="text-rm-text-muted" />
-        <p className="text-ui-sm text-rm-text-secondary">
-          {loadError ?? "Couldn't load the shop."}
-        </p>
-      </div>
+      <EmptyState
+        className="pt-12"
+        title="The shop didn't load"
+        description={
+          loadError ?? "Check your connection, then open the shop again."
+        }
+      />
     );
   } else if (collection && collectionSection) {
     body = (
@@ -510,7 +504,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     const total = countSectionItems(sections);
     body = (
       <div className="flex flex-col gap-8">
-        <p role="status" className="text-ui-sm text-rm-text-secondary">
+        <p role="status" className="text-ui-sm text-ink-2">
           {total
             ? `${total} ${total === 1 ? "result" : "results"} for “${deferredQuery}”`
             : `Nothing matches “${deferredQuery}”.`}
@@ -558,7 +552,6 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => openCollection(section.category.id)}
-                  className="max-md:h-9"
                 >
                   See all
                   <Icon name="chevronRight" size="sm" />
@@ -584,79 +577,84 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
       value: kind,
       label: KIND_COPY[kind].many,
       adornment: catalog ? (
-        <span className="text-ui-2xs text-rm-text-muted tabular-nums">
-          {kindCounts[kind]}
-        </span>
+        <Num className="text-ink-3">{kindCounts[kind]}</Num>
       ) : undefined,
     })),
   ];
   const freshness = catalog ? freshnessLabel(catalog) : null;
+  // One field: in the header bar on desktop, its own row under it on phones.
+  const searchField = (
+    <>
+      <label htmlFor={searchId} className="sr-only">
+        Search the shop
+      </label>
+      <Icon
+        name="search"
+        size="sm"
+        className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-ink-3"
+      />
+      <Input
+        id={searchId}
+        type="search"
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          if (collectionId) setCollectionId(null);
+        }}
+        placeholder="Search the shop"
+        enterKeyHint="search"
+        autoComplete="off"
+        className="ps-8 max-md:h-10"
+      />
+    </>
+  );
   const detailCategory = detail
     ? categoriesById.get(detail.base.categoryId)
     : undefined;
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary text-rm-text">
-      <header className="shrink-0 border-b border-rm-border">
-        <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-3 md:flex-nowrap md:px-6">
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-ply-0 text-ink-1">
+      <header className="shrink-0 border-b border-line">
+        {/* The 48px bar every column shares: title, then search. */}
+        <div className="mx-auto flex h-[calc(48px+var(--safe-area-top,0px))] w-full max-w-[1400px] items-center gap-2 px-4 pt-[var(--safe-area-top,0px)] max-md:ps-2 md:px-6">
           <IconButton
             icon="menu"
             aria-label="Open navigation"
             variant="ghost"
-            size="md"
+            size={32}
             onClick={onMenuClick}
-            className="-ms-2 lg:hidden"
+            className="lg:hidden"
           />
           {collection ? (
             <IconButton
               icon="back"
               aria-label="Back to the shop"
               variant="ghost"
-              size="md"
+              size={32}
               onClick={() => setCollectionId(null)}
-              className="-ms-1"
             />
           ) : null}
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-ui-lg font-semibold text-rm-text">
-              {collection ? collection.name : "Shop"}
-            </h1>
-            <p className="truncate text-ui-xs text-rm-text-muted">
-              {collection
-                ? "Collection"
-                : freshness
-                  ? `Every collectible is free to equip · ${freshness}`
-                  : "Every collectible is free to equip"}
+          <h1 className="min-w-0 shrink truncate text-ui-xl font-semibold text-ink-1 max-md:text-ui-md">
+            {collection ? collection.name : "Shop"}
+          </h1>
+          {collection ? null : (
+            <p className="min-w-0 truncate text-ui-xs text-ink-3 max-lg:hidden">
+              {freshness
+                ? `Every collectible is free to equip · ${freshness}`
+                : "Every collectible is free to equip"}
             </p>
-          </div>
-          <div className="relative w-full md:w-72">
-            <label htmlFor={searchId} className="sr-only">
-              Search the shop
-            </label>
-            <Icon
-              name="search"
-              size="sm"
-              className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-            />
-            <input
-              id={searchId}
-              type="search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                if (collectionId) setCollectionId(null);
-              }}
-              placeholder="Search the shop"
-              enterKeyHint="search"
-              autoComplete="off"
-              className="h-11 w-full rounded-lg border border-rm-field-edge bg-rm-bg-surface ps-9 pe-3 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted focus-visible:border-rm-focus md:h-9 md:text-ui-sm"
-            />
-          </div>
+          )}
+          {isMobile ? null : (
+            <div className="relative ms-auto w-64 shrink-0">{searchField}</div>
+          )}
         </div>
-        {collection ? (
-          <div className="h-3" />
-        ) : (
-          <div className="mx-auto w-full max-w-[1400px] overflow-x-auto px-4 [scrollbar-width:none] md:px-6">
+        {isMobile ? (
+          <div className="px-4 pb-2">
+            <div className="relative">{searchField}</div>
+          </div>
+        ) : null}
+        {collection ? null : (
+          <div className="mx-auto w-full max-w-[1400px] px-4 md:px-6">
             <Tabs
               label="Collectible type"
               items={tabItems}
@@ -664,7 +662,8 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               onValueChange={changeTab}
               idBase={tabsId}
               panelId={panelId}
-              className="h-11 w-max gap-5"
+              scrollable
+              className="h-10 gap-5 max-md:h-11"
             />
           </div>
         )}

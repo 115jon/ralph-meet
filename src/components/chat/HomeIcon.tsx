@@ -1,6 +1,5 @@
+import { ThemeMark } from "@/components/ui/theme-slots";
 import { cn } from "@/lib/utils";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 
 const HOME_ICON_ASSETS = {
   light: "/icons/home-light.svg",
@@ -9,69 +8,53 @@ const HOME_ICON_ASSETS = {
 
 type HomeIconProps = {
   className?: string;
+  /** Force one asset; by default the dark/light pair swaps in CSS. */
   variant?: keyof typeof HOME_ICON_ASSETS;
+  /** Layer the theme's mark (Miku's wig, Spider-Man's mask) over it. */
   showThemeOverlay?: boolean;
 };
 
+/**
+ * The home mark. Both assets render and the `dark:` variant picks one, so
+ * nothing branches on the resolved theme and SSR matches the first paint.
+ * Theme personality comes from the ThemeMark slot (talk-tree-spec §1g).
+ */
 export function HomeIcon({
   className,
   variant,
   showThemeOverlay = true,
 }: HomeIconProps) {
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  const isMiku =
-    showThemeOverlay &&
-    mounted &&
-    (resolvedTheme === "miku-light" || resolvedTheme === "miku-dark");
-  const isSpiderman =
-    showThemeOverlay &&
-    mounted &&
-    (resolvedTheme === "spiderman-light" || resolvedTheme === "spiderman-dark");
-  const isLightMode =
-    resolvedTheme === "light" ||
-    resolvedTheme === "miku-light" ||
-    resolvedTheme === "spiderman-light";
-  const iconVariant = variant ?? (isLightMode ? "light" : "dark");
-  const iconAsset = HOME_ICON_ASSETS[iconVariant];
-  const shouldRenderAsset = mounted || variant !== undefined;
-
   return (
     <div
       className={cn(
-        "relative flex h-7 w-7 items-center justify-center",
+        "relative flex size-7 items-center justify-center",
         className,
       )}
-      suppressHydrationWarning
     >
-      {shouldRenderAsset ? (
+      {variant ? (
         <img
           aria-hidden="true"
           alt=""
-          className="block h-full w-full object-contain"
-          src={iconAsset}
+          className="block size-full object-contain"
+          src={HOME_ICON_ASSETS[variant]}
         />
-      ) : null}
-      {isMiku && (
-        <img
-          src="/themes/miku/miku-wig.svg"
-          alt=""
-          className="absolute -top-[8px] left-1/2 -translate-x-[47%] size-11 max-w-none pointer-events-none select-none z-10"
-        />
+      ) : (
+        <>
+          <img
+            aria-hidden="true"
+            alt=""
+            className="block size-full object-contain dark:hidden"
+            src={HOME_ICON_ASSETS.light}
+          />
+          <img
+            aria-hidden="true"
+            alt=""
+            className="hidden size-full object-contain dark:block"
+            src={HOME_ICON_ASSETS.dark}
+          />
+        </>
       )}
-      {isSpiderman && (
-        <img
-          src="/themes/spiderman/spiderman-mask.svg"
-          alt=""
-          className="absolute -top-[2px] left-1/2 -translate-x-[50%] w-[32px] h-[32px] max-w-none pointer-events-none select-none z-10 filter drop-shadow-md"
-        />
-      )}
+      {showThemeOverlay && <ThemeMark />}
     </div>
   );
 }

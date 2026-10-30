@@ -58,6 +58,15 @@ export const useChatStore = create<ChatStore>()(
   ),
 );
 
+/**
+ * Per-user speaking selector: a component subscribed with it re-renders only
+ * when that one user's speaking flag flips (see hooks/useIsSpeaking.ts).
+ */
+export const selectIsSpeaking =
+  (userId: string | null | undefined) =>
+  (state: Pick<ChatState, "speakingUsers">): boolean =>
+    !!userId && state.speakingUsers[userId] === true;
+
 // ── Composed Hooks ──────────────────────────────────────────────────────────
 // Provides a stable memoized actions interface combining dispatch, REST actions, and gateway
 

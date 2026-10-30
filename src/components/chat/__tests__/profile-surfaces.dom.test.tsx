@@ -63,11 +63,21 @@ afterEach(() => {
   api.apiGet.mockImplementation(() => new Promise(() => {}));
 });
 
+const SOLID = '[data-variant="primary"], [data-variant="default"]';
+
+function openOverflow() {
+  fireEvent.click(
+    screen.getByRole("button", { name: "More actions for Grace Hopper" }),
+  );
+}
+
 describe("UserProfileModal", () => {
   it("asks before blocking and names the person", async () => {
     render(<UserProfileModal open user={grace} onClose={() => {}} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Block" }));
+    await screen.findByRole("button", { name: "Message" });
+    openOverflow();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Block" }));
     expect(api.apiPut).not.toHaveBeenCalled();
     expect(
       screen.getByText(/Block Grace Hopper\? They'll be removed/),
@@ -92,11 +102,14 @@ describe("UserProfileModal", () => {
       />,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
-    expect(screen.getByRole("button", { name: "Block" })).toBeInTheDocument();
+    expect(screen.queryByText(/They'll be removed/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "More actions for Grace Hopper" }),
+    ).toBeInTheDocument();
     expect(api.apiPut).not.toHaveBeenCalled();
   });
 
-  it("shows profile load errors as user copy, never the server message", async () => {
+  it("shows profile load errors as user copy, with Try again as the only action", async () => {
     api.apiGet.mockImplementation(((url: string) =>
       url.endsWith("/profile")
         ? Promise.reject(httpError(500))
@@ -108,15 +121,46 @@ describe("UserProfileModal", () => {
       "Unable to load Grace Hopper's profile. Try again in a moment.",
     );
     expect(screen.queryByText(/D1_ERROR/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Message" })).toBeNull();
+    expect(document.body.querySelectorAll(SOLID)).toHaveLength(0);
   });
 
   it("has no fake tabs and one solid button", async () => {
     render(<UserProfileModal open user={grace} onClose={() => {}} />);
     await screen.findByRole("button", { name: "Message" });
     expect(screen.queryByRole("tab")).toBeNull();
+    expect(document.body.querySelectorAll(SOLID)).toHaveLength(1);
+  });
+
+  it("makes Accept the primary for an incoming request", async () => {
+    useChatStore.setState({
+      relationships: [{ user: grace, type: 2, created_at: "" }],
+    } as never);
+    render(<UserProfileModal open user={grace} onClose={() => {}} />);
+    const accept = await screen.findByRole("button", { name: "Accept" });
+    const solids = document.body.querySelectorAll(SOLID);
+    expect(solids).toHaveLength(1);
+    expect(solids[0]).toBe(accept);
+    expect(screen.getByRole("button", { name: "Message" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
+  });
+
+  it("has no primary for a blocked person and says so", async () => {
+    useChatStore.setState({
+      relationships: [{ user: grace, type: 1, created_at: "" }],
+    } as never);
+    render(<UserProfileModal open user={grace} onClose={() => {}} />);
     expect(
-      document.body.querySelectorAll('[data-variant="default"]'),
-    ).toHaveLength(1);
+      await screen.findByRole("button", { name: "Unblock" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Message" })).toBeNull();
+    expect(document.body.querySelectorAll(SOLID)).toHaveLength(0);
+    expect(
+      screen.getByText(
+        "You blocked Grace Hopper. They can't message you or send requests.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 
@@ -170,7 +214,7 @@ describe("AvatarPickerModal", () => {
       ),
     ).toBeInTheDocument();
     const surface = document.body.querySelector('[data-slot="dialog-content"]');
-    expect(surface?.className).toContain("md:max-w-md");
+    expect(surface).toHaveAttribute("data-size", "md");
   });
 });
 

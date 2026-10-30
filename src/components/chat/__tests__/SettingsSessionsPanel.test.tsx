@@ -99,7 +99,8 @@ describe("SessionsPanel", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Your session has ended. Sign in again to load your sessions.",
     );
-    expect(screen.getByRole("button", { name: /Try again/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sign in again" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
   });
 
   it("shows a failed sign-out on the device's own row", async () => {

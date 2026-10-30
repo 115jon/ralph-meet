@@ -72,12 +72,15 @@ function BackgroundTile({
   onSelect,
   children,
   onRemove,
+  disabled = false,
 }: {
   selected: boolean;
   label: string;
   onSelect: () => void;
   children: ReactNode;
   onRemove?: () => void;
+  /** No camera, or access refused: shown, but can't be picked. */
+  disabled?: boolean;
 }) {
   return (
     <div className="group relative">
@@ -88,20 +91,21 @@ function BackgroundTile({
         aria-label={label}
         tabIndex={selected ? 0 : -1}
         data-roving
+        disabled={disabled}
         onClick={onSelect}
-        className="flex w-full flex-col gap-1.5 rounded-md text-left"
+        className="flex w-full flex-col gap-1.5 rounded-[2px] text-left disabled:cursor-not-allowed disabled:opacity-45"
       >
         <span
           className={cn(
-            "relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md bg-rm-tint-1 text-rm-text-secondary",
+            "relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-[2px] bg-tint-1 text-ink-2",
             selected
-              ? "ring-2 ring-primary ring-offset-2 ring-offset-rm-bg-surface"
-              : "ring-1 ring-rm-border-strong",
+              ? "ring-2 ring-ink-1 ring-offset-2 ring-offset-ply-0"
+              : "ring-1 ring-line-strong",
           )}
         >
           {children}
           {selected ? (
-            <span className="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <span className="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-[2px] bg-primary-fill text-on-primary">
               <Icon name="check" size="xs" />
             </span>
           ) : null}
@@ -109,7 +113,7 @@ function BackgroundTile({
         <span
           className={cn(
             "truncate px-0.5 text-ui-sm",
-            selected ? "font-medium text-rm-text" : "text-rm-text-secondary",
+            selected ? "font-semibold text-ink-1" : "text-ink-2",
           )}
         >
           <InlineEmojiText text={label} />
@@ -153,19 +157,16 @@ function PreviewState({
   return (
     <div
       role="status"
-      className="flex w-full max-w-[480px] flex-col items-center gap-3 rounded-md bg-rm-tint-1 px-6 py-8 text-center"
+      className="flex w-full max-w-[480px] flex-col items-center gap-3 rounded-[2px] bg-tint-1 px-6 py-8 text-center"
     >
-      <Icon name="cameraOff" size="2xl" className="text-rm-text-muted" />
+      <Icon name="cameraOff" size="2xl" className="text-ink-3" />
       <div className="flex flex-col gap-1">
-        <p className="text-ui-md font-semibold text-rm-text">{title}</p>
-        <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
-          {body}
-        </p>
+        <p className="text-ui-md font-semibold text-ink-1">{title}</p>
+        <p className="max-w-[36ch] text-pretty text-ui-sm text-ink-2">{body}</p>
       </div>
       <Button
         type="button"
         variant="secondary"
-        size="sm"
         loading={busy}
         onClick={onAction}
       >
@@ -185,12 +186,19 @@ export type CameraCardProps = {
   autoPreview?: boolean;
   /** Rows only, without the card frame (the camera dialog is the frame). */
   bare?: boolean;
+  /**
+   * Called when the camera becomes unusable or usable again: "none" (no
+   * camera), "denied" (access refused) or null. The camera dialog uses it to
+   * disable "Turn on camera" without polling.
+   */
+  onProblemChange?: (problem: "denied" | "none" | null) => void;
 };
 
 export default function CameraCard({
   settingsUserId: settingsUserIdProp,
   autoPreview = false,
   bare = false,
+  onProblemChange,
 }: CameraCardProps = {}) {
   const { user } = useUser();
   const settingsUserId =
@@ -227,6 +235,18 @@ export default function CameraCard({
     vSettings.customCameraBackgrounds ?? [];
 
   const noCamera = accessNone || previewProblem === "missing";
+  const cameraProblem: "denied" | "none" | null = noCamera
+    ? "none"
+    : previewProblem === "denied"
+      ? "denied"
+      : null;
+  const onProblemChangeRef = useRef(onProblemChange);
+  useEffect(() => {
+    onProblemChangeRef.current = onProblemChange;
+  });
+  useEffect(() => {
+    onProblemChangeRef.current?.(cameraProblem);
+  }, [cameraProblem]);
 
   const applyPreviewStream = useCallback(
     async (
@@ -519,7 +539,7 @@ export default function CameraCard({
       <PreviewState
         title="No camera found"
         body="Plug in a camera, then try again."
-        action="Retry"
+        action="Try again"
         onAction={() => void retryPreview()}
       />
     );
@@ -535,7 +555,7 @@ export default function CameraCard({
   } else {
     preview = (
       // A media surface: the black frame and white ink are the video's.
-      <div className="relative flex aspect-video w-full max-w-[480px] items-center justify-center overflow-hidden rounded-md bg-black">
+      <div className="relative flex aspect-video w-full max-w-[480px] items-center justify-center overflow-hidden rounded-[2px] bg-black">
         {previewOn && previewStream ? (
           <VideoPlayer
             stream={previewStream}
@@ -592,7 +612,11 @@ export default function CameraCard({
       </SettingsRow>
 
       {noCamera ? null : (
-        <SettingsRow id="camera">
+        <SettingsRow
+          id="camera"
+          layout="field"
+          ground={bare ? "ply-3" : "ply-0"}
+        >
           {(ids) => (
             <SettingsSelect
               ids={ids}
@@ -633,13 +657,17 @@ export default function CameraCard({
       <SettingsRow
         id="camera-background"
         layout="block"
+        description={
+          cameraProblem === "denied"
+            ? "Allow camera access first."
+            : cameraProblem === "none"
+              ? "Plug in a camera first."
+              : undefined
+        }
         footer={
           <>
             {isLoadingBackgrounds ? (
-              <p
-                role="status"
-                className="mt-3 text-ui-xs text-rm-text-secondary"
-              >
+              <p role="status" className="mt-3 text-ui-xs text-ink-2">
                 Loading saved backgrounds…
               </p>
             ) : null}
@@ -662,17 +690,18 @@ export default function CameraCard({
                 key={option.id}
                 label={option.label}
                 selected={currentBgId === option.id}
+                disabled={cameraProblem !== null}
                 onSelect={() => setBackground(option.value)}
               >
                 {option.id === "none" ? (
                   <Icon name="ban" size="lg" />
                 ) : (
                   <>
-                    <span className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/20 to-rm-accent/40 blur-[8px]" />
+                    <span className="absolute inset-0 bg-tint-2" />
                     <Icon
                       name="sparkle"
                       size="lg"
-                      className="relative text-rm-text"
+                      className="relative text-ink-1"
                     />
                   </>
                 )}
@@ -683,6 +712,7 @@ export default function CameraCard({
                 key={background.id}
                 label={background.name}
                 selected={currentBgId === `image-${background.id}`}
+                disabled={cameraProblem !== null}
                 onSelect={() =>
                   setBackground({ type: "image", id: background.id })
                 }
@@ -702,8 +732,8 @@ export default function CameraCard({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingBackground}
-              className="flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed border-rm-field-edge text-ui-sm text-rm-text-secondary transition-colors duration-150 pointer-fine:hover:bg-rm-tint-1 pointer-fine:hover:text-rm-text disabled:opacity-45"
+              disabled={isUploadingBackground || cameraProblem !== null}
+              className="flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-[2px] border border-dashed border-line-field text-ui-sm text-ink-2 transition-colors duration-(--dur-1) pointer-fine:hover:enabled:bg-tint-1 pointer-fine:hover:enabled:text-ink-1 disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Icon name="upload" size="md" />
               {isUploadingBackground ? "Uploading…" : "Upload image"}
@@ -742,7 +772,7 @@ export default function CameraCard({
   );
 
   if (bare) {
-    return <ul className="divide-y divide-rm-border">{rows}</ul>;
+    return <ul>{rows}</ul>;
   }
   return <SettingsCard id="camera">{rows}</SettingsCard>;
 }

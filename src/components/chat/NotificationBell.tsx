@@ -1,6 +1,9 @@
-import { getDisplayInitial } from "@/lib/display-name";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Num } from "@/components/ui/num";
 import { IconButton } from "@/components/ui/IconButton";
+import { CountBadge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import {
   getDesktopNotificationBadgeState,
@@ -14,6 +17,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -21,6 +25,7 @@ import {
 import { MENU_PANEL } from "@/components/ui/menu";
 import { PickerSurface } from "./PickerSurface";
 import { AvatarImage } from "./AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
 import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
@@ -105,30 +110,26 @@ export const NotificationBell = memo(function NotificationBell() {
 
   return (
     <div className="relative">
-      {/* Bell icon */}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
+      {/* Bell: the header's one count badge, top-right, cut from ply-0. */}
+      <IconButton
         ref={buttonRef}
+        icon="bell"
+        variant="muted"
+        size={40}
+        tone={open ? "toggled" : "idle"}
         aria-label="Notifications"
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={cn(
-          open
-            ? "bg-rm-tint-2 text-rm-text"
-            : "text-rm-text-muted pointer-fine:hover:text-rm-text",
-        )}
         title="Notifications"
         onClick={toggle}
-      >
-        <Icon name="bell" state={open ? "active" : "idle"} size="lg" />
-        {unreadCount > 0 && (
-          <span className="badge-count absolute -top-1 -right-1 ring-2 ring-rm-bg-primary animate-in zoom-in-90 duration-200">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
-        )}
-      </Button>
+      />
+      {unreadCount > 0 && (
+        <CountBadge
+          count={unreadCount}
+          ring="ply-0"
+          className="pointer-events-none absolute top-0.5 right-0.5"
+        />
+      )}
 
       {/*
        * Desktop: a non-modal panel anchored under the bell. Phones: the
@@ -211,10 +212,19 @@ export function NotificationInbox({
     [markNotificationsRead, onClose, onNavigate],
   );
 
+  const labelId = useId();
+
   return (
     <>
-      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-rm-border px-4">
-        <h2 className="min-w-0 truncate text-ui-md font-semibold text-rm-text">
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-between gap-2 px-4",
+          page
+            ? "h-[calc(48px+var(--safe-area-top,0px))] pt-[var(--safe-area-top,0px)]"
+            : "h-12 border-b border-line",
+        )}
+      >
+        <h2 className="min-w-0 truncate text-ui-md font-semibold text-ink-1">
           {page ? "Notifications" : "Inbox"}
         </h2>
         <div className="flex shrink-0 items-center gap-2">
@@ -222,7 +232,7 @@ export function NotificationInbox({
             <Button
               type="button"
               variant={page ? "secondary" : "link"}
-              size={page ? "sm" : "xs"}
+              size={page ? "md" : "xs"}
               onClick={() => markNotificationsRead()}
             >
               Mark all read
@@ -232,7 +242,7 @@ export function NotificationInbox({
             <IconButton
               aria-label="Close notifications"
               icon="close"
-              size="sm"
+              size={28}
               variant="muted"
               onClick={onClose}
             />
@@ -240,25 +250,43 @@ export function NotificationInbox({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overscroll-contain custom-scrollbar pb-6 md:pb-0">
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-6 md:pb-0">
         {notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-            <Icon name="bell" size="2xl" className="text-rm-text-muted" />
-            <p className="text-ui-md font-semibold text-rm-text">
-              No notifications yet
-            </p>
-            <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
-              Mentions and replies show up here.
-            </p>
-          </div>
+          <EmptyState
+            size="sm"
+            className="py-10"
+            title="No notifications yet"
+            description="Mentions and replies show up here."
+          />
+        ) : page ? (
+          // Phone list grammar (shared with MobileYouPage): one sentence-case
+          // label over an inset grouped card, rows split by hairlines.
+          <section aria-labelledby={labelId}>
+            <h3
+              id={labelId}
+              className="px-4 pb-2 pt-2 text-ui-xs font-semibold text-ink-2"
+            >
+              Recent
+            </h3>
+            <ul className="mx-4 overflow-hidden rounded-lg border border-line bg-ply-2 divide-y divide-line">
+              {notifications.map((notif) => (
+                <li key={notif.id}>
+                  <NotificationRow
+                    notification={notif}
+                    onClick={handleNotificationClick}
+                    roomy
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : (
-          <ul className="divide-y divide-rm-border">
+          <ul className="divide-y divide-line">
             {notifications.map((notif) => (
               <li key={notif.id}>
                 <NotificationRow
                   notification={notif}
                   onClick={handleNotificationClick}
-                  roomy={page}
                 />
               </li>
             ))}
@@ -294,54 +322,93 @@ const NotificationRow = memo(function NotificationRow({
   );
   const timeAgo = getTimeAgo(notification.created_at);
 
+  const unread = !notification.is_read;
+
   return (
     <button
       type="button"
       className={cn(
-        "flex w-full items-start gap-3 text-left transition-colors duration-150 ease-(--rm-ease-out) pointer-fine:hover:bg-rm-tint-1 active:bg-rm-tint-2",
-        roomy ? "min-h-16 px-4 py-3" : "px-4 py-3",
-        !notification.is_read && "bg-rm-accent-tint",
+        "flex w-full items-start gap-3 px-4 text-left outline-none transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1 active:bg-tint-3 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+        roomy ? "min-h-14 py-3" : "py-3",
+        // The panel keeps the mention tint; the phone page marks unread with
+        // the dot alone.
+        unread && !roomy && "bg-accent-tint",
       )}
       onClick={() => onClick(notification)}
     >
-      {/* Avatar */}
-      <div className="shrink-0 mt-0.5">
+      {/* Avatar: AvatarImage honours the member's crop; Avatar is the
+          initial fallback. */}
+      <div className="mt-0.5 shrink-0">
         {authorInfo.avatarUrl ? (
-          <div className="size-10 overflow-visible rounded-full">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "relative flex bg-ply-2",
+              avatarShape(authorInfo.avatarDisplay),
+              roomy ? "size-10" : "size-8",
+            )}
+          >
             <AvatarImage
               src={getAuthAssetUrl(authorInfo.avatarUrl)}
               alt=""
               display={authorInfo.avatarDisplay}
             />
-          </div>
+          </span>
         ) : (
-          <div className="flex size-10 items-center justify-center rounded-full bg-rm-accent-tint text-ui-sm font-semibold text-rm-accent-ink">
-            {getDisplayInitial({
-              display_name: authorInfo.displayName,
-              username: authorInfo.username,
-            })}
-          </div>
+          <Avatar
+            name={authorInfo.displayName || authorInfo.username || "?"}
+            size={roomy ? 40 : 32}
+            aria-hidden="true"
+          />
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-ui-sm">
-          <span className="font-semibold text-rm-text">
-            <InlineEmojiText text={authorInfo.displayName} />
-          </span>{" "}
-          <span className="text-rm-text-secondary">{label}</span>
-        </p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <p className="min-w-0 flex-1 truncate text-ui-row">
+            <span
+              className={cn(
+                unread ? "font-semibold text-ink-1" : "font-medium text-ink-2",
+              )}
+            >
+              <InlineEmojiText text={authorInfo.displayName} />
+            </span>{" "}
+            <span
+              className={cn(
+                "font-normal",
+                unread ? "text-ink-2" : "text-ink-3",
+              )}
+            >
+              {label}
+            </span>
+          </p>
+          <Num className="shrink-0 text-ink-3">
+            {timeAgo === "just now" ? "now" : timeAgo.replace(/ ago$/, "")}
+            <span className="sr-only">
+              {timeAgo.endsWith(" ago") ? " ago" : ""}
+            </span>
+          </Num>
+          {unread && (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-1.5 shrink-0 self-center rounded-full bg-accent-ink"
+              />
+              <span className="sr-only">Unread</span>
+            </>
+          )}
+        </div>
 
-        {/* Channel + server context (skip for DMs — sender name is already shown above) */}
+        {/* Channel + server context (skip for DMs: the sender is already named above) */}
         {notification.type !== "dm" && (
-          <div className="flex items-center gap-1 mt-0.5">
+          <div className="mt-0.5 flex items-center gap-1">
             <Icon
               name="textChannel"
               size="xs"
-              className="shrink-0 text-rm-text-muted"
+              className="shrink-0 text-ink-3"
             />
-            <span className="truncate text-ui-xs text-rm-text-muted">
+            <span className="truncate text-ui-xs text-ink-3">
               <InlineEmojiText
                 text={`${notification.channel_name ?? "channel"}${
                   notification.server_name
@@ -355,23 +422,11 @@ const NotificationRow = memo(function NotificationRow({
 
         {/* Message snippet */}
         {notification.content && (
-          <p className="mt-1 line-clamp-2 text-ui-sm text-pretty text-rm-text-secondary">
+          <p className="mt-1 line-clamp-2 text-ui-sm text-pretty text-ink-2">
             <InlineEmojiText text={notification.content} />
           </p>
         )}
-
-        {/* Timestamp */}
-        <span className="mt-1 block text-ui-xs text-rm-text-muted">
-          {timeAgo}
-        </span>
       </div>
-
-      {/* Unread dot */}
-      {!notification.is_read && (
-        <div className="shrink-0 mt-2">
-          <div className="size-2 rounded-full bg-rm-accent-ink" />
-        </div>
-      )}
     </button>
   );
 });
@@ -390,5 +445,14 @@ function getTimeAgo(isoStr: string): string {
   if (diffHr < 24) return `${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
   if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(isoStr).toLocaleDateString();
+  // "Oct 22" (the year only when it differs): a full numeric date ate the
+  // row's name and action on phones.
+  const date = new Date(isoStr);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== new Date().getFullYear()
+      ? { year: "numeric" }
+      : {}),
+  });
 }

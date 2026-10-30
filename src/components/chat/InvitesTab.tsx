@@ -1,14 +1,23 @@
 /**
  * Server settings → Invites: pause switch, create form, and the active links
  * as a row list that fits every width (no table to clip at 390). Every
- * failure shows next to its control (design-system 14.3).
+ * failure shows next to its control; a list failure is an in-card error
+ * with Retry.
+ *
+ * Countdowns share one module-level ticker (server-settings/invite-clock)
+ * and read in minutes above an hour. While invites are paused the rows dim
+ * to 50% under a "Paused" badge; their actions stay live (flow 11).
  */
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
+import { copyToClipboard } from "@/components/ui/toast";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl, getWebOrigin } from "@/lib/platform";
 import type { Invite } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -24,12 +33,8 @@ import {
   SettingsSelect,
   useConfirm,
 } from "./settings/primitives";
-import {
-  LoadError,
-  PageState,
-  RowAvatar,
-  SkeletonRows,
-} from "./server-settings/states";
+import { useRemaining } from "./server-settings/invite-clock";
+import { ListError, RowAvatar, SkeletonRows } from "./server-settings/states";
 
 interface InvitesTabProps {
   serverId: string;
@@ -38,38 +43,24 @@ interface InvitesTabProps {
 
 const inviteLink = (code: string) => `${getWebOrigin()}/invite/${code}`;
 
-/** Remaining time as "2d 03:12:09" / "03:12:09", or null once expired. */
-function remainingLabel(expiresAt: string, now: number) {
-  const diff = new Date(expiresAt).getTime() - now;
-  if (diff <= 0) return null;
-  const days = Math.floor(diff / 86_400_000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const clock = `${pad(Math.floor((diff % 86_400_000) / 3_600_000))}:${pad(
-    Math.floor((diff % 3_600_000) / 60_000),
-  )}:${pad(Math.floor((diff % 60_000) / 1000))}`;
-  return days > 0 ? `${days}d ${clock}` : clock;
-}
-
 function Countdown({ expiresAt }: { expiresAt: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-  const left = remainingLabel(expiresAt, now);
-  if (!left) return <span className="text-rm-danger-ink">Expired</span>;
+  const left = useRemaining(expiresAt);
+  if (!left) return <span className="text-danger-ink">Expired</span>;
   return (
     <span>
-      Expires in <span className="tabular-nums">{left}</span>
+      Expires in <Num size="sm">{left}</Num>
     </span>
   );
 }
 
 function InviteRow({
   invite,
+  paused,
   onRevoke,
 }: {
   invite: Invite;
+  /** Invites are paused: the row dims, its actions stay live. */
+  paused: boolean;
   onRevoke: (code: string) => Promise<void>;
 }) {
   const members = useChatStore((s) => s.members);
@@ -93,12 +84,12 @@ function InviteRow({
 
   const copy = async () => {
     setError(null);
-    try {
-      await navigator.clipboard.writeText(inviteLink(invite.code));
+    // The shared "Link copied" toast, and the button flips for 2s.
+    if (await copyToClipboard(inviteLink(invite.code), "Link copied")) {
       setCopied(true);
       if (copiedTimer.current) clearTimeout(copiedTimer.current);
       copiedTimer.current = setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } else {
       setError(
         `Unable to copy the link. Copy it by hand: ${inviteLink(invite.code)}`,
       );
@@ -112,18 +103,21 @@ function InviteRow({
       : `${invite.uses} uses`;
 
   return (
-    <li className="px-4 py-3 @min-[560px]:px-5">
+    <li className="px-4 py-3">
       <div className="flex flex-col gap-3 @min-[560px]:flex-row @min-[560px]:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div
+          data-paused={paused || undefined}
+          className="flex min-w-0 flex-1 items-center gap-3 transition-opacity duration-(--dur-2) ease-out data-paused:opacity-50"
+        >
           <RowAvatar
             src={avatar ? getAuthAssetUrl(avatar) : null}
-            initial={getDisplayInitial(inviter)}
+            name={inviterName}
           />
           <div className="min-w-0">
-            <p className="truncate font-mono text-ui-base text-rm-text">
+            <p className="truncate font-mono text-ui-sm leading-5 text-ink-1">
               {invite.code}
             </p>
-            <p className="text-ui-xs text-rm-text-secondary">
+            <p className="text-ui-xs text-ink-3">
               {invite.channel_name ? (
                 <>
                   <InlineEmojiText text={`#${invite.channel_name}`} />
@@ -156,7 +150,7 @@ function InviteRow({
               <Icon
                 name={copied ? "check" : "copy"}
                 size="sm"
-                className={cn(copied && "text-rm-success-ink")}
+                className={cn(copied && "text-success-ink")}
               />
               {copied ? "Copied" : "Copy link"}
             </Button>
@@ -177,9 +171,6 @@ function InviteRow({
           </div>
         )}
       </div>
-      <span role="status" className="sr-only">
-        {copied ? "Link copied" : ""}
-      </span>
       {armed ? (
         <ConfirmStrip
           irreversible
@@ -330,7 +321,7 @@ function CreateInviteCard({
           />
         )}
       </SettingsRow>
-      <li className="px-4 py-3.5 @min-[560px]:px-5">
+      <li className="px-4 py-3.5">
         {error ? <RowError className="mt-0 mb-3">{error}</RowError> : null}
         <div className="flex justify-end gap-2">
           <Button
@@ -449,10 +440,10 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
     setInvites((prev) => prev?.filter((i) => i.code !== code) ?? prev);
   };
 
-  let list;
+  let rows;
   if (loadError) {
-    list = (
-      <LoadError
+    rows = (
+      <ListError
         title="Invite links didn't load"
         message={loadError}
         retrying={loading}
@@ -460,22 +451,49 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
       />
     );
   } else if (!invites) {
-    list = <SkeletonRows label="Loading invite links" rows={3} />;
+    rows = null;
   } else if (invites.length === 0) {
-    list = (
-      <PageState icon="link" title="No active invite links">
-        Create a link to let people join <InlineEmojiText text={serverName} />.
-      </PageState>
+    rows = (
+      <li>
+        <EmptyState
+          size="sm"
+          art={null}
+          title="No active invite links"
+          description={
+            <>
+              Create a link to let people join{" "}
+              <InlineEmojiText text={serverName} />.
+            </>
+          }
+        />
+      </li>
     );
   } else {
-    list = (
-      <SettingsCard title="Active links">
-        {invites.map((invite) => (
-          <InviteRow key={invite.code} invite={invite} onRevoke={revoke} />
-        ))}
+    rows = invites.map((invite) => (
+      <InviteRow
+        key={invite.code}
+        invite={invite}
+        paused={paused}
+        onRevoke={revoke}
+      />
+    ));
+  }
+
+  const list =
+    !invites && !loadError ? (
+      <SkeletonRows label="Loading invite links" rows={3} />
+    ) : (
+      <SettingsCard
+        title={
+          <span className="flex items-center gap-2">
+            Active links
+            {paused ? <Badge variant="secondary">Paused</Badge> : null}
+          </span>
+        }
+      >
+        {rows}
       </SettingsCard>
     );
-  }
 
   return (
     <>
@@ -507,25 +525,8 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
           id="invites-paused"
           label="Pause invites"
           layout="inline"
-          description={
-            paused
-              ? undefined
-              : "Stops every link from working until you turn this off."
-          }
-          footer={
-            <>
-              {paused ? (
-                <p className="mt-3 flex items-start gap-2 rounded-md bg-rm-tint-1 px-3 py-2 text-ui-sm text-rm-warning-ink">
-                  <Icon name="pause" size="sm" className="mt-px shrink-0" />
-                  <span>
-                    Invites are paused. No one can join with a link until you
-                    resume them.
-                  </span>
-                </p>
-              ) : null}
-              {pauseError ? <RowError>{pauseError}</RowError> : null}
-            </>
-          }
+          description="Stops every link from working until you turn this off."
+          footer={pauseError ? <RowError>{pauseError}</RowError> : undefined}
         >
           {({ labelId, descId }) => (
             <SettingsSwitch
@@ -543,7 +544,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
         {notice ?? ""}
       </p>
       {notice ? (
-        <p className="flex items-center gap-2 text-ui-sm text-rm-success-ink">
+        <p className="flex items-center gap-2 text-ui-sm text-success-ink">
           <Icon name="success" size="sm" className="shrink-0" />
           {notice}
         </p>

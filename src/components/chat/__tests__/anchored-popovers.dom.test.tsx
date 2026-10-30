@@ -291,19 +291,53 @@ describe("UserAccountPopover status", () => {
     await screen.findByRole("dialog", { name: "User account options" });
     expect(screen.queryByText("Switch Accounts")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Online" }));
-    const back = screen.getByRole("button", {
+    // The rows are real menu items (overlays flow 5).
+    fireEvent.click(screen.getByRole("menuitem", { name: "Online" }));
+    const back = screen.getByRole("menuitem", {
       name: "Back to account options",
     });
     await waitFor(() => expect(document.activeElement).toBe(back));
-    expect(screen.getByRole("radio", { name: "Online" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    expect(
+      screen.getByRole("menuitemradio", { name: "Online" }),
+    ).toHaveAttribute("aria-checked", "true");
 
-    fireEvent.click(screen.getByRole("radio", { name: "Idle" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Idle" }));
     expect(updateStatus).toHaveBeenCalledWith("idle", "Coding");
-    expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
+    const row = screen.getByRole("menuitem", { name: "Online" });
+    await waitFor(() => expect(document.activeElement).toBe(row));
+  });
+
+  it("moves between rows with the arrow keys and opens the status view with ArrowRight", async () => {
+    render(
+      <Host onClose={vi.fn()}>
+        {(anchor, _ref, close) => (
+          <UserAccountPopover
+            user={me}
+            anchorEl={anchor}
+            onClose={close}
+            updateStatus={vi.fn()}
+            onOpenProfileEditor={vi.fn()}
+          />
+        )}
+      </Host>,
+    );
+    openFromAnchor();
+    await screen.findByRole("dialog", { name: "User account options" });
+    const edit = screen.getByRole("menuitem", { name: "Edit profile" });
+    edit.focus();
+    fireEvent.keyDown(edit, { key: "ArrowDown" });
+    const status = screen.getByRole("menuitem", { name: "Online" });
+    expect(document.activeElement).toBe(status);
+    fireEvent.keyDown(status, { key: "c" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("menuitem", { name: "Copy user ID" }),
+    );
+    status.focus();
+    fireEvent.keyDown(status, { key: "ArrowRight" });
+    const back = screen.getByRole("menuitem", {
+      name: "Back to account options",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(back));
   });
 
   it("Escape in the custom status field cancels the edit, not the popover", async () => {

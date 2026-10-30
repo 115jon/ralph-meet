@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api-client", () => ({
@@ -80,10 +80,11 @@ describe("MobileProfileSheet", () => {
     expect(screen.getByRole("button", { name: "Call" })).toBeTruthy();
   });
 
-  it("hides Call for a blocked user (type 1)", () => {
+  it("hides Call and Message for a blocked user (type 1); Unblock instead", () => {
     seed({ relationshipType: 1 });
     renderSheet();
-    expect(screen.getByRole("button", { name: "Message" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unblock" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Message" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Call" })).toBeNull();
   });
 
@@ -109,5 +110,30 @@ describe("MobileProfileSheet", () => {
     expect(screen.queryByRole("button", { name: "Ban" })).toBeNull();
     expect(screen.queryByText(/note \(only visible to you\)/i)).toBeNull();
     expect(screen.queryByRole("button", { name: "Manage" })).toBeNull();
+  });
+
+  it("closes from the X", () => {
+    seed();
+    const onClose = vi.fn();
+    renderSheet(grace, { onClose });
+    fireEvent.click(screen.getByRole("button", { name: "Close profile" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels sections with the phone section label", () => {
+    seed({ permissions: PERMISSIONS.KICK_MEMBERS });
+    renderSheet(grace, { onKick: vi.fn() });
+    const label = screen.getByRole("heading", { name: "Moderator actions" });
+    expect(label.className).toContain("text-ui-xs");
+    expect(label.className).toContain("font-semibold");
+    expect(label.className).not.toContain("uppercase");
+  });
+
+  it("plays decorations while the profile is open", () => {
+    seed();
+    renderSheet();
+    expect(
+      document.querySelector("[data-profile-surface][data-decoration-play]"),
+    ).not.toBeNull();
   });
 });

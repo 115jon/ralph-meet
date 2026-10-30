@@ -48,7 +48,7 @@ export function RestartAppDialog({
 }: RestartAppDialogProps) {
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="z-60 md:max-w-sm">
+      <ResponsiveDialogContent size="sm" className="z-60">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
@@ -59,7 +59,7 @@ export function RestartAppDialog({
         <ResponsiveDialogFooter>
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             disabled={restarting}
             onClick={() => onOpenChange(false)}
           >

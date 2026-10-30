@@ -42,22 +42,22 @@ function BanRow({
   });
 
   return (
-    <li className="px-4 py-3 @min-[560px]:px-5">
-      <div className="flex items-center gap-3">
+    <li className="px-4 py-3">
+      <div className="flex min-h-9 items-center gap-3">
         <RowAvatar
           src={ban.avatar_url ? getAuthAssetUrl(ban.avatar_url) : null}
-          initial={(name[0] ?? "?").toUpperCase()}
+          name={name}
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ui-base font-medium text-rm-text">
+          <p className="truncate text-ui-row font-medium text-ink-1">
             <InlineEmojiText text={name} />
           </p>
           {ban.reason ? (
-            <p className="text-pretty text-ui-sm text-rm-text-secondary">
+            <p className="text-pretty text-ui-sm text-ink-2">
               <InlineEmojiText text={ban.reason} />
             </p>
           ) : null}
-          <p className="text-ui-xs text-rm-text-secondary">
+          <p className="text-ui-xs text-ink-3">
             Banned by {ban.banned_by_username ?? "a moderator"}
             {date ? ` on ${date}` : ""}
           </p>
@@ -81,7 +81,7 @@ function BanRow({
       {armed ? (
         <ConfirmStrip
           consequence={`Unban ${name}? They can rejoin with an invite link.`}
-          confirmLabel="Unban"
+          confirmLabel={`Unban ${name}`}
           busy={busy}
           error={error}
           onCancel={() => {
@@ -141,10 +141,11 @@ export function BansPage({ serverId }: { serverId: string }) {
       />
     );
   }
+  // Real rows are 60 (name + meta) or taller with a reason: match the 60.
   if (!bans) return <SkeletonRows label="Loading bans" rows={2} />;
   if (bans.length === 0) {
     return (
-      <PageState icon="ban" title="No one is banned">
+      <PageState title="No one is banned">
         People you ban from the member list show here, so you can let them back
         in later.
       </PageState>

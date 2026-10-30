@@ -1,9 +1,11 @@
 /**
- * The settings workbench shell (design-system 12.6, 12.8, 13.1), extracted
- * from Studio so every settings-like surface shares one frame:
+ * The settings workbench shell (design-system 12.6, 12.8, 13.1; component kit,
+ * direction C), extracted from Studio so every settings-like surface shares
+ * one frame:
  *
- *   desktop  a 1120 x 820 dialog: a 240px nav column on the leading side, a
- *            titled page (48px+ header, one scroller) on the trailing side
+ *   desktop  a dialog: a 264px nav (ply-1, 48px header, numbered silkscreen
+ *            groups) on the leading side, a titled page (48px header, one
+ *            scroller) on the trailing side
  *   phone    a full-screen page. The nav is a list that pushes into pages;
  *            the page header has a back button. Safe areas on both edges.
  *
@@ -38,6 +40,7 @@ import {
 import { Icon, type IconName } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { HIT, PRESS } from "@/components/ui/interaction";
+import { Kbd } from "@/components/ui/kbd";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import {
@@ -49,6 +52,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { UnsavedBar, type UnsavedBarProps } from "./UnsavedBar";
 import {
   rovingKeyDown,
   SettingsContext,
@@ -77,9 +81,10 @@ export type WorkbenchNavGroup = {
 };
 
 /**
- * One nav row (12.3 on desktop, 12.4 on phones). Selected: tint fill,
- * Fill icon and 600 weight (14.5). `data-workbench-item` lets the shell put
- * focus back on it when a phone page pops.
+ * One nav row: 36 high (48 on phones), 20px icon, Geist 14. Selected: tint-2,
+ * semibold ink-1, Fill icon; idle rows are ink-2 at 500 with a tint-1 hover.
+ * `data-workbench-item` lets the shell put focus back on it when a phone page
+ * pops.
  */
 export function WorkbenchNavButton({
   item,
@@ -105,36 +110,102 @@ export function WorkbenchNavButton({
       aria-label={item.ariaLabel}
       onClick={() => onSelect(item.id)}
       className={cn(
-        "flex w-full items-center gap-3 rounded-md px-2 text-left outline-offset-[-2px] transition-colors duration-150 ease-(--rm-ease-out) disabled:cursor-default disabled:opacity-45",
+        "flex w-full min-w-0 items-center gap-3 rounded-[2px] px-2 text-left outline-offset-[-2px] transition-colors duration-(--dur-1) ease-out disabled:cursor-default disabled:opacity-45",
         PRESS,
         HIT,
-        narrow ? "min-h-12 px-3 text-ui-md" : "h-8 text-ui-sm",
+        narrow ? "min-h-12 px-3 text-ui-md" : "h-9 text-ui-row",
         current
-          ? "bg-rm-tint-2 font-semibold text-rm-text"
-          : "font-medium text-rm-text-secondary pointer-fine:hover:enabled:bg-rm-tint-1 pointer-fine:hover:enabled:text-rm-text",
+          ? "bg-tint-2 font-semibold text-ink-1"
+          : "font-medium text-ink-2 pointer-fine:hover:enabled:bg-tint-1 pointer-fine:hover:enabled:text-ink-1",
       )}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center">
-        <Icon
-          name={item.icon}
-          size="md"
-          state={current ? ("active" as never) : undefined}
-        />
-      </span>
+      <Icon
+        name={item.icon}
+        size="lg"
+        state={current ? ("active" as never) : undefined}
+        className={cn("shrink-0", current ? "text-ink-1" : "text-ink-3")}
+      />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {item.trailing ??
         (narrow ? (
-          <Icon
-            name="chevronRight"
-            size="xs"
-            className="shrink-0 text-rm-text-muted"
-          />
+          <Icon name="chevronRight" size="xs" className="shrink-0 text-ink-3" />
         ) : null)}
     </button>
   );
 }
 
-/** Grouped nav list with roving arrow-key focus. */
+/**
+ * A titled nav group: a numbered silkscreen label ("01 You", the number in
+ * ink-1, the name in ink-3) over its rows. Untitled groups render flat.
+ */
+export function WorkbenchNavBranch({
+  title,
+  index,
+  children,
+  className,
+}: {
+  title?: string;
+  /** 1-based position among the titled groups, printed as "01". */
+  index?: number;
+  children: ReactNode;
+  className?: string;
+}) {
+  const labelId = useId();
+  if (!title) {
+    return (
+      <div role="group" className={cn("flex flex-col gap-0.5", className)}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className={className}>
+      <h3
+        id={labelId}
+        className="silkscreen flex h-6 items-center gap-3 px-2 text-ink-3"
+      >
+        {index ? (
+          <span aria-hidden="true" className="text-ink-1">
+            {String(index).padStart(2, "0")}
+          </span>
+        ) : null}
+        {title}
+      </h3>
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        className="mt-0.5 flex flex-col gap-0.5"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One row of a nav branch. `below` hangs under the row (Studio's search
+ * hits). `current` and `tree` are kept for callers; the kit nav draws no
+ * guides, the selected row's tint is its whole signal.
+ */
+export function WorkbenchNavLeaf({
+  below,
+  children,
+}: {
+  current?: boolean;
+  /** Kept for existing callers. */
+  tree?: boolean;
+  below?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      {children}
+      {below}
+    </div>
+  );
+}
+
+/** Grouped nav with roving arrow-key focus. */
 export function WorkbenchNav({
   groups,
   activeId,
@@ -147,29 +218,37 @@ export function WorkbenchNav({
   const narrow = useIsMobile();
   const visible = groups.filter((group) => group.items.length > 0);
   const firstId = visible[0]?.items[0]?.id;
+  let titled = 0;
   return (
-    <div onKeyDown={(event) => rovingKeyDown(event)}>
+    <div
+      className="flex flex-col gap-4"
+      onKeyDown={(event) => rovingKeyDown(event)}
+    >
       {visible.map((group, index) => (
-        <div key={group.title ?? index} className="mt-4 first:mt-0">
-          {group.title ? (
-            <h3 className="px-2 pb-1 text-ui-xs font-semibold text-rm-text-secondary">
-              {group.title}
-            </h3>
-          ) : null}
-          <ul className="flex flex-col gap-px">
-            {group.items.map((item) => (
-              <li key={item.id}>
+        <WorkbenchNavBranch
+          key={group.title ?? index}
+          title={group.title}
+          index={group.title ? ++titled : undefined}
+        >
+          {group.items.map((item) => {
+            const current = !narrow && item.id === activeId;
+            return (
+              <WorkbenchNavLeaf
+                key={item.id}
+                tree={Boolean(group.title)}
+                current={current}
+              >
                 <WorkbenchNavButton
                   item={item}
                   narrow={narrow}
-                  current={!narrow && item.id === activeId}
+                  current={current}
                   tabbable={narrow ? item.id === firstId : item.id === activeId}
                   onSelect={onSelect}
                 />
-              </li>
-            ))}
-          </ul>
-        </div>
+              </WorkbenchNavLeaf>
+            );
+          })}
+        </WorkbenchNavBranch>
       ))}
     </div>
   );
@@ -197,6 +276,8 @@ export type SettingsWorkbenchProps = {
   showList: boolean;
   onShowListChange: (showList: boolean) => void;
   pageTitle: ReactNode;
+  /** Glyph before the page title in the 48px header. */
+  pageIcon?: IconName;
   /** Changes re-run the page enter animation. Defaults to `activeId`. */
   pageKey?: string;
   /**
@@ -208,13 +289,23 @@ export type SettingsWorkbenchProps = {
   headerActions?: ReactNode;
   /** Sticky footer under the scroller (a save bar). Gets safe-area padding. */
   footer?: ReactNode;
+  /**
+   * The shared save bar (UnsavedBar): hidden while clean, slides up when
+   * dirty. While dirty, closing or Escape calls `nudge` instead of closing.
+   */
+  unsaved?: UnsavedBarProps & { nudge?: () => void };
   /** Escape handler that runs before `back` (clear a search). */
   onEscape?: () => boolean;
   /**
-   * prose: content capped at 720 and centred (12.1).
+   * prose: content capped at 760 with 40px between sections.
    * full: the page lays itself out (split editors, Studio's preview rail).
    */
   width?: "prose" | "full";
+  /**
+   * default: 1120 wide. wide: 1280, for pages that carry a preview rail
+   * beside a full column (Studio).
+   */
+  size?: "default" | "wide";
   /** Kept mounted but hidden (Studio's theme preview sheet). */
   hidden?: boolean;
   /** Opened over another dialog: overlay and surface move to z-60. */
@@ -232,8 +323,17 @@ export type SettingsWorkbenchProps = {
   children: ReactNode;
 };
 
-const WORKBENCH_SURFACE =
-  "fixed inset-0 m-0 flex h-full w-full min-h-0 flex-row items-stretch overflow-hidden bg-rm-bg-primary p-0 outline-none md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1120px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-rm-border md:shadow-2xl animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:duration-150 md:zoom-in-[0.98] md:data-[state=closed]:zoom-out-[0.98]";
+/**
+ * The one workbench shell (overlays §3b "Workbench"), shared by Studio,
+ * server/channel settings, the profile editor and the catalog picker:
+ * min(1120, 100vw-32) x min(820, 100dvh-32), 2px corners, ply-0 body with a
+ * line edge and shadow-3 (the nav column sits on ply-1).
+ * Presence: opacity + scale .98 -> 1 over 250ms, out 180ms; opacity only
+ * when opened from the keyboard. Phones: a full-screen page.
+ * Layout (flex-row / flex-col) is added by the caller.
+ */
+export const WORKBENCH_SURFACE =
+  "fixed inset-0 m-0 flex h-full w-full min-h-0 items-stretch overflow-hidden bg-ply-0 p-0 text-ink-1 outline-none md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1120px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-line md:shadow-modal animate-in fade-in duration-(--dur-4) data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:duration-(--dur-4-exit) md:zoom-in-[0.98] md:data-[state=closed]:zoom-out-[0.98] data-keyboard:zoom-in-100 data-keyboard:md:zoom-in-100 data-keyboard:duration-100 data-stacked:z-60 [transition:transform_var(--dur-3)_var(--ease-out)] data-behind:[transform:translateY(-6px)_scale(0.985)] motion-reduce:data-behind:transform-none";
 
 export function SettingsWorkbench({
   open,
@@ -247,12 +347,15 @@ export function SettingsWorkbench({
   showList,
   onShowListChange,
   pageTitle,
+  pageIcon,
   pageKey,
   back,
   headerActions,
   footer,
+  unsaved,
   onEscape,
   width = "prose",
+  size = "default",
   hidden = false,
   stacked = false,
   bodyRef,
@@ -263,6 +366,16 @@ export function SettingsWorkbench({
 }: SettingsWorkbenchProps) {
   const narrow = useIsMobile();
   const pageTitleId = useId();
+  const unsavedDirty = Boolean(unsaved?.dirty);
+  const unsavedNudge = unsaved?.nudge;
+  /** Close, unless there are unsaved changes: then the bar nudges. */
+  const requestClose = useCallback(() => {
+    if (unsavedDirty) {
+      unsavedNudge?.();
+      return;
+    }
+    onClose();
+  }, [onClose, unsavedDirty, unsavedNudge]);
   const navRef = useRef<HTMLElement>(null);
   const pageTitleRef = useRef<HTMLHeadingElement>(null);
   const escapeStack = useRef<Array<() => boolean>>([]);
@@ -338,7 +451,7 @@ export function SettingsWorkbench({
         open={open}
         onOpenChange={(nextOpen) => {
           if (nextOpen) return;
-          if (!stepBack()) onClose();
+          if (!stepBack()) requestClose();
         }}
       >
         <DialogPortal>
@@ -369,6 +482,8 @@ export function SettingsWorkbench({
             }}
             className={cn(
               WORKBENCH_SURFACE,
+              size === "wide" && "md:w-[min(1280px,calc(100vw-32px))]",
+              "flex-row",
               stacked ? "z-60" : "z-50",
               hidden && "invisible",
             )}
@@ -383,37 +498,44 @@ export function SettingsWorkbench({
               aria-hidden={!listVisible ? "true" : undefined}
               inert={!listVisible ? true : undefined}
               className={cn(
-                "flex min-h-0 flex-col bg-rm-bg-sidebar outline-none",
+                "flex min-h-0 flex-col bg-ply-1 outline-none",
                 narrow
                   ? "w-full pt-[var(--safe-area-top,0px)]"
-                  : "w-[240px] shrink-0 border-r border-rm-border",
+                  : "w-[264px] shrink-0 border-r border-line",
                 !listVisible && "hidden",
               )}
             >
-              <div className="flex flex-col gap-3 px-3 pb-3 pt-3">
-                <div className="flex min-h-8 items-center justify-between gap-2 pl-1">
-                  <div aria-hidden="true" className="min-w-0">
-                    <p className="truncate text-ui-lg font-semibold text-rm-text">
-                      {title}
-                    </p>
-                    {subtitle ? (
-                      <p className="truncate text-ui-xs text-rm-text-secondary">
-                        {subtitle}
-                      </p>
-                    ) : null}
-                  </div>
-                  {narrow ? (
-                    <IconButton
-                      aria-label={close}
-                      icon="close"
-                      size="sm"
-                      onClick={onClose}
-                    />
+              <div className="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-1">
+                <div aria-hidden="true" className="min-w-0">
+                  <p className="truncate font-display text-[17px] leading-6 font-extrabold tracking-[-0.01em] text-ink-1 [font-optical-sizing:auto]">
+                    {title}
+                  </p>
+                  {subtitle ? (
+                    <p className="truncate text-ui-xs text-ink-3">{subtitle}</p>
                   ) : null}
                 </div>
-                {navTop}
+                {narrow ? (
+                  <IconButton
+                    aria-label={close}
+                    icon="close"
+                    variant="active"
+                    size={40}
+                    onClick={requestClose}
+                  />
+                ) : (
+                  <Kbd
+                    variant="outline"
+                    aria-hidden="true"
+                    className="shrink-0 pointer-coarse:hidden"
+                  >
+                    Esc
+                  </Kbd>
+                )}
               </div>
-              <div className="rm-settings-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(16px,var(--safe-area-bottom,0px))]">
+              {navTop ? (
+                <div className="shrink-0 px-3 pt-4">{navTop}</div>
+              ) : null}
+              <div className="rm-settings-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-6 pb-[max(16px,var(--safe-area-bottom,0px))]">
                 {nav}
               </div>
             </nav>
@@ -424,28 +546,36 @@ export function SettingsWorkbench({
               aria-hidden={!pageVisible ? "true" : undefined}
               inert={!pageVisible ? true : undefined}
               className={cn(
-                "@container relative flex min-h-0 min-w-0 flex-1 flex-col bg-rm-bg-primary",
+                "@container relative flex min-h-0 min-w-0 flex-1 flex-col bg-ply-0",
                 narrow && "pt-[var(--safe-area-top,0px)]",
                 !pageVisible && "hidden",
               )}
             >
-              {/* Settings exception (12.2): the page header is h-14 with an
-                  xl title; it is the page heading, not a nav bar. */}
-              <header className="flex h-14 shrink-0 items-center gap-2 border-b border-rm-border px-3 md:px-6">
+              {/* The page header is 48 high: the panel's glyph and title in
+                  Bricolage, and a 40px tint-2 close key at its end. */}
+              <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-3 md:px-4">
                 {headerBack ? (
                   <IconButton
                     aria-label={headerBack.label}
                     icon="chevronLeft"
-                    size="sm"
+                    size={40}
                     onClick={headerBack.onBack}
-                    className={cn(!narrow && "-ml-2")}
+                    className="-ml-1"
+                  />
+                ) : null}
+                {pageIcon ? (
+                  <Icon
+                    name={pageIcon}
+                    size="md"
+                    aria-hidden="true"
+                    className="shrink-0 text-ink-3"
                   />
                 ) : null}
                 <h2
                   id={pageTitleId}
                   ref={pageTitleRef}
                   tabIndex={-1}
-                  className="min-w-0 flex-1 truncate text-ui-xl font-semibold text-rm-text outline-none"
+                  className="min-w-0 flex-1 truncate font-display text-[18px] leading-6 font-extrabold tracking-[-0.02em] text-ink-1 outline-none [font-optical-sizing:auto]"
                 >
                   {pageTitle}
                 </h2>
@@ -453,8 +583,9 @@ export function SettingsWorkbench({
                 <IconButton
                   aria-label={close}
                   icon="close"
-                  size="sm"
-                  onClick={onClose}
+                  variant="active"
+                  size={40}
+                  onClick={requestClose}
                 />
               </header>
               <div
@@ -466,15 +597,19 @@ export function SettingsWorkbench({
                   <div
                     key={`${pageKey ?? activeId}-${narrow ? "n" : "w"}`}
                     className={cn(
-                      "px-4 pt-5 md:px-6",
-                      footer
+                      "px-4 pt-6 md:px-8 md:pt-8",
+                      footer || unsaved
                         ? "pb-8"
                         : "pb-[calc(64px+var(--safe-area-bottom,0px))]",
-                      narrow ? "rm-settings-push-in" : "rm-settings-panel-in",
+                      // Phones push in with a short slide; desktop pages
+                      // crossfade (opacity only, 120ms).
+                      narrow
+                        ? "rm-settings-push-in"
+                        : "animate-in fade-in-0 duration-120 ease-out",
                     )}
                   >
                     {width === "prose" ? (
-                      <div className="mx-auto flex max-w-[720px] min-w-0 flex-col gap-4">
+                      <div className="flex w-full max-w-[760px] min-w-0 flex-col gap-10">
                         {children}
                       </div>
                     ) : (
@@ -483,8 +618,17 @@ export function SettingsWorkbench({
                   </div>
                 ) : null}
               </div>
+              {unsaved && pageVisible ? (
+                <UnsavedBar
+                  {...unsaved}
+                  className={cn(
+                    "pb-[max(12px,var(--safe-area-bottom,0px))]",
+                    unsaved.className,
+                  )}
+                />
+              ) : null}
               {footer && pageVisible ? (
-                <div className="shrink-0 border-t border-rm-border bg-rm-bg-primary px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] md:px-6">
+                <div className="shrink-0 border-t-2 border-ink-1 bg-ply-0 px-4 pt-3 pb-[max(12px,var(--safe-area-bottom,0px))] md:px-8">
                   {footer}
                 </div>
               ) : null}

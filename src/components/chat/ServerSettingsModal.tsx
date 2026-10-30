@@ -1,7 +1,12 @@
 /**
- * Server settings on the shared settings workbench (design-system 12.6, 12.8,
- * 13.1): nav column + titled page on desktop, push navigation with a back
- * step on phones. Each page lives in `server-settings/` or its own file.
+ * Server settings on the shared settings workbench: nav column + titled page
+ * on desktop, push navigation with a back step on phones. Each page lives in
+ * `server-settings/` or its own file.
+ *
+ * One save pattern (overlays audit issue 7, flow 3): Overview and the role
+ * editor feed the workbench's UnsavedBar. While either is dirty, closing,
+ * Escape, switching page, switching role and popping the role editor all
+ * nudge the bar instead of dropping the draft.
  */
 
 import {
@@ -11,14 +16,14 @@ import {
 } from "@/hooks/useMediaQuery";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { useChatStore } from "@/stores/chat-store";
-import { useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import AuditLogTab from "./AuditLogTab";
 import InvitesTab from "./InvitesTab";
-import RoleManagement from "./RoleManagement";
+import RoleManagement, { type RoleUnsaved } from "./RoleManagement";
 import { BansPage } from "./server-settings/BansPage";
 import {
   OverviewPage,
-  OverviewSaveBar,
+  OverviewSavedStatus,
   useOverviewForm,
   type ServerUpdates,
 } from "./server-settings/OverviewPage";
@@ -27,6 +32,7 @@ import {
   WorkbenchNav,
   type WorkbenchNavItem,
 } from "./settings/SettingsWorkbench";
+import { useUnsavedNudge } from "./settings/UnsavedBar";
 import { useWorkbenchNav } from "./settings/useWorkbenchNav";
 
 export type ServerSettingsTab =
@@ -155,7 +161,38 @@ export default function ServerSettingsModal({
     onUpdated,
   });
 
+  const { nudgeKey, nudge: shake } = useUnsavedNudge();
+  /** Show the bar (a phone on the list pushes back into the page) and shake. */
+  const { showList, setShowList } = nav;
+  const nudge = useCallback(() => {
+    if (showList) setShowList(false);
+    shake();
+  }, [setShowList, shake, showList]);
+  const [roleUnsaved, setRoleUnsavedState] = useState<RoleUnsaved | null>(null);
+  const setRoleUnsaved = useCallback(
+    (state: RoleUnsaved | null) => setRoleUnsavedState(state),
+    [],
+  );
+
+  const unsaved =
+    active === "overview" && canManageServer
+      ? {
+          dirty: form.dirty,
+          saving: form.saving,
+          error: form.saveError,
+          onReset: form.reset,
+          onSave: () => void form.save(),
+        }
+      : active === "roles" && roleUnsaved
+        ? roleUnsaved
+        : null;
+  const dirty = Boolean(unsaved?.dirty);
+
   const select = (id: string) => {
+    if (dirty && id !== active) {
+      nudge();
+      return;
+    }
     setRoleEditorOpen(false);
     nav.go(id as ServerSettingsTab);
   };
@@ -171,6 +208,9 @@ export default function ServerSettingsModal({
           editorOpen={roleEditorOpen}
           onEditorOpenChange={setRoleEditorOpen}
           onEditorTitle={setRoleTitle}
+          onUnsavedChange={setRoleUnsaved}
+          blocked={dirty}
+          onBlocked={nudge}
         />
       );
       break;
@@ -221,17 +261,17 @@ export default function ServerSettingsModal({
       pageKey={active}
       back={
         rolePushed
-          ? { label: "Back to roles", onBack: () => setRoleEditorOpen(false) }
+          ? {
+              label: "Back to roles",
+              onBack: () => (dirty ? nudge() : setRoleEditorOpen(false)),
+            }
           : undefined
       }
       width={active === "roles" && splitRoles ? "full" : "prose"}
-      footer={
-        active === "overview" && canManageServer ? (
-          <OverviewSaveBar form={form} />
-        ) : undefined
-      }
+      unsaved={unsaved ? { ...unsaved, nudgeKey, nudge } : undefined}
     >
       {page}
+      {active === "overview" ? <OverviewSavedStatus form={form} /> : null}
     </SettingsWorkbench>
   );
 }

@@ -16,7 +16,7 @@ function GlyphTile({ icon }: { icon: IconName }) {
   return (
     <span
       aria-hidden="true"
-      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-rm-tint-1 text-rm-text-muted max-md:size-8"
+      className="flex size-5 shrink-0 items-center justify-center text-ink-3 max-md:size-8"
     >
       <Icon name={icon} size="sm" />
     </span>
@@ -41,7 +41,7 @@ function Row({
       {lead}
       <span
         className={cn(
-          "min-w-0 truncate text-ui-sm font-medium text-rm-text max-md:text-ui-base",
+          "min-w-0 truncate text-ui-sm font-medium text-ink-1 max-md:text-ui-base",
           labelClassName,
         )}
         style={labelStyle}
@@ -49,7 +49,7 @@ function Row({
         {label}
       </span>
       {meta ? (
-        <span className="ml-auto min-w-0 shrink truncate pl-3 text-ui-xs text-rm-text-muted tabular-nums max-md:text-ui-sm">
+        <span className="ms-auto min-w-0 shrink truncate pl-3 text-ui-xs text-ink-3 max-md:text-ui-sm">
           {meta}
         </span>
       ) : null}
@@ -72,7 +72,7 @@ export function SuggestionContent({
           label={
             <>
               {suggestion.key}:
-              <span className="ml-1.5 font-normal text-rm-text-muted">
+              <span className="ml-1.5 font-normal text-ink-3">
                 {suggestion.hint}
               </span>
             </>
@@ -91,7 +91,7 @@ export function SuggestionContent({
               avatarDisplay={member.avatar_display as string | null}
               displayName={member.display_name}
               username={member.username}
-              size={24}
+              size={20}
               className="max-md:size-8"
             />
           }
@@ -143,7 +143,7 @@ export function SuggestionContent({
         <Row
           lead={<GlyphTile icon="clock" />}
           label={recentSearchLabel(suggestion.recent)}
-          labelClassName="font-normal text-rm-text-secondary"
+          labelClassName="font-normal text-ink-2"
         />
       );
   }

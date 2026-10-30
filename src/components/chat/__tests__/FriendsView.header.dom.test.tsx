@@ -141,8 +141,6 @@ describe("FriendsView header", () => {
     await vi.waitFor(() =>
       expect(field).toHaveAttribute("aria-invalid", "true"),
     );
-    expect(screen.getByRole("status").className).toContain(
-      "text-rm-danger-ink",
-    );
+    expect(screen.getByRole("status").className).toContain("text-danger-ink");
   });
 });

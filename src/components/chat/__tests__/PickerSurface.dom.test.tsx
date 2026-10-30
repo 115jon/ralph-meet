@@ -63,8 +63,8 @@ describe("PickerSurface (desktop)", () => {
     );
     const panel = screen.getByRole("dialog", { name: "Recipe" });
     expect(panel).toHaveClass(
-      "rounded-lg",
-      "shadow-lg",
+      "rounded-[2px]",
+      "shadow-float",
       "z-50",
       "max-h-[min(600px,calc(100dvh-24px))]",
       "w-80",

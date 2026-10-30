@@ -1,10 +1,13 @@
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { getDisplayName } from "@/lib/display-name";
+import { CountBadge } from "@/components/ui/badge";
 import { ButtonBase } from "@/components/ui/button-base";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
-import { HIT, REVEAL } from "@/components/ui/interaction";
+import { HIT } from "@/components/ui/interaction";
 import { Label } from "@/components/ui/label";
+import { Num } from "@/components/ui/num";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -13,7 +16,21 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
+import {
+  ROW_ACTION_BUTTON,
+  ROW_ACTIONS,
+  ROW_NAME_FADE,
+  sidebarRowClass,
+  TREE_BRANCH_GAP,
+  TREE_BRANCH_LABEL,
+} from "@/components/ui/sidebar-row";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, tabId } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import {
   LONG_PRESS_TARGET,
@@ -23,9 +40,9 @@ import {
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
-import { getAuthAssetUrl } from "@/lib/platform";
+import type { Relationship } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { UserStatusDot } from "./UserStatusDot";
+import { normalizeUserStatus, UserStatusDot } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import {
@@ -38,7 +55,7 @@ import {
 } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
-import { AvatarImage } from "./AvatarImage";
+import { MiniAvatar } from "./MiniAvatar";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { UserDisplayName } from "./UserDisplayName";
 import UserProfilePopover from "./UserProfilePopover";
@@ -57,15 +74,14 @@ const LIST_LABEL: Record<Tab, string> = {
   pending: "Pending",
   blocked: "Blocked",
 };
-const EMPTY: Record<Tab, { icon: IconName; title: string; body?: string }> = {
-  online: { icon: "members", title: "No friends online" },
+const EMPTY: Record<Tab, { title: string; body?: string }> = {
+  online: { title: "No friends online" },
   all: {
-    icon: "members",
     title: "No friends yet",
     body: "Add a friend by their username to start a conversation.",
   },
-  pending: { icon: "invite", title: "No pending requests" },
-  blocked: { icon: "ban", title: "No blocked users" },
+  pending: { title: "No pending requests" },
+  blocked: { title: "No blocked users" },
 };
 
 type AddStatus = { kind: "success" | "error"; message: string } | null;
@@ -137,14 +153,15 @@ function fvReducer(s: FriendsViewState, a: FVAction): FriendsViewState {
   }
 }
 
-function relationLabel(rel: { type: number; user: { status?: string } }) {
-  if (rel.type === 2) return "Incoming friend request";
-  if (rel.type === 3) return "Outgoing friend request";
-  if (rel.type === 1) return "Blocked";
-  if (rel.user.status === "online") return "Online";
-  if (rel.user.status === "idle") return "Idle";
-  if (rel.user.status === "dnd") return "Do not disturb";
-  return "Offline";
+/**
+ * The second line of a friend row: the person's custom status, if they set
+ * one. Presence is already the dot, and the branch label says what kind of
+ * request a row is, so a row without a custom status stays one line.
+ */
+function statusLine(rel: Relationship): string | null {
+  if (rel.type !== 0) return null;
+  const text = rel.user.custom_status?.trim();
+  return text ? text : null;
 }
 
 /**
@@ -174,10 +191,10 @@ function removeCopy(relType: number) {
     };
   if (relType === 2)
     return {
-      action: "Reject",
-      title: "Reject request",
-      body: (name: string) => `Reject the friend request from ${name}?`,
-      confirm: "Reject",
+      action: "Ignore",
+      title: "Ignore request",
+      body: (name: string) => `Ignore the friend request from ${name}?`,
+      confirm: "Ignore",
     };
   return {
     action: "Cancel",
@@ -392,6 +409,24 @@ export default function FriendsView({
     return false;
   });
 
+  // Pending splits into what needs you (Incoming) and what waits on them
+  // (Sent); the other tabs are one branch.
+  const branches: Array<{ id: string; label: string; rows: Relationship[] }> =
+    tab === "pending"
+      ? [
+          {
+            id: "incoming",
+            label: "Incoming",
+            rows: filteredFriends.filter((f) => f.type === 2),
+          },
+          {
+            id: "sent",
+            label: "Sent",
+            rows: filteredFriends.filter((f) => f.type === 3),
+          },
+        ].filter((b) => b.rows.length > 0)
+      : [{ id: tab, label: LIST_LABEL[tab], rows: filteredFriends }];
+
   const pendingCount = relationships.filter((f) => f.type === 2).length;
 
   const toggleAddFriend = () =>
@@ -414,9 +449,11 @@ export default function FriendsView({
       items={FRIEND_TABS.map((t) => ({
         value: t,
         label: TAB_LABEL[t],
+        // Incoming requests need you, so they earn the count badge; totals
+        // never do (spec §7 Count badge).
         adornment:
           t === "pending" && pendingCount > 0 ? (
-            <span className="badge-count">{pendingCount}</span>
+            <CountBadge count={pendingCount} />
           ) : undefined,
       }))}
     />
@@ -425,15 +462,144 @@ export default function FriendsView({
   const empty = EMPTY[tab];
   const removal = removeTarget ? removeCopy(removeTarget.relType) : null;
 
+  const askRemove = (rel: Relationship) =>
+    setRemoveTarget({ user: rel.user, relType: rel.type });
+
+  const renderRow = (rel: Relationship) => {
+    const displayName = getDisplayName(rel.user);
+    const status = statusLine(rel);
+    const incoming = rel.type === 2;
+    // Friends and sent requests keep their actions in a hover overlay;
+    // incoming requests always show Accept and Ignore.
+    const hoverActions = rel.type === 0 || rel.type === 3;
+    return (
+      <li
+        key={rel.user.id}
+        data-testid="friend-row"
+        className={cn(
+          sidebarRowClass({ tall: !!status }),
+          "gap-2.5",
+          LONG_PRESS_TARGET,
+        )}
+        style={
+          rel.type === 3
+            ? ({ "--row-actions-w": "28px" } as React.CSSProperties)
+            : undefined
+        }
+      >
+        <ButtonBase
+          onClick={() => handleOpenDm(rel.user.id)}
+          onContextMenu={(e) => handleFriendContextMenu(e, rel.user, rel.type)}
+          {...bindLongPress({ user: rel.user, relType: rel.type })}
+          aria-label={`Message ${displayName}`}
+          className="absolute inset-0 z-10 rounded-sm outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+        />
+        <ButtonBase
+          className={cn(
+            "relative z-20 shrink-0 cursor-pointer rounded-avatar outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+            HIT,
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            dispatch({
+              type: "SET_POPOVER",
+              user: rel.user,
+              anchor: e.currentTarget,
+            });
+          }}
+          aria-label={`View ${displayName}'s profile`}
+        >
+          <MiniAvatar
+            avatarUrl={rel.user.avatar_url}
+            avatarDisplay={rel.user.avatar_display}
+            displayName={rel.user.display_name}
+            username={rel.user.username}
+            size={24}
+          />
+          {rel.type !== 1 && (
+            <UserStatusDot
+              status={normalizeUserStatus(rel.user.status)}
+              ring="bg-ply-0"
+              className="absolute -right-1 -bottom-1 size-3"
+            />
+          )}
+        </ButtonBase>
+
+        <div
+          className={cn(
+            "flex min-w-0 flex-1 flex-col",
+            hoverActions && ROW_NAME_FADE,
+          )}
+        >
+          <UserDisplayName
+            user={rel.user}
+            className="block truncate text-ui-row font-medium"
+          />
+          {status && (
+            <span className="block truncate text-ui-xs font-normal text-ink-3">
+              {status}
+            </span>
+          )}
+        </div>
+
+        {incoming && (
+          <div className="relative z-20 flex shrink-0 items-center gap-1">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleAcceptFriend(rel.user.id);
+              }}
+              aria-label={`Accept ${displayName}`}
+            >
+              Accept
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-ink-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                askRemove(rel);
+              }}
+              aria-label={`Ignore ${displayName}`}
+            >
+              Ignore
+            </Button>
+          </div>
+        )}
+
+        {hoverActions && (
+          <div className={ROW_ACTIONS}>
+            {rel.type === 0 && (
+              <RowAction
+                icon="chat"
+                label="Message"
+                onClick={() => handleOpenDm(rel.user.id)}
+              />
+            )}
+            <RowAction
+              icon="close"
+              label={removeCopy(rel.type).action}
+              tone="danger"
+              onClick={() => askRemove(rel)}
+            />
+          </div>
+        )}
+      </li>
+    );
+  };
+
   return (
     <div
       ref={rootRef}
-      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-rm-bg-primary"
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-ply-0"
     >
-      {/* Header (12.1 / 12.2): 48px + safe area. */}
+      {/* Header: 48px + safe area, the same bar as the chat header. */}
       <header
         data-testid="friends-header"
-        className="z-20 flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center gap-2 border-b border-rm-border bg-rm-bg-primary px-4 pt-[var(--safe-area-top,0px)] max-md:pl-2"
+        className="z-20 flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center gap-2 border-b border-line bg-ply-0 px-4 pt-[var(--safe-area-top,0px)] max-md:pl-2"
       >
         <IconButton
           icon="menu"
@@ -447,15 +613,15 @@ export default function FriendsView({
         <Icon
           name="members"
           size="lg"
-          className="shrink-0 text-rm-text-muted max-md:hidden"
+          className="shrink-0 text-ink-3 max-md:hidden"
         />
-        <h1 className="shrink-0 text-ui-md font-semibold whitespace-nowrap text-rm-text">
+        <h1 className="shrink-0 text-ui-xl font-semibold whitespace-nowrap text-ink-1 max-md:text-ui-md">
           Friends
         </h1>
 
         {!tabsInStrip && (
           <>
-            <div aria-hidden className="mx-2 h-5 w-px shrink-0 bg-rm-border" />
+            <div aria-hidden className="mx-2 h-5 w-px shrink-0 bg-line" />
             {tabs}
           </>
         )}
@@ -471,8 +637,10 @@ export default function FriendsView({
               onClick={toggleAddFriend}
             />
           ) : (
+            // The page's one primary action; it steps back to secondary while
+            // its form is open, so Send request is the primary then.
             <Button
-              variant={addFriendMode ? "secondary" : "ghost"}
+              variant={addFriendMode ? "secondary" : "primary"}
               size="sm"
               aria-pressed={addFriendMode}
               onClick={toggleAddFriend}
@@ -487,7 +655,7 @@ export default function FriendsView({
       {tabsInStrip && (
         <div
           data-testid="friends-tab-strip"
-          className="shrink-0 border-b border-rm-border"
+          className="shrink-0 border-b border-line"
         >
           {tabs}
         </div>
@@ -496,17 +664,17 @@ export default function FriendsView({
       {/* Add friend form */}
       {addFriendMode && (
         <form
-          className="flex shrink-0 flex-col gap-2 border-b border-rm-border px-4 py-4"
+          className="flex shrink-0 flex-col gap-1.5 border-b border-line px-4 py-4"
           onSubmit={(e) => {
             e.preventDefault();
             void handleAddFriend();
           }}
         >
           <Label htmlFor="friend-username">Add friend</Label>
-          <p className="text-ui-xs text-rm-text-secondary">
+          <p className="text-ui-sm text-ink-2">
             You can add friends by their username.
           </p>
-          <div className="flex max-w-lg gap-2">
+          <div className="mt-1 flex max-w-lg gap-2">
             <Input
               id="friend-username"
               name="username"
@@ -534,8 +702,8 @@ export default function FriendsView({
             className={cn(
               "min-h-4 text-ui-xs",
               addStatus?.kind === "error"
-                ? "text-rm-danger-ink"
-                : "text-rm-success-ink",
+                ? "text-danger-ink"
+                : "text-success-ink",
             )}
           >
             {addStatus?.message}
@@ -543,173 +711,72 @@ export default function FriendsView({
         </form>
       )}
 
-      {/* Friends list */}
+      {/* Friends list: rows share the member / DM row anatomy, capped at
+          720 so hover tints don't span the window. */}
       <div
         id="friends-panel"
         role="tabpanel"
         aria-labelledby={tabId("friends", tab)}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain custom-scrollbar"
       >
-        <h2 className="px-4 pt-4 pb-2 text-ui-2xs font-semibold tracking-[0.08em] text-rm-text-muted uppercase">
-          {LIST_LABEL[tab]} — {filteredFriends.length}
-        </h2>
-
-        {loading && filteredFriends.length === 0 && (
-          <div role="status" className="flex flex-col gap-1 px-4 py-2 md:px-2">
-            <span className="sr-only">Loading friends</span>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                aria-hidden
-                className="h-14 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none md:h-12"
-              />
-            ))}
-          </div>
-        )}
-
-        {!loading && filteredFriends.length === 0 && (
-          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <Icon
-              name={empty.icon}
-              size={isMobile ? "2xl" : "3xl"}
-              className="text-rm-text-muted"
-            />
-            <p className="text-ui-md font-semibold text-balance text-rm-text">
-              {empty.title}
-            </p>
-            {empty.body && (
-              <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
-                {empty.body}
-              </p>
-            )}
-            {tab === "all" && !addFriendMode && (
-              <Button variant="secondary" onClick={toggleAddFriend}>
-                Add friend
-              </Button>
-            )}
-          </div>
-        )}
-
-        {filteredFriends.length > 0 && (
-          <ul className="flex flex-col pb-4 md:gap-0.5 md:px-2">
-            {filteredFriends.map((rel) => {
-              const displayName = getDisplayName(rel.user);
-              const remove = removeCopy(rel.type);
-              return (
-                <li
-                  key={rel.user.id}
-                  data-testid="friend-row"
-                  className={cn(
-                    "group relative flex min-h-12 items-center gap-3 px-4 py-1.5 transition-colors duration-150 ease-(--rm-ease-out) md:min-h-14 md:rounded-md md:px-2 pointer-fine:hover:bg-rm-tint-1",
-                    LONG_PRESS_TARGET,
-                  )}
+        <div className="max-w-[720px] px-2 pb-4">
+          {loading && filteredFriends.length === 0 && (
+            <div role="status" className="flex flex-col gap-0.5 pt-2">
+              <span className="sr-only">Loading friends</span>
+              <div aria-hidden className="flex h-6 items-center px-2">
+                <Skeleton className="h-2.5 w-16 rounded-xs!" />
+              </div>
+              {[36, 24, 30].map((w) => (
+                <div
+                  key={w}
+                  aria-hidden
+                  className="flex h-8 items-center gap-2.5 px-2"
                 >
-                  <ButtonBase
-                    onClick={() => handleOpenDm(rel.user.id)}
-                    onContextMenu={(e) =>
-                      handleFriendContextMenu(e, rel.user, rel.type)
-                    }
-                    {...bindLongPress({ user: rel.user, relType: rel.type })}
-                    aria-label={`Message ${displayName}`}
-                    className="absolute inset-0 z-10 outline-none md:rounded-md"
+                  <Skeleton className="size-6 shrink-0 rounded-avatar" />
+                  <Skeleton
+                    className="h-3 rounded-xs!"
+                    style={{ width: `${w}%` }}
                   />
-                  {/* Avatar */}
-                  <ButtonBase
-                    className={cn(
-                      "relative z-20 shrink-0 cursor-pointer rounded-full outline-none",
-                      HIT,
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      dispatch({
-                        type: "SET_POPOVER",
-                        user: rel.user,
-                        anchor: e.currentTarget,
-                      });
-                    }}
-                    aria-label={`View ${displayName}'s profile`}
-                  >
-                    <span className="relative flex size-10 items-center justify-center overflow-visible rounded-full bg-rm-accent-tint text-ui-sm font-semibold text-rm-accent-ink ring-1 ring-rm-border">
-                      {rel.user.avatar_url ? (
-                        <AvatarImage
-                          src={getAuthAssetUrl(rel.user.avatar_url)}
-                          alt=""
-                          display={rel.user.avatar_display}
-                        />
-                      ) : (
-                        getDisplayInitial(rel.user)
-                      )}
-                    </span>
-                    <UserStatusDot
-                      status={rel.user.status ?? "offline"}
-                      ring="bg-rm-bg-primary"
-                      className="absolute -right-0.5 -bottom-0.5 size-3.5"
-                    />
-                  </ButtonBase>
+                </div>
+              ))}
+            </div>
+          )}
 
-                  {/* Info */}
-                  <div className="min-w-0 flex-1">
-                    <UserDisplayName
-                      user={rel.user}
-                      className="block truncate text-ui-base font-medium text-rm-text"
-                    />
-                    <span className="block truncate text-ui-xs text-rm-text-secondary">
-                      {relationLabel(rel)}
-                    </span>
-                  </div>
+          {!loading && filteredFriends.length === 0 && (
+            <EmptyState
+              title={empty.title}
+              description={empty.body}
+              className="py-16"
+              action={
+                tab === "all" && !addFriendMode ? (
+                  <Button variant="secondary" onClick={toggleAddFriend}>
+                    Add friend
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
 
-                  {/* Actions: revealed on hover/focus for fine pointers,
-                      always visible on touch. */}
-                  <div
-                    className={cn("relative z-20 flex shrink-0 gap-2", REVEAL)}
-                  >
-                    {rel.type === 0 && (
-                      <IconButton
-                        icon="chat"
-                        size="sm"
-                        shape="circle"
-                        tooltip="Message"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenDm(rel.user.id);
-                        }}
-                      />
-                    )}
-                    {rel.type === 2 && (
-                      <IconButton
-                        icon="check"
-                        size="sm"
-                        shape="circle"
-                        className="text-rm-success-ink"
-                        tooltip="Accept"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAcceptFriend(rel.user.id);
-                        }}
-                      />
-                    )}
-                    {rel.type !== 1 && (
-                      <IconButton
-                        icon="close"
-                        size="sm"
-                        shape="circle"
-                        variant="destructive"
-                        tooltip={remove.action}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRemoveTarget({
-                            user: rel.user,
-                            relType: rel.type,
-                          });
-                        }}
-                      />
-                    )}
-                  </div>
-                </li>
+          {filteredFriends.length > 0 &&
+            branches.map((branch) => {
+              const labelId = `friends-branch-${branch.id}`;
+              return (
+                <section
+                  key={branch.id}
+                  aria-labelledby={labelId}
+                  className={TREE_BRANCH_GAP}
+                >
+                  <h2 id={labelId} className={TREE_BRANCH_LABEL}>
+                    <span className="truncate">{branch.label}</span>
+                    <Num className="text-ink-3">{branch.rows.length}</Num>
+                  </h2>
+                  <ul className="flex flex-col gap-0.5 pt-0.5">
+                    {branch.rows.map(renderRow)}
+                  </ul>
+                </section>
               );
             })}
-          </ul>
-        )}
+        </div>
       </div>
 
       <ResponsiveDialog
@@ -772,5 +839,43 @@ export default function FriendsView({
         />
       )}
     </div>
+  );
+}
+
+/** A 24px action in a row's hover overlay, named by its tooltip. */
+function RowAction({
+  icon,
+  label,
+  tone,
+  onClick,
+}: {
+  icon: IconName;
+  label: string;
+  tone?: "danger";
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className={cn(
+            ROW_ACTION_BUTTON,
+            tone === "danger" &&
+              "pointer-fine:hover:bg-danger-tint pointer-fine:hover:text-danger-ink",
+          )}
+        >
+          <Icon name={icon} size="sm" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <p>{label}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }

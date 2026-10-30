@@ -608,7 +608,7 @@ describe("LinkEmbed DOM rendering", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders TikTok slideshow branding in the footer without the extra badge", async () => {
+  it("names TikTok once, in the header, without a favicon badge", async () => {
     vi.stubGlobal(
       "IntersectionObserver",
       class {
@@ -688,10 +688,11 @@ describe("LinkEmbed DOM rendering", () => {
       ).not.toBeNull();
     });
 
-    const footerIcon = container.querySelector(
-      `img[src="${"https://www.tiktok.com/favicon.ico"}"]`,
-    );
-    expect(footerIcon).not.toBeNull();
+    const header = container.querySelector("[data-embed-header]");
+    expect(header?.textContent).toContain("TikTok");
+    expect(
+      container.querySelector('img[src="https://www.tiktok.com/favicon.ico"]'),
+    ).toBeNull();
     expect(container.textContent?.match(/TikTok/g)?.length ?? 0).toBe(1);
   });
 

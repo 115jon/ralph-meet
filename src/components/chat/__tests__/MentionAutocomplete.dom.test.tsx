@@ -124,7 +124,7 @@ describe("HoveredMentionTooltip", () => {
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("Alice");
     const content = document.querySelector('[data-slot="tooltip-content"]');
-    expect(content?.className).toContain("bg-rm-text");
+    expect(content?.className).toContain("bg-ink-1");
   });
 
   it("renders nothing without a hovered member", () => {

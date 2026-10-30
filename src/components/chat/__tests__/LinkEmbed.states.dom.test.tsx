@@ -78,7 +78,7 @@ const youtube: EmbedInfo = {
 };
 
 describe("play overlays", () => {
-  it("centres the YouTube play target on the whole frame and keeps the open link in a corner", () => {
+  it("centres the YouTube play target on the whole frame and keeps the open link in the header", () => {
     render(<LinkEmbed embed={youtube} />);
 
     const play = screen.getByRole("button", {
@@ -92,8 +92,8 @@ describe("play overlays", () => {
     expect(play.className).toContain("justify-center");
 
     const open = screen.getByRole("link", { name: "Open in YouTube" });
-    expect(open.className).toContain("right-2");
-    expect(open.className).toContain("top-2");
+    // The one open-external control lives in the embed header.
+    expect(open.closest("[data-embed-header]")).not.toBeNull();
     // Not a sibling inside the play target's flex row any more.
     expect(play.contains(open)).toBe(false);
   });
@@ -110,12 +110,16 @@ describe("play overlays", () => {
 });
 
 describe("direct media links", () => {
-  it("fits a direct image in 400x300 without upscaling", () => {
+  it("fits a direct image in 640x400 without upscaling", () => {
+    expect(getDirectMediaBox(2000, 1000)).toEqual({
+      width: 640,
+      aspectRatio: 2,
+    });
     expect(getDirectMediaBox(544, 184)).toEqual({
-      width: 400,
+      width: 544,
       aspectRatio: 544 / 184,
     });
-    expect(getDirectMediaBox(1080, 1920)?.width).toBe(169);
+    expect(getDirectMediaBox(1080, 1920)?.width).toBe(225);
     expect(getDirectMediaBox(120, 80)?.width).toBe(120);
     expect(getDirectMediaBox(undefined, 10)).toBeNull();
   });

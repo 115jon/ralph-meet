@@ -1,13 +1,24 @@
+/**
+ * Invite people to a server: pick expiry and uses, generate a link, copy it.
+ * The kit's C1 plate (DESIGN.md, Dialog): a silkscreen kicker ("Invite ·
+ * server"), the Bricolage title, the dithered rule, a 15/22 body, fields as
+ * legend plates on ply-3 with 48px controls, and a footer of 48px keys: a
+ * ghost Cancel (Done once there is a link) beside the notched primary. A
+ * form dialog (md, top-anchored); a bottom sheet below md.
+ */
+
 import { Button } from "@/components/ui/button";
+import { DialogKicker, DialogRule } from "@/components/ui/dialog";
+import { Icon } from "@/components/ui/icon";
+import { FieldPlate, Input } from "@/components/ui/input";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,12 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { copyToClipboard } from "@/components/ui/toast";
 import { apiPost } from "@/lib/api-client";
+import { describeApiError } from "@/lib/api-errors";
 import { getWebOrigin } from "@/lib/platform";
-import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
-import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
+import { RowError } from "./settings/primitives";
+
 interface InviteModalProps {
   open: boolean;
   serverId: string;
@@ -40,7 +53,9 @@ export default function InviteModal({
     copied: false,
     expiresHours: 24,
     maxUses: 0,
+    error: null as string | null,
   });
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -50,13 +65,21 @@ export default function InviteModal({
       inviteCode: "",
       loading: false,
       copied: false,
+      error: null,
     }));
   }, [open, serverId]);
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
 
   const firstSelectRef = useRef<HTMLButtonElement>(null);
 
   const createInvite = async () => {
-    setState((prev) => ({ ...prev, loading: true }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const data = await apiPost<{ code: string }>(
         `/api/servers/${serverId}/invites`,
@@ -66,21 +89,29 @@ export default function InviteModal({
         },
       );
       setState((prev) => ({ ...prev, inviteCode: data.code }));
-    } catch (err: any) {
-      console.error("Failed to create invite:", err);
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        error: describeApiError(err, "create the invite link"),
+      }));
     } finally {
       setState((prev) => ({ ...prev, loading: false }));
     }
   };
 
+  const link = `${getWebOrigin()}/invite/${state.inviteCode}`;
+
   const copyLink = async () => {
-    const link = `${getWebOrigin()}/invite/${state.inviteCode}`;
-    await navigator.clipboard.writeText(link);
+    if (!(await copyToClipboard(link, "Link copied"))) return;
     setState((prev) => ({ ...prev, copied: true }));
-    setTimeout(() => setState((prev) => ({ ...prev, copied: false })), 2000);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(
+      () => setState((prev) => ({ ...prev, copied: false })),
+      2000,
+    );
   };
 
-  const selectStyle = "w-full max-md:min-h-11";
+  const selectStyle = "w-full";
 
   return (
     <ResponsiveDialog
@@ -88,7 +119,8 @@ export default function InviteModal({
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
       <ResponsiveDialogContent
-        className="md:max-w-md"
+        size="md"
+        placement="top"
         // Desktop only (the drawer drops this): start on the first field. On a
         // phone focus stays on the sheet so nothing pops open under the thumb.
         onOpenAutoFocus={(event) => {
@@ -98,124 +130,131 @@ export default function InviteModal({
         }}
       >
         <ResponsiveDialogHeader>
+          <DialogKicker>
+            Invite · <InlineEmojiText text={serverName} />
+          </DialogKicker>
           <ResponsiveDialogTitle>
-            Invite people to{" "}
-            <InlineEmojiText text={serverName} className="text-rm-accent-ink" />
+            Invite people to <InlineEmojiText text={serverName} />
           </ResponsiveDialogTitle>
-          <ResponsiveDialogDescription className="sr-only">
-            Generate an invite link for this server.
+          <DialogRule />
+          <ResponsiveDialogDescription className="mt-2">
+            {state.inviteCode
+              ? "Share this link with others to let them join your server."
+              : "Choose how long the link lasts and how many people can use it."}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <div>
-          {!state.inviteCode ? (
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="expire-after">Expire after</Label>
-                <Select
-                  value={String(state.expiresHours)}
-                  onValueChange={(value) =>
-                    setState((prev) => ({
-                      ...prev,
-                      expiresHours: Number(value),
-                    }))
-                  }
+        {!state.inviteCode ? (
+          <div className="flex flex-col gap-4">
+            <FieldPlate
+              label="Expire after"
+              htmlFor="expire-after"
+              ground="ply-3"
+            >
+              <Select
+                value={String(state.expiresHours)}
+                onValueChange={(value) =>
+                  setState((prev) => ({
+                    ...prev,
+                    expiresHours: Number(value),
+                  }))
+                }
+              >
+                <SelectTrigger
+                  ref={firstSelectRef}
+                  id="expire-after"
+                  size="lg"
+                  className={selectStyle}
                 >
-                  <SelectTrigger
-                    ref={firstSelectRef}
-                    id="expire-after"
-                    className={selectStyle}
-                  >
-                    <SelectValue placeholder="Expire after" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" align="start">
-                    <SelectItem value="1">1 hour</SelectItem>
-                    <SelectItem value="6">6 hours</SelectItem>
-                    <SelectItem value="24">24 hours</SelectItem>
-                    <SelectItem value="168">7 days</SelectItem>
-                    <SelectItem value="0">Never</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="max-uses">Max uses</Label>
-                <Select
-                  value={String(state.maxUses)}
-                  onValueChange={(value) =>
-                    setState((prev) => ({
-                      ...prev,
-                      maxUses: Number(value),
-                    }))
-                  }
-                >
-                  <SelectTrigger id="max-uses" className={selectStyle}>
-                    <SelectValue placeholder="Maximum uses" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" align="start">
-                    <SelectItem value="0">No limit</SelectItem>
-                    <SelectItem value="1">1 use</SelectItem>
-                    <SelectItem value="5">5 uses</SelectItem>
-                    <SelectItem value="10">10 uses</SelectItem>
-                    <SelectItem value="25">25 uses</SelectItem>
-                    <SelectItem value="100">100 uses</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                  <SelectValue placeholder="Expire after" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="1">1 hour</SelectItem>
+                  <SelectItem value="6">6 hours</SelectItem>
+                  <SelectItem value="24">24 hours</SelectItem>
+                  <SelectItem value="168">7 days</SelectItem>
+                  <SelectItem value="0">Never</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldPlate>
+            <FieldPlate label="Max uses" htmlFor="max-uses" ground="ply-3">
+              <Select
+                value={String(state.maxUses)}
+                onValueChange={(value) =>
+                  setState((prev) => ({
+                    ...prev,
+                    maxUses: Number(value),
+                  }))
+                }
+              >
+                <SelectTrigger id="max-uses" size="lg" className={selectStyle}>
+                  <SelectValue placeholder="Maximum uses" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="0">No limit</SelectItem>
+                  <SelectItem value="1">1 use</SelectItem>
+                  <SelectItem value="5">5 uses</SelectItem>
+                  <SelectItem value="10">10 uses</SelectItem>
+                  <SelectItem value="25">25 uses</SelectItem>
+                  <SelectItem value="100">100 uses</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldPlate>
+            {state.error ? (
+              <RowError className="mt-0">{state.error}</RowError>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-3">
+            <FieldPlate
+              label="Invite link"
+              htmlFor="invite-link"
+              ground="ply-3"
+              className="w-full"
+            >
+              <Input
+                id="invite-link"
+                inputSize="lg"
+                value={link}
+                readOnly
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+            </FieldPlate>
+            <Button
+              variant="rule"
+              onClick={() => setState((prev) => ({ ...prev, inviteCode: "" }))}
+            >
+              Generate new link
+            </Button>
+          </div>
+        )}
+
+        <ResponsiveDialogFooter>
+          {state.inviteCode ? (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Done
+              </Button>
+              <Button variant="primary" onClick={() => void copyLink()}>
+                <Icon name={state.copied ? "check" : "copy"} size="sm" />
+                {state.copied ? "Copied" : "Copy link"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
               <Button
-                className="w-full max-md:min-h-11"
-                size="lg"
-                onClick={createInvite}
-                disabled={state.loading}
+                variant="primary"
+                onClick={() => void createInvite()}
                 loading={state.loading}
               >
                 Generate invite link
               </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  value={`${getWebOrigin()}/invite/${state.inviteCode}`}
-                  readOnly
-                  aria-label="Invite link"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                  className="flex-1 max-md:min-h-11"
-                />
-                <Button
-                  variant="secondary"
-                  onClick={copyLink}
-                  className={cn(
-                    "h-9 max-md:min-h-11",
-                    state.copied && "text-rm-accent-ink",
-                  )}
-                >
-                  {state.copied ? (
-                    <>
-                      <Icon name="check" size="sm" /> Copied
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="copy" size="sm" /> Copy
-                    </>
-                  )}
-                </Button>
-              </div>
-              <p className="text-ui-xs text-rm-text-muted">
-                Share this link with others to let them join your server.
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setState((prev) => ({ ...prev, inviteCode: "" }))
-                }
-                className="-ml-2.5 text-rm-text-secondary"
-              >
-                Generate new link
-              </Button>
-            </div>
+            </>
           )}
-        </div>
+        </ResponsiveDialogFooter>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );

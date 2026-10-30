@@ -93,7 +93,7 @@ export default function NotificationsPanel() {
             />
           )}
         </SettingsRow>
-        <SettingsRow id="sound-volume" disabled={!soundsOn}>
+        <SettingsRow id="sound-volume" layout="block" disabled={!soundsOn}>
           {(ids) => (
             <RangeControl
               ids={ids}

@@ -1,22 +1,34 @@
+/**
+ * Invite friends to a channel: a channel-scoped 7-day link is created on
+ * open; friends can be marked invited, or the link copied. The kit's C1
+ * plate (DESIGN.md, Dialog) at `size="md"`: kicker ("Invite · server"), the
+ * Bricolage title, the dithered rule, a 15/22 body, a friend search and the
+ * invite link as legend plates on ply-3, and a footer of 48px keys (ghost
+ * Done, notched Copy link).
+ */
+
 import { Button } from "@/components/ui/button";
+import { DialogKicker, DialogRule } from "@/components/ui/dialog";
+import { Icon } from "@/components/ui/icon";
+import { FieldPlate, Input } from "@/components/ui/input";
 import {
   ResponsiveDialog,
-  ResponsiveDialogClose,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { IconButton } from "@/components/ui/IconButton";
-import { Input } from "@/components/ui/input";
+import { copyToClipboard } from "@/components/ui/toast";
 import { apiPost } from "@/lib/api-client";
-import { getAuthAssetUrl, getWebOrigin } from "@/lib/platform";
+import { describeApiError } from "@/lib/api-errors";
+import { getWebOrigin } from "@/lib/platform";
 import type { Channel, Relationship } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-import { useEffect, useId, useMemo, useState } from "react";
-import { AvatarImage } from "./AvatarImage";
-import { Icon } from "@/components/ui/icon";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
+import { MiniAvatar } from "./MiniAvatar";
 
 interface ChannelInviteModalProps {
   open: boolean;
@@ -41,15 +53,17 @@ export default function ChannelInviteModal({
     inviteCode: string;
     loading: boolean;
     copied: boolean;
+    error: string | null;
     invitedUsers: Set<string>;
   }>({
     search: "",
     inviteCode: "",
     loading: true,
     copied: false,
+    error: null,
     invitedUsers: new Set(),
   });
-  const [_invitedUsers, _setInvitedUsers] = useState<Set<string>>(new Set());
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -59,9 +73,17 @@ export default function ChannelInviteModal({
       inviteCode: "",
       loading: true,
       copied: false,
+      error: null,
       invitedUsers: new Set(),
     });
   }, [open, serverId, channel.id]);
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
 
   // Filter to accepted friends only (type 0)
   const friends = useMemo(
@@ -79,8 +101,10 @@ export default function ChannelInviteModal({
     );
   }, [friends, state.search]);
 
-  // Auto-create a channel-scoped invite on open
+  // Create a channel-scoped invite each time the dialog opens (not while it
+  // closes: the parent keeps it mounted through the exit).
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
     async function createInvite() {
       try {
@@ -94,32 +118,31 @@ export default function ChannelInviteModal({
         if (!cancelled)
           setState((prev) => ({ ...prev, inviteCode: data.code }));
       } catch (err) {
-        console.error("Failed to create invite:", err);
+        if (!cancelled)
+          setState((prev) => ({
+            ...prev,
+            error: describeApiError(err, "create the invite link"),
+          }));
       } finally {
         if (!cancelled) setState((prev) => ({ ...prev, loading: false }));
       }
     }
-    createInvite();
+    void createInvite();
     return () => {
       cancelled = true;
     };
   }, [open, serverId, channel.id]);
 
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
   const copyLink = async () => {
     if (!state.inviteCode) return;
     const link = `${getWebOrigin()}/invite/${state.inviteCode}`;
-    await navigator.clipboard.writeText(link);
+    if (!(await copyToClipboard(link, "Link copied"))) return;
     setState((prev) => ({ ...prev, copied: true }));
-    setTimeout(() => setState((prev) => ({ ...prev, copied: false })), 2000);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(
+      () => setState((prev) => ({ ...prev, copied: false })),
+      2000,
+    );
   };
 
   const handleInviteUser = (userId: string) => {
@@ -133,6 +156,8 @@ export default function ChannelInviteModal({
   const inviteUrl = state.inviteCode
     ? `${getWebOrigin()}/invite/${state.inviteCode}`
     : "";
+  const channelName =
+    channel.channel_type === "voice" ? channel.name : `#${channel.name}`;
 
   return (
     <ResponsiveDialog
@@ -140,160 +165,135 @@ export default function ChannelInviteModal({
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
       <ResponsiveDialogContent
-        showCloseButton={false}
-        dialogClassName="w-full max-w-[480px] overflow-hidden flex flex-col max-h-[80dvh]"
-        drawerClassName="px-0"
+        size="md"
+        placement="top"
+        dialogClassName="max-h-[80dvh] grid-rows-[auto_auto_minmax(0,1fr)_auto_auto] overflow-hidden"
       >
-        <div>
-          {/* Header */}
-          <div className="px-6 pt-5 pb-3">
-            <ResponsiveDialogClose asChild>
-              <IconButton
-                icon="close"
-                type="button"
-                className="absolute right-4 top-4 max-md:hidden"
-                aria-label="Close invite modal"
-              />
-            </ResponsiveDialogClose>
+        <ResponsiveDialogHeader>
+          <DialogKicker>
+            Invite · <InlineEmojiText text={serverName} />
+          </DialogKicker>
+          <ResponsiveDialogTitle>
+            Invite friends to <InlineEmojiText text={serverName} />
+          </ResponsiveDialogTitle>
+          <DialogRule />
+          <ResponsiveDialogDescription className="mt-2">
+            They land in <InlineEmojiText text={channelName} />.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-            <ResponsiveDialogTitle className="text-ui-lg font-semibold text-rm-text">
-              Invite friends to{" "}
-              <InlineEmojiText
-                text={serverName}
-                className="text-rm-accent-ink"
-              />
-            </ResponsiveDialogTitle>
-            <ResponsiveDialogDescription className="mt-0.5 flex items-center gap-1 text-ui-sm text-rm-text-muted">
-              Recipients will land in <Icon name="textChannel" size="xs" />
-              <InlineEmojiText text={channel.name} />
-            </ResponsiveDialogDescription>
+        <FieldPlate
+          label="Search friends"
+          htmlFor={friendSearchInputId}
+          ground="ply-3"
+        >
+          <div className="relative">
+            <Icon
+              name="search"
+              size="sm"
+              className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-ink-3"
+            />
+            <Input
+              id={friendSearchInputId}
+              type="text"
+              inputSize="lg"
+              placeholder="Search for friends"
+              value={state.search}
+              onChange={(e) =>
+                setState((prev) => ({ ...prev, search: e.target.value }))
+              }
+              className="pl-11"
+            />
           </div>
+        </FieldPlate>
 
-          {/* Search */}
-          <div className="px-6 pb-2">
-            <div className="relative">
-              <label htmlFor={friendSearchInputId} className="sr-only">
-                Search friends
-              </label>
-              <Icon
-                name="search"
-                size="sm"
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-              />
-              <Input
-                id={friendSearchInputId}
-                type="text"
-                placeholder="Search for friends"
-                value={state.search}
-                onChange={(e) =>
-                  setState((prev) => ({ ...prev, search: e.target.value }))
-                }
-                className="pl-9"
-              />
-            </div>
-          </div>
-
-          {/* Friends list */}
-          <div className="flex-1 overflow-y-auto px-3 custom-scrollbar min-h-0">
-            {friends.length === 0 ? (
-              <div className="px-3 py-8 text-center text-ui-sm text-rm-text-muted">
-                No friends to invite. Add some friends first!
-              </div>
-            ) : filteredFriends.length === 0 ? (
-              <div className="px-3 py-8 text-center text-ui-sm text-rm-text-muted">
-                No friends matching &quot;{state.search}&quot;
-              </div>
-            ) : (
-              filteredFriends.map((rel: Relationship) => {
+        <div className="-mx-2 min-h-0 flex-1 overflow-y-auto">
+          {friends.length === 0 ? (
+            <p className="px-2 py-6 text-center text-ui-sm text-ink-2">
+              No friends to invite yet. Send the link below instead.
+            </p>
+          ) : filteredFriends.length === 0 ? (
+            <p className="px-2 py-6 text-center text-ui-sm text-ink-2">
+              No friends match &ldquo;{state.search}&rdquo;.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-px">
+              {filteredFriends.map((rel: Relationship) => {
                 const isInvited = state.invitedUsers.has(rel.user.id);
                 const displayName =
                   rel.user.display_name?.trim() || rel.user.username;
                 return (
-                  <div
+                  <li
                     key={rel.user.id}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors pointer-fine:hover:bg-rm-bg-hover"
+                    className="flex h-12 items-center gap-3 rounded-sm px-2 transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1"
                   >
-                    {/* Avatar */}
-                    {rel.user.avatar_url ? (
-                      <div className="h-9 w-9 shrink-0 overflow-visible rounded-full">
-                        <AvatarImage
-                          src={getAuthAssetUrl(rel.user.avatar_url)}
-                          alt=""
-                          display={rel.user.avatar_display}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-sm font-semibold text-primary">
-                        {displayName[0].toUpperCase()}
-                      </div>
-                    )}
-
-                    {/* Name */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-ui-sm font-semibold text-rm-text truncate">
-                        <InlineEmojiText text={displayName} />
-                      </p>
-                    </div>
-
-                    {/* Invite button */}
+                    <MiniAvatar
+                      size={32}
+                      avatarUrl={rel.user.avatar_url}
+                      avatarDisplay={rel.user.avatar_display}
+                      displayName={rel.user.display_name}
+                      username={rel.user.username}
+                    />
+                    <p className="min-w-0 flex-1 truncate text-ui-row font-medium text-ink-1">
+                      <InlineEmojiText text={displayName} />
+                    </p>
                     <Button
                       type="button"
                       variant={isInvited ? "ghost" : "secondary"}
                       size="sm"
                       onClick={() => handleInviteUser(rel.user.id)}
                       disabled={isInvited}
-                      className={cn(isInvited && "text-rm-text-muted")}
                     >
                       {isInvited ? "Invited" : "Invite"}
                     </Button>
-                  </div>
+                  </li>
                 );
-              })
-            )}
-          </div>
-
-          {/* Bottom: invite link */}
-          <div className="border-t border-rm-border px-6 py-4">
-            <label
-              htmlFor={inviteLinkInputId}
-              className="mb-2 block text-ui-xs font-medium text-rm-text-muted"
-            >
-              Or, send a server invite link to a friend
-            </label>
-            <div className="flex gap-2">
-              <Input
-                id={inviteLinkInputId}
-                value={state.loading ? "Generating..." : inviteUrl}
-                readOnly
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-                className="flex-1 truncate"
-              />
-              <Button
-                type="button"
-                variant={state.copied ? "secondary" : "default"}
-                onClick={copyLink}
-                disabled={state.loading || !state.inviteCode}
-                loading={state.loading}
-                className={cn("h-9", state.copied && "text-rm-accent-ink")}
-              >
-                {state.copied ? (
-                  <>
-                    <Icon name="check" size="sm" /> Copied
-                  </>
-                ) : (
-                  <>
-                    <Icon name="copy" size="sm" /> Copy
-                  </>
-                )}
-              </Button>
-            </div>
-            {state.inviteCode && (
-              <p className="mt-2 text-ui-2xs text-rm-text-muted">
-                Your invite link expires in 7 days.
-              </p>
-            )}
-          </div>
+              })}
+            </ul>
+          )}
         </div>
+
+        <div className="flex flex-col gap-1.5">
+          <FieldPlate
+            label="Invite link"
+            htmlFor={inviteLinkInputId}
+            ground="ply-3"
+          >
+            <Input
+              id={inviteLinkInputId}
+              inputSize="lg"
+              value={state.loading ? "Generating…" : inviteUrl}
+              readOnly
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+              className="truncate"
+            />
+          </FieldPlate>
+          <p
+            className={cn(
+              "text-ui-xs",
+              state.error ? "text-danger-ink" : "text-ink-3",
+            )}
+          >
+            {state.error ??
+              (state.inviteCode ? "Your invite link expires in 7 days." : "")}
+          </p>
+        </div>
+
+        <ResponsiveDialogFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Done
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => void copyLink()}
+            disabled={state.loading || !state.inviteCode}
+            loading={state.loading}
+          >
+            <Icon name={state.copied ? "check" : "copy"} size="sm" />
+            {state.copied ? "Copied" : "Copy link"}
+          </Button>
+        </ResponsiveDialogFooter>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );

@@ -2,20 +2,21 @@ import React from "react";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { Attachment, EmbedInfo } from "@/lib/types";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
-import { useClientDateFormatter } from "@/lib/client-date-format";
 import { isPlayableVideo } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { extractCustomEmojiIds } from "@/lib/emoji";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
+import { useMessageTimeFormat } from "./message-time";
 import { GifProviderBranding } from "./GifProviderBranding";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import VideoAttachment from "./VideoAttachment";
 import EmojiToken from "./EmojiToken";
-import { AvatarImage } from "./AvatarImage";
+import { PreviewAvatar } from "./MessagePreviewCard";
 import InlineEmojiText from "./InlineEmojiText";
 
 interface SharePreviewAuthor {
@@ -65,8 +66,7 @@ export default function ShareSnapshotPreview({
   previewMedia = false,
 }: ShareSnapshotPreviewProps) {
   const displayName = author.display_name || author.username || "Unknown";
-  const initial = (displayName[0] || "?").toUpperCase();
-  const formatDate = useClientDateFormatter();
+  const { time, full, shortDate, today } = useMessageTimeFormat();
   const imageAttachments = attachments.filter((attachment) =>
     attachment.content_type?.startsWith("image/"),
   );
@@ -89,186 +89,189 @@ export default function ShareSnapshotPreview({
   return (
     <article
       className={cn(
-        "rounded-lg border border-rm-border bg-rm-bg-surface p-4",
+        "flex gap-3 rounded-lg border border-line bg-ply-2 p-4",
         className,
       )}
     >
-      {originalEdited && (
-        <p className="mb-4 flex items-start gap-2 rounded-md bg-rm-warning-tint px-3 py-2 text-ui-sm text-rm-warning-ink">
-          <Icon name="edit" size="sm" className="mt-px shrink-0" />
-          <span>The original message was edited after this was shared.</span>
-        </p>
-      )}
+      <PreviewAvatar
+        name={displayName}
+        src={avatarUrl}
+        display={author.avatar_display ?? null}
+        size={32}
+      />
+      <div className="min-w-0 flex-1">
+        {originalEdited && (
+          <p className="mb-3 flex items-start gap-2 rounded-md bg-warning-tint px-3 py-2 text-ui-sm text-warning-ink">
+            <Icon name="edit" size="sm" className="mt-px shrink-0" />
+            <span>The original message was edited after this was shared.</span>
+          </p>
+        )}
 
-      <div className="mb-3 flex items-start gap-3">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-accent-tint text-ui-sm font-semibold text-rm-accent-ink">
-          {avatarUrl ? (
-            <AvatarImage
-              src={avatarUrl}
-              alt=""
-              display={author.avatar_display ?? null}
-            />
-          ) : (
-            initial
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+          <h3 className="min-w-0 truncate text-ui-row font-semibold text-ink-1">
+            <InlineEmojiText text={displayName} />
+          </h3>
+          {createdAt && (
+            <time
+              dateTime={createdAt}
+              title={full(createdAt)}
+              className="shrink-0 whitespace-nowrap text-ink-3"
+            >
+              {shortDate(createdAt) === time(createdAt) || today === null ? (
+                <Num>{time(createdAt)}</Num>
+              ) : (
+                <>
+                  <span className="text-ui-xs">{shortDate(createdAt)}</span>{" "}
+                  <Num>{time(createdAt)}</Num>
+                </>
+              )}
+            </time>
           )}
         </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <h3 className="text-ui-sm font-semibold text-rm-text">
-              <InlineEmojiText text={displayName} />
-            </h3>
-            {createdAt && (
-              <time className="text-ui-xs text-rm-text-muted">
-                {formatDate(createdAt, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </time>
-            )}
+        {source && (
+          <p className="truncate text-ui-xs text-ink-3">
+            <InlineEmojiText
+              text={`${source.server_name ?? ""} / #${source.channel_name ?? ""}`}
+            />
+          </p>
+        )}
+
+        {hasContent ? (
+          <div className="max-w-[72ch] whitespace-pre-wrap break-words text-ui-base font-normal text-ink-1">
+            <MarkdownRenderer content={content} />
           </div>
-          {source && (
-            <p className="mt-0.5 truncate text-ui-xs text-rm-text-muted">
-              <InlineEmojiText
-                text={`${source.server_name ?? ""} / #${source.channel_name ?? ""}`}
+        ) : (
+          <p className="text-ui-sm text-ink-3">Attachments only</p>
+        )}
+
+        {embeds.length > 0 && (
+          <div className="mt-3 flex flex-col items-start gap-2">
+            {embeds.map((embed, index) => (
+              <LinkEmbed
+                key={embed.id || `${embed.url}-${index}`}
+                embed={embed}
               />
-            </p>
-          )}
-        </div>
-      </div>
+            ))}
+          </div>
+        )}
 
-      {hasContent ? (
-        <div className="whitespace-pre-wrap text-ui-base font-medium leading-[1.25] text-rm-text">
-          <MarkdownRenderer content={content} />
-        </div>
-      ) : (
-        <p className="text-ui-sm italic text-rm-text-muted">
-          (attachment only)
-        </p>
-      )}
+        {imageAttachments.length > 0 && (
+          <div className="mt-3 grid max-w-[560px] grid-cols-1 gap-2 md:grid-cols-2">
+            {imageAttachments.map((attachment) => {
+              const url = mediaUrlForAttachment(attachment);
+              return (
+                <SensitiveMediaFrame
+                  key={attachment.id}
+                  attachmentId={attachment.id}
+                  blur={shouldBlurSensitiveAttachment(
+                    attachment,
+                    contentFilter,
+                  )}
+                  className="group/image relative overflow-hidden rounded-xl border border-line bg-tint-1"
+                >
+                  {({ revealed }) => {
+                    const interactive =
+                      !shouldBlurSensitiveAttachment(
+                        attachment,
+                        contentFilter,
+                      ) || revealed;
+                    return (
+                      <a
+                        href={interactive ? url : undefined}
+                        target={interactive ? "_blank" : undefined}
+                        rel={interactive ? "noreferrer" : undefined}
+                        className="block"
+                      >
+                        <img
+                          src={url}
+                          alt={attachment.filename}
+                          className={cn(
+                            "h-full w-full object-contain",
+                            previewMedia ? "max-h-[220px]" : "max-h-[360px]",
+                          )}
+                          loading="lazy"
+                        />
+                        <GifProviderBranding
+                          fileKeyOrUrl={attachment.file_key || attachment.url}
+                        />
+                        <span className="sr-only">
+                          Open {attachment.filename}
+                        </span>
+                      </a>
+                    );
+                  }}
+                </SensitiveMediaFrame>
+              );
+            })}
+          </div>
+        )}
 
-      {embeds.length > 0 && (
-        <div className="mt-3 flex flex-col items-start gap-2">
-          {embeds.map((embed, index) => (
-            <LinkEmbed
-              key={embed.id || `${embed.url}-${index}`}
-              embed={embed}
-            />
-          ))}
-        </div>
-      )}
-
-      {imageAttachments.length > 0 && (
-        <div className="mt-3 grid max-w-[560px] grid-cols-1 gap-2 md:grid-cols-2">
-          {imageAttachments.map((attachment) => {
-            const url = mediaUrlForAttachment(attachment);
-            return (
+        {videoAttachments.length > 0 && (
+          <div className="mt-3 flex max-w-[560px] flex-col gap-2">
+            {videoAttachments.map((attachment) => (
               <SensitiveMediaFrame
                 key={attachment.id}
                 attachmentId={attachment.id}
                 blur={shouldBlurSensitiveAttachment(attachment, contentFilter)}
-                className="group/image relative overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated"
+                className="w-fit max-w-full"
               >
-                {({ revealed }) => {
-                  const interactive =
-                    !shouldBlurSensitiveAttachment(attachment, contentFilter) ||
-                    revealed;
-                  return (
-                    <a
-                      href={interactive ? url : undefined}
-                      target={interactive ? "_blank" : undefined}
-                      rel={interactive ? "noreferrer" : undefined}
-                      className="block"
-                    >
-                      <img
-                        src={url}
-                        alt={attachment.filename}
-                        className={cn(
-                          "h-full w-full object-contain transition-[filter] duration-150 ease-(--rm-ease-out) pointer-fine:group-hover/image:brightness-105",
-                          previewMedia ? "max-h-[220px]" : "max-h-[360px]",
-                        )}
-                        loading="lazy"
-                      />
-                      <GifProviderBranding
-                        fileKeyOrUrl={attachment.file_key || attachment.url}
-                      />
-                      <span className="sr-only">
-                        Open {attachment.filename}
-                      </span>
-                    </a>
-                  );
-                }}
+                <VideoAttachment
+                  src={mediaUrlForAttachment(attachment)}
+                  filename={attachment.filename}
+                  maxWidth={560}
+                  maxHeight={previewMedia ? 240 : 420}
+                  showDownload={false}
+                  brandingKey={attachment.file_key || attachment.url}
+                />
               </SensitiveMediaFrame>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
 
-      {videoAttachments.length > 0 && (
-        <div className="mt-3 flex max-w-[560px] flex-col gap-2">
-          {videoAttachments.map((attachment) => (
-            <SensitiveMediaFrame
-              key={attachment.id}
-              attachmentId={attachment.id}
-              blur={shouldBlurSensitiveAttachment(attachment, contentFilter)}
-              className="w-fit max-w-full"
-            >
-              <VideoAttachment
-                src={mediaUrlForAttachment(attachment)}
-                filename={attachment.filename}
-                maxWidth={560}
-                maxHeight={previewMedia ? 240 : 420}
-                showDownload={false}
-                brandingKey={attachment.file_key || attachment.url}
-              />
-            </SensitiveMediaFrame>
-          ))}
-        </div>
-      )}
+        {omittedAttachmentCount > 0 && (
+          <p className="mt-3 flex items-start gap-1.5 text-ui-xs text-pretty text-ink-3">
+            <Icon
+              name={
+                imageAttachments.length > 0 || videoAttachments.length > 0
+                  ? "paperclip"
+                  : "image"
+              }
+              size="xs"
+              className="mt-px shrink-0"
+            />
+            <span>
+              {omittedAttachmentCount === 1
+                ? "1 attachment isn't included in this public share."
+                : `${omittedAttachmentCount} attachments aren't included in this public share.`}
+            </span>
+          </p>
+        )}
 
-      {omittedAttachmentCount > 0 && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-ui-sm text-rm-text-muted">
-          {imageAttachments.length > 0 || videoAttachments.length > 0 ? (
-            <Icon name="paperclip" size="sm" className="shrink-0" />
-          ) : (
-            <Icon name="image" size="sm" className="shrink-0" />
-          )}
-          <span>
-            {omittedAttachmentCount === 1
-              ? "1 attachment isn't included in this public share."
-              : `${omittedAttachmentCount} attachments aren't included in this public share.`}
-          </span>
-        </div>
-      )}
-
-      {(reactions.length > 0 || replyCount > 0) && (
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-rm-border pt-4">
-          {reactions.map((reaction) => (
-            <span
-              key={reaction.emoji}
-              className="rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-ui-xs font-semibold text-rm-text-secondary"
-            >
-              <span className="inline-flex items-center gap-1.5">
+        {reactions.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {reactions.map((reaction) => (
+              <span
+                key={reaction.emoji}
+                className="inline-flex h-6 items-center gap-1 rounded-sm bg-tint-1 px-1.5 text-ink-2"
+              >
                 <EmojiToken
                   value={reaction.emoji}
                   customEmojiMap={reactionEmojiMap}
-                  className="h-4 w-4"
-                  fallbackClassName="max-w-[84px] truncate text-ui-2xs"
+                  className="size-4"
+                  fallbackClassName="max-w-24 truncate text-ui-xs"
                 />
-                <span>{reaction.count}</span>
+                <Num>{reaction.count}</Num>
               </span>
-            </span>
-          ))}
-          {replyCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-ui-xs font-semibold text-rm-text-secondary">
-              <Icon name="chat" size="xs" />
-              {replyCount}
-            </span>
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+
+        {replyCount > 0 && (
+          <p className="mt-2 text-ui-xs text-ink-3">
+            <Num>{replyCount}</Num> {replyCount === 1 ? "reply" : "replies"}
+          </p>
+        )}
+      </div>
     </article>
   );
 }

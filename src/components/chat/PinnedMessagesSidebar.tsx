@@ -1,28 +1,50 @@
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/IconButton";
 import { REVEAL } from "@/components/ui/interaction";
+import { Num } from "@/components/ui/num";
 import { SidePanel, type SidePanelMode } from "@/components/ui/side-panel";
-import { getDisplayInitial } from "@/lib/display-name";
-import { getAuthAssetUrl } from "@/lib/platform";
+import { Skeleton } from "@/components/ui/skeleton";
+import { getAuthAssetUrl, getDownloadUrl } from "@/lib/platform";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
-import { getDownloadUrl } from "@/lib/platform";
-import { useClientDateFormatter } from "@/lib/client-date-format";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 
 import React from "react";
-import { AvatarImage } from "./AvatarImage";
 import { ImageGrid } from "./ImageGrid";
+import InlineEmojiText from "./InlineEmojiText";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { PreviewAvatar } from "./MessagePreviewCard";
+import { useMessageTimeFormat, type MessageTimeFormat } from "./message-time";
 import VideoAttachment from "./VideoAttachment";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * What a pin's Jump and Unpin keys are named after: its author plus a short
+ * snippet, so a list of identical "Jump" buttons is told apart by screen
+ * readers and voice control.
+ */
+function pinnedRowLabel(
+  verb: string,
+  author: string,
+  msg: Pick<Message, "content" | "attachments">,
+): string {
+  const text = (msg.content ?? "").replace(/\s+/g, " ").trim();
+  const snippet =
+    text.length > 60
+      ? `${text.slice(0, 60).trimEnd()}...`
+      : text || ((msg.attachments?.length ?? 0) > 0 ? "attachment" : "");
+  return snippet
+    ? `${verb} from ${author}: ${snippet}`
+    : `${verb} from ${author}`;
 }
 
 interface PinnedMessagesSidebarProps {
@@ -37,10 +59,35 @@ interface PinnedMessagesSidebarProps {
   forceMode?: SidePanelMode;
 }
 
+/** Placeholder rows in the row anatomy: avatar 32, a name line, two body lines. */
+function PinsLoading() {
+  return (
+    <div role="status" className="flex flex-col">
+      <span className="sr-only">Loading</span>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="flex gap-3 border-b border-line px-4 py-3"
+        >
+          <Skeleton className="size-8 shrink-0 rounded-avatar" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2 pt-1">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className={i === 1 ? "h-3 w-1/3" : "h-3 w-2/3"} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Pinned messages as a side panel (design-system 12.10, 13.1): docked at
  * `lg`, a sheet below, a right drawer on phones. The panel owns Escape, the
- * back button, outside dismissal and focus return.
+ * back button, outside dismissal and focus return. Pins are rows on the
+ * panel ply with `--line` seams, not cards; Jump and Unpin overlay the row
+ * on hover or focus instead of reserving space.
  */
 export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   open,
@@ -52,6 +99,7 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   canUnpin,
   forceMode,
 }) => {
+  const timeFormat = useMessageTimeFormat();
   return (
     <SidePanel
       open={open}
@@ -62,40 +110,25 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
       forceMode={forceMode}
     >
       <div
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 custom-scrollbar"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         aria-busy={isLoading || undefined}
       >
         {isLoading ? (
-          <div className="flex flex-col gap-4">
-            <span className="sr-only">Loading</span>
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                aria-hidden="true"
-                className="h-24 animate-pulse rounded-lg bg-rm-tint-1"
-              />
-            ))}
-          </div>
+          <PinsLoading />
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <Icon
-              name="pin"
-              size="3xl"
-              className="text-rm-text-muted max-md:size-8"
-            />
-            <p className="text-ui-md font-semibold text-rm-text">
-              No pinned messages
-            </p>
-            <p className="max-w-[36ch] text-ui-sm text-pretty text-rm-text-secondary">
-              Pin important messages to see them here.
-            </p>
-          </div>
+          <EmptyState
+            size="sm"
+            className="py-12"
+            title="No pinned messages"
+            description="Pin a message from its menu and it shows up here for everyone in the channel."
+          />
         ) : (
-          <ul className="flex flex-col gap-4">
+          <ul className="flex flex-col">
             {messages.map((msg) => (
-              <li key={msg.id}>
+              <li key={msg.id} className="border-b border-line">
                 <PinnedMessageItem
                   msg={msg}
+                  timeFormat={timeFormat}
                   onJumpToMessage={onJumpToMessage}
                   onUnpin={onUnpin}
                   canUnpin={canUnpin}
@@ -111,17 +144,18 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
 
 const PinnedMessageItem = ({
   msg,
+  timeFormat,
   onJumpToMessage,
   onUnpin,
   canUnpin,
 }: {
   msg: Message;
+  timeFormat: MessageTimeFormat;
   onJumpToMessage: (id: string) => void;
   onUnpin: (id: string, skipConfirm: boolean) => void;
   canUnpin: boolean;
 }) => {
   const authorInfo = useUserResolution(msg.author_id, msg.author);
-  const formatDate = useClientDateFormatter();
   const attachments = msg.attachments ?? [];
   const imageAttachments: Message["attachments"] = [];
   const videoAttachments: Message["attachments"] = [];
@@ -137,150 +171,145 @@ const PinnedMessageItem = ({
     }
   }
 
+  const shortDate = timeFormat.shortDate(msg.created_at);
+  const time = timeFormat.time(msg.created_at);
+  const isToday = shortDate === time;
+
   return (
-    <article className="group relative flex flex-col gap-3 rounded-lg border border-rm-border bg-rm-bg-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-tint-2 text-ui-sm font-semibold text-rm-text">
-            {authorInfo.avatarUrl ? (
-              <AvatarImage
-                src={getAuthAssetUrl(authorInfo.avatarUrl)}
-                alt=""
-                display={authorInfo.avatarDisplay}
-              />
-            ) : (
-              getDisplayInitial({
-                display_name: authorInfo.displayName,
-                username: authorInfo.username,
-              })
-            )}
-          </div>
-          <div className="flex min-w-0 flex-col">
-            <div className="mb-0.5 flex items-baseline gap-2">
-              <span className="truncate text-ui-base font-medium text-rm-text">
-                {authorInfo.displayName}
-              </span>
-              <span className="shrink-0 text-ui-xs text-rm-text-muted">
-                {formatDate(msg.created_at, {
-                  year: "numeric",
-                  month: "numeric",
-                  day: "numeric",
-                })}
-              </span>
-            </div>
-
-            {msg.content && (
-              <div className="text-ui-sm break-words text-rm-text-secondary">
-                <MarkdownRenderer content={msg.content} />
-                {msg.updated_at && (
-                  <span
-                    className="ml-1.5 text-ui-xs text-rm-text-muted"
-                    title={`Edited ${formatDate(msg.updated_at, {
-                      year: "numeric",
-                      month: "numeric",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "numeric",
-                      second: "numeric",
-                    })}`}
-                  >
-                    (edited)
-                  </span>
-                )}
-              </div>
-            )}
-
-            {attachments.length > 0 && (
-              <div className="mt-2 flex flex-col gap-2">
-                {/* Images first */}
-                {imageAttachments.length > 0 && (
-                  <div className="max-w-full">
-                    <ImageGrid
-                      attachments={imageAttachments}
-                      username={authorInfo.username}
-                      displayName={authorInfo.displayName}
-                      avatarUrl={authorInfo.avatarUrl}
-                      avatarDisplay={authorInfo.avatarDisplay}
-                      createdAt={msg.created_at}
-                    />
-                  </div>
-                )}
-
-                {/* Videos */}
-                {videoAttachments.map((att) => (
-                  <VideoAttachment
-                    key={att.id}
-                    src={att.url || `/api/${att.file_key}`}
-                    filename={att.filename}
-                    maxWidth={280}
-                    maxHeight={200}
-                  />
-                ))}
-
-                {/* Other files */}
-                {otherAttachments.map((att) => {
-                  const { icon: typeIcon, colorClass } = getFileIcon(
-                    att.filename,
-                    att.content_type ?? undefined,
-                  );
-                  return (
-                    <a
-                      key={att.id}
-                      href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
-                      download={att.filename}
-                      className="group/file flex max-w-[280px] items-center gap-3 rounded-md border border-rm-border p-3 transition-colors pointer-fine:hover:bg-rm-tint-1"
-                    >
-                      <div
-                        className={cn(
-                          "flex size-9 shrink-0 items-center justify-center rounded-md bg-rm-tint-1",
-                          colorClass,
-                        )}
-                      >
-                        <Icon name={typeIcon} size="md" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-ui-sm font-medium text-rm-accent-ink pointer-fine:group-hover/file:underline">
-                          {att.filename}
-                        </p>
-                        <p className="text-ui-xs text-rm-text-muted">
-                          {formatFileSize(att.size_bytes)}
-                        </p>
-                      </div>
-                      <Icon
-                        name="download"
-                        size="sm"
-                        className="shrink-0 text-rm-text-muted transition-colors pointer-fine:group-hover/file:text-rm-text-secondary"
-                      />
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className={cn("flex shrink-0 items-center gap-1", REVEAL)}>
-          <Button
-            variant="secondary"
-            size="xs"
-            onClick={() => onJumpToMessage(msg.id)}
+    <article className="group relative flex gap-3 px-4 py-3 transition-colors duration-(--dur-1) ease-out pointer-fine:hover:bg-tint-1">
+      <PreviewAvatar
+        name={authorInfo.displayName}
+        src={
+          authorInfo.avatarUrl ? getAuthAssetUrl(authorInfo.avatarUrl) : null
+        }
+        display={authorInfo.avatarDisplay}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="min-w-0 truncate text-ui-row font-semibold text-ink-1">
+            <InlineEmojiText text={authorInfo.displayName} />
+          </span>
+          <time
+            dateTime={msg.created_at}
+            title={timeFormat.full(msg.created_at)}
+            className="shrink-0 text-ui-xs text-ink-3"
           >
-            Jump
-          </Button>
-          {canUnpin && (
-            <IconButton
-              icon="close"
-              size="xs"
-              variant="destructive"
-              aria-label="Unpin message"
-              tooltip="Unpin (Shift-click to skip the confirmation)"
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnpin(msg.id, e.shiftKey);
-              }}
-            />
-          )}
+            {isToday ? <Num>{time}</Num> : shortDate}
+          </time>
         </div>
+
+        {msg.content && (
+          <div className="text-ui-sm/5 wrap-break-word text-ink-1">
+            <MarkdownRenderer content={msg.content} />
+            {msg.updated_at && (
+              <span
+                className="text-ui-xs whitespace-nowrap text-ink-3"
+                title={`Edited ${timeFormat.full(msg.updated_at)}`}
+              >
+                {" "}(edited)
+              </span>
+            )}
+          </div>
+        )}
+
+        {attachments.length > 0 && (
+          <div className="mt-2 flex flex-col gap-2">
+            {imageAttachments.length > 0 && (
+              <div className="max-w-full">
+                <ImageGrid
+                  attachments={imageAttachments}
+                  username={authorInfo.username}
+                  displayName={authorInfo.displayName}
+                  avatarUrl={authorInfo.avatarUrl}
+                  avatarDisplay={authorInfo.avatarDisplay}
+                  createdAt={msg.created_at}
+                />
+              </div>
+            )}
+
+            {videoAttachments.map((att) => (
+              <VideoAttachment
+                key={att.id}
+                src={att.url || `/api/${att.file_key}`}
+                filename={att.filename}
+                maxWidth={280}
+                maxHeight={200}
+              />
+            ))}
+
+            {otherAttachments.map((att) => {
+              const { icon: typeIcon } = getFileIcon(
+                att.filename,
+                att.content_type ?? undefined,
+              );
+              return (
+                <a
+                  key={att.id}
+                  href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
+                  download={att.filename}
+                  className="group/file flex max-w-[280px] items-center gap-3 rounded-lg border border-line bg-ply-2 p-2 transition-colors duration-(--dur-1) pointer-fine:hover:bg-tint-1"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-tint-2 text-ink-2">
+                    <Icon name={typeIcon} size="md" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-ui-sm font-medium text-ink-1 pointer-fine:group-hover/file:underline">
+                      {att.filename}
+                    </span>
+                    <Num size="sm" className="text-ink-3">
+                      {formatFileSize(att.size_bytes)}
+                    </Num>
+                  </span>
+                  <Icon
+                    name="download"
+                    size="sm"
+                    className="shrink-0 text-ink-3 pointer-fine:group-hover/file:text-ink-1"
+                  />
+                </a>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div
+        className={cn(
+          "absolute top-2 right-3 flex items-center gap-0.5 rounded-md border border-line bg-ply-3 p-0.5 shadow-float",
+          // Touch has no hover to reveal them, so they never float over the
+          // text: they take their own column at the row's end.
+          "pointer-coarse:static pointer-coarse:-my-1 pointer-coarse:shrink-0 pointer-coarse:self-start pointer-coarse:border-0 pointer-coarse:bg-transparent pointer-coarse:p-0 pointer-coarse:shadow-none",
+          REVEAL,
+        )}
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={pinnedRowLabel(
+            "Jump to message",
+            authorInfo.displayName,
+            msg,
+          )}
+          onClick={() => onJumpToMessage(msg.id)}
+        >
+          Jump
+        </Button>
+        {canUnpin && (
+          <IconButton
+            icon="close"
+            size={28}
+            variant="destructive"
+            aria-label={pinnedRowLabel(
+              "Unpin message",
+              authorInfo.displayName,
+              msg,
+            )}
+            tooltip="Unpin (Shift-click skips the confirm)"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUnpin(msg.id, e.shiftKey);
+            }}
+          />
+        )}
       </div>
     </article>
   );

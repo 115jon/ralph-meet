@@ -5,7 +5,6 @@ import {
   subscribeDesktopTokenChanges,
 } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { isWideViewport } from "@/hooks/useMediaQuery";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useUser } from "@kova/react";
@@ -19,6 +18,8 @@ import {
   useState,
 } from "react";
 import { useShallow } from "zustand/shallow";
+
+const MEMBER_PANEL_DEFAULT_QUERY = "(min-width: 1280px)";
 
 export function silentPush(path: string) {
   if (typeof window === "undefined") return;
@@ -188,7 +189,12 @@ export function useChatPageLogic() {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("contextmenu", handleContextMenu);
 
-    if (!isWideViewport()) {
+    // The member panel shows by default from 1280 up (talk-tree-spec §3);
+    // below that it starts closed and the header toggle opens it.
+    if (
+      typeof window.matchMedia !== "function" ||
+      !window.matchMedia(MEMBER_PANEL_DEFAULT_QUERY).matches
+    ) {
       uiDispatch({ type: "SET_MEMBERS", show: false });
     }
 
@@ -246,14 +252,26 @@ export function useChatPageLogic() {
     const check = () => {
       if (getDesktopAuthHandoffToken() || (isTauri() && getDesktopToken())) {
         setAuthReady(true);
+        return true;
       }
+      return false;
     };
-    check();
-    const interval = setInterval(check, 200);
+    if (check()) return;
+    // Every token write announces itself (subscribeDesktopTokenChanges),
+    // including the Kova SDK's own pk-scoped write: the SDK reports each one
+    // through onSessionTokenChange, and rememberKovaSessionToken re-announces
+    // it even when the slot is already filled. No poll. A token another tab
+    // wrote arrives as a storage event; focus and visibility re-check too.
     const unsubscribe = subscribeDesktopTokenChanges(check);
+    const onReturn = () => void check();
+    window.addEventListener("storage", onReturn);
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
     return () => {
-      clearInterval(interval);
       unsubscribe();
+      window.removeEventListener("storage", onReturn);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
     };
   }, [authReady]);
 

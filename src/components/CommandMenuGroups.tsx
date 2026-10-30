@@ -1,7 +1,13 @@
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { MiniAvatar } from "@/components/chat/MiniAvatar";
-import { UserStatusDot } from "@/components/chat/UserStatusDot";
+import {
+  normalizeUserStatus,
+  UserStatusDot,
+} from "@/components/chat/UserStatusDot";
+import { CountBadge } from "@/components/ui/badge";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { Kbd } from "@/components/ui/kbd";
+import { MENU_ITEM } from "@/components/ui/menu";
 import { getChannelIcon } from "@/lib/channel-icon";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { AppTheme } from "@/lib/theme-preferences";
@@ -11,46 +17,67 @@ import { Command } from "cmdk";
 import type { ReactNode } from "react";
 import { commandValue, SEARCH_MESSAGES_VALUE } from "./command-menu-filter";
 
-/** Quiet Pro menu row; the highlight is tonal and changes instantly. */
-const ROW =
-  "group/item flex min-h-9 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1 text-ui-sm text-rm-text-secondary outline-none select-none pointer-coarse:min-h-12 aria-selected:bg-rm-tint-2 aria-selected:text-rm-text";
+/**
+ * Menu row (spec §7): 32 high, radius 6, a 20px leading slot (16px glyphs,
+ * 20px avatars and server tiles), text-ui-sm 500. The highlight is tint-2 and
+ * changes instantly: the switcher is used many times a day.
+ */
+const ROW = cn(
+  MENU_ITEM,
+  "group/item h-8 cursor-pointer py-0 text-ink-1 aria-selected:bg-tint-2",
+);
 
+/** Sentence-case group labels (MENU_LABEL); groups sit 4px apart. */
 const GROUP =
-  "not-first:mt-1.5 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-1.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-ui-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-rm-text-muted";
-
-const KBD =
-  "inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-rm-border-strong px-1 font-sans text-ui-2xs font-medium text-rm-text-muted";
+  "not-first:mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-ui-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-ink-3";
 
 /** Shown on the highlighted row, and only where there is a keyboard. */
 function EnterHint() {
   return (
-    <kbd
+    <Kbd
       aria-hidden="true"
-      className={cn(
-        KBD,
-        "ml-2 hidden shrink-0 pointer-fine:group-aria-selected/item:inline-flex",
-      )}
+      className="ml-2 hidden shrink-0 pointer-fine:group-aria-selected/item:inline-flex"
     >
       ↵
-    </kbd>
+    </Kbd>
   );
 }
 
 function Meta({ children }: { children: ReactNode }) {
   return (
-    <span className="ml-auto min-w-0 shrink truncate pl-3 text-ui-xs text-rm-text-muted">
+    <span className="ms-auto min-w-0 shrink truncate pl-3 text-ui-xs font-normal text-ink-3">
       {children}
     </span>
   );
 }
 
-function GlyphBox({ icon }: { icon: IconName }) {
+/** The 20px leading slot with a 16px glyph. */
+function GlyphSlot({
+  icon,
+  className,
+  children,
+}: {
+  icon?: IconName;
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
     <span
       aria-hidden="true"
-      className="flex size-6 shrink-0 items-center justify-center text-rm-text-muted group-aria-selected/item:text-rm-text-secondary"
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center text-ink-3 group-aria-selected/item:text-ink-2",
+        className,
+      )}
     >
-      <Icon name={icon} size="md" />
+      {icon ? <Icon name={icon} size="sm" /> : children}
+    </span>
+  );
+}
+
+function Name({ text }: { text: string }) {
+  return (
+    <span className="min-w-0 truncate">
+      <InlineEmojiText text={text} />
     </span>
   );
 }
@@ -72,7 +99,7 @@ export function ServerIcon({
     <span
       aria-hidden="true"
       className={cn(
-        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-rm-tint-2 text-ui-2xs font-semibold text-rm-text-secondary",
+        "flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-xs bg-tint-2 text-ui-2xs font-semibold text-ink-2",
         className,
       )}
     >
@@ -89,6 +116,107 @@ export function ServerIcon({
     </span>
   );
 }
+
+// ── Rows ───────────────────────────────────────────────────────────────────
+// Shared by the kind groups and the idle Recent / Unread groups. `tag` keeps
+// cmdk values unique when the same place shows in two groups.
+
+export type CommandDm = { id: string; name: string; recipient: User };
+
+function dmName(dm: CommandDm): string {
+  return (
+    dm.recipient?.display_name?.trim() || dm.recipient?.username || dm.name
+  );
+}
+
+export function CommandDmRow({
+  dm,
+  onSelect,
+  tag,
+  badge = 0,
+}: {
+  dm: CommandDm;
+  onSelect: (id: string) => void;
+  tag?: string;
+  badge?: number;
+}) {
+  const recipient = dm.recipient;
+  const displayName = dmName(dm);
+  return (
+    <Command.Item
+      value={commandValue(
+        "dm",
+        displayName,
+        recipient?.username ?? dm.id,
+        tag ?? "",
+      )}
+      onSelect={() => onSelect(dm.id)}
+      className={ROW}
+    >
+      <span className="relative flex size-5 shrink-0 items-center justify-center">
+        <MiniAvatar
+          avatarUrl={recipient?.avatar_url}
+          avatarDisplay={recipient?.avatar_display}
+          displayName={displayName}
+          username={recipient?.username}
+          size={20}
+        />
+        <UserStatusDot
+          status={normalizeUserStatus(recipient?.status)}
+          ring="bg-ply-3"
+          className="absolute -right-1 -bottom-1 size-3"
+        />
+      </span>
+      <Name text={displayName} />
+      {badge > 0 ? (
+        <CountBadge count={badge} className="ms-auto" />
+      ) : (
+        recipient?.username && <Meta>@{recipient.username}</Meta>
+      )}
+      <EnterHint />
+    </Command.Item>
+  );
+}
+
+export function CommandChannelRow({
+  channel,
+  kind,
+  server,
+  onSelect,
+  tag,
+  badge = 0,
+}: {
+  channel: Channel;
+  kind: "channel" | "voice";
+  /** Shown as meta; pass undefined when the user is in one server. */
+  server?: Server;
+  onSelect: (serverId: string, channelId: string) => void;
+  tag?: string;
+  badge?: number;
+}) {
+  return (
+    <Command.Item
+      value={commandValue(kind, channel.name, server?.name ?? "", tag ?? "")}
+      onSelect={() => onSelect(channel.server_id!, channel.id)}
+      className={ROW}
+    >
+      <GlyphSlot icon={getChannelIcon(channel)} />
+      <Name text={channel.name} />
+      {badge > 0 ? (
+        <CountBadge count={badge} className="ms-auto" />
+      ) : (
+        server && (
+          <Meta>
+            <InlineEmojiText text={server.name} />
+          </Meta>
+        )
+      )}
+      <EnterHint />
+    </Command.Item>
+  );
+}
+
+// ── Groups ─────────────────────────────────────────────────────────────────
 
 export function CommandMenuServersGroup({
   servers,
@@ -110,9 +238,7 @@ export function CommandMenuServersGroup({
           className={ROW}
         >
           <ServerIcon server={server} />
-          <span className="min-w-0 truncate font-medium">
-            <InlineEmojiText text={server.name} />
-          </span>
+          <Name text={server.name} />
           {server.id === activeServerId && <Meta>Current</Meta>}
           <EnterHint />
         </Command.Item>
@@ -126,41 +252,33 @@ export function CommandMenuChannelsGroup({
   kind,
   channels,
   serverMap,
+  showServer,
   navigateToChannel,
 }: {
   heading: string;
   kind: "channel" | "voice";
   channels: Channel[];
   serverMap: Map<string, Server>;
+  /** Server names as meta; off when the user is in one server. */
+  showServer: boolean;
   navigateToChannel: (serverId: string, channelId: string) => void;
 }) {
   if (channels.length === 0) return null;
   return (
     <Command.Group heading={heading} className={GROUP}>
-      {channels.map((channel) => {
-        const server = channel.server_id
-          ? serverMap.get(channel.server_id)
-          : undefined;
-        return (
-          <Command.Item
-            key={channel.id}
-            value={commandValue(kind, channel.name, server?.name ?? "")}
-            onSelect={() => navigateToChannel(channel.server_id!, channel.id)}
-            className={ROW}
-          >
-            <GlyphBox icon={getChannelIcon(channel)} />
-            <span className="min-w-0 truncate font-medium">
-              <InlineEmojiText text={channel.name} />
-            </span>
-            {server && (
-              <Meta>
-                <InlineEmojiText text={server.name} />
-              </Meta>
-            )}
-            <EnterHint />
-          </Command.Item>
-        );
-      })}
+      {channels.map((channel) => (
+        <CommandChannelRow
+          key={channel.id}
+          channel={channel}
+          kind={kind}
+          server={
+            showServer && channel.server_id
+              ? serverMap.get(channel.server_id)
+              : undefined
+          }
+          onSelect={navigateToChannel}
+        />
+      ))}
     </Command.Group>
   );
 }
@@ -169,50 +287,66 @@ export function CommandMenuDMsGroup({
   dmChannels,
   navigateToDm,
 }: {
-  dmChannels: Array<{ id: string; name: string; recipient: User }>;
+  dmChannels: CommandDm[];
   navigateToDm: (id: string) => void;
 }) {
   if (dmChannels.length === 0) return null;
   return (
     <Command.Group heading="Direct messages" className={GROUP}>
-      {dmChannels.map((dm) => {
-        const recipient = dm.recipient;
-        const displayName =
-          recipient?.display_name?.trim() || recipient?.username || dm.name;
-        const status = recipient?.status ?? "offline";
-        return (
-          <Command.Item
-            key={dm.id}
-            value={commandValue(
-              "dm",
-              displayName,
-              recipient?.username ?? dm.id,
-            )}
-            onSelect={() => navigateToDm(dm.id)}
-            className={ROW}
-          >
-            <span className="relative shrink-0">
-              <MiniAvatar
-                avatarUrl={recipient?.avatar_url}
-                avatarDisplay={recipient?.avatar_display}
-                displayName={displayName}
-                username={recipient?.username}
-                size={24}
-              />
-              <UserStatusDot
-                status={status}
-                ring="bg-rm-bg-surface dark:bg-rm-bg-elevated"
-                className="absolute -right-1 -bottom-1 size-3.5"
-              />
-            </span>
-            <span className="min-w-0 truncate font-medium">
-              <InlineEmojiText text={displayName} />
-            </span>
-            {recipient?.username && <Meta>@{recipient.username}</Meta>}
-            <EnterHint />
-          </Command.Item>
-        );
-      })}
+      {dmChannels.map((dm) => (
+        <CommandDmRow key={dm.id} dm={dm} onSelect={navigateToDm} />
+      ))}
+    </Command.Group>
+  );
+}
+
+/** One place in the idle Recent / Unread groups. */
+export type CommandPlace =
+  | { kind: "dm"; dm: CommandDm; badge?: number }
+  | {
+      kind: "channel" | "voice";
+      channel: Channel;
+      server?: Server;
+      badge?: number;
+    };
+
+export function CommandMenuPlacesGroup({
+  heading,
+  tag,
+  places,
+  navigateToDm,
+  navigateToChannel,
+}: {
+  heading: string;
+  tag: string;
+  places: CommandPlace[];
+  navigateToDm: (id: string) => void;
+  navigateToChannel: (serverId: string, channelId: string) => void;
+}) {
+  if (places.length === 0) return null;
+  return (
+    <Command.Group heading={heading} className={GROUP}>
+      {places.map((place) =>
+        place.kind === "dm" ? (
+          <CommandDmRow
+            key={place.dm.id}
+            dm={place.dm}
+            tag={tag}
+            badge={place.badge}
+            onSelect={navigateToDm}
+          />
+        ) : (
+          <CommandChannelRow
+            key={place.channel.id}
+            channel={place.channel}
+            kind={place.kind}
+            server={place.server}
+            tag={tag}
+            badge={place.badge}
+            onSelect={navigateToChannel}
+          />
+        ),
+      )}
     </Command.Group>
   );
 }
@@ -232,12 +366,11 @@ export function CommandMenuSearchItem({
         value={`${SEARCH_MESSAGES_VALUE} ${query}`}
         forceMount
         onSelect={onSelect}
-        className={ROW}
+        className={cn(ROW, "text-ink-2")}
       >
-        <GlyphBox icon="search" />
+        <GlyphSlot icon="search" />
         <span className="min-w-0 truncate">
-          Search {scopeLabel} for{" "}
-          <span className="font-medium text-rm-text">“{query}”</span>
+          Search {scopeLabel} for <span className="text-ink-1">“{query}”</span>
         </span>
         <EnterHint />
       </Command.Item>
@@ -272,15 +405,14 @@ export function CommandMenuActionsGroup({
         }}
         className={ROW}
       >
-        <span
-          aria-hidden="true"
+        <GlyphSlot
           className={cn(
-            "flex size-6 shrink-0 items-center justify-center",
-            isMuted ? "text-rm-danger-ink" : "text-rm-text-muted",
+            isMuted &&
+              "text-muted-state group-aria-selected/item:text-muted-state",
           )}
         >
-          <Icon name="mic" state={isMuted ? "off" : "idle"} size="md" />
-        </span>
+          <Icon name="mic" state={isMuted ? "off" : "idle"} size="sm" />
+        </GlyphSlot>
         <span>{isMuted ? "Unmute microphone" : "Mute microphone"}</span>
         <EnterHint />
       </Command.Item>
@@ -292,15 +424,14 @@ export function CommandMenuActionsGroup({
         }}
         className={ROW}
       >
-        <span
-          aria-hidden="true"
+        <GlyphSlot
           className={cn(
-            "flex size-6 shrink-0 items-center justify-center",
-            isDeafened ? "text-rm-danger-ink" : "text-rm-text-muted",
+            isDeafened &&
+              "text-muted-state group-aria-selected/item:text-muted-state",
           )}
         >
-          <Icon name="deafen" state={isDeafened ? "off" : "idle"} size="md" />
-        </span>
+          <Icon name="deafen" state={isDeafened ? "off" : "idle"} size="sm" />
+        </GlyphSlot>
         <span>{isDeafened ? "Undeafen" : "Deafen"}</span>
         <EnterHint />
       </Command.Item>
@@ -312,12 +443,10 @@ export function CommandMenuActionsGroup({
         }}
         className={ROW}
       >
-        <GlyphBox icon={theme === "dark" ? "sun" : "moon"} />
+        <GlyphSlot icon={theme === "dark" ? "sun" : "moon"} />
         <span>Switch to {theme === "dark" ? "light" : "dark"} mode</span>
         <EnterHint />
       </Command.Item>
     </Command.Group>
   );
 }
-
-export { KBD as COMMAND_KBD };

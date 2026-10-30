@@ -5,7 +5,7 @@ import type { Channel } from "@/lib/types";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import MemberList from "./MemberList";
-import MessageInput from "./MessageInput";
+import MessageInput, { ComposerReadOnly } from "./MessageInput";
 import { PinModal } from "./PinModal";
 import { PinnedMessagesSidebar } from "./PinnedMessagesSidebar";
 import SearchPanel, { type SearchScope } from "./SearchPanel";
@@ -32,8 +32,8 @@ interface Props {
 }
 
 import { ChatHeader } from "./ChatHeader";
+import { ColumnConnectionSlot } from "./ConnectionBanner";
 import { ChatJumpToPresent } from "./ChatJumpToPresent";
-import { Icon } from "@/components/ui/icon";
 import { ChatTypingIndicator } from "./ChatTypingIndicator";
 import { ChatWelcomeContent } from "./ChatWelcomeContent";
 import { DMCallRegion } from "./DMCallRegion";
@@ -256,7 +256,7 @@ export default function ChatArea({
 
   return (
     <div
-      className="flex flex-1 flex-col min-h-0 min-w-0 relative bg-rm-bg-primary chat-area-container"
+      className="flex flex-1 flex-col min-h-0 min-w-0 relative bg-ply-0 chat-area-container"
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -287,6 +287,9 @@ export default function ChatArea({
         onCall={onCall}
         dmUsername={dmUsername}
       />
+      {/* The connection strip sits in the flow under the header, so a drop
+          pushes the messages down instead of covering the first line. */}
+      <ColumnConnectionSlot />
 
       <BanMemberDialog
         target={banTarget}
@@ -310,51 +313,58 @@ export default function ChatArea({
       )}
 
       <div className="flex flex-1 min-h-0 min-w-0 flex-row">
-        <div className="flex flex-1 flex-col min-w-0 min-h-0 bg-rm-bg-primary relative border-r border-rm-border chat-messages-container">
+        <div className="flex flex-1 flex-col min-w-0 min-h-0 bg-ply-0 relative chat-messages-container">
           <div className="flex flex-1 min-h-0 flex-col">
             {/* In-DM call region */}
             {isDM && channelId && <DMCallRegion channelId={channelId} />}
-            {unreadCount > 0 && unreadSince && (
-              <UnreadBanner
-                count={unreadCount}
-                since={unreadSince}
-                onMarkAsRead={handleMarkAsRead}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {/* Overlays the list's top edge (and its sticky day label), so
+                the column never jumps when unread state changes. */}
+              {unreadCount > 0 && unreadSince && (
+                <UnreadBanner
+                  count={unreadCount}
+                  since={unreadSince}
+                  onMarkAsRead={handleMarkAsRead}
+                  className="absolute inset-x-0 top-0"
+                />
+              )}
+              <VirtualMessageList
+                ref={virtualListRef}
+                messages={state.messages}
+                currentUserId={state.user?.id}
+                canPin={canPin}
+                canDeleteMessages={canDeleteMessages}
+                hasMore={hasMore}
+                loading={loading}
+                isDetached={isDetached}
+                initialScrollMessageId={anchorScrollId}
+                initialScrollAlign={localState.initialScrollAlign || "center"}
+                initialScrollBehavior={
+                  localState.initialScrollBehavior || "auto"
+                }
+                highlightInitialScroll={highlightAnchor}
+                restoreInProgress={restoreInProgress}
+                onInitialScrollSettled={() => {
+                  handleInitialScrollSettled();
+                  setLocalState({ restoreInProgress: false });
+                }}
+                unreadSeparatorId={unreadSeparatorId}
+                onLoadMore={handleLoadMore}
+                onLoadAfter={
+                  isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined
+                }
+                onReply={handleReply}
+                onPin={handlePin}
+                onUnpin={handleUnpin}
+                onJump={handleJumpToMessage}
+                onBan={canBan ? handleBan : undefined}
+                onThread={handleThread}
+                welcomeContent={welcomeContent}
+                onAtBottom={handleAtBottom}
+                onScrollRangeChange={handleScrollRangeChange}
+                onMessageVisible={handleMessageVisible}
               />
-            )}
-            <VirtualMessageList
-              ref={virtualListRef}
-              messages={state.messages}
-              currentUserId={state.user?.id}
-              canPin={canPin}
-              canDeleteMessages={canDeleteMessages}
-              hasMore={hasMore}
-              loading={loading}
-              isDetached={isDetached}
-              initialScrollMessageId={anchorScrollId}
-              initialScrollAlign={localState.initialScrollAlign || "center"}
-              initialScrollBehavior={localState.initialScrollBehavior || "auto"}
-              highlightInitialScroll={highlightAnchor}
-              restoreInProgress={restoreInProgress}
-              onInitialScrollSettled={() => {
-                handleInitialScrollSettled();
-                setLocalState({ restoreInProgress: false });
-              }}
-              unreadSeparatorId={unreadSeparatorId}
-              onLoadMore={handleLoadMore}
-              onLoadAfter={
-                isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined
-              }
-              onReply={handleReply}
-              onPin={handlePin}
-              onUnpin={handleUnpin}
-              onJump={handleJumpToMessage}
-              onBan={canBan ? handleBan : undefined}
-              onThread={handleThread}
-              welcomeContent={welcomeContent}
-              onAtBottom={handleAtBottom}
-              onScrollRangeChange={handleScrollRangeChange}
-              onMessageVisible={handleMessageVisible}
-            />
+            </div>
           </div>
 
           <ChatJumpToPresent
@@ -379,22 +389,7 @@ export default function ChatArea({
                 onCancelReply={() => setLocalState({ replyTo: null })}
               />
             ) : (
-              <div
-                className="px-2 md:px-4"
-                style={{
-                  paddingBottom:
-                    "calc(max(8px, var(--safe-area-bottom, 0px)) + 8px)",
-                }}
-              >
-                <p
-                  data-testid="composer-read-only"
-                  className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-2 text-center text-ui-sm text-pretty text-rm-text-secondary select-none"
-                >
-                  <Icon name="lock" size="sm" className="shrink-0" />
-                  You don&apos;t have permission to send messages in this
-                  channel.
-                </p>
-              </div>
+              <ComposerReadOnly />
             )}
           </div>
         </div>
@@ -454,7 +449,7 @@ export default function ChatArea({
           title={showChannelDetails ? channelName || "Details" : "Members"}
           hideHeader={membersMode !== "sheet" || showChannelDetails}
           dockClassName={cn(
-            "border-l-0 bg-rm-bg-sidebar",
+            "border-l border-line bg-ply-0",
             showChannelDetails ? "w-[360px]" : "w-60",
           )}
         >
@@ -486,10 +481,6 @@ export default function ChatArea({
                 : undefined
             }
             onInviteClick={onInviteClick}
-            pinnedMessages={state.pinnedMessages}
-            loadingPins={state.loadingPins}
-            canUnpin={canPin}
-            onUnpin={handleUnpin}
             onJumpToMessage={handleJumpToMessage}
             onOpenThread={(messageId) => {
               setLocalState({ threadMessageId: messageId });

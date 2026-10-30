@@ -10,6 +10,7 @@
  */
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { describeApiError } from "@/lib/api-errors";
 import { Icon } from "@/components/ui/icon";
 import { PRESS } from "@/components/ui/interaction";
@@ -17,7 +18,9 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useRef, useState, type ReactNode } from "react";
 import { AvatarImage } from "./AvatarImage";
+import { avatarShape } from "@/components/ui/avatar-shape";
 import InlineEmojiText from "./InlineEmojiText";
+import { LoadError, SkeletonRows } from "./server-settings/states";
 import {
   TEXT_PERMISSIONS,
   VOICE_PERMISSIONS,
@@ -28,7 +31,6 @@ import {
 import { PermissionTriState } from "./channel-settings/PermissionTriState";
 import {
   ConfirmStrip,
-  RowError,
   SettingsCard,
   SettingsRow,
   useConfirm,
@@ -62,7 +64,7 @@ function RoleDot({
       aria-hidden="true"
       className={cn(
         "size-3 shrink-0 rounded-full",
-        !color && "bg-rm-text-muted",
+        !color && "bg-ink-3",
         className,
       )}
       style={color ? { backgroundColor: color } : undefined}
@@ -70,6 +72,7 @@ function RoleDot({
   );
 }
 
+/** Keeps the person's avatar framing (AvatarImage reads `display`). */
 function MemberAvatar({
   name,
   avatarUrl,
@@ -82,7 +85,10 @@ function MemberAvatar({
   return (
     <span
       aria-hidden="true"
-      className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-tint-2 text-ui-2xs font-semibold text-rm-text"
+      className={cn(
+        "flex size-6 shrink-0 items-center justify-center bg-tint-3 font-display text-[11px] font-extrabold text-ink-1",
+        avatarShape(avatarUrl && display),
+      )}
     >
       {avatarUrl ? (
         <AvatarImage
@@ -116,7 +122,7 @@ function OverrideMark({ override }: { override: PermissionOverride }) {
 /* ------------------------------------------------------------------ */
 
 const ROW =
-  "flex w-full items-center gap-3 rounded-md px-2 text-left outline-offset-[-2px] transition-colors duration-150 ease-(--rm-ease-out) min-h-12 md:min-h-10";
+  "flex w-full items-center gap-2.5 rounded-sm px-2 text-left outline-offset-[-2px] transition-colors duration-(--dur-1) ease-out min-h-12 md:min-h-10";
 
 function OverrideList({
   model,
@@ -181,7 +187,7 @@ function OverrideList({
                       className={cn(
                         ROW,
                         PRESS,
-                        "text-ui-md text-rm-text md:text-ui-sm pointer-fine:hover:bg-rm-tint-1",
+                        "text-ui-md text-ink-1 md:text-ui-sm pointer-fine:hover:bg-tint-1",
                       )}
                     >
                       <span className="flex size-6 shrink-0 items-center justify-center">
@@ -216,7 +222,7 @@ function OverrideList({
                         className={cn(
                           ROW,
                           PRESS,
-                          "text-ui-md text-rm-text md:text-ui-sm pointer-fine:hover:bg-rm-tint-1",
+                          "text-ui-md text-ink-1 md:text-ui-sm pointer-fine:hover:bg-tint-1",
                         )}
                       >
                         <MemberAvatar
@@ -235,7 +241,7 @@ function OverrideList({
               </PickerGroup>
             ) : null}
             {availableRoles.length === 0 && availableMembers.length === 0 ? (
-              <p className="px-2 py-3 text-ui-sm text-rm-text-secondary">
+              <p className="px-2 py-3 text-ui-sm text-ink-2">
                 Every role and member already has an override here.
               </p>
             ) : null}
@@ -255,8 +261,8 @@ function OverrideList({
                       ROW,
                       PRESS,
                       current && split
-                        ? "bg-rm-tint-2 font-semibold text-rm-text"
-                        : "font-medium text-rm-text pointer-fine:hover:bg-rm-tint-1",
+                        ? "bg-tint-2 font-semibold text-ink-1"
+                        : "font-medium text-ink-1 pointer-fine:hover:bg-tint-1",
                       "text-ui-md md:text-ui-sm",
                     )}
                   >
@@ -266,7 +272,7 @@ function OverrideList({
                         text={o.name}
                         className="block truncate"
                       />
-                      <span className="block text-ui-xs font-normal text-rm-text-secondary">
+                      <span className="block text-ui-xs font-normal text-ink-3">
                         {o.target_type === "role" ? "Role" : "Member"}
                         {dirty ? " · Unsaved" : ""}
                       </span>
@@ -275,7 +281,7 @@ function OverrideList({
                       <Icon
                         name="chevronRight"
                         size="xs"
-                        className="shrink-0 text-rm-text-muted"
+                        className="shrink-0 text-ink-3"
                       />
                     ) : null}
                   </button>
@@ -298,9 +304,7 @@ function PickerGroup({
 }) {
   return (
     <div>
-      <h5 className="px-2 pb-1 text-ui-xs font-semibold text-rm-text-secondary">
-        {title}
-      </h5>
+      <h5 className="px-2 pb-1 text-ui-xs font-medium text-ink-3">{title}</h5>
       <ul className="flex flex-col gap-px">{children}</ul>
     </div>
   );
@@ -376,7 +380,7 @@ function OverrideEditor({
       }
     >
       {armed ? (
-        <li className="px-4 pb-3.5 @min-[560px]:px-5">
+        <li className="px-4 pb-3">
           <ConfirmStrip
             consequence={`${override.name} goes back to ${
               isRole ? "its server role" : "their role"
@@ -419,35 +423,19 @@ function OverrideEditor({
 /* States                                                               */
 /* ------------------------------------------------------------------ */
 
-function ListSkeleton() {
-  return (
-    <div
-      role="status"
-      className="flex flex-col gap-2 rounded-lg border border-rm-border bg-rm-bg-surface p-3"
-    >
-      <span className="sr-only">Loading</span>
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="h-10 animate-pulse rounded-md bg-rm-tint-1 motion-reduce:animate-none"
-        />
-      ))}
-    </div>
-  );
-}
-
 function EmptyEditor({ channelLabel }: { channelLabel: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-      <Icon name="shield" size="3xl" className="text-rm-text-muted" />
-      <h3 className="text-ui-md font-semibold text-rm-text">
-        Pick a role or member
-      </h3>
-      <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
-        Choose one from the list to change what they can do in {channelLabel},
-        or add a new override.
-      </p>
-    </div>
+    <EmptyState
+      size="sm"
+      title="Pick a role or member"
+      description={
+        <>
+          Choose one from the list to change what they can do in{" "}
+          <InlineEmojiText text={channelLabel} />, or add a new override.
+        </>
+      }
+      className="justify-start pt-7"
+    />
   );
 }
 
@@ -465,26 +453,24 @@ export default function ChannelPermissionsTab({
 }: ChannelPermissionsTabProps) {
   if (model.status === "error") {
     return (
-      <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-        <Icon name="warning" size="3xl" className="text-rm-text-muted" />
-        <h3 className="text-ui-md font-semibold text-rm-danger-ink">
-          Permissions didn't load
-        </h3>
-        <p className="max-w-[36ch] text-pretty text-ui-sm text-rm-text-secondary">
-          {model.loadError}
-        </p>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => void model.reload()}
-        >
-          Try again
-        </Button>
-      </div>
+      <LoadError
+        title="Permissions didn't load"
+        message={model.loadError ?? "Unable to load the permissions."}
+        onRetry={() => void model.reload()}
+      />
     );
   }
 
-  if (model.status !== "ready") return <ListSkeleton />;
+  if (model.status !== "ready") {
+    return (
+      <SkeletonRows
+        label="Loading permissions"
+        rows={3}
+        avatar={false}
+        rowClass="h-10"
+      />
+    );
+  }
 
   const selected =
     model.overrides.find((o) => o.target_id === selectedId) ?? null;
@@ -516,107 +502,6 @@ export default function ChannelPermissionsTab({
       <div className="sticky top-0">{list}</div>
       <div className="min-w-0">
         {editor ?? <EmptyEditor channelLabel={channelLabel} />}
-      </div>
-    </div>
-  );
-}
-
-/** Footer status + actions for the permissions page. */
-export function PermissionsSaveBar({
-  model,
-  closeBlocked,
-}: {
-  model: PermissionModel;
-  closeBlocked: boolean;
-}) {
-  const dirty = model.dirtyIds.length;
-  return (
-    <SaveBar
-      status={
-        model.saveError ? (
-          <RowError className="mt-0">{model.saveError}</RowError>
-        ) : dirty > 0 ? (
-          <UnsavedText blocked={closeBlocked} />
-        ) : model.justSaved ? (
-          <SavedText />
-        ) : null
-      }
-      onReset={dirty > 0 ? model.reset : undefined}
-      onSave={() => void model.save()}
-      saving={model.saving}
-      canSave={dirty > 0}
-    />
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Shared save bar (also used by the overview)                          */
-/* ------------------------------------------------------------------ */
-
-export function SavedText() {
-  return (
-    <span className="flex items-center gap-1.5 text-ui-sm font-medium text-rm-success-ink">
-      <Icon name="success" size="sm" />
-      Saved
-    </span>
-  );
-}
-
-export function UnsavedText({ blocked }: { blocked: boolean }) {
-  return (
-    <span
-      className={cn(
-        "text-ui-sm",
-        blocked ? "font-medium text-rm-danger-ink" : "text-rm-text-secondary",
-      )}
-    >
-      {blocked
-        ? "Save or reset your changes before closing."
-        : "You have unsaved changes."}
-    </span>
-  );
-}
-
-export function SaveBar({
-  status,
-  onReset,
-  onSave,
-  saving,
-  canSave,
-}: {
-  status: ReactNode;
-  onReset?: () => void;
-  onSave: () => void;
-  saving: boolean;
-  canSave: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-3 @min-[560px]:flex-row @min-[560px]:items-center">
-      {/* Always mounted so the status is announced when it changes. */}
-      <div role="status" className="min-w-0 flex-1">
-        {status}
-      </div>
-      <div className="flex shrink-0 justify-end gap-2">
-        {onReset ? (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onReset}
-            disabled={saving}
-            className="max-md:h-11"
-          >
-            Reset
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          onClick={onSave}
-          loading={saving}
-          disabled={!canSave && !saving}
-          className="max-md:h-11"
-        >
-          Save changes
-        </Button>
       </div>
     </div>
   );

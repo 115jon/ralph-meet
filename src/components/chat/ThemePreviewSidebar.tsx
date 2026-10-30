@@ -107,7 +107,7 @@ export default function ThemePreviewSidebar({
     return (
       <Drawer open={open} onOpenChange={handleOpenChange}>
         <DrawerContent hideOverlay aria-label={TITLE}>
-          <div className="flex h-12 shrink-0 items-center gap-2 border-b border-rm-border px-4">
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
             <DrawerTitle className="min-w-0 flex-1 truncate text-ui-md font-semibold">
               {TITLE}
             </DrawerTitle>
@@ -135,9 +135,7 @@ export default function ThemePreviewSidebar({
           <SheetDescription className="mb-4">{DESCRIPTION}</SheetDescription>
           <ThemeGrid />
         </div>
-        <SheetFooter className="border-t border-rm-border">
-          {backButton}
-        </SheetFooter>
+        <SheetFooter className="border-t border-line">{backButton}</SheetFooter>
       </SheetContent>
     </Sheet>
   );
@@ -160,8 +158,8 @@ function ThemeGrid({ compact = false }: { compact?: boolean }) {
               "rounded-lg border p-2 text-left",
               PRESS,
               active
-                ? "border-rm-accent bg-rm-accent-tint ring-1 ring-rm-accent"
-                : "border-rm-border bg-rm-tint-1",
+                ? "border-accent-ink bg-accent-tint ring-1 ring-accent-ink"
+                : "border-line bg-tint-1",
             )}
           >
             <div
@@ -174,7 +172,7 @@ function ThemeGrid({ compact = false }: { compact?: boolean }) {
             <span
               className={cn(
                 "block truncate text-ui-xs font-semibold",
-                active ? "text-rm-accent-ink" : "text-rm-text",
+                active ? "text-accent-ink" : "text-ink-1",
               )}
             >
               {option.label}

@@ -67,7 +67,7 @@ describe("RestartAppDialog", () => {
     expect(settings.className).toContain("z-50");
     expect(confirm.className).toContain("z-60");
     expect(confirm.className).not.toContain("z-50");
-    expect(confirm.className).toContain("md:max-w-sm");
+    expect(confirm.className).toContain("md:max-w-[400px]");
 
     fireEvent.keyDown(confirm, { key: "Escape" });
 

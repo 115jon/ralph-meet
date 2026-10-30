@@ -7,17 +7,14 @@ import {
   MENU_SEPARATOR,
 } from "@/components/ui/menu";
 import type { ActionSheetItem } from "@/components/ui/action-sheet";
+import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
-  DropdownMenuCheckboxItem,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-} from "@/components/ui/dropdown-menu";
+  MenuItemRows,
+  type ContextMenuItem,
+} from "@/components/chat/ContextMenu";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { Icon } from "@/components/ui/icon";
-import React, { memo, useCallback } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 
 /**
  * Item model for the voice/stream context menus (LocalMenu, RemoteMenu). One
@@ -90,15 +87,19 @@ export const Slider = memo(
 
     return (
       <div className="shrink-0 px-2 py-2" onMouseEnter={onMouseEnter}>
-        <p className="mb-2 text-ui-xs font-semibold text-rm-text">{label}</p>
-        <div className="relative h-1 rounded-full bg-rm-bg-primary">
+        <p className="mb-2 flex items-baseline justify-between gap-2 text-ui-xs font-medium text-ink-2">
+          <span className="truncate">{label}</span>
+          <span className="shrink-0 text-num-xs text-ink-3">{value}%</span>
+        </p>
+        <div className="relative h-1 rounded-full bg-tint-2">
+          {/* The fill scales instead of resizing (no width layout). */}
           <div
-            className="absolute left-0 top-0 h-full rounded-full bg-primary transition-ui"
-            style={{ width: `${percent}%` }}
+            className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-primary-fill"
+            style={{ transform: `scaleX(${percent / 100})` }}
           />
           <div
             data-slot="slider-thumb"
-            className="pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface shadow-lg pointer-coarse:size-5"
+            className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-line-strong bg-ink-1 pointer-coarse:size-5"
             style={{ left: `${percent}%` }}
           />
           <input
@@ -145,12 +146,90 @@ function ItemLabel({
         <InlineEmojiText text={label} />
       </span>
       {description ? (
-        <span className="truncate text-ui-2xs font-normal text-rm-text-muted">
+        <span className="truncate text-ui-xs font-normal text-ink-2">
           <InlineEmojiText text={description} />
         </span>
       ) : null}
     </span>
   );
+}
+
+type MenuBlock =
+  | { kind: "rows"; items: ContextMenuItem[] }
+  | { kind: "slider"; entry: Extract<StreamMenuEntry, { type: "slider" }> }
+  | { kind: "separator"; key: string };
+
+/**
+ * Desktop: the entries as `ContextMenuItem`s (the one item model), rendered
+ * by `MenuItemRows`. Items and submenus become item rows (a toggle is a
+ * `checked` row, a submenu carries its own rows as `submenu`). A slider is
+ * custom inline content, not a row, so it splits the list: item runs on
+ * either side render as their own `MenuItemRows`, with an explicit separator
+ * wherever a divider falls.
+ */
+function toMenuBlocks(
+  entries: StreamMenuEntry[],
+  panelProps?: React.ComponentPropsWithoutRef<"div">,
+): MenuBlock[] {
+  const blocks: MenuBlock[] = [];
+  let rows: ContextMenuItem[] = [];
+  const flush = () => {
+    if (rows.length > 0) blocks.push({ kind: "rows", items: rows });
+    rows = [];
+  };
+  for (const entry of entries) {
+    switch (entry.type) {
+      case "divider":
+        flush();
+        blocks.push({ kind: "separator", key: entry.key });
+        break;
+      case "slider":
+        flush();
+        blocks.push({ kind: "slider", entry });
+        break;
+      case "submenu":
+        rows.push({
+          key: entry.key,
+          label: entry.label,
+          onClick: noop,
+          closeOnClick: false,
+          submenu: (
+            <StreamMenuEntries
+              entries={entry.entries}
+              panelProps={panelProps}
+            />
+          ),
+        });
+        break;
+      case "item":
+        rows.push({
+          key: entry.key,
+          label: entry.label,
+          subtitle: entry.description,
+          onClick: entry.onSelect ?? noop,
+          variant: entry.danger ? "danger" : "default",
+          disabled: entry.disabled,
+          // Rows never close the menu on their own: `onSelect` calls
+          // `onClose` when the action should dismiss it.
+          closeOnClick: false,
+          checked: entry.checked,
+          rightIcon: entry.checked === undefined ? entry.trailing : undefined,
+        });
+        break;
+    }
+  }
+  flush();
+  // No leading, trailing or doubled separators.
+  return blocks.filter((block, index) => {
+    if (block.kind !== "separator") return true;
+    const previous = blocks[index - 1];
+    const next = blocks[index + 1];
+    return (
+      previous !== undefined &&
+      previous.kind !== "separator" &&
+      next !== undefined
+    );
+  });
 }
 
 /** Desktop: the entries as Base UI menu rows (inside a DropdownMenuContent). */
@@ -162,80 +241,47 @@ export function StreamMenuEntries({
   /** Spread on every submenu panel (event isolation, data attributes). */
   panelProps?: React.ComponentPropsWithoutRef<"div">;
 }) {
+  const subPanelProps = useMemo(
+    () => ({
+      ...panelProps,
+      className: cn(
+        "max-w-[min(240px,var(--available-width))]",
+        panelProps?.className,
+      ),
+    }),
+    [panelProps],
+  );
+  const blocks = toMenuBlocks(entries, panelProps);
   return (
     <>
-      {entries.map((entry) => {
-        switch (entry.type) {
-          case "divider":
-            return <DropdownMenuSeparator key={entry.key} />;
+      {blocks.map((block, index) => {
+        switch (block.kind) {
+          case "separator":
+            return <DropdownMenuSeparator key={block.key} />;
           case "slider":
             return (
               <div
-                key={entry.key}
+                key={block.entry.key}
                 onKeyDown={(event) => {
                   if (SLIDER_KEYS.has(event.key)) event.stopPropagation();
                 }}
               >
                 <Slider
-                  label={entry.label}
-                  value={entry.value}
-                  max={entry.max}
-                  onChange={entry.onChange}
+                  label={block.entry.label}
+                  value={block.entry.value}
+                  max={block.entry.max}
+                  onChange={block.entry.onChange}
                 />
               </div>
             );
-          case "submenu":
+          case "rows":
             return (
-              <DropdownMenuSub key={entry.key}>
-                <DropdownMenuSubTrigger>
-                  <InlineEmojiText text={entry.label} />
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent
-                  className="max-w-[min(240px,var(--available-width))]"
-                  {...panelProps}
-                >
-                  <StreamMenuEntries
-                    entries={entry.entries}
-                    panelProps={panelProps}
-                  />
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            );
-          case "item": {
-            const label = (
-              <ItemLabel
-                label={entry.label}
-                description={entry.description}
-                bold={entry.bold}
+              <MenuItemRows
+                key={block.items[0]?.key ?? index}
+                items={block.items}
+                panelProps={subPanelProps}
               />
             );
-            if (entry.checked !== undefined) {
-              return (
-                <DropdownMenuCheckboxItem
-                  key={entry.key}
-                  checked={entry.checked}
-                  disabled={entry.disabled}
-                  onCheckedChange={() => entry.onSelect?.()}
-                  closeOnClick={false}
-                  className={cn(entry.danger && "text-rm-danger-ink")}
-                >
-                  {label}
-                </DropdownMenuCheckboxItem>
-              );
-            }
-            return (
-              <DropdownMenuItem
-                key={entry.key}
-                variant={entry.danger ? "danger" : "default"}
-                disabled={entry.disabled}
-                closeOnClick={false}
-                onClick={() => entry.onSelect?.()}
-                hint={entry.trailing}
-              >
-                {label}
-              </DropdownMenuItem>
-            );
-          }
         }
       })}
     </>

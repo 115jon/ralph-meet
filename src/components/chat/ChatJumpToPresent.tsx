@@ -1,17 +1,31 @@
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 
-export function ChatJumpToPresent({ isDetached, onJumpToPresent }: any) {
+interface ChatJumpToPresentProps {
+  isDetached: boolean;
+  onJumpToPresent: () => void;
+}
+
+/**
+ * Shown while you're reading history away from the live tail. A ply-3 float
+ * (line + float shadow) above the composer; it fades and rises 4px in.
+ */
+export function ChatJumpToPresent({
+  isDetached,
+  onJumpToPresent,
+}: ChatJumpToPresentProps) {
   if (!isDetached) return null;
   return (
-    <div className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-1 duration-150">
+    <div className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2 transition-[opacity,translate] duration-(--dur-3) ease-out starting:translate-y-(--motion-shift) starting:opacity-0">
       <Button
         type="button"
+        variant="secondary"
+        size="sm"
         onClick={onJumpToPresent}
-        className="gap-1.5 rounded-full shadow-[var(--rm-shadow-1)]"
+        className="border border-line bg-ply-3 text-ink-1 shadow-float"
       >
-        <span>Jump to present</span>
-        <Icon name="chevronDown" size="xs" />
+        Jump to present
+        <Icon name="chevronDown" size="sm" />
       </Button>
     </div>
   );

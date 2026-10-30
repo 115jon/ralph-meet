@@ -8,11 +8,13 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
-import { Input } from "@/components/ui/input";
+import { FIELD as INPUT_FIELD, Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Num } from "@/components/ui/num";
 import { cn } from "@/lib/utils";
 
 import EmojiToken from "./EmojiToken";
+import { RangeSlider } from "./floating/RangeSlider";
 
 const EmojiPicker = lazy(() => import("@/components/chat/EmojiPicker"));
 
@@ -81,11 +83,14 @@ export function UploadSoundModal({
 
   const isEditMode = !!editSound;
 
-  // 13.4 field anatomy: Label above, gap-2, 36px fields (44 on phones).
-  const FIELD =
-    "flex h-9 w-full items-center rounded-md border border-rm-field-edge bg-transparent text-ui-sm text-rm-text max-md:min-h-11";
+  // Field anatomy: label above, gap-2, the Input edge at 32px (40 on
+  // phones) for the file and emoji pickers too.
+  const FIELD = cn(
+    INPUT_FIELD,
+    "flex h-8 items-center text-ui-row max-md:h-10 max-md:text-ui-md",
+  );
   const required = (
-    <span aria-hidden className="text-rm-danger-ink">
+    <span aria-hidden className="text-danger-ink">
       *
     </span>
   );
@@ -101,7 +106,7 @@ export function UploadSoundModal({
           <label
             className={cn(
               FIELD,
-              "cursor-pointer justify-between gap-2 py-1 pr-1 pl-3 transition-colors duration-150 ease-(--rm-ease-out) has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-(--rm-focus) pointer-fine:hover:border-rm-border-strong",
+              "cursor-pointer justify-between gap-2 py-0.5 pr-0.5 pl-2.5 has-[input:focus-visible]:border-focus has-[input:focus-visible]:outline-1 has-[input:focus-visible]:outline-offset-0 has-[input:focus-visible]:outline-focus pointer-fine:hover:border-line-strong",
             )}
           >
             <input
@@ -113,7 +118,12 @@ export function UploadSoundModal({
               ref={fileInputRef}
               onChange={handleFileChange}
             />
-            <span className="flex min-w-0 items-center gap-2 text-rm-text-muted">
+            <span
+              className={cn(
+                "flex min-w-0 items-center gap-2",
+                file ? "text-ink-1" : "text-ink-3",
+              )}
+            >
               <Icon name="upload" size="sm" className="shrink-0" />
               <span className="truncate">
                 {file ? file.name : "Choose an audio file"}
@@ -121,7 +131,7 @@ export function UploadSoundModal({
             </span>
             <span
               aria-hidden
-              className="flex h-7 shrink-0 items-center rounded-sm bg-rm-tint-2 px-2.5 font-medium text-rm-text max-md:h-9"
+              className="flex h-6 shrink-0 items-center rounded-sm bg-tint-2 px-2 text-ui-sm font-medium text-ink-1 max-md:h-8"
             >
               Browse
             </span>
@@ -140,7 +150,7 @@ export function UploadSoundModal({
             value={soundName}
             onChange={(e) => setSoundName(e.target.value)}
             placeholder="Sound name"
-            className="max-md:min-h-11 max-md:text-ui-md"
+            className="max-md:h-10"
           />
         </div>
 
@@ -154,7 +164,7 @@ export function UploadSoundModal({
             onClick={() => setIsEmojiPickerOpen(true)}
             className={cn(
               FIELD,
-              "justify-center gap-2 px-3 text-rm-text-muted transition-colors duration-150 ease-(--rm-ease-out) pointer-fine:hover:border-rm-border-strong",
+              "justify-center gap-2 px-2.5 text-ink-3 focus-visible:border-focus pointer-fine:hover:border-line-strong",
             )}
             aria-haspopup="dialog"
             aria-expanded={isEmojiPickerOpen}
@@ -162,12 +172,12 @@ export function UploadSoundModal({
             {relatedEmoji ? (
               <EmojiToken
                 value={relatedEmoji}
-                className="block size-6 object-contain"
-                fallbackClassName="block text-ui-xl leading-none"
+                className="block size-5 object-contain"
+                fallbackClassName="block text-ui-lg leading-none"
               />
             ) : (
               <>
-                <Icon name="emoji" size="md" />
+                <Icon name="emoji" size="sm" />
                 <span>Choose emoji</span>
               </>
             )}
@@ -188,21 +198,21 @@ export function UploadSoundModal({
         </div>
       </div>
 
-      {/* Sound volume */}
+      {/* Sound volume: the value reads beside the label, in Num. */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor={soundVolumeInputId}>Sound volume</Label>
-        <div className="flex h-10 items-center">
-          <input
-            id={soundVolumeInputId}
-            type="range"
-            min="0"
-            max="100"
-            value={Math.round(soundVolume * 100)}
-            onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
-            className="rm-settings-range w-full"
-            aria-valuetext={`${Math.round(soundVolume * 100)}%`}
-          />
+        <div className="flex items-baseline justify-between gap-3">
+          <Label htmlFor={soundVolumeInputId}>Sound volume</Label>
+          <Num size="sm" className="text-ink-2" aria-hidden>
+            {Math.round(soundVolume * 100)}%
+          </Num>
         </div>
+        <RangeSlider
+          id={soundVolumeInputId}
+          value={Math.round(soundVolume * 100)}
+          onValueChange={(value) => setSoundVolume(value / 100)}
+          aria-valuetext={`${Math.round(soundVolume * 100)}%`}
+          className="h-8"
+        />
       </div>
     </div>
   );
@@ -221,7 +231,7 @@ export function UploadSoundModal({
         {fields}
         <ResponsiveDialogFooter>
           <Button type="button" variant="secondary" onClick={onClose}>
-            Never mind
+            Cancel
           </Button>
           <Button
             type="button"

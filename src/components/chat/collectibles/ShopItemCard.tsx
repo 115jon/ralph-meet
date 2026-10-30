@@ -1,4 +1,5 @@
 import { Icon } from "@/components/ui/icon";
+import { Num } from "@/components/ui/num";
 import {
   baseItemName,
   formatSourcePrice,
@@ -38,7 +39,7 @@ export function ItemStage({
   if (item.kind === "profile_effect") {
     return (
       <span className="aspect-[450/880] h-[86%]">
-        <EffectThumb item={item} className="shadow-(--rm-shadow-2)" />
+        <EffectThumb item={item} />
       </span>
     );
   }
@@ -63,21 +64,26 @@ export function VariantDots({ family }: { family: VariantFamily }) {
   return (
     <span className="flex items-center gap-1" aria-hidden="true">
       {shown.map((variant) => (
+        // Swatches are the collectible's own colours (catalog data).
         <span
           key={variant.id}
-          className="size-2.5 rounded-full ring-1 ring-black/15 ring-inset"
+          className="size-2.5 rounded-full ring-1 ring-line-strong ring-inset"
           style={{
-            background: variant.variantColor ?? "var(--color-rm-tint-3)",
+            background: variant.variantColor ?? "var(--color-tint-3)",
           }}
         />
       ))}
-      <span className="text-ui-2xs text-rm-text-muted tabular-nums">
-        {family.variants.length}
-      </span>
+      <Num className="text-ink-3">{family.variants.length}</Num>
     </span>
   );
 }
 
+/**
+ * One shop cell: the whole tile is the button (radius 10, ply-2, line). The
+ * art plays only while the tile is hovered or focused and on screen; at rest
+ * it is a still. Equipped reads as the accent ring plus a check disc, not a
+ * pill stacked on the art.
+ */
 export const ShopItemCard = memo(function ShopItemCard({
   family,
   category,
@@ -117,16 +123,21 @@ export const ShopItemCard = memo(function ShopItemCard({
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       aria-label={`${name}, ${KIND_COPY[item.kind].one}${variantsLabel}${equipped ? ", equipped" : ""}`}
+      data-equipped={equipped ? "" : undefined}
       className={cn(
-        "group/card flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface text-start outline-none [-webkit-tap-highlight-color:transparent]",
-        "transition-[transform,border-color] duration-150 ease-(--rm-ease-out) active:scale-[0.98] motion-reduce:active:scale-100 pointer-fine:hover:border-rm-border-strong",
-        "focus-visible:ring-2 focus-visible:ring-rm-focus focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary",
-        equipped && "border-rm-accent",
+        "group/card relative flex w-full min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-ply-2 text-start outline-none [-webkit-tap-highlight-color:transparent]",
+        // Hover is an ink overlay over art and caption alike (opacity only).
+        "after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:bg-tint-1 after:opacity-0 after:transition-opacity after:duration-(--dur-1) after:ease-out pointer-fine:hover:after:opacity-100",
+        "transition-[scale] duration-(--dur-1) ease-out active:scale-(--motion-press)",
+        // The ring sits on the tile's own edge (not outside it), so rails
+        // that scroll sideways never clip it.
+        equipped && "outline-2 -outline-offset-2 outline-accent-ink",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         className,
       )}
     >
       <span
-        className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-rm-bg-elevated"
+        className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-tint-1"
         style={
           category?.background ? { background: category.background } : undefined
         }
@@ -137,29 +148,32 @@ export const ShopItemCard = memo(function ShopItemCard({
           animate={(hovered || focused) && inView}
         />
         {equipped ? (
-          <span className="absolute start-2 top-2 inline-flex items-center gap-1 rounded-full bg-rm-accent-solid px-2 py-0.5 text-ui-2xs font-semibold text-rm-on-accent">
+          <span
+            aria-hidden="true"
+            className="absolute end-2 top-2 flex size-5 items-center justify-center rounded-full bg-accent-ink text-ply-0"
+          >
             <Icon name="check" size="xs" />
-            Equipped
           </span>
         ) : null}
       </span>
-      <span className="flex min-w-0 flex-col gap-1 p-3">
-        <span className="truncate text-ui-sm font-semibold text-rm-text">
+      <span className="flex min-w-0 flex-col gap-0.5 px-3 pt-2 pb-2.5">
+        <span className="truncate text-ui-row font-medium text-ink-1">
           {name}
         </span>
-        {showKind ? (
-          <span className="truncate text-ui-xs text-rm-text-muted">
-            {KIND_COPY[item.kind].one}
-          </span>
-        ) : null}
-        <span className="mt-1 flex items-center gap-2">
-          <span className="text-ui-sm font-semibold text-rm-accent-ink">
-            Free
-          </span>
+        <span className="flex min-w-0 items-center gap-2 text-ui-xs text-ink-3">
+          {equipped ? (
+            <span className="shrink-0 font-medium text-accent-ink">
+              Equipped
+            </span>
+          ) : showKind ? (
+            <span className="truncate">{KIND_COPY[item.kind].one}</span>
+          ) : (
+            <span className="shrink-0 font-medium text-ink-2">Free</span>
+          )}
           {price ? (
-            <s className="truncate text-ui-xs text-rm-text-ghost">
+            <s className="truncate">
               <span className="sr-only">Source price </span>
-              {price}
+              <Num>{price}</Num>
             </s>
           ) : null}
           <span className="ms-auto">

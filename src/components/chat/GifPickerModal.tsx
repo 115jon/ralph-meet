@@ -1,11 +1,18 @@
 import { isMobileViewport } from "@/hooks/useMediaQuery";
+import { useAppActive } from "@/hooks/useAppActive";
 import { PickerSurface } from "./PickerSurface";
+import {
+  PICKER_RING,
+  PICKER_WIDTH,
+  PICKER_WIDTH_CLASS,
+  handlePickerGridKeyDown,
+} from "./picker-grid";
+import { PickerHeader, PickerSearch, PickerSectionLabel } from "./PickerHeader";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Tooltip,
@@ -46,8 +53,13 @@ import { useUser } from "@kova/react";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Num } from "@/components/ui/num";
+import { Skeleton } from "@/components/ui/skeleton";
 import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import {
+  MENU_HINT,
+  MENU_ICON,
   MENU_ITEM,
   MENU_ITEM_DEFAULT,
   MENU_ITEM_DEFAULT_ON,
@@ -1318,9 +1330,9 @@ export default function GifPickerModal({
       }
 
       const rect = markerRef.current.getBoundingClientRect();
-      const pickerWidth = 420;
+      const pickerWidth = PICKER_WIDTH;
 
-      const MAX_HEIGHT = Math.min(620, window.innerHeight - 20);
+      const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
 
       const style: React.CSSProperties = {
         opacity: 1,
@@ -1354,8 +1366,137 @@ export default function GifPickerModal({
   const panelLayout = isExpanded
     ? "left-1/2 top-1/2 h-[min(780px,calc(100dvh-48px))] max-h-[min(780px,calc(100dvh-48px))] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
     : markerRef
-      ? "h-[min(600px,calc(100dvh-24px))] w-[min(420px,calc(100vw-24px))]"
+      ? cn("h-[min(600px,calc(100dvh-24px))]", PICKER_WIDTH_CLASS)
       : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(600px,calc(100dvh-112px))] w-[min(420px,calc(100vw-2rem))]";
+
+  const searchRow =
+    mode === "favorites" ? (
+      <>
+        <IconButton
+          icon="back"
+          size={32}
+          onClick={handleBack}
+          aria-label="Back"
+        />
+        <h3 className="min-w-0 flex-1 truncate text-ui-row font-semibold text-ink-1">
+          Favorite {mediaLabel}
+        </h3>
+      </>
+    ) : (
+      <>
+        {mode === "search" || mode === "featured" ? (
+          <IconButton
+            icon="back"
+            size={32}
+            onClick={handleBack}
+            aria-label="Back"
+          />
+        ) : null}
+        <div ref={searchFieldRef} className="relative min-w-0 flex-1">
+          <PickerSearch
+            ref={searchInputRef}
+            value={searchValue}
+            onChange={(event) => {
+              skipSuggestionOpenRef.current = false;
+              allowSearchFocusRef.current = true;
+              setSearchValue(event.target.value);
+            }}
+            onPointerDown={() => {
+              skipSuggestionOpenRef.current = false;
+              allowSearchFocusRef.current = true;
+            }}
+            onFocus={() => {
+              if (!allowSearchFocusRef.current) {
+                focusResultsPane();
+                return;
+              }
+              setIsSearchFocused(true);
+              if (
+                !skipSuggestionOpenRef.current &&
+                suggestions.length > 0 &&
+                searchValue.trim().length >= 2
+              ) {
+                setIsSuggestionListOpen(true);
+              }
+            }}
+            onBlur={() => {
+              window.setTimeout(() => {
+                if (document.activeElement === searchInputRef.current) {
+                  return;
+                }
+                setIsSearchFocused(false);
+                setIsSuggestionListOpen(false);
+                setActiveSuggestionIndex(-1);
+              }, 0);
+            }}
+            onKeyDown={handleSearchInputKeyDown}
+            placeholder={getGifProviderSearchPlaceholder(provider)}
+            aria-autocomplete="list"
+            aria-controls={
+              suggestionsVisible ? "gif-picker-search-suggestions" : undefined
+            }
+            aria-label={`Search ${providerLabel} ${mediaLabel}`}
+            aria-activedescendant={
+              suggestionsVisible && activeSuggestionIndex >= 0
+                ? `gif-picker-suggestion-${activeSuggestionIndex}`
+                : undefined
+            }
+          />
+          {suggestionsVisible && (
+            <div
+              id="gif-picker-search-suggestions"
+              role="listbox"
+              aria-label="Search suggestions"
+              className={cn(
+                MENU_PANEL,
+                "absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20",
+              )}
+            >
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={`${suggestion}-${index}`}
+                  id={`gif-picker-suggestion-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={activeSuggestionIndex === index}
+                  onMouseEnter={() => setActiveSuggestionIndex(index)}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    selectSuggestion(suggestion);
+                  }}
+                  className={cn(
+                    MENU_ITEM,
+                    "justify-between",
+                    activeSuggestionIndex === index
+                      ? MENU_ITEM_DEFAULT_ON
+                      : MENU_ITEM_DEFAULT,
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className={MENU_ICON}>
+                      <Icon name="search" size="sm" />
+                    </span>
+                    <span className="truncate">{suggestion}</span>
+                  </span>
+                  {activeSuggestionIndex === index && (
+                    <span className={MENU_HINT}>Enter</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <IconButton
+          icon="star"
+          size={32}
+          onClick={openFavorites}
+          className="pointer-coarse:size-11"
+          aria-label="View favorites"
+          tooltip="Favorites"
+          tooltipSide="bottom"
+        />
+      </>
+    );
 
   return (
     <TooltipProvider>
@@ -1367,44 +1508,45 @@ export default function GifPickerModal({
         stacked={stacked}
         className={panelLayout}
         style={markerRef && !isExpanded ? dynamicStyle : undefined}
+        initialFocusRef={searchInputRef}
+        anchorRef={markerRef}
         desktopProps={{ onMouseDown: (event) => event.stopPropagation() }}
       >
-        <div className="flex shrink-0 items-stretch justify-between gap-2 border-b border-rm-border px-3">
-          <Tabs
-            label="Media type"
-            items={MEDIA_TABS}
-            value={mediaType}
-            onValueChange={handleMediaTypeChange}
-            className="h-11"
-          />
-          <div className="flex items-center gap-1">
-            {!voiceMode && !lockExpanded && (
-              <IconButton
-                icon={expanded ? "minimize" : "maximize"}
-                variant="muted"
-                iconSize="sm"
-                onClick={() => setExpanded((value) => !value)}
-                className="max-md:hidden"
-                aria-label={
-                  expanded ? "Shrink GIF picker" : "Expand GIF picker"
-                }
-                tooltip={expanded ? "Shrink" : "Expand"}
-              />
-            )}
-            <IconButton
-              icon="close"
-              variant="muted"
-              iconSize="sm"
-              onClick={onClose}
-              aria-label="Close GIF picker"
+        <PickerHeader
+          tabs={
+            <Tabs
+              label="Media type"
+              items={MEDIA_TABS}
+              value={mediaType}
+              onValueChange={handleMediaTypeChange}
+              className="h-9"
             />
-          </div>
-        </div>
+          }
+        >
+          {searchRow}
+          {!voiceMode && !lockExpanded && (
+            <IconButton
+              icon={expanded ? "minimize" : "maximize"}
+              size={32}
+              onClick={() => setExpanded((value) => !value)}
+              className="max-md:hidden"
+              aria-label={expanded ? "Shrink GIF picker" : "Expand GIF picker"}
+              tooltip={expanded ? "Shrink" : "Expand"}
+              tooltipSide="bottom"
+            />
+          )}
+          <IconButton
+            icon="close"
+            size={32}
+            onClick={onClose}
+            aria-label="Close GIF picker"
+          />
+        </PickerHeader>
 
-        {/* Voice reaction mode: display mode selector + rate limit banner */}
+        {/* Voice reaction mode: display mode selector + rate limit line */}
         {voiceMode && (
-          <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-rm-border px-3 py-1.5 scrollbar-none">
-            <span className="mr-1 shrink-0 text-ui-xs font-medium text-rm-text-muted">
+          <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2 scrollbar-none">
+            <span className="mr-1 shrink-0 px-1 text-ui-xs font-medium text-ink-3">
               React mode
             </span>
             {VOICE_DISPLAY_MODES.map((mode) => (
@@ -1414,198 +1556,26 @@ export default function GifPickerModal({
                 onClick={() => persistVoiceDisplayMode(mode)}
                 aria-pressed={voiceDisplayMode === mode}
                 className={cn(
-                  "shrink-0 rounded-md px-2.5 py-1 text-ui-xs font-medium",
+                  "h-7 shrink-0 rounded-sm px-2 text-ui-xs font-medium outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
                   PRESS,
                   HIT,
                   voiceDisplayMode === mode
-                    ? "bg-rm-tint-2 text-rm-text"
-                    : "text-rm-text-muted pointer-fine:hover:text-rm-text",
+                    ? "bg-tint-2 text-ink-1"
+                    : "text-ink-3 pointer-fine:hover:text-ink-1",
                 )}
               >
                 {VOICE_DISPLAY_MODE_LABELS[mode]}
               </button>
             ))}
             {voiceRateLimited && (
-              <span className="ml-auto shrink-0 text-ui-xs font-medium text-rm-warning-ink">
-                Slow down! ⚠️
+              <span
+                role="status"
+                className="ml-auto flex shrink-0 items-center gap-1 px-1 text-ui-xs font-medium text-warning-ink"
+              >
+                <Icon name="warning" size="xs" />
+                Slow down!
               </span>
             )}
-          </div>
-        )}
-
-        {mode === "favorites" ? (
-          <div className="flex shrink-0 items-center gap-2 border-b border-rm-border px-3 py-2">
-            <IconButton
-              icon="back"
-              variant="muted"
-              onClick={handleBack}
-              aria-label="Back"
-            />
-            <h3 className="truncate text-ui-sm font-semibold text-rm-text">
-              Favorite {mediaLabel}
-            </h3>
-          </div>
-        ) : (
-          <div className="shrink-0 border-b border-rm-border px-3 py-2">
-            <div className="flex gap-2 items-center">
-              {mode === "search" || mode === "featured" ? (
-                <IconButton
-                  icon="back"
-                  variant="muted"
-                  onClick={handleBack}
-                  aria-label="Back"
-                />
-              ) : null}
-              <div ref={searchFieldRef} className="relative flex-1">
-                <Icon
-                  name="search"
-                  size="sm"
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-                />
-                <input
-                  ref={searchInputRef}
-                  value={searchValue}
-                  onChange={(event) => {
-                    skipSuggestionOpenRef.current = false;
-                    allowSearchFocusRef.current = true;
-                    setSearchValue(event.target.value);
-                  }}
-                  onPointerDown={() => {
-                    skipSuggestionOpenRef.current = false;
-                    allowSearchFocusRef.current = true;
-                  }}
-                  onFocus={() => {
-                    if (!allowSearchFocusRef.current) {
-                      focusResultsPane();
-                      return;
-                    }
-                    setIsSearchFocused(true);
-                    if (
-                      !skipSuggestionOpenRef.current &&
-                      suggestions.length > 0 &&
-                      searchValue.trim().length >= 2
-                    ) {
-                      setIsSuggestionListOpen(true);
-                    }
-                  }}
-                  onBlur={() => {
-                    window.setTimeout(() => {
-                      if (document.activeElement === searchInputRef.current) {
-                        return;
-                      }
-                      setIsSearchFocused(false);
-                      setIsSuggestionListOpen(false);
-                      setActiveSuggestionIndex(-1);
-                    }, 0);
-                  }}
-                  onKeyDown={handleSearchInputKeyDown}
-                  placeholder={getGifProviderSearchPlaceholder(provider)}
-                  aria-autocomplete="list"
-                  aria-controls={
-                    suggestionsVisible
-                      ? "gif-picker-search-suggestions"
-                      : undefined
-                  }
-                  aria-label={`Search ${providerLabel} ${mediaLabel}`}
-                  aria-activedescendant={
-                    suggestionsVisible && activeSuggestionIndex >= 0
-                      ? `gif-picker-suggestion-${activeSuggestionIndex}`
-                      : undefined
-                  }
-                  className="h-9 w-full rounded-md border border-rm-field-edge bg-transparent pl-9 pr-3 text-ui-md text-rm-text outline-none placeholder:text-rm-text-muted pointer-coarse:h-11 md:text-ui-sm"
-                />
-                {suggestionsVisible && (
-                  <div
-                    id="gif-picker-search-suggestions"
-                    role="listbox"
-                    aria-label="Search suggestions"
-                    className={cn(
-                      MENU_PANEL,
-                      "absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20",
-                    )}
-                  >
-                    {suggestions.map((suggestion, index) => (
-                      <button
-                        key={`${suggestion}-${index}`}
-                        id={`gif-picker-suggestion-${index}`}
-                        type="button"
-                        role="option"
-                        aria-selected={activeSuggestionIndex === index}
-                        onMouseEnter={() => setActiveSuggestionIndex(index)}
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          selectSuggestion(suggestion);
-                        }}
-                        className={cn(
-                          MENU_ITEM,
-                          "justify-between",
-                          activeSuggestionIndex === index
-                            ? MENU_ITEM_DEFAULT_ON
-                            : MENU_ITEM_DEFAULT,
-                        )}
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <Icon name="search" size="sm" className="shrink-0" />
-                          <span className="truncate">{suggestion}</span>
-                        </span>
-                        {activeSuggestionIndex === index && (
-                          <span className="shrink-0 text-ui-xs text-rm-text-muted">
-                            Enter
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <IconButton
-                icon="star"
-                variant="muted"
-                onClick={openFavorites}
-                className="size-9 pointer-coarse:size-11"
-                aria-label="View favorites"
-                tooltip="Favorites"
-              />
-              {mediaType === "gifs" && (
-                <div className="relative shrink-0">
-                  {providerOptions.length > 1 ? (
-                    <>
-                      <Select
-                        value={provider}
-                        onValueChange={(value) =>
-                          handleProviderChange(value as GifProvider)
-                        }
-                      >
-                        <SelectTrigger
-                          aria-label="GIF provider"
-                          className="font-medium"
-                        >
-                          <SelectValue placeholder="GIF provider" />
-                        </SelectTrigger>
-                        <SelectContent position="popper" align="start">
-                          {providerOptions.map((option) => {
-                            const label = getGifProviderLabel(option);
-                            return (
-                              <SelectItem
-                                key={option}
-                                value={option}
-                                textValue={label}
-                              >
-                                {label}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </>
-                  ) : (
-                    <div className="flex h-9 items-center rounded-md border border-rm-border px-3 text-ui-sm font-medium text-rm-text">
-                      {getGifProviderLabel(provider)}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -1613,35 +1583,38 @@ export default function GifPickerModal({
           ref={scrollRef}
           tabIndex={-1}
           onScroll={() => void handleScroll()}
-          className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 outline-none"
+          onKeyDown={handlePickerGridKeyDown}
+          className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-1 outline-none"
         >
           {mode === "categories" &&
             searchValue.trim() === "" &&
             recentQueries.length > 0 && (
-              <div className="mb-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-ui-xs font-medium text-rm-text-muted">
-                    Recent searches
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      clearRecentQueries();
-                    }}
-                    className={cn(
-                      "relative text-ui-xs font-medium text-rm-text-muted pointer-fine:hover:text-rm-text",
-                      HIT,
-                    )}
-                  >
-                    Clear all
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
+              <div className="mb-1">
+                <PickerSectionLabel
+                  sticky={false}
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearRecentQueries();
+                      }}
+                      className={cn(
+                        "relative rounded-xs text-ui-xs font-medium text-ink-3 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+                        HIT,
+                      )}
+                    >
+                      Clear all
+                    </button>
+                  }
+                >
+                  Recent searches
+                </PickerSectionLabel>
+                <div className="flex flex-wrap gap-1 px-1 pb-1">
                   {recentQueries.map((q) => (
                     <div
                       key={q}
-                      className="inline-flex items-center gap-1 rounded-full bg-rm-tint-1 py-0.5 pl-3 pr-1 text-ui-xs font-medium text-rm-text"
+                      className="inline-flex h-7 items-center gap-0.5 rounded-sm bg-tint-1 pl-2 pr-0.5 text-ui-xs font-medium text-ink-1"
                     >
                       <button
                         type="button"
@@ -1650,7 +1623,7 @@ export default function GifPickerModal({
                           commitProgrammaticSearch(q);
                         }}
                         className={cn(
-                          "relative text-left pointer-fine:hover:underline",
+                          "relative rounded-xs text-left outline-none pointer-fine:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
                           HIT,
                         )}
                       >
@@ -1663,7 +1636,7 @@ export default function GifPickerModal({
                           removeRecentQuery(q);
                         }}
                         className={cn(
-                          "flex size-5 items-center justify-center rounded-full text-rm-text-muted pointer-fine:hover:text-rm-text",
+                          "flex size-6 items-center justify-center rounded-xs text-ink-3 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
                           PRESS,
                           HIT,
                         )}
@@ -1680,74 +1653,31 @@ export default function GifPickerModal({
           {mode === "categories" && (
             <div
               className={cn(
-                "mb-4 grid grid-cols-2 gap-2",
+                "grid grid-cols-2 gap-0.5",
                 expanded && "md:grid-cols-3",
               )}
             >
-              <button
-                type="button"
+              <ShortcutCell
+                label="Favorites"
+                icon="star"
+                item={latestFavoritePreview}
                 onClick={openFavorites}
-                className={cn(
-                  "group relative h-24 overflow-hidden rounded-lg",
-                  PRESS,
-                  // No media yet: the accent fill under white ink.
-                  latestFavoritePreview
-                    ? "bg-rm-bg-surface"
-                    : "bg-rm-accent-solid",
-                )}
-              >
-                <GifShortcutCardMedia item={latestFavoritePreview} />
-                {latestFavoritePreview ? (
-                  <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
-                ) : null}
-                <div className="absolute right-2 top-2 rounded-full bg-black/40 p-1.5 text-white">
-                  <Icon name="star" size="sm" />
-                </div>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <span className="text-ui-xs font-medium text-white/80">
-                    {latestFavoritePreview ? "Latest saved" : "Your picks"}
-                  </span>
-                  <span className="mt-0.5 text-ui-lg font-semibold">
-                    Favorites
-                  </span>
-                </div>
-              </button>
-              <button
-                type="button"
+              />
+              <ShortcutCell
+                label="Trending"
+                icon="trendUp"
+                item={featuredCardPreview}
                 onClick={openFeatured}
-                className={cn(
-                  "group relative h-24 overflow-hidden rounded-lg",
-                  PRESS,
-                  // No media yet: the accent fill under white ink.
-                  featuredCardPreview
-                    ? "bg-rm-bg-surface"
-                    : "bg-rm-accent-solid",
-                )}
-              >
-                <GifShortcutCardMedia item={featuredCardPreview} />
-                {featuredCardPreview ? (
-                  <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
-                ) : null}
-                <div className="absolute right-2 top-2 rounded-full bg-black/40 p-1.5 text-white">
-                  <Icon name="trendUp" size="sm" />
-                </div>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <span className="text-ui-xs font-medium text-white/80">
-                    {providerLabel}
-                  </span>
-                  <span className="mt-0.5 text-ui-lg font-semibold">
-                    Trending
-                  </span>
-                </div>
-              </button>
+              />
               {categories.map((category) => (
                 <button
                   key={category.id}
                   type="button"
                   onClick={() => handleCategorySearch(category)}
+                  data-picker-cell=""
                   className={cn(
-                    "group relative h-24 overflow-hidden rounded-lg",
-                    PRESS,
+                    "group relative h-24 overflow-hidden rounded-md bg-tint-1",
+                    PICKER_RING,
                   )}
                 >
                   <img
@@ -1755,19 +1685,23 @@ export default function GifPickerModal({
                     alt=""
                     loading="lazy"
                     decoding="async"
-                    className="h-full w-full object-cover transition-transform duration-200"
+                    className="h-full w-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
-                  <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-ui-lg font-semibold capitalize text-white drop-shadow-md">
+                  <span className={MEDIA_SCRIM} />
+                  <span className={MEDIA_HOVER} />
+                  <span className="absolute inset-0 flex items-center justify-center px-3 text-center text-ui-row font-semibold capitalize text-white">
                     {category.label}
-                  </div>
+                  </span>
                 </button>
               ))}
             </div>
           )}
 
           {mode === "categories" && categoriesLoading ? (
-            <div className="py-8 text-center text-ui-sm font-medium text-rm-text-muted">
+            <div
+              role="status"
+              className="py-8 text-center text-ui-sm font-medium text-ink-3"
+            >
               Loading {providerLabel} {mediaLabel} categories…
             </div>
           ) : null}
@@ -1775,7 +1709,7 @@ export default function GifPickerModal({
           {mode === "categories" &&
           !categoriesLoading &&
           categories.length === 0 ? (
-            <div className="flex h-40 items-center justify-center text-center text-ui-sm font-medium text-rm-text-muted">
+            <div className="flex h-40 items-center justify-center px-6 text-center text-ui-sm text-ink-3">
               No {providerLabel} {mediaLabel} categories available right now.
             </div>
           ) : null}
@@ -1783,7 +1717,7 @@ export default function GifPickerModal({
           {error ? (
             <div
               role="alert"
-              className="mb-3 rounded-md bg-rm-danger-tint px-3 py-2 text-ui-sm text-rm-danger-ink"
+              className="m-1 rounded-md bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink"
             >
               {error}
             </div>
@@ -1794,19 +1728,11 @@ export default function GifPickerModal({
           ) : null}
 
           {mode !== "categories" && results.length > 0 ? (
-            <div
-              className={cn(
-                "flex items-start",
-                expanded ? "gap-2 md:gap-3" : "gap-2",
-              )}
-            >
+            <div className="flex items-start gap-0.5">
               {columnItems.map((col, colIdx) => (
                 <div
                   key={colIdx}
-                  className={cn(
-                    "flex flex-col flex-1 min-w-0",
-                    expanded ? "gap-2 md:gap-3" : "gap-2",
-                  )}
+                  className="flex min-w-0 flex-1 flex-col gap-0.5"
                 >
                   {col.map((gif) => (
                     <GifTile
@@ -1830,7 +1756,7 @@ export default function GifPickerModal({
           ) : (mode === "search" || mode === "featured") &&
             !loading &&
             !error ? (
-            <div className="flex h-40 items-center justify-center text-center text-ui-sm font-medium text-rm-text-muted">
+            <div className="flex h-40 items-center justify-center px-6 text-center text-ui-sm text-ink-3">
               {getNoResultsMessage()}
             </div>
           ) : null}
@@ -1853,21 +1779,103 @@ export default function GifPickerModal({
           ) : null}
         </div>
 
-        {provider === "klipy" && (
-          <div className="flex items-center justify-center border-t border-rm-border py-2 bg-rm-bg-surface/30 select-none pointer-events-none shrink-0">
-            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mr-1.5 opacity-70">
-              Powered by
+        {/* The one provider attribution. With more than one GIF provider it
+            is also the provider switch, so the name never shows twice. */}
+        <div className="flex h-9 shrink-0 select-none items-center justify-center gap-1 border-t border-line text-ui-xs text-ink-3">
+          <span>Powered by</span>
+          {mediaType === "gifs" && providerOptions.length > 1 ? (
+            <Select
+              value={provider}
+              onValueChange={(value) =>
+                handleProviderChange(value as GifProvider)
+              }
+            >
+              <SelectTrigger
+                size="sm"
+                aria-label="GIF provider"
+                className="h-6 gap-1 border-transparent bg-transparent px-1.5 text-ink-2 pointer-fine:hover:bg-tint-1 data-[size=sm]:h-6 pointer-coarse:min-h-8"
+              >
+                <ProviderMark provider={provider} />
+              </SelectTrigger>
+              <SelectContent position="popper" align="center" side="top">
+                {providerOptions.map((option) => {
+                  const label = getGifProviderLabel(option);
+                  return (
+                    <SelectItem key={option} value={option} textValue={label}>
+                      {label}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          ) : (
+            <span className="flex items-center px-1.5 text-ink-2">
+              <ProviderMark provider={provider} />
             </span>
-            <img
-              src={klipyTextLightUrl}
-              alt="KLIPY"
-              className="h-3.5 w-auto opacity-70 dark:opacity-70 invert dark:invert-0"
-            />
-          </div>
-        )}
+          )}
+        </div>
       </PickerSurface>
     </TooltipProvider>
   );
+}
+
+/** Over media: a fixed black scrim (media is the same in every theme). */
+const MEDIA_SCRIM = "pointer-events-none absolute inset-0 bg-black/50";
+/** Hover over media: the ink tint, revealed on fine pointers. */
+const MEDIA_HOVER =
+  "pointer-events-none absolute inset-0 bg-tint-2 opacity-0 transition-opacity duration-(--dur-1) ease-out pointer-fine:group-hover:opacity-100";
+
+/**
+ * The provider's wordmark, drawn in the current ink through a mask so it
+ * holds in every theme (light, dark, Miku, Spider-Man) without a theme check.
+ */
+function ProviderMark({ provider }: { provider: GifProvider }) {
+  if (provider === "klipy") {
+    return (
+      <span
+        role="img"
+        aria-label="KLIPY"
+        className="inline-block aspect-[375/102] h-3 bg-current"
+        style={{
+          maskImage: `url("${klipyTextLightUrl}")`,
+          WebkitMaskImage: `url("${klipyTextLightUrl}")`,
+          maskSize: "contain",
+          WebkitMaskSize: "contain",
+          maskRepeat: "no-repeat",
+          WebkitMaskRepeat: "no-repeat",
+          maskPosition: "center",
+          WebkitMaskPosition: "center",
+        }}
+      />
+    );
+  }
+  return <span className="font-semibold">{getGifProviderLabel(provider)}</span>;
+}
+
+/**
+ * Pauses a looping preview video while the app is inactive (hidden, or
+ * behind a fullscreen game): the global CSS pause doesn't reach <video>.
+ */
+function useVideoPausedWhileInactive(
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+) {
+  const active = useAppActive();
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (active) {
+      if (video.autoplay && video.paused) void video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [active, videoRef]);
+}
+
+/** A looping, muted preview video that stops with the app. */
+function PreviewVideo(props: React.ComponentProps<"video">) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useVideoPausedWhileInactive(videoRef);
+  return <video ref={videoRef} {...props} />;
 }
 
 const ClipVideoPlayer = memo(function ClipVideoPlayer({
@@ -1880,6 +1888,7 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
   onDurationLoaded?: (duration: number) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  useVideoPausedWhileInactive(videoRef);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -1920,6 +1929,14 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
     </div>
   );
 });
+
+/** A chip over media (6.5): fixed black glass and white ink in every theme. */
+const MEDIA_CHIP = cn(
+  "absolute z-10 flex size-7 items-center justify-center rounded-sm bg-black/60 text-white outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+  PRESS,
+  HIT,
+  "absolute",
+);
 
 const GifTile = memo(function GifTile({
   gif,
@@ -1967,7 +1984,7 @@ const GifTile = memo(function GifTile({
 
   return (
     <div
-      className="group relative overflow-hidden rounded-lg bg-rm-bg-surface"
+      className="group relative overflow-hidden rounded-md bg-tint-1"
       onPointerEnter={
         isClip
           ? (event) => {
@@ -1980,7 +1997,11 @@ const GifTile = memo(function GifTile({
       <button
         type="button"
         onClick={() => onSelect({ ...gif, duration })}
-        className="block w-full overflow-hidden text-left"
+        data-picker-cell=""
+        className={cn(
+          "block w-full overflow-hidden rounded-md text-left",
+          PICKER_RING,
+        )}
         aria-label={`Send asset: ${gif.altText || gif.title}`}
       >
         {isClip ? (
@@ -1994,6 +2015,8 @@ const GifTile = memo(function GifTile({
         )}
       </button>
 
+      <span className={MEDIA_HOVER} />
+
       {isClip && (
         <button
           type="button"
@@ -2001,10 +2024,8 @@ const GifTile = memo(function GifTile({
           className={cn(
             // Media overlay chip over the clip (6.5): always shown on touch,
             // revealed on hover for fine pointers.
-            "absolute bottom-2 left-2 z-10 flex size-7 items-center justify-center rounded-md bg-black/60 text-white",
-            PRESS,
-            HIT,
-            "absolute",
+            MEDIA_CHIP,
+            "bottom-1 left-1",
             REVEAL,
           )}
           aria-label={clipMuted ? "Unmute clip preview" : "Mute clip preview"}
@@ -2015,12 +2036,10 @@ const GifTile = memo(function GifTile({
       )}
 
       {duration !== undefined && (
-        <div className="pointer-events-none absolute bottom-2 right-2 z-10 rounded-md bg-black/60 px-1.5 py-0.5 text-ui-2xs font-bold text-white border border-white/5 select-none">
+        <Num className="pointer-events-none absolute bottom-1 right-1 z-10 rounded-xs bg-black/60 px-1 py-0.5 text-white select-none">
           {formatDuration(duration)}
-        </div>
+        </Num>
       )}
-
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100" />
 
       <Tooltip>
         <TooltipTrigger asChild>
@@ -2031,12 +2050,11 @@ const GifTile = memo(function GifTile({
               onToggleFavorite({ ...gif, duration });
             }}
             className={cn(
-              // Over the GIF itself: a media overlay chip (6.5). Visible on
-              // touch, hover-revealed on fine pointers; kept up once saved.
-              "absolute right-2 top-2 flex size-8 items-center justify-center rounded-md bg-black/60 text-white",
-              PRESS,
-              HIT,
-              "absolute",
+              // Over the GIF itself: a media overlay chip (6.5), inset 4px so
+              // it sits inside the tile's corner radius. Visible on touch,
+              // hover-revealed on fine pointers; kept up once saved.
+              MEDIA_CHIP,
+              "right-1 top-1",
               !isFavorite && REVEAL,
             )}
             aria-label={
@@ -2047,7 +2065,7 @@ const GifTile = memo(function GifTile({
             <Icon
               name="star"
               state={isFavorite ? "active" : "idle"}
-              size="md"
+              size="sm"
             />
           </button>
         </TooltipTrigger>
@@ -2059,16 +2077,53 @@ const GifTile = memo(function GifTile({
   );
 });
 
+/** Favorites / Trending: the same whole cell as a category, with a glyph. */
+function ShortcutCell({
+  label,
+  icon,
+  item,
+  onClick,
+}: {
+  label: string;
+  icon: "star" | "trendUp";
+  item: GifPickerItem | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-picker-cell=""
+      className={cn(
+        "group relative h-24 overflow-hidden rounded-md bg-tint-2",
+        PICKER_RING,
+      )}
+    >
+      <GifShortcutCardMedia item={item} />
+      {item ? <span className={MEDIA_SCRIM} /> : null}
+      <span className={MEDIA_HOVER} />
+      <span
+        className={cn(
+          "absolute inset-0 flex items-center justify-center gap-1.5 text-ui-row font-semibold",
+          item ? "text-white" : "text-ink-1",
+        )}
+      >
+        <Icon name={icon} size="sm" />
+        {label}
+      </span>
+    </button>
+  );
+}
+
 function GifShortcutCardMedia({ item }: { item: GifPickerItem | null }) {
   if (!item) return null;
 
   const asset = item.preview;
-  const className =
-    "absolute inset-0 h-full w-full object-cover transition-transform duration-200";
+  const className = "absolute inset-0 h-full w-full object-cover";
 
   if (asset.contentType === "video/mp4") {
     return (
-      <video
+      <PreviewVideo
         src={getMediaUrl(asset.url)}
         className={className}
         autoPlay
@@ -2100,28 +2155,13 @@ function FavoritesEmptyState({ mediaLabel = "GIFs" }: { mediaLabel?: string }) {
     ? mediaLabel.slice(0, -1)
     : mediaLabel;
   return (
-    <div
-      className="grid grid-cols-3 gap-3 max-md:grid-cols-1"
-      aria-live="polite"
-    >
-      <div className="relative flex min-h-40 items-center justify-center rounded-lg border border-rm-border px-5 py-6 text-center text-ui-base font-medium leading-7 text-rm-text">
-        <Icon
-          name="star"
-          state="active"
-          size="xl"
-          className="absolute right-4 top-3 text-rm-accent-ink"
-        />
-        <p>
-          Click the star in the corner of a {singleLabel.toLowerCase()} to
-          favorite it
-        </p>
-      </div>
-      <div className="flex min-h-40 items-center justify-center rounded-lg border border-rm-border px-5 py-6 text-center text-ui-base font-medium leading-7 text-rm-text">
-        <p>Favorites will show up here!</p>
-      </div>
-      <div className="flex min-h-40 items-center justify-center rounded-lg border border-rm-border px-5 py-6 text-center text-ui-base font-medium leading-7 text-rm-text">
-        <p>So uhh... maybe go favorite some {mediaLabel}?</p>
-      </div>
+    <div aria-live="polite">
+      <EmptyState
+        size="sm"
+        art={<Icon name="star" size="2xl" className="text-ink-3" />}
+        title="Favorites will show up here"
+        description={`Click the star in the corner of a ${singleLabel.toLowerCase()} to favorite it.`}
+      />
     </div>
   );
 }
@@ -2155,21 +2195,21 @@ function GifLoadingSkeleton({
 }) {
   return (
     <div
-      className="py-4 flex flex-col items-center justify-center"
+      className="flex flex-col items-center justify-center py-3"
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="flex items-center justify-center gap-2 text-center text-ui-xs font-medium text-rm-text-muted">
+      <div className="flex items-center justify-center gap-2 text-center text-ui-xs font-medium text-ink-3">
         {compact && <Spinner className="size-3.5" />}
         {message}
       </div>
       {!compact && (
-        <div className="grid grid-cols-2 gap-2 w-full mt-3">
+        <div className="mt-2 grid w-full grid-cols-2 gap-0.5">
           {Array.from({ length: 8 }).map((_, index) => (
-            <div
+            <Skeleton
               key={index}
               className={cn(
-                "animate-pulse rounded-lg bg-rm-tint-1",
+                "rounded-md",
                 index % 3 === 0 ? "h-28" : index % 3 === 1 ? "h-20" : "h-24",
               )}
             />
@@ -2192,7 +2232,7 @@ function GifPreviewMedia({
 
   if (asset.contentType === "video/mp4") {
     return (
-      <video
+      <PreviewVideo
         src={getMediaUrl(asset.url)}
         className={className}
         style={style}

@@ -212,14 +212,14 @@ export default function AppearancePanel() {
                     data-roving
                     tabIndex={on ? 0 : -1}
                     onClick={() => void setAppearanceTheme(id)}
-                    className="group flex min-w-0 flex-col gap-1.5 rounded-md text-left transition-transform duration-150 ease-(--rm-ease-out) enabled:active:scale-[0.97] motion-reduce:enabled:active:scale-100"
+                    className="group flex min-w-0 flex-col gap-1.5 rounded-[2px] text-left transition-transform duration-150 ease-out enabled:active:scale-[0.97] motion-reduce:enabled:active:scale-100"
                   >
                     <span
                       className={cn(
-                        "relative block aspect-[16/10] w-full overflow-hidden rounded-md",
+                        "relative block aspect-[16/10] w-full overflow-hidden rounded-[2px]",
                         on
-                          ? "ring-2 ring-primary ring-offset-2 ring-offset-rm-bg-surface"
-                          : "ring-1 ring-rm-border-strong",
+                          ? "ring-2 ring-ink-1 ring-offset-2 ring-offset-ply-0"
+                          : "ring-1 ring-line-strong",
                       )}
                     >
                       {id === "system" ? (
@@ -239,7 +239,7 @@ export default function AppearancePanel() {
                         <ThemeMock t={SWATCHES[id]} />
                       )}
                       {on ? (
-                        <span className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <span className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-[2px] bg-primary-fill text-on-primary">
                           <Icon name="check" size="xs" />
                         </span>
                       ) : null}
@@ -247,9 +247,7 @@ export default function AppearancePanel() {
                     <span
                       className={cn(
                         "truncate px-0.5 text-ui-sm",
-                        on
-                          ? "font-medium text-rm-text"
-                          : "text-rm-text-secondary",
+                        on ? "font-semibold text-ink-1" : "text-ink-2",
                       )}
                     >
                       {label}

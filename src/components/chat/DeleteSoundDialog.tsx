@@ -42,14 +42,14 @@ export function DeleteSoundDialog({
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="md:max-w-sm">
+      <ResponsiveDialogContent size="sm">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Delete sound</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Are you sure you want to delete this sound?
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        <div className="flex min-w-0 items-center justify-center gap-2 rounded-lg border border-rm-border p-3 text-ui-sm font-semibold text-rm-text">
+        <div className="flex min-w-0 items-center justify-center gap-2 rounded-lg bg-tint-1 px-3 py-2.5 text-ui-row font-medium text-ink-1">
           {soundEmoji && (
             <EmojiToken
               value={soundEmoji}

@@ -2,11 +2,12 @@ import { HIT, PRESS } from "@/components/ui/interaction";
 import { copyToClipboard } from "@/components/ui/toast";
 import {
   PHONE_GROUP,
+  PHONE_SECTION_LABEL,
   PHONE_ICON_SLOT,
   PHONE_ROW,
-  SIDEBAR_CATEGORY,
   SIDEBAR_ICON_SLOT,
   SIDEBAR_LIST,
+  TREE_BRANCH_LABEL,
   sidebarRowClass,
 } from "@/components/ui/sidebar-row";
 import { useContextMenu } from "@/hooks/useContextMenu";
@@ -15,6 +16,8 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 
 import { Icon, type IconName } from "@/components/ui/icon";
+import { CountBadge } from "@/components/ui/badge";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
@@ -79,12 +82,8 @@ function NavRow({
           <Icon name={icon} size="lg" />
         </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {badge ? <span className="badge-count">{badge}</span> : null}
-        <Icon
-          name="chevronRight"
-          size="xs"
-          className="shrink-0 text-rm-text-muted"
-        />
+        {badge ? <CountBadge count={badge} /> : null}
+        <Icon name="chevronRight" size="xs" className="shrink-0 text-ink-3" />
       </button>
     );
   }
@@ -92,14 +91,18 @@ function NavRow({
     <button
       type="button"
       aria-current={selected ? "page" : undefined}
-      className={sidebarRowClass({ selected, className: PRESS })}
+      className={sidebarRowClass({
+        selected,
+        className:
+          "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus",
+      })}
       onClick={onClick}
     >
-      <span className={SIDEBAR_ICON_SLOT}>
-        <Icon name={icon} size="md" state={selected ? "active" : undefined} />
+      <span className={cn(SIDEBAR_ICON_SLOT, selected && "text-ink-1")}>
+        <Icon name={icon} size="sm" state={selected ? "active" : undefined} />
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {badge ? <span className="badge-count">{badge}</span> : null}
+      {badge ? <CountBadge count={badge} /> : null}
     </button>
   );
 }
@@ -219,16 +222,14 @@ export default function DMSidebar({
     <div
       className={cn(
         "flex w-full min-h-0 flex-1 flex-col overflow-hidden font-sans",
-        phone
-          ? "bg-rm-bg-primary"
-          : "shrink-0 border-r border-rm-border bg-rm-sidebar",
+        phone ? "bg-ply-0" : "shrink-0 bg-ply-1",
       )}
     >
       {phone ? (
         <>
           {/* Phone page header (12.2): 48px + safe area. */}
           <header className="flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center px-4 pt-[var(--safe-area-top,0px)]">
-            <h1 className="truncate text-ui-md font-semibold text-rm-text">
+            <h1 className="truncate text-ui-md font-semibold text-ink-1">
               Messages
             </h1>
           </header>
@@ -236,7 +237,7 @@ export default function DMSidebar({
             <button
               type="button"
               className={cn(
-                "flex min-h-11 w-full items-center gap-2 rounded-md border border-rm-field-edge bg-rm-bg-surface px-3 text-left text-ui-md text-rm-text-muted outline-none",
+                "flex min-h-11 w-full items-center gap-2 rounded-md border border-line-field bg-ply-2 px-3 text-left text-ui-md text-ink-3 outline-none",
                 PRESS,
               )}
               onClick={openCommandMenu}
@@ -248,18 +249,26 @@ export default function DMSidebar({
         </>
       ) : (
         /* 48px header on the main header's line, plus the safe area. */
-        <div className="flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center border-b border-rm-border px-2 pt-[var(--safe-area-top,0px)]">
+        <div className="flex h-[calc(48px+var(--safe-area-top,0px))] shrink-0 items-center border-b border-line px-2 pt-[var(--safe-area-top,0px)]">
+          {/* It opens the command menu, so it says so: the shortcut sits in
+              the field instead of pretending to be an input. */}
           <button
             type="button"
             className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-md bg-rm-tint-1 px-2 text-left text-ui-sm text-rm-text-muted outline-none pointer-fine:hover:text-rm-text",
+              "flex h-8 w-full items-center gap-2 rounded-md bg-tint-1 pr-1.5 pl-2 text-left text-ui-sm text-ink-3 outline-none pointer-fine:hover:text-ink-1 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus",
               PRESS,
               HIT,
             )}
             onClick={openCommandMenu}
           >
             <Icon name="search" size="sm" className="shrink-0" />
-            <span className="truncate">Find or start a conversation</span>
+            <span className="min-w-0 flex-1 truncate">
+              Find or start a conversation
+            </span>
+            <KbdGroup aria-hidden className="shrink-0">
+              <Kbd>Ctrl</Kbd>
+              <Kbd>K</Kbd>
+            </KbdGroup>
           </button>
         </div>
       )}
@@ -267,7 +276,7 @@ export default function DMSidebar({
       {/* One scroller: nav rows, the DM eyebrow and the DM rows. */}
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto overscroll-contain custom-scrollbar",
+          "min-h-0 flex-1 overflow-y-auto overscroll-contain",
           phone && "pb-[var(--safe-area-bottom,0px)]",
         )}
       >
@@ -279,9 +288,16 @@ export default function DMSidebar({
           <div className={cn(SIDEBAR_LIST, "pb-0")}>{navRows}</div>
         )}
 
-        <h2 className={cn(SIDEBAR_CATEGORY, phone ? "px-4 pt-6 pb-2" : "px-4")}>
-          Direct messages
-        </h2>
+        {phone ? (
+          <h2 className={PHONE_SECTION_LABEL}>Direct messages</h2>
+        ) : (
+          <div className="px-2 pt-4 pb-0.5">
+            <h2 className={TREE_BRANCH_LABEL}>
+              {/* Label on the row-name edge: past the 20px icon slot. */}
+              <span className="pl-7">Direct messages</span>
+            </h2>
+          </div>
+        )}
 
         <DMListPanel
           dmChannels={dmChannels}

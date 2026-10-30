@@ -1,21 +1,19 @@
 /**
  * Live preview rails: the four pages where you judge a feel rather than flip
  * a fact. On wide dialogs they sit beside the cards; on narrow ones the page
- * renders them as the first card.
+ * renders them as the first card. Each is a C1 legend plate: a ply-2 plate
+ * with its title printed across the top edge in silkscreen.
  */
 
-import { AvatarImage } from "@/components/chat/AvatarImage";
-import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
-import { UserStatusDot } from "@/components/chat/UserStatusDot";
-import { Icon } from "@/components/ui/icon";
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
-import { getAuthAssetUrl } from "@/lib/platform";
 import {
-  PROFILE_BANNER_CHIP_STYLE,
-  resolveProfileTheme,
-} from "@/lib/profile-customization";
+  ProfileCard,
+  ProfileSections,
+  resolveProfileCardTheme,
+} from "@/components/chat/ProfileCard";
+import { normalizeUserStatus } from "@/components/chat/UserStatusDot";
+import { Icon } from "@/components/ui/icon";
+import { LegendPlate } from "@/components/ui/plate";
+import { getDisplayName } from "@/lib/display-name";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
@@ -41,13 +39,14 @@ function RailFrame({
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title} className="flex flex-col gap-3">
-      <h4 className="text-ui-sm font-semibold text-rm-text">{title}</h4>
-      {children}
-      {note ? (
-        <p className="text-pretty text-ui-xs text-rm-text-secondary">{note}</p>
-      ) : null}
-    </section>
+    <LegendPlate legend={title} aria-label={title}>
+      <div className="flex flex-col gap-3">
+        {children}
+        {note ? (
+          <p className="text-pretty text-ui-xs text-ink-2">{note}</p>
+        ) : null}
+      </div>
+    </LegendPlate>
   );
 }
 
@@ -62,81 +61,25 @@ function ProfileRail() {
     display_name: user.display_name ?? null,
     username: user.username,
   });
-  const theme = resolveProfileTheme(user);
-  const status = user.status ?? "online";
   return (
     <RailFrame
       title="How others see you"
       note="Your profile card, as it looks when someone opens it."
     >
-      <ProfileSurfaceShell
-        variant="card"
-        display={user.avatar_display}
+      {/* The popover card others open (avatar 72); decorations stay still
+          in settings. */}
+      <ProfileCard
+        size="popover"
+        user={user}
+        theme={resolveProfileCardTheme(user)}
+        name={displayName}
+        status={normalizeUserStatus(user.status ?? "online")}
         playAnimation={false}
-        style={theme.variables}
-        aria-label={`Profile preview for ${displayName}`}
         role="img"
+        aria-label={`Profile preview for ${displayName}`}
       >
-        <div
-          className="relative h-[88px] overflow-hidden rounded-t-[inherit]"
-          style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
-        >
-          <ProfileAssetLayer
-            url={user.banner_url}
-            contentType={user.banner_content_type}
-            alt=""
-            className="opacity-95"
-          />
-          <div
-            className="absolute inset-0"
-            style={{ background: "var(--rm-profile-custom-banner-overlay)" }}
-          />
-        </div>
-        <div className="relative z-30 -mt-10 px-4">
-          <div className="relative inline-block rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
-            <div className="relative flex size-[68px] items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-ui-xl font-semibold text-[color:var(--rm-profile-custom-button-text)]">
-              {user.avatar_url ? (
-                <AvatarImage
-                  src={getAuthAssetUrl(user.avatar_url)}
-                  alt=""
-                  display={user.avatar_display}
-                />
-              ) : (
-                getDisplayInitial({ name: displayName })
-              )}
-            </div>
-            <div
-              className="absolute bottom-0.5 right-0.5 z-20 rounded-full p-0.5"
-              style={PROFILE_BANNER_CHIP_STYLE}
-            >
-              <UserStatusDot status={status} className="size-4" />
-            </div>
-          </div>
-        </div>
-        <div className="relative z-20 px-4 pb-4 pt-2">
-          <ProfileDisplayName
-            text={displayName}
-            displayNameStyle={user.display_name_style}
-            className="text-ui-lg font-semibold leading-tight text-[color:var(--rm-profile-custom-text)]"
-            backgroundColor={theme.backgroundColor}
-            readableFallbackColor={theme.textColor}
-          />
-          <p className="mt-0.5 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
-            @{user.username}
-            {user.pronouns?.trim() ? ` · ${user.pronouns.trim()}` : ""}
-          </p>
-          {user.custom_status?.trim() ? (
-            <p className="mt-2 text-ui-sm italic text-[color:var(--rm-profile-custom-muted)]">
-              {user.custom_status.trim()}
-            </p>
-          ) : null}
-          {user.bio?.trim() ? (
-            <p className="mt-3 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-ui-sm text-[color:var(--rm-profile-custom-text)]">
-              {user.bio.trim()}
-            </p>
-          ) : null}
-        </div>
-      </ProfileSurfaceShell>
+        <ProfileSections bio={user.bio} />
+      </ProfileCard>
     </RailFrame>
   );
 }
@@ -191,9 +134,9 @@ function VoiceRail() {
         data-row="mic-test"
         data-target={target === "mic-test" || undefined}
         tabIndex={target === "mic-test" ? -1 : undefined}
-        className="rm-settings-target flex flex-col gap-2 rounded-lg border border-rm-border bg-rm-bg-surface p-3 outline-none"
+        className="rm-settings-target flex flex-col gap-3 rounded-[2px] outline-none"
       >
-        <p className="text-ui-xs text-rm-text-secondary">{micTest?.desc}</p>
+        <p className="text-ui-sm text-ink-2">{micTest?.desc}</p>
         <MicTestWidget
           sensitivity={vSettings.sensitivity}
           autoSensitivity={vSettings.autoSensitivity}
@@ -202,16 +145,14 @@ function VoiceRail() {
           processing={audioProcessing}
         />
       </div>
-      <dl className="divide-y divide-rm-border rounded-lg border border-rm-border bg-rm-bg-surface">
+      <dl className="divide-y divide-line border-t border-line">
         {items.map(([key, value]) => (
           <div
             key={key}
-            className="flex items-center justify-between gap-3 px-3 py-2"
+            className="flex items-center justify-between gap-3 py-2"
           >
-            <dt className="shrink-0 text-ui-xs text-rm-text-secondary">
-              {key}
-            </dt>
-            <dd className="min-w-0 truncate text-right text-ui-xs font-medium text-rm-text">
+            <dt className="shrink-0 text-ui-xs text-ink-2">{key}</dt>
+            <dd className="min-w-0 truncate text-right text-ui-xs font-medium text-ink-1">
               {value}
             </dd>
           </div>
@@ -233,7 +174,7 @@ const SAMPLE_CHAT = [
   },
   {
     who: "You",
-    color: "var(--rm-accent-ink)",
+    color: "var(--accent-ink)",
     text: "Come through. Noise suppression is on, the fan's back.",
   },
   {
@@ -253,13 +194,13 @@ function AppearanceRail() {
       <div
         role="img"
         aria-label={`Sample chat in the ${name} theme`}
-        className="flex flex-col gap-3 rounded-lg border border-rm-border bg-rm-bg-primary px-4 py-3"
+        className="flex flex-col gap-3 rounded-[2px] border border-line bg-ply-0 px-4 py-3"
       >
         {SAMPLE_CHAT.map((message) => (
           <div key={message.who} className="flex gap-3">
             <span
               aria-hidden
-              className="mt-0.5 size-8 shrink-0 rounded-full opacity-85"
+              className="mt-0.5 size-8 shrink-0 rounded-[2px] opacity-85"
               style={{ background: message.color }}
             />
             <div className="min-w-0">
@@ -276,11 +217,11 @@ function AppearanceRail() {
               >
                 {message.who}
               </p>
-              <p className="text-ui-sm text-rm-text">{message.text}</p>
+              <p className="text-ui-sm text-ink-1">{message.text}</p>
             </div>
           </div>
         ))}
-        <div className="flex h-9 items-center rounded-md border border-rm-border bg-rm-bg-surface px-3 text-ui-sm text-rm-text-secondary">
+        <div className="flex h-8 items-center rounded-[2px] border border-line-field bg-ply-2 px-3 text-ui-sm text-ink-2">
           Message #general
         </div>
       </div>
@@ -313,24 +254,22 @@ function NotificationsRail() {
     >
       <div
         className={cn(
-          "flex gap-3 rounded-lg border border-rm-border-strong bg-rm-bg-surface p-3 shadow-[var(--rm-shadow-2)] transition-opacity duration-200",
+          "flex gap-3 rounded-[2px] border border-line-strong bg-ply-0 p-3 shadow-float transition-opacity duration-200",
           alertsOff && "opacity-50",
         )}
       >
-        <span className="relative flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <span className="relative flex size-9 shrink-0 items-center justify-center rounded-[2px] bg-primary-fill text-on-primary">
           <Icon name="bell" size="sm" />
         </span>
         <div className="min-w-0">
-          <p className="text-ui-xs text-rm-text-secondary">Ralph Meet · now</p>
-          <p className="text-ui-sm font-semibold text-rm-text">
-            Ada in #design
-          </p>
-          <p className="truncate text-ui-sm text-rm-text-secondary">
+          <p className="text-ui-xs text-ink-2">Ralph Meet · now</p>
+          <p className="text-ui-sm font-semibold text-ink-1">Ada in #design</p>
+          <p className="truncate text-ui-sm text-ink-2">
             @you is the voice room still open?
           </p>
         </div>
       </div>
-      <p className="flex items-center gap-2 text-ui-xs text-rm-text-secondary">
+      <p className="flex items-center gap-2 text-ui-xs text-ink-2">
         <Icon name={soundOn ? "voiceChannel" : "speakerOff"} size="sm" />
         {soundOn
           ? `Plays a chime at ${soundSettings.soundVolume}% volume.`

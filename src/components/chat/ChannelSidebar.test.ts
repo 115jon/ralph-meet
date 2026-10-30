@@ -116,7 +116,8 @@ describe("ChannelSidebar voice member identities", () => {
     const markup = container.innerHTML;
 
     expect(markup).toContain("Track One");
-    expect(markup).toContain("music");
+    // The track row leads with its play/pause state glyph.
+    expect(markup).toMatch(/data-icon="(play|pause)"/);
     expect(markup).toContain("0:05");
   });
 
@@ -314,7 +315,7 @@ describe("ChannelSidebar voice member identities", () => {
     expect(markup).toContain("relationship-user");
     expect(markup).not.toContain("stale-member.png");
     expect(markup).not.toContain("stale-relationship.png");
-    expect(markup).not.toContain("linear-gradient");
+    expect(markup).not.toMatch(/background-image:\s*linear-gradient/);
   });
 
   it("renders voice member display name styles from the cached member profile", () => {
