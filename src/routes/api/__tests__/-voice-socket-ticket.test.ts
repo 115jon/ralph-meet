@@ -166,6 +166,45 @@ describe("socket ticket route", () => {
         secret: callsSecret,
       }),
     ).resolves.toMatchObject({ ok: true, subject: "user-123" });
+
+    // The bootstrap token proves identity only: it is bound to this ticket's
+    // participant, room and subject, and joining is enforced separately.
+    const token = body.media_bootstrap.voice_token;
+    const participantId = body.media_bootstrap.participant_id;
+    await expect(
+      verifyVoiceToken({
+        token,
+        participantId: "other-participant",
+        roomSlug: verification.claims.roomSlug,
+        secret: callsSecret,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "identity" });
+    await expect(
+      verifyVoiceToken({
+        token,
+        participantId,
+        roomSlug: "voice-server-1-other-channel",
+        secret: callsSecret,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "identity" });
+    await expect(
+      verifyVoiceToken({
+        token,
+        participantId,
+        roomSlug: verification.claims.roomSlug,
+        secret: callsSecret,
+        expectedSubject: "user-456",
+      }),
+    ).resolves.toEqual({ ok: false, reason: "subject" });
+    await expect(
+      verifyVoiceToken({
+        token,
+        participantId,
+        roomSlug: verification.claims.roomSlug,
+        secret: callsSecret,
+        now: Date.now() + 60 * 60 * 1000 + 1_000,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "expired" });
   });
 
   it("fails closed when a room bootstrap cannot be signed", async () => {

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   issueSocketTicket,
   verifySocketTicket,
@@ -256,6 +256,55 @@ async function nextDispatchEventMatching(
     const message = await nextDispatchEvent(socket, eventName);
     if (predicate(message)) return message;
   }
+}
+
+function meetingRoom(roomName: string) {
+  return env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+}
+
+/**
+ * ServerSubscribe has no acknowledgement and checks membership in D1, so wait
+ * until the room has registered the expected subscribers instead of sleeping.
+ */
+async function waitForServerSubscribers(
+  roomName: string,
+  serverId: string,
+  count: number,
+) {
+  await vi.waitFor(
+    async () => {
+      const size = await runInDurableObject(
+        meetingRoom(roomName),
+        (instance) =>
+          (
+            instance as unknown as {
+              serverSubscriptions: Map<string, Set<unknown>>;
+            }
+          ).serverSubscriptions.get(serverId)?.size ?? 0,
+      );
+      expect(size).toBe(count);
+    },
+    { timeout: 5_000, interval: 5 },
+  );
+}
+
+/** Waits until a closed socket's session is held for resume. */
+async function waitForResumableSession(roomName: string, sessionId: string) {
+  await vi.waitFor(
+    async () => {
+      const resumable = await runInDurableObject(
+        meetingRoom(roomName),
+        (instance) =>
+          (
+            instance as unknown as {
+              resumableSessions: Map<string, unknown>;
+            }
+          ).resumableSessions.has(sessionId),
+      );
+      expect(resumable).toBe(true);
+    },
+    { timeout: 5_000, interval: 5 },
+  );
 }
 
 async function hasMessageWithOpcode(
@@ -2424,7 +2473,8 @@ describe("MeetingRoom lifecycle", () => {
 
     socketA.send(JSON.stringify({ op: 35, d: { server_id: serverA } }));
     socketB.send(JSON.stringify({ op: 35, d: { server_id: serverB } }));
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForServerSubscribers(roomName, serverA, 1);
+    await waitForServerSubscribers(roomName, serverB, 1);
 
     const isolatedA = nextMessageWithOpcodeWithin(socketA, 19);
     await env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName)).fetch(
@@ -2511,7 +2561,7 @@ describe("MeetingRoom lifecycle", () => {
 
     memberSocket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
     outsiderSocket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForServerSubscribers(roomName, serverId, 1);
 
     const memberDispatch = nextMessageWithOpcodeWithin(memberSocket, 19);
     const outsiderDispatch = hasMessageWithOpcode(outsiderSocket, 19, 150);
@@ -2642,10 +2692,10 @@ describe("MeetingRoom lifecycle", () => {
     const original = await openMeetingSocket(roomName);
     const ready = await identifyMeetingSocket(original);
     original.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForServerSubscribers(roomName, serverId, 1);
 
     original.close();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitForResumableSession(roomName, ready.participant_id);
 
     const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
     await room.fetch("https://internal/broadcast", {
@@ -2902,7 +2952,7 @@ describe("MeetingRoom lifecycle", () => {
     const socket = await openMeetingSocket(roomName);
     await identifyMeetingSocket(socket);
     socket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForServerSubscribers(roomName, serverId, 1);
 
     const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
     const visible = nextMessageWithOpcodeWithin(socket, 19);
@@ -3011,9 +3061,9 @@ describe("MeetingRoom lifecycle", () => {
     const original = await openMeetingSocket(roomName);
     const ready = await identifyMeetingSocket(original);
     original.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForServerSubscribers(roomName, serverId, 1);
     original.close();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitForResumableSession(roomName, ready.participant_id);
 
     const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
     await room.fetch("https://internal/broadcast", {

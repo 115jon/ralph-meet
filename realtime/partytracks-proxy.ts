@@ -1,5 +1,9 @@
 import { routePartyTracksRequest } from "partytracks/server";
 import { verifyVoiceToken } from "./voice-token";
+import {
+  VOICE_MEDIA_AUTHORIZATION_PATH,
+  serializeVoiceJoinGrantQuery,
+} from "./voice-join-grant";
 
 const PARTICIPANT_HEADER = "X-Voice-Session-Id";
 const PARTYTRACKS_PATH = /^\/api\/channels\/([^/]+)\/partytracks(?:\/|$)/;
@@ -11,7 +15,52 @@ export interface PartyTracksProxyEnv {
   CALLS_API_URL?: string;
   TURN_TOKEN_ID?: string;
   TURN_TOKEN_SECRET?: string;
+  VOICE_ROOM?: DurableObjectNamespace;
 }
+
+export interface RemotePullAuthorizationInput {
+  roomSlug: string;
+  participantId: string;
+  subject: string;
+}
+
+/** Answers whether a participant may pull other participants' tracks. */
+export type RemotePullAuthorizer = (
+  input: RemotePullAuthorizationInput,
+  env: PartyTracksProxyEnv,
+) => Promise<boolean>;
+
+export interface PartyTracksProxyOptions {
+  authorizeRemotePull?: RemotePullAuthorizer;
+}
+
+/**
+ * Pulling another participant's track requires a join grant in the channel's
+ * VoiceRoom, which the MeetingRoom pushes when the session joins and revokes
+ * when it leaves. A voice token alone (for example a standby session's) is
+ * not enough.
+ */
+export const authorizeRemotePullWithVoiceRoom: RemotePullAuthorizer = async (
+  { roomSlug, participantId, subject },
+  env,
+) => {
+  const namespace = env.VOICE_ROOM;
+  if (!namespace) return false;
+  try {
+    const response = await namespace
+      .get(namespace.idFromName(roomSlug))
+      .fetch(`https://internal${VOICE_MEDIA_AUTHORIZATION_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: serializeVoiceJoinGrantQuery({ participantId, subject }),
+      });
+    if (!response.ok) return false;
+    const body = (await response.json()) as { authorized?: unknown };
+    return body.authorized === true;
+  } catch {
+    return false;
+  }
+};
 
 export interface PartyTracksRouteOptions {
   appId: string;
@@ -145,11 +194,18 @@ async function decodeSessionReferences(
   roomSlug: string,
   secret: string,
   capabilitiesBySession: Map<string, string>,
+  referencedParticipants: Set<string>,
 ): Promise<unknown> {
   if (Array.isArray(value)) {
     return Promise.all(
       value.map((entry) =>
-        decodeSessionReferences(entry, roomSlug, secret, capabilitiesBySession),
+        decodeSessionReferences(
+          entry,
+          roomSlug,
+          secret,
+          capabilitiesBySession,
+          referencedParticipants,
+        ),
       ),
     );
   }
@@ -163,6 +219,7 @@ async function decodeSessionReferences(
         throw new Error("INVALID_SESSION_CAPABILITY");
       }
       capabilitiesBySession.set(claims.sessionId, entry);
+      referencedParticipants.add(claims.participantId);
       decoded[key] = claims.sessionId;
     } else {
       decoded[key] = await decodeSessionReferences(
@@ -170,6 +227,7 @@ async function decodeSessionReferences(
         roomSlug,
         secret,
         capabilitiesBySession,
+        referencedParticipants,
       );
     }
   }
@@ -234,11 +292,17 @@ function readBearerToken(request: Request): string | null {
  * signed, participant-bound session capability in place of the raw Cloudflare
  * session id. Remote capabilities may be referenced for pulls, while only the
  * owner may place a capability in the mutable session URL.
+ *
+ * Creating a session and pushing local tracks only need the voice token: that
+ * is how a standby session warms up, and a push stays private until the
+ * VoiceRoom (join-gated) announces it. Pulls of other participants' tracks
+ * also need a join grant.
  */
 export async function handlePartyTracksProxyRequest(
   request: Request,
   env: PartyTracksProxyEnv,
   route: PartyTracksRouter = routePartyTracksRequest,
+  options: PartyTracksProxyOptions = {},
 ): Promise<Response | null> {
   const url = new URL(request.url);
   const pathMatch = PARTYTRACKS_PATH.exec(url.pathname);
@@ -273,6 +337,7 @@ export async function handlePartyTracksProxyRequest(
   const newSessionPath = `${prefix}/sessions/new`;
   const sessionPathPrefix = `${prefix}/sessions/`;
   const capabilitiesBySession = new Map<string, string>();
+  const referencedParticipants = new Set<string>();
   let routedUrl = new URL(url);
 
   if (
@@ -323,6 +388,7 @@ export async function handlePartyTracksProxyRequest(
             roomSlug,
             env.CALLS_APP_SECRET,
             capabilitiesBySession,
+            referencedParticipants,
           ),
         );
         headers.set("Content-Type", "application/json");
@@ -337,6 +403,20 @@ export async function handlePartyTracksProxyRequest(
       }
     }
   }
+  referencedParticipants.delete(participantId);
+  let pullAuthorizationMs: number | null = null;
+  if (referencedParticipants.size > 0) {
+    const authorize =
+      options.authorizeRemotePull ?? authorizeRemotePullWithVoiceRoom;
+    const startedAt = performance.now();
+    const authorized = await authorize(
+      { roomSlug, participantId, subject: verification.subject },
+      env,
+    );
+    pullAuthorizationMs = performance.now() - startedAt;
+    if (!authorized) return forbidden();
+  }
+
   if (body !== undefined) {
     // partytracks/server uses this header to decide whether to forward the
     // request stream, so recompute it after rewriting session capabilities.
@@ -382,7 +462,15 @@ export async function handlePartyTracksProxyRequest(
     });
   }
 
-  return rewriteJsonResponse(routedResponse, (value) =>
+  const response = await rewriteJsonResponse(routedResponse, (value) =>
     restoreSessionReferences(value, capabilitiesBySession),
   );
+  if (pullAuthorizationMs === null) return response;
+  // Durations only: lets `pnpm bench:voice` see what the join check costs.
+  const timed = new Response(response.body, response);
+  timed.headers.append(
+    "Server-Timing",
+    `voice-join;dur=${pullAuthorizationMs.toFixed(1)}`,
+  );
+  return timed;
 }

@@ -26,6 +26,9 @@ const capturedFirefoxTracksNewBody = JSON.stringify({
   ],
 });
 
+/** The puller has joined the channel (the VoiceRoom holds its join grant). */
+const joined = { authorizeRemotePull: async () => true };
+
 async function token(participantId: string, roomSlug: string) {
   return issueVoiceToken({
     participantId,
@@ -178,6 +181,7 @@ describe("PartyTracks proxy", () => {
         ),
         env,
         route,
+        joined,
       );
       expect(response?.status).toBe(200);
     }
@@ -418,6 +422,7 @@ describe("PartyTracks proxy", () => {
       ),
       env,
       route,
+      joined,
     );
     const pullPayload = (await pullResponse?.json()) as {
       tracks: Array<{ sessionId: string }>;
@@ -438,5 +443,132 @@ describe("PartyTracks proxy", () => {
       route,
     );
     expect(stolen?.status).toBe(403);
+  });
+
+  it("refuses remote pulls for a participant without a join grant", async () => {
+    const issuedSessions = ["cloudflare-publisher", "cloudflare-lurker"];
+    const route = vi.fn<PartyTracksRouter>(async ({ request: routed }) => {
+      if (new URL(routed.url).pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: issuedSessions.shift() });
+      }
+      return Response.json({ tracks: [] });
+    });
+    const authorizeRemotePull = vi.fn(async () => false);
+    const createSession = async (participantId: string) => {
+      const response = await handlePartyTracksProxyRequest(
+        request(
+          "room-one",
+          "/sessions/new",
+          participantId,
+          await token(participantId, "room-one"),
+          { method: "POST" },
+        ),
+        env,
+        route,
+        { authorizeRemotePull },
+      );
+      expect(response?.status).toBe(200);
+      return ((await response?.json()) as { sessionId: string }).sessionId;
+    };
+    const publisher = await createSession("publisher");
+    // Session creation and local pushes are how standby warms up; they never
+    // consult join state.
+    const lurker = await createSession("lurker");
+    const localPush = await handlePartyTracksProxyRequest(
+      request(
+        "room-one",
+        `/sessions/${lurker}/tracks/new`,
+        "lurker",
+        await token("lurker", "room-one"),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            tracks: [{ location: "local", trackName: "mic", mid: "0" }],
+          }),
+        },
+      ),
+      env,
+      route,
+      { authorizeRemotePull },
+    );
+    expect(localPush?.status).toBe(200);
+    expect(authorizeRemotePull).not.toHaveBeenCalled();
+    route.mockClear();
+
+    const pull = await handlePartyTracksProxyRequest(
+      request(
+        "room-one",
+        `/sessions/${lurker}/tracks/new`,
+        "lurker",
+        await token("lurker", "room-one"),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            tracks: [
+              { location: "remote", sessionId: publisher, trackName: "mic" },
+            ],
+          }),
+        },
+      ),
+      env,
+      route,
+      { authorizeRemotePull },
+    );
+
+    expect(pull?.status).toBe(403);
+    expect(route).not.toHaveBeenCalled();
+    expect(authorizeRemotePull).toHaveBeenCalledWith(
+      { roomSlug: "room-one", participantId: "lurker", subject: "user-lurker" },
+      env,
+    );
+  });
+
+  it("fails closed for remote pulls when no voice room is bound", async () => {
+    const issuedSessions = ["cloudflare-publisher", "cloudflare-subscriber"];
+    const route = vi.fn<PartyTracksRouter>(async ({ request: routed }) => {
+      if (new URL(routed.url).pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: issuedSessions.shift() });
+      }
+      return Response.json({ tracks: [] });
+    });
+    const createSession = async (participantId: string) => {
+      const response = await handlePartyTracksProxyRequest(
+        request(
+          "room-one",
+          "/sessions/new",
+          participantId,
+          await token(participantId, "room-one"),
+          { method: "POST" },
+        ),
+        env,
+        route,
+      );
+      return ((await response?.json()) as { sessionId: string }).sessionId;
+    };
+    const publisher = await createSession("publisher");
+    const subscriber = await createSession("subscriber");
+    route.mockClear();
+
+    const pull = await handlePartyTracksProxyRequest(
+      request(
+        "room-one",
+        `/sessions/${subscriber}/tracks/new`,
+        "subscriber",
+        await token("subscriber", "room-one"),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            tracks: [
+              { location: "remote", sessionId: publisher, trackName: "mic" },
+            ],
+          }),
+        },
+      ),
+      env,
+      route,
+    );
+
+    expect(pull?.status).toBe(403);
+    expect(route).not.toHaveBeenCalled();
   });
 });
