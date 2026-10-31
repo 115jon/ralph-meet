@@ -42,10 +42,17 @@ import {
   isNoiseReductionProviderSupported,
   resolveCaptureAudioProcessing,
   resolveLocalAudioProcessingMode,
+  resolveLocalAudioPublicationMode,
   type LocalAudioProcessorHandle,
   type LocalAudioProcessingMode,
+  type LocalAudioPublicationMode,
   type VoiceAudioProcessingSettings,
 } from "@/lib/voice/noise-reduction";
+import {
+  isCaptureAudioContextSuspended,
+  noteLocalAudioPublication,
+  reportLocalAudioIssue,
+} from "@/lib/voice/capture-audio-context";
 import {
   DEFAULT_SHARED_SPATIAL_STATE,
   calculateSpatialAudioMix,
@@ -591,6 +598,27 @@ export interface UseVoiceChannelProps {
   onJoined?: () => void;
   onLeft?: () => void;
   autoJoin?: boolean;
+}
+
+/** What a failed publication mode falls back to. */
+function fallbackPublicationMode(
+  mode: LocalAudioPublicationMode,
+): LocalAudioPublicationMode {
+  // RNNoise and true-stereo fall back to the identity graph (still gated);
+  // a failed identity graph leaves the raw microphone published.
+  return mode === "passthrough" || mode === "direct" ? "direct" : "passthrough";
+}
+
+/** Whether the current microphone publication is what `mode` asks for. */
+function publicationMatches(
+  processor: LocalAudioProcessorHandle | null,
+  mode: LocalAudioPublicationMode,
+  voiceGateEnabled: boolean,
+): boolean {
+  if ((processor?.mode ?? "direct") !== mode) return false;
+  const lookaheadMs = processor?.gateLookaheadMs;
+  // The gate's lookahead is fixed when the processor is built.
+  return lookaheadMs === undefined || lookaheadMs > 0 === voiceGateEnabled;
 }
 
 export function useVoiceChannel({
@@ -1171,6 +1199,7 @@ export function useVoiceChannel({
   const noiseReductionSupported = isNoiseReductionProviderSupported(
     noiseReductionProvider,
   );
+  const isStudioMode = inputProfile === "studio";
   const audioProcessingSettings = useMemo<VoiceAudioProcessingSettings>(
     () => ({
       noiseSuppression,
@@ -1179,10 +1208,14 @@ export function useVoiceChannel({
       streamHighFidelity,
       noiseReductionEnabled: noiseReductionEnabled && noiseReductionSupported,
       noiseReductionProvider,
+      // Studio turns the sensitivity gate off; without it (and without
+      // RNNoise) the microphone is published directly, with no Web Audio hop.
+      voiceGateEnabled: !isStudioMode,
     }),
     [
       autoSensitivity,
       echoCancellation,
+      isStudioMode,
       noiseReductionEnabled,
       noiseReductionProvider,
       noiseReductionSupported,
@@ -1194,7 +1227,6 @@ export function useVoiceChannel({
   useEffect(() => {
     audioProcessingSettingsRef.current = audioProcessingSettings;
   }, [audioProcessingSettings]);
-  const isStudioMode = inputProfile === "studio";
 
   useEffect(() => {
     failedAudioProcessingModeRef.current = null;
@@ -1318,11 +1350,16 @@ export function useVoiceChannel({
       if (!isMicOnRef.current) return;
 
       const processor = processorOverride ?? publishedAudioProcessorRef.current;
+      // The publication's gate detects speech itself; follow it (start()
+      // returns false if that gate is not the one bound to the detector).
+      if (processor?.gateController.inGraph && sfu.vad.start(null)) return;
+      // Without a processor the raw (direct) microphone is what is published.
+      const rawStream = fallbackStream ?? localStreamRef.current;
       const monitorStream = processor
         ? processor.createMonitorStream()
-        : fallbackStream
+        : rawStream
           ? new MediaStream(
-              fallbackStream
+              rawStream
                 .getAudioTracks()
                 .filter((track) => track.readyState === "live")
                 .map((track) =>
@@ -1445,7 +1482,10 @@ export function useVoiceChannel({
         Promise.resolve(sfu.resumeAudioContext()),
       ]).then(() => {
         sfu.vad.resumeContext();
-        const blocked = sfu.audio.isAudioSuspended();
+        // A suspended capture context silences the gated microphone, so it
+        // keeps the prompt up just like a suspended playback context.
+        const blocked =
+          sfu.audio.isAudioSuspended() || isCaptureAudioContextSuspended();
         voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: !!blocked });
         if (!blocked) {
           window.removeEventListener("click", resume);
@@ -1475,7 +1515,10 @@ export function useVoiceChannel({
     }
 
     const check = () => {
-      if (sfuRef.current?.audio.isAudioSuspended()) {
+      if (
+        sfuRef.current?.audio.isAudioSuspended() ||
+        isCaptureAudioContextSuspended()
+      ) {
         voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: true });
       }
     };
@@ -3039,16 +3082,20 @@ export function useVoiceChannel({
           const currentVideoTrack =
             rawCameraTrackRef.current ?? oldStream.getVideoTracks()[0];
           const currentVideoId = currentVideoTrack?.getSettings().deviceId;
-          const desiredAudioProcessingMode = resolveLocalAudioProcessingMode(
+          const desiredPublicationMode = resolveLocalAudioPublicationMode(
             audioProcessingSettings,
           );
-          const effectiveAudioProcessingMode =
-            failedAudioProcessingModeRef.current === desiredAudioProcessingMode
-              ? "passthrough"
-              : desiredAudioProcessingMode;
-          const audioProcessorMatches =
-            (publishedAudioProcessorRef.current?.mode ?? "passthrough") ===
-            effectiveAudioProcessingMode;
+          const effectivePublicationMode =
+            failedAudioProcessingModeRef.current === desiredPublicationMode
+              ? fallbackPublicationMode(desiredPublicationMode)
+              : desiredPublicationMode;
+          // A raw microphone left published while the settings want a gate
+          // (or RNNoise) is a mismatch, so the next sync repairs it.
+          const audioProcessorMatches = publicationMatches(
+            publishedAudioProcessorRef.current,
+            effectivePublicationMode,
+            audioProcessingSettings.voiceGateEnabled !== false,
+          );
           const audioMatch =
             currentAudioTrack &&
             currentAudioTrack.readyState === "live" &&
@@ -3148,8 +3195,6 @@ export function useVoiceChannel({
         }
 
         let streamToPublish: MediaStream | null = null;
-        let pendingProcessorUpgrade: Promise<LocalAudioProcessorHandle | null> | null =
-          null;
         const applyProcessorMode = (
           processor: LocalAudioProcessorHandle,
         ): void => {
@@ -3162,48 +3207,50 @@ export function useVoiceChannel({
         };
         if (newStream.getAudioTracks().length > 0) {
           const replacingExistingAudio = !!oldStream?.getAudioTracks()[0];
-          if (replacingExistingAudio) {
+          const publicationMode = resolveLocalAudioPublicationMode(
+            audioProcessingSettings,
+          );
+          if (publicationMode !== "direct") {
+            // The gate (and RNNoise) must be in place from the first packet:
+            // build the processor before publishing instead of publishing the
+            // raw microphone and swapping the processor in afterwards (that
+            // swap raced later syncs and could leave the raw track published).
+            // Joins overlap this with the voice gateway connecting.
             try {
               nextAudioProcessor = await createLocalAudioProcessor(
                 newStream,
                 audioProcessingSettings,
               );
             } catch (error) {
-              failedAudioProcessingModeRef.current =
-                resolveLocalAudioProcessingMode(audioProcessingSettings);
               devicesLog.warn(
                 "Failed to create gated outbound audio processor",
                 error,
               );
               nextAudioProcessor = null;
             }
+          }
 
-            if (!nextAudioProcessor) {
+          if (nextAudioProcessor) {
+            applyProcessorMode(nextAudioProcessor);
+            streamToPublish = nextAudioProcessor.publicationStream;
+          } else if (publicationMode === "direct") {
+            // No gate, no RNNoise: publish the capture track itself.
+            streamToPublish = new MediaStream(newStream.getAudioTracks());
+          } else {
+            failedAudioProcessingModeRef.current = publicationMode;
+            if (replacingExistingAudio) {
               devicesLog.warn(
                 "Outbound audio processor unavailable; preserving the previous publication",
               );
               await abortStaleSwap(null);
               return;
             }
-            applyProcessorMode(nextAudioProcessor);
-            streamToPublish = nextAudioProcessor.publicationStream;
-          } else {
-            pendingProcessorUpgrade = createLocalAudioProcessor(
-              newStream,
-              audioProcessingSettings,
-            ).then(
-              (processor) => processor,
-              (error: unknown) => {
-                failedAudioProcessingModeRef.current =
-                  resolveLocalAudioProcessingMode(audioProcessingSettings);
-                devicesLog.warn(
-                  "Failed to create gated outbound audio processor",
-                  error,
-                );
-                return null;
-              },
+            // Nothing is published yet, and an ungated microphone beats a
+            // missing one. Reported (logged once, in diagnostics).
+            reportLocalAudioIssue(
+              "processor-unavailable",
+              `publishing the raw microphone instead of ${publicationMode}`,
             );
-            nextAudioProcessor = null;
             streamToPublish = new MediaStream(newStream.getAudioTracks());
           }
 
@@ -3253,10 +3300,6 @@ export function useVoiceChannel({
             hasMicrophone,
             trackName: microphoneTrackName,
           });
-          void pendingProcessorUpgrade?.then((processor) =>
-            processor?.destroy(),
-          );
-          pendingProcessorUpgrade = null;
           if (rawAudioTrack) rawAudioTrack.enabled = false;
         }
         if (
@@ -3301,36 +3344,6 @@ export function useVoiceChannel({
               };
             }
             await sfu.publishTracks(new MediaStream([newAudio]), "cam");
-            if (pendingProcessorUpgrade) {
-              const upgraded = await pendingProcessorUpgrade;
-              if (!isCurrent()) {
-                await abortStaleSwap(upgraded);
-                return;
-              }
-              if (upgraded) {
-                applyProcessorMode(upgraded);
-                const processed =
-                  upgraded.publicationStream.getAudioTracks()[0];
-                if (!processed) {
-                  upgraded.destroy();
-                } else {
-                  const replaced = await sfu.replaceTrack(
-                    microphoneTrackName,
-                    processed,
-                  );
-                  if (!replaced) {
-                    upgraded.destroy();
-                  } else {
-                    nextAudioProcessor = upgraded;
-                    sfu.vad.setGateController(upgraded.gateController);
-                    restartVadMonitoring(sfu, upgraded);
-                    if (pendingInitialMediaRef.current?.stream === newStream) {
-                      pendingInitialMediaRef.current.processor = upgraded;
-                    }
-                  }
-                }
-              }
-            }
           }
           if (oldAudio) {
             replacedAudioTrack = sfu.getPublishedTrack(
@@ -3473,6 +3486,12 @@ export function useVoiceChannel({
           sfu.vad.setGateController(
             committedAudioProcessor?.gateController ?? null,
           );
+          noteLocalAudioPublication(committedAudioProcessor?.mode ?? "direct", {
+            gated:
+              !!committedAudioProcessor?.gateController.inGraph &&
+              (committedAudioProcessor.gateLookaheadMs ?? 0) > 0,
+            lookaheadMs: committedAudioProcessor?.gateLookaheadMs ?? null,
+          });
         }
         if (
           previousAudioProcessor &&
@@ -3686,9 +3705,17 @@ export function useVoiceChannel({
       const trackName = sfu.getMicrophoneTrackName();
       const published = trackName ? sfu.getPublishedTrack(trackName) : null;
       const silenceTrack = standbySilenceRef.current?.track ?? null;
-      const liveMic = localStreamRef.current
-        ?.getAudioTracks()
-        .find((track) => track.readyState === "live" && track !== silenceTrack);
+      // The processor's (gated) output when there is one, else the capture
+      // track itself (direct publication).
+      const liveMic =
+        publishedAudioProcessorRef.current?.publicationStream
+          .getAudioTracks()
+          .find((track) => track.readyState === "live") ??
+        localStreamRef.current
+          ?.getAudioTracks()
+          .find(
+            (track) => track.readyState === "live" && track !== silenceTrack,
+          );
       const liveTracks =
         localStreamRef.current
           ?.getAudioTracks()

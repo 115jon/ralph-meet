@@ -2,7 +2,11 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SpeakingFlags } from "../../types";
-import { VoiceActivityDetector } from "../vad";
+import {
+  type InGraphVoiceGate,
+  type VoiceGateEvent,
+  VoiceActivityDetector,
+} from "../vad";
 
 class TestMediaStream {
   constructor(private readonly tracks: MediaStreamTrack[]) {}
@@ -539,5 +543,124 @@ describe("VoiceActivityDetector", () => {
 
       expect(gate.setGated).toHaveBeenCalledWith(false);
     });
+  });
+});
+
+describe("VoiceActivityDetector following an in-graph gate", () => {
+  function fakeGate() {
+    const listeners = new Set<(event: VoiceGateEvent) => void>();
+    const gate = {
+      setMode: vi.fn(),
+      setThreshold: vi.fn(),
+      subscribe: vi.fn((listener: (event: VoiceGateEvent) => void) => {
+        listeners.add(listener);
+        listener({ type: "speaking", value: false, rms: 0 });
+        return () => listeners.delete(listener);
+      }),
+    } satisfies InGraphVoiceGate;
+    const emit = (event: VoiceGateEvent) => {
+      for (const listener of [...listeners]) listener(event);
+    };
+    return { gate, emit, listeners };
+  }
+
+  function detector() {
+    const callbacks = {
+      getParticipantId: () => "participant",
+      onSpeakingChange: vi.fn(),
+      sendSpeaking: vi.fn(),
+    };
+    return { callbacks, vad: new VoiceActivityDetector(callbacks) };
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "AudioContext",
+      vi.fn(function () {
+        throw new Error("no AudioContext of its own on the gate path");
+      }),
+    );
+  });
+
+  it("relays the gate's transitions without analysing audio itself", () => {
+    const { gate, emit } = fakeGate();
+    const controller = { setGated: vi.fn(), inGraph: gate };
+    const { callbacks, vad } = detector();
+    vad.enableNoiseGate();
+    vad.setGateController(controller);
+    vad.setThreshold(7);
+
+    expect(vad.start(null)).toBe(true);
+    expect(vad.isUsingAudioWorklet()).toBe(true);
+    expect(gate.setMode).toHaveBeenLastCalledWith("auto");
+    expect(gate.setThreshold).toHaveBeenLastCalledWith(7);
+
+    emit({ type: "speaking", value: true, rms: 12 });
+    expect(callbacks.onSpeakingChange).toHaveBeenLastCalledWith(
+      true,
+      SpeakingFlags.MICROPHONE,
+    );
+    expect(callbacks.sendSpeaking).toHaveBeenLastCalledWith(
+      SpeakingFlags.MICROPHONE,
+    );
+    expect(vad.getCurrentRMS()).toBe(12);
+    emit({ type: "speaking", value: false, rms: 1 });
+    expect(callbacks.onSpeakingChange).toHaveBeenLastCalledWith(
+      false,
+      SpeakingFlags.NONE,
+    );
+    // Speech gating stays in the graph: no main-thread gain flips.
+    expect(controller.setGated).not.toHaveBeenCalled();
+  });
+
+  it("closes the gate on mute even with sensitivity gating off", () => {
+    const { gate } = fakeGate();
+    const { vad } = detector();
+    vad.setGateController({ setGated: vi.fn(), inGraph: gate });
+    vad.disableNoiseGate();
+    expect(gate.setMode).toHaveBeenLastCalledWith("open");
+    vad.setMicrophoneEnabled(false);
+    expect(gate.setMode).toHaveBeenLastCalledWith("closed");
+    vad.setMicrophoneEnabled(true);
+    expect(gate.setMode).toHaveBeenLastCalledWith("open");
+    vad.enableNoiseGate();
+    expect(gate.setMode).toHaveBeenLastCalledWith("auto");
+  });
+
+  it("stops listening on stop and moves to a replacement gate", () => {
+    const first = fakeGate();
+    const second = fakeGate();
+    const { callbacks, vad } = detector();
+    vad.setGateController({ setGated: vi.fn(), inGraph: first.gate });
+    vad.start(null);
+    first.emit({ type: "speaking", value: true });
+    expect(callbacks.onSpeakingChange).toHaveBeenLastCalledWith(
+      true,
+      SpeakingFlags.MICROPHONE,
+    );
+
+    // A swapped processor: the detector re-subscribes and takes the new
+    // gate's state (not speaking) at once.
+    vad.setGateController({ setGated: vi.fn(), inGraph: second.gate });
+    expect(first.listeners.size).toBe(0);
+    expect(callbacks.onSpeakingChange).toHaveBeenLastCalledWith(
+      false,
+      SpeakingFlags.NONE,
+    );
+    second.emit({ type: "speaking", value: true });
+    expect(callbacks.onSpeakingChange).toHaveBeenLastCalledWith(
+      true,
+      SpeakingFlags.MICROPHONE,
+    );
+
+    vad.stop();
+    expect(second.listeners.size).toBe(0);
+    expect(vad.isUsingAudioWorklet()).toBe(false);
+  });
+
+  it("needs a stream when the bound gate is a plain gain", () => {
+    const { vad } = detector();
+    vad.setGateController({ setGated: vi.fn() });
+    expect(vad.start(null)).toBe(false);
   });
 });
