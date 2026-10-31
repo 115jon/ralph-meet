@@ -2,13 +2,20 @@ import { SidePanel, useSidePanelLayout } from "@/components/ui/side-panel";
 import { useBackButton } from "@/hooks/useBackButton";
 import { cn } from "@/lib/utils";
 import type { Channel } from "@/lib/types";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import ChannelSettingsModal from "./ChannelSettingsModal";
+import {
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { LazyChannelSettingsModal, LazySearchPanel } from "./lazy-panels";
 import MemberList from "./MemberList";
 import MessageInput, { ComposerReadOnly } from "./MessageInput";
 import { PinModal } from "./PinModal";
 import { PinnedMessagesSidebar } from "./PinnedMessagesSidebar";
-import SearchPanel, { type SearchScope } from "./SearchPanel";
+import type { SearchScope } from "./SearchPanel";
 import { OPEN_MESSAGE_SEARCH_EVENT } from "./search/open-message-search";
 import { useChatStore } from "@/stores/chat-store";
 import ThreadSidebar from "./ThreadSidebar";
@@ -395,14 +402,16 @@ export default function ChatArea({
         </div>
 
         {searchOpen ? (
-          <SearchPanel
-            key={`${searchScopeKey}:${searchRequest.n}`}
-            scope={searchScope!}
-            scopeLabel={searchScopeLabel}
-            initialText={searchRequest.text}
-            onClose={closeSearch}
-            onJump={handleSearchJump}
-          />
+          <Suspense fallback={null}>
+            <LazySearchPanel
+              key={`${searchScopeKey}:${searchRequest.n}`}
+              scope={searchScope!}
+              scopeLabel={searchScopeLabel}
+              initialText={searchRequest.text}
+              onClose={closeSearch}
+              onJump={handleSearchJump}
+            />
+          </Suspense>
         ) : null}
 
         {/*
@@ -493,18 +502,20 @@ export default function ChatArea({
       </div>
 
       {channelSettingsPayload && (serverId ?? state.activeServerId) && (
-        <ChannelSettingsModal
-          open={showChannelSettings}
-          serverId={(serverId ?? state.activeServerId)!}
-          channel={channelSettingsPayload}
-          onUpdated={(updates) =>
-            dispatch({
-              type: "UPSERT_CHANNEL",
-              channel: { ...channelSettingsPayload, ...updates },
-            })
-          }
-          onClose={() => setLocalState({ showChannelSettings: false })}
-        />
+        <Suspense fallback={null}>
+          <LazyChannelSettingsModal
+            open={showChannelSettings}
+            serverId={(serverId ?? state.activeServerId)!}
+            channel={channelSettingsPayload}
+            onUpdated={(updates) =>
+              dispatch({
+                type: "UPSERT_CHANNEL",
+                channel: { ...channelSettingsPayload, ...updates },
+              })
+            }
+            onClose={() => setLocalState({ showChannelSettings: false })}
+          />
+        </Suspense>
       )}
     </div>
   );
