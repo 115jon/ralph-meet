@@ -1950,14 +1950,32 @@ describe("MeetingRoom lifecycle", () => {
 
     const socket = await openMeetingSocket(crypto.randomUUID(), userId);
     await identifyMeetingSocket(socket);
+
+    // Invalidation runs after the status write, so wait for it instead of a
+    // fixed sleep (a loaded CI runner needs more than 100 ms).
+    const expectInvalidated = () =>
+      vi.waitFor(
+        async () => {
+          for (const serverId of serverIds) {
+            expect(
+              await env.CACHE.get(`v1:server:members:${serverId}`),
+            ).toBeNull();
+          }
+        },
+        { timeout: 5_000, interval: 25 },
+      );
+    // The DO handles frames in order: once it ACKs a heartbeat sent after the
+    // presence frame, that frame has been fully processed. The heartbeat
+    // carries a payload so it is not the exact `{"op":3}` frame the runtime
+    // auto-responds to without waking the DO.
+    const settle = async () => {
+      socket.send(JSON.stringify({ op: 3, d: { settle: true } }));
+      await nextMessageWithOpcode(socket, 6);
+    };
+
     socket.send(JSON.stringify({ op: 26, d: { status: "online" } }));
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
+    await expectInvalidated();
     for (const serverId of serverIds) {
-      await expect(
-        env.CACHE.get(`v1:server:members:${serverId}`),
-      ).resolves.toBeNull();
       await env.CACHE.put(`v1:server:members:${serverId}`, "present", {
         expirationTtl: 60,
       });
@@ -1965,8 +1983,7 @@ describe("MeetingRoom lifecycle", () => {
 
     socket.send(JSON.stringify({ op: 26, d: { status: "online" } }));
     expect(await hasMessageWithOpcode(socket, 19, 100)).toBe(false);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await settle();
 
     for (const serverId of serverIds) {
       await expect(
@@ -1975,14 +1992,7 @@ describe("MeetingRoom lifecycle", () => {
     }
 
     socket.send(JSON.stringify({ op: 26, d: { status: "idle" } }));
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    for (const serverId of serverIds) {
-      await expect(
-        env.CACHE.get(`v1:server:members:${serverId}`),
-      ).resolves.toBeNull();
-    }
+    await expectInvalidated();
     socket.close();
   }, 12_000);
 

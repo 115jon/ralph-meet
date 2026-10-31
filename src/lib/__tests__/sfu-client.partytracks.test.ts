@@ -705,6 +705,42 @@ describe("SFUClient PartyTracks facade", () => {
     client.disconnect("component-unmount");
   });
 
+  it("never pulls its own tracks from an earlier participant generation", () => {
+    const transports: TestPartyTracksTransport[] = [];
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => {
+        const transport = new TestPartyTracksTransport();
+        transports.push(transport);
+        return transport;
+      },
+    });
+    vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+    const track = (participantId: string): TrackInfo => ({
+      participant_id: participantId,
+      track_name: `cam-audio-${participantId}`,
+      sfu_track_name: `opaque-${participantId}`,
+      session_id: `session-${participantId}`,
+      kind: "audio",
+    });
+
+    emitMediaReady(client, "participant-generation-1", "voice-token-1");
+    // A server restart: the room hands out a new participant id, and the
+    // voice room still lists the old one's tracks until it prunes them.
+    emitMediaReady(client, "participant-generation-2", "voice-token-2");
+    client.voiceGW.emit("voice-ready", {
+      tracks: [
+        track("participant-generation-1"),
+        track("participant-generation-2"),
+        track("remote"),
+      ],
+    });
+
+    expect([...(transports[1]?.pullMetadata.keys() ?? [])]).toEqual([
+      "cam-audio-remote",
+    ]);
+    client.disconnect("component-unmount");
+  });
+
   it("updates PartyTracks across a same-generation VoiceGW reconnect and reconciles once", async () => {
     const transport = new TestPartyTracksTransport();
     const createPartyTracksTransport = vi.fn(() => transport);

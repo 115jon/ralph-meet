@@ -101,6 +101,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private readonly nativeScreenShare: NativeScreenShareTransport;
   private roomSlug: string;
   private participantId: string | null = null;
+  /**
+   * This client's earlier participant ids in this call. After a server
+   * restart, VoiceReady can still list tracks this client published under one
+   * of them until the voice room prunes it; they are never pulled.
+   */
+  private readonly previousParticipantIds = new Set<string>();
   private roomParticipantEstablished = false;
   private voiceToken: string | null = null;
   private iceServers: IceServer[] = [];
@@ -646,6 +652,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private resetMediaSessionsForParticipantChange(): void {
+    if (this.participantId) this.previousParticipantIds.add(this.participantId);
     this.rejectPartyTracksReadiness(new Error("PARTICIPANT_CHANGED"));
     this.createPartyTracksReadinessBarrier();
     this.resetNativeScreenForReconnect();
@@ -846,6 +853,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     const seen = new Set<string>();
     return tracks.filter((track) => {
       if (track.participant_id === this.participantId) return false;
+      if (this.previousParticipantIds.has(track.participant_id)) return false;
       if (seen.has(track.track_name)) return false;
       seen.add(track.track_name);
       return true;
@@ -1040,6 +1048,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.nativeScreenReconnectRequired = false;
     this.nativeScreenResetPromise = Promise.resolve();
     this.participantId = null;
+    this.previousParticipantIds.clear();
     this.voiceToken = null;
     this.iceServers = [];
     this.connectArgs = null;

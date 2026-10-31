@@ -11,7 +11,8 @@
 // said so (admission rejected, replaced by a newer connection) or the session
 // is gone (ticket refused twice). wake() is for the page coming back: retry
 // now if a retry is pending, or probe an open socket and drop it if nothing
-// answers in time.
+// answers in time. A socket that gets through tells the others (see
+// ./reachability), and those waiting out a backoff retry now too.
 //
 // Each attempt (one ticket request and the socket it opens) has an identity.
 // stop(), reconnectNow() and a fresh connect() replace it, and every callback
@@ -34,6 +35,7 @@ import {
   type ScheduleTimer,
 } from "@/lib/voice/heartbeat-manager";
 import { backoffDelay, type RealtimeSocketPolicy } from "./policy";
+import { serverReachability, type ServerReachability } from "./reachability";
 
 /** WebSocket.OPEN, without reading the global (tests replace it). */
 const WS_OPEN = 1;
@@ -147,6 +149,8 @@ export interface RealtimeSocketOptions<
   readonly shouldRetry?: () => boolean;
   readonly clock?: RealtimeClock;
   readonly createSocket?: CreateRealtimeWebSocket;
+  /** Shared with the page's other realtime sockets; tests pass their own. */
+  readonly reachability?: ServerReachability;
 }
 
 type Phase =
@@ -227,10 +231,12 @@ export class RealtimeSocket<
   private readonly createSocket: CreateRealtimeWebSocket;
   private readonly policy: RealtimeSocketPolicy;
   private readonly hooks: RealtimeSocketHooks<M, T>;
+  private readonly reachability: ServerReachability;
 
   constructor(private readonly options: RealtimeSocketOptions<M, T>) {
     this.log = clog(options.label);
     this.clock = options.clock ?? systemClock;
+    this.reachability = options.reachability ?? serverReachability;
     this.createSocket = options.createSocket ?? openBrowserSocket;
     this.policy = options.policy;
     this.hooks = options.hooks;
@@ -448,6 +454,7 @@ export class RealtimeSocket<
       if (!this.owns(socket)) return;
       this.log.info("Connected");
       this.hooks.opened?.();
+      this.reachability.reachable();
     };
     socket.onmessage = (event) => {
       if (!this.owns(socket)) return;
@@ -462,6 +469,8 @@ export class RealtimeSocket<
     socket.onerror = () => {
       // onclose follows.
     };
+    // The ticket request reached the server.
+    this.reachability.reachable();
   }
 
   private attemptFailed(attempt: symbol, error: unknown): void {
@@ -518,14 +527,29 @@ export class RealtimeSocket<
   }
 
   private waitThenRetry(ms: number, auth: boolean): void {
-    const cancel = this.clock.schedule(() => {
+    const retry = () => {
       if (this.phase !== waiting) return;
       if (this.options.shouldRetry?.() === false) {
+        cancel();
         this.phase = { kind: "idle" };
         return;
       }
       this.beginAttempt();
-    }, ms);
+    };
+    const cancelTimer = this.clock.schedule(retry, ms);
+    // A backoff ends early when another socket gets through. The signed-out
+    // wait does not: the server being up says nothing about the session.
+    const stopListening = auth
+      ? null
+      : this.reachability.onNextReachable(() => {
+          if (this.phase !== waiting) return;
+          this.log.info("Server reachable again, retrying now");
+          retry();
+        });
+    const cancel = () => {
+      cancelTimer();
+      stopListening?.();
+    };
     const waiting: Phase = { kind: "waiting", cancel, auth };
     this.phase = waiting;
   }

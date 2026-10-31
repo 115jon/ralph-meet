@@ -1600,6 +1600,23 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     return fallback;
   }
 
+  /**
+   * Participants with an identified voice socket. Closing a voice socket
+   * purges its participant at once, and identifying again purges the old
+   * rows before VoiceReady, so rows of any other participant can never be
+   * resumed. They only outlive their socket when the object restarts under
+   * live sockets (a deploy, a crash, a dev server restart), which drops the
+   * sockets without webSocketClose; the zombie alarm removes them later.
+   */
+  private identifiedVoiceParticipantIds(): Set<string> {
+    const participantIds = new Set<string>();
+    for (const ws of this.ctx.getWebSockets()) {
+      const participantId = this.getVoiceAttachment(ws)?.participant_id;
+      if (participantId) participantIds.add(participantId);
+    }
+    return participantIds;
+  }
+
   private getVoiceAttachment(ws: WebSocket): VoiceAttachment | null {
     return ws.deserializeAttachment() as VoiceAttachment | null;
   }
@@ -2040,12 +2057,21 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     roomLog.info(
       `VoiceIdentify: participant=${d.participant_id} join_wait_ms=${joinWaitMs}`,
     );
+    // Only participants that still have an identified voice socket. Rows of
+    // any other participant are left over from a restart (see
+    // identifiedVoiceParticipantIds) and name dead PartyTracks sessions.
+    const liveParticipantIds = this.identifiedVoiceParticipantIds();
     const existingTracks: TrackInfo[] = [];
+    let staleTrackCount = 0;
     const tCursor = this.sql.exec(
       "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind FROM tracks WHERE participant_id != ? AND native_screen_pending = 0",
       d.participant_id,
     );
     for (const row of tCursor) {
+      if (!liveParticipantIds.has(row.participant_id as string)) {
+        staleTrackCount += 1;
+        continue;
+      }
       existingTracks.push({
         track_name: row.track_name as string,
         participant_id: row.participant_id as string,
@@ -2062,7 +2088,13 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       d.participant_id,
     );
     for (const row of sCursor) {
+      if (!liveParticipantIds.has(row.id as string)) continue;
       speakingStates[row.id as string] = row.speaking as number;
+    }
+    if (staleTrackCount > 0) {
+      roomLog.info(
+        `VoiceReady: skipped ${staleTrackCount} tracks of participants without a voice socket`,
+      );
     }
 
     this.sendTo(ws, {

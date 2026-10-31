@@ -8,10 +8,12 @@ import {
   backoffDelay,
   CALL_SOCKET_POLICY,
   CHAT_SOCKET_POLICY,
+  createServerReachability,
   RealtimeSocket,
   type RealtimeClock,
   type RealtimeSocketPolicy,
   type RealtimeWebSocket,
+  type ServerReachability,
   type SocketTicket,
 } from "@/lib/realtime-socket";
 
@@ -122,7 +124,11 @@ const ACK = { op: GatewayOp.HeartbeatACK };
 
 function harness(
   policy: RealtimeSocketPolicy = CALL_SOCKET_POLICY,
-  options: { shouldRetry?: () => boolean } = {},
+  options: {
+    shouldRetry?: () => boolean;
+    /** Defaults to one of its own, so other harnesses never wake this one. */
+    reachability?: ServerReachability;
+  } = {},
 ) {
   const clock = new FakeClock();
   const sockets: FakeSocket[] = [];
@@ -141,6 +147,7 @@ function harness(
     acquireTicket,
     clock,
     shouldRetry: options.shouldRetry,
+    reachability: options.reachability ?? createServerReachability(),
     createSocket: (url, protocols) => {
       const fake = new FakeSocket(url, protocols);
       sockets.push(fake);
@@ -332,6 +339,107 @@ describe("wake", () => {
     h.socket.wake();
     h.clock.advance(60_000);
     expect(h.acquireTicket).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("server reachable", () => {
+  /** A chat socket deep in its backoff after a long outage. */
+  async function longOutage(reachability: ServerReachability) {
+    const chat = harness(CHAT_SOCKET_POLICY, { reachability });
+    const fake = await chat.connected();
+    fake.serverClose(1006);
+    for (const delay of [1000, 2000, 4000, 8000]) {
+      chat.clock.advance(delay);
+      await chat.refuseTicket(503);
+    }
+    expect(chat.clock.pending()).toEqual([16_000]);
+    return chat;
+  }
+
+  it("retries a socket waiting out a backoff when another socket's ticket gets through", async () => {
+    const reachability = createServerReachability();
+    const chat = await longOutage(reachability);
+    const call = harness(CALL_SOCKET_POLICY, { reachability });
+
+    call.socket.connect();
+    expect(chat.acquireTicket).toHaveBeenCalledTimes(5);
+    const callSocket = await call.grantTicket();
+    expect(chat.acquireTicket).toHaveBeenCalledTimes(6);
+    expect(chat.clock.pending()).toEqual([]);
+
+    // Once per wait: the open that follows does not ask again.
+    callSocket.open();
+    expect(chat.acquireTicket).toHaveBeenCalledTimes(6);
+    const chatSocket = await chat.grantTicket();
+    chatSocket.open();
+    expect(chat.socket.isOpen).toBe(true);
+    // The early retry kept the backoff count (it resets on markReady).
+    expect(chat.socket.debugState().retries).toBe(5);
+  });
+
+  it("retries a waiting socket when another socket opens", async () => {
+    const reachability = createServerReachability();
+    const call = harness(CALL_SOCKET_POLICY, { reachability });
+    const callSocket = await call.connected();
+    const chat = await longOutage(reachability);
+
+    callSocket.serverClose(1006);
+    call.clock.advance(500);
+    // The chat socket's retry is in flight; another success is not a second one.
+    await call.grantTicket();
+    expect(chat.acquireTicket).toHaveBeenCalledTimes(6);
+    call.sockets.at(-1)!.open();
+    expect(chat.acquireTicket).toHaveBeenCalledTimes(6);
+
+    // A retry that fails waits again, and listens again.
+    await chat.refuseTicket(503);
+    expect(chat.clock.pending()).toEqual([30_000]);
+    const third = harness(CALL_SOCKET_POLICY, { reachability });
+    await third.connected();
+    expect(chat.acquireTicket).toHaveBeenCalledTimes(7);
+  });
+
+  it("never wakes a stopped, signed-out or not-retrying socket, or one with a ticket in flight", async () => {
+    const reachability = createServerReachability();
+    const stopped = harness(CALL_SOCKET_POLICY, { reachability });
+    (await stopped.connected()).serverClose(1006);
+    stopped.socket.stop();
+
+    const signedOut = harness(CALL_SOCKET_POLICY, { reachability });
+    signedOut.socket.connect();
+    await signedOut.refuseTicket(401);
+    signedOut.clock.advance(500);
+    await signedOut.refuseTicket(401);
+    expect(signedOut.socket.debugState().phase).toBe("auth-failed");
+
+    const chatSignedOut = harness(CHAT_SOCKET_POLICY, { reachability });
+    chatSignedOut.socket.connect();
+    await chatSignedOut.refuseTicket(401);
+    chatSignedOut.clock.advance(1000);
+    await chatSignedOut.refuseTicket(401);
+    expect(chatSignedOut.clock.pending()).toEqual([60_000]);
+
+    let retryAllowed = true;
+    const notRetrying = harness(CALL_SOCKET_POLICY, {
+      reachability,
+      shouldRetry: () => retryAllowed,
+    });
+    (await notRetrying.connected()).serverClose(1006);
+    retryAllowed = false;
+
+    const inFlight = harness(CALL_SOCKET_POLICY, { reachability });
+    inFlight.socket.connect();
+
+    await harness(CALL_SOCKET_POLICY, { reachability }).connected();
+
+    expect(stopped.acquireTicket).toHaveBeenCalledTimes(1);
+    expect(signedOut.acquireTicket).toHaveBeenCalledTimes(2);
+    expect(chatSignedOut.acquireTicket).toHaveBeenCalledTimes(2);
+    expect(chatSignedOut.clock.pending()).toEqual([60_000]);
+    expect(notRetrying.acquireTicket).toHaveBeenCalledTimes(1);
+    expect(notRetrying.socket.debugState().phase).toBe("idle");
+    expect(notRetrying.clock.pending()).toEqual([]);
+    expect(inFlight.acquireTicket).toHaveBeenCalledTimes(1);
   });
 });
 
