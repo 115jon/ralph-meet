@@ -1,34 +1,24 @@
+// Kova session checks for code outside the Effect edge (requireAuth, the
+// account and session routes, the chat route guard). The lookup itself is
+// the `KovaAuth` service in `@/server/kova-auth`; this maps its typed
+// failures onto the plain shapes these callers already use.
+
 import { getRequestHeader } from "@tanstack/react-start/server";
-import { env } from "cloudflare:workers";
+import { Effect } from "effect";
 
+import type { AuthUnavailable, Unauthenticated } from "@/server/errors";
 import {
-  DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY,
-  DEFAULT_KOVA_AUTH_URL,
-} from "@/lib/site-defaults";
+  authenticate,
+  KovaAuth,
+  type Credentials,
+  type KovaAuthSession,
+  type KovaAuthUser,
+  type KovaIdentity,
+  type SessionHeaders,
+} from "@/server/kova-auth";
 
-export interface KovaAuthUser {
-  id: string;
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-  imageUrl?: string | null;
-  username?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
-  bio?: string | null;
-  primaryEmailAddress?: { emailAddress?: string | null } | null;
-}
-
-export interface KovaAuthSession {
-  id?: string;
-  token?: string;
-  userId?: string;
-  expiresAt?: string | number | Date;
-  createdAt?: string | number | Date;
-  updatedAt?: string | number | Date;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-}
+export type { KovaAuthSession, KovaAuthUser } from "@/server/kova-auth";
+export { isKovaUnavailableStatus } from "@/server/kova-auth";
 
 /**
  * What Kova said about a request's credentials. `unavailable` means it could
@@ -40,68 +30,75 @@ export type KovaSessionCheck =
   | { status: "signed-out" }
   | { status: "unavailable"; reason: string };
 
-/** A hung Kova must not hang every API request behind it. */
-const KOVA_SESSION_TIMEOUT_MS = 8000;
-
-/** Statuses that mean "try again", not "no session". */
-export function isKovaUnavailableStatus(status: number): boolean {
-  return status >= 500 || status === 429 || status === 408;
+function settle(
+  lookup: Effect.Effect<
+    KovaIdentity,
+    Unauthenticated | AuthUnavailable,
+    KovaAuth
+  >,
+): Promise<KovaSessionCheck> {
+  return Effect.runPromise(
+    lookup.pipe(
+      Effect.map((identity): KovaSessionCheck => ({
+        status: "signed-in",
+        user: identity.user,
+        session: identity.session,
+      })),
+      Effect.catchTags({
+        Unauthenticated: () =>
+          Effect.succeed<KovaSessionCheck>({ status: "signed-out" }),
+        AuthUnavailable: (error) =>
+          Effect.succeed<KovaSessionCheck>({
+            status: "unavailable",
+            reason: error.reason,
+          }),
+      }),
+      Effect.provide(KovaAuth.layer),
+    ),
+  );
 }
 
+function lookup(headers: SessionHeaders) {
+  return Effect.gen(function* () {
+    const kova = yield* KovaAuth;
+    return yield* kova.lookup(headers);
+  });
+}
+
+/** The session headers: from `headers` when given, else the current request's. */
+function sessionHeaders(headers?: Headers): SessionHeaders {
+  return {
+    authorization:
+      headers?.get("authorization") ??
+      getRequestHeader("authorization") ??
+      null,
+    cookie: headers?.get("cookie") ?? getRequestHeader("cookie") ?? null,
+  };
+}
+
+/**
+ * The credentials on `req`, falling back to the current request's headers
+ * (routes that call `requireAuth()` without passing the request).
+ */
+export function requestCredentials(req?: Request): Credentials {
+  return {
+    ...sessionHeaders(req?.headers),
+    queryToken: req ? new URL(req.url).searchParams.get("token") : null,
+  };
+}
+
+/** One get-session call with these headers (or the current request's). */
 export async function checkKovaAuthSession(
   headers?: Headers,
 ): Promise<KovaSessionCheck> {
-  const authEnv = env as unknown as CloudflareEnv & {
-    KOVA_AUTH_URL?: string;
-    VITE_KOVA_AUTH_PUBLISHABLE_KEY?: string;
-  };
-  const authUrl = (authEnv.KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL).replace(
-    /\/$/,
-    "",
-  );
-  // Under `vite dev` the define from vite.config.ts comes first: it is the
-  // client's key too, and .dev.vars cannot override it (lib/dev-auth-target).
-  const publishableKey: string =
-    import.meta.env.RALPH_DEV_KOVA_KEY ??
-    authEnv.VITE_KOVA_AUTH_PUBLISHABLE_KEY ??
-    DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY;
-  const reqHeaders = new Headers();
-  const authHeader =
-    headers?.get("authorization") ?? getRequestHeader("authorization");
-  const cookie = headers?.get("cookie") ?? getRequestHeader("cookie");
-  if (authHeader) reqHeaders.set("authorization", authHeader);
-  if (cookie) reqHeaders.set("cookie", cookie);
-  if (publishableKey) reqHeaders.set("x-publishable-key", publishableKey);
+  return settle(lookup(sessionHeaders(headers)));
+}
 
-  let res: Response;
-  try {
-    res = await fetch(`${authUrl}/api/auth/get-session`, {
-      headers: reqHeaders,
-      signal: AbortSignal.timeout(KOVA_SESSION_TIMEOUT_MS),
-    });
-  } catch (error) {
-    return {
-      status: "unavailable",
-      reason: error instanceof Error ? error.name : "fetch failed",
-    };
-  }
-
-  if (isKovaUnavailableStatus(res.status)) {
-    return { status: "unavailable", reason: `HTTP ${res.status}` };
-  }
-  // Any other refusal (401, 403, 400...) is Kova's answer: no session.
-  if (!res.ok) return { status: "signed-out" };
-
-  let data: { user?: KovaAuthUser; session?: KovaAuthSession } | null;
-  try {
-    data = (await res.json()) as typeof data;
-  } catch {
-    // A 2xx that is not JSON is a proxy or edge error page, not an answer.
-    return { status: "unavailable", reason: "unreadable body" };
-  }
-  return data?.user && data?.session
-    ? { status: "signed-in", user: data.user, session: data.session }
-    : { status: "signed-out" };
+/** The full check `requireAuth` makes: request headers, then the bearer or `?token=` alone. */
+export async function checkCredentials(
+  credentials: Credentials,
+): Promise<KovaSessionCheck> {
+  return settle(authenticate(credentials));
 }
 
 /** The session, or null when there is none or Kova could not be reached. */
@@ -131,7 +128,5 @@ export async function getCurrentUser(headers?: Headers) {
 
 /** Check a bearer token (desktop app token, or a `?token=` query param). */
 export async function checkToken(token: string): Promise<KovaSessionCheck> {
-  return checkKovaAuthSession(
-    new Headers({ authorization: `Bearer ${token}` }),
-  );
+  return settle(lookup({ authorization: `Bearer ${token}`, cookie: null }));
 }

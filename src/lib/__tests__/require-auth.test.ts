@@ -96,6 +96,33 @@ describe("requireAuth", () => {
     kovaAnswers(new Response("down", { status: 500 }));
     const res = (await requireAuth()) as Response;
     expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("5");
+  });
+
+  it("answers 503 when Kova's 2xx body is not JSON", async () => {
+    kovaAnswers(new Response("<html>edge error</html>"));
+    const res = (await requireAuth()) as Response;
+    expect(res.status).toBe(503);
+  });
+
+  it("answers 503 when Kova hangs past the session timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+      const pending = requireAuth();
+      await vi.advanceTimersByTimeAsync(5_000);
+      const res = (await pending) as Response;
+      expect(res.status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("answers 401 without asking Kova when there are no credentials", async () => {
+    requestHeaders.clear();
+    const res = (await requireAuth()) as Response;
+    expect(res.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("answers 503 when the bearer-token check cannot reach Kova", async () => {

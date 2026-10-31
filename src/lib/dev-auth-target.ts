@@ -7,7 +7,7 @@
  * key from wrangler.toml (dev: `[env.mobile-dev.vars]`, prod: top-level
  * `[vars]`) and hands that one value to both sides through
  * `import.meta.env.RALPH_DEV_KOVA_KEY`, which the client
- * (`kova-auth-config`) and the worker (`kova-auth-server`) read before
+ * (`kova-auth-config`) and the worker (`server/kova-auth`) read before
  * anything else, so .env.local or .dev.vars can no longer split them.
  *
  * Pure, so the selection is unit tested (`__tests__/dev-auth-target.test.ts`).

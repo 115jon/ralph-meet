@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   getEnv: vi.fn(),
   executeBroadcast: vi.fn(),
   broadcastToUser: vi.fn(),
-  getOrCreateDM: vi.fn(),
   sendFriendRequest: vi.fn(),
   acceptFriendRequest: vi.fn(),
   blockUser: vi.fn(),
@@ -34,7 +33,6 @@ vi.mock("@/services/service-helpers", () => ({
 vi.mock("@/services/social.service", () => ({
   acceptFriendRequest: mocks.acceptFriendRequest,
   blockUser: mocks.blockUser,
-  getOrCreateDM: mocks.getOrCreateDM,
   removeRelationship: mocks.removeRelationship,
   sendFriendRequest: mocks.sendFriendRequest,
 }));
@@ -53,7 +51,6 @@ vi.mock("@/services/notification.service", () => ({
   markNotificationsRead: mocks.markNotificationsRead,
 }));
 
-import { POST as postDM } from "../dms";
 import {
   DELETE as deleteFriend,
   POST as postFriend,
@@ -84,7 +81,6 @@ function invalidJsonRequest(): Request {
 }
 
 const handlers: Record<string, SocialHandler> = {
-  dm: (args) => postDM(args),
   friendPost: (args) => postFriend(args),
   friendPut: (args) => putFriend(args),
   friendDelete: (args) => deleteFriend(args),
@@ -99,11 +95,6 @@ describe("social request body validation", () => {
     mocks.getDB.mockReturnValue({});
     mocks.getEnv.mockReturnValue({});
     mocks.executeBroadcast.mockResolvedValue(undefined);
-    mocks.getOrCreateDM.mockResolvedValue({
-      isNew: false,
-      dm: {},
-      broadcasts: [],
-    });
     mocks.sendFriendRequest.mockResolvedValue({
       user: {},
       type: 1,
@@ -176,7 +167,6 @@ describe("social request body validation", () => {
   });
 
   it.each([
-    ["dm", { target_user_id: 123 }],
     ["friendPost", { username: 123 }],
     ["friendPut", { target_user_id: "user-2", action: 123 }],
     ["friendDelete", { target_user_id: 123 }],
@@ -213,7 +203,6 @@ describe("social request body validation", () => {
   );
 
   it.each([
-    ["dm", { target_user_id: "user-2" }],
     ["friendPost", { username: "friend" }],
     ["friendPut", { target_user_id: "user-2", action: "accept" }],
     ["friendDelete", { target_user_id: "user-2" }],
