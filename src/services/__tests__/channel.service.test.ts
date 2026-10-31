@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createMockD1 } from "../../lib/__tests__/mock-d1";
+import { anyId, anyTimestamp, createMockD1 } from "../../lib/__tests__/mock-d1";
+import { CacheKey } from "../../lib/cache";
 import {
   createChannel,
   deleteChannel,
@@ -45,16 +46,25 @@ describe("deleteChannel", () => {
 
     const result = await deleteChannel(db as any, CHANNEL_ID);
 
-    db.assertCalled(/DELETE FROM channels WHERE id/);
-    expect(result.serverId).toBe(SERVER_ID);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast).toMatchObject({
-      type: "server",
-      target: SERVER_ID,
-      event: "CHANNEL_DELETE",
+    // The channel is deleted by its own id, never by the server's.
+    db.assertCalledWith("DELETE FROM channels WHERE id", [CHANNEL_ID]);
+    expect(result).toEqual({
+      serverId: SERVER_ID,
+      cacheKeysToInvalidate: [CacheKey.serverChannels(SERVER_ID)],
+      broadcast: {
+        type: "server",
+        target: SERVER_ID,
+        event: "CHANNEL_DELETE",
+        data: { id: CHANNEL_ID, server_id: SERVER_ID },
+      },
+      auditLog: {
+        serverId: SERVER_ID,
+        actorId: "",
+        actionType: "CHANNEL_DELETE",
+        targetId: CHANNEL_ID,
+        changes: { name: "general", channel_type: "text" },
+      },
     });
-    expect(result.auditLog).toBeDefined();
-    expect(result.auditLog!.actionType).toBe("CHANNEL_DELETE");
   });
 
   it("throws 404 when channel not found", async () => {
@@ -82,15 +92,51 @@ describe("createChannel", () => {
       channel_type: "text",
     });
 
-    expect(result.channel.name).toBe("new-channel");
-    expect(result.channel.channel_type).toBe("text");
-    expect(result.channel.server_id).toBe(SERVER_ID);
-    expect(result.channel.id).toBeDefined();
-    db.assertCalled(/INSERT INTO channels/);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast).toBeDefined();
-    expect((result.broadcast.data as any).channel).toEqual(result.channel);
-    expect(result.auditLog).toBeDefined();
+    const { channel } = result;
+    expect(channel).toEqual({
+      id: anyId(),
+      server_id: SERVER_ID,
+      name: "new-channel",
+      description: null,
+      channel_type: "text",
+      category_id: null,
+      position: 0,
+      allow_public_shares: null,
+      voice_status: null,
+      created_at: anyTimestamp(),
+    });
+    // The row is inserted for this server under the id the caller gets back.
+    db.assertCalledWith("INSERT INTO channels", [
+      channel.id,
+      SERVER_ID,
+      "new-channel",
+      null,
+      "text",
+      null,
+      0,
+      channel.created_at,
+    ]);
+    db.assertCalledWith("COALESCE(MAX(position)", [SERVER_ID]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverChannels(SERVER_ID),
+    ]);
+    expect(result.broadcast).toEqual({
+      type: "server",
+      target: SERVER_ID,
+      event: "CHANNEL_UPDATE",
+      data: { server_id: SERVER_ID, channel },
+    });
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "CHANNEL_CREATE",
+      targetId: channel.id,
+      changes: {
+        name: "new-channel",
+        channel_type: "text",
+        category_id: null,
+      },
+    });
   });
 
   it("creates a voice channel", async () => {
@@ -101,6 +147,16 @@ describe("createChannel", () => {
 
     expect(result.channel.channel_type).toBe("voice");
     expect(result.channel.name).toBe("Voice Room");
+    db.assertCalledWith("INSERT INTO channels", [
+      result.channel.id,
+      SERVER_ID,
+      "Voice Room",
+      null,
+      "voice",
+      null,
+      0,
+      result.channel.created_at,
+    ]);
   });
 
   it("preserves decorative unicode while normalizing text channel spacing", async () => {
@@ -110,6 +166,16 @@ describe("createChannel", () => {
     });
 
     expect(result.channel.name).toBe("「✨」-my-cool-channel!!!");
+    db.assertCalledWith("INSERT INTO channels", [
+      result.channel.id,
+      SERVER_ID,
+      "「✨」-my-cool-channel!!!",
+      null,
+      "text",
+      null,
+      0,
+      result.channel.created_at,
+    ]);
   });
 
   it("includes description and category_id when provided", async () => {
@@ -122,6 +188,16 @@ describe("createChannel", () => {
 
     expect(result.channel.description).toBe("Help channel");
     expect(result.channel.category_id).toBe("cat_1");
+    db.assertCalledWith("INSERT INTO channels", [
+      result.channel.id,
+      SERVER_ID,
+      "help",
+      "Help channel",
+      "text",
+      "cat_1",
+      0,
+      result.channel.created_at,
+    ]);
   });
 
   it("throws when sanitized name is empty", async () => {
@@ -163,6 +239,23 @@ describe("updateChannel", () => {
 
     expect(result.channel.name).toBe("renamed");
     expect((result.broadcast.data as any).channel).toEqual(result.channel);
+    // name, description, allow_public_shares, then the channel being updated.
+    db.assertCalledWith("UPDATE channels SET name = ?", [
+      "renamed",
+      null,
+      null,
+      CHANNEL_ID,
+    ]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverChannels(SERVER_ID),
+    ]);
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "CHANNEL_UPDATE",
+      targetId: CHANNEL_ID,
+      changes: { name: { old: "general", new: "renamed" } },
+    });
   });
 
   it("keeps decorative unicode when renaming a text channel", async () => {
@@ -171,6 +264,12 @@ describe("updateChannel", () => {
     });
 
     expect(result.channel.name).toBe("「✨」chat");
+    db.assertCalledWith("UPDATE channels SET name = ?", [
+      "「✨」chat",
+      null,
+      null,
+      CHANNEL_ID,
+    ]);
   });
 });
 
@@ -205,9 +304,11 @@ describe("updateVoiceChannelStatus", () => {
       },
     );
 
-    db.assertCalled(
-      /UPDATE channels SET voice_status_text = \?, voice_status_media = \? WHERE id = \?/,
-    );
+    db.assertCalledWith("UPDATE channels SET voice_status_text = ?", [
+      "Working session",
+      JSON.stringify(JSON.parse(VOICE_STATUS_MEDIA_JSON)),
+      CHANNEL_ID,
+    ]);
     expect((result.channel as any).voice_status).toEqual({
       text: "Working session",
       media: JSON.parse(VOICE_STATUS_MEDIA_JSON),

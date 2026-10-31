@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createMockD1 } from "../../lib/__tests__/mock-d1";
+import { anyId, createMockD1 } from "../../lib/__tests__/mock-d1";
+import { CacheKey } from "../../lib/cache";
 import { createCategory, deleteCategory } from "../category.service";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -27,13 +28,29 @@ describe("createCategory", () => {
       name: "NEW CATEGORY",
     });
 
-    db.assertCalled(/INSERT INTO categories/);
-    expect(result.data.name).toBe("NEW CATEGORY");
-    expect(result.data.server_id).toBe(SERVER_ID);
-    expect(result.data.rank).toBe(2);
-    expect(result.data.id).toBeDefined();
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast?.event).toBe("CHANNEL_UPDATE");
+    expect(result.data).toEqual({
+      id: anyId(),
+      server_id: SERVER_ID,
+      name: "NEW CATEGORY",
+      rank: 2,
+    });
+    // The row is written for this server under the id the caller gets back.
+    db.assertCalledWith(/INSERT INTO categories/, [
+      result.data.id,
+      SERVER_ID,
+      "NEW CATEGORY",
+      2,
+    ]);
+    db.assertCalledWith(/SELECT COALESCE\(MAX\(rank\)/, [SERVER_ID]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverChannels(SERVER_ID),
+    ]);
+    expect(result.broadcast).toEqual({
+      type: "server",
+      target: SERVER_ID,
+      event: "CHANNEL_UPDATE",
+      data: { server_id: SERVER_ID },
+    });
   });
 
   it("trims the category name", async () => {
@@ -80,10 +97,19 @@ describe("deleteCategory", () => {
       CATEGORY_ID,
     );
 
-    db.assertCalled(/UPDATE channels SET category_id = NULL/);
-    db.assertCalled(/DELETE FROM categories/);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast?.event).toBe("CHANNEL_UPDATE");
+    db.assertCalledWith(/UPDATE channels SET category_id = NULL/, [
+      CATEGORY_ID,
+    ]);
+    db.assertCalledWith(/DELETE FROM categories/, [CATEGORY_ID, SERVER_ID]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverChannels(SERVER_ID),
+    ]);
+    expect(result.broadcast).toEqual({
+      type: "server",
+      target: SERVER_ID,
+      event: "CHANNEL_UPDATE",
+      data: { server_id: SERVER_ID },
+    });
   });
 
   it("passes the correct categoryId to the cascade nullify", async () => {

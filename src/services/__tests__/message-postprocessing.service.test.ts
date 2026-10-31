@@ -201,7 +201,16 @@ describe("message postprocessing", () => {
     );
 
     expect(outcome).toEqual({ retryEmbeds: true });
+    // Guarded on the revision and the embeds that were read, for this message
+    // in this channel.
     expect(db.getCalls("UPDATE messages SET embeds")).toHaveLength(1);
+    db.assertCalledWith("UPDATE messages SET embeds", [
+      JSON.stringify([{ url: "https://a.test" }]),
+      "message-1",
+      "channel-1",
+      1,
+      "[]",
+    ]);
     expect(broadcast).toHaveBeenCalledWith(
       { kind: "server", id: "server-1" },
       "MESSAGE_UPDATE",

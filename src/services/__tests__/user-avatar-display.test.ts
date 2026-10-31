@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AvatarDisplay } from "@/lib/avatar-display";
-import { createMockD1 } from "@/lib/__tests__/mock-d1";
+import { anyTimestamp, createMockD1 } from "@/lib/__tests__/mock-d1";
 import { updateAvatarUrl } from "@/services/user.service";
 
 describe("user avatar display metadata", () => {
@@ -27,8 +27,13 @@ describe("user avatar display metadata", () => {
     const [updateCall] = db.getCalls(/UPDATE users SET avatar_url/);
 
     expect(updateCall.sql).toContain("avatar_display = ?");
-    expect(updateCall.bindings[0]).toBe("/api/avatars/user-1.png");
-    expect(updateCall.bindings[1]).toBe(JSON.stringify(display));
+    // avatar url, display instructions, updated_at, then the user being changed.
+    expect(updateCall.bindings).toEqual([
+      "/api/avatars/user-1.png",
+      JSON.stringify(display),
+      anyTimestamp(),
+      "user-1",
+    ]);
     expect(result.avatarUrl).toBe("/api/avatars/user-1.png");
     expect(result.avatarDisplay).toEqual(display);
   });

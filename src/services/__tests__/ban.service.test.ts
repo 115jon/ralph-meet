@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createMockD1 } from "../../lib/__tests__/mock-d1";
+import { anyTimestamp, createMockD1 } from "../../lib/__tests__/mock-d1";
 import { banUser, listBans, unbanUser } from "../ban.service";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -101,22 +101,38 @@ describe("banUser", () => {
       reason: "Spamming",
     });
 
-    db.assertCalled(/INSERT OR REPLACE INTO server_bans/);
-    db.assertCalled(/DELETE FROM server_members/);
+    db.assertCalledWith(/INSERT OR REPLACE INTO server_bans/, [
+      SERVER_ID,
+      TARGET_ID,
+      "Spamming",
+      USER_ID,
+      anyTimestamp(),
+    ]);
+    db.assertCalledWith(/DELETE FROM server_members/, [SERVER_ID, TARGET_ID]);
+    db.assertCalledWith(/DELETE FROM member_roles/, [SERVER_ID, TARGET_ID]);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
+    const removed = { server_id: SERVER_ID, user_id: TARGET_ID, banned: true };
     expect(result.broadcasts).toEqual([
-      expect.objectContaining({
+      {
         type: "server",
         target: SERVER_ID,
         event: "GUILD_MEMBER_REMOVE",
-      }),
-      expect.objectContaining({
+        data: removed,
+      },
+      {
         type: "user",
         target: TARGET_ID,
         event: "GUILD_MEMBER_REMOVE",
-      }),
+        data: removed,
+      },
     ]);
-    expect(result.auditLog.actionType).toBe("MEMBER_BAN");
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "MEMBER_BAN",
+      targetId: TARGET_ID,
+      reason: "Spamming",
+    });
   });
 
   it("throws 400 when actor tries to ban themselves", async () => {
@@ -191,8 +207,13 @@ describe("unbanUser", () => {
 
     const result = await unbanUser(db as any, SERVER_ID, USER_ID, TARGET_ID);
 
-    db.assertCalled(/DELETE FROM server_bans/);
-    expect(result.auditLog.actionType).toBe("MEMBER_UNBAN");
+    db.assertCalledWith(/DELETE FROM server_bans/, [SERVER_ID, TARGET_ID]);
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "MEMBER_UNBAN",
+      targetId: TARGET_ID,
+    });
   });
 
   it("throws 403 when actor lacks BAN_MEMBERS and ADMINISTRATOR", async () => {

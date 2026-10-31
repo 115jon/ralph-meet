@@ -123,7 +123,7 @@ describe("markNotificationsRead", () => {
   it("marks all notifications read when all=true", async () => {
     await markNotificationsRead(db as any, USER_ID, { all: true });
 
-    db.assertCalled(/UPDATE notifications SET is_read = 1/);
+    db.assertCalledWith("UPDATE notifications SET is_read = 1", [USER_ID]);
   });
 
   it("marks specific notifications read by ids", async () => {
@@ -131,8 +131,7 @@ describe("markNotificationsRead", () => {
       ids: ["notif_1", "notif_2"],
     });
 
-    db.assertCalled(/UPDATE notifications SET is_read = 1/);
-    db.assertCalledWith(/UPDATE notifications SET is_read = 1/, [
+    db.assertCalledWith("UPDATE notifications SET is_read = 1", [
       USER_ID,
       "notif_1",
       "notif_2",
@@ -162,11 +161,12 @@ describe("clearNotifications", () => {
   });
 
   it("deletes all notifications for the user", async () => {
-    await clearNotifications(db as any, USER_ID);
+    const clearedAt = await clearNotifications(db as any, USER_ID);
 
-    db.assertCalled(/DELETE FROM notifications/);
-    db.assertCalledWith(/DELETE FROM notifications/, [USER_ID]);
-    db.assertCalled(/notification_clear_watermarks/);
-    db.assertCalledWith(/notification_clear_watermarks/, [USER_ID]);
+    db.assertCalledWith("DELETE FROM notifications", [USER_ID]);
+    db.assertCalledWith("INSERT INTO notification_clear_watermarks", [
+      USER_ID,
+      clearedAt,
+    ]);
   });
 });

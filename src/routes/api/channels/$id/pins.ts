@@ -64,7 +64,7 @@ export const GET = async ({ request: _request, params }: any) => {
 };
 
 // PUT /api/channels/:id/pins — pin or unpin a message
-const PUT = async ({ request, params }: any) => {
+export const PUT = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

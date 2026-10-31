@@ -34,7 +34,21 @@ describe("voice-status-media.service", () => {
       createdAt: NOW,
     });
 
-    db.assertCalled(/INSERT INTO voice_status_media_assets/);
+    // id, server, channel, uploader, filename, file key, type, width, height,
+    // size, created_at.
+    db.assertCalledWith("INSERT INTO voice_status_media_assets", [
+      asset.id,
+      SERVER_ID,
+      CHANNEL_ID,
+      USER_ID,
+      "party.png",
+      `voice-status-media/${SERVER_ID}/${asset.id}/party.png`,
+      "image/png",
+      1920,
+      1080,
+      42_000,
+      NOW,
+    ]);
     expect(asset.server_id).toBe(SERVER_ID);
     expect(asset.channel_id).toBe(CHANNEL_ID);
     expect(asset.media.preview_url).toContain("/api/voice-status-media/");
@@ -180,6 +194,18 @@ describe("voice-status-media.service", () => {
 
     expect(asset.id).toBe("asset-2");
     expect(asset.fileKey).toBe("external-url:https://media.tenor.com/new.gif");
-    db.assertCalled(/INSERT INTO voice_status_media_assets/);
+    db.assertCalledWith("INSERT INTO voice_status_media_assets", [
+      "asset-2",
+      SERVER_ID,
+      CHANNEL_ID,
+      USER_ID,
+      "new.gif",
+      "external-url:https://media.tenor.com/new.gif",
+      "image/gif",
+      320,
+      180,
+      0,
+      NOW,
+    ]);
   });
 });

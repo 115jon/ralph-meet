@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createMockD1 } from "../../lib/__tests__/mock-d1";
+import { anyTimestamp, createMockD1 } from "../../lib/__tests__/mock-d1";
 import {
   addReaction,
   batchFetchAttachments,
@@ -153,7 +153,19 @@ describe("createMessage attachment linking", () => {
     const insert = db.getCalls("INSERT INTO messages")[0];
     expect(insert?.sql).toContain("content_revision");
     expect(insert?.sql).toContain("VALUES (?, ?, ?, ?, ?, ?, 1)");
-    expect(insert?.bindings).toHaveLength(6);
+    // id, channel, author, content, reply target, created_at.
+    expect(insert?.bindings).toEqual([
+      "msg_revision",
+      CHANNEL_ID,
+      USER_ID,
+      "hello",
+      null,
+      anyTimestamp(),
+    ]);
+    db.assertCalledWith("INSERT INTO message_postprocessing_jobs", [
+      "msg_revision",
+      CHANNEL_ID,
+    ]);
   });
 
   it("does not reassociate a soundboard attachment with a message", async () => {
@@ -174,6 +186,7 @@ describe("createMessage attachment linking", () => {
       "msg_1",
       "sound-1",
       USER_ID,
+      CHANNEL_ID,
     ]);
     expect(
       db
@@ -204,7 +217,12 @@ describe("createMessage attachment linking", () => {
     const update = db.getCalls("UPDATE attachments SET message_id")[0];
     expect(update?.sql).toContain("message_id IS NULL");
     expect(update?.sql).toContain("channel_id = ?");
-    expect(update?.bindings).toContain(CHANNEL_ID);
+    expect(update?.bindings).toEqual([
+      "msg_2",
+      "already-linked",
+      USER_ID,
+      CHANNEL_ID,
+    ]);
     expect(
       db
         .getCalls("SELECT id, filename, file_key")
@@ -246,7 +264,7 @@ describe("createMessage attachment linking", () => {
 
     const update = db.getCalls("UPDATE attachments SET message_id")[0];
     expect(update?.sql).toContain("channel_id = ?");
-    expect(update?.bindings).toContain(CHANNEL_ID);
+    expect(update?.bindings).toEqual(["msg_gif", "gif-1", USER_ID, CHANNEL_ID]);
     expect(message.attachments).toEqual([
       expect.objectContaining({
         id: "gif-1",
@@ -549,13 +567,22 @@ describe("addReaction", () => {
       "👍",
     );
 
-    db.assertCalled(/INSERT INTO message_reactions/);
-    expect(result.broadcast.event).toBe("REACTION_ADD");
-    expect(result.broadcast.data).toEqual({
-      message_id: "msg_1",
-      channel_id: CHANNEL_ID,
-      user_id: USER_ID,
-      emoji: "👍",
+    db.assertCalledWith("INSERT INTO message_reactions", [
+      "msg_1",
+      USER_ID,
+      "👍",
+      anyTimestamp(),
+    ]);
+    expect(result.broadcast).toEqual({
+      type: "channel",
+      target: CHANNEL_ID,
+      event: "REACTION_ADD",
+      data: {
+        message_id: "msg_1",
+        channel_id: CHANNEL_ID,
+        user_id: USER_ID,
+        emoji: "👍",
+      },
     });
   });
 });
@@ -578,8 +605,23 @@ describe("removeReaction", () => {
       "👍",
     );
 
-    db.assertCalled(/DELETE FROM message_reactions/);
-    expect(result.broadcast?.event).toBe("REACTION_REMOVE");
+    db.assertCalledWith("DELETE FROM message_reactions", [
+      "msg_1",
+      USER_ID,
+      "👍",
+      CHANNEL_ID,
+    ]);
+    expect(result.broadcast).toEqual({
+      type: "channel",
+      target: CHANNEL_ID,
+      event: "REACTION_REMOVE",
+      data: {
+        message_id: "msg_1",
+        channel_id: CHANNEL_ID,
+        user_id: USER_ID,
+        emoji: "👍",
+      },
+    });
   });
 
   it("does not broadcast when the message is outside the requested channel", async () => {
@@ -617,9 +659,15 @@ describe("markChannelAsRead", () => {
   it("upserts read state", async () => {
     const result = await markChannelAsRead(db as any, USER_ID, CHANNEL_ID);
 
-    db.assertCalled(/INSERT INTO read_states/);
-    expect(result.channel_id).toBe(CHANNEL_ID);
-    expect(result.last_read_at).toBeDefined();
+    expect(result).toEqual({
+      channel_id: CHANNEL_ID,
+      last_read_at: anyTimestamp(),
+    });
+    db.assertCalledWith("INSERT INTO read_states", [
+      USER_ID,
+      CHANNEL_ID,
+      result.last_read_at,
+    ]);
   });
 });
 
@@ -643,9 +691,13 @@ describe("pinMessage", () => {
 
     const result = await pinMessage(db as any, CHANNEL_ID, "msg_1");
 
-    db.assertCalled(/UPDATE messages SET is_pinned/);
-    expect(result.broadcast).toBeDefined();
-    expect(result.broadcast!.event).toBe("MESSAGE_PIN");
+    db.assertCalledWith("UPDATE messages SET is_pinned = 1", ["msg_1"]);
+    expect(result.broadcast).toEqual({
+      type: "channel",
+      target: CHANNEL_ID,
+      event: "MESSAGE_PIN",
+      data: { id: "msg_1", channel_id: CHANNEL_ID, is_pinned: true },
+    });
   });
 
   it("throws 404 when message not found", async () => {
@@ -686,9 +738,13 @@ describe("unpinMessage", () => {
 
     const result = await unpinMessage(db as any, CHANNEL_ID, "msg_1");
 
-    db.assertCalled(/UPDATE messages SET is_pinned/);
-    expect(result.broadcast).toBeDefined();
-    expect(result.broadcast!.event).toBe("MESSAGE_UNPIN");
+    db.assertCalledWith("UPDATE messages SET is_pinned = 0", ["msg_1"]);
+    expect(result.broadcast).toEqual({
+      type: "channel",
+      target: CHANNEL_ID,
+      event: "MESSAGE_UNPIN",
+      data: { id: "msg_1", channel_id: CHANNEL_ID, is_pinned: false },
+    });
   });
 });
 
@@ -711,9 +767,17 @@ describe("deleteMessage", () => {
       deleteMessage(db as any, CHANNEL_ID, "msg_1", USER_ID, false),
     ).resolves.toEqual(["attachments/channel-1/a-1/file.txt"]);
 
-    db.assertCalled(/UPDATE message_shares SET status = 'deleted'/);
-    db.assertCalled(/SELECT file_key FROM attachments WHERE message_id/);
-    db.assertCalled(/DELETE FROM messages WHERE id = \?/);
+    db.assertCalledWith("UPDATE message_shares SET status = 'deleted'", [
+      anyTimestamp(),
+      "msg_1",
+    ]);
+    db.assertCalledWith("SELECT file_key FROM attachments WHERE message_id", [
+      "msg_1",
+    ]);
+    db.assertCalledWith("DELETE FROM messages WHERE id = ?", [
+      "msg_1",
+      CHANNEL_ID,
+    ]);
   });
 
   it("rejects when a concurrent delete already removed the message", async () => {
