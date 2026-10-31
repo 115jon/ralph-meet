@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GATE_ATTACK_MS,
   GATE_LOOKAHEAD_MS,
+  GATE_ONSET_MIN_ACTIVE_MS,
   VAD_SILENCE_DELAY_MS,
   VAD_TICK_MS,
   VAD_WINDOW_SAMPLES,
@@ -23,6 +24,7 @@ function speechBurst(options: {
   silenceBeforeMs: number;
   speechMs: number;
   silenceAfterMs: number;
+  level?: number;
 }) {
   const onset = ms(options.silenceBeforeMs);
   const end = onset + ms(options.speechMs);
@@ -39,11 +41,31 @@ function speechBurst(options: {
       let voiced = 0;
       for (let n = 1; n <= 12; n++) voiced += Math.sin(n * phase) / n;
       const attack = Math.min(1, (i - onset) / ms(6));
-      value += (voiced / 2) * attack * 0.35;
+      value += (voiced / 2) * attack * (options.level ?? 0.35);
     }
     signal[i] = value;
   }
   return { signal, onset, end };
+}
+
+/** Adds a `durationMs` click (noise burst or 2 kHz tone) at `atMs`. */
+function addClick(
+  signal: Float32Array,
+  atMs: number,
+  amplitude: number,
+  kind: "noise" | "tone",
+  durationMs = 5,
+) {
+  let seed = 777 + atMs;
+  const rand = () =>
+    ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
+  const start = ms(atMs);
+  for (let i = 0; i < ms(durationMs); i++) {
+    signal[start + i] +=
+      kind === "noise"
+        ? amplitude * rand()
+        : amplitude * Math.sin((2 * Math.PI * 2000 * i) / RATE);
+  }
 }
 
 function runGate(
@@ -160,7 +182,71 @@ describe("VoiceGateCore (in-graph outbound gate)", () => {
     ]);
   });
 
-  it("decides every render quantum, without any message from the main thread", () => {
+  it("never opens for isolated 5 ms clicks, at any level", () => {
+    for (const kind of ["noise", "tone"] as const) {
+      for (const amplitude of [0.03, 0.08, 0.3, 0.9]) {
+        const { signal } = speechBurst({
+          silenceBeforeMs: 2000,
+          speechMs: 0,
+          silenceAfterMs: 0,
+        });
+        // Typing: a click every 150 ms.
+        for (let at = 100; at < 1900; at += 150) {
+          addClick(signal, at, amplitude, kind);
+        }
+        const { output, events } = runGate(newGate(), signal);
+        expect({
+          kind,
+          amplitude,
+          energy: energy(output, 0, output.length),
+        }).toEqual({ kind, amplitude, energy: 0 });
+        // Nor does the speaking indicator light up.
+        expect(events).toEqual([]);
+      }
+    }
+  });
+
+  it("still opens for a word, onset intact, at a quiet level", () => {
+    // ~1.5x the threshold: the window RMS of this burst is about 4.5.
+    const { signal, onset, end } = speechBurst({
+      silenceBeforeMs: 800,
+      speechMs: 300,
+      silenceAfterMs: 400,
+      level: 0.1,
+    });
+    const { output } = runGate(newGate(), signal);
+    for (let i = onset; i < end; i++) {
+      expect(output[i + LOOKAHEAD]).toBe(signal[i]);
+    }
+  });
+
+  it("keeps a word that starts right after a click", () => {
+    for (const gapMs of [0, 2, 20, 100]) {
+      const { signal, onset, end } = speechBurst({
+        silenceBeforeMs: 800,
+        speechMs: 300,
+        silenceAfterMs: 400,
+      });
+      addClick(signal, 800 - 5 - gapMs, 0.5, "noise");
+      const { output } = runGate(newGate(), signal);
+      for (let i = onset; i < end; i++) {
+        expect(output[i + LOOKAHEAD]).toBe(signal[i]);
+      }
+    }
+  });
+
+  it("needs a sustained onset: a click as long as the minimum opens", () => {
+    const { signal } = speechBurst({
+      silenceBeforeMs: 500,
+      speechMs: 0,
+      silenceAfterMs: 500,
+    });
+    addClick(signal, 200, 0.5, "tone", GATE_ONSET_MIN_ACTIVE_MS + 2);
+    const { events } = runGate(newGate(), signal);
+    expect(events[0]).toMatchObject({ type: "speaking", value: true });
+  });
+
+  it("decides every millisecond, without any message from the main thread", () => {
     const { signal, onset } = speechBurst({
       silenceBeforeMs: 300,
       speechMs: 100,
@@ -168,8 +254,12 @@ describe("VoiceGateCore (in-graph outbound gate)", () => {
     });
     const { events } = runGate(newGate(), signal);
     const speakingAt = events.find((e) => e.type === "speaking")!.frame;
-    // Detected within one window plus one quantum of the onset.
-    expect(speakingAt - onset).toBeLessThanOrEqual(VAD_WINDOW_SAMPLES + BLOCK);
+    // Detected (after the minimum onset duration) early enough for the
+    // attack ramp to finish inside the lookahead. `frame` is the start of
+    // the 128-sample block the transition fell in.
+    expect(speakingAt - onset).toBeLessThanOrEqual(
+      LOOKAHEAD - ms(GATE_ATTACK_MS),
+    );
   });
 
   it("closes for mute and opens fully when gating is off", () => {

@@ -13,7 +13,8 @@
 // window of the last 512 samples, speaking on at the first window at or above
 // the threshold, off after 300 ms below it, and a hardware stall after 5 s of
 // exact digital silence. "rm-vad" and the analyser fallback evaluate it every
-// 50 ms; the gate evaluates it every render quantum (128 samples).
+// 50 ms; the gate evaluates it every millisecond, and additionally requires a
+// sustained onset (see GATE_ONSET_MIN_ACTIVE_MS) before it turns speaking on.
 
 export const VAD_WINDOW_SAMPLES = 512;
 export const VAD_TICK_MS = 50;
@@ -21,17 +22,25 @@ export const VAD_SILENCE_DELAY_MS = 300;
 export const VAD_STALL_MS = 5000;
 
 // Outbound gate. The gate delays the audio it passes by GATE_LOOKAHEAD_MS, so
-// it opens before a word's first sample reaches its output: a word is
-// detected at most one 512-sample window (10.7 ms at 48 kHz) plus one
-// evaluation step (2.7 ms) after it starts, and the attack ramp then takes
-// GATE_ATTACK_MS, all inside the lookahead. The lookahead is the only latency
-// the gate adds. The 300 ms hangover is kept on the output timeline (the gate
-// closes once the delayed audio of the last loud window has played), then the
-// gain fades out over GATE_RELEASE_MS instead of stepping to zero.
+// it opens before a word's first sample reaches its output. To open, the
+// 512-sample window must reach the threshold (as everywhere) AND the onset
+// must be sustained: at least GATE_ONSET_MIN_ACTIVE_MS of the last
+// GATE_ONSET_WINDOW_MS, counted in 1 ms blocks whose RMS reaches the
+// threshold minus GATE_ONSET_ACTIVITY_DB. An isolated click (a few ms) never
+// gets there, so it neither opens the gate nor lights the speaking
+// indicator; speech does within ~10-11 ms, and the gate is fully open
+// GATE_ATTACK_MS later, still inside the lookahead (worst case 10 ms + 1 ms
+// block alignment + 3 ms attack = 14 ms < 20 ms). The lookahead is the only
+// latency the gate adds. Once open, the 300 ms hangover is kept on the output
+// timeline (the gate closes once the delayed audio of the last loud window
+// has played), then the gain fades out over GATE_RELEASE_MS.
 export const GATE_LOOKAHEAD_MS = 20;
 export const GATE_ATTACK_MS = 3;
 export const GATE_RELEASE_MS = 10;
-export const GATE_EVAL_FRAMES = 128;
+export const GATE_EVAL_MS = 1;
+export const GATE_ONSET_WINDOW_MS = 15;
+export const GATE_ONSET_MIN_ACTIVE_MS = 10;
+export const GATE_ONSET_ACTIVITY_DB = 6;
 
 /**
  * RMS of time-domain samples on the VAD's 0..100 scale (mean-centred, so a
@@ -87,9 +96,12 @@ export class VadCore {
    * @param {number} now
    * @param {Array<{ type: "speaking" | "stalled", value: boolean }>} [events]
    *   Array to append to (the audio thread reuses one to avoid garbage).
+   * @param {boolean} [canStart] false holds speaking off even at or above
+   *   the threshold (an onset that is not sustained yet); it does not affect
+   *   speech already on.
    * @returns {Array<{ type: "speaking" | "stalled", value: boolean }>}
    */
-  update(rms, now, events = []) {
+  update(rms, now, events = [], canStart = true) {
     if (rms === 0) {
       if (this.pureSilenceStart === null) {
         this.pureSilenceStart = now;
@@ -105,7 +117,7 @@ export class VadCore {
       }
     }
 
-    if (rms >= this.threshold) {
+    if (rms >= this.threshold && (this.speaking || canStart)) {
       this.silenceStart = null;
       if (!this.speaking) {
         this.speaking = true;
@@ -153,7 +165,9 @@ export class VoiceGateCore {
    *   lookaheadMs?: number,
    *   attackMs?: number,
    *   releaseMs?: number,
-   *   evalFrames?: number,
+   *   evalMs?: number,
+   *   onsetMinActiveMs?: number,
+   *   onsetWindowMs?: number,
    *   mode?: VoiceGateMode,
    * }} options
    */
@@ -180,14 +194,26 @@ export class VoiceGateCore {
       Math.max(1, Math.round((ms * rate) / 1000));
     this.attackStep = 1 / toSamples(options.attackMs ?? GATE_ATTACK_MS);
     this.releaseStep = 1 / toSamples(options.releaseMs ?? GATE_RELEASE_MS);
-    this.evalFrames = Math.max(
-      1,
-      Math.round(options.evalFrames ?? GATE_EVAL_FRAMES),
-    );
+    this.evalFrames = toSamples(options.evalMs ?? GATE_EVAL_MS);
     this.framesUntilEval = this.evalFrames;
     this.ring = new Float32Array(VAD_WINDOW_SAMPLES);
-    this.window = new Float32Array(VAD_WINDOW_SAMPLES);
     this.ringIndex = 0;
+    // Onset duration: activity of the last onsetWindow 1 ms blocks.
+    this.blockSamples = toSamples(1);
+    this.blockFill = 0;
+    this.blockSumSq = 0;
+    this.onsetMinActive = Math.max(
+      1,
+      Math.round(options.onsetMinActiveMs ?? GATE_ONSET_MIN_ACTIVE_MS),
+    );
+    this.activity = new Uint8Array(
+      Math.max(
+        this.onsetMinActive,
+        Math.round(options.onsetWindowMs ?? GATE_ONSET_WINDOW_MS),
+      ),
+    );
+    this.activityIndex = 0;
+    this.activeBlocks = 0;
     // Samples the gate stays open after speech ends, so the hangover is
     // measured on the delayed output rather than the input.
     this.releaseCountdown = 0;
@@ -256,6 +282,8 @@ export class VoiceGateCore {
       }
       this.ring[this.ringIndex] = mono;
       this.ringIndex = (this.ringIndex + 1) % VAD_WINDOW_SAMPLES;
+      this.blockSumSq += mono * mono;
+      if (++this.blockFill === this.blockSamples) this.closeActivityBlock();
 
       const target = this.targetGain();
       if (this.gain < target) {
@@ -292,17 +320,47 @@ export class VoiceGateCore {
     return events;
   }
 
+  /** Whether the onset so far is long enough to be speech, not a click. */
+  get onsetSustained() {
+    return this.activeBlocks >= this.onsetMinActive;
+  }
+
+  closeActivityBlock() {
+    // Not mean-centred: 1 ms is a fraction of a voice period, and removing
+    // its mean would remove most of a low voice. A DC offset alone still
+    // cannot open the gate (the 512-sample window test is mean-centred).
+    const rms = Math.sqrt(this.blockSumSq / this.blockFill) * 100;
+    const active =
+      rms >= this.vad.threshold * 10 ** (-GATE_ONSET_ACTIVITY_DB / 20) ? 1 : 0;
+    this.activeBlocks += active - this.activity[this.activityIndex];
+    this.activity[this.activityIndex] = active;
+    this.activityIndex = (this.activityIndex + 1) % this.activity.length;
+    this.blockFill = 0;
+    this.blockSumSq = 0;
+  }
+
   /** @param {number} frame */
   evaluate(frame) {
-    const start = this.ringIndex;
+    // RMS of the last 512 samples (order does not matter), as windowRms().
+    const ring = this.ring;
+    let mean = 0;
+    for (let j = 0; j < VAD_WINDOW_SAMPLES; j++) mean += ring[j];
+    mean /= VAD_WINDOW_SAMPLES;
+    let sum = 0;
     for (let j = 0; j < VAD_WINDOW_SAMPLES; j++) {
-      this.window[j] = this.ring[(start + j) % VAD_WINDOW_SAMPLES];
+      const centered = ring[j] - mean;
+      sum += centered * centered;
     }
-    const rms = windowRms(this.window);
+    const rms = Math.sqrt(sum / VAD_WINDOW_SAMPLES) * 100;
     this.lastRms = rms;
     const vadEvents = this.vadEvents;
     vadEvents.length = 0;
-    this.vad.update(rms, (frame / this.sampleRate) * 1000, vadEvents);
+    this.vad.update(
+      rms,
+      (frame / this.sampleRate) * 1000,
+      vadEvents,
+      this.onsetSustained,
+    );
     for (const event of vadEvents) {
       if (event.type === "speaking") {
         // Speech end: keep the gain up until the audio that was in the
