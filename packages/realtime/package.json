@@ -1,0 +1,13 @@
+{
+  "name": "@ralph/realtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ralph Meet realtime socket lifecycle: tickets, heartbeat, backoff, wake.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ralph/protocol": "workspace:*"
+  }
+}

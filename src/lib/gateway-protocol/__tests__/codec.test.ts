@@ -532,17 +532,24 @@ describe("server → client rules", () => {
 
 describe("gateway-protocol imports", () => {
   it("uses only Schema from effect and type-only app imports", () => {
-    const dir = path.resolve(__dirname, "..");
-    for (const file of readdirSync(dir).filter((name) =>
-      name.endsWith(".ts"),
-    )) {
-      const source = readFileSync(path.join(dir, file), "utf8");
+    const dirs = [
+      path.resolve(__dirname, ".."),
+      path.resolve(__dirname, "../../../../packages/protocol/src"),
+    ];
+    const files = dirs.flatMap((dir) =>
+      readdirSync(dir)
+        .filter((name) => name.endsWith(".ts"))
+        .map((name) => path.join(dir, name)),
+    );
+    expect(files.length).toBeGreaterThan(4);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
       for (const [, clause, from] of source.matchAll(
         /^import\s+(.+?)\s+from\s+"([^"]+)";/gms,
       )) {
         if (from === "effect") {
           expect(clause, file).toBe("{ Schema }");
-        } else if (!from.startsWith("./")) {
+        } else if (!from.startsWith("./") && from !== "@ralph/protocol") {
           expect(clause.startsWith("type "), `${file}: ${from}`).toBe(true);
         }
       }
