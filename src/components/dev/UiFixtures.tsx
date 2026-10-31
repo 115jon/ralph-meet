@@ -117,11 +117,9 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { VoiceControls } from "@/components/voice/VoiceControls";
 import { MembersTray, VoiceStage } from "@/components/voice/VoiceStage";
 import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
-import {
-  RoomConnecting,
-  RoomJoinForm,
-  RoomMeta,
-} from "@/components/RoomPageClient";
+import { RoomConnecting } from "@/components/RoomConnecting";
+import { RoomJoinForm } from "@/components/RoomPageClient";
+import { RoomMeta } from "@/components/RoomVoiceView";
 import { DemoRoomChatPanel } from "@/components/DemoRoomChatPanel";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";

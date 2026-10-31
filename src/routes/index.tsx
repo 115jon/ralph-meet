@@ -1,4 +1,4 @@
-import DesktopLogin from "@/components/DesktopLogin";
+import { LazyDesktopLogin } from "@/components/LazyDesktopLogin";
 import HomePageClient from "@/components/HomePageClient";
 import { isTauri } from "@/lib/platform";
 import { createFileRoute } from "@tanstack/react-router";
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   // Local app: show browser-based sign-in page for native auth
   if (isTauri()) {
-    return <DesktopLogin />;
+    return <LazyDesktopLogin />;
   }
   return <HomePageClient />;
 }

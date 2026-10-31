@@ -11,7 +11,7 @@
 @import "@fontsource-variable/bricolage-grotesque/opsz.css";
 @import "@fontsource-variable/martian-mono/wdth.css";
 @import "./display-name-fonts.css";
-@import "tailwindcss";
+@import "tailwindcss" source("./");
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 /* Talk Tree foundation (docs: .impeccable/decision/foundation-api.md) */

@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import { GIF_FAVORITE_ADDED_EVENT } from "@/stores/useGifFavoritesStore";
-import { useEffect, useRef, useState } from "react";
-import GifPickerModal from "./GifPickerModal";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { LazyGifPickerModal } from "./lazy-panels";
 import EmojiPicker from "./EmojiPicker";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -170,13 +170,15 @@ export function InputControls({
         />
       </div>
       {showGifPicker ? (
-        <GifPickerModal
-          open
-          onClose={() => setLocalState({ showGifPicker: false })}
-          onSelect={handleGifSelect}
-          defaultMediaType={gifPickerMediaType}
-          markerRef={gifPickerMarkerRef}
-        />
+        <Suspense fallback={null}>
+          <LazyGifPickerModal
+            open
+            onClose={() => setLocalState({ showGifPicker: false })}
+            onSelect={handleGifSelect}
+            defaultMediaType={gifPickerMediaType}
+            markerRef={gifPickerMarkerRef}
+          />
+        </Suspense>
       ) : null}
       {/* Phone send: absent until there is something to send (no dead slot
           at the row's end), then a 40px primary key in the 48px slot the
