@@ -172,21 +172,17 @@ export const DesktopScreenPickerModal: React.FC<
   )
     ? settings.screenShareQuality
     : (availableQualities[0] ?? "720p30");
-  const [state, dispatch] = useReducer(
-    reducer,
-    null,
-    (): State => ({
-      tab: readLastTab(),
-      sources: [],
-      thumbnails: {},
-      loading: true,
-      previewLoading: false,
-      selectedId: null,
-      selectedQuality: initialQuality,
-      withAudio: settings.screenShareWithAudio,
-      devices: [],
-    }),
-  );
+  const [state, dispatch] = useReducer(reducer, null, (): State => ({
+    tab: readLastTab(),
+    sources: [],
+    thumbnails: {},
+    loading: true,
+    previewLoading: false,
+    selectedId: null,
+    selectedQuality: initialQuality,
+    withAudio: settings.screenShareWithAudio,
+    devices: [],
+  }));
   const setTab = (tab: Tab) => {
     rememberTab(tab);
     dispatch({ type: "SET_TAB", payload: tab });

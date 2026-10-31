@@ -236,18 +236,16 @@ export function ImageViewerToolbar({
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         title="Attachment actions"
-        items={moreItems.map(
-          (item): ActionSheetItem => ({
-            key: item.key,
-            label: item.label,
-            rightIcon: item.icon,
-            onClick: item.onSelect ?? (() => {}),
-            variant: item.danger ? "danger" : "default",
-            divider: item.divider,
-            submenu: item.key === "details" ? detailsPanel : undefined,
-            closeOnClick: item.key === "details" ? false : undefined,
-          }),
-        )}
+        items={moreItems.map((item): ActionSheetItem => ({
+          key: item.key,
+          label: item.label,
+          rightIcon: item.icon,
+          onClick: item.onSelect ?? (() => {}),
+          variant: item.danger ? "danger" : "default",
+          divider: item.divider,
+          submenu: item.key === "details" ? detailsPanel : undefined,
+          closeOnClick: item.key === "details" ? false : undefined,
+        }))}
       />
     </>
   ) : (
