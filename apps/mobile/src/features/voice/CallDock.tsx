@@ -6,8 +6,16 @@ import {
   SpeakerSlash,
   type Icon as PhosphorIcon,
 } from "phosphor-react-native";
+import { useState } from "react";
 import { Pressable, View } from "react-native";
 
+import { AudioRouteSheet } from "@/features/call-service/AudioRouteSheet";
+import {
+  routeIcon,
+  routeLabel,
+  useActiveRoute,
+} from "@/features/call-service/routes";
+import { askBluetoothPermission } from "@/features/call-service/service";
 import { RADIUS, useTheme } from "@/theme";
 import { Icon } from "@/ui";
 
@@ -63,9 +71,18 @@ interface CallDockProps {
   bottomInset: number;
 }
 
-/** Floating ply-3 plate under a 2px ink rule: Mute, Deafen, Leave. */
+/**
+ * Floating ply-3 plate under a 2px ink rule: Mute, Deafen, the audio route
+ * (when the phone reports routes), Leave.
+ */
 export function CallDock({ muted, deafened, bottomInset }: CallDockProps) {
   const theme = useTheme();
+  const route = useActiveRoute();
+  const [routesOpen, setRoutesOpen] = useState(false);
+  const openRoutes = () => {
+    setRoutesOpen(true);
+    void askBluetoothPermission();
+  };
   return (
     <View
       style={{
@@ -99,11 +116,22 @@ export function CallDock({ muted, deafened, bottomInset }: CallDockProps) {
         on={deafened}
         onPress={toggleDeafen}
       />
+      {route ? (
+        <DockKey
+          icon={routeIcon(route.type)}
+          label={`Audio output: ${routeLabel(route)}`}
+          onPress={openRoutes}
+        />
+      ) : null}
       <DockKey
         icon={PhoneX}
         label="Leave the call"
         danger
         onPress={leaveCall}
+      />
+      <AudioRouteSheet
+        visible={routesOpen}
+        onClose={() => setRoutesOpen(false)}
       />
     </View>
   );

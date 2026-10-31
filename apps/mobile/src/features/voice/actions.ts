@@ -1,6 +1,11 @@
 import { PermissionsAndroid, Platform } from "react-native";
 
 import { useSession } from "@/features/auth/session";
+import {
+  askNotificationPermission,
+  startCallService,
+  stopCallService,
+} from "@/features/call-service/service";
 import { showToast } from "@/ui";
 
 import { voiceRoomSlug } from "./protocol";
@@ -62,6 +67,9 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     }
     return;
   }
+  // The ongoing-call notification; the call goes ahead either way.
+  await askNotificationPermission();
+  if (mine !== generation) return;
 
   let microphone: MediaStream;
   let engine: typeof import("./engine");
@@ -99,6 +107,7 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     deafened: false,
     onEnd: (end) => {
       engine.stopCallAudio();
+      if (session === next) stopCallService();
       if (session === next) session = null;
       const call = useVoiceStore.getState().call;
       if (call?.channelId === target.channelId) {
@@ -115,6 +124,9 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
   });
   session = next;
   next.start();
+  // While the app is still in front: Android only starts the microphone
+  // foreground service from a visible app.
+  startCallService({ toggleMute, leave: leaveCall });
 }
 
 /** Leaves the call (or abandons a join in progress). */
@@ -123,6 +135,7 @@ export function leaveCall(): void {
   const ending = session;
   session = null;
   ending?.leave();
+  stopCallService();
   useVoiceStore.setState({ call: null });
 }
 

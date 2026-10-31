@@ -63,7 +63,9 @@ const config: ExpoConfig = {
   android: {
     package: variant.package,
     predictiveBackGestureEnabled: true,
-    // Voice: the microphone, and call audio mode/routing (InCallManager).
+    // Voice: the microphone and call audio routing. The background call's
+    // foreground service, notification, Telecom and Bluetooth permissions come
+    // from modules/ralph-call's own AndroidManifest.xml.
     permissions: [
       "android.permission.INTERNET",
       "android.permission.RECORD_AUDIO",
