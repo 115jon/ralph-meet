@@ -552,6 +552,8 @@ export interface SFUEventMap {
   "voice-ready": { speaking?: Record<string, number> };
   disconnected: never;
   kicked: never;
+  /** A call socket's ticket was refused twice: the session is gone. */
+  "auth-failed": never;
   error: { message: string };
   "audio-resumed": {};
   "voice-reconnected": never;

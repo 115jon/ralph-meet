@@ -1,5 +1,4 @@
 import {
-  DEFAULT_HEARTBEAT_INTERVAL_MS,
   decodeRoomGatewayServerFrame,
   GatewayCloseCode,
   readReplaySeq,
@@ -79,16 +78,22 @@ export interface ConnectOptions {
   standby?: boolean;
 }
 
+interface RoomSocketTicket {
+  readonly url: string;
+  readonly protocols: string[];
+  readonly mediaBootstrap?: MediaBootstrap;
+  readonly roomSlug: string;
+}
+
 export class RoomGateway extends BaseGateway<
   RoomGatewayEvents,
-  RoomGatewayServerMessage
+  RoomGatewayServerMessage,
+  RoomSocketTicket
 > {
   private sessionId: string | null = null;
   private participantId: string | null = null;
   private lastReplayableSeq = 0;
   private options: ConnectOptions | null = null;
-  private connecting = false;
-  private reconnectQueued = false;
 
   constructor() {
     super("RoomGW", decodeRoomGatewayServerFrame);
@@ -96,66 +101,43 @@ export class RoomGateway extends BaseGateway<
 
   public connectRoom(options: ConnectOptions) {
     this.options = options;
-    const requestGeneration = ++this.connectionRequestGeneration;
-    if (this.connecting) {
-      this.reconnectQueued = true;
-      return;
-    }
-    void this.openRoomSocket(true, requestGeneration);
+    // A ticket already in flight was requested for the previous options.
+    this.socket.connect({ freshTicket: true });
   }
 
-  private async openRoomSocket(
-    resetReconnectAttempt: boolean,
-    requestGeneration: number,
-  ) {
+  protected async acquireTicket(): Promise<RoomSocketTicket> {
     const options = this.options;
-    if (!options) return;
-    this.connecting = true;
-    try {
-      const audience =
-        options.roomSlug === "global-gateway" ? "global" : "room";
-      markVoice("RoomGW:ticket-start", { roomSlug: options.roomSlug });
-      const bundle = await fetchSocketTicketBundle({
-        audience,
-        channelId: options.channelId,
-        roomSlug: options.roomSlug,
-        serverId: options.serverId,
-      });
-      if (
-        this.isLeaving ||
-        requestGeneration !== this.connectionRequestGeneration
-      )
-        return;
-      markVoice("RoomGW:ticket-done", { roomSlug: options.roomSlug });
-      if (bundle.mediaBootstrap) {
-        this.emit("media-bootstrap", bundle.mediaBootstrap);
-      }
-      const path =
-        audience === "global"
-          ? "/api/gateway"
-          : `/api/channels/${options.roomSlug}/ws?v=1`;
-      const url = options.wsUrlGenerator(path);
-      super.connect(url, resetReconnectAttempt, bundle.protocols);
-    } catch (error) {
-      if (
-        this.isLeaving ||
-        requestGeneration !== this.connectionRequestGeneration
-      )
-        return;
-      this.log.error("Failed to open room socket", error);
-      this.emit("error", {
-        message: "Could not open room socket",
-      } as RoomGatewayEvents["error"]);
-      this.scheduleReconnect();
-    } finally {
-      this.connecting = false;
-      if (this.reconnectQueued && !this.isLeaving) {
-        this.reconnectQueued = false;
-        void this.openRoomSocket(false, this.connectionRequestGeneration);
-      } else {
-        this.reconnectQueued = false;
-      }
+    if (!options) throw new Error("Room socket has no room to connect to");
+    const audience = options.roomSlug === "global-gateway" ? "global" : "room";
+    markVoice("RoomGW:ticket-start", { roomSlug: options.roomSlug });
+    const bundle = await fetchSocketTicketBundle({
+      audience,
+      channelId: options.channelId,
+      roomSlug: options.roomSlug,
+      serverId: options.serverId,
+    });
+    const path =
+      audience === "global"
+        ? "/api/gateway"
+        : `/api/channels/${options.roomSlug}/ws?v=1`;
+    return {
+      url: options.wsUrlGenerator(path),
+      protocols: bundle.protocols,
+      mediaBootstrap: bundle.mediaBootstrap,
+      roomSlug: options.roomSlug,
+    };
+  }
+
+  protected onTicket(ticket: RoomSocketTicket) {
+    markVoice("RoomGW:ticket-done", { roomSlug: ticket.roomSlug });
+    if (ticket.mediaBootstrap) {
+      this.emit("media-bootstrap", ticket.mediaBootstrap);
     }
+  }
+
+  protected onTicketFailed(error: unknown) {
+    this.log.error("Failed to open room socket", error);
+    this.emit("error", { message: "Could not open room socket" });
   }
 
   public refreshProfile() {
@@ -169,19 +151,6 @@ export class RoomGateway extends BaseGateway<
     super.disconnect();
   }
 
-  protected performReconnect() {
-    if (this.options) {
-      this.log.info("Attempting reconnect...");
-      this.isIdentified = false;
-      const requestGeneration = ++this.connectionRequestGeneration;
-      if (this.connecting) {
-        this.reconnectQueued = true;
-        return;
-      }
-      void this.openRoomSocket(false, requestGeneration);
-    }
-  }
-
   protected onFrame(frame: GatewayFrame) {
     const seq = readReplaySeq(frame);
     if (seq !== undefined && seq > this.lastReplayableSeq) {
@@ -192,11 +161,7 @@ export class RoomGateway extends BaseGateway<
   protected handleMessage(msg: RoomGatewayServerMessage) {
     switch (msg.op) {
       case VoiceOpcode.Hello: {
-        const interval =
-          msg.d.heartbeat_interval ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
-        this.log.info(`Hello received, interval=${interval}ms`);
-        this.heartbeat.start(interval);
-
+        this.log.info("Hello received");
         if (this.sessionId && this.participantId) {
           this.log.info(`Attempting resume for session ${this.participantId}`);
           this.send(
@@ -240,9 +205,7 @@ export class RoomGateway extends BaseGateway<
           }
         }
 
-        this.isIdentified = true;
-        this.reconnectAttempt = 0;
-        this.flushQueue();
+        this.socket.markReady();
 
         this.emit("ready", {
           participantId: ready.participant_id,
@@ -260,9 +223,7 @@ export class RoomGateway extends BaseGateway<
         this.log.info("Session resumed successfully");
         const resumed = msg.d;
 
-        this.isIdentified = true;
-        this.reconnectAttempt = 0;
-        this.flushQueue();
+        this.socket.markReady();
 
         this.emit("resumed", {
           voiceToken: resumed.voice_token,
@@ -270,11 +231,6 @@ export class RoomGateway extends BaseGateway<
           participants: resumed.participants ?? [],
           spatialAudioState: resumed.spatial_audio_state,
         });
-        break;
-      }
-
-      case VoiceOpcode.HeartbeatACK: {
-        this.heartbeat.onAck();
         break;
       }
 
@@ -379,6 +335,6 @@ export class RoomGateway extends BaseGateway<
   }
 
   public get isReady() {
-    return this.isIdentified && this.ws?.readyState === WebSocket.OPEN;
+    return this.socket.isReady;
   }
 }

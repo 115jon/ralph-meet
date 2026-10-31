@@ -22,18 +22,17 @@ import {
 } from "@/lib/presence-platform";
 import {
   decodeChatGatewayServerFrame,
-  DEFAULT_HEARTBEAT_INTERVAL_MS,
   GatewayCloseCode,
   GatewayOp,
-  HEARTBEAT_FRAME,
-  parseGatewayFrame,
   readReplaySeq,
   type ChatGatewayServerMessage,
 } from "@/lib/gateway-protocol";
 import {
-  fetchSocketProtocols,
-  SocketTicketError,
-} from "@/lib/voice/socket-ticket-client";
+  CHAT_SOCKET_POLICY,
+  RealtimeSocket,
+  type OutboundFrame,
+} from "@/lib/realtime-socket";
+import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import {
   areReconnectSoundsSuppressed,
   beginReconnectSoundSuppression,
@@ -57,7 +56,6 @@ import type {
   Role,
   Server,
 } from "@/lib/types";
-import { HeartbeatManager } from "@/lib/voice/heartbeat-manager";
 import type { ChatRestActions } from "./chat-actions";
 import { useCallStore } from "./useCallStore";
 import { useDesktopSettingsStore } from "./useDesktopSettingsStore";
@@ -92,7 +90,7 @@ export interface ChatGatewayActions {
     spatial_audio_high_fidelity?: boolean;
     spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
   }) => void;
-  sendGateway: (msg: object) => void;
+  sendGateway: (msg: OutboundFrame) => void;
   sendCallInitiate: (targetUserId: string, channelId: string) => void;
   sendCallAccept: (callId: string) => void;
   sendCallDecline: (callId: string) => void;
@@ -104,22 +102,10 @@ export function createChatGateway(
   dispatch: (action: ChatAction) => void,
   actions: ChatRestActions,
 ): ChatGatewayActions {
-  let ws: WebSocket | null = null;
-  // Raw heartbeat — must match setWebSocketAutoResponse pattern exactly (no extra fields)
-  const HEARTBEAT_MSG = HEARTBEAT_FRAME;
-  const hb = new HeartbeatManager("ChatGW", {
-    sendBeat: () => {
-      if (ws?.readyState === WebSocket.OPEN) ws.send(HEARTBEAT_MSG);
-    },
-    onZombie: () => {
-      if (ws) abandonSocket(ws, "zombie");
-    },
-  });
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const recentlyToastedMessageIds = new Map<string, number>();
+  /** Identify was sent on the current socket. */
   let identified = false;
-  let gatewayReady = false;
-  let pendingQueue: object[] = [];
   let clerkUserId: string | null | undefined = null;
   let gatewaySessionId: string | null = null;
   let lastReceivedSeq = 0;
@@ -127,24 +113,85 @@ export function createChatGateway(
   const subscribedServerIds = new Set<string>();
   let subscribedChannelId: string | null = null;
 
+  /** SET_GATEWAY_FAILURE "auth" is on screen. */
+  let authFailureShown = false;
+
+  // The socket's lifecycle (tickets, reconnects, heartbeat, wake); this
+  // store keeps the protocol.
+  const socket: RealtimeSocket<ChatGatewayServerMessage> = new RealtimeSocket({
+    label: "ChatGW",
+    policy: CHAT_SOCKET_POLICY,
+    decode: decodeChatGatewayServerFrame,
+    acquireTicket: async () => ({
+      url: wsUrl("/api/gateway"),
+      protocols: await fetchSocketProtocols({ audience: "global" }),
+    }),
+    // A desktop session without a user id never identifies: do not retry it.
+    shouldRetry: () => Boolean(clerkUserId),
+    hooks: {
+      attemptStarted: () => {
+        if (!hasConnectedBefore)
+          dispatch({ type: "SET_CONNECT_STEP", step: 0 });
+      },
+      ticketReady: () => {
+        if (authFailureShown) {
+          authFailureShown = false;
+          dispatch({ type: "SET_GATEWAY_FAILURE", failure: null });
+        }
+        if (!hasConnectedBefore)
+          dispatch({ type: "SET_CONNECT_STEP", step: 1 });
+      },
+      ticketFailed: (error) => {
+        chatLog.warn("Could not obtain gateway ticket", error);
+      },
+      // The session is gone: say so. The socket now only tries again slowly;
+      // signing in (a new initGateway) or the page coming back (wake) tries at
+      // once. A Kova outage is a 503, not this, and backs off as usual.
+      authFailed: () => {
+        authFailureShown = true;
+        dispatch({ type: "SET_GATEWAY_FAILURE", failure: "auth" });
+      },
+      opened: () => {
+        dispatch({ type: "SET_CONNECTED", connected: true });
+        dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
+        if (!hasConnectedBefore)
+          dispatch({ type: "SET_CONNECT_STEP", step: 2 });
+      },
+      // The replay cursor is read from every well-formed frame, whatever its
+      // opcode and whether or not its payload decodes.
+      frame: (frame) => {
+        const seq = readReplaySeq(frame);
+        if (seq !== undefined) lastReceivedSeq = Math.max(lastReceivedSeq, seq);
+      },
+      message: (msg) => handleGatewayMessage(msg),
+      closed: ({ code }) => {
+        chatLog.info("Disconnected", { code });
+        dispatch({ type: "SET_CONNECTED", connected: false });
+        identified = false;
+        resumeInFlight = false;
+        resetSubscriptions();
+      },
+      // The slow auth retry is not a reconnect attempt: the strip keeps
+      // showing "Signed out", so only backoff retries count here.
+      retryScheduled: (attempt) => {
+        dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt });
+      },
+    },
+  });
+
   const resetSubscriptions = () => {
     subscribedServerIds.clear();
     subscribedChannelId = null;
-    pendingQueue = pendingQueue.filter((message) => {
-      if (!message || typeof message !== "object") return true;
-      const op = (message as { op?: unknown }).op;
-      return (
-        op !== GatewayOp.ChannelSubscribe &&
-        op !== GatewayOp.ChannelUnsubscribe &&
-        op !== GatewayOp.ServerSubscribe
-      );
-    });
+    socket.dropQueued(
+      ({ op }) =>
+        op === GatewayOp.ChannelSubscribe ||
+        op === GatewayOp.ChannelUnsubscribe ||
+        op === GatewayOp.ServerSubscribe,
+    );
   };
 
-  const sendGateway = (msg: object) => {
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg));
-    }
+  const sendGateway = (msg: OutboundFrame) => {
+    socket.sendJson(msg);
   };
 
   const noteToastedMessage = (messageId: string) => {
@@ -896,7 +943,6 @@ export function createChatGateway(
     }
     resumeInFlight = false;
     identified = true;
-    gatewayReady = true;
     dispatch({ type: "SET_CONNECT_STEP", step: 3 });
     const currentStatus = get().user?.status;
     if (currentStatus && currentStatus !== "online") {
@@ -905,10 +951,7 @@ export function createChatGateway(
         d: { status: currentStatus },
       });
     }
-    for (const queued of pendingQueue) {
-      sendGateway(queued);
-    }
-    pendingQueue = [];
+    socket.markReady();
 
     const servers = get().servers;
     for (const server of servers) {
@@ -940,44 +983,10 @@ export function createChatGateway(
     hasConnectedBefore = true;
   };
 
-  /**
-   * One text frame from the socket. Malformed frames and frames that fail
-   * their opcode's schema are logged and dropped; opcodes this store does not
-   * handle are ignored. The replay cursor is read from every well-formed
-   * frame first, whatever its opcode.
-   */
-  const handleGatewayFrame = (data: unknown) => {
-    if (typeof data !== "string") {
-      chatLog.warn("Dropping non-text gateway frame");
-      return;
-    }
-    const parsed = parseGatewayFrame(data);
-    if (!parsed.ok) {
-      chatLog.warn(`Dropping gateway frame: ${parsed.message}`);
-      return;
-    }
-    const seq = readReplaySeq(parsed.frame);
-    if (seq !== undefined) lastReceivedSeq = Math.max(lastReceivedSeq, seq);
-
-    const decoded = decodeChatGatewayServerFrame(parsed.frame);
-    if (decoded.ok) {
-      try {
-        handleGatewayMessage(decoded.message);
-      } catch (error) {
-        chatLog.warn("Gateway frame handler failed:", error);
-      }
-    } else if (decoded.reason === "invalid-payload") {
-      chatLog.warn(
-        `Dropping gateway frame op=${parsed.frame.op}: ${decoded.invalid}`,
-      );
-    }
-  };
-
   const handleGatewayMessage = (msg: ChatGatewayServerMessage) => {
     switch (msg.op) {
       case GatewayOp.Hello: {
-        const interval =
-          msg.d.heartbeat_interval ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+        // The lifecycle has started the heartbeat from this Hello.
         if (gatewaySessionId && hasConnectedBefore) {
           resumeInFlight = true;
           sendGateway({
@@ -987,16 +996,10 @@ export function createChatGateway(
         } else {
           sendIdentify();
         }
-        hb.start(interval);
         break;
       }
       case GatewayOp.Ready: {
         handleGatewayReady(msg.d.participant_id);
-        break;
-      }
-      case GatewayOp.HeartbeatACK: {
-        // The auto-response sends {"op":6} with no `d`; it is never decoded.
-        hb.onAck();
         break;
       }
       case GatewayOp.Dispatch: {
@@ -1028,117 +1031,6 @@ export function createChatGateway(
     }
   };
 
-  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-  let reconnectAttempt = 0;
-  let intentionalDisconnect = false;
-  let connecting = false;
-  let ticketRequestGeneration = 0;
-  /**
-   * Ticket requests refused (401) in a row. One can be a race (a session
-   * refresh in flight), so the first retries on the normal backoff; the
-   * second puts the gateway in the auth-failed state.
-   */
-  let authRefusals = 0;
-  /** Signed out, as far as the server can tell: retry slowly, show Sign in. */
-  let authFailed = false;
-  /** In the auth-failed state, how often to try again on its own. */
-  const AUTH_RETRY_MS = 60_000;
-  /** Refusals in a row before the gateway reports "signed out". */
-  const AUTH_REFUSALS_TO_FAIL = 2;
-
-  const BACKOFF_BASE = 1000; // 1 second
-  const BACKOFF_MAX = 30_000; // 30 seconds cap
-  const BACKOFF_JITTER = 500; // random jitter up to 500ms
-
-  const getBackoffDelay = (attempt: number) => {
-    const delay = Math.min(BACKOFF_BASE * Math.pow(2, attempt), BACKOFF_MAX);
-    return delay + Math.random() * BACKOFF_JITTER;
-  };
-
-  const scheduleReconnect = () => {
-    if (intentionalDisconnect) return;
-    if (reconnectTimeout) return; // Already scheduled
-
-    reconnectAttempt++;
-    dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: reconnectAttempt });
-
-    const delay = getBackoffDelay(reconnectAttempt - 1);
-    chatLog.info(
-      `Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempt})`,
-    );
-
-    reconnectTimeout = setTimeout(() => {
-      reconnectTimeout = null;
-      if (!intentionalDisconnect && clerkUserId) {
-        initGateway(clerkUserId);
-      }
-    }, delay);
-  };
-
-  /**
-   * The auth-failed state's slow retry: no attempt counter (the strip shows
-   * "Signed out", not "Reconnecting"), just one more try a minute later in
-   * case the session came back (signed in in another tab, Kova recovered).
-   */
-  const scheduleAuthRetry = () => {
-    if (intentionalDisconnect || reconnectTimeout) return;
-    reconnectTimeout = setTimeout(() => {
-      reconnectTimeout = null;
-      if (!intentionalDisconnect && clerkUserId) void openGatewaySocket();
-    }, AUTH_RETRY_MS);
-  };
-
-  /** Liveness probe sent on wake; cleared by any frame from the socket. */
-  let probeTimeout: ReturnType<typeof setTimeout> | null = null;
-  /** No reply within this after a wake means the socket died while asleep. */
-  const WAKE_PROBE_MS = 5000;
-
-  const clearProbe = () => {
-    if (probeTimeout) {
-      clearTimeout(probeTimeout);
-      probeTimeout = null;
-    }
-  };
-
-  const handleSocketClosed = (socket: WebSocket, code: number) => {
-    if (ws !== socket) return;
-    chatLog.info("Disconnected", { code });
-    dispatch({ type: "SET_CONNECTED", connected: false });
-
-    clearProbe();
-    hb.stop();
-    ws = null;
-    gatewayReady = false;
-    identified = false;
-    resumeInFlight = false;
-    resetSubscriptions();
-
-    if (code === GatewayCloseCode.AdmissionRejected) {
-      intentionalDisconnect = true;
-      chatLog.warn("Realtime admission was rejected. Not reconnecting.");
-      return;
-    }
-
-    // Auto-reconnect unless intentionally disconnected
-    scheduleReconnect();
-  };
-
-  /**
-   * Give up on a socket that has stopped answering. `close()` on a dead TCP
-   * link can take a long time to fire `onclose` (the closing handshake has to
-   * time out), so run the close path now and let the late event be ignored.
-   */
-  const abandonSocket = (socket: WebSocket, reason: string) => {
-    if (ws !== socket) return;
-    chatLog.warn(`Abandoning gateway socket (${reason})`);
-    handleSocketClosed(socket, 4000);
-    try {
-      socket.close(4000, reason);
-    } catch {
-      /* already closed */
-    }
-  };
-
   /**
    * The page came back (visible again, or the network returned). Timers were
    * throttled or frozen while it was away, so do not wait for them: reconnect
@@ -1146,60 +1038,22 @@ export function createChatGateway(
    * while the tab slept.
    */
   const wake = () => {
-    if (intentionalDisconnect || !clerkUserId) return;
-    if (authFailed && !ws && !connecting) {
-      // Signed in again in another tab, perhaps: one fresh try now instead
-      // of waiting out the slow retry.
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
-      }
-      void openGatewaySocket();
-      return;
-    }
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout);
-      reconnectTimeout = null;
-      initGateway(clerkUserId);
-      return;
-    }
-    const socket = ws;
-    if (!socket || socket.readyState !== WebSocket.OPEN || probeTimeout) return;
-    socket.send(HEARTBEAT_MSG);
-    probeTimeout = setTimeout(() => {
-      probeTimeout = null;
-      abandonSocket(socket, "no reply after wake");
-    }, WAKE_PROBE_MS);
+    if (!clerkUserId) return;
+    socket.wake();
   };
 
   const disconnectGateway = () => {
-    intentionalDisconnect = true;
-    connecting = false;
-    clearProbe();
-    ticketRequestGeneration++;
+    socket.stop();
     releaseReconnectSoundSuppression?.();
     releaseReconnectSoundSuppression = null;
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout);
-      reconnectTimeout = null;
-    }
-    if (ws) {
-      ws.close();
-      ws = null;
-    }
     resetSubscriptions();
-    pendingQueue = [];
-    hb.stop();
-    gatewayReady = false;
     identified = false;
     gatewaySessionId = null;
     lastReceivedSeq = 0;
     resumeInFlight = false;
     dispatch({ type: "SET_CONNECTED", connected: false });
-    reconnectAttempt = 0;
     dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
-    authRefusals = 0;
-    authFailed = false;
+    authFailureShown = false;
     dispatch({ type: "SET_GATEWAY_FAILURE", failure: null });
     // connectStep stays at 3 once Ready has been seen: the store keeps its
     // data, so coming back to /chat is a reconnect (the strip), not a cold
@@ -1208,101 +1062,22 @@ export function createChatGateway(
   };
 
   const initGateway = (userId: string | null | undefined) => {
-    if (clerkUserId !== userId && (ws || connecting)) {
+    if (clerkUserId !== userId && socket.isActive) {
       disconnectGateway();
     }
-    if (ws || connecting) return; // Already connected or connecting
-
-    intentionalDisconnect = false;
     clerkUserId = userId;
-    void openGatewaySocket();
-  };
-
-  const openGatewaySocket = async () => {
-    if (ws || connecting || intentionalDisconnect) return;
-    connecting = true;
-    const requestGeneration = ++ticketRequestGeneration;
-    const ticketUserId = clerkUserId;
-    if (!hasConnectedBefore) dispatch({ type: "SET_CONNECT_STEP", step: 0 });
-    try {
-      const protocols = await fetchSocketProtocols({ audience: "global" });
-      if (
-        intentionalDisconnect ||
-        ws ||
-        requestGeneration !== ticketRequestGeneration ||
-        ticketUserId !== clerkUserId
-      )
-        return;
-      authRefusals = 0;
-      if (authFailed) {
-        authFailed = false;
-        dispatch({ type: "SET_GATEWAY_FAILURE", failure: null });
-      }
-      if (!hasConnectedBefore) dispatch({ type: "SET_CONNECT_STEP", step: 1 });
-
-      const url = wsUrl("/api/gateway");
-      const socket = new WebSocket(url, protocols);
-      ws = socket;
-
-      socket.onopen = () => {
-        if (ws !== socket) return;
-        chatLog.info("Connected");
-        reconnectAttempt = 0;
-        dispatch({ type: "SET_CONNECTED", connected: true });
-        dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
-        if (!hasConnectedBefore)
-          dispatch({ type: "SET_CONNECT_STEP", step: 2 });
-      };
-
-      socket.onmessage = (event) => {
-        if (ws !== socket) return;
-        clearProbe();
-        handleGatewayFrame(event.data);
-      };
-
-      socket.onclose = (event) => handleSocketClosed(socket, event.code);
-    } catch (error) {
-      if (requestGeneration !== ticketRequestGeneration) return;
-      if (error instanceof SocketTicketError && error.status === 401) {
-        authRefusals++;
-        if (authFailed || authRefusals >= AUTH_REFUSALS_TO_FAIL) {
-          // The session is gone: say so, and only try again slowly. Signing
-          // in (a new initGateway) or the page coming back (wake) tries at
-          // once. A Kova outage is a 503, not this, and backs off below.
-          if (!authFailed) {
-            chatLog.warn("Gateway ticket refused (401). Waiting for sign-in.");
-            authFailed = true;
-            dispatch({ type: "SET_GATEWAY_FAILURE", failure: "auth" });
-          }
-          scheduleAuthRetry();
-          return;
-        }
-        chatLog.warn("Gateway ticket refused (401). Retrying once.");
-        scheduleReconnect();
-        return;
-      }
-      chatLog.warn("Could not obtain gateway ticket", error);
-      if (authFailed) {
-        // Could not tell (server or network trouble): keep the Sign in
-        // prompt, keep the slow retry.
-        scheduleAuthRetry();
-        return;
-      }
-      authRefusals = 0;
-      scheduleReconnect();
-    } finally {
-      connecting = false;
-    }
+    // Connects unless already connecting or connected; a pending retry (or
+    // the signed-out state) tries now.
+    socket.connect();
   };
 
   const setClerkUserId = (userId: string | null | undefined) => {
     if (clerkUserId !== userId) {
-      if (ws || connecting) {
+      if (socket.isActive) {
         disconnectGateway();
-      } else if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
-        intentionalDisconnect = true;
+      } else {
+        // A retry pending for the previous user is not wanted any more.
+        socket.stop();
       }
       hasConnectedBefore = false;
       // A different user: nothing on screen is theirs, so the next connect
@@ -1313,11 +1088,10 @@ export function createChatGateway(
       resumeInFlight = false;
     }
     clerkUserId = userId;
-    if (userId && !identified && ws?.readyState === WebSocket.OPEN) {
+    if (userId && !identified && socket.isOpen) {
       chatLog.info("Sending identify after clerk user became available", {
         userId,
-        gatewayReady,
-        readyState: ws.readyState,
+        gatewayReady: socket.isReady,
       });
       sendGateway({
         op: GatewayOp.Identify,
@@ -1332,12 +1106,8 @@ export function createChatGateway(
     }
   };
 
-  const sendWhenReady = (msg: object) => {
-    if (gatewayReady) {
-      sendGateway(msg);
-    } else {
-      pendingQueue.push(msg);
-    }
+  const sendWhenReady = (msg: OutboundFrame) => {
+    socket.sendWhenReady(msg);
   };
 
   const subscribeChannel = (channelId: string) => {
