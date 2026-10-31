@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
+import { useSession } from "@/features/auth/session";
 import {
   useCallSegment,
   useCallSegmentActions,
@@ -114,8 +115,17 @@ function DevCallToggle() {
   );
 }
 
+function SignOutButton() {
+  const signOut = useSession((s) => s.signOut);
+  return (
+    <Button variant="ghost" label="Sign out" onPress={() => void signOut()} />
+  );
+}
+
 export default function YouScreen() {
   const [tab, setTab] = useState<TabId>("01 You");
+  const user = useSession((s) => s.user);
+  const name = user?.display_name ?? user?.username ?? "You";
   return (
     <Screen>
       <Header title="You" />
@@ -127,17 +137,24 @@ export default function YouScreen() {
           padding: 16,
         }}
       >
-        <Avatar name="Jon" size={56} presence="talk" />
+        <Avatar name={name} size={56} presence="talk" />
         <View>
-          <Text variant="title">Jon</Text>
-          <Text variant="silk" tone="ink3">
-            Online
-          </Text>
+          <Text variant="title">{name}</Text>
+          {user ? (
+            <Text variant="silk" tone="ink3">
+              @{user.username}
+            </Text>
+          ) : null}
         </View>
       </View>
       <IndexTabs active={tab} onChange={setTab} />
       <View style={{ padding: 16, gap: 16 }}>
-        {tab === "01 You" ? <ThemePicker /> : null}
+        {tab === "01 You" ? (
+          <>
+            <ThemePicker />
+            <SignOutButton />
+          </>
+        ) : null}
         {tab === "02 Calls" ? (
           <Text variant="body" tone="ink2">
             Call history lands with the voice release.
