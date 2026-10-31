@@ -567,6 +567,15 @@ async function identifyVoiceSocket(
   });
 }
 
+async function trackNames(roomName: string): Promise<string[]> {
+  const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+  return runInDurableObject(room, (_instance, state) =>
+    [...state.storage.sql.exec("SELECT track_name FROM tracks")].map(
+      (row) => row.track_name as string,
+    ),
+  );
+}
+
 describe("VoiceRoom lifecycle", () => {
   it("accepts a hibernatable voice socket and sends Hello", async () => {
     const roomId = env.VOICE_ROOM.idFromName("lifecycle-test-room");
@@ -2724,6 +2733,169 @@ describe("VoiceRoom lifecycle", () => {
     expect(readyMessage.d).not.toHaveProperty("pull_session_id");
     publisher.close();
     late.close();
+  });
+
+  it("does not replay tracks of participants whose voice socket vanished in a restart", async () => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const goneId = crypto.randomUUID();
+    const listenerOldId = crypto.randomUUID();
+    const liveId = crypto.randomUUID();
+    const listenerId = crypto.randomUUID();
+    await mockCallsApi(roomName, async () => Response.json({}));
+
+    // A restart drops every socket without webSocketClose: the participant
+    // and track rows stay until the zombie alarm. One of them is the
+    // listener's own previous participant (same user, new id after restart).
+    const leftover = [
+      { participantId: goneId, subject: "gone-user" },
+      { participantId: listenerOldId, subject: "listener-user" },
+    ];
+    await runInDurableObject(room, (_instance, state) => {
+      for (const { participantId, subject } of leftover) {
+        state.storage.sql.exec(
+          "INSERT INTO participants (id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id) VALUES (?, ?, NULL, ?, 1, ?)",
+          participantId,
+          subject,
+          Date.now(),
+          crypto.randomUUID(),
+        );
+        state.storage.sql.exec(
+          "INSERT INTO tracks (track_name, participant_id, sfu_track_name, session_id, kind) VALUES (?, ?, ?, ?, 'audio')",
+          `cam-audio-${participantId}`,
+          participantId,
+          `opaque-${participantId}`,
+          `dead-session-${participantId}`,
+        );
+      }
+    });
+
+    const live = await openVoiceSocket(roomName, "live-user");
+    await identifyVoiceSocket(live, liveId, roomName, "live-user");
+    const liveSession = await issuePartyTracksSessionCapability(
+      liveId,
+      roomName,
+      "live-partytracks-session",
+    );
+    live.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: liveId,
+              track_name: `cam-audio-${liveId}`,
+              sfu_track_name: "opaque-live-audio",
+              session_id: liveSession,
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+    await vi.waitFor(async () => {
+      expect(await trackNames(roomName)).toContain(`cam-audio-${liveId}`);
+    });
+
+    const listener = await openVoiceSocket(roomName, "listener-user");
+    await grantVoiceJoin(roomName, listenerId, "listener-user");
+    const ready = nextMessageWithOpcode(listener, 101);
+    listener.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: listenerId,
+          voice_token: await issueVoiceToken(
+            listenerId,
+            roomName,
+            "listener-user",
+          ),
+        },
+      }),
+    );
+    const readyMessage = (await ready) as {
+      d: { tracks: Array<{ participant_id: string }>; speaking: object };
+    };
+
+    expect(readyMessage.d.tracks).toEqual([
+      expect.objectContaining({
+        participant_id: liveId,
+        track_name: `cam-audio-${liveId}`,
+        sfu_track_name: "opaque-live-audio",
+      }),
+    ]);
+    expect(readyMessage.d.speaking).toEqual({});
+    live.close();
+    listener.close();
+  });
+
+  it("keeps replaying a participant's tracks while its voice socket reconnects", async () => {
+    const roomName = crypto.randomUUID();
+    const publisherId = crypto.randomUUID();
+    const listenerId = crypto.randomUUID();
+    await mockCallsApi(roomName, async () => Response.json({}));
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, publisherId, roomName);
+    const session = await issuePartyTracksSessionCapability(
+      publisherId,
+      roomName,
+      "resuming-partytracks-session",
+    );
+    publisher.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: publisherId,
+              track_name: `cam-audio-${publisherId}`,
+              sfu_track_name: "opaque-resuming-audio",
+              session_id: session,
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+    await vi.waitFor(async () => {
+      expect(await trackNames(roomName)).toContain(`cam-audio-${publisherId}`);
+    });
+
+    // The replacement socket is open but has not identified yet; the old
+    // one still carries the participant until the new one replaces it.
+    const replacement = await openVoiceSocket(roomName);
+    const listener = await openVoiceSocket(roomName, "listener-user");
+    await grantVoiceJoin(roomName, listenerId, "listener-user");
+    const ready = nextMessageWithOpcode(listener, 101);
+    listener.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: listenerId,
+          voice_token: await issueVoiceToken(
+            listenerId,
+            roomName,
+            "listener-user",
+          ),
+        },
+      }),
+    );
+
+    await expect(ready).resolves.toMatchObject({
+      d: {
+        tracks: [
+          expect.objectContaining({
+            participant_id: publisherId,
+            track_name: `cam-audio-${publisherId}`,
+            sfu_track_name: "opaque-resuming-audio",
+            session_id: session,
+          }),
+        ],
+      },
+    });
+    publisher.close();
+    replacement.close();
+    listener.close();
   });
 
   it("limits public-demo sockets to temporary demo chat events", async () => {
