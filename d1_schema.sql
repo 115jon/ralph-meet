@@ -358,6 +358,18 @@ CREATE TABLE IF NOT EXISTS notification_clear_watermarks (
     cleared_at TEXT NOT NULL
 );
 
+-- ── Push tokens ──────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS push_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,          -- FCM registration token
+    platform TEXT NOT NULL,              -- 'android' | 'ios'
+    app_variant TEXT,                    -- 'development' | 'preview' | 'production'
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ── Indexes ──────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id);
@@ -412,6 +424,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_dedupe_key
     ON notifications(dedupe_key) WHERE dedupe_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_notification_delivery_markers_message
     ON notification_delivery_markers(message_id);
+
+-- Push fan-out per recipient
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user_id ON push_tokens(user_id);
 
 -- ── Audit Log ────────────────────────────────────────────────────────────
 

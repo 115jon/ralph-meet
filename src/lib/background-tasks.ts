@@ -5,6 +5,8 @@ import {
   type MessagePostprocessingTask,
 } from "@/services/message.service";
 export type { MessagePostprocessingTask } from "@/services/message.service";
+import { fcmSenderFor } from "@/server/fcm";
+import { sendMessagePushes } from "@/services/push.service";
 import {
   processR2CleanupTask,
   recordR2CleanupFailure,
@@ -74,6 +76,8 @@ export interface BackgroundTaskRuntimeEnv {
   BUCKET?: R2Bucket;
   MEETING_ROOM?: DurableObjectNamespace;
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
+  /** Service-account JSON for FCM; push is off without it. */
+  FCM_SERVICE_ACCOUNT?: string;
 }
 
 export interface BackgroundTaskConsumerEnv {
@@ -83,6 +87,13 @@ export interface BackgroundTaskConsumerEnv {
   MEETING_ROOM: DurableObjectNamespace;
   /** Producer for delayed embed retries; the cron covers its absence. */
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
+  FCM_SERVICE_ACCOUNT?: string;
+}
+
+/** The postprocessing push hook for this env's database and FCM secret. */
+function messagePushes(db: D1Database, fcmServiceAccount: string | undefined) {
+  return (pushes: Parameters<typeof sendMessagePushes>[2]) =>
+    sendMessagePushes(db, fcmSenderFor(fcmServiceAccount), pushes);
 }
 
 type PresenceCacheInvalidationEnvelope = {
@@ -355,8 +366,11 @@ async function processMessageTaskInRuntime(
   if (!db || !realtime) {
     throw new Error("Message postprocessing bindings are unavailable");
   }
-  return processMessagePostprocessingTask(db, task, (target, event, data) =>
-    broadcastTaskEvent(realtime, target, event, data),
+  return processMessagePostprocessingTask(
+    db,
+    task,
+    (target, event, data) => broadcastTaskEvent(realtime, target, event, data),
+    { push: messagePushes(db, env.FCM_SERVICE_ACCOUNT) },
   );
 }
 
@@ -686,6 +700,7 @@ export async function consumeBackgroundTaskBatch(
           task,
           (target, event, data) =>
             broadcastTaskEvent(env.MEETING_ROOM, target, event, data),
+          { push: messagePushes(env.DB, env.FCM_SERVICE_ACCOUNT) },
         );
         await settleMessagePostprocessingJob(
           env.DB,
