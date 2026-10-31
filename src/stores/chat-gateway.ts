@@ -21,6 +21,16 @@ import {
   type PresencePlatform,
 } from "@/lib/presence-platform";
 import {
+  decodeChatGatewayServerFrame,
+  DEFAULT_HEARTBEAT_INTERVAL_MS,
+  GatewayCloseCode,
+  GatewayOp,
+  HEARTBEAT_FRAME,
+  parseGatewayFrame,
+  readReplaySeq,
+  type ChatGatewayServerMessage,
+} from "@/lib/gateway-protocol";
+import {
   fetchSocketProtocols,
   SocketTicketError,
 } from "@/lib/voice/socket-ticket-client";
@@ -96,7 +106,7 @@ export function createChatGateway(
 ): ChatGatewayActions {
   let ws: WebSocket | null = null;
   // Raw heartbeat — must match setWebSocketAutoResponse pattern exactly (no extra fields)
-  const HEARTBEAT_MSG = JSON.stringify({ op: 3 });
+  const HEARTBEAT_MSG = HEARTBEAT_FRAME;
   const hb = new HeartbeatManager("ChatGW", {
     sendBeat: () => {
       if (ws?.readyState === WebSocket.OPEN) ws.send(HEARTBEAT_MSG);
@@ -123,7 +133,11 @@ export function createChatGateway(
     pendingQueue = pendingQueue.filter((message) => {
       if (!message || typeof message !== "object") return true;
       const op = (message as { op?: unknown }).op;
-      return op !== 27 && op !== 28 && op !== 35;
+      return (
+        op !== GatewayOp.ChannelSubscribe &&
+        op !== GatewayOp.ChannelUnsubscribe &&
+        op !== GatewayOp.ServerSubscribe
+      );
     });
   };
 
@@ -184,7 +198,7 @@ export function createChatGateway(
     return false;
   };
 
-  const handleDispatch = (d: { event: string; data: any; seq?: number }) => {
+  const handleDispatch = (d: { event: string; data?: any; seq?: number }) => {
     if (import.meta.env.DEV) chatLog.info(`Event: ${d.event}`, d.data);
     if (typeof window !== "undefined") {
       window.dispatchEvent(
@@ -389,7 +403,10 @@ export function createChatGateway(
         break;
       case "GUILD_MEMBER_ADD":
         if (d.data.user?.id === get().user?.id && d.data.server_id) {
-          sendWhenReady({ op: 35, d: { server_id: d.data.server_id } });
+          sendWhenReady({
+            op: GatewayOp.ServerSubscribe,
+            d: { server_id: d.data.server_id },
+          });
           void actions.loadServers();
           void actions.loadChannels(d.data.server_id, { force: true });
           void actions.loadMembers(d.data.server_id, { force: true });
@@ -411,7 +428,7 @@ export function createChatGateway(
           if (activeChannel) {
             unsubscribeChannel(activeChannel);
           }
-          sendGateway({ op: 34, d: {} });
+          sendGateway({ op: GatewayOp.VoiceChannelLeave, d: {} });
           window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
           dispatch({ type: "REMOVE_SERVER", serverId: removedServerId });
         } else {
@@ -456,7 +473,10 @@ export function createChatGateway(
         }
 
         if (serverId) {
-          sendWhenReady({ op: 35, d: { server_id: serverId } });
+          sendWhenReady({
+            op: GatewayOp.ServerSubscribe,
+            d: { server_id: serverId },
+          });
           void actions.loadChannels(serverId, { force: true });
           void actions.loadMembers(serverId, { force: true });
         }
@@ -720,7 +740,7 @@ export function createChatGateway(
 
         // Automatically reject if we are already in another active call
         if (callState.status === "active" && callState.callId !== call_id) {
-          sendWhenReady({ op: 38, d: { call_id } });
+          sendWhenReady({ op: GatewayOp.CallDecline, d: { call_id } });
           return;
         }
 
@@ -858,7 +878,7 @@ export function createChatGateway(
   const sendIdentify = () => {
     if (!clerkUserId) return;
     sendGateway({
-      op: 0,
+      op: GatewayOp.Identify,
       d: {
         name: "ChatClient",
         clerk_user_id: clerkUserId,
@@ -880,7 +900,10 @@ export function createChatGateway(
     dispatch({ type: "SET_CONNECT_STEP", step: 3 });
     const currentStatus = get().user?.status;
     if (currentStatus && currentStatus !== "online") {
-      sendGateway({ op: 26, d: { status: currentStatus } });
+      sendGateway({
+        op: GatewayOp.PresenceUpdate,
+        d: { status: currentStatus },
+      });
     }
     for (const queued of pendingQueue) {
       sendGateway(queued);
@@ -917,22 +940,48 @@ export function createChatGateway(
     hasConnectedBefore = true;
   };
 
-  const handleGatewayMessage = (msg: { op: number; d: any }) => {
-    if (
-      msg.op !== 6 &&
-      typeof msg.d?.seq === "number" &&
-      Number.isFinite(msg.d.seq)
-    ) {
-      lastReceivedSeq = Math.max(lastReceivedSeq, msg.d.seq);
+  /**
+   * One text frame from the socket. Malformed frames and frames that fail
+   * their opcode's schema are logged and dropped; opcodes this store does not
+   * handle are ignored. The replay cursor is read from every well-formed
+   * frame first, whatever its opcode.
+   */
+  const handleGatewayFrame = (data: unknown) => {
+    if (typeof data !== "string") {
+      chatLog.warn("Dropping non-text gateway frame");
+      return;
     }
+    const parsed = parseGatewayFrame(data);
+    if (!parsed.ok) {
+      chatLog.warn(`Dropping gateway frame: ${parsed.message}`);
+      return;
+    }
+    const seq = readReplaySeq(parsed.frame);
+    if (seq !== undefined) lastReceivedSeq = Math.max(lastReceivedSeq, seq);
 
+    const decoded = decodeChatGatewayServerFrame(parsed.frame);
+    if (decoded.ok) {
+      try {
+        handleGatewayMessage(decoded.message);
+      } catch (error) {
+        chatLog.warn("Gateway frame handler failed:", error);
+      }
+    } else if (decoded.reason === "invalid-payload") {
+      chatLog.warn(
+        `Dropping gateway frame op=${parsed.frame.op}: ${decoded.invalid}`,
+      );
+    }
+  };
+
+  const handleGatewayMessage = (msg: ChatGatewayServerMessage) => {
     switch (msg.op) {
-      case 8: {
-        const interval = msg.d?.heartbeat_interval ?? 45000;
+      case GatewayOp.Hello: {
+        const interval =
+          msg.d.heartbeat_interval ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
         if (gatewaySessionId && hasConnectedBefore) {
           resumeInFlight = true;
           sendGateway({
-            op: 7,
+            op: GatewayOp.Resume,
             d: { session_id: gatewaySessionId, seq_ack: lastReceivedSeq },
           });
         } else {
@@ -941,39 +990,35 @@ export function createChatGateway(
         hb.start(interval);
         break;
       }
-      case 2: {
-        handleGatewayReady(
-          typeof msg.d?.participant_id === "string"
-            ? msg.d.participant_id
-            : undefined,
-        );
+      case GatewayOp.Ready: {
+        handleGatewayReady(msg.d.participant_id);
         break;
       }
-      case 6: {
-        // HeartbeatACK — auto-response sends {"op":6} with no `d`, guard accordingly.
+      case GatewayOp.HeartbeatACK: {
+        // The auto-response sends {"op":6} with no `d`; it is never decoded.
         hb.onAck();
         break;
       }
-      case 19: {
+      case GatewayOp.Dispatch: {
         handleDispatch(msg.d);
         break;
       }
-      case 9:
+      case GatewayOp.Resumed:
         handleGatewayReady();
         break;
-      case 18: {
-        const code = msg.d?.code;
-        const message = typeof msg.d?.message === "string" ? msg.d.message : "";
-        if (
-          resumeInFlight &&
-          (code === 4006 || message.toLowerCase().includes("continuity"))
-        ) {
+      case GatewayOp.Error: {
+        const { code } = msg.d;
+        if (resumeInFlight && code === GatewayCloseCode.SessionInvalid) {
+          // Unknown session or continuity lost: Identify and reconcile.
           resumeInFlight = false;
           gatewaySessionId = null;
           lastReceivedSeq = 0;
           identified = false;
           sendIdentify();
-        } else if (resumeInFlight && code === 4008) {
+        } else if (
+          resumeInFlight &&
+          code === GatewayCloseCode.AdmissionRejected
+        ) {
           resumeInFlight = false;
           gatewaySessionId = null;
           lastReceivedSeq = 0;
@@ -1068,7 +1113,7 @@ export function createChatGateway(
     resumeInFlight = false;
     resetSubscriptions();
 
-    if (code === 4008) {
+    if (code === GatewayCloseCode.AdmissionRejected) {
       intentionalDisconnect = true;
       chatLog.warn("Realtime admission was rejected. Not reconnecting.");
       return;
@@ -1212,12 +1257,7 @@ export function createChatGateway(
       socket.onmessage = (event) => {
         if (ws !== socket) return;
         clearProbe();
-        try {
-          const msg = JSON.parse(event.data);
-          handleGatewayMessage(msg);
-        } catch {
-          chatLog.warn("Invalid message:", event.data);
-        }
+        handleGatewayFrame(event.data);
       };
 
       socket.onclose = (event) => handleSocketClosed(socket, event.code);
@@ -1280,7 +1320,7 @@ export function createChatGateway(
         readyState: ws.readyState,
       });
       sendGateway({
-        op: 0,
+        op: GatewayOp.Identify,
         d: {
           name: "ChatClient",
           clerk_user_id: userId,
@@ -1303,22 +1343,34 @@ export function createChatGateway(
   const subscribeChannel = (channelId: string) => {
     if (subscribedChannelId === channelId) return;
     if (subscribedChannelId) {
-      sendWhenReady({ op: 28, d: { channel_id: subscribedChannelId } });
+      sendWhenReady({
+        op: GatewayOp.ChannelUnsubscribe,
+        d: { channel_id: subscribedChannelId },
+      });
     }
     subscribedChannelId = channelId;
-    sendWhenReady({ op: 27, d: { channel_id: channelId } });
+    sendWhenReady({
+      op: GatewayOp.ChannelSubscribe,
+      d: { channel_id: channelId },
+    });
   };
 
   const unsubscribeChannel = (channelId: string) => {
     if (subscribedChannelId !== channelId) return;
     subscribedChannelId = null;
-    sendWhenReady({ op: 28, d: { channel_id: channelId } });
+    sendWhenReady({
+      op: GatewayOp.ChannelUnsubscribe,
+      d: { channel_id: channelId },
+    });
   };
 
   const subscribeServer = (serverId: string) => {
     if (subscribedServerIds.has(serverId)) return;
     subscribedServerIds.add(serverId);
-    sendWhenReady({ op: 35, d: { server_id: serverId } });
+    sendWhenReady({
+      op: GatewayOp.ServerSubscribe,
+      d: { server_id: serverId },
+    });
   };
 
   return {
@@ -1336,7 +1388,7 @@ export function createChatGateway(
       startedAt?: number | null,
     ) =>
       sendWhenReady({
-        op: 33,
+        op: GatewayOp.VoiceChannelJoin,
         d: {
           channel_id: channelId,
           self_mute: selfMute ?? true,
@@ -1344,19 +1396,23 @@ export function createChatGateway(
         },
       }),
     sendVoiceChannelLeave: (channelId?: string) =>
-      sendWhenReady({ op: 34, d: { channel_id: channelId } }),
-    sendVoiceStateUpdate: (data) => sendWhenReady({ op: 15, d: data }),
+      sendWhenReady({
+        op: GatewayOp.VoiceChannelLeave,
+        d: { channel_id: channelId },
+      }),
+    sendVoiceStateUpdate: (data) =>
+      sendWhenReady({ op: GatewayOp.VoiceStateUpdate, d: data }),
     sendGateway,
     sendCallInitiate: (targetUserId: string, channelId: string) =>
       sendWhenReady({
-        op: 36,
+        op: GatewayOp.CallInitiate,
         d: { target_user_id: targetUserId, channel_id: channelId },
       }),
     sendCallAccept: (callId: string) =>
-      sendWhenReady({ op: 37, d: { call_id: callId } }),
+      sendWhenReady({ op: GatewayOp.CallAccept, d: { call_id: callId } }),
     sendCallDecline: (callId: string) =>
-      sendWhenReady({ op: 38, d: { call_id: callId } }),
+      sendWhenReady({ op: GatewayOp.CallDecline, d: { call_id: callId } }),
     sendCallEnd: (callId: string) =>
-      sendWhenReady({ op: 39, d: { call_id: callId } }),
+      sendWhenReady({ op: GatewayOp.CallEnd, d: { call_id: callId } }),
   };
 }

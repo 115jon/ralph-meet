@@ -1,7 +1,14 @@
 import {
+  DEFAULT_HEARTBEAT_INTERVAL_MS,
+  decodeRoomGatewayServerFrame,
+  GatewayCloseCode,
+  readReplaySeq,
+  type GatewayFrame,
+  type RoomGatewayServerMessage,
+} from "@/lib/gateway-protocol";
+import {
   VoiceOpcode,
   type IceServer,
-  type ServerMessage,
   type TrackInfo,
   type VoiceState,
   type VoiceStateDelta,
@@ -72,7 +79,10 @@ export interface ConnectOptions {
   standby?: boolean;
 }
 
-export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
+export class RoomGateway extends BaseGateway<
+  RoomGatewayEvents,
+  RoomGatewayServerMessage
+> {
   private sessionId: string | null = null;
   private participantId: string | null = null;
   private lastReplayableSeq = 0;
@@ -81,7 +91,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
   private reconnectQueued = false;
 
   constructor() {
-    super("RoomGW", VoiceOpcode.Heartbeat);
+    super("RoomGW", decodeRoomGatewayServerFrame);
   }
 
   public connectRoom(options: ConnectOptions) {
@@ -172,24 +182,20 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     }
   }
 
-  protected handleMessage(msg: ServerMessage) {
-    if (
-      msg.op !== VoiceOpcode.HeartbeatACK &&
-      msg.d !== null &&
-      typeof msg.d === "object" &&
-      "seq" in msg.d &&
-      typeof msg.d.seq === "number" &&
-      Number.isInteger(msg.d.seq) &&
-      msg.d.seq > this.lastReplayableSeq
-    ) {
-      this.lastReplayableSeq = msg.d.seq;
+  protected onFrame(frame: GatewayFrame) {
+    const seq = readReplaySeq(frame);
+    if (seq !== undefined && seq > this.lastReplayableSeq) {
+      this.lastReplayableSeq = seq;
     }
+  }
 
+  protected handleMessage(msg: RoomGatewayServerMessage) {
     switch (msg.op) {
       case VoiceOpcode.Hello: {
-        const hello = msg.d as any;
-        this.log.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
-        this.heartbeat.start(hello.heartbeat_interval);
+        const interval =
+          msg.d.heartbeat_interval ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+        this.log.info(`Hello received, interval=${interval}ms`);
+        this.heartbeat.start(interval);
 
         if (this.sessionId && this.participantId) {
           this.log.info(`Attempting resume for session ${this.participantId}`);
@@ -223,13 +229,13 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
       }
 
       case VoiceOpcode.Ready: {
-        const ready = msg.d as any;
+        const ready = msg.d;
         this.participantId = ready.participant_id;
         this.sessionId = ready.participant_id;
 
         const tracksToQueue: TrackInfo[] = [];
-        for (const p of ready.participants || []) {
-          for (const t of p.tracks || []) {
+        for (const p of ready.participants ?? []) {
+          for (const t of p.tracks ?? []) {
             tracksToQueue.push(t);
           }
         }
@@ -244,7 +250,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           iceServers: ready.ice_servers,
           voiceToken: ready.voice_token,
           tracksToQueue,
-          participants: ready.participants || [],
+          participants: ready.participants ?? [],
           spatialAudioState: ready.spatial_audio_state,
         });
         break;
@@ -252,7 +258,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
       case VoiceOpcode.Resumed: {
         this.log.info("Session resumed successfully");
-        const resumed = msg.d as any;
+        const resumed = msg.d;
 
         this.isIdentified = true;
         this.reconnectAttempt = 0;
@@ -261,7 +267,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
         this.emit("resumed", {
           voiceToken: resumed.voice_token,
           iceServers: resumed.ice_servers,
-          participants: resumed.participants || [],
+          participants: resumed.participants ?? [],
           spatialAudioState: resumed.spatial_audio_state,
         });
         break;
@@ -291,7 +297,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
         this.emit("profile-update", {
           participantId: pu.participant_id,
           name: pu.name,
-          username: pu.username,
+          username: pu.username ?? undefined,
           displayName: pu.display_name,
           avatarUrl: pu.avatar_url,
           avatarDisplay: pu.avatar_display,
@@ -300,10 +306,10 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
       }
 
       case VoiceOpcode.Error: {
-        const err = msg.d as any;
+        const err = msg.d;
         this.log.error(`Error (code=${err.code}):`, err.message);
 
-        if (err.code === 4006) {
+        if (err.code === GatewayCloseCode.SessionInvalid) {
           this.log.warn("Resume failed — falling back to fresh Identify");
           this.sessionId = null;
           this.participantId = null;

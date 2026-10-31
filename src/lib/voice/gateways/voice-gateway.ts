@@ -1,8 +1,12 @@
 import {
+  DEFAULT_HEARTBEAT_INTERVAL_MS,
+  decodeVoiceGatewayServerFrame,
+  type VoiceGatewayServerMessage,
+} from "@/lib/gateway-protocol";
+import {
   VoiceOpcode,
   type ClientDisconnectPayload,
   type NegotiationDonePayload,
-  type ServerMessage,
   type SessionDescriptionPayload,
   type TrackInfo,
 } from "@/lib/types";
@@ -31,7 +35,10 @@ export interface VoiceGatewayEvents extends BaseGatewayEvents {
   };
 }
 
-export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
+export class VoiceGateway extends BaseGateway<
+  VoiceGatewayEvents,
+  VoiceGatewayServerMessage
+> {
   private participantId: string | null = null;
   private voiceToken: string | null = null;
   private roomSlug: string | null = null;
@@ -46,7 +53,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
   private clearCredentialsOnNextPrepare = false;
 
   constructor() {
-    super("VoiceGW", VoiceOpcode.Heartbeat);
+    super("VoiceGW", decodeVoiceGatewayServerFrame);
     this.on("disconnected", () => {
       this.resetSocketIdentityState();
     });
@@ -180,12 +187,13 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     }
   }
 
-  protected handleMessage(msg: ServerMessage) {
+  protected handleMessage(msg: VoiceGatewayServerMessage) {
     switch (msg.op) {
       case VoiceOpcode.Hello: {
-        const hello = msg.d;
-        this.log.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
-        this.heartbeat.start(hello.heartbeat_interval);
+        const interval =
+          msg.d.heartbeat_interval ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+        this.log.info(`Hello received, interval=${interval}ms`);
+        this.heartbeat.start(interval);
         this.helloReceived = true;
         this.maybeSendIdentify();
         break;
@@ -263,7 +271,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
       }
 
       case VoiceOpcode.ClientDisconnect: {
-        const disconnect = msg.d as ClientDisconnectPayload;
+        const disconnect = msg.d;
         if (disconnect.participant_id !== this.participantId) {
           this.emit("client-disconnect", disconnect);
         }
@@ -280,7 +288,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
       }
 
       case VoiceOpcode.VoiceAppEvent: {
-        this.emit("app-event", msg.d as Record<string, unknown>);
+        this.emit("app-event", msg.d);
         break;
       }
     }

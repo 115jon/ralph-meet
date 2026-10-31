@@ -53,6 +53,14 @@ import {
   getSoundboardMediaCapabilityUrl,
   issueSoundboardMediaCapability,
 } from "../src/lib/voice/soundboard-media-capability";
+import {
+  decodeVoiceGatewayClientFrame,
+  GatewayCloseCode as CloseCode,
+  GatewayOp as Op,
+  parseGatewayFrame,
+  RETIRED_BROWSER_SFU_OPS,
+  type VoiceClientPayload,
+} from "../src/lib/gateway-protocol";
 import { verifyPartyTracksSessionCapability } from "./partytracks-proxy";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { verifyVoiceToken } from "./voice-token";
@@ -93,37 +101,7 @@ interface Env {
   MEETING_ROOM?: DurableObjectNamespace;
 }
 
-// ── Opcodes (voice-specific subset) ─────────────────────────────────────────
-
-const enum Op {
-  SelectProtocol = 1,
-  Heartbeat = 3,
-  SessionDescription = 4,
-  Speaking = 5,
-  HeartbeatACK = 6,
-  Hello = 8,
-  Resumed = 9,
-  NegotiationDone = 10,
-  ClientDisconnect = 11,
-  Video = 12,
-  StopTracks = 13,
-  Error = 18,
-
-  // Voice-specific: authenticate with token from Main GW
-  VoiceIdentify = 100,
-  VoiceReady = 101,
-  // C->S: Publisher confirms push negotiation complete
-  TracksReady = 102,
-  VoiceAppEvent = 106,
-}
-
-const enum CloseCode {
-  UnknownOpcode = 4001,
-  NotAuthenticated = 4003,
-  AlreadyAuthenticated = 4005,
-  AuthenticationFailed = 4004,
-  AdmissionRejected = 4008,
-}
+// Opcodes, codes and payload schemas: src/lib/gateway-protocol.
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -143,31 +121,18 @@ interface TrackInfo {
   kind: "audio" | "video";
 }
 
-interface PushTrackDescriptor {
-  track_name: string;
-  mid?: string;
-  kind: "audio" | "video";
-}
-
 interface NativeScreenTrackRow {
   mid: string;
   track_name: string;
 }
 
-interface NativeScreenSelectProtocolPayload {
-  sdp: string;
-  push_tracks: PushTrackDescriptor[];
-  pull_tracks: [];
-  push_prefix: "screen";
-  request_id?: string;
-}
+type NativeScreenSelectProtocolPayload = VoiceClientPayload<Op.SelectProtocol>;
 
-interface GatewayMessage {
+/** An outbound frame. Inbound frames are decoded by the gateway protocol. */
+interface ServerMsg {
   op: number;
   d: unknown;
 }
-
-type ServerMsg = GatewayMessage;
 
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
@@ -200,8 +165,6 @@ const LEGACY_SOUNDBOARD_PLAYBACK_OWNER_TTL_MS = 10 * 60 * 1000;
 const SOUNDBOARD_MEDIA_CAPABILITY_TTL_MS = 60 * 60 * 1000;
 const MAX_SOUNDBOARD_POSITION_SECONDS = 24 * 60 * 60;
 const DEFAULT_SOUNDBOARD_SOUND_IDS = new Set(["ping", "pop", "chime", "tada"]);
-const MAX_NEGOTIATION_TRACKS = 32;
-const MAX_SDP_LENGTH = 1_000_000;
 const MAX_VOICE_FRAME_BYTES = 1_000_000;
 const VOICE_WS_RATE_LIMIT_WINDOW_MS = 60_000;
 const VOICE_WS_RATE_LIMITS: Record<number, number> = {
@@ -211,9 +174,6 @@ const VOICE_WS_RATE_LIMITS: Record<number, number> = {
   [Op.TracksReady]: 60,
   [Op.VoiceAppEvent]: 60,
 };
-const UNSUPPORTED_BROWSER_SFU_OPCODES: ReadonlySet<number> = new Set([
-  14, 103, 104, 105, 107, 108,
-]);
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
@@ -551,48 +511,37 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     if (typeof rawMsg !== "string") {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Text websocket frames are required" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Text websocket frames are required",
+        },
       });
       return;
     }
     if (rawMsg.length > MAX_VOICE_FRAME_BYTES) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Websocket frame is too large" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Websocket frame is too large",
+        },
       });
       return;
     }
 
-    let msg: GatewayMessage;
-    try {
-      const parsed: unknown = JSON.parse(rawMsg);
-      if (!this.isPlainObject(parsed)) {
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
-        });
-        return;
-      }
-      msg = parsed as unknown as GatewayMessage;
-    } catch {
+    const parsed = parseGatewayFrame(rawMsg);
+    if (!parsed.ok) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4002, message: "Invalid JSON" },
+        d: { code: parsed.code, message: parsed.message },
       });
       return;
     }
-
-    if (typeof msg.op !== "number") {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
-      });
-      return;
-    }
+    const frame = parsed.frame;
 
     if (
       this.isPublicDemoSocket(ws) &&
-      !this.isAllowedPublicDemoOpcode(msg.op)
+      !this.isAllowedPublicDemoOpcode(frame.op)
     ) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -605,38 +554,53 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
 
     if (
-      this.isAuthenticatedMutatingOpcode(msg.op) &&
+      this.isAuthenticatedMutatingOpcode(frame.op) &&
       !this.isCurrentAuthenticatedVoiceSocket(ws)
     ) {
       return;
     }
 
-    if (UNSUPPORTED_BROWSER_SFU_OPCODES.has(msg.op)) {
+    if (RETIRED_BROWSER_SFU_OPS.has(frame.op)) {
       this.rejectBrowserSfuNegotiation(ws);
       return;
     }
 
-    if (this.isRateLimited(ws, msg.op)) {
+    if (this.isRateLimited(ws, frame.op)) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4290, message: "Operation rate limit exceeded" },
+        d: {
+          code: CloseCode.RateLimited,
+          message: "Operation rate limit exceeded",
+        },
       });
       return;
     }
 
+    const decoded = decodeVoiceGatewayClientFrame(frame);
+    if (!decoded.ok) {
+      if (decoded.reason === "unknown-op") {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: {
+            code: CloseCode.UnknownOpcode,
+            message: `Unknown voice opcode: ${frame.op}`,
+          },
+        });
+      } else if (frame.op === Op.SelectProtocol) {
+        // As for a valid offer: an unidentified socket hears that first.
+        if (this.requireParticipantId(ws)) this.rejectBrowserSfuNegotiation(ws);
+      } else {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: CloseCode.InvalidPayload, message: decoded.invalid },
+        });
+      }
+      return;
+    }
+
+    const msg = decoded.message;
     switch (msg.op) {
       case Op.VoiceIdentify: {
-        if (
-          !this.isPlainObject(msg.d) ||
-          typeof msg.d.participant_id !== "string" ||
-          typeof msg.d.voice_token !== "string"
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid voice identify payload" },
-          });
-          break;
-        }
         const identifyPayload = {
           participant_id: msg.d.participant_id,
           voice_token: msg.d.voice_token,
@@ -656,98 +620,35 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         await this.handleSelectProtocol(ws, msg.d);
         break;
 
-      case Op.Video: {
-        if (
-          !this.isPlainObject(msg.d) ||
-          !Array.isArray(msg.d.tracks) ||
-          !this.isTrackInfoArray(msg.d.tracks)
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid video payload" },
-          });
-          break;
-        }
-        const videoPayload = { tracks: msg.d.tracks };
-        await this.handleVideo(ws, videoPayload);
+      case Op.Video:
+        await this.handleVideo(ws, msg.d);
         break;
-      }
 
-      case Op.StopTracks: {
-        if (
-          !this.isPlainObject(msg.d) ||
-          !this.isTrackNameArray(msg.d.track_names)
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid stop tracks payload" },
-          });
-          break;
-        }
-        const stopTracksPayload = { track_names: msg.d.track_names };
-        await this.handleStopTracks(ws, stopTracksPayload);
+      case Op.StopTracks:
+        await this.handleStopTracks(ws, msg.d);
         break;
-      }
 
-      case Op.TracksReady: {
-        if (
-          !this.isPlainObject(msg.d) ||
-          !this.isTrackNameArray(msg.d.track_names)
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid tracks ready payload" },
-          });
-          break;
-        }
-        const tracksReadyPayload = { track_names: msg.d.track_names };
-        this.handleTracksReady(ws, tracksReadyPayload);
+      case Op.TracksReady:
+        this.handleTracksReady(ws, msg.d);
         break;
-      }
 
-      case Op.Speaking: {
-        if (
-          !this.isPlainObject(msg.d) ||
-          typeof msg.d.speaking !== "number" ||
-          !Number.isFinite(msg.d.speaking)
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid speaking payload" },
-          });
-          break;
-        }
-        const speakingPayload = { speaking: msg.d.speaking };
-        this.handleSpeaking(ws, speakingPayload);
+      case Op.Speaking:
+        this.handleSpeaking(ws, msg.d);
         break;
-      }
 
       case Op.ClientDisconnect:
         await this.handleLeave(ws, true);
         break;
 
       case Op.VoiceAppEvent:
-        if (!this.isPlainObject(msg.d)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: {
-              code: 4000,
-              message: "Voice app event payload must be a plain object",
-            },
-          });
-          break;
-        }
         await this.handleVoiceAppEvent(ws, msg.d);
         break;
 
-      default:
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: {
-            code: CloseCode.UnknownOpcode,
-            message: `Unknown voice opcode: ${msg.op}`,
-          },
-        });
+      default: {
+        // Every opcode in voiceGatewayClientRules has a case above.
+        const unhandled: never = msg;
+        void unhandled;
+      }
     }
   }
 
@@ -1406,80 +1307,32 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     return limited;
   }
 
-  private isTrackInfoArray(value: unknown): value is TrackInfo[] {
-    if (!Array.isArray(value) || value.length > MAX_NEGOTIATION_TRACKS)
-      return false;
-    return value.every((item) => {
-      if (!this.isPlainObject(item)) return false;
-      return (
-        typeof item.participant_id === "string" &&
-        item.participant_id.length > 0 &&
-        item.participant_id.length <= 200 &&
-        typeof item.track_name === "string" &&
-        item.track_name.length > 0 &&
-        item.track_name.length <= 200 &&
-        (item.sfu_track_name === undefined ||
-          (typeof item.sfu_track_name === "string" &&
-            item.sfu_track_name.length > 0 &&
-            item.sfu_track_name.length <= 200)) &&
-        typeof item.session_id === "string" &&
-        item.session_id.length > 0 &&
-        item.session_id.length <= (item.sfu_track_name ? 4_096 : 200) &&
-        (item.mid === undefined ||
-          (typeof item.mid === "string" && item.mid.length <= 64)) &&
-        (item.kind === "audio" || item.kind === "video")
-      );
-    });
-  }
-
-  private isNativeScreenSelectProtocolPayload(
-    value: unknown,
+  /**
+   * The rules for a native screen offer the schema cannot check: a non-blank
+   * SDP, and unique `screen-…-<participant id>` track names.
+   */
+  private isOwnNativeScreenOffer(
+    payload: NativeScreenSelectProtocolPayload,
     participantId: string,
-  ): value is NativeScreenSelectProtocolPayload {
-    if (!this.isPlainObject(value)) return false;
-    if (
-      typeof value.sdp !== "string" ||
-      !value.sdp.trim() ||
-      value.sdp.length > MAX_SDP_LENGTH ||
-      value.push_prefix !== "screen" ||
-      value.media_mode !== undefined ||
-      !Array.isArray(value.push_tracks) ||
-      value.push_tracks.length === 0 ||
-      value.push_tracks.length > MAX_NEGOTIATION_TRACKS ||
-      !value.push_tracks.every((item) => {
-        if (!this.isPlainObject(item)) return false;
-        return (
-          typeof item.track_name === "string" &&
-          item.track_name.startsWith("screen-") &&
-          item.track_name.endsWith(`-${participantId}`) &&
-          item.track_name.length <= 200 &&
-          (item.mid === undefined ||
-            (typeof item.mid === "string" && item.mid.length <= 64)) &&
-          (item.kind === "audio" || item.kind === "video")
-        );
-      }) ||
-      new Set(
-        value.push_tracks.map((track) =>
-          this.isPlainObject(track) ? track.track_name : undefined,
-        ),
-      ).size !== value.push_tracks.length ||
-      !Array.isArray(value.pull_tracks) ||
-      value.pull_tracks.length !== 0
-    ) {
-      return false;
-    }
+  ): boolean {
+    const trackNames = payload.push_tracks.map((track) => track.track_name);
     return (
-      value.request_id === undefined ||
-      (typeof value.request_id === "string" &&
-        value.request_id.length > 0 &&
-        value.request_id.length <= 200)
+      payload.sdp.trim().length > 0 &&
+      trackNames.every(
+        (name) =>
+          name.startsWith("screen-") && name.endsWith(`-${participantId}`),
+      ) &&
+      new Set(trackNames).size === trackNames.length
     );
   }
 
   private rejectBrowserSfuNegotiation(ws: WebSocket): void {
     this.sendTo(ws, {
       op: Op.Error,
-      d: { code: 4000, message: "Browser SFU negotiation is unsupported" },
+      d: {
+        code: CloseCode.InvalidPayload,
+        message: "Browser SFU negotiation is unsupported",
+      },
     });
   }
 
@@ -1766,7 +1619,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       op === Op.Speaking ||
       op === Op.ClientDisconnect ||
       op === Op.VoiceAppEvent ||
-      UNSUPPORTED_BROWSER_SFU_OPCODES.has(op)
+      RETIRED_BROWSER_SFU_OPS.has(op)
     );
   }
 
@@ -1824,7 +1677,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       op === Op.Speaking ||
       op === Op.ClientDisconnect ||
       op === Op.VoiceAppEvent ||
-      UNSUPPORTED_BROWSER_SFU_OPCODES.has(op)
+      RETIRED_BROWSER_SFU_OPS.has(op)
     );
   }
 
@@ -1835,17 +1688,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       ws,
       participantId,
       this.getVoiceAttachment(ws)?.connection_id,
-    );
-  }
-
-  private isTrackNameArray(value: unknown): value is string[] {
-    return (
-      Array.isArray(value) &&
-      value.length <= MAX_NEGOTIATION_TRACKS &&
-      value.every(
-        (name) =>
-          typeof name === "string" && name.length > 0 && name.length <= 200,
-      )
     );
   }
 
@@ -2257,7 +2099,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   // ── Op 5: Speaking (forwarded to all other voice participants) ─────────
 
-  private handleSpeaking(ws: WebSocket, d: { speaking: number }) {
+  private handleSpeaking(ws: WebSocket, d: VoiceClientPayload<Op.Speaking>) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
     const connectionId = this.getVoiceAttachment(ws)?.connection_id;
@@ -2282,15 +2124,15 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   private async handleSelectProtocol(
     ws: WebSocket,
-    value: unknown,
+    payload: NativeScreenSelectProtocolPayload,
   ): Promise<void> {
     const participantId = this.requireParticipantId(ws);
     if (!participantId) return;
-    if (!this.isNativeScreenSelectProtocolPayload(value, participantId)) {
+    if (!this.isOwnNativeScreenOffer(payload, participantId)) {
       this.rejectBrowserSfuNegotiation(ws);
       return;
     }
-    await this.handleNativeScreenSelectProtocol(ws, participantId, value);
+    await this.handleNativeScreenSelectProtocol(ws, participantId, payload);
   }
 
   private async handleNativeScreenSelectProtocol(
@@ -2552,7 +2394,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   private async handleVideo(
     ws: WebSocket,
-    d: { tracks: TrackInfo[] },
+    d: VoiceClientPayload<Op.Video>,
   ): Promise<void> {
     const participantId = this.requireParticipantId(ws);
     if (!participantId) return;
@@ -2579,7 +2421,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       if (this.hasTrackNameConflict(track.track_name, participantId)) {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: 4000, message: "Track name is already owned" },
+          d: {
+            code: CloseCode.InvalidPayload,
+            message: "Track name is already owned",
+          },
         });
         return;
       }
@@ -2594,7 +2439,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       ) {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: 4000, message: "Invalid PartyTracks session" },
+          d: {
+            code: CloseCode.InvalidPayload,
+            message: "Invalid PartyTracks session",
+          },
         });
         return;
       }
@@ -2636,7 +2484,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   private async handleStopTracks(
     ws: WebSocket,
-    d: { track_names: string[] },
+    d: VoiceClientPayload<Op.StopTracks>,
   ): Promise<void> {
     const participantId = this.requireParticipantId(ws);
     if (!participantId || d.track_names.length === 0) return;
@@ -2704,7 +2552,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     this.broadcastStoppedTracks(participantId, removedTracks, ws);
   }
 
-  private handleTracksReady(ws: WebSocket, d: { track_names: string[] }): void {
+  private handleTracksReady(
+    ws: WebSocket,
+    d: VoiceClientPayload<Op.TracksReady>,
+  ): void {
     const participantId = this.requireParticipantId(ws);
     if (!participantId || d.track_names.length === 0) return;
     const connectionId = this.getVoiceAttachment(ws)?.connection_id;
@@ -2871,7 +2722,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     });
   }
 
-  private async handleVoiceAppEvent(ws: WebSocket, d: Record<string, unknown>) {
+  private async handleVoiceAppEvent(
+    ws: WebSocket,
+    d: VoiceClientPayload<Op.VoiceAppEvent>,
+  ) {
     if (!this.isCurrentAuthenticatedVoiceSocket(ws)) return;
 
     const pid = this.requireParticipantId(ws);
@@ -2906,7 +2760,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       if (wordleActivityEvent.kind === "invalid") {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: 4000, message: wordleActivityEvent.message },
+          d: {
+            code: CloseCode.InvalidPayload,
+            message: wordleActivityEvent.message,
+          },
         });
         return;
       }
@@ -2943,7 +2800,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
-          code: 4000,
+          code: CloseCode.InvalidPayload,
           message: "Server membership is required for soundboard actions",
         },
       });
@@ -2969,7 +2826,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     if (type.startsWith("soundboard.")) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Soundboard event was rejected" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Soundboard event was rejected",
+        },
       });
       return;
     }
@@ -3029,7 +2889,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
-          code: 4000,
+          code: CloseCode.InvalidPayload,
           message: "Voice app events cannot create persisted channel messages",
         },
       });
@@ -3065,7 +2925,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       if (!url || url.length > MAX_URL_LENGTH) {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: 4000, message: "Sticker URL is invalid or too long" },
+          d: {
+            code: CloseCode.InvalidPayload,
+            message: "Sticker URL is invalid or too long",
+          },
         });
         return;
       }
@@ -3077,7 +2940,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       } catch {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: 4000, message: "Sticker URL is not a valid URL" },
+          d: {
+            code: CloseCode.InvalidPayload,
+            message: "Sticker URL is not a valid URL",
+          },
         });
         return;
       }
@@ -3085,7 +2951,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       if (parsedUrl.protocol !== "https:") {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: 4000, message: "Sticker URL must use HTTPS" },
+          d: {
+            code: CloseCode.InvalidPayload,
+            message: "Sticker URL must use HTTPS",
+          },
         });
         return;
       }
@@ -3101,7 +2970,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       if (!isSafeHost) {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: 4000, message: "Sticker URL host is not allowed" },
+          d: {
+            code: CloseCode.InvalidPayload,
+            message: "Sticker URL host is not allowed",
+          },
         });
         return;
       }
@@ -3139,7 +3011,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
     this.sendTo(ws, {
       op: Op.Error,
-      d: { code: 4000, message: "Unknown voice app event" },
+      d: { code: CloseCode.InvalidPayload, message: "Unknown voice app event" },
     });
   }
 
@@ -3158,7 +3030,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     if (!content && !gif) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Demo chat messages need text or a GIF" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Demo chat messages need text or a GIF",
+        },
       });
       return;
     }

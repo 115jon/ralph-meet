@@ -15,11 +15,13 @@ import {
   type ChannelVisibilityRole,
 } from "../src/lib/channel-visibility";
 import { getDisplayName } from "../src/lib/display-name";
-import type {
-  CallIdPayload,
-  CallInitiatePayload,
-  ResumePayload,
-} from "../src/lib/types";
+import {
+  decodeMainGatewayClientFrame,
+  GatewayCloseCode as CloseCode,
+  GatewayOp as Op,
+  parseGatewayFrame,
+  type MainClientPayload,
+} from "../src/lib/gateway-protocol";
 import { clog } from "../src/lib/console-logger";
 import {
   isReconnectWithinGrace,
@@ -94,57 +96,7 @@ interface Env {
   VOICE_ROOM?: DurableObjectNamespace;
 }
 
-// ── Opcodes ─────────────────────────────────────────────────────────────────
-
-const enum Op {
-  Identify = 0,
-  Ready = 2,
-  Heartbeat = 3,
-  Speaking = 5,
-  HeartbeatACK = 6,
-  Resume = 7,
-  Hello = 8,
-  Resumed = 9,
-  ClientDisconnect = 11,
-  VoiceStateUpdate = 15,
-  ProfileUpdate = 16,
-  ProfileRefresh = 17,
-  Error = 18,
-  // Chat opcodes
-  Dispatch = 19,
-  MessageCreate = 20,
-  MessageUpdate = 21,
-  MessageDelete = 22,
-  TypingStart = 23,
-  ReactionAdd = 24,
-  ReactionRemove = 25,
-  PresenceUpdate = 26,
-  ChannelSubscribe = 27,
-  ChannelUnsubscribe = 28,
-  ChannelUpdate = 29,
-  ChannelDelete = 30,
-  GuildMemberUpdate = 31,
-  RelationshipUpdate = 32,
-  VoiceChannelJoin = 33,
-  VoiceChannelLeave = 34,
-  ServerSubscribe = 35,
-  // Call opcodes
-  CallInitiate = 36,
-  CallAccept = 37,
-  CallDecline = 38,
-  CallEnd = 39,
-  RefreshVoiceCredentials = 40,
-  MediaReady = 41,
-}
-
-const enum CloseCode {
-  UnknownOpcode = 4001,
-  NotAuthenticated = 4003,
-  AdmissionRejected = 4008,
-  AlreadyAuthenticated = 4005,
-  SessionInvalid = 4006,
-  SessionTimeout = 4009,
-}
+// Opcodes, codes and payload schemas: src/lib/gateway-protocol.
 
 const MAX_STREAM_PREVIEW_URL_BYTES = 4_096;
 const MAX_WEBSOCKET_ATTACHMENT_BYTES = 16_384;
@@ -183,13 +135,12 @@ interface VoiceState {
 
 // ── Gateway message shapes ──────────────────────────────────────────────────
 
-interface GatewayMessage {
+/** An outbound frame. Inbound frames are decoded by the gateway protocol. */
+interface ServerMsg {
   op: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   d: any;
 }
-
-type ServerMsg = GatewayMessage;
 
 type VoiceStateDelta = Omit<
   VoiceState,
@@ -326,6 +277,18 @@ const WS_RATE_LIMITS: Record<number, number> = {
   [Op.CallEnd]: 12,
   [Op.VoiceStateUpdate]: 60,
 };
+
+type PresenceStatus = "online" | "idle" | "dnd" | "offline";
+const PRESENCE_STATUSES: ReadonlySet<string> = new Set<PresenceStatus>([
+  "online",
+  "idle",
+  "dnd",
+  "offline",
+]);
+
+function isPresenceStatus(status: string): status is PresenceStatus {
+  return PRESENCE_STATUSES.has(status);
+}
 
 // ── MeetingRoom Durable Object ──────────────────────────────────────────────
 
@@ -928,50 +891,39 @@ export class MeetingRoom extends DurableObject<Env> {
     if (typeof rawMsg !== "string") {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Text websocket frames are required" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Text websocket frames are required",
+        },
       });
       return;
     }
     if (new TextEncoder().encode(rawMsg).byteLength > MAX_GATEWAY_FRAME_BYTES) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Websocket frame is too large" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Websocket frame is too large",
+        },
       });
       return;
     }
     if (this.env.DEBUG)
       log.info(`webSocketMessage received: ${rawMsg.substring(0, 100)}`);
 
-    let msg: GatewayMessage;
-    try {
-      const parsed: unknown = JSON.parse(rawMsg);
-      if (!this.isPlainObject(parsed)) {
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
-        });
-        return;
-      }
-      msg = parsed as unknown as GatewayMessage;
-    } catch {
+    const parsed = parseGatewayFrame(rawMsg);
+    if (!parsed.ok) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4002, message: "Invalid JSON" },
+        d: { code: parsed.code, message: parsed.message },
       });
       return;
     }
-
-    if (typeof msg.op !== "number") {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
-      });
-      return;
-    }
+    const frame = parsed.frame;
 
     if (
       this.getSessionAdmission(ws)?.accessMode === "public-demo" &&
-      !this.isAllowedPublicDemoOpcode(msg.op)
+      !this.isAllowedPublicDemoOpcode(frame.op)
     ) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -983,54 +935,48 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    if (this.isRateLimited(ws, msg.op)) {
+    if (this.isRateLimited(ws, frame.op)) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4290, message: "Operation rate limit exceeded" },
+        d: {
+          code: CloseCode.RateLimited,
+          message: "Operation rate limit exceeded",
+        },
       });
       return;
     }
 
-    const invalidPayloadMessage: Record<number, string> = {
-      [Op.Identify]: "Invalid identify payload",
-      [Op.VoiceStateUpdate]: "Invalid voice state payload",
-      [Op.MessageCreate]: "Invalid message payload",
-      [Op.MessageUpdate]: "Invalid message payload",
-      [Op.MessageDelete]: "Invalid message payload",
-      [Op.TypingStart]: "Invalid typing payload",
-      [Op.ReactionAdd]: "Invalid reaction payload",
-      [Op.ReactionRemove]: "Invalid reaction payload",
-      [Op.ChannelSubscribe]: "Invalid channel payload",
-      [Op.ChannelUnsubscribe]: "Invalid channel payload",
-      [Op.PresenceUpdate]: "Invalid presence payload",
-      [Op.VoiceChannelJoin]: "Invalid voice channel payload",
-      [Op.ServerSubscribe]: "Invalid server payload",
-    };
-    if (invalidPayloadMessage[msg.op] && !this.isPlainObject(msg.d)) {
+    const decoded = decodeMainGatewayClientFrame(frame);
+    if (!decoded.ok) {
+      if (decoded.reason === "invalid-payload") {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: CloseCode.InvalidPayload, message: decoded.invalid },
+        });
+        return;
+      }
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: invalidPayloadMessage[msg.op] },
+        d: {
+          code: CloseCode.UnknownOpcode,
+          message: `Unknown opcode: ${frame.op}`,
+        },
       });
+      this.flushDirtyStorage();
       return;
     }
 
+    const msg = decoded.message;
     switch (msg.op) {
       case Op.Identify:
         await this.handleIdentify(ws, msg.d);
         break;
 
       case Op.Heartbeat:
-        this.handleHeartbeat(ws, msg.d);
+        this.handleHeartbeat(ws);
         break;
 
       case Op.Resume:
-        if (!this.isResumePayload(msg.d)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid resume payload" },
-          });
-          break;
-        }
         await this.handleResume(ws, msg.d);
         break;
 
@@ -1101,57 +1047,26 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.CallInitiate:
-        if (!this.isCallInitiatePayload(msg.d)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid call payload" },
-          });
-          break;
-        }
         await this.handleCallInitiate(ws, msg.d);
         break;
 
       case Op.CallAccept:
-        if (!this.isCallIdPayload(msg.d)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid call payload" },
-          });
-          break;
-        }
         this.handleCallAccept(ws, msg.d);
         break;
 
       case Op.CallDecline:
-        if (!this.isCallIdPayload(msg.d)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid call payload" },
-          });
-          break;
-        }
         this.handleCallDecline(ws, msg.d);
         break;
 
       case Op.CallEnd:
-        if (!this.isCallIdPayload(msg.d)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid call payload" },
-          });
-          break;
-        }
         this.handleCallEnd(ws, msg.d);
         break;
 
-      default:
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: {
-            code: CloseCode.UnknownOpcode,
-            message: `Unknown opcode: ${msg.op}`,
-          },
-        });
+      default: {
+        // Every opcode in mainGatewayClientRules has a case above.
+        const unhandled: never = msg;
+        void unhandled;
+      }
     }
 
     // Flush any dirty storage keys accumulated during this message cycle
@@ -1429,26 +1344,6 @@ export class MeetingRoom extends DurableObject<Env> {
       return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
-  }
-
-  private isResumePayload(value: unknown): value is ResumePayload {
-    return (
-      this.isPlainObject(value) &&
-      typeof value.session_id === "string" &&
-      typeof value.seq_ack === "number"
-    );
-  }
-
-  private isCallInitiatePayload(value: unknown): value is CallInitiatePayload {
-    return (
-      this.isPlainObject(value) &&
-      typeof value.target_user_id === "string" &&
-      typeof value.channel_id === "string"
-    );
-  }
-
-  private isCallIdPayload(value: unknown): value is CallIdPayload {
-    return this.isPlainObject(value) && typeof value.call_id === "string";
   }
 
   private isRateLimited(ws: WebSocket, op: number): boolean {
@@ -2512,17 +2407,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleIdentify(
     ws: WebSocket,
-    d: {
-      name: string;
-      username?: string;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      avatar_display?: string | null;
-      clerk_user_id?: string;
-      platform?: PresencePlatform;
-      supports_voice_state_deltas?: boolean;
-      standby?: boolean;
-    },
+    d: MainClientPayload<Op.Identify>,
   ) {
     if (this.getSession(ws)) {
       log.info(`AlreadyAuthenticated — session exists for this WS`);
@@ -2598,7 +2483,9 @@ export class MeetingRoom extends DurableObject<Env> {
       let resolvedUsername = d.username ?? d.name;
       let resolvedDisplayName = d.display_name ?? null;
       let resolvedAvatar: string | null | undefined = d.avatar_url;
-      let resolvedAvatarDisplay = d.avatar_display ?? null;
+      // An AvatarDisplay object (not only its string form) is stored and
+      // broadcast as sent, as before; profiles from the resolver are strings.
+      let resolvedAvatarDisplay = (d.avatar_display ?? null) as string | null;
       let resolvedStatus: "online" | "idle" | "dnd" | "offline" = "online";
       const resolvedPlatform = normalizePresencePlatform(d.platform) ?? "web";
 
@@ -2768,7 +2655,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
-          code: 4000,
+          code: CloseCode.InvalidPayload,
           message: `Identify failed: ${err instanceof Error ? err.message : "Unknown error"}`,
         },
       });
@@ -2779,7 +2666,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
 
-  private handleHeartbeat(ws: WebSocket, d: { seq_ack: number }) {
+  private handleHeartbeat(ws: WebSocket) {
     const session = this.getSession(ws);
 
     // Always ACK the heartbeat — even for unidentified sessions.
@@ -2805,10 +2692,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 7: Resume ──────────────────────────────────────────────────────
 
-  private async handleResume(
-    ws: WebSocket,
-    d: { session_id: string; seq_ack: number },
-  ) {
+  private async handleResume(ws: WebSocket, d: MainClientPayload<Op.Resume>) {
     const oldAttachment = this.resumableSessions.get(d.session_id);
     const admission = this.getSessionAdmission(ws);
     if (!oldAttachment) {
@@ -3062,18 +2946,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private handleVoiceStateUpdate(
     ws: WebSocket,
-    d: {
-      self_mute?: boolean;
-      self_deaf?: boolean;
-      self_video?: boolean;
-      self_stream?: boolean;
-      self_stream_audio?: boolean;
-      stream_preview_url?: string | null;
-      spatial_audio_enabled?: boolean;
-      spatial_audio_high_fidelity?: boolean;
-      spatial_audio_state?: SpatialAudioState;
-      promote_standby?: boolean;
-    },
+    d: MainClientPayload<Op.VoiceStateUpdate>,
   ) {
     const session = this.requireSession(ws);
     if (!session) return;
@@ -3137,7 +3010,10 @@ export class MeetingRoom extends DurableObject<Env> {
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Stream preview URL is too long" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Stream preview URL is too long",
+        },
       });
       return;
     }
@@ -3154,7 +3030,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (d.spatial_audio_high_fidelity !== undefined)
       session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
     const spatialRoomKey = session.voice_channel_id || this.roomSlug;
-    if (d.spatial_audio_state && isSpatialAudioState(d.spatial_audio_state)) {
+    if (isSpatialAudioState(d.spatial_audio_state)) {
       const nextSpatialAudioState = {
         ...d.spatial_audio_state,
         updatedBy: session.clerk_user_id || session.id,
@@ -3186,24 +3062,25 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private handlePresenceUpdate(
     ws: WebSocket,
-    d: { status: "online" | "idle" | "dnd" | "offline" },
+    d: MainClientPayload<Op.PresenceUpdate>,
   ) {
     const session = this.requireSession(ws);
     if (!session) return;
 
-    if (!["online", "idle", "dnd", "offline"].includes(d.status)) return;
+    const status = d.status;
+    if (!isPresenceStatus(status)) return;
 
     if (session.clerk_user_id) {
       let presenceChanged = false;
       for (const [sessionWs, otherSession] of this.sessions) {
         if (otherSession.clerk_user_id !== session.clerk_user_id) continue;
-        if (otherSession.status !== d.status) presenceChanged = true;
-        otherSession.status = d.status;
+        if (otherSession.status !== status) presenceChanged = true;
+        otherSession.status = status;
         this.persist(sessionWs, otherSession);
       }
 
       // 1. Debounced persist to D1 (coalesces rapid toggles into one write)
-      this.ctx.waitUntil(this.persistPresence(session.clerk_user_id, d.status));
+      this.ctx.waitUntil(this.persistPresence(session.clerk_user_id, status));
 
       if (!presenceChanged) return;
 
@@ -3221,7 +3098,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    session.status = d.status;
+    session.status = status;
     this.persist(ws, session);
   }
 
@@ -3836,17 +3713,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleChannelSubscribe(
     ws: WebSocket,
-    d: { channel_id: string },
+    d: MainClientPayload<Op.ChannelSubscribe>,
   ) {
     const session = this.requireSession(ws);
-    if (
-      !session ||
-      !d ||
-      typeof d.channel_id !== "string" ||
-      !d.channel_id ||
-      !session.clerk_user_id
-    )
-      return;
+    if (!session || !d.channel_id || !session.clerk_user_id) return;
 
     const access = await resolveChannelAccess(
       this.env.DB,
@@ -3856,7 +3726,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4003, message: "Channel not found or access denied" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Channel not found or access denied",
+        },
       });
       return;
     }
@@ -3892,10 +3765,12 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 28: ChannelUnsubscribe ─────────────────────────────────────────
 
-  private handleChannelUnsubscribe(ws: WebSocket, d: { channel_id: string }) {
+  private handleChannelUnsubscribe(
+    ws: WebSocket,
+    d: MainClientPayload<Op.ChannelUnsubscribe>,
+  ) {
     const session = this.requireSession(ws);
-    if (!session || !d || typeof d.channel_id !== "string" || !d.channel_id)
-      return;
+    if (!session || !d.channel_id) return;
 
     const subs = this.channelSubscriptions.get(d.channel_id);
     if (subs) {
@@ -3977,17 +3852,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleVoiceChannelJoin(
     ws: WebSocket,
-    d: { channel_id: string; self_mute?: boolean; started_at?: number },
+    d: MainClientPayload<Op.VoiceChannelJoin>,
   ) {
     const session = this.requireSession(ws);
-    if (
-      !session ||
-      !d ||
-      typeof d.channel_id !== "string" ||
-      !d.channel_id ||
-      !session.clerk_user_id
-    )
-      return;
+    if (!session || !d.channel_id || !session.clerk_user_id) return;
 
     const access = await resolveChannelAccess(
       this.env.DB,
@@ -3997,7 +3865,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!access || !hasChannelPermission(access, PERMISSIONS.CONNECT)) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4003, message: "Channel not found or access denied" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Channel not found or access denied",
+        },
       });
       return;
     }
@@ -4207,29 +4078,22 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleMessageCreate(
     ws: WebSocket,
-    d: {
-      channel_id: string;
-      content: string;
-      reply_to_id?: string;
-      nonce?: string;
-    },
+    d: MainClientPayload<Op.MessageCreate>,
   ) {
     const session = this.requireSession(ws);
     if (
       !session?.clerk_user_id ||
-      !d ||
-      typeof d.channel_id !== "string" ||
-      typeof d.content !== "string" ||
       !d.channel_id ||
       !d.content.trim() ||
       d.content.length > 4000 ||
-      (d.reply_to_id !== undefined && typeof d.reply_to_id !== "string") ||
-      (d.nonce !== undefined &&
-        (typeof d.nonce !== "string" || d.nonce.length > 100))
+      (d.nonce !== undefined && d.nonce.length > 100)
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Invalid message payload" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Invalid message payload",
+        },
       });
       return;
     }
@@ -4238,7 +4102,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
-          code: 4000,
+          code: CloseCode.InvalidPayload,
           message: "This gateway cannot create persisted channel messages",
         },
       });
@@ -4253,7 +4117,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!access || !hasChannelPermission(access, PERMISSIONS.SEND_MESSAGES)) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4003, message: "Channel not found or access denied" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Channel not found or access denied",
+        },
       });
       return;
     }
@@ -4368,21 +4235,21 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleMessageUpdate(
     ws: WebSocket,
-    d: { message_id: string; content: string },
+    d: MainClientPayload<Op.MessageUpdate>,
   ) {
     const session = this.requireSession(ws);
     if (
       !session?.clerk_user_id ||
-      !d ||
-      typeof d.message_id !== "string" ||
-      typeof d.content !== "string" ||
       !d.message_id ||
       !d.content.trim() ||
       d.content.length > 4000
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Invalid message payload" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Invalid message payload",
+        },
       });
       return;
     }
@@ -4510,20 +4377,16 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleMessageDelete(
     ws: WebSocket,
-    d: { message_id: string; channel_id: string },
+    d: MainClientPayload<Op.MessageDelete>,
   ) {
     const session = this.requireSession(ws);
-    if (
-      !session?.clerk_user_id ||
-      !d ||
-      typeof d.message_id !== "string" ||
-      typeof d.channel_id !== "string" ||
-      !d.message_id ||
-      !d.channel_id
-    ) {
+    if (!session?.clerk_user_id || !d.message_id || !d.channel_id) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Invalid message payload" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Invalid message payload",
+        },
       });
       return;
     }
@@ -4637,10 +4500,12 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 23: TypingStart ────────────────────────────────────────────────
 
-  private async handleTypingStart(ws: WebSocket, d: { channel_id: string }) {
+  private async handleTypingStart(
+    ws: WebSocket,
+    d: MainClientPayload<Op.TypingStart>,
+  ) {
     const session = this.requireSession(ws);
-    if (!session?.clerk_user_id || !d || typeof d.channel_id !== "string")
-      return;
+    if (!session?.clerk_user_id) return;
 
     const access = await resolveChannelAccess(
       this.env.DB,
@@ -4650,7 +4515,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4003, message: "Channel not found or access denied" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Channel not found or access denied",
+        },
       });
       return;
     }
@@ -4678,15 +4546,11 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleReactionAdd(
     ws: WebSocket,
-    d: { channel_id: string; message_id: string; emoji: string },
+    d: MainClientPayload<Op.ReactionAdd>,
   ) {
     const session = this.requireSession(ws);
     if (
       !session?.clerk_user_id ||
-      !d ||
-      typeof d.channel_id !== "string" ||
-      typeof d.message_id !== "string" ||
-      typeof d.emoji !== "string" ||
       !d.channel_id ||
       !d.message_id ||
       !d.emoji ||
@@ -4694,7 +4558,10 @@ export class MeetingRoom extends DurableObject<Env> {
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Invalid reaction payload" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Invalid reaction payload",
+        },
       });
       return;
     }
@@ -4720,7 +4587,10 @@ export class MeetingRoom extends DurableObject<Env> {
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4003, message: "Channel not found or access denied" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Channel not found or access denied",
+        },
       });
       return;
     }
@@ -4758,15 +4628,11 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleReactionRemove(
     ws: WebSocket,
-    d: { channel_id: string; message_id: string; emoji: string },
+    d: MainClientPayload<Op.ReactionRemove>,
   ) {
     const session = this.requireSession(ws);
     if (
       !session?.clerk_user_id ||
-      !d ||
-      typeof d.channel_id !== "string" ||
-      typeof d.message_id !== "string" ||
-      typeof d.emoji !== "string" ||
       !d.channel_id ||
       !d.message_id ||
       !d.emoji ||
@@ -4774,7 +4640,10 @@ export class MeetingRoom extends DurableObject<Env> {
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "Invalid reaction payload" },
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Invalid reaction payload",
+        },
       });
       return;
     }
@@ -4800,7 +4669,10 @@ export class MeetingRoom extends DurableObject<Env> {
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4003, message: "Channel not found or access denied" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Channel not found or access denied",
+        },
       });
       return;
     }
@@ -4864,16 +4736,12 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 35: ServerSubscribe ────────────────────────────────────────────
 
-  private async handleServerSubscribe(ws: WebSocket, d: { server_id: string }) {
+  private async handleServerSubscribe(
+    ws: WebSocket,
+    d: MainClientPayload<Op.ServerSubscribe>,
+  ) {
     const session = this.requireSession(ws);
-    if (
-      !session ||
-      !d ||
-      typeof d.server_id !== "string" ||
-      !d.server_id ||
-      !session.clerk_user_id
-    )
-      return;
+    if (!session || !d.server_id || !session.clerk_user_id) return;
 
     // Already subscribed?
     if (session.subscribed_servers?.includes(d.server_id)) return;
@@ -4939,7 +4807,10 @@ export class MeetingRoom extends DurableObject<Env> {
     return new Set(ids);
   }
 
-  private async handleCallInitiate(ws: WebSocket, d: CallInitiatePayload) {
+  private async handleCallInitiate(
+    ws: WebSocket,
+    d: MainClientPayload<Op.CallInitiate>,
+  ) {
     const session = this.requireSession(ws);
     if (
       !session ||
@@ -5130,7 +5001,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 37: CallAccept ────────────────────────────────────────────────
 
-  private handleCallAccept(ws: WebSocket, d: CallIdPayload) {
+  private handleCallAccept(ws: WebSocket, d: MainClientPayload<Op.CallAccept>) {
     const session = this.requireSession(ws);
     if (!session || !session.clerk_user_id || !d.call_id) return;
 
@@ -5201,7 +5072,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 38: CallDecline ───────────────────────────────────────────────
 
-  private handleCallDecline(ws: WebSocket, d: CallIdPayload) {
+  private handleCallDecline(
+    ws: WebSocket,
+    d: MainClientPayload<Op.CallDecline>,
+  ) {
     const session = this.requireSession(ws);
     if (!session || !session.clerk_user_id || !d.call_id) return;
 
@@ -5232,7 +5106,7 @@ export class MeetingRoom extends DurableObject<Env> {
     log.info(`Call declined: ${pending.callId}`);
   }
 
-  private handleCallEnd(ws: WebSocket, d: CallIdPayload) {
+  private handleCallEnd(ws: WebSocket, d: MainClientPayload<Op.CallEnd>) {
     const session = this.requireSession(ws);
     if (!session || !session.clerk_user_id) return;
 

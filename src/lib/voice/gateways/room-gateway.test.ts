@@ -391,3 +391,123 @@ describe("RoomGateway", () => {
     gateway.disconnect();
   });
 });
+
+describe("RoomGateway frame decoding", () => {
+  beforeEach(() => {
+    TestWebSocket.instances = [];
+    mocks.fetchSocketTicketBundle.mockReset();
+    mocks.fetchSocketTicketBundle.mockResolvedValue({
+      protocols: ["ralph.realtime.v1", "ralph.ticket.test"],
+    });
+    vi.stubGlobal("WebSocket", TestWebSocket);
+  });
+
+  async function connectedGateway() {
+    const gateway = new RoomGateway();
+    gateway.connectRoom({
+      name: "Test User",
+      clerkUserId: "user-1",
+      roomSlug: "voice-server-channel",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    return { gateway, socket };
+  }
+
+  it("drops malformed frames without throwing and keeps working", async () => {
+    const { gateway, socket } = await connectedGateway();
+    const ready = vi.fn();
+    const joined = vi.fn();
+    const errors = vi.fn();
+    gateway.on("ready", ready);
+    gateway.on("participant-joined", joined);
+    gateway.on("error", errors);
+    const raw = (data: unknown) => socket.onmessage?.({ data } as MessageEvent);
+
+    expect(() => {
+      raw("not-json");
+      raw("null");
+      raw("[]");
+      raw('{"op":"2"}');
+      raw(new ArrayBuffer(4));
+      socket.message({ op: VoiceOpcode.Hello, d: { heartbeat_interval: "x" } });
+      socket.message({ op: VoiceOpcode.Ready, d: { participant_id: 7 } });
+      socket.message({ op: VoiceOpcode.Ready, d: null });
+      socket.message({
+        op: VoiceOpcode.VoiceStateUpdate,
+        d: { participant: {}, action: "join" },
+      });
+      socket.message({
+        op: VoiceOpcode.VoiceStateUpdate,
+        d: { participant: { id: "p" }, action: "teleport" },
+      });
+      socket.message({ op: VoiceOpcode.Error, d: { code: "4006" } });
+      socket.message({ op: 4242, d: { anything: true } });
+    }).not.toThrow();
+
+    expect(socket.sent).toEqual([]);
+    expect(ready).not.toHaveBeenCalled();
+    expect(joined).not.toHaveBeenCalled();
+    expect(errors).not.toHaveBeenCalled();
+
+    socket.message({
+      op: VoiceOpcode.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    socket.message({
+      op: VoiceOpcode.Ready,
+      d: {
+        participant_id: "session-1",
+        ice_servers: [],
+        voice_token: "voice-token",
+        participants: [],
+        future_field: { kept: true },
+      },
+    });
+    expect(sentMessages(socket).map((message) => message.op)).toEqual([
+      VoiceOpcode.Identify,
+    ]);
+    expect(ready).toHaveBeenCalledOnce();
+    gateway.disconnect();
+  });
+
+  it("tracks the replay cursor from frames it does not otherwise handle", async () => {
+    const { gateway, socket } = await connectedGateway();
+    socket.message({
+      op: VoiceOpcode.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    socket.message({
+      op: VoiceOpcode.Ready,
+      d: {
+        participant_id: "session-1",
+        ice_servers: [],
+        voice_token: "voice-token",
+        participants: [],
+      },
+    });
+    socket.message({ op: VoiceOpcode.Dispatch, d: { seq: 4, event: "X" } });
+    socket.message({ op: 4242, d: { seq: 9 } });
+    socket.message({ op: VoiceOpcode.HeartbeatACK, d: { seq: 99 } });
+    socket.onclose?.({ code: 1006, reason: "" } as CloseEvent);
+
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(2), {
+      timeout: 2_000,
+    });
+    const second = TestWebSocket.instances[1]!;
+    second.readyState = TestWebSocket.OPEN;
+    second.message({
+      op: VoiceOpcode.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    expect(sentMessages(second)).toEqual([
+      {
+        op: VoiceOpcode.Resume,
+        d: { session_id: "session-1", seq_ack: 9 },
+      },
+    ]);
+    gateway.disconnect();
+  });
+});
