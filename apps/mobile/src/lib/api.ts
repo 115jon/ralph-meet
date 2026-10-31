@@ -30,6 +30,38 @@ export async function apiFetch(
   return response;
 }
 
+/** A non-2xx answer. `status` 401 is what RealtimeSocket reads as a refusal. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    path: string,
+  ) {
+    super(`${path} failed: ${status}`);
+    this.name = "ApiError";
+  }
+}
+
+/**
+ * Fetches `path` and decodes the JSON body with `schema`, so screens only
+ * ever see data that matched it. Throws ApiError on a non-2xx answer and a
+ * SchemaError when the body does not match.
+ */
+export async function apiJson<S extends Schema.ConstraintDecoder<unknown>>(
+  path: string,
+  schema: S,
+  init?: RequestInit,
+): Promise<S["Type"]> {
+  const response = await apiFetch(path, init);
+  if (!response.ok) throw new ApiError(response.status, path);
+  return Schema.decodeUnknownSync(schema)(await response.json());
+}
+
+/** An API-relative media path (avatars, icons) as an absolute URL. */
+export function mediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  return path.startsWith("/") ? `${config.apiBaseUrl}${path}` : path;
+}
+
 // Only what the app shows; the server sends more and we ignore it.
 const MeSchema = Schema.Struct({
   id: Schema.String,
@@ -39,11 +71,7 @@ const MeSchema = Schema.Struct({
 });
 export type Me = typeof MeSchema.Type;
 
-const decodeMe = Schema.decodeUnknownSync(MeSchema);
-
 /** GET /api/users/me: the profile of the token's owner. */
-export async function getMe(): Promise<Me> {
-  const response = await apiFetch("/api/users/me");
-  if (!response.ok) throw new Error(`users/me failed: ${response.status}`);
-  return decodeMe(await response.json());
+export function getMe(): Promise<Me> {
+  return apiJson("/api/users/me", MeSchema);
 }

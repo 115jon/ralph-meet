@@ -16,6 +16,8 @@
     "@expo/metro-runtime": "~58.0.14",
     "@expo/ui": "58.0.26",
     "@kova/react": "https://github.com/115jon/kova/releases/download/kova-react-v1.2.0/115jon-kova-react-1.2.0.tgz",
+    "@ralph/protocol": "workspace:*",
+    "@ralph/realtime": "workspace:*",
     "effect": "^4.1.1",
     "expo": "58.0.22",
     "expo-asset": "~58.0.16",

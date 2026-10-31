@@ -3,6 +3,7 @@ import { BricolageGrotesque_700Bold } from "@expo-google-fonts/bricolage-grotesq
 import { BricolageGrotesque_800ExtraBold } from "@expo-google-fonts/bricolage-grotesque/800ExtraBold";
 import { Geist_400Regular } from "@expo-google-fonts/geist/400Regular";
 import { Geist_500Medium } from "@expo-google-fonts/geist/500Medium";
+import { Geist_600SemiBold } from "@expo-google-fonts/geist/600SemiBold";
 import { MartianMono_500Medium } from "@expo-google-fonts/martian-mono/500Medium";
 import { MartianMono_600SemiBold } from "@expo-google-fonts/martian-mono/600SemiBold";
 
@@ -13,6 +14,7 @@ export const FONT_ASSETS = {
   BricolageGrotesque_800ExtraBold,
   Geist_400Regular,
   Geist_500Medium,
+  Geist_600SemiBold,
   MartianMono_500Medium,
   MartianMono_600SemiBold,
 };
@@ -24,6 +26,8 @@ export const FONT = {
   display: "BricolageGrotesque_800ExtraBold",
   body: "Geist_400Regular",
   row: "Geist_500Medium",
+  /** Unread rows. */
+  rowStrong: "Geist_600SemiBold",
   silk: "MartianMono_500Medium",
   silkStrong: "MartianMono_600SemiBold",
 } as const;
