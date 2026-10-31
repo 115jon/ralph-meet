@@ -1,20 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { waitUntil } from "cloudflare:workers";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { apiSuccess, getDB, getEnv, requireAuth } from "@/lib/api-helpers";
 import { scheduleServerMemberCacheInvalidation } from "@/lib/background-tasks";
+import { looseStruct, withDefault } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { getPresence, updatePresence } from "@/services/presence.service";
 import { executeBroadcast } from "@/services/service-helpers";
 
-const presenceUpdateSchema = z
-  .object({
-    status: z.string().default(""),
-    custom_status: z.string().nullable().optional(),
-  })
-  .passthrough();
+const presenceUpdateSchema = looseStruct({
+  status: withDefault(Schema.String, ""),
+  custom_status: Schema.optional(Schema.NullOr(Schema.String)),
+});
 
 // GET /api/presence — fetch current user's presence
 const GET = async ({ request, params: _params }: any) => {

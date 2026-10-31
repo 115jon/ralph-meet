@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import {
   apiSuccess,
@@ -7,6 +7,7 @@ import {
   getDB,
   requireAuth,
 } from "@/lib/api-helpers";
+import { looseStruct } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import {
@@ -15,12 +16,10 @@ import {
   markNotificationsRead,
 } from "@/services/notification.service";
 
-const markNotificationsReadSchema = z
-  .object({
-    ids: z.array(z.string()).optional(),
-    all: z.boolean().optional(),
-  })
-  .passthrough();
+const markNotificationsReadSchema = looseStruct({
+  ids: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  all: Schema.optional(Schema.Boolean),
+});
 
 // GET /api/notifications — fetch user's notifications (most recent first)
 const GET = async ({ request, params: _params }: any) => {

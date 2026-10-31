@@ -10,15 +10,14 @@ import {
   requireAuth,
 } from "@/lib/api-helpers";
 import { validateBody } from "@/lib/validate-body";
-import { z } from "zod";
+import { Schema } from "effect";
+import { looseStruct } from "@/lib/schema";
 
-export const voiceDisconnectBodySchema = z
-  .object({
-    server_id: z.string().nullable().optional(),
-    gateway_session_id: z.string().nullable().optional(),
-    voice_session_id: z.string().nullable().optional(),
-  })
-  .passthrough();
+export const voiceDisconnectBodySchema = looseStruct({
+  server_id: Schema.optional(Schema.NullOr(Schema.String)),
+  gateway_session_id: Schema.optional(Schema.NullOr(Schema.String)),
+  voice_session_id: Schema.optional(Schema.NullOr(Schema.String)),
+});
 
 const OPTIONS = async ({ request }: any) => {
   return (

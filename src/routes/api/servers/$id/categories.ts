@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { safeParse } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { CreateCategorySchema } from "@/lib/validations";
 import { createCategory } from "@/services/category.service";
@@ -10,8 +11,6 @@ import {
   executeBroadcast,
   executeInvalidation,
 } from "@/services/service-helpers";
-
-import { z } from "zod";
 
 // POST /api/servers/:id/categories — create a category
 const POST = async ({ request, params }: any) => {
@@ -27,16 +26,20 @@ const POST = async ({ request, params }: any) => {
   );
   if (permResult instanceof Response) return permResult;
 
-  let body;
+  let rawBody: unknown;
   try {
-    const rawBody = await request.json();
-    body = CreateCategorySchema.parse(rawBody);
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      return Response.json({ error: err.issues[0].message }, { status: 400 });
-    }
+    rawBody = await request.json();
+  } catch {
     return apiError("Invalid request body", 400);
   }
+  const parsed = safeParse(CreateCategorySchema, rawBody);
+  if (!parsed.success) {
+    return Response.json(
+      { error: parsed.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
+  }
+  const body = parsed.data;
 
   const db = getDB();
 

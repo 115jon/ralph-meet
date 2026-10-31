@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import {
   apiError,
@@ -17,6 +17,7 @@ import {
   type GeneratedEmoji,
 } from "@/lib/emoji";
 import { checkRateLimitDO } from "@/lib/rate-limit";
+import { looseStruct } from "@/lib/schema";
 import {
   createGeneratedEmoji,
   listGeneratedEmojisByIds,
@@ -37,12 +38,10 @@ class KlipyRequestError extends Error {
   }
 }
 
-export const generateEmojiBodySchema = z
-  .object({
-    prompt: z.unknown().optional(),
-    shortcode: z.unknown().optional(),
-  })
-  .passthrough();
+export const generateEmojiBodySchema = looseStruct({
+  prompt: Schema.optional(Schema.Unknown),
+  shortcode: Schema.optional(Schema.Unknown),
+});
 
 type KlipyGenerateResponse = {
   data?: {

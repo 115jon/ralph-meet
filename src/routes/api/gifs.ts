@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import {
   apiError,
@@ -35,6 +35,7 @@ import {
   DEFAULT_MEDIA_CONTENT_FILTER,
   parseMediaContentFilter,
 } from "@/lib/media-content-filter";
+import { looseStruct } from "@/lib/schema";
 import { validateBody } from "@/lib/validate-body";
 
 const KLIPY_API_URL = "https://api.klipy.com/v2";
@@ -94,14 +95,12 @@ type StoredGifFavoriteRow = {
   duration?: number | null;
 };
 
-export const gifFavoriteBodySchema = z
-  .object({
-    favorite: z.unknown().optional(),
-    favorites: z.array(z.unknown()).optional(),
-    provider: z.string().optional(),
-    gif_id: z.string().optional(),
-  })
-  .passthrough();
+export const gifFavoriteBodySchema = looseStruct({
+  favorite: Schema.optional(Schema.Unknown),
+  favorites: Schema.optional(Schema.mutable(Schema.Array(Schema.Unknown))),
+  provider: Schema.optional(Schema.String),
+  gif_id: Schema.optional(Schema.String),
+});
 
 interface KvCacheEntry<T> {
   cachedAt: number;

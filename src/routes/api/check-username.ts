@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { clog } from "@/lib/console-logger";
+import { safeParse } from "@/lib/schema";
 import { UsernameSchema } from "@/lib/validations";
 
 const log = clog("check-username");
@@ -16,7 +17,7 @@ const GET = async ({ request: req }: any) => {
   if (!rawUsername) {
     return apiSuccess({ available: false, reason: "too_short" });
   }
-  const parsedUsername = UsernameSchema.safeParse(rawUsername);
+  const parsedUsername = safeParse(UsernameSchema, rawUsername);
   if (!parsedUsername.success) {
     return apiSuccess({ available: false, reason: "invalid" });
   }

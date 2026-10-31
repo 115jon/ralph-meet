@@ -1,5 +1,6 @@
+import { Schema } from "effect";
 import { describe, it, expect } from "vitest";
-import { z } from "zod";
+import { looseStruct, withDefault } from "../schema";
 import { validateBody } from "../validate-body";
 
 function jsonRequest(body: unknown): Request {
@@ -10,9 +11,9 @@ function jsonRequest(body: unknown): Request {
   });
 }
 
-const schema = z.object({
-  content: z.string().default(""),
-  attachment_ids: z.array(z.string()).optional(),
+const schema = Schema.Struct({
+  content: withDefault(Schema.String, ""),
+  attachment_ids: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
 });
 
 describe("validateBody", () => {
@@ -47,6 +48,39 @@ describe("validateBody", () => {
     expect(payload.error).toContain("content");
   });
 
+  it("formats the error as 'Invalid request body: <path> <message>'", async () => {
+    const result = await validateBody(
+      jsonRequest({ content: "ok", attachment_ids: ["a", 2] }),
+      schema,
+    );
+    if (!(result instanceof Response)) throw new Error("expected Response");
+    const payload = (await result.json()) as { error: string; code: string };
+
+    expect(payload.code).toBe("INVALID_BODY");
+    expect(payload.error).toMatch(
+      /^Invalid request body: attachment_ids\.1 \S/,
+    );
+  });
+
+  it("names the body when the root value is not an object", async () => {
+    const result = await validateBody(jsonRequest([1, 2]), schema);
+    if (!(result instanceof Response)) throw new Error("expected Response");
+    const payload = (await result.json()) as { error: string };
+
+    expect(payload.error).toMatch(/^Invalid request body: body \S/);
+  });
+
+  it("does not echo the rejected value back to the client", async () => {
+    const secret = "do-not-reflect-this-value";
+    const result = await validateBody(
+      jsonRequest({ content: [secret] }),
+      schema,
+    );
+    if (!(result instanceof Response)) throw new Error("expected Response");
+
+    expect(JSON.stringify(await result.json())).not.toContain(secret);
+  });
+
   it("rejects non-JSON bodies with INVALID_JSON", async () => {
     const badRequest = new Request("https://meet.test/api/x", {
       method: "POST",
@@ -67,5 +101,17 @@ describe("validateBody", () => {
       schema,
     );
     expect(result).toBeInstanceOf(Response);
+  });
+
+  it("strips unknown keys from a plain struct and keeps them on a loose one", async () => {
+    const body = { content: "x", extra: true };
+    const stripped = await validateBody(jsonRequest(body), schema);
+    const kept = await validateBody(
+      jsonRequest(body),
+      looseStruct({ content: Schema.String }),
+    );
+
+    expect(stripped).toEqual({ content: "x" });
+    expect(kept).toEqual({ content: "x", extra: true });
   });
 });

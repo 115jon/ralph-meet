@@ -1,17 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { looseStruct, withDefault } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { executeBroadcast } from "@/services/service-helpers";
 import { getOrCreateDM, listDMs } from "@/services/social.service";
 
-const dmCreateSchema = z
-  .object({
-    target_user_id: z.string().default(""),
-  })
-  .passthrough();
+const dmCreateSchema = looseStruct({
+  target_user_id: withDefault(Schema.String, ""),
+});
 
 // GET /api/dms — list all DM channels for the authenticated user
 const GET = async ({ request: _request, params: _params }: any) => {

@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { looseStruct } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { updateMemberRoles } from "@/services/role.service";
@@ -11,11 +12,9 @@ import {
   executeInvalidation,
 } from "@/services/service-helpers";
 
-export const memberRolesBodySchema = z
-  .object({
-    roleIds: z.array(z.string()).optional(),
-  })
-  .passthrough();
+export const memberRolesBodySchema = looseStruct({
+  roleIds: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+});
 
 // PUT /api/servers/:id/members/:userId/roles — update a member's roles
 const PUT = async ({ request, params }: any) => {

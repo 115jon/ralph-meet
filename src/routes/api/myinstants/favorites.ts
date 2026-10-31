@@ -1,27 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { looseStruct } from "@/lib/schema";
 import { validateBody } from "@/lib/validate-body";
 import { getSoundboardUploadUrl } from "@/lib/voice/soundboard-media";
 
-export const myInstantsFavoriteBodySchema = z
-  .object({
-    action: z.string().optional(),
-    sound: z
-      .object({
-        id: z.string().optional(),
-        title: z.string().optional(),
-        url: z.string().optional(),
-        color: z.string().optional(),
-        soundType: z.string().optional(),
-        emoji: z.string().optional(),
-        serverId: z.string().optional(),
-        source_server_id: z.string().optional(),
-      })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
+export const myInstantsFavoriteBodySchema = looseStruct({
+  action: Schema.optional(Schema.String),
+  sound: Schema.optional(
+    looseStruct({
+      id: Schema.optional(Schema.String),
+      title: Schema.optional(Schema.String),
+      url: Schema.optional(Schema.String),
+      color: Schema.optional(Schema.String),
+      soundType: Schema.optional(Schema.String),
+      emoji: Schema.optional(Schema.String),
+      serverId: Schema.optional(Schema.String),
+      source_server_id: Schema.optional(Schema.String),
+    }),
+  ),
+});
 
 const GET = async ({ request }: { request: Request }) => {
   const authResult = await requireAuth(request);

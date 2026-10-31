@@ -15,6 +15,7 @@ import {
 } from "@/lib/desktop-auth";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { safeParse } from "@/lib/schema";
 import { DisplayNameSchema, UsernameSchema } from "@/lib/validations";
 import { useChatStore } from "@/stores/chat-store";
 import { useAuth, useUser } from "@kova/react";
@@ -79,7 +80,7 @@ function ProfileFieldRow({
       setCheckedUsername(normalized);
       return undefined;
     }
-    if (!UsernameSchema.safeParse(draft).success) {
+    if (!safeParse(UsernameSchema, draft).success) {
       setUsernameCheck("invalid");
       setCheckedUsername(null);
       return undefined;
@@ -140,11 +141,11 @@ function ProfileFieldRow({
 
     const parsed =
       field === "username"
-        ? UsernameSchema.safeParse(draft)
-        : DisplayNameSchema.safeParse(draft);
+        ? safeParse(UsernameSchema, draft)
+        : safeParse(DisplayNameSchema, draft);
     if (!parsed.success) {
       if (field === "username") setUsernameCheck("invalid");
-      setError(parsed.error.issues[0]?.message ?? "Invalid value");
+      setError(parsed.issues[0]?.message ?? "Invalid value");
       return;
     }
     const nextValue = parsed.data;
@@ -231,7 +232,7 @@ function ProfileFieldRow({
                       setUsernameCheck(
                         normalized === value.trim().toLowerCase()
                           ? "available"
-                          : UsernameSchema.safeParse(nextDraft).success
+                          : safeParse(UsernameSchema, nextDraft).success
                             ? "checking"
                             : "invalid",
                       );

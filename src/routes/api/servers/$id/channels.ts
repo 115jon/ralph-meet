@@ -7,6 +7,7 @@ import {
   getVisibleChannels,
   requirePermission,
 } from "@/lib/require-permission";
+import { safeParse } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { CreateChannelSchema } from "@/lib/validations";
 import { createChannel, listServerChannels } from "@/services/channel.service";
@@ -15,8 +16,6 @@ import {
   executeBroadcast,
   executeInvalidation,
 } from "@/services/service-helpers";
-
-import { z } from "zod";
 
 // GET /api/servers/:id/channels — list channels in a server
 const GET = async ({ request, params }: any) => {
@@ -73,16 +72,20 @@ const POST = async ({ request, params }: any) => {
   );
   if (permResult instanceof Response) return permResult;
 
-  let body;
+  let rawBody: unknown;
   try {
-    const rawBody = await request.json();
-    body = CreateChannelSchema.parse(rawBody);
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      return Response.json({ error: err.issues[0].message }, { status: 400 });
-    }
+    rawBody = await request.json();
+  } catch {
     return apiError("Invalid request body", 400);
   }
+  const parsed = safeParse(CreateChannelSchema, rawBody);
+  if (!parsed.success) {
+    return Response.json(
+      { error: parsed.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
+  }
+  const body = parsed.data;
 
   try {
     const result = await createChannel(db, serverId, userId, body);

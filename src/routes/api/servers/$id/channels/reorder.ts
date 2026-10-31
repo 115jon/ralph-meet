@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { safeParse } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { reorderChannels } from "@/services/channel.service";
 import {
@@ -10,31 +11,36 @@ import {
   executeInvalidation,
 } from "@/services/service-helpers";
 
-import { z } from "zod";
+import { Schema } from "effect";
 
-const ReorderSchema = z
-  .object({
-    channels: z
-      .array(
-        z.object({
-          id: z.string(),
-          position: z.number().int().min(0),
-          category_id: z.string().nullable(),
+const ReorderSchema = Schema.Struct({
+  channels: Schema.optional(
+    Schema.mutable(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+          category_id: Schema.NullOr(Schema.String),
         }),
-      )
-      .optional(),
-    categories: z
-      .array(
-        z.object({
-          id: z.string(),
-          rank: z.number().int().min(0),
+      ),
+    ),
+  ),
+  categories: Schema.optional(
+    Schema.mutable(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          rank: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
         }),
-      )
-      .optional(),
-  })
-  .refine((d) => (d.channels?.length ?? 0) + (d.categories?.length ?? 0) > 0, {
-    message: "Must provide at least one channel or category to reorder",
-  });
+      ),
+    ),
+  ),
+}).check(
+  Schema.makeFilter(
+    (d) => (d.channels?.length ?? 0) + (d.categories?.length ?? 0) > 0,
+    { message: "Must provide at least one channel or category to reorder" },
+  ),
+);
 
 // PATCH /api/servers/:id/channels/reorder — batch update positions
 const PATCH = async ({ request, params }: any) => {
@@ -52,10 +58,10 @@ const PATCH = async ({ request, params }: any) => {
   if (permResult instanceof Response) return permResult;
 
   const raw = await request.json();
-  const parsed = ReorderSchema.safeParse(raw);
+  const parsed = safeParse(ReorderSchema, raw);
   if (!parsed.success) {
     return Response.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { error: parsed.issues[0]?.message ?? "Invalid input" },
       { status: 400 },
     );
   }

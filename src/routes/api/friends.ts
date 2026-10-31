@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { looseStruct, withDefault } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { executeBroadcast } from "@/services/service-helpers";
@@ -13,24 +14,18 @@ import {
   sendFriendRequest,
 } from "@/services/social.service";
 
-const friendRequestSchema = z
-  .object({
-    username: z.string().default(""),
-  })
-  .passthrough();
+const friendRequestSchema = looseStruct({
+  username: withDefault(Schema.String, ""),
+});
 
-const friendRelationshipSchema = z
-  .object({
-    target_user_id: z.string().default(""),
-    action: z.string().default(""),
-  })
-  .passthrough();
+const friendRelationshipSchema = looseStruct({
+  target_user_id: withDefault(Schema.String, ""),
+  action: withDefault(Schema.String, ""),
+});
 
-const removeFriendSchema = z
-  .object({
-    target_user_id: z.string().default(""),
-  })
-  .passthrough();
+const removeFriendSchema = looseStruct({
+  target_user_id: withDefault(Schema.String, ""),
+});
 
 // GET /api/friends — list all relationships for the authenticated user
 const GET = async ({ request: _request, params: _params }: any) => {

@@ -20,7 +20,8 @@ import { getUserChannelPermissions } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { logger } from "@/lib/logger";
 import { validateBody } from "@/lib/validate-body";
-import { z } from "zod";
+import { Schema } from "effect";
+import { withDefault } from "@/lib/schema";
 import {
   createMessage,
   deleteMessage,
@@ -89,12 +90,14 @@ export const GET = async ({ request, params }: any) => {
 // Permissive schema: validates structure only (types + shape), not business
 // rules. The content-or-attachments requirement is enforced separately below,
 // exactly as before, so existing clients are unaffected.
-const messageCreateSchema = z.object({
-  content: z.string().max(4000).default(""),
-  reply_to_id: z.string().optional(),
-  nonce: z.string().optional(),
-  attachment_ids: z.array(z.string()).optional(),
-  nsfw_attachment_ids: z.array(z.string()).optional(),
+const messageCreateSchema = Schema.Struct({
+  content: withDefault(Schema.String.check(Schema.isMaxLength(4000)), ""),
+  reply_to_id: Schema.optional(Schema.String),
+  nonce: Schema.optional(Schema.String),
+  attachment_ids: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  nsfw_attachment_ids: Schema.optional(
+    Schema.mutable(Schema.Array(Schema.String)),
+  ),
 });
 
 // POST /api/channels/:id/messages — send a message

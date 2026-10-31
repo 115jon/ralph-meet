@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { describeApiError } from "@/lib/api-errors";
 import { cn } from "@/lib/utils";
-import { sanitizeChannelName } from "@/lib/validations";
+import { sanitizeChannelName } from "@/lib/channel-name";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallback, useId, useRef, useState } from "react";
 

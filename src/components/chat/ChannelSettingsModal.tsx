@@ -16,7 +16,7 @@ import { apiPatch } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
 import { useClientDateFormatter } from "@/lib/client-date-format";
 import type { Channel } from "@/lib/types";
-import { sanitizeChannelName } from "@/lib/validations";
+import { sanitizeChannelName } from "@/lib/channel-name";
 import {
   useEffect,
   useId,
