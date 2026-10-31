@@ -198,20 +198,17 @@ function buildStarGeometry(
 }
 
 function buildDebrisField(count: number, loopLength: number) {
-  return Array.from(
-    { length: count },
-    (_, index): DebrisState => ({
-      distance: 20 + (index / count) * loopLength,
-      radius: 6.8 + (index % 19) * 0.36,
-      angle: (index * 0.73) % (Math.PI * 2),
-      lift: ((index * 17) % 29) / 29 - 0.5,
-      scale: 0.08 + (index % 7) * 0.022,
-      drift: 0.18 + (index % 11) * 0.045,
-      spinX: 0.18 + (index % 5) * 0.09,
-      spinY: 0.26 + (index % 7) * 0.06,
-      spinZ: 0.16 + (index % 9) * 0.05,
-    }),
-  );
+  return Array.from({ length: count }, (_, index): DebrisState => ({
+    distance: 20 + (index / count) * loopLength,
+    radius: 6.8 + (index % 19) * 0.36,
+    angle: (index * 0.73) % (Math.PI * 2),
+    lift: ((index * 17) % 29) / 29 - 0.5,
+    scale: 0.08 + (index % 7) * 0.022,
+    drift: 0.18 + (index % 11) * 0.045,
+    spinX: 0.18 + (index % 5) * 0.09,
+    spinY: 0.26 + (index % 7) * 0.06,
+    spinZ: 0.16 + (index % 9) * 0.05,
+  }));
 }
 
 function createGhostShip(colorHex: string) {

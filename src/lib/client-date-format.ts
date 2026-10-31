@@ -65,7 +65,7 @@ export function useClientReferenceTime(): number | null {
 
   useEffect(() => {
     // Date.now() is intentionally read only after the stable server snapshot.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks-js/set-state-in-effect
     setReferenceTime(Date.now());
   }, []);
 

@@ -154,7 +154,7 @@ function WordleFixture({ surface }: { surface: string }) {
       return original(input, init);
     };
     // Fixture setup: the stub must exist before the stage mounts and fetches.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks-js/set-state-in-effect
     setReady(true);
     return () => {
       window.fetch = original;

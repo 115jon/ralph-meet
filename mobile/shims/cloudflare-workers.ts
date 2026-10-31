@@ -11,9 +11,9 @@ export const env = new Proxy(
   {
     get(_target, prop) {
       console.warn(
-        `[Desktop Shim] Attempted to access cloudflare:workers.env.${String(prop)} — not available in desktop mode`
+        `[Desktop Shim] Attempted to access cloudflare:workers.env.${String(prop)} — not available in desktop mode`,
       );
       return undefined;
     },
-  }
+  },
 );

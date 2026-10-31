@@ -29,11 +29,11 @@ with this component through its documented IPC boundary.
 
 ### Components (name, upstream version, license) — Requirement 11.5
 
-| Component name | Files | Built from (upstream basis) | Pinned upstream identifier | License |
-| --- | --- | --- | --- | --- |
-| Forked_Hook_DLL — graphics-hook payload | `graphics-hook64.dll`, `graphics-hook32.dll` | OBS `plugins/win-capture/graphics-hook` (+ `shared/obs-hook-config/`) | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2 |
-| Owned_Injector — inject helper | `inject-helper64.exe`, `inject-helper32.exe` | OBS `plugins/win-capture/inject-helper` | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2 |
-| Owned_Injector — graphics-offsets helper | `get-graphics-offsets64.exe`, `get-graphics-offsets32.exe` | OBS `plugins/win-capture/get-graphics-offsets` | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2 |
+| Component name                           | Files                                                      | Built from (upstream basis)                                           | Pinned upstream identifier                             | License |
+| ---------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ | ------- |
+| Forked_Hook_DLL — graphics-hook payload  | `graphics-hook64.dll`, `graphics-hook32.dll`               | OBS `plugins/win-capture/graphics-hook` (+ `shared/obs-hook-config/`) | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2   |
+| Owned_Injector — inject helper           | `inject-helper64.exe`, `inject-helper32.exe`               | OBS `plugins/win-capture/inject-helper`                               | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2   |
+| Owned_Injector — graphics-offsets helper | `get-graphics-offsets64.exe`, `get-graphics-offsets32.exe` | OBS `plugins/win-capture/get-graphics-offsets`                        | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2   |
 
 - **Upstream project:** OBS Studio (`obs-studio`), the OBS Project.
 - **Upstream source:** <https://github.com/obsproject/obs-studio>
@@ -47,7 +47,7 @@ with this component through its documented IPC boundary.
 - **License:** GNU General Public License, version 2 (GPLv2). The full,
   verbatim license text ships with the component at
   [`src-tauri/resources/obs-capture/LICENSE-GPLv2.txt`](src-tauri/resources/obs-capture/LICENSE-GPLv2.txt).
-- **In-bundle attribution:** the per-bundle attribution that ships *inside* the
+- **In-bundle attribution:** the per-bundle attribution that ships _inside_ the
   Owned_Capture_Component is
   [`src-tauri/resources/obs-capture/ATTRIBUTION.md`](src-tauri/resources/obs-capture/ATTRIBUTION.md);
   see also

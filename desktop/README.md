@@ -11,6 +11,7 @@ Desktop client for Ralph Meet built with [Tauri 2.0](https://tauri.app/).
 ## Development
 
 1. **Start the web dev server** (from the project root):
+
    ```bash
    pnpm run dev
    ```

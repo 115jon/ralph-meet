@@ -51,10 +51,20 @@ Install dependencies with the repository's pinned package manager and run the
 available validation commands:
 
 ```powershell
+pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
 ```
+
+Formatting is `oxfmt`, linting is `oxlint` (config in `oxlint.config.ts`, with the
+vendored anti-slop rules under `tools/oxlint/anti-slop`), and `lefthook` runs
+format, lint and typecheck on commit. `pnpm format` rewrites files, `pnpm lint:fix`
+applies safe lint fixes.
+
+`pnpm perf` builds and runs Lighthouse CI against `vite preview` (config in
+`lighthouserc.cjs`, reports in `.lighthouseci/reports`). Set
+`LHCI_KOVA_SESSION_TOKEN` to include the signed-in chat shell.
 
 ### Local sign-in (Kova app)
 

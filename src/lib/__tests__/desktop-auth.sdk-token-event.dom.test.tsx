@@ -35,7 +35,7 @@ function RootShell() {
   const [sessionToken, setSessionToken] = useState<string | undefined>();
   const state = useRef({ seenSessionToken: false });
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks-js/set-state-in-effect
     setSessionToken(getDesktopAuthHandoffToken() ?? undefined);
     return subscribeDesktopTokenChanges((token) =>
       setSessionToken(token ?? undefined),
