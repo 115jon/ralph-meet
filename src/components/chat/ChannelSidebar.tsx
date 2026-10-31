@@ -82,7 +82,7 @@ import {
   useState,
 } from "react";
 import ChannelInviteModal from "./ChannelInviteModal";
-import ChannelSettingsModal from "./ChannelSettingsModal";
+import { LazyChannelSettingsModal } from "./lazy-panels";
 import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
@@ -1273,20 +1273,22 @@ export default function ChannelSidebar({
           />
         )}
         {serverId && renderedChannelSettings && (
-          <ChannelSettingsModal
-            open={shouldRenderChannelSettings}
-            serverId={serverId}
-            channel={renderedChannelSettings}
-            onUpdated={(updates) =>
-              dispatch({
-                type: "UPSERT_CHANNEL",
-                channel: { ...renderedChannelSettings, ...updates },
-              })
-            }
-            onClose={() =>
-              uiDispatch({ type: "SET_CHANNEL_SETTINGS", value: null })
-            }
-          />
+          <Suspense fallback={null}>
+            <LazyChannelSettingsModal
+              open={shouldRenderChannelSettings}
+              serverId={serverId}
+              channel={renderedChannelSettings}
+              onUpdated={(updates) =>
+                dispatch({
+                  type: "UPSERT_CHANNEL",
+                  channel: { ...renderedChannelSettings, ...updates },
+                })
+              }
+              onClose={() =>
+                uiDispatch({ type: "SET_CHANNEL_SETTINGS", value: null })
+              }
+            />
+          </Suspense>
         )}
         {serverId && renderedInviteChannel && (
           <ChannelInviteModal

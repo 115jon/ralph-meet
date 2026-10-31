@@ -1,7 +1,7 @@
 import { NotFoundPage, RouteErrorPage } from "@/components/PageState";
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/toast";
+import { DeferredToaster } from "@/components/DeferredToaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import {
@@ -148,7 +148,7 @@ function RootComponent() {
       <AppActiveRoot />
       <TooltipProvider>
         <Outlet />
-        <Toaster />
+        <DeferredToaster />
       </TooltipProvider>
     </ThemeProvider>
   );

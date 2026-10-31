@@ -10,6 +10,7 @@
     "icons:generate": "node scripts/generate-phosphor-icons.mjs",
     "preview": "vite preview",
     "perf": "pnpm run build && lhci autorun",
+    "perf:budgets": "pnpm run build && node scripts/check-bundle-budgets.mjs",
     "doctor": "react-doctor --project ralph-meet,desktop,mobile --blocking none -y",
     "doctor:verbose": "react-doctor --project ralph-meet,desktop,mobile --blocking none --verbose -y",
     "doctor:changed": "react-doctor --project ralph-meet,desktop,mobile --blocking none --scope changed -y",
