@@ -178,7 +178,9 @@ describe("entry path imports", () => {
     });
 
     it("finds effect through the chat store, and stops at the carriers", () => {
-      const hook = path.join(SRC, "hooks/useIsSpeaking.ts");
+      // useUserResolution imports the chat store statically. (useIsSpeaking
+      // used to, until speaking-source.ts cut it off the store.)
+      const hook = path.join(SRC, "hooks/useUserResolution.ts");
 
       expect(
         chainsToEffect(hook, []).some((chain) =>
