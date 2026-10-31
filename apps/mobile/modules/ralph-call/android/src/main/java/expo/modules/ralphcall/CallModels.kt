@@ -8,6 +8,8 @@ internal data class CallInfo(
   val deafened: Boolean,
   /** Deep link the notification opens, e.g. ralphmeet://call. */
   val openUrl: String?,
+  /** Speaker rather than earpiece when no headset is connected. */
+  val speakerFirst: Boolean,
   val startedAt: Long,
 )
 

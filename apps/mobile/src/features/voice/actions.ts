@@ -6,6 +6,10 @@ import {
   startCallService,
   stopCallService,
 } from "@/features/call-service/service";
+import {
+  speakingLevel,
+  useCallPreferences,
+} from "@/features/preferences/call-preferences";
 import { showToast } from "@/ui";
 
 import { voiceRoomSlug } from "./protocol";
@@ -18,6 +22,8 @@ import { useVoiceStore } from "./store";
 let session: VoiceSession | null = null;
 /** Bumped by every join and leave; a join that finds it moved gives up. */
 let generation = 0;
+/** The call screen is up with the app in front: pull remote video. */
+let watchingVideo = false;
 
 export interface JoinTarget {
   readonly serverId: string;
@@ -47,17 +53,21 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
   const user = useSession.getState().user;
   if (!user) return;
   const mine = ++generation;
+  // Read at launch (app/_layout); set synchronously so the call screen,
+  // opened right after this call, finds the call already in the store.
+  const { joinMuted } = useCallPreferences.getState();
   useVoiceStore.setState({
     call: {
       serverId: target.serverId,
       channelId: target.channelId,
       channelName: target.channelName,
       status: "joining",
-      muted: false,
+      muted: joinMuted,
       deafened: false,
       selfId: null,
       participants: {},
       speaking: {},
+      videos: {},
     },
   });
 
@@ -103,8 +113,9 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
       avatarUrl: user.avatar_url,
     },
     microphone,
-    muted: false,
+    muted: joinMuted,
     deafened: false,
+    speakingLevel,
     onEnd: (end) => {
       engine.stopCallAudio();
       if (session === next) stopCallService();
@@ -123,6 +134,7 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     },
   });
   session = next;
+  next.setWatchingVideo(watchingVideo);
   next.start();
   // While the app is still in front: Android only starts the microphone
   // foreground service from a visible app.
@@ -145,6 +157,15 @@ export function toggleMute(): void {
 
 export function toggleDeafen(): void {
   session?.toggleDeafen();
+}
+
+/**
+ * Whether the call screen is showing (and the app is in front), so remote
+ * camera and screen video is worth pulling. Audio is pulled regardless.
+ */
+export function setWatchingVideo(watching: boolean): void {
+  watchingVideo = watching;
+  session?.setWatchingVideo(watching);
 }
 
 /** The app is in front again. */

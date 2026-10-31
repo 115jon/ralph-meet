@@ -6,8 +6,6 @@
 // audioLevel (0..1), polled a few times a second, nothing per frame.
 
 const POLL_MS = 250;
-/** Level that counts as voice; quiet rooms sit near 0.001-0.01. */
-const START_LEVEL = 0.035;
 /** Silence this long ends a burst, so pauses between words do not flicker. */
 const HOLD_MS = 600;
 
@@ -34,12 +32,18 @@ function readAudioLevel(report: Iterable<[string, unknown]>): number | null {
 export interface SpeakingDetectorOptions {
   /** The microphone's sender now, or null (not published, muted). */
   readonly sender: () => RTCRtpSender | null;
+  /**
+   * Level (0..1) that counts as voice, read every poll so a settings change
+   * applies at once. Quiet rooms sit near 0.001-0.01.
+   */
+  readonly level: () => number;
   readonly onChange: (speaking: boolean) => void;
 }
 
 /** Polls until the returned stop() is called. */
 export function startSpeakingDetector({
   sender,
+  level: threshold,
   onChange,
 }: SpeakingDetectorOptions): () => void {
   let speaking = false;
@@ -68,7 +72,7 @@ export function startSpeakingDetector({
       if (stopped) return;
       const level = readAudioLevel(report);
       const now = Date.now();
-      if (level !== null && level >= START_LEVEL) {
+      if (level !== null && level >= threshold()) {
         lastVoiceAt = now;
         set(true);
       } else if (now - lastVoiceAt >= HOLD_MS) {

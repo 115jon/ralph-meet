@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSession } from "@/features/auth/session";
 import { useCurrentUser } from "@/features/auth/use-current-user";
 import { ImageViewer } from "@/features/media/ImageViewer";
+import { loadCallPreferences } from "@/features/preferences/call-preferences";
 import { useRealtime } from "@/features/realtime/use-realtime";
 import { FONT_ASSETS, ThemeProvider, useTheme } from "@/theme";
 import { ToastHost } from "@/ui";
@@ -55,6 +56,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     void useSession.getState().hydrate();
+    void loadCallPreferences();
   }, []);
 
   useEffect(() => {

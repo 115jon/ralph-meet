@@ -26,6 +26,7 @@ import {
   type TrackInfo,
   type VoiceState,
 } from "./protocol";
+import { isPullableVideo, RemoteVideo } from "./remote-video";
 import { startSpeakingDetector } from "./speaking";
 import { updateCall, type CallParticipant, type CallStatus } from "./store";
 import type { CallTarget } from "./tickets";
@@ -45,6 +46,10 @@ import { PartyTracksTransport } from "./transport";
 // 3. VoiceReady: the room's tracks are pulled (after our publication is
 //    re-announced, so pulls queue behind the push on the shared session) and
 //    the speaking snapshot is applied. Speaking flags flow both ways from then.
+//
+// Audio is always pulled. Camera and screen video are pulled only while the
+// call screen watches (setWatchingVideo); ./remote-video keeps those offers
+// apart so starting and stopping video never touches an audio pull.
 //
 // Leave says goodbye on both sockets, closes them and the peer connection,
 // stops the microphone and leaves the channel on the chat socket.
@@ -91,6 +96,8 @@ export interface SessionOptions {
   readonly microphone: MediaStream;
   readonly muted: boolean;
   readonly deafened: boolean;
+  /** The microphone level (0..1) that counts as speaking, read live. */
+  readonly speakingLevel: () => number;
   readonly onEnd: (end: SessionEnd) => void;
 }
 
@@ -119,13 +126,12 @@ function mergeParticipant(
         : (previous?.avatarUrl ?? null),
     muted: state.self_mute ?? previous?.muted ?? false,
     deafened: state.self_deaf ?? previous?.deafened ?? false,
+    camera: state.self_video ?? previous?.camera ?? false,
+    sharing: state.self_stream ?? previous?.sharing ?? false,
   };
 }
 
-/**
- * Only audio is pulled for now. TODO(mobile video): pull camera and screen
- * tracks and render them with react-native-webrtc's RTCView in the tiles.
- */
+/** Audio publications, always pulled (video goes through RemoteVideo). */
 function pullable(tracks: readonly TrackInfo[]): TrackInfo[] {
   return tracks.filter(
     (track) => track.kind === "audio" && Boolean(track.sfu_track_name),
@@ -158,6 +164,7 @@ export class VoiceSession {
   /** Pulled audio by alias, to mute for deafen. */
   private readonly remoteAudio = new Map<string, MediaStreamTrack>();
   private readonly lastRepublishRequestAt = new Map<string, number>();
+  private readonly video = new RemoteVideo(() => this.media);
 
   private peerState: RTCPeerConnectionState = "new";
   private roomReady = false;
@@ -243,6 +250,7 @@ export class VoiceSession {
     });
     this.stopSpeakingDetector = startSpeakingDetector({
       sender: () => this.microphoneSender(),
+      level: options.speakingLevel,
       onChange: (speaking) => this.onLocalSpeaking(speaking),
     });
   }
@@ -262,6 +270,15 @@ export class VoiceSession {
 
   leave(): void {
     this.end({ reason: "left" });
+  }
+
+  /**
+   * Pull remote camera and screen video while true. The call screen sets it
+   * while visible with the app in front; audio is unaffected either way.
+   */
+  setWatchingVideo(watching: boolean): void {
+    if (this.ended) return;
+    this.video.setWatching(watching);
   }
 
   /** As the web's setIsMuted: unmuting while deafened undeafens too. */
@@ -357,6 +374,10 @@ export class VoiceSession {
           d: { track_names: [trackName] },
         }),
       onRemoteTrack: ({ action, track, trackInfo }) => {
+        if (track.kind === "video") {
+          this.video.onTrack(action, track, trackInfo);
+          return;
+        }
         if (track.kind !== "audio") return;
         if (action === "add") {
           // Remote audio plays through WebRTC's own audio device; deafen
@@ -404,6 +425,8 @@ export class VoiceSession {
       this.deferredRemoteTracks.clear();
       media.offerTracks(deferred);
     }
+    const video = this.video.pullable();
+    if (video.length > 0) media.offerTracks(video);
     this.refreshStatus();
   }
 
@@ -414,6 +437,7 @@ export class VoiceSession {
     this.transport = null;
     this.mediaParticipantId = null;
     this.remoteAudio.clear();
+    this.video.clearStreams();
   }
 
   private microphoneSender(): RTCRtpSender | null {
@@ -445,6 +469,8 @@ export class VoiceSession {
       avatarUrl: this.identity.avatarUrl,
       muted: this.muted,
       deafened: this.deafened,
+      camera: false,
+      sharing: false,
     };
     this.replaceParticipants(participants, self);
     // The room starts us muted; tell it (and the channel) where we are.
@@ -500,6 +526,7 @@ export class VoiceSession {
     action: "join" | "leave" | "update",
   ): void {
     if (action === "leave") {
+      this.video.forgetParticipant(participant.id);
       this.media?.removeParticipant(participant.id);
       updateCall((call) => {
         if (!call.participants[participant.id]) return call;
@@ -587,11 +614,15 @@ export class VoiceSession {
       if (call.selfId && this.localSpeaking) next[call.selfId] = true;
       return { ...call, speaking: next };
     });
+    this.video.replaceOffers(remote.filter(isPullableVideo));
     if (this.media) {
       // Announce our publication before the replayed pulls queue their
       // negotiation behind it on the shared session.
       this.media.reannouncePublications();
-      this.media.syncRemoteTracks(pullable(remote));
+      this.media.syncRemoteTracks([
+        ...pullable(remote),
+        ...this.video.pullable(),
+      ]);
     } else {
       for (const track of pullable(remote)) {
         this.deferredRemoteTracks.set(track.track_name, track);
@@ -603,6 +634,10 @@ export class VoiceSession {
 
   private onTrackOffered(track: TrackInfo): void {
     if (this.isOwnTrack(track)) return;
+    if (isPullableVideo(track)) {
+      this.video.offer(track);
+      return;
+    }
     const tracks = pullable([track]);
     if (tracks.length === 0) return;
     if (this.media) this.media.offerTracks(tracks);
@@ -616,6 +651,7 @@ export class VoiceSession {
     for (const trackName of trackNames) {
       this.deferredRemoteTracks.delete(trackName);
     }
+    this.video.forget(trackNames);
     const stopped = trackNames.filter(
       (trackName) =>
         tracks?.some(
@@ -632,6 +668,7 @@ export class VoiceSession {
         this.deferredRemoteTracks.delete(trackName);
       }
     }
+    this.video.forgetParticipant(participantId);
     this.media?.removeParticipant(participantId);
     this.setSpeaking(participantId, false);
   }
@@ -806,6 +843,7 @@ export class VoiceSession {
     this.voice.stop();
     this.disposeMedia();
     this.deferredRemoteTracks.clear();
+    this.video.clear();
     stopStream(this.microphone);
     if (this.joinedChannel) sendVoiceChannelLeave(this.target.channelId);
     this.onEnd(end);

@@ -12,6 +12,11 @@ export interface CallOptions {
   readonly deafened: boolean;
   /** Deep link the notification opens, e.g. ralphmeet://call. */
   readonly openUrl?: string;
+  /**
+   * Start on the speaker (default) rather than the earpiece when no headset
+   * is connected. Read when the call starts.
+   */
+  readonly speakerFirst?: boolean;
 }
 
 export type AudioRouteType =

@@ -17,8 +17,11 @@ import androidx.annotation.RequiresApi
  * routes are the system's communication devices, Bluetooth included; below
  * that only speaker and earpiece (a wired headset takes over the earpiece).
  */
-internal class LegacyAudioRouter(context: Context, private val onRoutesChanged: () -> Unit) :
-  AudioRouter {
+internal class LegacyAudioRouter(
+  context: Context,
+  private val speakerFirst: Boolean,
+  private val onRoutesChanged: () -> Unit,
+) : AudioRouter {
   private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
   private val main = Handler(Looper.getMainLooper())
   private val previousMode = audio.mode
@@ -44,7 +47,7 @@ internal class LegacyAudioRouter(context: Context, private val onRoutesChanged: 
       startCommunicationRouting()
     } else {
       @Suppress("DEPRECATION")
-      audio.isSpeakerphoneOn = !audio.isWiredHeadsetOn && !audio.isBluetoothA2dpOn
+      audio.isSpeakerphoneOn = speakerFirst && !audio.isWiredHeadsetOn && !audio.isBluetoothA2dpOn
     }
     onRoutesChanged()
   }
@@ -86,8 +89,9 @@ internal class LegacyAudioRouter(context: Context, private val onRoutesChanged: 
   private fun startCommunicationRouting() {
     val devices = audio.availableCommunicationDevices
     val headset = devices.firstOrNull { routeType(it.type).let { t -> t == "bluetooth" || t == "wired" } }
-    val speaker = devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-    (headset ?: speaker)?.let { audio.setCommunicationDevice(it) }
+    val builtIn = if (speakerFirst) AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+    val fallback = devices.firstOrNull { it.type == builtIn }
+    (headset ?: fallback)?.let { audio.setCommunicationDevice(it) }
 
     val listener = AudioManager.OnCommunicationDeviceChangedListener { onRoutesChanged() }
     audio.addOnCommunicationDeviceChangedListener({ main.post(it) }, listener)
