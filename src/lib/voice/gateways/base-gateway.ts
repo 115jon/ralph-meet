@@ -1,5 +1,12 @@
 import { clog, ScopedLogger } from "@/lib/console-logger";
 import { TypedEventEmitter } from "@/lib/event-emitter";
+import {
+  GatewayCloseCode,
+  HEARTBEAT_FRAME,
+  parseGatewayFrame,
+  type GatewayFrame,
+  type PayloadDecodeResult,
+} from "@/lib/gateway-protocol";
 import type { ClientMessage, ServerMessage } from "@/lib/types";
 import { HeartbeatManager } from "../heartbeat-manager";
 import { markVoice } from "../latency-marks";
@@ -13,6 +20,7 @@ export interface BaseGatewayEvents {
 
 export abstract class BaseGateway<
   EventMap extends Record<string, any>,
+  Message extends ServerMessage = ServerMessage,
 > extends TypedEventEmitter<EventMap & BaseGatewayEvents> {
   protected ws: WebSocket | null = null;
   protected reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -28,17 +36,23 @@ export abstract class BaseGateway<
   protected readonly log: ScopedLogger;
   protected readonly heartbeat: HeartbeatManager;
 
+  /**
+   * @param decodeFrame The endpoint's payload decoder from
+   *   @/lib/gateway-protocol (built once at module load).
+   */
   constructor(
     public readonly label: string,
-    private heartbeatOpcode: number,
+    private readonly decodeFrame: (
+      frame: GatewayFrame,
+    ) => PayloadDecodeResult<Message>,
   ) {
     super();
     this.log = clog(label);
-    const HEARTBEAT_MSG = JSON.stringify({ op: this.heartbeatOpcode });
 
     this.heartbeat = new HeartbeatManager(label, {
       sendBeat: () => {
-        if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(HEARTBEAT_MSG);
+        if (this.ws?.readyState === WebSocket.OPEN)
+          this.ws.send(HEARTBEAT_FRAME);
       },
       onZombie: () => this.ws?.close(),
     });
@@ -85,8 +99,8 @@ export abstract class BaseGateway<
 
     socket.onmessage = (event) => {
       if (this.ws !== socket) return;
-      const msg = JSON.parse(event.data) as ServerMessage;
-      // Emit raw message for subclass handling
+      const msg = this.decodeServerFrame(event.data);
+      if (!msg) return;
       this.emit("message", msg as unknown as EventMap["message"]);
       this.handleMessage(msg);
     };
@@ -111,7 +125,7 @@ export abstract class BaseGateway<
           return;
         }
 
-        if (event.code === 4008) {
+        if (event.code === GatewayCloseCode.AdmissionRejected) {
           this.log.warn("Realtime admission was rejected. Not reconnecting.");
           this.isLeaving = true;
           this.emit("disconnected", undefined as never);
@@ -164,9 +178,41 @@ export abstract class BaseGateway<
   }
 
   /**
+   * Decodes one server frame at the socket edge. A frame that is not JSON,
+   * has no opcode, or fails its opcode's schema is logged and dropped; an
+   * opcode this gateway does not handle is ignored. Never throws.
+   */
+  private decodeServerFrame(data: unknown): Message | null {
+    if (typeof data !== "string") {
+      this.log.warn("Dropping non-text gateway frame");
+      return null;
+    }
+    const parsed = parseGatewayFrame(data);
+    if (!parsed.ok) {
+      this.log.warn(`Dropping gateway frame: ${parsed.message}`);
+      return null;
+    }
+    this.onFrame(parsed.frame);
+    const decoded = this.decodeFrame(parsed.frame);
+    if (decoded.ok) return decoded.message;
+    if (decoded.reason === "invalid-payload") {
+      this.log.warn(
+        `Dropping gateway frame op=${parsed.frame.op}: ${decoded.invalid}`,
+      );
+    }
+    return null;
+  }
+
+  /**
+   * Sees every well-formed frame before its payload is decoded, including
+   * opcodes this gateway ignores (RoomGateway tracks replay cursors here).
+   */
+  protected onFrame(_frame: GatewayFrame): void {}
+
+  /**
    * Subclasses must implement this to interpret messages and manage identification.
    */
-  protected abstract handleMessage(msg: ServerMessage): void;
+  protected abstract handleMessage(msg: Message): void;
 
   /**
    * Subclasses must implement this to define how reconnect is re-issued.

@@ -786,3 +786,66 @@ describe("VoiceGateway", () => {
     ).toBe(true);
   });
 });
+
+describe("VoiceGateway frame decoding", () => {
+  beforeEach(() => {
+    TestWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockReset();
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    vi.stubGlobal("WebSocket", TestWebSocket);
+  });
+
+  it("drops malformed frames without throwing and keeps working", async () => {
+    const gateway = new VoiceGateway();
+    const voiceReady = vi.fn();
+    const speaking = vi.fn();
+    const offered = vi.fn();
+    gateway.on("voice-ready", voiceReady);
+    gateway.on("speaking", speaking);
+    gateway.on("track-offered", offered);
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token-1",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    const raw = (data: unknown) => socket.onmessage?.({ data } as MessageEvent);
+    const frame = (op: number, d?: unknown) =>
+      raw(JSON.stringify(d === undefined ? { op } : { op, d }));
+
+    expect(() => {
+      raw("{");
+      raw('"text"');
+      raw('{"d":{}}');
+      frame(VoiceOpcode.Hello, { heartbeat_interval: null });
+      frame(VoiceOpcode.VoiceReady, { tracks: "none" });
+      frame(VoiceOpcode.VoiceReady, { speaking: { p: "loud" } });
+      frame(VoiceOpcode.Speaking, { participant_id: "p" });
+      frame(VoiceOpcode.Video, { participant_id: "p", tracks: [1] });
+      frame(VoiceOpcode.StopTracks, { track_names: "screen" });
+      frame(VoiceOpcode.VoiceAppEvent, ["not", "an", "object"]);
+      frame(4242, { unknown: true });
+    }).not.toThrow();
+    expect(socket.sent).toEqual([]);
+    expect(voiceReady).not.toHaveBeenCalled();
+    expect(speaking).not.toHaveBeenCalled();
+    expect(offered).not.toHaveBeenCalled();
+
+    frame(VoiceOpcode.Hello, { heartbeat_interval: 45_000 });
+    frame(VoiceOpcode.VoiceReady, { participant_id: "participant-1" });
+    frame(VoiceOpcode.Speaking, { participant_id: "p", speaking: 1 });
+    expect(socket.sent.map((message) => JSON.parse(message).op)).toEqual([
+      VoiceOpcode.VoiceIdentify,
+    ]);
+    expect(voiceReady).toHaveBeenCalledOnce();
+    expect(speaking).toHaveBeenCalledWith({ participantId: "p", speaking: 1 });
+    gateway.disconnect();
+  });
+});

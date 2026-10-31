@@ -552,3 +552,69 @@ describe("chat gateway sign-in failure and first-load steps", () => {
     });
   });
 });
+
+describe("chat gateway frame decoding", () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockResolvedValue([]);
+    mocks.bootstrapChat.mockResolvedValue(undefined);
+    mocks.loadMessages.mockResolvedValue({
+      messages: [],
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+    });
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+  });
+
+  it("drops malformed frames without throwing and keeps the replay cursor", async () => {
+    const { gateway, dispatch } = createFixture();
+    gateway.initGateway("user-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const first = FakeWebSocket.instances[0]!;
+    first.open();
+    const raw = (data: unknown) =>
+      first.onmessage?.({ data } as MessageEvent<string>);
+
+    expect(() => {
+      raw("not-json");
+      raw("null");
+      raw("[1,2]");
+      raw('{"op":"8"}');
+      raw(new ArrayBuffer(2));
+      first.message({ op: 8, d: { heartbeat_interval: "soon" } });
+      first.message({ op: 18, d: { code: 4006 } });
+    }).not.toThrow();
+    expect(first.sent).toEqual([]);
+
+    first.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    // The wire bytes of Identify are unchanged by the codec.
+    expect(first.sent).toEqual([
+      '{"op":0,"d":{"name":"ChatClient","clerk_user_id":"user-1","platform":"web","supports_voice_state_deltas":true}}',
+    ]);
+    first.message({ op: 2, d: { participant_id: "session-1" } });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_CONNECT_STEP",
+      step: 3,
+    });
+
+    // A Dispatch that fails its schema is dropped, but its cursor counts, as
+    // does the cursor of an opcode this store does not know.
+    first.message({ op: 19, d: { seq: 3, event: 42 } });
+    first.message({ op: 4242, d: { seq: 5 } });
+    first.message({ op: 6, d: { seq: 99 } });
+
+    gateway.wake();
+    expect(first.sent.at(-1)).toBe('{"op":3}');
+    first.disconnect();
+
+    gateway.initGateway("user-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = FakeWebSocket.instances[1]!;
+    second.open();
+    second.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    expect(second.sent).toEqual([
+      '{"op":7,"d":{"session_id":"session-1","seq_ack":5}}',
+    ]);
+    gateway.disconnectGateway();
+  });
+});

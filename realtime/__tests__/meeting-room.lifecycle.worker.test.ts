@@ -10,6 +10,11 @@ import {
   createRealtimeAdmissionContext,
 } from "../realtime-admission";
 import { PERMISSIONS } from "../../src/lib/permissions";
+import {
+  GatewayOp,
+  HEARTBEAT_FRAME,
+  mainGatewayClientRules,
+} from "../../src/lib/gateway-protocol";
 
 async function createAdmissionHeaders(
   roomName: string,
@@ -3137,5 +3142,154 @@ describe("MeetingRoom lifecycle", () => {
 
     intentionalObserver.close();
     abruptObserver.close();
+  });
+});
+
+describe("MeetingRoom gateway protocol edge", () => {
+  /** A mistyped payload per opcode (non-objects are sent too). */
+  const MISTYPED_PAYLOADS = new Map<number, unknown>([
+    [GatewayOp.Identify, { name: 5 }],
+    [GatewayOp.Resume, { session_id: "s", seq_ack: "0" }],
+    [GatewayOp.VoiceStateUpdate, { self_mute: "yes" }],
+    [GatewayOp.MessageCreate, { channel_id: "c", content: 5 }],
+    [GatewayOp.MessageUpdate, { message_id: "m" }],
+    [GatewayOp.MessageDelete, { message_id: "m", channel_id: null }],
+    [GatewayOp.TypingStart, { channel_id: 1 }],
+    [GatewayOp.ReactionAdd, { channel_id: "c", message_id: "m", emoji: 1 }],
+    [GatewayOp.ReactionRemove, { channel_id: "c", message_id: "m" }],
+    [GatewayOp.ChannelSubscribe, {}],
+    [GatewayOp.ChannelUnsubscribe, { channel_id: ["c"] }],
+    [GatewayOp.PresenceUpdate, { status: 1 }],
+    [GatewayOp.VoiceChannelJoin, { channel_id: "c", self_mute: "no" }],
+    [GatewayOp.ServerSubscribe, { server_id: [] }],
+    [GatewayOp.CallInitiate, { target_user_id: "u" }],
+    [GatewayOp.CallAccept, { call_id: 1 }],
+    [GatewayOp.CallDecline, { call_id: null }],
+    [GatewayOp.CallEnd, {}],
+  ]);
+  const payloadOps = Object.entries(mainGatewayClientRules).flatMap(
+    ([op, rule]) => (rule ? [[Number(op), rule.invalid] as const] : []),
+  );
+
+  /** Everything a client frame could change, without heartbeat fields. */
+  async function roomState(roomName: string) {
+    return runInDurableObject(meetingRoom(roomName), (instance) => {
+      const live = instance as unknown as {
+        sessions: Map<unknown, Record<string, unknown>>;
+        channelSubscriptions: Map<string, unknown>;
+        serverSubscriptions: Map<string, unknown>;
+        pendingCalls: Map<string, unknown>;
+        spatialAudioStates: Map<string, unknown>;
+      };
+      return JSON.stringify({
+        sessions: [...live.sessions.values()].map((session) => {
+          const {
+            last_heartbeat: _lastHeartbeat,
+            seq: _seq,
+            ...rest
+          } = session;
+          return rest;
+        }),
+        channels: [...live.channelSubscriptions.keys()],
+        servers: [...live.serverSubscriptions.keys()],
+        calls: [...live.pendingCalls.keys()],
+        spatial: [...live.spatialAudioStates.keys()],
+      });
+    });
+  }
+
+  async function nextRawMessage(socket: WebSocket) {
+    const message = await new Promise<MessageEvent<string>>((resolve) => {
+      socket.addEventListener("message", resolve, { once: true });
+    });
+    return message.data;
+  }
+
+  it("has a mistyped payload for every opcode with a payload", () => {
+    expect([...MISTYPED_PAYLOADS.keys()].sort((a, b) => a - b)).toEqual(
+      payloadOps.map(([op]) => op).sort((a, b) => a - b),
+    );
+  });
+
+  it.each(payloadOps)(
+    "answers malformed opcode %s payloads with %j and changes nothing",
+    async (op, invalid) => {
+      const roomName = crypto.randomUUID();
+      const socket = await openMeetingSocket(roomName);
+      if (op !== GatewayOp.Identify) await identifyMeetingSocket(socket);
+      const before = await roomState(roomName);
+
+      for (const d of [
+        undefined,
+        null,
+        [],
+        "text",
+        7,
+        MISTYPED_PAYLOADS.get(op),
+      ]) {
+        const reply = nextJsonMessage(socket);
+        socket.send(JSON.stringify({ op, d }));
+        expect(await reply).toEqual({
+          op: 18,
+          d: { code: 4000, message: invalid },
+        });
+      }
+
+      expect(await roomState(roomName)).toBe(before);
+      const ack = nextJsonMessage(socket);
+      socket.send(HEARTBEAT_FRAME);
+      await expect(ack).resolves.toMatchObject({ op: 6 });
+      socket.close();
+    },
+  );
+
+  it("sends the same error bytes as before for edge failures", async () => {
+    const socket = await openMeetingSocket();
+    await identifyMeetingSocket(socket);
+    const cases: Array<[string, string]> = [
+      ["not-json", '{"op":18,"d":{"code":4002,"message":"Invalid JSON"}}'],
+      ['{"d":{}}', '{"op":18,"d":{"code":4001,"message":"Missing opcode"}}'],
+      [
+        '{"op":999,"d":{}}',
+        '{"op":18,"d":{"code":4001,"message":"Unknown opcode: 999"}}',
+      ],
+      [
+        '{"op":23,"d":null}',
+        '{"op":18,"d":{"code":4000,"message":"Invalid typing payload"}}',
+      ],
+    ];
+    for (const [sent, expected] of cases) {
+      const reply = nextRawMessage(socket);
+      socket.send(sent);
+      expect(await reply).toBe(expected);
+    }
+    socket.close();
+  });
+
+  it("accepts keys it does not know, as a newer client may send", async () => {
+    const roomName = crypto.randomUUID();
+    const sender = await openMeetingSocket(roomName);
+    const ready = await identifyMeetingSocket(sender);
+    const observer = await openMeetingSocket(roomName);
+    await identifyMeetingSocket(observer);
+
+    const update = nextMessageWithOpcodeMatching(
+      observer,
+      15,
+      (message) =>
+        (message.d as { participant?: { id?: string } }).participant?.id ===
+        ready.participant_id,
+    );
+    sender.send(
+      JSON.stringify({
+        op: 15,
+        d: { self_mute: true, added_by_a_newer_client: { nested: [1] } },
+      }),
+    );
+    expect(await update).toMatchObject({
+      d: { participant: { self_mute: true }, action: "update" },
+    });
+    sender.close();
+    observer.close();
   });
 });

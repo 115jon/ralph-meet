@@ -12,6 +12,11 @@ import {
 import { createSoundboardPlaybackId } from "../../src/lib/voice/soundboard-playback-id";
 import { verifySoundboardMediaCapability } from "../../src/lib/voice/soundboard-media-capability";
 import { GET as GET_SOUNDBOARD_UPLOAD } from "../../src/routes/api/soundboard/uploads/$id";
+import {
+  GatewayOp,
+  HEARTBEAT_FRAME,
+  voiceGatewayClientRules,
+} from "../../src/lib/gateway-protocol";
 
 const textEncoder = new TextEncoder();
 const TEST_SUBJECT = "user-test";
@@ -4918,6 +4923,108 @@ describe("VoiceRoom lifecycle", () => {
     expect(await response).toMatchObject({
       op: 106,
       d: { type: "listen_together.error", code: "EMPTY_QUEUE" },
+    });
+    socket.close();
+  });
+});
+
+describe("VoiceRoom gateway protocol edge", () => {
+  /** A mistyped payload per opcode (non-objects are sent too). */
+  const MISTYPED_PAYLOADS = new Map<number, unknown>([
+    [GatewayOp.VoiceIdentify, { participant_id: "p" }],
+    [
+      GatewayOp.SelectProtocol,
+      {
+        sdp: "v=0",
+        push_prefix: "camera",
+        push_tracks: [{ track_name: "screen-video-p", kind: "video" }],
+        pull_tracks: [],
+      },
+    ],
+    [GatewayOp.Video, { tracks: [{ track_name: "cam-video-p" }] }],
+    [GatewayOp.StopTracks, { track_names: [1] }],
+    [GatewayOp.TracksReady, { track_names: "screen-video-p" }],
+    [GatewayOp.Speaking, { speaking: "1" }],
+    [GatewayOp.VoiceAppEvent, [{ type: "soundboard.play" }]],
+  ]);
+  const payloadOps = Object.entries(voiceGatewayClientRules).flatMap(
+    ([op, rule]) => (rule ? [[Number(op), rule.invalid] as const] : []),
+  );
+
+  async function roomRows(roomName: string) {
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    return runInDurableObject(room, (_instance, state) => {
+      const rows = (table: string) => [
+        ...state.storage.sql.exec(`SELECT * FROM ${table} ORDER BY 1`),
+      ];
+      return JSON.stringify({
+        participants: rows("participants").map((row) => ({
+          ...row,
+          last_heartbeat: undefined,
+        })),
+        tracks: rows("tracks"),
+      });
+    });
+  }
+
+  it("has a mistyped payload for every opcode with a payload", () => {
+    expect([...MISTYPED_PAYLOADS.keys()].sort((a, b) => a - b)).toEqual(
+      payloadOps.map(([op]) => op).sort((a, b) => a - b),
+    );
+  });
+
+  it.each(payloadOps)(
+    "answers malformed opcode %s payloads with %j and changes nothing",
+    async (op, invalid) => {
+      const roomName = crypto.randomUUID();
+      const socket = await openVoiceSocket(roomName);
+      if (op !== GatewayOp.VoiceIdentify) {
+        await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+      }
+      const before = await roomRows(roomName);
+
+      for (const d of [
+        undefined,
+        null,
+        [],
+        "text",
+        7,
+        MISTYPED_PAYLOADS.get(op),
+      ]) {
+        const reply = nextMessageWithOpcode(socket, 18);
+        socket.send(JSON.stringify({ op, d }));
+        expect(await reply).toEqual({
+          op: 18,
+          d: { code: 4000, message: invalid },
+        });
+      }
+
+      expect(await roomRows(roomName)).toBe(before);
+      const ack = nextMessageWithOpcode(socket, 6);
+      socket.send(HEARTBEAT_FRAME);
+      await expect(ack).resolves.toMatchObject({ op: 6 });
+      socket.close();
+    },
+  );
+
+  it("still asks an unidentified socket to identify before judging an offer", async () => {
+    const socket = await openVoiceSocket();
+    const reply = nextMessageWithOpcode(socket, 18);
+    socket.send(JSON.stringify({ op: GatewayOp.SelectProtocol, d: null }));
+    await expect(reply).resolves.toEqual({
+      op: 18,
+      d: { code: 4003, message: "Not identified on voice" },
+    });
+    socket.close();
+  });
+
+  it("answers an unknown opcode as before", async () => {
+    const socket = await openVoiceSocket();
+    const reply = nextMessageWithOpcode(socket, 18);
+    socket.send(JSON.stringify({ op: 999, d: {} }));
+    await expect(reply).resolves.toEqual({
+      op: 18,
+      d: { code: 4001, message: "Unknown voice opcode: 999" },
     });
     socket.close();
   });
