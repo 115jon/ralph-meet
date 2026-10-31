@@ -14,14 +14,13 @@ import {
   unpinMessage,
 } from "@/services/message.service";
 import { executeBroadcast } from "@/services/service-helpers";
-import { z } from "zod";
+import { Schema } from "effect";
+import { looseStruct, withDefault } from "@/lib/schema";
 
-export const pinsBodySchema = z
-  .object({
-    message_id: z.string().default(""),
-    pinned: z.boolean().default(false),
-  })
-  .passthrough();
+export const pinsBodySchema = looseStruct({
+  message_id: withDefault(Schema.String, ""),
+  pinned: withDefault(Schema.Boolean, false),
+});
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
 export const GET = async ({ request: _request, params }: any) => {

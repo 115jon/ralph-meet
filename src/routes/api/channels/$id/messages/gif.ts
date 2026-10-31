@@ -18,7 +18,8 @@ import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
 import { isTikTokMediaHostname } from "@/lib/tiktok-hosts";
 import { validateBody } from "@/lib/validate-body";
-import { z } from "zod";
+import { Schema } from "effect";
+import { looseStruct, withDefault } from "@/lib/schema";
 
 interface GifUploadBody {
   source_url: string;
@@ -28,15 +29,13 @@ interface GifUploadBody {
   size_bytes?: number;
 }
 
-export const gifUploadBodySchema = z
-  .object({
-    source_url: z.string().default(""),
-    filename: z.string().optional(),
-    content_type: z.string().optional(),
-    provider: z.enum(["klipy", "tenor", "external"]).optional(),
-    size_bytes: z.number().optional(),
-  })
-  .passthrough();
+export const gifUploadBodySchema = looseStruct({
+  source_url: withDefault(Schema.String, ""),
+  filename: Schema.optional(Schema.String),
+  content_type: Schema.optional(Schema.String),
+  provider: Schema.optional(Schema.Literals(["klipy", "tenor", "external"])),
+  size_bytes: Schema.optional(Schema.Finite),
+});
 
 type HostedGifProvider = Exclude<GifProvider, "external">;
 

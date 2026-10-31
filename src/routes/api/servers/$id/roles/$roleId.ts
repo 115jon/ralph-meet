@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { looseStruct } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { deleteRole, updateRole } from "@/services/role.service";
@@ -10,14 +11,12 @@ import {
   executeInvalidation,
 } from "@/services/service-helpers";
 
-export const roleUpdateBodySchema = z
-  .object({
-    name: z.string().optional(),
-    color: z.string().nullable().optional(),
-    permissions: z.number().optional(),
-    position: z.number().optional(),
-  })
-  .passthrough();
+export const roleUpdateBodySchema = looseStruct({
+  name: Schema.optional(Schema.String),
+  color: Schema.optional(Schema.NullOr(Schema.String)),
+  permissions: Schema.optional(Schema.Finite),
+  position: Schema.optional(Schema.Finite),
+});
 
 // PATCH /api/servers/:id/roles/:roleId — update a role
 const PATCH = async ({ request, params }: any) => {

@@ -1,21 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
 import { clog } from "@/lib/console-logger";
+import { looseStruct } from "@/lib/schema";
 import { validateBody } from "@/lib/validate-body";
 import { resolveListenTogetherUrl } from "@/services/listen-together.service";
 
 const resolveLog = clog("listen-together:resolve");
 
-export const listenTogetherResolveBodySchema = z
-  .object({
-    roomSlug: z.string().optional(),
-    serverId: z.string().nullable().optional(),
-    channelId: z.string().nullable().optional(),
-    url: z.string().optional(),
-    offset: z.number().int().min(0).optional(),
-  })
-  .passthrough();
+export const listenTogetherResolveBodySchema = looseStruct({
+  roomSlug: Schema.optional(Schema.String),
+  serverId: Schema.optional(Schema.NullOr(Schema.String)),
+  channelId: Schema.optional(Schema.NullOr(Schema.String)),
+  url: Schema.optional(Schema.String),
+  offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
 
 function getListenTogetherSourceHost(rawUrl: string) {
   try {

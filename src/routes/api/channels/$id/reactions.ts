@@ -5,6 +5,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
+import { safeParse } from "@/lib/schema";
 import { AddReactionSchema, RemoveReactionSchema } from "@/lib/validations";
 import { addReaction, removeReaction } from "@/services/message.service";
 import { executeBroadcast } from "@/services/service-helpers";
@@ -33,10 +34,10 @@ export const PUT = async ({ request, params }: any) => {
   if (rl) return rl;
 
   const body = await request.json();
-  const parsed = AddReactionSchema.safeParse(body);
+  const parsed = safeParse(AddReactionSchema, body);
   if (!parsed.success) {
     return Response.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { error: parsed.issues[0]?.message ?? "Invalid input" },
       { status: 400 },
     );
   }
@@ -66,10 +67,10 @@ export const DELETE = async ({ request, params }: any) => {
   if (rl) return rl;
 
   const body = await request.json();
-  const parsed = RemoveReactionSchema.safeParse(body);
+  const parsed = safeParse(RemoveReactionSchema, body);
   if (!parsed.success) {
     return Response.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { error: parsed.issues[0]?.message ?? "Invalid input" },
       { status: 400 },
     );
   }

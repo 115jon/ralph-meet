@@ -18,6 +18,7 @@ import {
   normalizeHexColor,
   serializeDisplayNameStyle,
 } from "@/lib/profile-customization";
+import { safeParse } from "@/lib/schema";
 import { isAppTheme } from "@/lib/theme-preferences";
 import {
   normalizeAvatarDisplay,
@@ -74,13 +75,13 @@ const PATCH = async ({ request: req }: any) => {
     pronouns,
   } = body;
 
-  const identity = ProfileIdentityPatchSchema.safeParse({
+  const identity = safeParse(ProfileIdentityPatchSchema, {
     displayName,
     username,
   });
   if (!identity.success) {
     return apiError(
-      identity.error.issues[0]?.message ?? "Invalid profile identity",
+      identity.issues[0]?.message ?? "Invalid profile identity",
       400,
     );
   }

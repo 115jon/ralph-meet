@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import {
   apiError,
@@ -14,6 +14,7 @@ import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
 import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 import { checkRateLimitDOFailClosed } from "@/lib/rate-limit";
+import { looseStruct } from "@/lib/schema";
 import { getOrCreateDemoSession } from "@/lib/voice/demo-session";
 import { isPublicDemoRoomSlug } from "@/lib/voice/realtime-policy";
 import { validateBody } from "@/lib/validate-body";
@@ -32,16 +33,14 @@ const OPTIONS = async ({ request }: { request: Request }) =>
   handleCorsPreflightIfNeeded(request) ??
   new Response(null, { status: 204, headers: getCorsHeaders(request) });
 
-export const socketTicketRequestBodySchema = z
-  .object({
-    audience: z.unknown().optional(),
-    channelId: z.unknown().optional(),
-    roomSlug: z.unknown().optional(),
-    serverId: z.unknown().optional(),
-  })
-  .passthrough();
+export const socketTicketRequestBodySchema = looseStruct({
+  audience: Schema.optional(Schema.Unknown),
+  channelId: Schema.optional(Schema.Unknown),
+  roomSlug: Schema.optional(Schema.Unknown),
+  serverId: Schema.optional(Schema.Unknown),
+});
 
-type SocketTicketRequestBody = z.infer<typeof socketTicketRequestBodySchema>;
+type SocketTicketRequestBody = typeof socketTicketRequestBodySchema.Type;
 
 type SocketTicketEnv = CloudflareEnv & {
   CALLS_APP_SECRET?: string;

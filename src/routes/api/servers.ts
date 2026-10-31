@@ -4,6 +4,7 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
+import { safeParse } from "@/lib/schema";
 import { CreateServerSchema } from "@/lib/validations";
 import {
   executeBroadcast,
@@ -47,12 +48,12 @@ const POST = async ({ request, params: _params }: any) => {
   );
   if (rl) return rl;
 
-  // Validate input with Zod
+  // Validate input with Effect Schema
   const raw = await request.json();
-  const parsed = CreateServerSchema.safeParse(raw);
+  const parsed = safeParse(CreateServerSchema, raw);
   if (!parsed.success) {
     return Response.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { error: parsed.issues[0]?.message ?? "Invalid input" },
       { status: 400 },
     );
   }

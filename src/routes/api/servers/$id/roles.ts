@@ -1,19 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { looseStruct, withDefault } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { createRole, listServerRoles } from "@/services/role.service";
 import { executeAuditLog } from "@/services/service-helpers";
 
-export const roleCreateBodySchema = z
-  .object({
-    name: z.string().default(""),
-    color: z.string().optional(),
-    permissions: z.number().optional(),
-  })
-  .passthrough();
+export const roleCreateBodySchema = looseStruct({
+  name: withDefault(Schema.String, ""),
+  color: Schema.optional(Schema.String),
+  permissions: Schema.optional(Schema.Finite),
+});
 
 // GET /api/servers/:id/roles — list all roles for a server
 const GET = async ({ request: _request, params }: any) => {

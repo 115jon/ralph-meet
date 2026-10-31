@@ -4,6 +4,7 @@ import { apiSuccess, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { safeParse } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { UpdateServerSchema } from "@/lib/validations";
 import {
@@ -26,10 +27,10 @@ const PATCH = async ({ request, params }: any) => {
   const { id: serverId } = params;
 
   const raw = await request.json();
-  const parsed = UpdateServerSchema.safeParse(raw);
+  const parsed = safeParse(UpdateServerSchema, raw);
   if (!parsed.success) {
     return Response.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { error: parsed.issues[0]?.message ?? "Invalid input" },
       { status: 400 },
     );
   }

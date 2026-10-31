@@ -10,15 +10,14 @@ import {
   upsertPermissionOverride,
 } from "@/services/channel.service";
 import { executeBroadcast } from "@/services/service-helpers";
-import { z } from "zod";
+import { Schema } from "effect";
+import { looseStruct } from "@/lib/schema";
 
-export const permissionOverrideBodySchema = z
-  .object({
-    target_type: z.enum(["role", "user"]),
-    allow: z.number(),
-    deny: z.number(),
-  })
-  .passthrough();
+export const permissionOverrideBodySchema = looseStruct({
+  target_type: Schema.Literals(["role", "user"]),
+  allow: Schema.Finite,
+  deny: Schema.Finite,
+});
 
 // PUT /api/channels/:id/permissions/:targetId — create or update an override
 const PUT = async ({ request, params }: any) => {

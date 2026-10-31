@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { looseStruct } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { banUser, listBans, unbanUser } from "@/services/ban.service";
@@ -12,18 +13,14 @@ import {
   executeInvalidation,
 } from "@/services/service-helpers";
 
-export const banCreateBodySchema = z
-  .object({
-    user_id: z.string().optional(),
-    reason: z.string().optional(),
-  })
-  .passthrough();
+export const banCreateBodySchema = looseStruct({
+  user_id: Schema.optional(Schema.String),
+  reason: Schema.optional(Schema.String),
+});
 
-export const banDeleteBodySchema = z
-  .object({
-    user_id: z.string().optional(),
-  })
-  .passthrough();
+export const banDeleteBodySchema = looseStruct({
+  user_id: Schema.optional(Schema.String),
+});
 
 // GET /api/servers/:id/bans — list banned users
 const GET = async ({ request: _request, params }: any) => {
