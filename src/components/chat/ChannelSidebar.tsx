@@ -407,7 +407,7 @@ const LEAVING_ROW_STYLE: React.CSSProperties = {
   pointerEvents: "none",
 };
 
-export interface OccupantRow<T> {
+interface OccupantRow<T> {
   item: T;
   key: string;
   leaving: boolean;
@@ -449,7 +449,7 @@ function prefersReducedMotion() {
  * old place for the exit and dropped when it ends. A key that comes back
  * mid-exit returns as a normal row.
  */
-export function useLeavingRows<T>(
+function useLeavingRows<T>(
   items: readonly T[],
   keyOf: (item: T) => string,
 ): OccupantRow<T>[] {

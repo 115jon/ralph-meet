@@ -149,7 +149,7 @@ function StepFrame({
  * step. At step 3 the real mark (the lockup's SVG) settles over the dither,
  * so the hand-off to the app lands on the logo itself.
  */
-export function LogoResolve({
+function LogoResolve({
   step,
   className,
   cell: cellProp,
@@ -226,7 +226,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * Bricolage line that changes as steps complete, a quiet detail and, for a
  * failure, one key.
  */
-export function ColdStatus({
+function ColdStatus({
   step,
   error,
   onSignIn,

@@ -390,7 +390,7 @@ export async function requireAuth(
 }
 
 /** Seconds a client should wait before retrying a 503 AUTH_UNAVAILABLE. */
-export const AUTH_RETRY_AFTER_SECONDS = 5;
+const AUTH_RETRY_AFTER_SECONDS = 5;
 
 /** The 401 for a request with no session. Clients read it as "sign in again". */
 export function unauthorizedResponse(req?: Request): Response {

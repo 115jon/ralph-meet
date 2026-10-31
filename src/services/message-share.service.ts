@@ -15,12 +15,12 @@ export interface ShareAuthorSnapshot {
   avatar_display?: string | null;
 }
 
-export interface ShareReactionSnapshot {
+interface ShareReactionSnapshot {
   emoji: string;
   count: number;
 }
 
-export interface MessageShareSnapshot {
+interface MessageShareSnapshot {
   content: string;
   author: ShareAuthorSnapshot;
   attachments: Attachment[];

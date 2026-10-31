@@ -7,13 +7,6 @@ import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { BroadcastDescriptor } from "./server.service";
 
-// ─── ID generator (injectable) ───────────────────────────────────────────────
-
-let _genId = (): string => crypto.randomUUID();
-export function setSocialIdGenerator(fn: () => string): void {
-  _genId = fn;
-}
-
 // ─── listRelationships ───────────────────────────────────────────────────────
 
 export async function listRelationships(
@@ -430,7 +423,7 @@ export async function getOrCreateDM(
   }
 
   // Create new DM
-  const channelId = _genId();
+  const channelId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   await db.batch([
@@ -527,7 +520,7 @@ export async function createInvite(
   expires_at: string | null;
   channel_id: string | null;
 }> {
-  const code = _genId().split("-")[0];
+  const code = crypto.randomUUID().split("-")[0];
   const now = new Date().toISOString();
 
   const expiresAt =

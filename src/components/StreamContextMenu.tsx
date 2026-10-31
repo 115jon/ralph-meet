@@ -116,14 +116,14 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     (s) => s.setPeerSoundboardMuted,
   );
 
-  const { user: clerkUser } = useUser();
+  const { user: authUser } = useUser();
   const members = useChatStore((s) => s.members);
 
-  const myClerkId = clerkUser?.id;
-  const isLocal = userId === "me" || userId === myClerkId;
-  const resolvedTargetUserId = userId === "me" ? (myClerkId ?? null) : userId;
+  const myUserId = authUser?.id;
+  const isLocal = userId === "me" || userId === myUserId;
+  const resolvedTargetUserId = userId === "me" ? (myUserId ?? null) : userId;
 
-  const myMember = members.find((m: any) => m.user.id === myClerkId);
+  const myMember = members.find((m: any) => m.user.id === myUserId);
   const myTotalPerms =
     myMember?.roles?.reduce((acc: number, r: any) => acc | r.permissions, 0) ??
     0;
@@ -172,11 +172,11 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
 
   const handleCopyId = useCallback(() => {
     void copyToClipboard(
-      userId === "me" ? myClerkId || "" : userId,
+      userId === "me" ? myUserId || "" : userId,
       "User ID copied",
     );
     onClose();
-  }, [userId, myClerkId, onClose]);
+  }, [userId, myUserId, onClose]);
 
   const handleProfile = useCallback(() => {
     if (resolvedTargetUserId && onOpenProfileUser) {

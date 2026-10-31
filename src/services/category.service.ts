@@ -10,14 +10,6 @@ import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { BroadcastDescriptor, ServiceResult } from "./server.service";
 
-// ─── ID generator (injectable for testing) ───────────────────────────────────
-
-let _genId = (): string => crypto.randomUUID();
-
-export function setCategoryIdGenerator(fn: () => string): void {
-  _genId = fn;
-}
-
 // ─── createCategory ──────────────────────────────────────────────────────────
 
 export interface CreateCategoryInput {
@@ -42,7 +34,7 @@ export async function createCategory(
     throw ServiceError.badRequest("Category name is required");
   }
 
-  const categoryId = _genId();
+  const categoryId = crypto.randomUUID();
 
   const rankRow = (await db
     .prepare(

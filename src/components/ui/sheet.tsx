@@ -21,20 +21,16 @@ import * as React from "react";
 
 import {
   Dialog,
-  DialogClose,
   DialogDescription,
   DialogOverlay,
   DialogPortal,
   DialogSurface,
   DialogTitle,
-  DialogTrigger,
   BEHIND_CUE,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const Sheet = Dialog;
-const SheetTrigger = DialogTrigger;
-const SheetClose = DialogClose;
 
 type SheetSide = "top" | "right" | "bottom" | "left";
 
@@ -145,11 +141,9 @@ Object.assign(SheetDescription, { rmSlot: "description" });
 
 export {
   Sheet,
-  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 };

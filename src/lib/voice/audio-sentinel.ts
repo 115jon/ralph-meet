@@ -185,7 +185,7 @@ export class AudioSentinel {
   }
 }
 
-export interface OutboundAudioStallDiagnostics {
+interface OutboundAudioStallDiagnostics {
   bytesSent: number;
   packetsSent: number;
   trackEnabled: boolean;

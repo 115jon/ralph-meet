@@ -21,8 +21,8 @@ import type { PayloadRules } from "./codec";
 
 // ── Limits shared with the handlers ────────────────────────────────────────
 
-export const MAX_NEGOTIATION_TRACKS = 32;
-export const MAX_SDP_LENGTH = 1_000_000;
+const MAX_NEGOTIATION_TRACKS = 32;
+const MAX_SDP_LENGTH = 1_000_000;
 const MAX_TRACK_ID_LENGTH = 200;
 const MAX_SFU_SESSION_ID_LENGTH = 4_096;
 const MAX_MID_LENGTH = 64;
@@ -37,7 +37,7 @@ const Mid = Schema.String.check(Schema.isMaxLength(MAX_MID_LENGTH));
 
 // ── Main gateway (MeetingRoom) ─────────────────────────────────────────────
 
-export const IdentifyPayload = Schema.Struct({
+const IdentifyPayload = Schema.Struct({
   name: Schema.String,
   username: Schema.optional(NullableString),
   display_name: Schema.optional(NullableString),
@@ -57,12 +57,12 @@ export const IdentifyPayload = Schema.Struct({
   standby: Schema.optional(Schema.Boolean),
 });
 
-export const ResumePayload = Schema.Struct({
+const ResumePayload = Schema.Struct({
   session_id: Schema.String,
   seq_ack: Schema.Number,
 });
 
-export const VoiceStateUpdateClientPayload = Schema.Struct({
+const VoiceStateUpdateClientPayload = Schema.Struct({
   self_mute: Schema.optional(Schema.Boolean),
   self_deaf: Schema.optional(Schema.Boolean),
   self_video: Schema.optional(Schema.Boolean),
@@ -76,37 +76,37 @@ export const VoiceStateUpdateClientPayload = Schema.Struct({
   promote_standby: Schema.optional(Schema.Boolean),
 });
 
-export const MessageCreatePayload = Schema.Struct({
+const MessageCreatePayload = Schema.Struct({
   channel_id: Schema.String,
   content: Schema.String,
   reply_to_id: Schema.optional(Schema.String),
   nonce: Schema.optional(Schema.String),
 });
 
-export const MessageUpdatePayload = Schema.Struct({
+const MessageUpdatePayload = Schema.Struct({
   message_id: Schema.String,
   content: Schema.String,
 });
 
-export const MessageDeletePayload = Schema.Struct({
+const MessageDeletePayload = Schema.Struct({
   message_id: Schema.String,
   channel_id: Schema.String,
 });
 
-export const ChannelPayload = Schema.Struct({ channel_id: Schema.String });
+const ChannelPayload = Schema.Struct({ channel_id: Schema.String });
 
-export const ReactionPayload = Schema.Struct({
+const ReactionPayload = Schema.Struct({
   channel_id: Schema.String,
   message_id: Schema.String,
   emoji: Schema.String,
 });
 
 /** Validated against the known statuses by the room; others are ignored. */
-export const PresenceUpdateClientPayload = Schema.Struct({
+const PresenceUpdateClientPayload = Schema.Struct({
   status: Schema.String,
 });
 
-export const VoiceChannelJoinPayload = Schema.Struct({
+const VoiceChannelJoinPayload = Schema.Struct({
   channel_id: Schema.String,
   self_mute: Schema.optional(Schema.Boolean),
   /** Normalized by the room; out-of-range values are replaced. */
@@ -118,20 +118,20 @@ export const VoiceChannelJoinPayload = Schema.Struct({
  * channel cannot drop them from the one they joined since. A leave without
  * a channel (the forced disconnect sends `{}`) applies to the current one.
  */
-export const VoiceChannelLeavePayload = Schema.Struct({
+const VoiceChannelLeavePayload = Schema.Struct({
   channel_id: Schema.optional(Schema.String),
 });
 
-export const ServerSubscribePayload = Schema.Struct({
+const ServerSubscribePayload = Schema.Struct({
   server_id: Schema.String,
 });
 
-export const CallInitiatePayload = Schema.Struct({
+const CallInitiatePayload = Schema.Struct({
   target_user_id: Schema.String,
   channel_id: Schema.String,
 });
 
-export const CallIdPayload = Schema.Struct({ call_id: Schema.String });
+const CallIdPayload = Schema.Struct({ call_id: Schema.String });
 
 /**
  * Every client opcode the main gateway handles. `null`: the payload is not
@@ -223,7 +223,7 @@ export const mainGatewayClientRules = {
 
 // ── Voice gateway (VoiceRoom) ──────────────────────────────────────────────
 
-export const VoiceIdentifyPayload = Schema.Struct({
+const VoiceIdentifyPayload = Schema.Struct({
   participant_id: Schema.String,
   voice_token: Schema.String,
   /** Opt-in flag; anything but `true` means "not supported". */
@@ -231,7 +231,7 @@ export const VoiceIdentifyPayload = Schema.Struct({
 });
 
 /** A published track as a client announces it (Video, op 12). */
-export const TrackInfoWire = Schema.Struct({
+const TrackInfoWire = Schema.Struct({
   participant_id: TrackId,
   track_name: TrackId,
   sfu_track_name: Schema.optional(TrackId),
@@ -254,17 +254,17 @@ const TrackNames = Schema.mutable(Schema.Array(TrackId)).check(
   Schema.isMaxLength(MAX_NEGOTIATION_TRACKS),
 );
 
-export const VideoClientPayload = Schema.Struct({
+const VideoClientPayload = Schema.Struct({
   tracks: Schema.mutable(Schema.Array(TrackInfoWire)).check(
     Schema.isMaxLength(MAX_NEGOTIATION_TRACKS),
   ),
 });
 
-export const TrackNamesPayload = Schema.Struct({ track_names: TrackNames });
+const TrackNamesPayload = Schema.Struct({ track_names: TrackNames });
 
-export const SpeakingClientPayload = Schema.Struct({ speaking: Schema.Finite });
+const SpeakingClientPayload = Schema.Struct({ speaking: Schema.Finite });
 
-export const PushTrackDescriptor = Schema.Struct({
+const PushTrackDescriptor = Schema.Struct({
   track_name: Schema.String.check(Schema.isMaxLength(MAX_TRACK_ID_LENGTH)),
   mid: Schema.optional(Mid),
   kind: TrackKind,
@@ -275,7 +275,7 @@ export const PushTrackDescriptor = Schema.Struct({
  * the SDP is not blank and every track is `screen-…-<participant id>` and
  * unique, which needs the socket's participant id.
  */
-export const SelectProtocolPayload = Schema.Struct({
+const SelectProtocolPayload = Schema.Struct({
   sdp: Schema.String.check(Schema.isMaxLength(MAX_SDP_LENGTH)),
   push_prefix: Schema.Literal("screen"),
   /** Browser SFU offers set this; native screen offers never do. */
@@ -289,13 +289,10 @@ export const SelectProtocolPayload = Schema.Struct({
 });
 
 /** App events are routed by `type` inside the room; only the envelope is checked here. */
-export const VoiceAppEventPayload = Schema.Record(
-  Schema.String,
-  Schema.Unknown,
-);
+const VoiceAppEventPayload = Schema.Record(Schema.String, Schema.Unknown);
 
 /** The reply to a SelectProtocol that fails its schema. */
-export const BROWSER_SFU_UNSUPPORTED = "Browser SFU negotiation is unsupported";
+const BROWSER_SFU_UNSUPPORTED = "Browser SFU negotiation is unsupported";
 
 export const voiceGatewayClientRules = {
   [GatewayOp.VoiceIdentify]: {
@@ -332,27 +329,25 @@ export const voiceGatewayClientRules = {
 
 // ── Payload types ──────────────────────────────────────────────────────────
 
-export type IdentifyPayload = typeof IdentifyPayload.Type;
-export type ResumePayload = typeof ResumePayload.Type;
-export type VoiceStateUpdateClientPayload =
-  typeof VoiceStateUpdateClientPayload.Type;
-export type MessageCreatePayload = typeof MessageCreatePayload.Type;
-export type MessageUpdatePayload = typeof MessageUpdatePayload.Type;
-export type MessageDeletePayload = typeof MessageDeletePayload.Type;
-export type ChannelPayload = typeof ChannelPayload.Type;
-export type ReactionPayload = typeof ReactionPayload.Type;
-export type PresenceUpdateClientPayload =
-  typeof PresenceUpdateClientPayload.Type;
-export type VoiceChannelJoinPayload = typeof VoiceChannelJoinPayload.Type;
-export type VoiceChannelLeavePayload = typeof VoiceChannelLeavePayload.Type;
-export type ServerSubscribePayload = typeof ServerSubscribePayload.Type;
-export type CallInitiatePayload = typeof CallInitiatePayload.Type;
-export type CallIdPayload = typeof CallIdPayload.Type;
-export type VoiceIdentifyPayload = typeof VoiceIdentifyPayload.Type;
-export type TrackInfoWire = typeof TrackInfoWire.Type;
-export type VideoClientPayload = typeof VideoClientPayload.Type;
-export type TrackNamesPayload = typeof TrackNamesPayload.Type;
-export type SpeakingClientPayload = typeof SpeakingClientPayload.Type;
-export type PushTrackDescriptor = typeof PushTrackDescriptor.Type;
-export type SelectProtocolPayload = typeof SelectProtocolPayload.Type;
-export type VoiceAppEventPayload = typeof VoiceAppEventPayload.Type;
+type IdentifyPayload = typeof IdentifyPayload.Type;
+type ResumePayload = typeof ResumePayload.Type;
+type VoiceStateUpdateClientPayload = typeof VoiceStateUpdateClientPayload.Type;
+type MessageCreatePayload = typeof MessageCreatePayload.Type;
+type MessageUpdatePayload = typeof MessageUpdatePayload.Type;
+type MessageDeletePayload = typeof MessageDeletePayload.Type;
+type ChannelPayload = typeof ChannelPayload.Type;
+type ReactionPayload = typeof ReactionPayload.Type;
+type PresenceUpdateClientPayload = typeof PresenceUpdateClientPayload.Type;
+type VoiceChannelJoinPayload = typeof VoiceChannelJoinPayload.Type;
+type VoiceChannelLeavePayload = typeof VoiceChannelLeavePayload.Type;
+type ServerSubscribePayload = typeof ServerSubscribePayload.Type;
+type CallInitiatePayload = typeof CallInitiatePayload.Type;
+type CallIdPayload = typeof CallIdPayload.Type;
+type VoiceIdentifyPayload = typeof VoiceIdentifyPayload.Type;
+type TrackInfoWire = typeof TrackInfoWire.Type;
+type VideoClientPayload = typeof VideoClientPayload.Type;
+type TrackNamesPayload = typeof TrackNamesPayload.Type;
+type SpeakingClientPayload = typeof SpeakingClientPayload.Type;
+type PushTrackDescriptor = typeof PushTrackDescriptor.Type;
+type SelectProtocolPayload = typeof SelectProtocolPayload.Type;
+type VoiceAppEventPayload = typeof VoiceAppEventPayload.Type;

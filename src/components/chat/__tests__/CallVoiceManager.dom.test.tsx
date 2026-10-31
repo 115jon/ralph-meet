@@ -59,11 +59,6 @@ vi.mock("@/stores/useCallStore", () => ({
     selector(mocks.callState),
 }));
 
-vi.mock("@/stores/useChatStore", () => ({
-  useChatStore: (selector: (state: { user: { id: string } }) => unknown) =>
-    selector({ user: { id: "user-1" } }),
-}));
-
 vi.mock("@/stores/useCallVoiceStore", () => ({
   useCallVoiceStore: {
     getState: () => ({ reset: mocks.reset, update: mocks.update }),

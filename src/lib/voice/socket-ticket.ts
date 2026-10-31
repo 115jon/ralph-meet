@@ -25,7 +25,7 @@ export interface SocketTicketVerificationContext {
   roomSlug: string;
 }
 
-export interface SocketTicketProtocolResult {
+interface SocketTicketProtocolResult {
   responseProtocol: string;
   ticket: string;
 }

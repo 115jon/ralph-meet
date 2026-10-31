@@ -21,10 +21,6 @@ vi.mock("@kova/react", () => ({
   useUser: () => ({ user: { id: "viewer" } }),
 }));
 
-vi.mock("@/lib/color-utils", () => ({
-  extractDominantColor: vi.fn(async () => null),
-}));
-
 describe("voice context menu wiring", () => {
   beforeEach(() => {
     useChatStore.setState({

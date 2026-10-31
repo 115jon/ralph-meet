@@ -20,7 +20,7 @@ function getAuthToken(): string | null {
   }
 }
 
-export function buildVoiceDisconnectBeaconHeaders(
+function buildVoiceDisconnectBeaconHeaders(
   payload: VoiceDisconnectBeaconPayload,
 ): Record<string, string> {
   const headers: Record<string, string> = {

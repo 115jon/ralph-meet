@@ -31,7 +31,7 @@ type DownloadEventPayload =
 
 // ── Hook status ───────────────────────────────────────────────────────────
 
-export type UpdaterStatus =
+type UpdaterStatus =
   | "idle"
   | "checking"
   | "up-to-date"

@@ -4,7 +4,7 @@ export interface R2ByteRange {
   suffix?: number;
 }
 
-export interface ParsedR2ByteRange {
+interface ParsedR2ByteRange {
   range?: R2ByteRange;
   requested: boolean;
   invalid: boolean;
@@ -49,9 +49,7 @@ function parseNonNegativeSafeInteger(value: string): number | null {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function parseR2ByteRangeHeader(
-  header: string | null,
-): ParsedR2ByteRange {
+function parseR2ByteRangeHeader(header: string | null): ParsedR2ByteRange {
   const value = header?.trim();
   if (!value) return { requested: false, invalid: false };
 

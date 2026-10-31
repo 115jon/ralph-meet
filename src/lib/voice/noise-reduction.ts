@@ -44,9 +44,6 @@ export interface LocalAudioGateHandle {
   destroy: () => void;
 }
 
-export const DEFAULT_NOISE_REDUCTION_PROVIDER: NoiseReductionProviderId =
-  "rnnoise";
-
 export const NOISE_REDUCTION_PROVIDER_LABELS: Record<
   NoiseReductionProviderId,
   string
@@ -76,13 +73,7 @@ function getLocalAudioGateContext(): AudioContext | null {
   }
 }
 
-export function prepareLocalAudioGateContext(): void {
-  localAudioGateContextUsers += 1;
-  const context = getLocalAudioGateContext();
-  context?.resume().catch(() => {});
-}
-
-export function resumeLocalAudioGateContext(): Promise<void> {
+function resumeLocalAudioGateContext(): Promise<void> {
   const context = localAudioGateContext;
   if (context?.state === "suspended") return context.resume().catch(() => {});
   return Promise.resolve();

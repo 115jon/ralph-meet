@@ -60,12 +60,12 @@ const NullableString = Schema.NullOr(Schema.String);
 /** Used when a Hello carries no interval (no current server omits it). */
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 45_000;
 
-export const HelloPayload = Schema.Struct({
+const HelloPayload = Schema.Struct({
   heartbeat_interval: Schema.optional(Schema.Finite),
   gateway_version: Schema.optional(Schema.Unknown),
 });
 
-export const ErrorPayload = Schema.Struct({
+const ErrorPayload = Schema.Struct({
   code: Schema.Number,
   message: Schema.String,
   /** Native screen-share errors only. */
@@ -76,13 +76,13 @@ export const ErrorPayload = Schema.Struct({
 
 // ── Main gateway (MeetingRoom) ─────────────────────────────────────────────
 
-export const MediaReadyPayload = Schema.Struct({
+const MediaReadyPayload = Schema.Struct({
   participant_id: Schema.String,
   ice_servers: IceServers,
   voice_token: Schema.String,
 });
 
-export const ReadyPayload = Schema.Struct({
+const ReadyPayload = Schema.Struct({
   participant_id: Schema.String,
   ice_servers: IceServers,
   voice_token: Schema.String,
@@ -91,7 +91,7 @@ export const ReadyPayload = Schema.Struct({
   spatial_audio_state: Schema.optional(SpatialAudioStateObject),
 });
 
-export const ResumedPayload = Schema.Struct({
+const ResumedPayload = Schema.Struct({
   /** Fresh voice token for re-authenticating on the Voice Gateway */
   voice_token: Schema.optional(Schema.String),
   /** Fresh ICE/TURN credentials to apply to existing PeerConnections */
@@ -102,7 +102,7 @@ export const ResumedPayload = Schema.Struct({
 });
 
 /** Join and leave carry a full VoiceState; update may carry a delta. */
-export const VoiceStateUpdatePayload = Schema.Union([
+const VoiceStateUpdatePayload = Schema.Union([
   Schema.Struct({
     participant: VoiceStateObject,
     action: Schema.Literals(["join", "leave"]),
@@ -115,7 +115,7 @@ export const VoiceStateUpdatePayload = Schema.Union([
   }),
 ]);
 
-export const ProfileUpdatePayload = Schema.Struct({
+const ProfileUpdatePayload = Schema.Struct({
   participant_id: Schema.String,
   name: Schema.String,
   username: Schema.optional(NullableString),
@@ -125,7 +125,7 @@ export const ProfileUpdatePayload = Schema.Struct({
 });
 
 /** The event payload is routed by `event` in the chat store, not checked here. */
-export const DispatchPayload = Schema.Struct({
+const DispatchPayload = Schema.Struct({
   event: Schema.String,
   data: Schema.optional(Schema.Unknown),
   /** Replay cursor; also read generically by readReplaySeq. */
@@ -133,7 +133,7 @@ export const DispatchPayload = Schema.Struct({
 });
 
 /** The chat store reads only the session id from Ready. */
-export const ChatReadyPayload = Schema.Struct({
+const ChatReadyPayload = Schema.Struct({
   participant_id: Schema.optional(Schema.String),
 });
 
@@ -176,7 +176,7 @@ export const roomGatewayServerRules = {
 
 // ── Voice gateway (VoiceRoom) ──────────────────────────────────────────────
 
-export const VoiceReadyPayload = Schema.Struct({
+const VoiceReadyPayload = Schema.Struct({
   participant_id: Schema.optional(Schema.String),
   tracks: Schema.optional(TrackInfos),
   speaking: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
@@ -199,12 +199,12 @@ export const NegotiationDonePayload = Schema.Struct({
   push_prefix: Schema.Literal("screen"),
 });
 
-export const VideoServerPayload = Schema.Struct({
+const VideoServerPayload = Schema.Struct({
   participant_id: Schema.String,
   tracks: TrackInfos,
 });
 
-export const SpeakingServerPayload = Schema.Struct({
+const SpeakingServerPayload = Schema.Struct({
   participant_id: Schema.String,
   speaking: Schema.Number,
 });
@@ -213,16 +213,13 @@ export const ClientDisconnectPayload = Schema.Struct({
   participant_id: Schema.String,
 });
 
-export const StopTracksServerPayload = Schema.Struct({
+const StopTracksServerPayload = Schema.Struct({
   participant_id: Schema.optional(Schema.String),
   track_names: Schema.mutable(Schema.Array(Schema.String)),
   tracks: Schema.optional(TrackInfos),
 });
 
-export const VoiceAppEventServerPayload = Schema.Record(
-  Schema.String,
-  Schema.Unknown,
-);
+const VoiceAppEventServerPayload = Schema.Record(Schema.String, Schema.Unknown);
 
 /** Server opcodes VoiceGateway handles. */
 export const voiceGatewayServerRules = {
@@ -262,20 +259,20 @@ export const voiceGatewayServerRules = {
 
 // ── Payload types ──────────────────────────────────────────────────────────
 
-export type HelloPayload = typeof HelloPayload.Type;
-export type ErrorPayload = typeof ErrorPayload.Type;
-export type MediaReadyPayload = typeof MediaReadyPayload.Type;
-export type ReadyPayload = typeof ReadyPayload.Type;
-export type ResumedPayload = typeof ResumedPayload.Type;
-export type VoiceStateUpdatePayload = typeof VoiceStateUpdatePayload.Type;
-export type ProfileUpdatePayload = typeof ProfileUpdatePayload.Type;
-export type DispatchPayload = typeof DispatchPayload.Type;
-export type ChatReadyPayload = typeof ChatReadyPayload.Type;
-export type VoiceReadyPayload = typeof VoiceReadyPayload.Type;
+type HelloPayload = typeof HelloPayload.Type;
+type ErrorPayload = typeof ErrorPayload.Type;
+type MediaReadyPayload = typeof MediaReadyPayload.Type;
+type ReadyPayload = typeof ReadyPayload.Type;
+type ResumedPayload = typeof ResumedPayload.Type;
+type VoiceStateUpdatePayload = typeof VoiceStateUpdatePayload.Type;
+type ProfileUpdatePayload = typeof ProfileUpdatePayload.Type;
+type DispatchPayload = typeof DispatchPayload.Type;
+type ChatReadyPayload = typeof ChatReadyPayload.Type;
+type VoiceReadyPayload = typeof VoiceReadyPayload.Type;
 export type SessionDescriptionPayload = typeof SessionDescriptionPayload.Type;
 export type NegotiationDonePayload = typeof NegotiationDonePayload.Type;
-export type VideoServerPayload = typeof VideoServerPayload.Type;
-export type SpeakingServerPayload = typeof SpeakingServerPayload.Type;
+type VideoServerPayload = typeof VideoServerPayload.Type;
+type SpeakingServerPayload = typeof SpeakingServerPayload.Type;
 export type ClientDisconnectPayload = typeof ClientDisconnectPayload.Type;
-export type StopTracksServerPayload = typeof StopTracksServerPayload.Type;
-export type VoiceAppEventServerPayload = typeof VoiceAppEventServerPayload.Type;
+type StopTracksServerPayload = typeof StopTracksServerPayload.Type;
+type VoiceAppEventServerPayload = typeof VoiceAppEventServerPayload.Type;

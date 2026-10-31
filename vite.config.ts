@@ -22,7 +22,6 @@ const ignoredWatchPaths = [
   "**/.vite/**",
   "**/.tanstack/**",
   "**/.vinxi/**",
-  "**/.open-next/**",
   "**/coverage/**",
   "**/dist/**",
   "**/target/**",

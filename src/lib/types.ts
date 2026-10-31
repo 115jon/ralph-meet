@@ -9,17 +9,9 @@ import type { PresencePlatform } from "@/lib/presence-platform";
 // existing imports.
 // ============================================================================
 
-export {
-  GatewayCloseCode,
-  GatewayOp as VoiceOpcode,
-} from "./gateway-protocol/opcodes";
 export type {
-  CallIdPayload,
-  CallInitiatePayload,
   ClientDisconnectPayload,
   NegotiationDonePayload,
-  PushTrackDescriptor,
-  ResumePayload,
   SessionDescriptionPayload,
 } from "./gateway-protocol";
 import type {
@@ -111,57 +103,7 @@ export interface StreamWatchSnapshotPayload {
   watchers_by_streamer: Record<string, string[]>;
 }
 
-export interface StreamWatchStartPayload {
-  type: "stream.watch.start";
-  streamer_user_id: string;
-}
-
-export interface StreamWatchStopPayload {
-  type: "stream.watch.stop";
-  streamer_user_id: string;
-}
-
-export interface StreamWatchClearPayload {
-  type: "stream.watch.clear";
-}
-
-export type StreamWatchAppEventPayload =
-  | StreamWatchSnapshotPayload
-  | StreamWatchStartPayload
-  | StreamWatchStopPayload
-  | StreamWatchClearPayload;
-
 // ── Chat Data Types ─────────────────────────────────────────────────────────
-
-/** Dispatch event names (used in Dispatch opcode) */
-export type DispatchEvent =
-  | "MESSAGE_CREATE"
-  | "MESSAGE_UPDATE"
-  | "MESSAGE_DELETE"
-  | "TYPING_START"
-  | "REACTION_ADD"
-  | "REACTION_REMOVE"
-  | "PRESENCE_UPDATE"
-  | "PRESENCE_LIST"
-  | "CHANNEL_UPDATE"
-  | "CHANNEL_DELETE"
-  | "GUILD_MEMBER_ADD"
-  | "GUILD_MEMBER_REMOVE"
-  | "GUILD_MEMBER_UPDATE"
-  | "USER_SERVERS_UPDATE"
-  | "USER_PROFILE_UPDATE"
-  | "MESSAGE_PIN"
-  | "MESSAGE_UNPIN"
-  | "RELATIONSHIP_ADD"
-  | "RELATIONSHIP_REMOVE"
-  | "READ_STATE_UPDATE"
-  | "NOTIFICATIONS_READ"
-  | "NOTIFICATIONS_CLEAR"
-  | "CALL_RING"
-  | "CALL_RINGING"
-  | "CALL_START"
-  | "CALL_ACCEPTED"
-  | "CALL_END";
 
 /** User object */
 export interface User {
@@ -213,15 +155,6 @@ export interface Role {
   position: number;
   is_default: boolean;
   created_at: string;
-}
-
-/** Server Member object */
-export interface ServerMember {
-  server_id: string;
-  user_id: string;
-  joined_at: string;
-  roles: Role[];
-  user: User;
 }
 
 /** Channel object */
@@ -291,18 +224,18 @@ export interface EmbedAuthor {
   isVerified?: boolean;
 }
 
-export interface EmbedProvider {
+interface EmbedProvider {
   name: string;
   url?: string;
 }
 
-export interface EmbedThumbnail {
+interface EmbedThumbnail {
   url: string;
   width?: number;
   height?: number;
 }
 
-export interface EmbedVideo {
+interface EmbedVideo {
   url: string;
   width?: number;
   height?: number;
@@ -323,12 +256,12 @@ export interface EmbedMedia {
   durationSeconds?: number;
 }
 
-export interface EmbedFooter {
+interface EmbedFooter {
   text: string;
   iconURL?: string;
 }
 
-export interface EmbedField {
+interface EmbedField {
   name: string;
   value: string;
   inline?: boolean;

@@ -10,7 +10,7 @@ export type ProfileEffectFallbackAsset = {
   kind: MediaKind;
 };
 
-export type ProfileEffectPlaybackLayerState = {
+type ProfileEffectPlaybackLayerState = {
   layer: ProfileEffectLayer;
   resolvedSrc: string;
   renderIndex: number;
@@ -142,7 +142,7 @@ export function getProfileEffectFallbackAsset(
   ]);
 }
 
-export function getProfileEffectLayerState(
+function getProfileEffectLayerState(
   layer: ProfileEffectLayer,
   elapsedMs: number,
   renderIndex = 0,

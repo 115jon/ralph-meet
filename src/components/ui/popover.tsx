@@ -171,9 +171,6 @@ function Popover({
 }
 
 const PopoverTrigger = PopoverPrimitive.Trigger;
-const PopoverClose = PopoverPrimitive.Close;
-const PopoverTitle = PopoverPrimitive.Title;
-const PopoverDescription = PopoverPrimitive.Description;
 
 const VARIANT = {
   /** Menu rows (MENU_ITEM), max 280. */
@@ -362,12 +359,4 @@ function ResponsivePopover({
   );
 }
 
-export {
-  Popover,
-  PopoverClose,
-  PopoverContent,
-  PopoverDescription,
-  PopoverTitle,
-  PopoverTrigger,
-  ResponsivePopover,
-};
+export { Popover, PopoverContent, PopoverTrigger, ResponsivePopover };

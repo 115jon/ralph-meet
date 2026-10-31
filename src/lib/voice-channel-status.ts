@@ -105,18 +105,6 @@ export function sanitizeVoiceChannelStatus(
   };
 }
 
-export function hasVoiceChannelStatus(
-  status: VoiceChannelStatus | null | undefined,
-): boolean {
-  return Boolean(status?.text || status?.media);
-}
-
-export function isVoiceChannelStatusVideo(
-  media: VoiceChannelStatusMedia | null | undefined,
-): boolean {
-  return !!media?.preview_content_type?.startsWith("video/");
-}
-
 export function getVoiceRenderableGifAsset(item: GifPickerItem) {
   return item.send ?? item.preview;
 }

@@ -217,7 +217,7 @@ const NEUTRAL_PROFILE_THEME = {
  * around it. Fills its box at the profile aspect (450:880); every inner size
  * is in container units so it reads the same at 140px or 320px wide.
  */
-export function ProfileCardPreview({
+function ProfileCardPreview({
   identity,
   display,
   playAnimation = true,

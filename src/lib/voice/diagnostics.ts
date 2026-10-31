@@ -2,7 +2,7 @@ import type { VoiceConnectionStats } from "@/lib/sfu-client";
 
 type Clock = () => Date;
 
-const SENSITIVE_KEY_PATTERN = /(token|authorization|secret|clerk|user[_-]?id)/i;
+const SENSITIVE_KEY_PATTERN = /(token|authorization|secret|user[_-]?id)/i;
 
 export interface VoiceDiagnosticsBundleInput {
   detailedStats: unknown;

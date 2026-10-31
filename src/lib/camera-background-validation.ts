@@ -1,5 +1,5 @@
 export const CAMERA_BACKGROUND_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
-export const CAMERA_BACKGROUND_UPLOAD_LIMIT_MB = 25;
+const CAMERA_BACKGROUND_UPLOAD_LIMIT_MB = 25;
 
 const SUPPORTED_BACKGROUND_MIME_TYPES = new Set([
   "image/gif",
@@ -22,7 +22,7 @@ export const CAMERA_BACKGROUND_ACCEPT = [
   ...SUPPORTED_BACKGROUND_MIME_TYPES,
 ].join(",");
 
-export function isSupportedCameraBackgroundMimeType(
+function isSupportedCameraBackgroundMimeType(
   type: string | undefined | null,
 ): boolean {
   return SUPPORTED_BACKGROUND_MIME_TYPES.has(

@@ -1,5 +1,4 @@
 import {
-  buildListenTogetherSnapshot,
   clampListenTogetherPosition,
   createListenTogetherState,
   getListenTogetherCurrentEntry,
@@ -10,7 +9,6 @@ import {
   type ListenTogetherPersistentState,
   type ListenTogetherQueueEntry,
   type ListenTogetherQueueEntrySeed,
-  type ListenTogetherStateSnapshot,
 } from "@/lib/listen-together";
 
 export interface ListenTogetherMutationResult {
@@ -117,7 +115,7 @@ function getEntryDuration(
   return entry ? getListenTogetherTrackDuration(entry.track) : null;
 }
 
-export function ensureListenTogetherState(
+function ensureListenTogetherState(
   roomSlug: string,
   state?: ListenTogetherPersistentState | null,
 ): ListenTogetherPersistentState {
@@ -129,19 +127,6 @@ export function ensureListenTogetherState(
       LISTEN_TOGETHER_RECENTLY_PLAYED_LIMIT,
     ),
   };
-}
-
-export function buildListenTogetherRoomSnapshot(
-  roomSlug: string,
-  queue: ListenTogetherQueueEntry[],
-  state?: ListenTogetherPersistentState | null,
-  now = Date.now(),
-): ListenTogetherStateSnapshot {
-  return buildListenTogetherSnapshot(
-    ensureListenTogetherState(roomSlug, state),
-    queue,
-    now,
-  );
 }
 
 export function enqueueListenTogetherEntries(

@@ -1,8 +1,4 @@
-export type SafeSfuFailureCategory =
-  | "client"
-  | "network"
-  | "server"
-  | "timeout";
+type SafeSfuFailureCategory = "client" | "network" | "server" | "timeout";
 
 export interface SafeSfuFailureInput {
   attempt: number;

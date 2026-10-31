@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 const log = clog("useNativeShareStats");
 
 /** Fallback poll interval for `get_native_screen_share_stats`. <= 2s per Req 8.8. */
-export const NATIVE_SHARE_STATS_POLL_MS = 1000;
+const NATIVE_SHARE_STATS_POLL_MS = 1000;
 
 /** Public state surfaced by {@link useNativeShareStats}. */
 export interface NativeShareStatsState {

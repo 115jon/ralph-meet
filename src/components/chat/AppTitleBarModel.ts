@@ -1,6 +1,6 @@
 import type { Channel, Server } from "@/lib/types";
 
-export type DmHomeView = "friends" | "shop";
+type DmHomeView = "friends" | "shop";
 
 export type AppTitleBarModel = {
   kind: "friends" | "shop" | "dm" | "server" | "logo";

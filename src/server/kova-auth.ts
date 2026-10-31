@@ -64,10 +64,10 @@ export interface KovaOptions {
   readonly fetch: typeof fetch;
 }
 
-export const KOVA_SESSION_TIMEOUT: Duration.Input = "5 seconds";
+const KOVA_SESSION_TIMEOUT: Duration.Input = "5 seconds";
 
 /** Statuses that mean "try again", not "no session". */
-export function isKovaUnavailableStatus(status: number): boolean {
+function isKovaUnavailableStatus(status: number): boolean {
   return status >= 500 || status === 429 || status === 408;
 }
 
@@ -196,7 +196,7 @@ function bearerToken(authorization: string | null): string | null {
 }
 
 /** The credentials on a request: its authorization and cookie headers and `?token=`. */
-export function credentialsOf(request: Request): Credentials {
+function credentialsOf(request: Request): Credentials {
   return {
     authorization: request.headers.get("authorization"),
     cookie: request.headers.get("cookie"),

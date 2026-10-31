@@ -21,7 +21,7 @@ import {
  * padding (13+22+13 desktop, 12+24+12 phone). Matches the 48px slot keys and
  * the plate's `min-h-12`. Heights are set inline, so this must not drift.
  */
-export const COMPOSER_MIN_HEIGHT_PX = 48;
+const COMPOSER_MIN_HEIGHT_PX = 48;
 
 export interface UploadedFile {
   id: string;

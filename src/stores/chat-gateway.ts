@@ -68,7 +68,7 @@ export interface ChatGatewayActions {
   disconnectGateway: () => void;
   /** Page visible again or back online: retry now, or probe the open socket. */
   wake: () => void;
-  setClerkUserId: (userId: string | null | undefined) => void;
+  setGatewayUserId: (userId: string | null | undefined) => void;
   getSessionId: () => string | null;
   subscribeChannel: (channelId: string) => void;
   unsubscribeChannel: (channelId: string) => void;
@@ -106,7 +106,7 @@ export function createChatGateway(
   const recentlyToastedMessageIds = new Map<string, number>();
   /** Identify was sent on the current socket. */
   let identified = false;
-  let clerkUserId: string | null | undefined = null;
+  let appUserId: string | null | undefined = null;
   let gatewaySessionId: string | null = null;
   let lastReceivedSeq = 0;
   let resumeInFlight = false;
@@ -127,7 +127,7 @@ export function createChatGateway(
       protocols: await fetchSocketProtocols({ audience: "global" }),
     }),
     // A desktop session without a user id never identifies: do not retry it.
-    shouldRetry: () => Boolean(clerkUserId),
+    shouldRetry: () => Boolean(appUserId),
     hooks: {
       attemptStarted: () => {
         if (!hasConnectedBefore)
@@ -684,7 +684,7 @@ export function createChatGateway(
           spatialAudioState: d.data.spatial_audio_state,
         });
 
-        const myId = get().user?.id ?? clerkUserId;
+        const myId = get().user?.id ?? appUserId;
 
         // Ignore state replays while we are rebuilding after a normal gateway reconnect.
         if (
@@ -923,12 +923,12 @@ export function createChatGateway(
   let releaseReconnectSoundSuppression: (() => void) | null = null;
 
   const sendIdentify = () => {
-    if (!clerkUserId) return;
+    if (!appUserId) return;
     sendGateway({
       op: GatewayOp.Identify,
       d: {
         name: "ChatClient",
-        clerk_user_id: clerkUserId,
+        clerk_user_id: appUserId,
         platform: getCurrentPresencePlatform(),
         supports_voice_state_deltas: true,
       },
@@ -1038,7 +1038,7 @@ export function createChatGateway(
    * while the tab slept.
    */
   const wake = () => {
-    if (!clerkUserId) return;
+    if (!appUserId) return;
     socket.wake();
   };
 
@@ -1062,17 +1062,17 @@ export function createChatGateway(
   };
 
   const initGateway = (userId: string | null | undefined) => {
-    if (clerkUserId !== userId && socket.isActive) {
+    if (appUserId !== userId && socket.isActive) {
       disconnectGateway();
     }
-    clerkUserId = userId;
+    appUserId = userId;
     // Connects unless already connecting or connected; a pending retry (or
     // the signed-out state) tries now.
     socket.connect();
   };
 
-  const setClerkUserId = (userId: string | null | undefined) => {
-    if (clerkUserId !== userId) {
+  const setGatewayUserId = (userId: string | null | undefined) => {
+    if (appUserId !== userId) {
       if (socket.isActive) {
         disconnectGateway();
       } else {
@@ -1087,9 +1087,9 @@ export function createChatGateway(
       lastReceivedSeq = 0;
       resumeInFlight = false;
     }
-    clerkUserId = userId;
+    appUserId = userId;
     if (userId && !identified && socket.isOpen) {
-      chatLog.info("Sending identify after clerk user became available", {
+      chatLog.info("Sending identify after the user id became available", {
         userId,
         gatewayReady: socket.isReady,
       });
@@ -1147,7 +1147,7 @@ export function createChatGateway(
     initGateway,
     disconnectGateway,
     wake,
-    setClerkUserId,
+    setGatewayUserId,
     getSessionId: () => gatewaySessionId,
     subscribeChannel,
     unsubscribeChannel,

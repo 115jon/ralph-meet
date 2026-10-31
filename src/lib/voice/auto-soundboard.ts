@@ -344,10 +344,6 @@ export function resetAutomaticSoundboardSession(
   sessions.delete(sessionId);
 }
 
-export function hasAutomaticSoundboardLeaveStarted(sessionId: string) {
-  return sessions.get(sessionId)?.leaveStarted ?? false;
-}
-
 export function getAutomaticSoundboardSessionGeneration(sessionId: string) {
   return sessions.get(sessionId)?.generation;
 }

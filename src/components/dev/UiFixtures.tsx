@@ -909,7 +909,7 @@ function voiceMembersFromItems(items: GridItem[]): VoiceChannelMember[] {
 
 export const LISTEN_ROOM = "lounge";
 
-export function listenEntry(
+function listenEntry(
   id: string,
   title: string,
   artist: string,

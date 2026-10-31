@@ -57,7 +57,7 @@ export interface SpatialPosition {
   y: number;
 }
 
-export interface SpatialAudioSettings {
+interface SpatialAudioSettings {
   spatialAudioEnabled: boolean;
   spatialPlacementMode: SpatialPlacementMode;
   spatialRoomSize: number;

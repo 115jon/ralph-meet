@@ -21,14 +21,14 @@ export const SIDEBAR_ROW =
   "group relative flex h-8 w-full min-w-0 items-center gap-2 rounded-sm px-2 text-left text-ui-row font-medium outline-none select-none [-webkit-tap-highlight-color:transparent] transition-colors duration-(--dur-1) ease-out pointer-coarse:min-h-11";
 
 /** Rows with an avatar and a status line (DMs, members). */
-export const SIDEBAR_ROW_TALL = "h-10";
+const SIDEBAR_ROW_TALL = "h-10";
 
 export const SIDEBAR_ROW_IDLE =
   "text-ink-2 pointer-fine:hover:bg-tint-1 pointer-fine:hover:text-ink-1";
 
 export const SIDEBAR_ROW_SELECTED = "bg-tint-2 text-ink-1";
 
-export const SIDEBAR_ROW_UNREAD = "text-ink-1 font-semibold";
+const SIDEBAR_ROW_UNREAD = "text-ink-1 font-semibold";
 
 /** Fixed leading slot: a 16px icon centred in 20px, ink-3. */
 export const SIDEBAR_ICON_SLOT =

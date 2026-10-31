@@ -2,7 +2,6 @@ packages:
   - "."
   - "desktop"
   - "mobile"
-  - "worker"
 
 allowBuilds:
   bufferutil: true

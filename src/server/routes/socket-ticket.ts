@@ -60,7 +60,7 @@ type TicketAdmission = {
 };
 
 /** POST /api/voice/socket-ticket — a short-lived, audience-bound socket ticket. */
-export const issueTicket = Effect.fn("voice.socket_ticket")(function* (
+const issueTicket = Effect.fn("voice.socket_ticket")(function* (
   request: Request,
 ) {
   const timing = createServerTiming();

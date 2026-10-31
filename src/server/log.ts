@@ -9,7 +9,7 @@ export const REQUEST_SPAN = "request";
  * sit at the top level. Annotate with names and counts only: never tokens,
  * cookies, headers or bodies.
  */
-export const routeLogger = Logger.withLeveledConsole(
+const routeLogger = Logger.withLeveledConsole(
   Logger.map(Logger.formatStructured, (entry) => ({
     level: entry.level,
     message: entry.message,

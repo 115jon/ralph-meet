@@ -18,14 +18,14 @@ export interface PartyTracksProxyEnv {
   VOICE_ROOM?: DurableObjectNamespace;
 }
 
-export interface RemotePullAuthorizationInput {
+interface RemotePullAuthorizationInput {
   roomSlug: string;
   participantId: string;
   subject: string;
 }
 
 /** Answers whether a participant may pull other participants' tracks. */
-export type RemotePullAuthorizer = (
+type RemotePullAuthorizer = (
   input: RemotePullAuthorizationInput,
   env: PartyTracksProxyEnv,
 ) => Promise<boolean>;
@@ -40,7 +40,7 @@ export interface PartyTracksProxyOptions {
  * when it leaves. A voice token alone (for example a standby session's) is
  * not enough.
  */
-export const authorizeRemotePullWithVoiceRoom: RemotePullAuthorizer = async (
+const authorizeRemotePullWithVoiceRoom: RemotePullAuthorizer = async (
   { roomSlug, participantId, subject },
   env,
 ) => {
@@ -62,7 +62,7 @@ export const authorizeRemotePullWithVoiceRoom: RemotePullAuthorizer = async (
   }
 };
 
-export interface PartyTracksRouteOptions {
+interface PartyTracksRouteOptions {
   appId: string;
   token: string;
   request: Request;

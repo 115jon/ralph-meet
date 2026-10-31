@@ -8,7 +8,7 @@
  * per join. The buffer is trimmed so a long session cannot grow it forever.
  */
 
-export const VOICE_MARK_PREFIX = "voice:";
+const VOICE_MARK_PREFIX = "voice:";
 const MAX_VOICE_MARKS = 600;
 
 let markCount = 0;
@@ -28,8 +28,4 @@ export function markVoice(stage: string, detail?: Record<string, unknown>) {
   } catch {
     // An uncloneable detail or a missing User Timing API is not worth a throw.
   }
-}
-
-export function resetVoiceMarkCountForTests(): void {
-  markCount = 0;
 }

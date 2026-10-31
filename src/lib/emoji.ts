@@ -10,10 +10,10 @@ import {
 } from "@/lib/persisted-guard";
 
 export const MAX_AI_EMOJI_PROMPT_LENGTH = 300;
-export const MAX_EMOJI_RECENTS = 36;
+const MAX_EMOJI_RECENTS = 36;
 export const EMOJI_RECENTS_STORAGE_KEY = "chat:emoji:recents:v1";
 export const NATIVE_EMOJI_STYLE_VERSION = "16.0.0";
-export const NATIVE_EMOJI_STYLE_BASE_URL = `https://cdn.jsdelivr.net/npm/emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}/img/twitter/64`;
+const NATIVE_EMOJI_STYLE_BASE_URL = `https://cdn.jsdelivr.net/npm/emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}/img/twitter/64`;
 export const NATIVE_EMOJI_SKIN_TONE_OPTIONS = [
   { tone: 0, label: "Default" },
   { tone: 1, label: "Light" },
@@ -75,7 +75,7 @@ export interface NativeEmojiCategory {
   emojis: NativeEmoji[];
 }
 
-export interface NativeEmojiSkinVariant {
+interface NativeEmojiSkinVariant {
   tone: NativeEmojiSkinTone;
   native: string;
   unified: string;
@@ -474,7 +474,7 @@ if (!emojiDataReady && typeof window !== "undefined") {
   void loadEmojiData();
 }
 
-export function applyNativeEmojiSkinTone(
+function applyNativeEmojiSkinTone(
   emoji: NativeEmoji,
   tone: number | null | undefined = 0,
 ): NativeEmoji {
@@ -493,14 +493,6 @@ export function getNativeEmojiCategories(
       applyNativeEmojiSkinTone(emoji, tone),
     ),
   }));
-}
-
-export function getNativeEmojiById(
-  id: string,
-  tone: number | null | undefined = 0,
-): NativeEmoji | null {
-  const emoji = emojiIndex.nativeEmojiById.get(id);
-  return emoji ? applyNativeEmojiSkinTone(emoji, tone) : null;
 }
 
 export function resolveNativeEmojiValue(value: string): NativeEmoji | null {
@@ -637,7 +629,7 @@ export function buildGeneratedEmojiStorageKey(
   return `emoji-assets/${userId}/${id}.${fileExtensionForEmojiContentType(contentType)}`;
 }
 
-export function fileExtensionForEmojiContentType(contentType: string): string {
+function fileExtensionForEmojiContentType(contentType: string): string {
   switch (contentType.toLowerCase()) {
     case "image/webp":
       return "webp";
@@ -750,7 +742,7 @@ export function loadEmojiRecents(): EmojiRecentItem[] {
   return cachedEmojiRecents;
 }
 
-export function saveEmojiRecents(items: EmojiRecentItem[]): void {
+function saveEmojiRecents(items: EmojiRecentItem[]): void {
   if (
     typeof window === "undefined" ||
     typeof window.localStorage === "undefined"

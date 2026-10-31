@@ -7,7 +7,7 @@ const MAX_DESCRIPTION_LENGTH = 220;
 const MAX_TITLE_LENGTH = 80;
 const URL_ONLY_REGEX = /^https?:\/\/\S+$/i;
 
-export interface SharePreviewMedia {
+interface SharePreviewMedia {
   type: "image" | "video";
   url: string;
   contentType?: string;
@@ -81,7 +81,7 @@ function encodeMediaPath(fileKey: string): string {
     .join("/");
 }
 
-export function getShareMediaUrl(
+function getShareMediaUrl(
   origin: string,
   token: string,
   attachment: Attachment,

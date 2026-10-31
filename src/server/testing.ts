@@ -70,7 +70,7 @@ export function memoryGateway() {
 }
 
 /** A rate limiter that allows everything. */
-export const allowAllRateLimits: Layer.Layer<RateLimiter> = Layer.succeed(
+const allowAllRateLimits: Layer.Layer<RateLimiter> = Layer.succeed(
   RateLimiter,
   RateLimiter.of({ check: () => Effect.succeed(null) }),
 );

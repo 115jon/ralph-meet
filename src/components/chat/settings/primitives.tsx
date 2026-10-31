@@ -574,7 +574,7 @@ export type RadioOption<V extends string> = {
  * (Studio's own choices use `SegmentedField`; this stays for dialogs that
  * list options with long descriptions.)
  */
-export function ChoiceCard({
+function ChoiceCard({
   type = "radio",
   name,
   value,

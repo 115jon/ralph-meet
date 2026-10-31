@@ -37,7 +37,7 @@ import {
   type StubRoute,
 } from "./api-stub";
 
-export const SERVER_SURFACES = [
+const SERVER_SURFACES = [
   "sp-server",
   "sp-server-roles",
   "sp-server-invites",

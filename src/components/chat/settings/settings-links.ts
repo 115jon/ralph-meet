@@ -29,7 +29,7 @@ export type SettingsLocation = {
 };
 
 /** Tab names the dialog accepted before the Studio IA. Still accepted. */
-export type LegacySettingsTab =
+type LegacySettingsTab =
   | "account"
   | "profiles"
   | "shares"

@@ -1,12 +1,7 @@
 {
   "$schema": "https://react.doctor/schema/config.json",
   "ignore": {
-    "files": [
-      "desktop/src-tauri/tauri-fork/**",
-      "desktop/src-tauri/vendor/**",
-      "public/vad/**",
-      "mobile/src-tauri/vendored_crates/**"
-    ]
+    "files": ["desktop/src-tauri/tauri-fork/**", "desktop/src-tauri/vendor/**"]
   },
   "surfaces": {
     "score": {

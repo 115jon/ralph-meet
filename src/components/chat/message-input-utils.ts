@@ -3,7 +3,7 @@ import { buildCustomEmojiToken } from "@/lib/emoji";
 const CUSTOM_EMOJI_PLACEHOLDER_START = 0xe000;
 const CUSTOM_EMOJI_PLACEHOLDER_END = 0xf8ff;
 
-export interface ComposerCustomEmoji {
+interface ComposerCustomEmoji {
   id: string;
   shortcode: string;
 }
@@ -26,7 +26,7 @@ export function replaceTextRange(
   };
 }
 
-export function isComposerCustomEmojiPlaceholder(char: string): boolean {
+function isComposerCustomEmojiPlaceholder(char: string): boolean {
   if (!char) return false;
 
   const codePoint = char.charCodeAt(0);

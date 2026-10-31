@@ -10,7 +10,7 @@ export interface ViewState {
   hideUi: boolean;
 }
 
-export type ViewAction =
+type ViewAction =
   | { type: "ZOOM_IN" }
   | { type: "ZOOM_OUT" }
   | { type: "RESET" }

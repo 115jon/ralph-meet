@@ -28,11 +28,6 @@ export const MENU_ITEM_DEFAULT_ON = "bg-tint-2 text-ink-1";
 
 export const MENU_ITEM_DANGER =
   "text-danger-ink pointer-fine:hover:enabled:bg-danger-tint focus-visible:bg-danger-tint";
-export const MENU_ITEM_DANGER_ON = "bg-danger-tint text-danger-ink";
-
-export const MENU_ITEM_WARNING =
-  "text-warning-ink pointer-fine:hover:enabled:bg-warning-tint focus-visible:bg-warning-tint";
-export const MENU_ITEM_WARNING_ON = "bg-warning-tint text-warning-ink";
 
 /** Leading icon: ink-2 in the neutral row, inherits ink on hover and in danger rows. */
 export const MENU_ICON =

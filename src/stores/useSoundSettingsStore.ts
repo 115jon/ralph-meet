@@ -23,7 +23,6 @@ import {
 } from "@/lib/persisted-guard";
 
 export type {
-  SoundboardTriggerMap,
   SoundboardTriggerConfig,
   SoundboardTriggerSelection,
 } from "@/lib/voice/soundboard-trigger";

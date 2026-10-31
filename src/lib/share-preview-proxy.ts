@@ -540,7 +540,7 @@ interface TikTokPlayerApiLookup {
  * returning a generic player for dead posts and tikwm only says "parsing
  * failed".
  */
-export function isTikTokPlayerApiGonePayload(
+function isTikTokPlayerApiGonePayload(
   payload: TikTokPlayerApiResponse | undefined,
   itemId: string,
 ): boolean {

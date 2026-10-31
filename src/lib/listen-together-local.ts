@@ -2,12 +2,11 @@ import { getListenTogetherInputMode } from "@/lib/listen-together";
 
 export const LISTEN_TOGETHER_PANE_RATIO_KEY =
   "listen-together:workspace-pane-ratio:v1";
-export const LISTEN_TOGETHER_QUERY_HISTORY_KEY =
-  "listen-together:query-history:v1";
-export const LISTEN_TOGETHER_QUERY_HISTORY_LIMIT = 10;
-export const LISTEN_TOGETHER_DEFAULT_PANE_RATIO = 0.38;
-export const LISTEN_TOGETHER_MIN_PANE_RATIO = 0.28;
-export const LISTEN_TOGETHER_MAX_PANE_RATIO = 0.52;
+const LISTEN_TOGETHER_QUERY_HISTORY_KEY = "listen-together:query-history:v1";
+const LISTEN_TOGETHER_QUERY_HISTORY_LIMIT = 10;
+const LISTEN_TOGETHER_DEFAULT_PANE_RATIO = 0.38;
+const LISTEN_TOGETHER_MIN_PANE_RATIO = 0.28;
+const LISTEN_TOGETHER_MAX_PANE_RATIO = 0.52;
 
 export function clampListenTogetherPaneRatio(value: number): number {
   if (!Number.isFinite(value)) return LISTEN_TOGETHER_MIN_PANE_RATIO;

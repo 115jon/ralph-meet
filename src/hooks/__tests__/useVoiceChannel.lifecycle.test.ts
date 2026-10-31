@@ -73,8 +73,8 @@ const {
     readonly setTrackVolume = vi.fn();
     readonly setTrackPan = vi.fn();
     readonly setRemoteTrackSubscription = vi.fn();
-    readonly setClerkMapping = vi.fn();
-    readonly deleteClerkMapping = vi.fn();
+    readonly setUserMapping = vi.fn();
+    readonly deleteUserMapping = vi.fn();
     readonly publishedTracks = new Map<string, MediaStreamTrack>();
     readonly publishTracks = vi.fn(
       (stream: MediaStream, prefix: string): Promise<void> => {

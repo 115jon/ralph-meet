@@ -20,14 +20,6 @@ import type {
   ServiceResult,
 } from "./server.service";
 
-// ─── ID generator (injectable for testing) ───────────────────────────────────
-
-let _genId = (): string => crypto.randomUUID();
-
-export function setRoleIdGenerator(fn: () => string): void {
-  _genId = fn;
-}
-
 // ─── Shared helper ───────────────────────────────────────────────────────────
 
 async function _getActorPermissions(
@@ -259,7 +251,7 @@ export async function createRole(
     requestedPermissions: input.permissions ?? 0,
   });
 
-  const roleId = _genId();
+  const roleId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   const lastRole = (await db

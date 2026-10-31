@@ -5,7 +5,7 @@ import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
  * Crockford-ish alphabet (no 0/O/1/I), 8 characters shown as XXXX-XXXX.
  */
 
-export const DEVICE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const DEVICE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DEVICE_CODE =
   /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$/;
 

@@ -16,8 +16,6 @@ import { getRoomPreflightWarnings } from "@/lib/room-preflight";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 
-export { RoomConnecting };
-
 export default function RoomPageClient() {
   const { slug } = useParams({ strict: false }) as { slug: string };
   const navigate = useNavigate();

@@ -133,7 +133,7 @@ function requireTicket(data: SocketTicketResponse): string {
   return data.ticket;
 }
 
-export async function fetchSocketTicket(
+async function fetchSocketTicket(
   request: SocketTicketRequest,
 ): Promise<string> {
   return requireTicket(await takeSocketTicket(request));

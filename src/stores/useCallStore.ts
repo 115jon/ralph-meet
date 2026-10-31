@@ -9,13 +9,9 @@
 import { create } from "zustand";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 
-export type CallStatus =
-  | "idle"
-  | "ringing_outgoing"
-  | "ringing_incoming"
-  | "active";
+type CallStatus = "idle" | "ringing_outgoing" | "ringing_incoming" | "active";
 
-export interface CallUser {
+interface CallUser {
   id: string;
   username: string;
   display_name?: string | null;

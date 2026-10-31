@@ -60,7 +60,7 @@ export const THEME_SLOTS: Record<ThemeId, ThemeSlotAssets> = {
 };
 
 /** The active theme's slot assets (empty before mount, so SSR matches). */
-export function useThemeSlots(): ThemeSlotAssets {
+function useThemeSlots(): ThemeSlotAssets {
   const { resolvedTheme } = useTheme();
   const mounted = useMounted();
   if (!mounted || !resolvedTheme) return {};

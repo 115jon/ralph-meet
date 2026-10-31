@@ -35,7 +35,7 @@ export type RouteServices =
   | Gateway
   | RateLimiter;
 
-export const liveServices: Layer.Layer<RouteServices> = Layer.mergeAll(
+const liveServices: Layer.Layer<RouteServices> = Layer.mergeAll(
   KovaAuth.layer,
   Gateway.layer,
   RateLimiter.layer,

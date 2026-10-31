@@ -17,7 +17,7 @@ import { useMessageTimeFormat } from "../message-time";
  * the old 4px leading stripe went; otherwise it is the unlit `--line-strong`
  * dot. It never glows: a lit halo means call state, and this is identity.
  */
-export function EmbedProviderDot({ color }: { color?: string | null }) {
+function EmbedProviderDot({ color }: { color?: string | null }) {
   return (
     <Led
       state="off"

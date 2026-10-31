@@ -16,7 +16,7 @@ import { useEffect, type ReactNode } from "react";
 import { describeApiError } from "@/lib/api-errors";
 import { fail, ok, useApiStub, type StubRoute } from "./api-stub";
 
-export const PROFILE_EDITOR_SURFACES = [
+const PROFILE_EDITOR_SURFACES = [
   "sp-profile-editor",
   "sp-profile-editor-panel",
   "sp-profile-editor-nouser",

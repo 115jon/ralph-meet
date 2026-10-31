@@ -30,7 +30,6 @@ const BADGE_RED = [239, 68, 68, 255] as const;
 const WHITE = [255, 255, 255, 255] as const;
 export const MOBILE_ACTION_TYPE_ID = "messages";
 let notificationPluginInitialized = false;
-let notificationActionUnlisten: (() => void) | null = null;
 let nativeBadgeActive = false;
 let nativeTaskbarAttentionActive = false;
 let notificationPluginInitialization: Promise<void> | null = null;
@@ -133,37 +132,35 @@ async function ensureNotificationPluginReady() {
     }
 
     try {
-      notificationActionUnlisten = await onAction(
-        (event: NotificationActionEvent) => {
-          const payload = event as NotificationActionPayload;
-          desktopNotificationsLog.info("Notification action received", payload);
-          const notification = payload.notification ?? payload;
-          const messageId = notification.extra?.messageId;
-          const channelId = notification.extra?.channelId;
-          if (payload.actionId === "mark-read" && channelId) {
-            window.dispatchEvent(
-              new CustomEvent("notification-mark-read", {
-                detail: { channelId, messageId },
-              }),
-            );
-          }
-          if (
-            payload.actionId === "reply" &&
-            channelId &&
-            payload.inputValue?.trim()
-          ) {
-            window.dispatchEvent(
-              new CustomEvent("notification-reply", {
-                detail: {
-                  channelId,
-                  messageId,
-                  content: payload.inputValue.trim(),
-                },
-              }),
-            );
-          }
-        },
-      );
+      await onAction((event: NotificationActionEvent) => {
+        const payload = event as NotificationActionPayload;
+        desktopNotificationsLog.info("Notification action received", payload);
+        const notification = payload.notification ?? payload;
+        const messageId = notification.extra?.messageId;
+        const channelId = notification.extra?.channelId;
+        if (payload.actionId === "mark-read" && channelId) {
+          window.dispatchEvent(
+            new CustomEvent("notification-mark-read", {
+              detail: { channelId, messageId },
+            }),
+          );
+        }
+        if (
+          payload.actionId === "reply" &&
+          channelId &&
+          payload.inputValue?.trim()
+        ) {
+          window.dispatchEvent(
+            new CustomEvent("notification-reply", {
+              detail: {
+                channelId,
+                messageId,
+                content: payload.inputValue.trim(),
+              },
+            }),
+          );
+        }
+      });
     } catch {
       // Desktop may not support action callbacks.
     }
@@ -433,9 +430,7 @@ async function applyDesktopBadgeStateNow(input: DesktopBadgeState) {
   nativeBadgeActive = true;
 }
 
-export function applyDesktopBadgeState(
-  input: DesktopBadgeState,
-): Promise<void> {
+function applyDesktopBadgeState(input: DesktopBadgeState): Promise<void> {
   pendingBadgeState = input;
   if (badgeDrain) return badgeDrain;
 
@@ -506,13 +501,4 @@ export async function showNativeDesktopToast(input: NotificationOptions) {
   }
 
   await setTaskbarNotificationAttention(true);
-}
-
-export function teardownDesktopNotificationSync() {
-  notificationActionUnlisten?.();
-  notificationActionUnlisten = null;
-  notificationPluginInitialized = false;
-  nativeBadgeActive = false;
-  nativeTaskbarAttentionActive = false;
-  pendingBadgeState = null;
 }

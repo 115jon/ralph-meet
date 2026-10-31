@@ -2,7 +2,7 @@ import { clog } from "@/lib/console-logger";
 
 const log = clog("ChatScroll");
 
-export function isChatScrollDebugEnabled(): boolean {
+function isChatScrollDebugEnabled(): boolean {
   return (
     typeof import.meta !== "undefined" && (import.meta as any).env?.DEV === true
   );

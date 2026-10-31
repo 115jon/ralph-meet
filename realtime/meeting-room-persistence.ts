@@ -1,7 +1,7 @@
 export const PENDING_CALLS_STORAGE_KEY = "pendingCalls";
 export const SPATIAL_AUDIO_STORAGE_PREFIX = "spatialAudio:";
-export const MAX_SPATIAL_MANUAL_POSITIONS = 64;
-export const MAX_SPATIAL_AUDIO_STATE_BYTES = 32 * 1024;
+const MAX_SPATIAL_MANUAL_POSITIONS = 64;
+const MAX_SPATIAL_AUDIO_STATE_BYTES = 32 * 1024;
 const MAX_SPATIAL_DIMENSION = 10_000;
 
 export interface StoredPendingCall {
@@ -48,9 +48,7 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-export function isStoredPendingCall(
-  value: unknown,
-): value is StoredPendingCall {
+function isStoredPendingCall(value: unknown): value is StoredPendingCall {
   if (!isRecord(value)) return false;
 
   return (

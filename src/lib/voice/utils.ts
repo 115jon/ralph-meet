@@ -51,14 +51,14 @@ export const formatQuality = (
   return q?.toUpperCase() || "HD";
 };
 
-export interface StreamQualityProfile {
+interface StreamQualityProfile {
   id: string;
   label: string;
   height: number;
   fps: number;
 }
 
-export const STREAMING_PROFILES: StreamQualityProfile[] = [
+const STREAMING_PROFILES: StreamQualityProfile[] = [
   { id: "720p30", label: "720p", height: 720, fps: 30 },
   { id: "720p60", label: "720p", height: 720, fps: 60 },
   { id: "1080p30", label: "1080p", height: 1080, fps: 30 },

@@ -27,7 +27,7 @@ describe("buildVoiceDiagnosticsBundle", () => {
     const bundle = buildVoiceDiagnosticsBundle({
       detailedStats: {
         voiceToken: "secret",
-        clerk_user_id: "user-123",
+        user_id: "user-123",
         nested: { authorization: "Bearer nope" },
       },
       connectionStats: null,
@@ -35,7 +35,7 @@ describe("buildVoiceDiagnosticsBundle", () => {
 
     expect(bundle.detailedStats).toEqual({
       voiceToken: "[redacted]",
-      clerk_user_id: "[redacted]",
+      user_id: "[redacted]",
       nested: { authorization: "[redacted]" },
     });
   });

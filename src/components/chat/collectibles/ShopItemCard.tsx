@@ -19,7 +19,7 @@ import {
 } from "./CollectiblePreviews";
 import { useInView } from "./hooks";
 
-export function ItemStage({
+function ItemStage({
   family,
   identity,
   animate,
@@ -58,7 +58,7 @@ export function ItemStage({
 }
 
 /** Up to four colour dots for a design's variants, plus a count. */
-export function VariantDots({ family }: { family: VariantFamily }) {
+function VariantDots({ family }: { family: VariantFamily }) {
   if (family.variants.length < 2) return null;
   const shown = family.variants.slice(0, 4);
   return (

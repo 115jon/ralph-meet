@@ -53,11 +53,11 @@ export type CollectionSection = {
   items: CollectibleCatalogItem[];
 };
 
-export function normalizeQuery(query: string) {
+function normalizeQuery(query: string) {
   return query.trim().toLowerCase();
 }
 
-export function itemMatchesQuery(
+function itemMatchesQuery(
   item: CollectibleCatalogItem,
   normalizedQuery: string,
 ) {
@@ -199,7 +199,7 @@ export function variantName(item: CollectibleCatalogItem) {
 }
 
 /** Key shared by all colour variants of one design. */
-export function variantFamilyKey(item: CollectibleCatalogItem) {
+function variantFamilyKey(item: CollectibleCatalogItem) {
   return `${item.kind}:${item.variantOf ?? item.skuId}`;
 }
 

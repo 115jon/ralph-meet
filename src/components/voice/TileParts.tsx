@@ -81,7 +81,7 @@ export function TileAvatar({
  * ink that scales out and fades around the square avatar. Never talk green
  * (green means speaking). The caller unmounts it when ringing ends.
  */
-export function RingingRing({ className }: { className?: string }) {
+function RingingRing({ className }: { className?: string }) {
   return (
     <span
       aria-hidden

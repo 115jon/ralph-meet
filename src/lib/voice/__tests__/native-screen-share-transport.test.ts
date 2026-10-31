@@ -1,10 +1,10 @@
 import {
-  VoiceOpcode,
   type ClientMessage,
   type IceServer,
   type NegotiationDonePayload,
   type SessionDescriptionPayload,
 } from "@/lib/types";
+import { GatewayOp } from "@/lib/gateway-protocol";
 import { VoiceGateway } from "@/lib/voice/gateways/voice-gateway";
 import {
   NativeScreenShareTransport,
@@ -62,8 +62,8 @@ function selectProtocolMessages(messages: ClientMessage[]) {
   return messages.filter(
     (
       message,
-    ): message is Extract<ClientMessage, { op: VoiceOpcode.SelectProtocol }> =>
-      message.op === VoiceOpcode.SelectProtocol,
+    ): message is Extract<ClientMessage, { op: GatewayOp.SelectProtocol }> =>
+      message.op === GatewayOp.SelectProtocol,
   );
 }
 
@@ -135,7 +135,7 @@ describe("NativeScreenShareTransport", () => {
     ).toBe(false);
     expect(
       fixture.sentMessages.some(
-        (message) => message.op === VoiceOpcode.TracksReady,
+        (message) => message.op === GatewayOp.TracksReady,
       ),
     ).toBe(false);
 
@@ -167,7 +167,7 @@ describe("NativeScreenShareTransport", () => {
       { timeoutMs: 10000 },
     );
     expect(fixture.sentMessages.at(-1)).toEqual({
-      op: VoiceOpcode.TracksReady,
+      op: GatewayOp.TracksReady,
       d: {
         track_names: [
           "screen-video-local-participant",
@@ -250,9 +250,9 @@ describe("NativeScreenShareTransport", () => {
       ),
     ).toHaveLength(1);
     expect(fixture.sentMessages).toEqual([
-      expect.objectContaining({ op: VoiceOpcode.SelectProtocol }),
+      expect.objectContaining({ op: GatewayOp.SelectProtocol }),
       {
-        op: VoiceOpcode.StopTracks,
+        op: GatewayOp.StopTracks,
         d: {
           track_names: [
             "screen-video-local-participant",
@@ -263,7 +263,7 @@ describe("NativeScreenShareTransport", () => {
     ]);
     expect(
       fixture.sentMessages.some(
-        (message) => message.op === VoiceOpcode.TracksReady,
+        (message) => message.op === GatewayOp.TracksReady,
       ),
     ).toBe(false);
     expect(fixture.transport.active).toBe(false);
@@ -276,7 +276,7 @@ describe("NativeScreenShareTransport", () => {
     ).toHaveLength(1);
     expect(
       fixture.sentMessages.filter(
-        (message) => message.op === VoiceOpcode.StopTracks,
+        (message) => message.op === GatewayOp.StopTracks,
       ),
     ).toHaveLength(1);
   });
@@ -375,8 +375,8 @@ describe("NativeScreenShareTransport", () => {
       "start_native_screen_share",
     ]);
     expect(fixture.sentMessages.map((message) => message.op)).toEqual([
-      VoiceOpcode.SelectProtocol,
-      VoiceOpcode.TracksReady,
+      GatewayOp.SelectProtocol,
+      GatewayOp.TracksReady,
     ]);
     expect(fixture.transport.active).toBe(true);
   });
@@ -401,10 +401,10 @@ describe("NativeScreenShareTransport", () => {
       ),
     ).toHaveLength(2);
     expect(fixture.sentMessages.map((message) => message.op)).toEqual([
-      VoiceOpcode.StopTracks,
-      VoiceOpcode.SelectProtocol,
-      VoiceOpcode.TracksReady,
-      VoiceOpcode.StopTracks,
+      GatewayOp.StopTracks,
+      GatewayOp.SelectProtocol,
+      GatewayOp.TracksReady,
+      GatewayOp.StopTracks,
     ]);
     expect(fixture.transport.active).toBe(false);
   });
@@ -416,9 +416,9 @@ describe("NativeScreenShareTransport", () => {
     fixture.sentMessages.length = 0;
     await completeStart(fixture, fixture.transport.reconnect(), 0);
     expect(fixture.sentMessages.map((message) => message.op)).toEqual([
-      VoiceOpcode.StopTracks,
-      VoiceOpcode.SelectProtocol,
-      VoiceOpcode.TracksReady,
+      GatewayOp.StopTracks,
+      GatewayOp.SelectProtocol,
+      GatewayOp.TracksReady,
     ]);
 
     fixture.sentMessages.length = 0;
@@ -454,7 +454,7 @@ describe("NativeScreenShareTransport", () => {
 
     expect(
       fixture.sentMessages.some(
-        (message) => message.op === VoiceOpcode.TracksReady,
+        (message) => message.op === GatewayOp.TracksReady,
       ),
     ).toBe(false);
     expect(fixture.transport.active).toBe(false);
@@ -484,7 +484,7 @@ describe("NativeScreenShareTransport", () => {
 
     expect(fixture.sentMessages).toEqual([
       {
-        op: VoiceOpcode.StopTracks,
+        op: GatewayOp.StopTracks,
         d: {
           track_names: [
             "screen-video-local-participant",

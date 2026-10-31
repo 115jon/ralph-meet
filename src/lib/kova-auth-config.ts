@@ -3,7 +3,7 @@ import {
   DEFAULT_KOVA_AUTH_URL,
 } from "@/lib/site-defaults";
 
-export const KOVA_AUTH_URL =
+const KOVA_AUTH_URL =
   import.meta.env.VITE_KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL;
 
 /**

@@ -12,7 +12,7 @@ export function getPublicMediaUrl(url: string): string {
   return `${getWebOrigin()}${path}`;
 }
 
-export function getMediaFilename(url: string, fallback = "media"): string {
+function getMediaFilename(url: string, fallback = "media"): string {
   try {
     const pathname = new URL(url).pathname;
     const filename = pathname.split("/").pop()?.trim();

@@ -6,12 +6,12 @@ import {
   type RoomGatewayServerMessage,
 } from "@/lib/gateway-protocol";
 import {
-  VoiceOpcode,
   type IceServer,
   type TrackInfo,
   type VoiceState,
   type VoiceStateDelta,
 } from "@/lib/types";
+import { GatewayOp } from "@/lib/gateway-protocol";
 import {
   fetchSocketTicketBundle,
   type MediaBootstrap,
@@ -70,7 +70,7 @@ export interface ConnectOptions {
   displayName?: string | null;
   avatarUrl?: string;
   avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
-  clerkUserId?: string;
+  userId?: string;
   channelId?: string;
   serverId?: string;
   roomSlug: string;
@@ -141,7 +141,7 @@ export class RoomGateway extends BaseGateway<
   }
 
   public refreshProfile() {
-    this.send({ op: VoiceOpcode.ProfileRefresh, d: {} });
+    this.send({ op: GatewayOp.ProfileRefresh, d: {} });
   }
 
   public disconnect() {
@@ -160,13 +160,13 @@ export class RoomGateway extends BaseGateway<
 
   protected handleMessage(msg: RoomGatewayServerMessage) {
     switch (msg.op) {
-      case VoiceOpcode.Hello: {
+      case GatewayOp.Hello: {
         this.log.info("Hello received");
         if (this.sessionId && this.participantId) {
           this.log.info(`Attempting resume for session ${this.participantId}`);
           this.send(
             {
-              op: VoiceOpcode.Resume,
+              op: GatewayOp.Resume,
               d: {
                 session_id: this.participantId,
                 seq_ack: this.lastReplayableSeq,
@@ -176,14 +176,14 @@ export class RoomGateway extends BaseGateway<
           );
         } else {
           this.send(
-            { op: VoiceOpcode.Identify, d: this.identifyPayload() },
+            { op: GatewayOp.Identify, d: this.identifyPayload() },
             true,
           );
         }
         break;
       }
 
-      case VoiceOpcode.MediaReady: {
+      case GatewayOp.MediaReady: {
         const ready = msg.d;
         this.emit("media-ready", {
           participantId: ready.participant_id,
@@ -193,7 +193,7 @@ export class RoomGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.Ready: {
+      case GatewayOp.Ready: {
         const ready = msg.d;
         this.participantId = ready.participant_id;
         this.sessionId = ready.participant_id;
@@ -219,7 +219,7 @@ export class RoomGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.Resumed: {
+      case GatewayOp.Resumed: {
         this.log.info("Session resumed successfully");
         const resumed = msg.d;
 
@@ -234,7 +234,7 @@ export class RoomGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.VoiceStateUpdate: {
+      case GatewayOp.VoiceStateUpdate: {
         const vsu = msg.d;
         this.emit("voice-state-update", {
           participant: vsu.participant,
@@ -248,7 +248,7 @@ export class RoomGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.ProfileUpdate: {
+      case GatewayOp.ProfileUpdate: {
         const pu = msg.d;
         this.emit("profile-update", {
           participantId: pu.participant_id,
@@ -261,7 +261,7 @@ export class RoomGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.Error: {
+      case GatewayOp.Error: {
         const err = msg.d;
         this.log.error(`Error (code=${err.code}):`, err.message);
 
@@ -271,7 +271,7 @@ export class RoomGateway extends BaseGateway<
           this.participantId = null;
           this.lastReplayableSeq = 0;
           this.send(
-            { op: VoiceOpcode.Identify, d: this.identifyPayload() },
+            { op: GatewayOp.Identify, d: this.identifyPayload() },
             true,
           );
           break;
@@ -291,7 +291,7 @@ export class RoomGateway extends BaseGateway<
   }): void {
     if (this.options) this.options = { ...this.options, standby: false };
     this.send({
-      op: VoiceOpcode.VoiceStateUpdate,
+      op: GatewayOp.VoiceStateUpdate,
       d: {
         promote_standby: true,
         ...(voice?.selfMute !== undefined ? { self_mute: voice.selfMute } : {}),
@@ -307,7 +307,7 @@ export class RoomGateway extends BaseGateway<
       display_name: this.options?.displayName,
       avatar_url: this.options?.avatarUrl,
       avatar_display: this.options?.avatarDisplay,
-      clerk_user_id: this.options?.clerkUserId,
+      clerk_user_id: this.options?.userId,
       supports_voice_state_deltas: true,
       ...(this.options?.standby ? { standby: true } : {}),
     };
@@ -315,21 +315,21 @@ export class RoomGateway extends BaseGateway<
 
   public sendMuteUpdate(isMicOn: boolean, isCameraOn: boolean) {
     this.send({
-      op: VoiceOpcode.VoiceStateUpdate,
+      op: GatewayOp.VoiceStateUpdate,
       d: { self_mute: !isMicOn, self_video: isCameraOn },
     });
   }
 
   public sendVoiceState(state: any) {
     this.send({
-      op: VoiceOpcode.VoiceStateUpdate,
+      op: GatewayOp.VoiceStateUpdate,
       d: state,
     });
   }
 
   public requestCredentialRefresh() {
     this.send({
-      op: VoiceOpcode.RefreshVoiceCredentials,
+      op: GatewayOp.RefreshVoiceCredentials,
       d: {},
     });
   }

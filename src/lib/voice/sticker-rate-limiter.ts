@@ -35,9 +35,3 @@ export function consumeStickerToken(): boolean {
   tokens--;
   return true;
 }
-
-/** Remaining tokens (for UI feedback, not for security). */
-export function remainingStickerTokens(): number {
-  refill();
-  return tokens;
-}

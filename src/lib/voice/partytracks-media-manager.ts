@@ -11,7 +11,7 @@ export interface PartyTracksMediaTransport {
   pull(track$: Observable<TrackInfo>): Observable<MediaStreamTrack>;
 }
 
-export interface PartyTracksRemoteTrackEvent {
+interface PartyTracksRemoteTrackEvent {
   action: "add" | "remove";
   track: MediaStreamTrack;
   trackInfo: TrackInfo;

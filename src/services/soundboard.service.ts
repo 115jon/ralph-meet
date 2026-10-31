@@ -1,4 +1,3 @@
-import { CacheKey } from "@/lib/cache";
 import { getSoundboardUploadUrl } from "@/lib/voice/soundboard-media";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -58,8 +57,4 @@ export async function listServerSoundboardSounds(
     volume: Number(row.sound_volume ?? 1.0),
     created_at: row.created_at as string,
   }));
-}
-
-export function soundboardCacheKey(serverId: string) {
-  return CacheKey.serverSoundboard(serverId);
 }

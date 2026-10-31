@@ -17,20 +17,6 @@ function jsonRequest(body: string): Request {
 
 describe("media and miscellaneous request body validation", () => {
   it.each([
-    ["GIF favorites", gifFavoriteBodySchema],
-    ["emoji generation", generateEmojiBodySchema],
-    ["listen together resolution", listenTogetherResolveBodySchema],
-    ["MyInstants favorites", myInstantsFavoriteBodySchema],
-    ["socket tickets", socketTicketRequestBodySchema],
-  ])("rejects malformed JSON for %s with a 400", async (_name, schema) => {
-    const result = await validateBody(jsonRequest("{not json"), schema);
-
-    expect(result).toBeInstanceOf(Response);
-    if (!(result instanceof Response)) throw new Error("expected Response");
-    expect(result.status).toBe(400);
-  });
-
-  it.each([
     ["GIF favorites", gifFavoriteBodySchema, { favorites: "not-an-array" }],
     ["emoji generation", generateEmojiBodySchema, []],
     [

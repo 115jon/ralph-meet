@@ -77,7 +77,7 @@ export function loadRecentTargets(): RecentTarget[] {
 }
 
 /** `target` first, without duplicates, capped. Pure. */
-export function pushRecentTarget(
+function pushRecentTarget(
   list: readonly RecentTarget[],
   target: RecentTarget,
 ): RecentTarget[] {

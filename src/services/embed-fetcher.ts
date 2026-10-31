@@ -37,7 +37,7 @@ const log = clog("EmbedFetcher");
 const twitterLog = clog("embed:twitter");
 
 /** Most embeds a single message gets. */
-export const MAX_EMBEDS_PER_MESSAGE = 3;
+const MAX_EMBEDS_PER_MESSAGE = 3;
 const X_ICON_URL =
   "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
 const X_EMBED_HOSTS = new Set([
@@ -153,7 +153,7 @@ export function extractEmbedUrls(
  * yields no embed (404, a page without metadata, a non-HTML file type) is a
  * permanent "none" and must not hold the message's other embeds hostage.
  */
-export class TransientEmbedError extends Error {
+class TransientEmbedError extends Error {
   constructor(
     message: string,
     readonly status?: number,
@@ -163,7 +163,7 @@ export class TransientEmbedError extends Error {
   }
 }
 
-export function isTransientStatus(status: number): boolean {
+function isTransientStatus(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
@@ -176,7 +176,7 @@ function isTransientFetchError(error: unknown): boolean {
   return false;
 }
 
-export type EmbedUrlOutcome =
+type EmbedUrlOutcome =
   | { url: string; status: "ok"; embed: EmbedInfo; stale?: boolean }
   | { url: string; status: "none" }
   | { url: string; status: "retry"; reason: string };
@@ -284,7 +284,7 @@ function isSocialEmbedUrl(url: string): boolean {
   }
 }
 
-export function embedFreshSeconds(url: string, embed: EmbedInfo): number {
+function embedFreshSeconds(url: string, embed: EmbedInfo): number {
   if (embed.unavailable) return UNAVAILABLE_EMBED_FRESH_SECONDS;
   return isSocialEmbedUrl(url)
     ? SOCIAL_EMBED_FRESH_SECONDS
@@ -2007,7 +2007,7 @@ async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
  * Rendered as bare media (no card), sized from the file header so the
  * message row does not jump when it loads.
  */
-export function buildDirectMediaEmbed(
+function buildDirectMediaEmbed(
   url: string,
   contentType: string,
   bytes: Uint8Array,

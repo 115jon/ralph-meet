@@ -1,4 +1,4 @@
-export type ScreenShareSourceKind = "window" | "monitor" | "device";
+type ScreenShareSourceKind = "window" | "monitor" | "device";
 
 export interface ScreenShareOptions {
   quality?: string;

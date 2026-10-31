@@ -69,7 +69,7 @@ function deriveUsername(user: any) {
   );
 }
 
-export interface UIState {
+interface UIState {
   sidebarOpen: boolean;
   activeModal: "none" | "invite" | "settings";
   showMembers: boolean;
@@ -78,7 +78,7 @@ export interface UIState {
   pendingJump: { channelId: string; messageId: string } | null;
 }
 
-export type UIAction =
+type UIAction =
   | { type: "SET_SIDEBAR"; open: boolean }
   | { type: "OPEN_MODAL"; modal: "invite" | "settings" }
   | { type: "CLOSE_MODAL" }
@@ -92,7 +92,7 @@ export type UIAction =
       jump: { channelId: string; messageId: string } | null;
     };
 
-export function uiReducer(state: UIState, action: UIAction): UIState {
+function uiReducer(state: UIState, action: UIAction): UIState {
   switch (action.type) {
     case "SET_SIDEBAR":
       return { ...state, sidebarOpen: action.open };

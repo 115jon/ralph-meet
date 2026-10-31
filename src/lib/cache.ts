@@ -216,39 +216,3 @@ export async function cacheFetch<T>(
     return fresh;
   }) as Promise<T>;
 }
-
-/**
- * Stale-while-revalidate pattern: return cached data immediately,
- * and refresh in the background using waitUntil.
- *
- * Use this for data that's tolerable if slightly stale (members list, etc).
- * Falls back to normal cache-aside if no cached data exists.
- *
- * @param key     - KV cache key
- * @param ttl     - TTL in seconds
- * @param fetcher - async function that fetches from D1
- * @param ctx     - ExecutionContext for waitUntil (optional)
- */
-export async function cacheStaleWhileRevalidate<T>(
-  key: string,
-  ttl: number,
-  fetcher: () => Promise<T>,
-  ctx?: { waitUntil: (p: Promise<unknown>) => void },
-): Promise<T> {
-  const cached = await cacheGet<T>(key);
-
-  if (cached !== null) {
-    // Serve stale, revalidate in background
-    if (ctx) {
-      ctx.waitUntil(
-        fetcher()
-          .then((fresh) => cacheSet(key, fresh, ttl))
-          .catch(() => {}),
-      );
-    }
-    return cached;
-  }
-
-  // No cached data — must fetch synchronously
-  return cacheFetch(key, ttl, fetcher);
-}

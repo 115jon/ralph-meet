@@ -1,6 +1,5 @@
 // Kept free of schema imports on purpose: the channel modals bundled in the main
 // chat chunk import this, and must not pull Effect Schema in with it.
-// validations.ts re-exports it for existing importers.
 
 /**
  * Sanitizes a channel name based on its type.

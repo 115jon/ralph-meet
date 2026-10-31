@@ -176,7 +176,7 @@ export async function getVoiceStatusMediaAssetById(
   };
 }
 
-export async function getVoiceStatusMediaAssetByFileKey(
+async function getVoiceStatusMediaAssetByFileKey(
   db: D1Database,
   fileKey: string,
 ): Promise<(VoiceChannelStatusMediaAsset & { fileKey: string }) | null> {

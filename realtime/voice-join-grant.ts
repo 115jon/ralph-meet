@@ -21,7 +21,7 @@ export const VOICE_MEDIA_AUTHORIZATION_PATH = "/voice-media-authorization";
 /** How long a voice Identify or pull waits for the MeetingRoom's grant. */
 export const VOICE_JOIN_GRANT_WAIT_MS = 10_000;
 /** Revocation tombstones outlive any delayed grant push for the same id. */
-export const VOICE_JOIN_GRANT_TOMBSTONE_TTL_MS = 10 * 60 * 1000;
+const VOICE_JOIN_GRANT_TOMBSTONE_TTL_MS = 10 * 60 * 1000;
 
 export interface VoiceJoinGrantUpdate {
   participantId: string;

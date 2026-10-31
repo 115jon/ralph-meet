@@ -17,7 +17,7 @@ import { clog } from "../console-logger";
 
 const log = clog("StatsHub");
 
-export interface StatsTick {
+interface StatsTick {
   /** The single report every consumer reads this tick. */
   report: RTCStatsReport;
   /** The peer connection the report came from. */
@@ -40,8 +40,8 @@ export interface StatsHubOptions {
   isSuspect?: () => boolean;
 }
 
-export const STATS_HUB_INTERVAL_MS = 2000;
-export const STATS_HUB_SUSPECT_INTERVAL_MS = 1000;
+const STATS_HUB_INTERVAL_MS = 2000;
+const STATS_HUB_SUSPECT_INTERVAL_MS = 1000;
 
 export class StatsHub {
   private readonly consumers = new Set<StatsConsumer>();

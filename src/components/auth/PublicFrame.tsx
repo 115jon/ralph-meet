@@ -389,6 +389,3 @@ export function ErrorNotice({
     </div>
   );
 }
-
-/** @deprecated The old name of `PublicKicker`. */
-export const PublicLeadIn = PublicKicker;

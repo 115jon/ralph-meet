@@ -25,7 +25,7 @@ export const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
  * responses). 12 MiB is far larger than any legitimate oEmbed/HTML payload but
  * prevents multi-GB responses from being materialised in memory.
  */
-export const DEFAULT_MAX_BUFFER_BYTES = 12 * 1024 * 1024;
+const DEFAULT_MAX_BUFFER_BYTES = 12 * 1024 * 1024;
 
 export interface SafeFetchOptions {
   /** Per-request timeout in ms. Defaults to {@link DEFAULT_FETCH_TIMEOUT_MS}. */

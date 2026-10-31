@@ -10,7 +10,6 @@ import type { ReactNode } from "react";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs } from "@/components/ui/tabs";
-import { SCREEN_SHARE_QUALITY_PRESETS } from "@/lib/screen-share-support";
 import { cn } from "@/lib/utils";
 
 export interface ScreenSource {
@@ -30,8 +29,6 @@ export interface MediaDeviceSource {
 }
 
 export type Tab = "applications" | "screens" | "devices";
-
-export const QUALITY_PRESETS = SCREEN_SHARE_QUALITY_PRESETS;
 
 const GRID =
   "grid grid-cols-1 gap-3 @min-[440px]:grid-cols-2 @min-[680px]:grid-cols-3";

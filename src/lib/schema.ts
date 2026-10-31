@@ -44,7 +44,7 @@ export function withDefault<S extends Schema.Constraint>(
   return Schema.withDecodingDefaultType(Effect.succeed(value))(schema);
 }
 
-export interface ParseIssue {
+interface ParseIssue {
   /** Keys leading to the failing value; empty when the root value failed. */
   readonly path: ReadonlyArray<PropertyKey>;
   /** The message of the failing check, or the library default. */

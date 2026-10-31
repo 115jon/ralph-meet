@@ -4,19 +4,12 @@
 
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
+import { sanitizeChannelName } from "@/lib/channel-name";
 import { ServiceError } from "@/lib/service-error";
 import type { VoiceChannelStatus } from "@/lib/types";
-import { sanitizeChannelName } from "@/lib/validations";
 import { sanitizeVoiceChannelStatus } from "@/lib/voice-channel-status";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { AuditLogDescriptor, BroadcastDescriptor } from "./server.service";
-
-// ─── ID generator (injectable) ───────────────────────────────────────────────
-
-let _genId = (): string => crypto.randomUUID();
-export function setChannelIdGenerator(fn: () => string): void {
-  _genId = fn;
-}
 
 type RawChannelRecord = {
   id: string;
@@ -374,7 +367,7 @@ export async function createChannel(
     throw ServiceError.badRequest("Invalid channel name");
   }
 
-  const channelId = _genId();
+  const channelId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   // Get next position
@@ -517,7 +510,7 @@ export async function upsertPermissionOverride(
     throw ServiceError.notFound("Channel not found");
   }
 
-  const id = _genId();
+  const id = crypto.randomUUID();
 
   await db
     .prepare(

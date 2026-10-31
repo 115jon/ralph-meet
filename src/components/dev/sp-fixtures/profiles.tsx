@@ -24,7 +24,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { at, fail, ok, useApiStub, type StubRoute } from "./api-stub";
 import { FIXTURE_ROLES } from "./server";
 
-export const PROFILE_SURFACES = [
+const PROFILE_SURFACES = [
   "sp-profile-modal",
   "sp-profile-modal-friend",
   "sp-profile-modal-pending",
@@ -67,7 +67,7 @@ export const me: User = {
   banner_url: coverGlasshouse,
 } as User;
 
-export function relationshipFor(surface: string, user: User): Relationship[] {
+function relationshipFor(surface: string, user: User): Relationship[] {
   const type = surface.endsWith("-friend")
     ? 0
     : surface.endsWith("-blocked")

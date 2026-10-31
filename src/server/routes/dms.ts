@@ -16,7 +16,7 @@ const dmCreateSchema = looseStruct({
 });
 
 /** GET /api/dms — list all DM channels for the authenticated user. */
-export const listDms = Effect.fn("dms.list")(function* (request: Request) {
+const listDms = Effect.fn("dms.list")(function* (request: Request) {
   const userId = yield* signedInUserId(request);
   const db = yield* Database;
   const dms = yield* Effect.promise(() => listDMs(db, userId));
@@ -25,7 +25,7 @@ export const listDms = Effect.fn("dms.list")(function* (request: Request) {
 });
 
 /** POST /api/dms — open or create a DM with a user. */
-export const openDm = Effect.fn("dms.open")(function* (request: Request) {
+const openDm = Effect.fn("dms.open")(function* (request: Request) {
   const userId = yield* signedInUserId(request);
   const body = yield* Effect.promise(() =>
     validateBody(request, dmCreateSchema, request),

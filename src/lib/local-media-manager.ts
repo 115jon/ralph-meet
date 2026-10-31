@@ -40,12 +40,6 @@ export interface LocalVideoConstraints {
   qualityId?: string;
 }
 
-export interface AcquireResult {
-  stream: MediaStream;
-  /** True if this was a freshly acquired stream, false if constraints matched cache */
-  fresh: boolean;
-}
-
 declare const localMediaOwnerBrand: unique symbol;
 export type LocalMediaOwner = {
   readonly [localMediaOwnerBrand]: true;

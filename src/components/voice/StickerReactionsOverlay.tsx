@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 interface StickerReactionsOverlayProps {
   sfu: SFUClient | null;
-  /** When set, only reactions from this clerk user ID are shown (per-card display). */
+  /** When set, only reactions from this user ID are shown (per-card display). */
   senderUserId?: string;
 }
 

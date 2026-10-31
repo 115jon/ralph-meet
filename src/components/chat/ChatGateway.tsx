@@ -20,7 +20,7 @@ type ChatGatewayProps = {
 export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
   const { userId, isLoaded } = useAuth();
   const initGateway = useChatStore((s) => s.gateway.initGateway);
-  const _setClerkUserId = useChatStore((s) => s.gateway.setClerkUserId);
+  const _setGatewayUserId = useChatStore((s) => s.gateway.setGatewayUserId);
   const disconnectGateway = useChatStore((s) => s.gateway.disconnectGateway);
   const navigate = useNavigate();
 
@@ -59,7 +59,7 @@ export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
   }, [initGateway, disconnectGateway, gatewayUserId, tokenReady]);
 
   useEffect(() => {
-    useChatStore.getState().gateway.setClerkUserId(gatewayUserId);
+    useChatStore.getState().gateway.setGatewayUserId(gatewayUserId);
   }, [gatewayUserId]);
 
   // A backgrounded tab or a sleeping phone throttles or freezes timers, so a

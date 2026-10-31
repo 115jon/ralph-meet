@@ -40,13 +40,6 @@ import { cn } from "@/lib/utils";
 
 export type SidePanelMode = "dock" | "sheet" | "drawer";
 
-const SidePanelModeContext = React.createContext<SidePanelMode | null>(null);
-
-/** The form the enclosing SidePanel took, or null outside one. */
-export function useSidePanelMode(): SidePanelMode | null {
-  return React.useContext(SidePanelModeContext);
-}
-
 type SidePanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -268,9 +261,5 @@ export function SidePanel({
     );
   }
 
-  return (
-    <SidePanelModeContext.Provider value={mode}>
-      {surface}
-    </SidePanelModeContext.Provider>
-  );
+  return surface;
 }

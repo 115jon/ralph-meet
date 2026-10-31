@@ -648,12 +648,6 @@ describe("MeetingRoom lifecycle", () => {
     )
       .bind(userId, "profile-refresh-user")
       .run();
-    await env.CACHE.put(
-      `clerk:profile:${userId}`,
-      JSON.stringify({ name: "Cached Profile" }),
-      { expirationTtl: 300 },
-    );
-
     const roomName = crypto.randomUUID();
     const source = await openMeetingSocket(roomName, userId);
     const ready = await identifyMeetingSocket(source);
@@ -1190,12 +1184,6 @@ describe("MeetingRoom lifecycle", () => {
         "frame:old",
       )
       .run();
-
-    await env.CACHE.put(
-      `clerk:profile:${userId}`,
-      JSON.stringify({ name: "Cached Profile", imageUrl: "cached.png" }),
-      { expirationTtl: 300 },
-    );
 
     const roomName = crypto.randomUUID();
     const first = await Promise.race([

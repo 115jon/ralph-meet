@@ -25,7 +25,7 @@ import type { User } from "@/lib/types";
 
 export type CollectibleKit = "frame" | "deco" | "full";
 
-export const FIXTURE_AVATAR =
+const FIXTURE_AVATAR =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#22c3a6"/></linearGradient></defs><rect width="128" height="128" fill="url(#g)"/><circle cx="64" cy="50" r="22" fill="#fff" fill-opacity=".9"/><path d="M22 118c6-26 24-38 42-38s36 12 42 38" fill="#fff" fill-opacity=".9"/></svg>`,

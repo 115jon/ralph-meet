@@ -18,7 +18,7 @@ import type { ReactNode } from "react";
 import { at, ok, useApiStub, type StubRoute } from "./api-stub";
 import { FIXTURE_ROLES } from "./server";
 
-export const CHANNEL_SURFACES = [
+const CHANNEL_SURFACES = [
   "sp-channel",
   "sp-channel-permissions",
   "sp-channel-permissions-list",
