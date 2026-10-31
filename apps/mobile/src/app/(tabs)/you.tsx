@@ -141,7 +141,7 @@ export default function YouScreen() {
         <View>
           <Text variant="title">{name}</Text>
           {user ? (
-            <Text variant="silk" tone="ink3">
+            <Text variant="row" tone="ink3">
               @{user.username}
             </Text>
           ) : null}
