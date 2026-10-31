@@ -1,5 +1,5 @@
 diff --git a/dist/client/index.js b/dist/client/index.js
-index 030793c98d77b71e6d32020e35a4a9624ac8eed5..8b6a94eea196a269e6c000e0af6ed7bdf5a4c28b 100644
+index 030793c98d77b71e6d32020e35a4a9624ac8eed5..430aae10358c13bfe801ebade83a86b4dd0cd895 100644
 --- a/dist/client/index.js
 +++ b/dist/client/index.js
 @@ -287,15 +287,15 @@ var PartyTracks = class {
@@ -25,7 +25,21 @@ index 030793c98d77b71e6d32020e35a4a9624ac8eed5..8b6a94eea196a269e6c000e0af6ed7bd
  						if (transceiver.mid) {
  							logger.debug("🔚 Closing pushed track ", trackName);
  							this.#closeTrackInBulk(peerConnection, transceiver.mid, sessionId);
-@@ -417,8 +417,20 @@ var PartyTracks = class {
+@@ -371,6 +371,13 @@ var PartyTracks = class {
+ 		return new Observable((subscriber) => {
+ 			logger.debug("📥 pulling track ", trackMetadata.trackName);
+ 			this.#pullTrackDispatcher.doBulkRequest(trackMetadata, (tracks) => this.#taskScheduler.schedule(async () => {
++				// Ralph Meet: a pull renegotiates. If it lands before the peer
++				// connection first reaches "connected" (a pull queued behind the
++				// push that negotiated it), the SFU never registers the pushed
++				// track and every pull of it gets not_found_track_error. Hold the
++				// pull until connected; a timeout or failure throws so
++				// retryWithBackoff tries again.
++				await peerConnectionIsReadyForPull(peerConnection);
+ 				const newTrackResponse = await this.#fetchWithRecordedHistory(`${this.#config.prefix}/sessions/${sessionId}/tracks/new?${this.#params}`, {
+ 					method: "POST",
+ 					body: JSON.stringify({ tracks })
+@@ -417,8 +424,20 @@ var PartyTracks = class {
  				}).catch((err) => subscriber.error(err));
  				else subscriber.error(/* @__PURE__ */ new Error("Missing Track Info"));
  				return trackMetadata.trackName;
@@ -47,3 +61,43 @@ index 030793c98d77b71e6d32020e35a4a9624ac8eed5..8b6a94eea196a269e6c000e0af6ed7bd
  	}
  	/**
  	Pulls a track from the Realtime SFU. If trackData$ emits new TrackMetadata
+@@ -530,6 +549,39 @@ function waitForTransceiverToSendData(transceiver, onDataSent) {
+ 		if (timeoutId !== void 0) clearTimeout(timeoutId);
+ 	};
+ }
++// Ralph Meet: resolves once a pull may renegotiate. A peer connection that has
++// negotiated nothing yet goes at once (this pull connects it), as does one that
++// has connected before ("disconnected" is an ICE blip on an established
++// session). One that negotiated and is still "new" or "connecting" waits.
++async function peerConnectionIsReadyForPull(peerConnection, timeout = 5e3) {
++	const isReady = () => {
++		const state = peerConnection.connectionState;
++		if (state === "failed" || state === "closed") throw new Error(`PeerConnection connectionState is ${state}`);
++		if (state === "new") return !peerConnection.remoteDescription;
++		return state !== "connecting";
++	};
++	if (isReady()) return;
++	// iceconnectionstatechange too: when ICE fails the session closes the peer
++	// connection from that event, and a closed one fires no connectionstatechange.
++	const events = ["connectionstatechange", "iceconnectionstatechange"];
++	await new Promise((resolve, reject) => {
++		const finish = (error) => {
++			clearTimeout(timeoutId);
++			for (const event of events) peerConnection.removeEventListener(event, handler);
++			if (error) reject(error);
++			else resolve(void 0);
++		};
++		const handler = () => {
++			try {
++				if (isReady()) finish();
++			} catch (error) {
++				finish(error);
++			}
++		};
++		const timeoutId = setTimeout(() => finish(/* @__PURE__ */ new Error(`PeerConnection did not connect within ${timeout / 1e3} seconds`)), timeout);
++		for (const event of events) peerConnection.addEventListener(event, handler);
++	});
++}
+ async function signalingStateIsStable(peerConnection) {
+ 	if (peerConnection.signalingState !== "stable") await new Promise((res, rej) => {
+ 		const timeout = setTimeout(() => {
