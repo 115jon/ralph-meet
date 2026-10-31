@@ -600,6 +600,49 @@ export interface UseVoiceChannelProps {
   autoJoin?: boolean;
 }
 
+/**
+ * A processor built from the early microphone capture on a join click, in
+ * parallel with the voice gateway connecting. The device sync adopts it when
+ * it is for the same capture track and settings.
+ */
+interface EarlyAudioProcessor {
+  trackId: string | null;
+  settingsKey: string;
+  promise: Promise<LocalAudioProcessorHandle | null>;
+}
+
+function discardEarlyAudioProcessor(ref: {
+  current: EarlyAudioProcessor | null;
+}): void {
+  const early = ref.current;
+  ref.current = null;
+  if (early) void early.promise.then((processor) => processor?.destroy());
+}
+
+/**
+ * The early processor when it matches `stream` and `settings`; otherwise
+ * undefined (and the early one, if any, is destroyed).
+ */
+async function takeEarlyAudioProcessor(
+  ref: { current: EarlyAudioProcessor | null },
+  stream: MediaStream,
+  settings: VoiceAudioProcessingSettings,
+): Promise<LocalAudioProcessorHandle | undefined> {
+  const early = ref.current;
+  if (!early) return undefined;
+  ref.current = null;
+  const processor = await early.promise;
+  if (
+    processor &&
+    early.trackId === stream.getAudioTracks()[0]?.id &&
+    early.settingsKey === JSON.stringify(settings)
+  ) {
+    return processor;
+  }
+  processor?.destroy();
+  return undefined;
+}
+
 /** What a failed publication mode falls back to. */
 function fallbackPublicationMode(
   mode: LocalAudioPublicationMode,
@@ -1061,6 +1104,7 @@ export function useVoiceChannel({
     null,
   );
   const ownedVadMonitorStreamRef = useRef<MediaStream | null>(null);
+  const earlyAudioProcessorRef = useRef<EarlyAudioProcessor | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
   const activeCameraBackgroundKeyRef = useRef("none");
@@ -1807,7 +1851,7 @@ export function useVoiceChannel({
     // A claimed standby never opened the microphone (it only published
     // silence); capture starts here, concurrently with promotion, on the
     // standby's media owner so the device sync below reuses this request.
-    startEarlyMic(
+    const earlyMic = startEarlyMic(
       {
         deviceId: currentSettings.inputDeviceId,
         deviceLabel: currentSettings.inputDeviceLabel,
@@ -1819,6 +1863,33 @@ export function useVoiceChannel({
       },
       claimedStandby?.mediaOwner ?? localMediaOwner,
     );
+    // Build the gated processor from that capture as soon as it lands, in
+    // parallel with the gateway connect, so the first publication (which
+    // never goes out ungated) rarely waits for it.
+    discardEarlyAudioProcessor(earlyAudioProcessorRef);
+    const earlySettings = audioProcessingSettingsRef.current;
+    if (
+      earlyMic &&
+      resolveLocalAudioPublicationMode(earlySettings) !== "direct"
+    ) {
+      const early: EarlyAudioProcessor = {
+        trackId: null,
+        settingsKey: JSON.stringify(earlySettings),
+        promise: Promise.resolve(null),
+      };
+      early.promise = Promise.resolve(earlyMic)
+        .then((stream) => {
+          const track = stream?.getAudioTracks()[0];
+          if (!stream || !track || earlyAudioProcessorRef.current !== early) {
+            return null;
+          }
+          early.trackId = track.id;
+          markVoice("audio-processor-early");
+          return createLocalAudioProcessor(stream, earlySettings);
+        })
+        .catch(() => null);
+      earlyAudioProcessorRef.current = early;
+    }
 
     const sfuUnsubscribers: Array<() => void> = [];
     const onSfu = <K extends keyof SFUEventMap>(
@@ -3217,10 +3288,16 @@ export function useVoiceChannel({
             // swap raced later syncs and could leave the raw track published).
             // Joins overlap this with the voice gateway connecting.
             try {
-              nextAudioProcessor = await createLocalAudioProcessor(
-                newStream,
-                audioProcessingSettings,
-              );
+              nextAudioProcessor =
+                (await takeEarlyAudioProcessor(
+                  earlyAudioProcessorRef,
+                  newStream,
+                  audioProcessingSettings,
+                )) ??
+                (await createLocalAudioProcessor(
+                  newStream,
+                  audioProcessingSettings,
+                ));
             } catch (error) {
               devicesLog.warn(
                 "Failed to create gated outbound audio processor",
@@ -3962,6 +4039,7 @@ export function useVoiceChannel({
         ownedVadMonitorStreamRef.current = null;
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
+        discardEarlyAudioProcessor(earlyAudioProcessorRef);
         localStreamRef.current?.getTracks().forEach((t) => {
           t.onended = null;
           t.stop();
@@ -4093,6 +4171,7 @@ export function useVoiceChannel({
         activeSfu.vad.setGateController(null);
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
+        discardEarlyAudioProcessor(earlyAudioProcessorRef);
         localStreamRef.current?.getTracks().forEach((t) => {
           t.onended = null;
           t.stop();
@@ -4157,6 +4236,7 @@ export function useVoiceChannel({
       activeSfu.vad.setGateController(null);
       publishedAudioProcessorRef.current?.destroy();
       publishedAudioProcessorRef.current = null;
+      discardEarlyAudioProcessor(earlyAudioProcessorRef);
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -4218,6 +4298,7 @@ export function useVoiceChannel({
     ownedVadMonitorStreamRef.current = null;
     publishedAudioProcessorRef.current?.destroy();
     publishedAudioProcessorRef.current = null;
+    discardEarlyAudioProcessor(earlyAudioProcessorRef);
     localStreamRef.current?.getTracks().forEach((t) => {
       t.onended = null;
       t.stop();

@@ -264,18 +264,22 @@ describe("outbound audio processor", () => {
     expect(audio.context.close).toHaveBeenCalledOnce();
   });
 
-  it("reports a capture context that cannot start without a gesture", async () => {
+  it("does not wait for the context to start, and reports one that cannot", async () => {
     vi.useFakeTimers();
     const audio = installAudio("suspended");
-    const pending = createLocalAudioProcessor(
+    // Resolves without any timer running: the publication track exists at
+    // once and carries audio when the context starts.
+    const processor = await createLocalAudioProcessor(
       inputStream().stream,
       makeSettings(),
     );
-    await vi.advanceTimersByTimeAsync(300);
-    const processor = await pending;
-
-    // Still published gated (never raw); a gesture resumes it.
     expect(processor?.gateController.inGraph).toBeDefined();
+    expect(
+      getLocalAudioDiagnostics().issues["capture-context-suspended"],
+    ).toBeUndefined();
+
+    // Still suspended a moment later: only a gesture starts it now.
+    await vi.advanceTimersByTimeAsync(300);
     expect(
       getLocalAudioDiagnostics().issues["capture-context-suspended"],
     ).toEqual({ count: 1, detail: "suspended" });

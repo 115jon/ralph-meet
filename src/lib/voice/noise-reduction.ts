@@ -7,6 +7,7 @@ import {
   releaseCaptureAudioContext,
   reportLocalAudioIssue,
 } from "./capture-audio-context";
+import { markVoice } from "./latency-marks";
 import {
   type InGraphVoiceGate,
   type VoiceGateEvent,
@@ -78,11 +79,12 @@ const MAX_CHANNELS = 2;
 /** Matches getVoiceActivityThreshold(true, …); the detector sets the real one. */
 const DEFAULT_GATE_THRESHOLD = 3;
 /**
- * How long a new processor waits for its context to run. A context created
- * or resumed with user activation starts within a few ms; one that is still
- * suspended after this needs a gesture (see reportLocalAudioIssue).
+ * A context created or resumed with user activation starts once the output
+ * device is open (tens of ms); one still suspended after this needs a
+ * gesture (see reportLocalAudioIssue). Nothing waits for it: the publication
+ * track exists at once and carries audio as soon as the context runs.
  */
-const CONTEXT_START_WAIT_MS = 250;
+const CONTEXT_START_REPORT_MS = 250;
 
 let rnnoiseBinaryPromise: Promise<ArrayBuffer> | null = null;
 type RnnoiseModule = typeof import("@sapphi-red/web-noise-suppressor");
@@ -243,16 +245,21 @@ async function loadRnnoiseBinaryOnce(
   return rnnoiseBinaryPromise;
 }
 
-async function waitForRunning(context: AudioContext): Promise<void> {
+/** Starts `context` without waiting; reports it if it stays suspended. */
+function watchContextStart(
+  context: AudioContext,
+  isDestroyed: () => boolean,
+): void {
   if (context.state === "running") return;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([
-    Promise.resolve(context.resume?.()).catch(() => {}),
-    new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, CONTEXT_START_WAIT_MS);
-    }),
-  ]);
-  clearTimeout(timer);
+  Promise.resolve(context.resume?.()).catch(() => {});
+  setTimeout(() => {
+    if (!isDestroyed() && context.state === "suspended") {
+      // Only a user gesture starts it now. The published microphone stays
+      // gated (silent) until then; the voice session's audio-blocked prompt
+      // and click listener resume it through resume().
+      reportLocalAudioIssue("capture-context-suspended", context.state);
+    }
+  }, CONTEXT_START_REPORT_MS);
 }
 
 /**
@@ -264,6 +271,7 @@ async function createProcessor(
   mode: LocalAudioProcessingMode,
   voiceGate: boolean,
 ): Promise<LocalAudioProcessorHandle> {
+  const startedAt = performance.now();
   const context = acquireCaptureAudioContext();
   if (!context) {
     reportLocalAudioIssue("capture-context-unavailable");
@@ -361,15 +369,13 @@ async function createProcessor(
     preGateTrack.contentHint = "speech";
     publicationTrack.contentHint = "speech";
 
-    await waitForRunning(context);
-    if (context.state !== "running") {
-      // Only a user gesture starts it now. The published microphone stays
-      // gated (silent) until then; the voice session's audio-blocked prompt
-      // and click listener resume it through resume().
-      reportLocalAudioIssue("capture-context-suspended", context.state);
-    }
-
     let destroyed = false;
+    watchContextStart(context, () => destroyed);
+    markVoice("audio-processor-ready", {
+      mode,
+      buildMs: Math.round(performance.now() - startedAt),
+      contextState: context.state,
+    });
     const resume = () => {
       if (!destroyed && context.state === "suspended") {
         context.resume().catch(() => {});
