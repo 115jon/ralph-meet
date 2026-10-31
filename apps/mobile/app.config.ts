@@ -35,6 +35,8 @@ function resolveVariant(value: string | undefined): AppVariant {
 
 const variant = VARIANTS[resolveVariant(process.env.APP_VARIANT)];
 
+const MICROPHONE_USAGE = "Ralph Meet uses the microphone in voice channels.";
+
 // Mirrors the web app's VITE_API_BASE_URL, VITE_KOVA_AUTH_URL and
 // VITE_KOVA_AUTH_PUBLISHABLE_KEY. All defaults come from the web
 // app's dependency-free src/lib/site-defaults.ts; the publishable key is
@@ -61,7 +63,18 @@ const config: ExpoConfig = {
   android: {
     package: variant.package,
     predictiveBackGestureEnabled: true,
-    permissions: ["android.permission.INTERNET"],
+    // Voice: the microphone, and call audio mode/routing (InCallManager).
+    permissions: [
+      "android.permission.INTERNET",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+    ],
+    // The WebRTC plugin also asks for these; voice needs neither (no camera
+    // publishing yet, no overlay).
+    blockedPermissions: [
+      "android.permission.CAMERA",
+      "android.permission.SYSTEM_ALERT_WINDOW",
+    ],
     adaptiveIcon: {
       foregroundImage: "./assets/icon.png",
       backgroundColor: "#000000",
@@ -72,11 +85,16 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-web-browser",
     "expo-image",
-    // The composer picks from the system photo picker only: drop the
-    // camera and microphone permissions the library would add.
+    // The composer picks from the system photo picker only: drop the camera
+    // permission the library would add. The microphone is voice's (set, not
+    // false: false would block RECORD_AUDIO for the whole app).
     [
       "expo-image-picker",
-      { cameraPermission: false, microphonePermission: false },
+      { cameraPermission: false, microphonePermission: MICROPHONE_USAGE },
+    ],
+    [
+      "@config-plugins/react-native-webrtc",
+      { microphonePermission: MICROPHONE_USAGE },
     ],
     [
       "expo-splash-screen",

@@ -3,10 +3,6 @@ import { Pressable, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
 import {
-  useCallSegment,
-  useCallSegmentActions,
-} from "@/features/app-bar/call-segment";
-import {
   RADIUS,
   THEME_IDS,
   THEME_LABELS,
@@ -97,24 +93,6 @@ function ThemePicker() {
   );
 }
 
-function DevCallToggle() {
-  const call = useCallSegment();
-  const { setCall } = useCallSegmentActions();
-  return (
-    <Button
-      variant="ghost"
-      label={call ? "End fake call" : "Fake a call"}
-      onPress={() =>
-        setCall(
-          call
-            ? null
-            : { channel: "Standup", status: "3 in the room", muted: false },
-        )
-      }
-    />
-  );
-}
-
 function SignOutButton() {
   const signOut = useSession((s) => s.signOut);
   return (
@@ -161,12 +139,9 @@ export default function YouScreen() {
           </Text>
         ) : null}
         {tab === "03 App" ? (
-          <>
-            <Text variant="body" tone="ink2">
-              Developer
-            </Text>
-            <DevCallToggle />
-          </>
+          <Text variant="body" tone="ink2">
+            App settings land in a later build.
+          </Text>
         ) : null}
       </View>
     </Screen>
