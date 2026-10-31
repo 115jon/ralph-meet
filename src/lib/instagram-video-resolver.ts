@@ -6,6 +6,14 @@ import { fetchInstagramOEmbedMetadata } from "@/lib/share-preview-proxy";
 import { singleFlight } from "@/lib/single-flight";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
+import { safeParse } from "@/lib/schema";
+import {
+  InstagramGraphqlResponse,
+  InstagramMediaInfoResponse,
+  type InstagramImageCandidate,
+  type InstagramMediaItem,
+  type InstagramMediaNode,
+} from "@/lib/vendor-payloads/instagram";
 
 const INSTAGRAM_VIDEO_TTL = 50 * 60;
 const INSTAGRAM_VIDEO_CACHE_SAFETY_WINDOW = 5 * 60;
@@ -181,7 +189,7 @@ function extractInstagramMetricsFromDescription(
   return {
     likeCount: parseInstagramMetricCount(metricMatch?.[1] ?? null),
     commentCount: parseInstagramMetricCount(metricMatch?.[2] ?? null),
-    timestamp: toIsoTimestamp(metricMatch?.[3] ?? null),
+    timestamp: toIsoTimestamp(metricMatch?.[3]),
   };
 }
 
@@ -349,13 +357,11 @@ function buildInstagramCookieHeader(secrets: InstagramSessionSecrets): string {
   return entries.map(([key, value]) => `${key}=${value}`).join("; ");
 }
 
-function toIsoTimestamp(rawValue: unknown): string | null {
-  if (
-    typeof rawValue === "number" &&
-    Number.isFinite(rawValue) &&
-    rawValue > 0
-  ) {
-    return new Date(rawValue * 1000).toISOString();
+function toIsoTimestamp(rawValue: number | string | undefined): string | null {
+  if (typeof rawValue === "number") {
+    return Number.isFinite(rawValue) && rawValue > 0
+      ? new Date(rawValue * 1000).toISOString()
+      : null;
   }
 
   if (typeof rawValue === "string" && rawValue.trim()) {
@@ -374,17 +380,13 @@ function toIsoTimestamp(rawValue: unknown): string | null {
 }
 
 function getLargestImageCandidate(
-  candidates: any[],
+  candidates: ReadonlyArray<InstagramImageCandidate>,
 ): { url: string; width?: number; height?: number } | null {
   const validCandidates = candidates
-    .filter(
-      (candidate) =>
-        typeof candidate?.url === "string" && candidate.url.trim().length > 0,
-    )
+    .filter((candidate) => candidate.url.trim().length > 0)
     .sort(
       (a, b) =>
-        Number(b?.width || 0) * Number(b?.height || 0) -
-        Number(a?.width || 0) * Number(a?.height || 0),
+        (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0),
     );
 
   if (validCandidates.length === 0) return null;
@@ -392,39 +394,31 @@ function getLargestImageCandidate(
   const best = validCandidates[0];
   return {
     url: best.url,
-    width: typeof best.width === "number" ? best.width : undefined,
-    height: typeof best.height === "number" ? best.height : undefined,
+    width: best.width,
+    height: best.height,
   };
 }
 
 function getBestInstagramVideoUrl(
-  item: any,
+  item: InstagramMediaNode,
 ): { url: string; width?: number; height?: number } | null {
-  const videoVersions = Array.isArray(item?.video_versions)
-    ? item.video_versions
-    : [];
-  const bestVideo = videoVersions
-    .filter((version: any) => typeof version?.url === "string" && version.url)
+  const bestVideo = (item.video_versions ?? [])
+    .filter((version) => version.url)
     .sort(
-      (a: any, b: any) =>
-        Number(a?.width || 0) * Number(a?.height || 0) -
-        Number(b?.width || 0) * Number(b?.height || 0),
+      (a, b) =>
+        (a.width ?? 0) * (a.height ?? 0) - (b.width ?? 0) * (b.height ?? 0),
     )
     .at(-1);
 
-  if (typeof bestVideo?.url === "string" && bestVideo.url) {
+  if (bestVideo) {
     return {
       url: bestVideo.url,
-      width: typeof bestVideo.width === "number" ? bestVideo.width : undefined,
-      height:
-        typeof bestVideo.height === "number" ? bestVideo.height : undefined,
+      width: bestVideo.width,
+      height: bestVideo.height,
     };
   }
 
-  const dashManifest =
-    typeof item?.video_dash_manifest === "string"
-      ? item.video_dash_manifest
-      : "";
+  const dashManifest = item.video_dash_manifest ?? "";
   const dashUrls = extractInstagramVideoUrlsFromDashManifest(
     dashManifest,
   ).filter(
@@ -443,38 +437,19 @@ function getBestInstagramVideoUrl(
   return { url: dashVideoUrl };
 }
 
-function getInstagramAudio(item: any): EmbedAudio | null {
+function getInstagramAudio(item: InstagramMediaItem): EmbedAudio | null {
   const asset =
-    item?.clips_metadata?.music_info?.music_asset_info ??
-    item?.music_metadata?.music_info?.music_asset_info ??
-    item?.music_metadata?.music_asset;
+    item.clips_metadata?.music_info?.music_asset_info ??
+    item.music_metadata?.music_info?.music_asset_info ??
+    item.music_metadata?.music_asset;
 
-  if (!asset || typeof asset !== "object") return null;
+  if (!asset) return null;
 
-  const title =
-    typeof asset.title === "string"
-      ? asset.title
-      : typeof asset.track_title === "string"
-        ? asset.track_title
-        : undefined;
-  const artist =
-    typeof asset.display_artist === "string"
-      ? asset.display_artist
-      : typeof asset.artist_name === "string"
-        ? asset.artist_name
-        : undefined;
-  const url =
-    typeof asset.progressive_download_url === "string"
-      ? asset.progressive_download_url
-      : typeof asset.url === "string"
-        ? asset.url
-        : undefined;
+  const title = asset.title ?? asset.track_title;
+  const artist = asset.display_artist ?? asset.artist_name;
+  const url = asset.progressive_download_url ?? asset.url;
   const artworkUrl =
-    typeof asset.cover_artwork_uri === "string"
-      ? asset.cover_artwork_uri
-      : typeof asset.cover_artwork_thumbnail_uri === "string"
-        ? asset.cover_artwork_thumbnail_uri
-        : undefined;
+    asset.cover_artwork_uri ?? asset.cover_artwork_thumbnail_uri;
 
   if (!title && !artist && !url && !artworkUrl) return null;
 
@@ -486,47 +461,30 @@ function getInstagramAudio(item: any): EmbedAudio | null {
   };
 }
 
-function getInstagramAuthorMetadata(item: any): {
+function getInstagramAuthorMetadata(item: InstagramMediaItem): {
   authorName: string | null;
   authorUrl: string | null;
   authorAvatarUrl: string | null;
   authorVerified: boolean | null;
 } {
-  const username =
-    typeof item?.user?.username === "string" && item.user.username.trim()
-      ? item.user.username.trim()
-      : null;
-  const authorName =
-    username ??
-    (typeof item?.user?.full_name === "string" && item.user.full_name.trim()
-      ? item.user.full_name.trim()
-      : null);
+  const username = item.user?.username?.trim() || null;
+  const authorName = username ?? (item.user?.full_name?.trim() || null);
 
   return {
     authorName,
     authorUrl: username ? `https://www.instagram.com/${username}` : null,
-    authorAvatarUrl:
-      typeof item?.user?.profile_pic_url === "string"
-        ? item.user.profile_pic_url
-        : null,
-    authorVerified:
-      typeof item?.user?.is_verified === "boolean"
-        ? item.user.is_verified
-        : null,
+    authorAvatarUrl: item.user?.profile_pic_url ?? null,
+    authorVerified: item.user?.is_verified ?? null,
   };
 }
 
-function mapInstagramMediaItem(item: any): EmbedMedia | null {
+function mapInstagramMediaItem(item: InstagramMediaNode): EmbedMedia | null {
   const imageCandidate = getLargestImageCandidate(
-    item?.image_versions2?.candidates ?? [],
+    item.image_versions2?.candidates ?? [],
   );
   const video = getBestInstagramVideoUrl(item);
-  const altText =
-    typeof item?.accessibility_caption === "string"
-      ? item.accessibility_caption
-      : undefined;
-  const durationSeconds =
-    typeof item?.video_duration === "number" ? item.video_duration : undefined;
+  const altText = item.accessibility_caption;
+  const durationSeconds = item.video_duration;
 
   if (video?.url) {
     return {
@@ -552,11 +510,11 @@ function mapInstagramMediaItem(item: any): EmbedMedia | null {
   };
 }
 
-function collectInstagramMedia(item: any): EmbedMedia[] {
-  const sourceItems =
-    Array.isArray(item?.carousel_media) && item.carousel_media.length > 0
-      ? item.carousel_media
-      : [item];
+function collectInstagramMedia(item: InstagramMediaItem): EmbedMedia[] {
+  const sourceItems: ReadonlyArray<InstagramMediaNode> = item.carousel_media
+    ?.length
+    ? item.carousel_media
+    : [item];
 
   const media: EmbedMedia[] = [];
   const seen = new Set<string>();
@@ -630,10 +588,13 @@ function isInstagramLegacyAuthorCacheResult(
 }
 
 export function parseInstagramGraphqlPayload(
-  payload: any,
+  payload: unknown,
 ): InstagramVideoResult {
-  const media = payload?.data?.xdt_shortcode_media;
-  if (!media || typeof media !== "object") {
+  const decoded = safeParse(InstagramGraphqlResponse, payload);
+  const media = decoded.success
+    ? decoded.data.data?.xdt_shortcode_media
+    : undefined;
+  if (!media) {
     return {
       videoUrl: null,
       thumbnailUrl: null,
@@ -642,51 +603,26 @@ export function parseInstagramGraphqlPayload(
     };
   }
 
-  const captionEdge = Array.isArray(media.edge_media_to_caption?.edges)
-    ? media.edge_media_to_caption.edges[0]
-    : null;
-  const caption =
-    typeof captionEdge?.node?.text === "string" ? captionEdge.node.text : null;
-  const mediaList =
-    typeof media.display_url === "string" && media.display_url.trim()
-      ? [
-          {
-            type:
-              typeof media.video_url === "string" && media.video_url.trim()
-                ? ("video" as const)
-                : ("image" as const),
-            url:
-              typeof media.video_url === "string" && media.video_url.trim()
-                ? media.video_url
-                : media.display_url,
-            thumbnailUrl:
-              typeof media.video_url === "string" && media.video_url.trim()
-                ? media.display_url
-                : undefined,
-            contentType:
-              typeof media.video_url === "string" && media.video_url.trim()
-                ? "video/mp4"
-                : undefined,
-            durationSeconds:
-              typeof media.video_duration === "number"
-                ? media.video_duration
-                : undefined,
-          },
-        ]
-      : undefined;
+  const caption = media.edge_media_to_caption?.edges?.[0]?.node?.text ?? null;
+  const videoUrl = media.video_url?.trim() ? media.video_url : null;
+  const thumbnailUrl = media.display_url?.trim() ? media.display_url : null;
+  const mediaList = thumbnailUrl
+    ? [
+        {
+          type: videoUrl ? ("video" as const) : ("image" as const),
+          url: videoUrl ?? thumbnailUrl,
+          thumbnailUrl: videoUrl ? thumbnailUrl : undefined,
+          contentType: videoUrl ? "video/mp4" : undefined,
+          durationSeconds: media.video_duration,
+        },
+      ]
+    : undefined;
 
   return {
-    videoUrl:
-      typeof media.video_url === "string" && media.video_url.trim()
-        ? media.video_url
-        : null,
-    thumbnailUrl:
-      typeof media.display_url === "string" && media.display_url.trim()
-        ? media.display_url
-        : null,
+    videoUrl,
+    thumbnailUrl,
     title: caption,
-    durationSeconds:
-      typeof media.video_duration === "number" ? media.video_duration : null,
+    durationSeconds: media.video_duration ?? null,
     media: mediaList,
   };
 }
@@ -719,7 +655,7 @@ async function fetchInstagramMediaInfoPayload(
     mediaPk?: string | null;
     shortcode?: string | null;
   },
-): Promise<any> {
+): Promise<InstagramMediaInfoResponse | undefined> {
   const candidateUrls = [
     options.mediaPk
       ? `https://i.instagram.com/api/v1/media/${encodeURIComponent(options.mediaPk)}/info/`
@@ -758,7 +694,7 @@ async function fetchInstagramMediaInfoPayload(
         continue;
       }
 
-      return (await readJsonCapped(response)) as any;
+      return await readJsonCapped(response, InstagramMediaInfoResponse);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
@@ -772,7 +708,7 @@ async function fetchInstagramMediaInfoPayload(
 }
 
 function buildInstagramResultFromMediaItem(
-  item: any,
+  item: InstagramMediaItem,
   oembed?: {
     title?: string | null;
     thumbnailUrl?: string | null;
@@ -782,17 +718,14 @@ function buildInstagramResultFromMediaItem(
   const primaryVideo = media.find((entry) => entry.type === "video");
   const primaryImage = media.find((entry) => entry.type === "image");
   const fallbackImage = getLargestImageCandidate(
-    item?.image_versions2?.candidates ?? [],
+    item.image_versions2?.candidates ?? [],
   );
   const author = getInstagramAuthorMetadata(item);
-  const caption =
-    typeof item?.caption?.text === "string" && item.caption.text.trim()
-      ? item.caption.text
-      : (oembed?.title ?? null);
+  const caption = item.caption?.text?.trim()
+    ? item.caption.text
+    : (oembed?.title ?? null);
   const durationSeconds =
-    typeof item?.video_duration === "number"
-      ? item.video_duration
-      : (primaryVideo?.durationSeconds ?? null);
+    item.video_duration ?? primaryVideo?.durationSeconds ?? null;
 
   return {
     videoUrl: primaryVideo?.url ?? null,
@@ -809,16 +742,10 @@ function buildInstagramResultFromMediaItem(
     authorUrl: author.authorUrl,
     authorAvatarUrl: author.authorAvatarUrl,
     authorVerified: author.authorVerified,
-    likeCount: typeof item?.like_count === "number" ? item.like_count : null,
-    commentCount:
-      typeof item?.comment_count === "number" ? item.comment_count : null,
-    viewCount:
-      typeof item?.view_count === "number"
-        ? item.view_count
-        : typeof item?.play_count === "number"
-          ? item.play_count
-          : null,
-    timestamp: toIsoTimestamp(item?.taken_at),
+    likeCount: item.like_count ?? null,
+    commentCount: item.comment_count ?? null,
+    viewCount: item.view_count ?? item.play_count ?? null,
+    timestamp: toIsoTimestamp(item.taken_at),
     audio: getInstagramAudio(item),
   };
 }
@@ -862,8 +789,8 @@ async function fetchInstagramSharedEntityMetadata(
         shortcode: null,
       },
     );
-    const item = Array.isArray(payload?.items) ? payload.items[0] : null;
-    if (!item || typeof item !== "object") return null;
+    const item = payload?.items?.[0];
+    if (!item) return null;
 
     return buildInstagramResultFromMediaItem(item, oembed);
   } catch {
@@ -994,7 +921,7 @@ async function fetchInstagramMedia(
     throw new Error("Instagram oEmbed did not return a media id");
   }
 
-  let iPhonePayload: any;
+  let iPhonePayload: InstagramMediaInfoResponse | undefined;
   try {
     iPhonePayload = await fetchInstagramMediaInfoPayload(
       canonicalUrl,
@@ -1018,10 +945,8 @@ async function fetchInstagramMedia(
     throw error;
   }
 
-  const item = Array.isArray(iPhonePayload?.items)
-    ? iPhonePayload.items[0]
-    : null;
-  if (!item || typeof item !== "object") {
+  const item = iPhonePayload?.items?.[0];
+  if (!item) {
     const sharedEntityFallback = await fallbackToSharedEntityMedia();
     if (sharedEntityFallback) {
       return sharedEntityFallback;
@@ -1032,7 +957,7 @@ async function fetchInstagramMedia(
       return publicFallback;
     }
   }
-  const result = buildInstagramResultFromMediaItem(item, {
+  const result = buildInstagramResultFromMediaItem(item ?? {}, {
     thumbnailUrl: oembed?.thumbnailUrl ?? null,
     title: oembed?.title ?? null,
   });

@@ -168,6 +168,20 @@ export const POST = async ({ request, params }: any) => {
   return apiSuccess(message, 201);
 };
 
+// Permissive: structure only. A non-array `message_ids` used to reach
+// `.length` unchecked; it is now a 400 INVALID_BODY like any other bad shape.
+const messageEditSchema = Schema.Struct({
+  message_id: Schema.optional(Schema.String),
+  message_ids: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  refresh_embeds: Schema.optional(Schema.Boolean),
+  content: Schema.optional(Schema.String),
+  embeds: Schema.optional(Schema.mutable(Schema.Array(Schema.Unknown))),
+});
+
+const messageDeleteSchema = Schema.Struct({
+  message_id: Schema.optional(Schema.String),
+});
+
 // PATCH /api/channels/:id/messages — edit a message
 export const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth();
@@ -179,13 +193,8 @@ export const PATCH = async ({ request, params }: any) => {
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
-  const body = (await request.json()) as {
-    message_id?: string;
-    message_ids?: string[];
-    refresh_embeds?: boolean;
-    content?: string;
-    embeds?: unknown[];
-  };
+  const body = await validateBody(request, messageEditSchema);
+  if (body instanceof Response) return body;
   const db = getDB();
 
   if (body.refresh_embeds) {
@@ -313,7 +322,8 @@ export const DELETE = async ({ request, params }: any) => {
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
-  const body = (await request.json()) as { message_id: string };
+  const body = await validateBody(request, messageDeleteSchema);
+  if (body instanceof Response) return body;
 
   if (!body.message_id) {
     return apiError("message_id required", 400);

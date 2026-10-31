@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   getDB: vi.fn(),
   ensureUserProfileSchema: vi.fn(),
+  getMe: vi.fn(),
   db: {
     prepare: vi.fn(),
   },
@@ -21,10 +22,10 @@ vi.mock("@/lib/api-helpers", () => ({
 vi.mock("@/lib/ensure-user-profile-schema", () => ({
   ensureUserProfileSchema: mocks.ensureUserProfileSchema,
 }));
-vi.mock("@/services/user.service", () => ({ getMe: vi.fn() }));
+vi.mock("@/services/user.service", () => ({ getMe: mocks.getMe }));
 vi.mock("@/lib/kova-auth-server", () => ({ getCurrentUser: vi.fn() }));
 
-import { PATCH } from "../users/me";
+import { GET, PATCH } from "../users/me";
 
 describe("authenticated user sound settings", () => {
   beforeEach(() => {
@@ -288,5 +289,177 @@ describe("authenticated user sound settings", () => {
     expect(
       JSON.stringify((mocks.db as DbTestState).lastBindings),
     ).not.toContain("Forged global name");
+  });
+
+  it.each([
+    ["not json", "{not json"],
+    ["null", "null"],
+    ["an array of settings", JSON.stringify({ sound_settings: [] })],
+    ["a string setting", JSON.stringify({ sound_settings: "loud" })],
+  ])("rejects a body that is %s", async (_label, body) => {
+    const response = await PATCH({
+      request: new Request("https://meet.test/api/users/me", {
+        method: "PATCH",
+        body,
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "INVALID_SOUND_SETTINGS",
+    });
+    expect(mocks.db.prepare).not.toHaveBeenCalled();
+  });
+
+  it("rejects an out-of-range soundboard volume", async () => {
+    mocks.db.prepare.mockImplementation(() => ({
+      bind: () => ({ first: async () => ({ sound_settings: null }) }),
+    }));
+
+    const response = await PATCH({
+      request: new Request("https://meet.test/api/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({ sound_settings: { soundboardVolume: 101 } }),
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: "Soundboard volume is invalid",
+    });
+  });
+
+  it.each([
+    ["is not JSON", "{oops"],
+    ["is an array", "[1,2]"],
+    ["is a string", JSON.stringify("loud")],
+  ])("saves over a stored value that %s", async (_label, stored) => {
+    mocks.db.prepare.mockImplementation((sql: string) => {
+      if (sql.includes("SELECT sound_settings")) {
+        return {
+          bind: () => ({ first: async () => ({ sound_settings: stored }) }),
+        };
+      }
+      return {
+        bind: (...bindings: unknown[]) => ({
+          run: async () => {
+            (mocks.db as DbTestState).lastBindings = bindings;
+          },
+        }),
+      };
+    });
+
+    const response = await PATCH({
+      request: new Request("https://meet.test/api/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({ sound_settings: { soundboardVolume: 40 } }),
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const [written] = (mocks.db as DbTestState).lastBindings as [string];
+    expect(JSON.parse(written)).toEqual({ soundboardVolume: 40 });
+  });
+
+  it("drops a retyped stored volume but keeps the other stored keys", async () => {
+    mocks.db.prepare.mockImplementation((sql: string) => {
+      if (sql.includes("SELECT sound_settings")) {
+        return {
+          bind: () => ({
+            first: async () => ({
+              sound_settings: JSON.stringify({
+                soundboardVolume: "loud",
+                future_flag: true,
+                voiceJoinSoundboard: "garbage",
+              }),
+            }),
+          }),
+        };
+      }
+      return {
+        bind: (...bindings: unknown[]) => ({
+          run: async () => {
+            (mocks.db as DbTestState).lastBindings = bindings;
+          },
+        }),
+      };
+    });
+
+    await PATCH({
+      request: new Request("https://meet.test/api/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({
+          sound_settings: {
+            voiceLeaveSoundboard: { enabled: false, sound: null },
+          },
+        }),
+      }),
+    });
+
+    const [written] = (mocks.db as DbTestState).lastBindings as [string];
+    const stored = JSON.parse(written) as Record<string, unknown>;
+    expect(stored.future_flag).toBe(true);
+    expect(stored).not.toHaveProperty("soundboardVolume");
+    expect(stored.voiceJoinSoundboard).toEqual({
+      "*": { enabled: false, sound: null },
+    });
+  });
+
+  describe("reading stored settings", () => {
+    const defaults = {
+      voiceJoinSoundboard: { "*": { enabled: false, sound: null } },
+      voiceLeaveSoundboard: { "*": { enabled: false, sound: null } },
+      soundboardVolume: 100,
+    };
+
+    async function readSettings(stored: string | null) {
+      mocks.getMe.mockResolvedValue({ id: "user-1", avatar_url: "a.png" });
+      mocks.db.prepare.mockImplementation(() => ({
+        bind: () => ({ first: async () => ({ sound_settings: stored }) }),
+      }));
+      const response = await GET({
+        request: new Request("https://meet.test/api/users/me"),
+      });
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { sound_settings: unknown })
+        .sound_settings;
+    }
+
+    it.each([
+      ["missing", null],
+      ["not JSON", "{oops"],
+      ["JSON null", "null"],
+      ["an array", "[1]"],
+      ["a string", JSON.stringify("loud")],
+    ])(
+      "returns the defaults when the stored value is %s",
+      async (_l, stored) => {
+        expect(await readSettings(stored)).toEqual(defaults);
+      },
+    );
+
+    it("keeps valid fields and defaults and clamps the rest field by field", async () => {
+      expect(
+        await readSettings(
+          JSON.stringify({
+            soundboardVolume: 250,
+            voiceJoinSoundboard: { enabled: true, sound: "nope" },
+            voiceLeaveSoundboard: { enabled: false, sound: null },
+          }),
+        ),
+      ).toEqual({
+        ...defaults,
+        // An object with no usable scope normalizes to an empty map.
+        voiceJoinSoundboard: {},
+        soundboardVolume: 100,
+      });
+
+      expect(
+        await readSettings(JSON.stringify({ soundboardVolume: "loud" })),
+      ).toEqual(defaults);
+      expect(
+        await readSettings(JSON.stringify({ soundboardVolume: 35 })),
+      ).toEqual({ ...defaults, soundboardVolume: 35 });
+    });
   });
 });

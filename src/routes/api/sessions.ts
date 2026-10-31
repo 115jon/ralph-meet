@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, requireAuth } from "@/lib/api-helpers";
 import { getKovaAuthSession } from "@/lib/kova-auth-server";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 
 const GET = async ({ request }: any) => {
   const authResult = await requireAuth();
@@ -28,18 +30,18 @@ const GET = async ({ request }: any) => {
   });
 };
 
-const DELETE = async ({ request: req }: any) => {
+const sessionRevokeSchema = Schema.Struct({
+  sessionId: Schema.optional(Schema.String),
+});
+
+export const DELETE = async ({ request: req }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
 
-  let body: { sessionId?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return apiError("Invalid JSON", 400);
-  }
+  const body = await validateBody(req, sessionRevokeSchema);
+  if (body instanceof Response) return body;
 
-  if (!body.sessionId || typeof body.sessionId !== "string") {
+  if (!body.sessionId) {
     return apiError("sessionId is required", 400);
   }
 

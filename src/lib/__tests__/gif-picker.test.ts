@@ -423,4 +423,129 @@ describe("gif-picker helpers", () => {
       getGifAttachmentProvider("https://cdn.example.com/test.gif"),
     ).toBeNull();
   });
+
+  describe("stored favorites", () => {
+    const asset = (url: string, extra: Record<string, unknown> = {}) => ({
+      url,
+      width: 100,
+      height: 50,
+      sizeBytes: 2048,
+      contentType: "image/gif",
+      ...extra,
+    });
+
+    it("keeps a well-formed favorite as saved, extra fields included", () => {
+      const saved = {
+        id: "gif-1",
+        title: "wave",
+        provider: "tenor",
+        sourceUrl: "https://tenor.com/view/wave",
+        aspectRatio: 2,
+        mediaType: "stickers",
+        altText: "waving",
+        query: "wave",
+        preview: asset("https://media.tenor.com/p.gif"),
+        send: asset("https://media.tenor.com/s.gif"),
+        savedWith: "a newer release",
+      };
+
+      expect(parseStoredGifFavorites(JSON.stringify([saved]))).toEqual([saved]);
+    });
+
+    it("fills what an older save lacks and re-derives provider and media type", () => {
+      const [item] = parseStoredGifFavorites(
+        JSON.stringify([
+          {
+            id: "old",
+            provider: "retired-provider",
+            preview: { url: "https://static.klipy.com/a.gif" },
+            send: {
+              url: "https://static.klipy.com/a.gif",
+              contentType: "weird",
+            },
+          },
+        ]),
+      );
+
+      expect(item).toMatchObject({
+        id: "old",
+        title: "",
+        provider: "klipy",
+        mediaType: "gifs",
+        sourceUrl: "",
+        aspectRatio: 1,
+        preview: {
+          width: 0,
+          height: 0,
+          sizeBytes: 0,
+          contentType: "image/gif",
+        },
+        send: { contentType: "image/gif" },
+      });
+    });
+
+    it("drops favorites without an id or a playable url, and keeps the rest", () => {
+      const good = {
+        id: "ok",
+        preview: { url: "https://x.test/p.gif" },
+        send: { url: "https://x.test/s.gif" },
+      };
+
+      const items = parseStoredGifFavorites(
+        JSON.stringify([
+          good,
+          null,
+          "text",
+          { ...good, id: 4 },
+          { ...good, id: "no-send", send: {} },
+          { ...good, id: "empty-url", preview: { url: "" } },
+          { ...good, id: "bad-fields", title: 7, aspectRatio: "wide" },
+        ]),
+      );
+
+      expect(items.map((item) => item.id)).toEqual(["ok", "bad-fields"]);
+      expect(items[1]).toMatchObject({ title: "", aspectRatio: 1 });
+    });
+
+    it.each(["{oops", "null", '{"id":"x"}', '"text"', ""])(
+      "is empty when the stored text is %j",
+      (raw) => {
+        expect(parseStoredGifFavorites(raw)).toEqual([]);
+      },
+    );
+  });
+
+  describe("Tenor config", () => {
+    const html = (value: unknown) =>
+      `<script type="text/x-cache" id="data">${Buffer.from(
+        typeof value === "string" ? value : JSON.stringify(value),
+        "utf8",
+      ).toString("base64")}</script>`;
+
+    it("keeps the three known keys and drops the rest", () => {
+      expect(
+        extractTenorConfigFromHtml(
+          html({ API_V2_KEY: "k", API_V2_URL: "https://t.test", other: 1 }),
+        ),
+      ).toEqual({ API_V2_KEY: "k", API_V2_URL: "https://t.test" });
+    });
+
+    it("ignores a retyped optional client key", () => {
+      expect(
+        extractTenorConfigFromHtml(
+          html({ API_V2_KEY: "k", API_V2_URL: "u", API_V2_CLIENT_KEY: 9 }),
+        ),
+      ).toEqual({ API_V2_KEY: "k", API_V2_URL: "u" });
+    });
+
+    it.each([
+      ["a missing key", { API_V2_URL: "u" }],
+      ["a retyped key", { API_V2_KEY: 1, API_V2_URL: "u" }],
+      ["not an object", [1]],
+      ["null", "null"],
+      ["not JSON", "{oops"],
+    ])("is null for %s", (_label, value) => {
+      expect(extractTenorConfigFromHtml(html(value))).toBeNull();
+    });
+  });
 });

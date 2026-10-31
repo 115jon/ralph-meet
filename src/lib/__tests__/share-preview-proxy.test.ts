@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchInstagramVideoMetadata,
   fetchTikTokProxyMetadata,
   getTikTokShareUrl,
+  lookupInstagramOEmbed,
   getTikTokThumbnailUrl,
   proxyImage,
 } from "../share-preview-proxy";
@@ -157,4 +159,107 @@ describe("share preview proxy", () => {
       proxyImage("https://p16-common-sign.tiktokcdn-us.com/thumb.jpeg"),
     ).resolves.toBeNull();
   });
+});
+
+describe("Instagram payloads", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubJson(body: string, status = 200) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, {
+            status,
+            headers: { "content-type": "application/json" },
+          }),
+      ) as unknown as typeof fetch,
+    );
+  }
+
+  it("oEmbed: maps the public shape and keeps only well-typed fields", async () => {
+    stubJson(
+      JSON.stringify({
+        media_id: "3878972523924185684_1",
+        title: "caption",
+        author_name: 7,
+        thumbnail_url: "https://cdn.test/t.jpg",
+        thumbnail_width: 640,
+        thumbnail_height: "tall",
+        unmodelled: true,
+      }),
+    );
+
+    const { status, metadata } = await lookupInstagramOEmbed(
+      "https://www.instagram.com/p/ABC/",
+    );
+
+    expect(status).toBe(200);
+    expect(metadata).toEqual({
+      mediaId: "3878972523924185684_1",
+      title: "caption",
+      authorName: undefined,
+      authorUrl: undefined,
+      providerName: undefined,
+      providerUrl: undefined,
+      thumbnailUrl: "https://cdn.test/t.jpg",
+      thumbnailWidth: 640,
+      thumbnailHeight: undefined,
+    });
+  });
+
+  it.each(["null", "[]", '"text"', "3"])(
+    "oEmbed: a body of %s is no metadata",
+    async (body) => {
+      stubJson(body);
+
+      await expect(
+        lookupInstagramOEmbed("https://www.instagram.com/p/ABC/"),
+      ).resolves.toEqual({ status: 200, metadata: null });
+    },
+  );
+
+  it("video API: filters malformed media and retyped fields", async () => {
+    stubJson(
+      JSON.stringify({
+        videoUrl: "https://cdn.test/v.mp4",
+        title: 5,
+        durationSeconds: 12.5,
+        media: [
+          { type: "video", url: "https://cdn.test/v.mp4", width: 10 },
+          { type: "audio", url: "https://cdn.test/a.mp3" },
+          { type: "image", url: 4 },
+        ],
+        audio: { title: "t", artist: false },
+        authorVerified: "yes",
+      }),
+    );
+
+    const metadata = await fetchInstagramVideoMetadata(
+      "https://www.instagram.com/reel/ABC/",
+    );
+
+    expect(metadata).toMatchObject({
+      videoUrl: "https://cdn.test/v.mp4",
+      durationSeconds: 12.5,
+      media: [{ type: "video", url: "https://cdn.test/v.mp4", width: 10 }],
+      audio: { title: "t" },
+    });
+    expect(metadata?.title).toBeUndefined();
+    expect(metadata?.authorVerified).toBeUndefined();
+    expect(metadata?.audio?.artist).toBeUndefined();
+  });
+
+  it.each(["null", "[]", '"text"'])(
+    "video API: a body of %s is no metadata",
+    async (body) => {
+      stubJson(body);
+
+      await expect(
+        fetchInstagramVideoMetadata("https://www.instagram.com/reel/ABC/"),
+      ).resolves.toBeNull();
+    },
+  );
 });

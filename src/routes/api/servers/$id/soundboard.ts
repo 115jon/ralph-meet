@@ -13,6 +13,8 @@ import { getUserPermissions } from "@/lib/require-permission";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getSoundboardUploadUrl } from "@/lib/voice/soundboard-media";
 import { logger } from "@/lib/logger";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import {
   recordR2CleanupFailure,
   retryR2Cleanup,
@@ -143,8 +145,15 @@ const DELETE = async ({ request, params }: any) => {
 
 export { DELETE };
 
+// Structure only: the edit form sends all three, other clients may omit any.
+const soundboardUpdateSchema = Schema.Struct({
+  sound_name: Schema.optional(Schema.NullOr(Schema.String)),
+  sound_emoji: Schema.optional(Schema.NullOr(Schema.String)),
+  sound_volume: Schema.optional(Schema.NullOr(Schema.Finite)),
+});
+
 // PATCH /api/servers/:id/soundboard?soundId=XYZ
-const PATCH = async ({ request, params }: any) => {
+export const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -154,7 +163,8 @@ const PATCH = async ({ request, params }: any) => {
   const soundId = url.searchParams.get("soundId");
   if (!soundId) return apiError("Missing soundId", 400);
 
-  const body = await request.json();
+  const body = await validateBody(request, soundboardUpdateSchema);
+  if (body instanceof Response) return body;
   const { sound_name, sound_emoji, sound_volume } = body;
 
   const db = getDB();

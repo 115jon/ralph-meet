@@ -1,3 +1,8 @@
+import {
+  readList,
+  readNonBlankString,
+  readStoredJson,
+} from "@/lib/persisted-guard";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { useAppActive } from "@/hooks/useAppActive";
 import { PickerSurface } from "./PickerSurface";
@@ -274,21 +279,12 @@ export default function GifPickerModal({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = getRecentQueriesKey(mediaType);
-    const stored = window.localStorage.getItem(key);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setRecentQueries(
-            parsed.filter((q) => typeof q === "string" && q.trim() !== ""),
-          );
-          return;
-        }
-      } catch (e) {
-        console.error("Failed to parse recent queries:", e);
-      }
-    }
-    setRecentQueries([]);
+    setRecentQueries(
+      readStoredJson(
+        window.localStorage.getItem(key),
+        readList(readNonBlankString),
+      ) ?? [],
+    );
   }, [mediaType, getRecentQueriesKey]);
 
   const saveQueryToHistory = useCallback(

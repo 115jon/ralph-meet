@@ -5,6 +5,7 @@ import {
   buildNativeEmojiAssetUrl,
   extractCustomEmojiIds,
   getNativeEmojiCategories,
+  EMOJI_RECENTS_STORAGE_KEY,
   loadEmojiRecents,
   parseCustomEmojiToken,
   rememberRecentEmoji,
@@ -119,5 +120,79 @@ describe("emoji helpers", () => {
 
   it("returns a stable snapshot when emoji recents have not changed", () => {
     expect(loadEmojiRecents()).toBe(loadEmojiRecents());
+  });
+
+  describe("stored recents", () => {
+    const valid = {
+      type: "custom",
+      id: "e1",
+      shortcode: "party",
+      native: null,
+      imageUrl: "https://cdn.test/e1.png",
+      insertText: ":party:",
+      label: "party",
+    };
+
+    function seed(raw: string | null) {
+      const store = window.localStorage as unknown as {
+        setItem: (k: string, v: string) => void;
+        removeItem: (k: string) => void;
+      };
+      if (raw === null) store.removeItem(EMOJI_RECENTS_STORAGE_KEY);
+      else store.setItem(EMOJI_RECENTS_STORAGE_KEY, raw);
+    }
+
+    it("fills the optional fields of an entry saved without them", () => {
+      seed(
+        JSON.stringify([
+          {
+            type: "native",
+            id: "joy",
+            shortcode: "joy",
+            insertText: "x",
+            label: "joy",
+          },
+        ]),
+      );
+
+      expect(loadEmojiRecents()).toEqual([
+        {
+          type: "native",
+          id: "joy",
+          shortcode: "joy",
+          native: null,
+          imageUrl: null,
+          insertText: "x",
+          label: "joy",
+        },
+      ]);
+    });
+
+    it("drops entries that are malformed and keeps the rest", () => {
+      seed(
+        JSON.stringify([
+          valid,
+          null,
+          "joy",
+          { ...valid, id: 9 },
+          { ...valid, type: "gif" },
+          { ...valid, id: "e2", native: 5, imageUrl: ["x"] },
+        ]),
+      );
+
+      expect(loadEmojiRecents().map((item) => item.id)).toEqual(["e1", "e2"]);
+      expect(loadEmojiRecents()[1]).toMatchObject({
+        native: null,
+        imageUrl: null,
+      });
+    });
+
+    it.each(["{not json", "null", '{"a":1}', '"text"', ""])(
+      "is empty when the stored text is %j",
+      (raw) => {
+        seed(raw);
+        expect(loadEmojiRecents()).toEqual([]);
+      },
+    );
   });
 });

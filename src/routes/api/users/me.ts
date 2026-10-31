@@ -10,11 +10,13 @@ import {
 } from "@/lib/profile-customization";
 import { normalizeUsernameForStorage } from "@/lib/validations";
 import { ServiceError } from "@/lib/service-error";
+import { lenientNumber } from "@/lib/lenient-schema";
+import { looseStruct, safeParse, safeParseJson } from "@/lib/schema";
+import { Schema } from "effect";
 import { getMe } from "@/services/user.service";
 import { clog } from "@/lib/console-logger";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import {
-  ALL_SERVERS_SOUND_SCOPE,
   normalizeSoundboardTriggerMap,
   normalizeSoundboardTriggerConfig,
   validatePersistedSoundboardTriggerMap,
@@ -67,7 +69,7 @@ const USER_ID_REFERENCES = [
   ["server_audit_logs", "actor_id"],
 ] as const;
 
-const GET = async ({ request }: any) => {
+export const GET = async ({ request }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -103,18 +105,27 @@ const GET = async ({ request }: any) => {
   }
 };
 
+// Envelope only; each field is validated against the caller's servers below.
+const soundSettingsPatchSchema = Schema.Struct({
+  sound_settings: Schema.Record(Schema.String, Schema.Unknown),
+});
+
+const soundboardVolumeSchema = Schema.Finite.check(
+  Schema.isBetween({ minimum: 0, maximum: 100 }),
+);
+
 export const PATCH = async ({ request }: { request: Request }) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
-  const body = await request.json().catch(() => null);
-  const incoming =
-    body && typeof body === "object" && "sound_settings" in body
-      ? (body as { sound_settings?: unknown }).sound_settings
-      : null;
-  if (!incoming || typeof incoming !== "object") {
+  const body = safeParse(
+    soundSettingsPatchSchema,
+    await request.json().catch(() => null),
+  );
+  if (!body.success) {
     return apiError("Invalid sound settings", 400, "INVALID_SOUND_SETTINGS");
   }
+  const raw = body.data.sound_settings;
 
   const db = getDB();
   await ensureUserProfileSchema(db);
@@ -123,7 +134,6 @@ export const PATCH = async ({ request }: { request: Request }) => {
     .bind(userId)
     .first<{ sound_settings: string | null }>();
   const current = parseStoredSoundSettingsRecord(currentRow?.sound_settings);
-  const raw = incoming as Record<string, unknown>;
   const requestedFields = [
     "voiceJoinSoundboard",
     "voiceLeaveSoundboard",
@@ -173,20 +183,15 @@ export const PATCH = async ({ request }: { request: Request }) => {
   > = {};
   for (const field of changedFields) {
     if (field === "soundboardVolume") {
-      const volume = raw[field];
-      if (
-        typeof volume !== "number" ||
-        !Number.isFinite(volume) ||
-        volume < 0 ||
-        volume > 100
-      ) {
+      const volume = safeParse(soundboardVolumeSchema, raw[field]);
+      if (!volume.success) {
         return apiError(
           "Soundboard volume is invalid",
           400,
           "INVALID_SOUND_SETTINGS",
         );
       }
-      validated[field] = volume;
+      validated[field] = volume.data;
       continue;
     }
     const value = await validatePersistedSoundboardTriggerMap(
@@ -212,26 +217,41 @@ export const PATCH = async ({ request }: { request: Request }) => {
   return apiSuccess({ sound_settings: validated });
 };
 
+/**
+ * What `users.sound_settings` holds. Tolerant per field: a corrupt field decodes
+ * to `undefined` (and so to its default), never to a throw. Other keys are kept
+ * so a PATCH merges into whatever is stored.
+ */
+const StoredSoundSettings = looseStruct({
+  voiceJoinSoundboard: Schema.optional(Schema.Unknown),
+  voiceLeaveSoundboard: Schema.optional(Schema.Unknown),
+  soundboardVolume: lenientNumber,
+});
+
+function decodeStoredSoundSettings(value: string | null | undefined) {
+  if (!value) return undefined;
+  const parsed = safeParseJson(StoredSoundSettings, value);
+  return parsed.success ? parsed.data : undefined;
+}
+
 function parseStoredSoundSettingsRecord(
   value: string | null | undefined,
 ): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-    const record = parsed as Record<string, unknown>;
-    const sanitized = { ...record };
-    for (const field of ["voiceJoinSoundboard", "voiceLeaveSoundboard"]) {
-      if (field in record) {
-        sanitized[field] = parseStoredTriggerMap(record[field]);
-      }
-    }
-    return sanitized;
-  } catch {
-    return {};
+  const stored = decodeStoredSoundSettings(value);
+  if (!stored) return {};
+
+  const sanitized = { ...stored };
+  if ("voiceJoinSoundboard" in stored) {
+    sanitized.voiceJoinSoundboard = parseStoredTriggerMap(
+      stored.voiceJoinSoundboard,
+    );
   }
+  if ("voiceLeaveSoundboard" in stored) {
+    sanitized.voiceLeaveSoundboard = parseStoredTriggerMap(
+      stored.voiceLeaveSoundboard,
+    );
+  }
+  return sanitized;
 }
 
 function parseStoredSoundSettings(value: string | null | undefined): {
@@ -239,39 +259,15 @@ function parseStoredSoundSettings(value: string | null | undefined): {
   voiceLeaveSoundboard: SoundboardTriggerMap;
   soundboardVolume: number;
 } {
-  if (!value) {
-    return {
-      voiceJoinSoundboard: {
-        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
-      },
-      voiceLeaveSoundboard: {
-        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
-      },
-      soundboardVolume: 100,
-    };
-  }
-  try {
-    const parsed = JSON.parse(value) as Record<string, unknown>;
-    return {
-      voiceJoinSoundboard: parseStoredTriggerMap(parsed.voiceJoinSoundboard),
-      voiceLeaveSoundboard: parseStoredTriggerMap(parsed.voiceLeaveSoundboard),
-      soundboardVolume:
-        typeof parsed.soundboardVolume === "number" &&
-        Number.isFinite(parsed.soundboardVolume)
-          ? Math.max(0, Math.min(100, parsed.soundboardVolume))
-          : 100,
-    };
-  } catch {
-    return {
-      voiceJoinSoundboard: {
-        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
-      },
-      voiceLeaveSoundboard: {
-        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
-      },
-      soundboardVolume: 100,
-    };
-  }
+  const stored = decodeStoredSoundSettings(value);
+  return {
+    voiceJoinSoundboard: parseStoredTriggerMap(stored?.voiceJoinSoundboard),
+    voiceLeaveSoundboard: parseStoredTriggerMap(stored?.voiceLeaveSoundboard),
+    soundboardVolume:
+      stored?.soundboardVolume === undefined
+        ? 100
+        : Math.max(0, Math.min(100, stored.soundboardVolume)),
+  };
 }
 
 function parseStoredTriggerMap(value: unknown): SoundboardTriggerMap {

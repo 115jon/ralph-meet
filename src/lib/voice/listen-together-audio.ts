@@ -46,6 +46,15 @@ export const LISTEN_TOGETHER_LOUDNESS_PRESETS = {
 
 export type ListenTogetherLoudnessPreset =
   keyof typeof LISTEN_TOGETHER_LOUDNESS_PRESETS;
+export function isListenTogetherLoudnessPreset(
+  value: unknown,
+): value is ListenTogetherLoudnessPreset {
+  return (
+    typeof value === "string" &&
+    Object.hasOwn(LISTEN_TOGETHER_LOUDNESS_PRESETS, value)
+  );
+}
+
 export const LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS = Object.entries(
   LISTEN_TOGETHER_LOUDNESS_PRESETS,
 ) as [

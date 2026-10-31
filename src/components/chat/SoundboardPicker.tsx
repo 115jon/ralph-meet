@@ -1,3 +1,12 @@
+import {
+  readList,
+  readNumber,
+  readOneOf,
+  readObject,
+  readStoredJson,
+  readString,
+  required,
+} from "@/lib/persisted-guard";
 import { useMounted } from "@/hooks/useMounted";
 import { describeApiError } from "@/lib/api-errors";
 import {
@@ -256,10 +265,27 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+/** A saved sound: an id and a name are required, the rest is optional and dropped when mistyped. */
+const readStoredSound = readObject<CustomSound>(
+  {
+    id: required(readString),
+    name: required(readString),
+    source: readOneOf(["default", "server", "custom"]),
+    serverId: readString,
+    dataUrl: readString,
+    mediaUrl: readString,
+    emoji: readString,
+    volume: readNumber,
+  },
+  { keepUnknown: true },
+);
+
 function readStoredSounds(key: string): CustomSound[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(key) || "[]");
+    return (
+      readStoredJson(localStorage.getItem(key), readList(readStoredSound)) ?? []
+    );
   } catch {
     return [];
   }

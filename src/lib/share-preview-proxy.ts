@@ -3,6 +3,17 @@ import type { MessageShare } from "@/services/message-share.service";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 import { clog } from "@/lib/console-logger";
 import { safeFetch, readJsonCapped } from "@/lib/safe-fetch";
+import {
+  InstagramOEmbedResponse,
+  InstagramVideoApiResponse,
+} from "@/lib/vendor-payloads/instagram";
+import {
+  TikTokPlayerApiResponse,
+  TikwmResponse,
+  type TikwmData,
+  type TikTokPlayerItem,
+  type TikTokUrlRef,
+} from "@/lib/vendor-payloads/tiktok";
 
 const log = clog("share-preview-proxy");
 
@@ -91,47 +102,15 @@ function canonicalizeInstagramUrl(url: string): string {
   }
 }
 
-function firstNonEmptyString(...values: Array<unknown>): string | undefined {
+function firstNonEmptyString(
+  ...values: Array<string | undefined>
+): string | undefined {
   for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
   }
 
   return undefined;
-}
-
-function readPositiveNumber(...values: Array<unknown>): number | undefined {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-      return value;
-    }
-
-    if (typeof value === "string") {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        return parsed;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function toIsoTimestamp(rawValue: unknown): string | undefined {
-  const seconds = readPositiveNumber(rawValue);
-  if (seconds !== undefined) {
-    return new Date(seconds * 1000).toISOString();
-  }
-
-  if (typeof rawValue !== "string" || !rawValue.trim()) {
-    return undefined;
-  }
-
-  const fallbackDate = new Date(rawValue);
-  return Number.isNaN(fallbackDate.getTime())
-    ? undefined
-    : fallbackDate.toISOString();
 }
 
 function isLikelyTikTokAudioUrl(url: string | undefined): boolean {
@@ -171,27 +150,17 @@ function buildTikTokCanonicalUrl(
   return `${authorUrl}/${postType === "slideshow" ? "photo" : "video"}/${postId}`;
 }
 
-function getTikTokStringArray(values: unknown): string[] {
-  return Array.isArray(values)
-    ? values.filter(
-        (value: unknown): value is string =>
-          typeof value === "string" && value.trim().length > 0,
-      )
-    : [];
-}
-
-function getTikTokPostType(data: any): "video" | "slideshow" {
-  return getTikTokStringArray(data?.images).length > 0 ||
-    getTikTokStringArray(data?.live_images).length > 0
+function getTikTokPostType(data: TikwmData): "video" | "slideshow" {
+  return data.images?.length || data.live_images?.length
     ? "slideshow"
     : "video";
 }
 
 function getTikTokDirectVideoUrl(
-  data: any,
+  data: TikwmData,
   postType: "video" | "slideshow",
 ): string | undefined {
-  const candidate = firstNonEmptyString(data?.hdplay, data?.play, data?.wmplay);
+  const candidate = firstNonEmptyString(data.hdplay, data.play, data.wmplay);
   if (
     !candidate ||
     postType === "slideshow" ||
@@ -203,9 +172,9 @@ function getTikTokDirectVideoUrl(
   return candidate;
 }
 
-function getTikTokAudio(data: any): EmbedAudio | undefined {
-  const musicInfo = data?.music_info;
-  const url = firstNonEmptyString(musicInfo?.play, data?.music);
+function getTikTokAudio(data: TikwmData): EmbedAudio | undefined {
+  const musicInfo = data.music_info;
+  const url = firstNonEmptyString(musicInfo?.play, data.music);
   const title = firstNonEmptyString(musicInfo?.title);
   const artist = firstNonEmptyString(musicInfo?.author);
   const artworkUrl = firstNonEmptyString(musicInfo?.cover);
@@ -223,20 +192,12 @@ function getTikTokAudio(data: any): EmbedAudio | undefined {
 }
 
 function getTikTokCoverUrl(
-  data: any,
+  data: TikwmData,
   postType: "video" | "slideshow",
 ): string | undefined {
   return postType === "video"
-    ? firstNonEmptyString(
-        data?.origin_cover,
-        data?.ai_dynamic_cover,
-        data?.cover,
-      )
-    : firstNonEmptyString(
-        data?.cover,
-        data?.origin_cover,
-        data?.ai_dynamic_cover,
-      );
+    ? firstNonEmptyString(data.origin_cover, data.ai_dynamic_cover, data.cover)
+    : firstNonEmptyString(data.cover, data.origin_cover, data.ai_dynamic_cover);
 }
 
 function isLikelyHeicImageUrl(url: string | undefined): boolean {
@@ -251,13 +212,13 @@ function isLikelyHeicImageUrl(url: string | undefined): boolean {
 }
 
 function getTikTokMedia(
-  data: any,
+  data: TikwmData,
   postType: "video" | "slideshow",
   coverUrl?: string,
 ): EmbedMedia[] | undefined {
   if (postType === "slideshow") {
-    const images = getTikTokStringArray(data?.images);
-    const liveImages = getTikTokStringArray(data?.live_images);
+    const images = data.images ?? [];
+    const liveImages = data.live_images ?? [];
 
     if (liveImages.length > 0) {
       const media: EmbedMedia[] = [];
@@ -305,7 +266,7 @@ function getTikTokMedia(
       url: videoUrl,
       thumbnailUrl: coverUrl,
       contentType: "video/mp4",
-      durationSeconds: readPositiveNumber(data?.duration),
+      durationSeconds: data.duration,
     },
   ];
 }
@@ -403,26 +364,8 @@ async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
   }
 }
 
-function getTikTokUrlList(candidate: unknown): string[] {
-  if (Array.isArray(candidate)) {
-    return candidate.filter(
-      (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
-    );
-  }
-
-  if (
-    candidate &&
-    typeof candidate === "object" &&
-    Array.isArray((candidate as any).url_list)
-  ) {
-    return (candidate as any).url_list.filter(
-      (value: unknown): value is string =>
-        typeof value === "string" && value.trim().length > 0,
-    );
-  }
-
-  return [];
+function urlsOf(ref: TikTokUrlRef | undefined): ReadonlyArray<string> {
+  return ref?.urls ?? [];
 }
 
 function isLikelyTikTokVideoUrl(url: string): boolean {
@@ -442,33 +385,38 @@ function isLikelyTikTokVideoUrl(url: string): boolean {
   }
 }
 
-function getTikTokPlayerApiCoverUrl(item: any): string | undefined {
+function getTikTokPlayerApiCoverUrl(
+  item: TikTokPlayerItem,
+): string | undefined {
+  const cover = item.image_post_info?.cover;
   return firstNonEmptyString(
-    ...getTikTokUrlList(item?.video_info?.origin_cover),
-    ...getTikTokUrlList(item?.video_info?.cover),
-    ...getTikTokUrlList(item?.image_post_info?.cover?.display_image),
-    ...getTikTokUrlList(item?.image_post_info?.cover?.thumbnail),
-    ...getTikTokUrlList(item?.image_post_info?.cover?.owner_watermark_image),
+    ...urlsOf(item.video_info?.origin_cover),
+    ...urlsOf(item.video_info?.cover),
+    ...urlsOf(cover?.display_image),
+    ...urlsOf(cover?.thumbnail),
+    ...urlsOf(cover?.owner_watermark_image),
   );
 }
 
-function getTikTokPlayerApiDirectVideoUrl(item: any): string | undefined {
-  const profileUrls = Array.isArray(item?.video_info?.profiles)
-    ? item.video_info.profiles.flatMap((profile: any) =>
-        getTikTokUrlList(profile?.play_addr),
-      )
-    : [];
+function getTikTokPlayerApiDirectVideoUrl(
+  item: TikTokPlayerItem,
+): string | undefined {
+  const profileUrls = (item.video_info?.profiles ?? []).flatMap((profile) =>
+    urlsOf(profile.play_addr),
+  );
   const videoUrls = [
     ...profileUrls,
-    ...getTikTokUrlList(item?.video_info?.url_list),
+    ...urlsOf(item.video_info?.url_list),
   ].filter((value, index, values) => values.indexOf(value) === index);
 
   return videoUrls.find(isLikelyTikTokVideoUrl);
 }
 
-function getTikTokPlayerApiAudio(item: any): EmbedAudio | undefined {
-  const title = firstNonEmptyString(item?.music_info?.title);
-  const artist = firstNonEmptyString(item?.music_info?.author);
+function getTikTokPlayerApiAudio(
+  item: TikTokPlayerItem,
+): EmbedAudio | undefined {
+  const title = item.music_info?.title;
+  const artist = item.music_info?.author;
 
   if (!title && !artist) {
     return undefined;
@@ -481,37 +429,29 @@ function getTikTokPlayerApiAudio(item: any): EmbedAudio | undefined {
 }
 
 function getTikTokPlayerApiMedia(
-  item: any,
+  item: TikTokPlayerItem,
   postType: "video" | "slideshow",
   coverUrl?: string,
 ): EmbedMedia[] | undefined {
   if (postType === "slideshow") {
-    const images = Array.isArray(item?.image_post_info?.images)
-      ? item.image_post_info.images
-      : [];
-    const media = images
-      .map((image: any) => {
-        const url = firstNonEmptyString(
-          ...getTikTokUrlList(image?.display_image),
-          ...getTikTokUrlList(image?.owner_watermark_image),
-          ...getTikTokUrlList(image?.thumbnail),
-        );
-        if (!url) return null;
-
-        const dimensions =
-          image?.display_image ??
-          image?.owner_watermark_image ??
-          image?.thumbnail;
-        return {
-          type: "image" as const,
-          url,
-          width: readPositiveNumber(dimensions?.width),
-          height: readPositiveNumber(dimensions?.height),
-        };
-      })
-      .filter(
-        (value: EmbedMedia | null): value is EmbedMedia => value !== null,
+    const media: EmbedMedia[] = [];
+    for (const image of item.image_post_info?.images ?? []) {
+      const url = firstNonEmptyString(
+        ...urlsOf(image.display_image),
+        ...urlsOf(image.owner_watermark_image),
+        ...urlsOf(image.thumbnail),
       );
+      if (!url) continue;
+
+      const dimensions =
+        image.display_image ?? image.owner_watermark_image ?? image.thumbnail;
+      media.push({
+        type: "image",
+        url,
+        width: dimensions?.width,
+        height: dimensions?.height,
+      });
+    }
 
     return media.length > 0 ? media : undefined;
   }
@@ -521,7 +461,8 @@ function getTikTokPlayerApiMedia(
 
   // `meta.duration` is whole seconds (51 for a 51 s clip). Treat values too
   // large to be seconds as milliseconds in case the API ever switches.
-  const rawDuration = readPositiveNumber(item?.video_info?.meta?.duration);
+  const meta = item.video_info?.meta;
+  const rawDuration = meta?.duration;
   const durationMs =
     rawDuration === undefined
       ? undefined
@@ -533,27 +474,25 @@ function getTikTokPlayerApiMedia(
       type: "video",
       url: videoUrl,
       thumbnailUrl: coverUrl,
-      width: readPositiveNumber(item?.video_info?.meta?.width),
-      height: readPositiveNumber(item?.video_info?.meta?.height),
+      width: meta?.width,
+      height: meta?.height,
       contentType: "video/mp4",
       durationSeconds: durationMs !== undefined ? durationMs / 1000 : undefined,
     },
   ];
 }
 
-function mapTikTokPlayerApiMetadata(item: any): TikTokProxyMetadata | null {
-  if (!item || typeof item !== "object") return null;
-
-  const postType: "video" | "slideshow" =
-    Array.isArray(item?.image_post_info?.images) &&
-    item.image_post_info.images.length > 0
-      ? "slideshow"
-      : "video";
+function mapTikTokPlayerApiMetadata(
+  item: TikTokPlayerItem,
+): TikTokProxyMetadata | null {
+  const postType: "video" | "slideshow" = item.image_post_info?.images?.length
+    ? "slideshow"
+    : "video";
   const id = firstNonEmptyString(
-    item?.id_str,
-    typeof item?.id === "number" ? String(item.id) : undefined,
+    item.id_str,
+    item.id !== undefined ? String(item.id) : undefined,
   );
-  const authorHandle = firstNonEmptyString(item?.author_info?.unique_id);
+  const authorHandle = item.author_info?.unique_id;
   const coverUrl = getTikTokPlayerApiCoverUrl(item);
   const media = getTikTokPlayerApiMedia(item, postType, coverUrl);
 
@@ -566,23 +505,23 @@ function mapTikTokPlayerApiMetadata(item: any): TikTokProxyMetadata | null {
     canonicalUrl: buildTikTokCanonicalUrl(authorHandle, id, postType),
     postType,
     coverUrl: coverUrl ?? media?.[0]?.url,
-    title: firstNonEmptyString(item?.desc),
+    title: item.desc,
     authorName: firstNonEmptyString(
-      item?.author_info?.nickname,
-      item?.author_info?.unique_id,
+      item.author_info?.nickname,
+      item.author_info?.unique_id,
     ),
     authorHandle,
     authorAvatarUrl: firstNonEmptyString(
-      ...getTikTokUrlList(item?.author_info?.avatar_url_list),
+      ...urlsOf(item.author_info?.avatar_url_list),
     ),
     videoUrl:
       postType === "video" ? getTikTokPlayerApiDirectVideoUrl(item) : undefined,
     media,
     audio: getTikTokPlayerApiAudio(item),
-    likeCount: readPositiveNumber(item?.statistics_info?.digg_count),
-    commentCount: readPositiveNumber(item?.statistics_info?.comment_count),
-    viewCount: readPositiveNumber(item?.statistics_info?.play_count),
-    shareCount: readPositiveNumber(item?.statistics_info?.share_count),
+    likeCount: item.statistics_info?.digg_count,
+    commentCount: item.statistics_info?.comment_count,
+    viewCount: item.statistics_info?.play_count,
+    shareCount: item.statistics_info?.share_count,
   };
 }
 
@@ -602,28 +541,18 @@ interface TikTokPlayerApiLookup {
  * failed".
  */
 export function isTikTokPlayerApiGonePayload(
-  payload: unknown,
+  payload: TikTokPlayerApiResponse | undefined,
   itemId: string,
 ): boolean {
-  if (!payload || typeof payload !== "object") return false;
-  const record = payload as Record<string, unknown>;
-  if (Array.isArray(record.items) && record.items.length > 0) return false;
+  if (!payload || payload.items?.length) return false;
 
-  const fatal = Array.isArray(
-    (record.extra as Record<string, unknown> | undefined)?.fatal_item_ids,
-  )
-    ? ((record.extra as Record<string, unknown>).fatal_item_ids as unknown[])
-    : [];
-  if (fatal.some((value) => String(value) === itemId)) return true;
+  if (payload.extra?.fatal_item_ids?.includes(itemId)) return true;
 
-  const results = Array.isArray(record.results) ? record.results : [];
-  return results.some((result) => {
-    if (!result || typeof result !== "object") return false;
-    const entry = result as Record<string, unknown>;
-    const id = String(entry.id_str ?? entry.id ?? "");
+  return (payload.results ?? []).some((entry) => {
+    const id = entry.id_str ?? entry.id ?? "";
     return (
       (id === "" || id === itemId) &&
-      typeof entry.code === "string" &&
+      entry.code !== undefined &&
       /nil_core_data|not_?found|deleted|private/i.test(entry.code)
     );
   });
@@ -669,10 +598,10 @@ async function fetchTikTokPlayerApiLookup(
       };
     }
 
-    const payload = (await readJsonCapped(response)) as any;
-    const item = Array.isArray(payload?.items) ? payload.items[0] : null;
+    const payload = await readJsonCapped(response, TikTokPlayerApiResponse);
+    const item = payload?.items?.[0];
     return {
-      metadata: mapTikTokPlayerApiMetadata(item),
+      metadata: item ? mapTikTokPlayerApiMetadata(item) : null,
       gone: !item && isTikTokPlayerApiGonePayload(payload, itemId),
       transient: false,
     };
@@ -744,7 +673,7 @@ function mergeTikTokMetadata(
 async function fetchTikTokTikwmMetadata(
   url: string,
 ): Promise<TikTokProxyMetadata | null> {
-  let data: any = null;
+  let data: TikwmData | null = null;
 
   for (const baseUrl of TIKTOK_PROXY_API_BASE_URLS) {
     const apiUrl = `${baseUrl}?url=${encodeURIComponent(url)}`;
@@ -766,7 +695,7 @@ async function fetchTikTokTikwmMetadata(
         continue;
       }
 
-      const payload = (await readJsonCapped(response)) as any;
+      const payload = await readJsonCapped(response, TikwmResponse);
       if (payload?.code !== 0 || !payload.data) {
         log.warn("TikTok proxy metadata payload missing data", {
           apiUrl: baseUrl,
@@ -803,19 +732,9 @@ async function fetchTikTokTikwmMetadata(
     postType === "slideshow" && isLikelyHeicImageUrl(rawCoverUrl)
       ? (firstMediaThumbnailUrl ?? rawCoverUrl)
       : (rawCoverUrl ?? firstMediaThumbnailUrl);
-  const title = firstNonEmptyString(
-    data.title,
-    Array.isArray(data.content_desc)
-      ? data.content_desc
-          .filter(
-            (value: unknown): value is string =>
-              typeof value === "string" && value.trim().length > 0,
-          )
-          .join("\n")
-      : undefined,
-  );
-  const authorHandle = firstNonEmptyString(data.author?.unique_id);
-  const postId = firstNonEmptyString(data.id);
+  const title = firstNonEmptyString(data.title, data.content_desc?.join("\n"));
+  const authorHandle = data.author?.unique_id;
+  const postId = data.id;
 
   return {
     id: postId,
@@ -828,15 +747,15 @@ async function fetchTikTokTikwmMetadata(
       data.author?.unique_id,
     ),
     authorHandle,
-    authorAvatarUrl: firstNonEmptyString(data.author?.avatar),
+    authorAvatarUrl: data.author?.avatar,
     videoUrl: getTikTokDirectVideoUrl(data, postType),
     media,
     audio: getTikTokAudio(data),
-    likeCount: readPositiveNumber(data.digg_count),
-    commentCount: readPositiveNumber(data.comment_count),
-    viewCount: readPositiveNumber(data.play_count),
-    shareCount: readPositiveNumber(data.share_count),
-    timestamp: toIsoTimestamp(data.create_time),
+    likeCount: data.digg_count,
+    commentCount: data.comment_count,
+    viewCount: data.play_count,
+    shareCount: data.share_count,
+    timestamp: data.create_time,
   };
 }
 
@@ -909,16 +828,15 @@ export async function lookupInstagramOEmbed(url: string): Promise<{
     return { status: response.status, metadata: null };
   }
 
-  const payload = (await readJsonCapped(response)) as any;
-  if (!payload || typeof payload !== "object") {
+  const payload = await readJsonCapped(response, InstagramOEmbedResponse);
+  if (!payload) {
     return { status: response.status, metadata: null };
   }
 
   return {
     status: response.status,
     metadata: {
-      mediaId:
-        typeof payload.media_id === "string" ? payload.media_id : undefined,
+      mediaId: payload.media_id,
       title: payload.title,
       authorName: payload.author_name,
       authorUrl: payload.author_url,
@@ -955,93 +873,29 @@ export async function fetchInstagramVideoMetadata(
     return null;
   }
 
-  const payload = (await readJsonCapped(response)) as any;
-  if (!payload || typeof payload !== "object") return null;
+  const payload = await readJsonCapped(response, InstagramVideoApiResponse);
+  if (!payload) return null;
 
   return {
-    videoUrl:
-      typeof payload.videoUrl === "string" ? payload.videoUrl : undefined,
-    thumbnailUrl:
-      typeof payload.thumbnailUrl === "string"
-        ? payload.thumbnailUrl
-        : undefined,
-    title: typeof payload.title === "string" ? payload.title : undefined,
-    durationSeconds:
-      typeof payload.durationSeconds === "number"
-        ? payload.durationSeconds
-        : undefined,
-    media: Array.isArray(payload.media)
-      ? payload.media
-          .filter(
-            (item: any) =>
-              item &&
-              (item.type === "image" || item.type === "video") &&
-              typeof item.url === "string",
-          )
-          .map((item: any) => ({
-            type: item.type,
-            url: item.url,
-            width: typeof item.width === "number" ? item.width : undefined,
-            height: typeof item.height === "number" ? item.height : undefined,
-            thumbnailUrl:
-              typeof item.thumbnailUrl === "string"
-                ? item.thumbnailUrl
-                : undefined,
-            contentType:
-              typeof item.contentType === "string"
-                ? item.contentType
-                : undefined,
-            altText:
-              typeof item.altText === "string" ? item.altText : undefined,
-            durationSeconds:
-              typeof item.durationSeconds === "number"
-                ? item.durationSeconds
-                : undefined,
-          }))
-      : undefined,
-    authorName:
-      typeof payload.authorName === "string" ? payload.authorName : undefined,
-    authorUrl:
-      typeof payload.authorUrl === "string" ? payload.authorUrl : undefined,
-    authorAvatarUrl:
-      typeof payload.authorAvatarUrl === "string"
-        ? payload.authorAvatarUrl
-        : undefined,
-    authorVerified:
-      typeof payload.authorVerified === "boolean"
-        ? payload.authorVerified
-        : undefined,
-    likeCount:
-      typeof payload.likeCount === "number" ? payload.likeCount : undefined,
-    commentCount:
-      typeof payload.commentCount === "number"
-        ? payload.commentCount
-        : undefined,
-    viewCount:
-      typeof payload.viewCount === "number" ? payload.viewCount : undefined,
-    timestamp:
-      typeof payload.timestamp === "string" ? payload.timestamp : undefined,
-    audio:
-      payload.audio && typeof payload.audio === "object"
-        ? {
-            title:
-              typeof payload.audio.title === "string"
-                ? payload.audio.title
-                : undefined,
-            artist:
-              typeof payload.audio.artist === "string"
-                ? payload.audio.artist
-                : undefined,
-            url:
-              typeof payload.audio.url === "string"
-                ? payload.audio.url
-                : undefined,
-            artworkUrl:
-              typeof payload.audio.artworkUrl === "string"
-                ? payload.audio.artworkUrl
-                : undefined,
-          }
-        : undefined,
+    videoUrl: payload.videoUrl,
+    thumbnailUrl: payload.thumbnailUrl,
+    title: payload.title,
+    durationSeconds: payload.durationSeconds,
+    media: payload.media,
+    authorName: payload.authorName,
+    authorUrl: payload.authorUrl,
+    authorAvatarUrl: payload.authorAvatarUrl,
+    authorVerified: payload.authorVerified,
+    likeCount: payload.likeCount,
+    commentCount: payload.commentCount,
+    viewCount: payload.viewCount,
+    timestamp: payload.timestamp,
+    audio: payload.audio && {
+      title: payload.audio.title,
+      artist: payload.audio.artist,
+      url: payload.audio.url,
+      artworkUrl: payload.audio.artworkUrl,
+    },
   };
 }
 

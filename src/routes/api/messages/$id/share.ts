@@ -1,6 +1,8 @@
 import { apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
+import { safeParse } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
+import { Schema } from "effect";
 import { createMessageShare } from "@/services/message-share.service";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -23,7 +25,11 @@ function expiryFromBody(value: unknown, now: Date): string | null | undefined {
   return expiresAt.toISOString();
 }
 
-const POST = async ({ request, params }: any) => {
+const shareBodySchema = Schema.Struct({
+  expires: Schema.optional(Schema.Unknown),
+});
+
+export const POST = async ({ request, params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -41,13 +47,20 @@ const POST = async ({ request, params }: any) => {
   if (accessResult instanceof Response) return accessResult;
 
   try {
-    const body = await request.json().catch(() => ({}));
+    // A missing, malformed or non-object body means "no options".
+    const body = safeParse(
+      shareBodySchema,
+      await request.json().catch(() => null),
+    );
     const now = new Date();
     const share = await createMessageShare(db, {
       messageId,
       createdBy: userId,
       now,
-      expiresAt: expiryFromBody((body as { expires?: unknown }).expires, now),
+      expiresAt: expiryFromBody(
+        body.success ? body.data.expires : undefined,
+        now,
+      ),
     });
     const url = new URL(request.url);
     const share_url = `${url.origin}/share/${share.token}`;

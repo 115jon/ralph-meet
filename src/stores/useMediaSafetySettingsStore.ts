@@ -1,7 +1,15 @@
 import {
   DEFAULT_MEDIA_CONTENT_FILTER,
+  isMediaContentFilter,
   type MediaContentFilter,
 } from "@/lib/media-content-filter";
+import {
+  orElse,
+  readGuard,
+  readMap,
+  readObject,
+  readString,
+} from "@/lib/persisted-guard";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -28,6 +36,26 @@ interface MediaSafetySettingsState {
 const defaultMediaSafetySettings: MediaSafetySettings = {
   contentFilter: DEFAULT_MEDIA_CONTENT_FILTER,
 };
+
+/**
+ * What localStorage may hold. `_cache` is derived and rebuilt, so it is never
+ * read back; a user entry with an unknown filter gets the default filter.
+ */
+const readPersistedMediaSafety = readObject<
+  Pick<Partial<MediaSafetySettingsState>, "userSettings"> & {
+    currentUser?: string;
+  }
+>({
+  currentUser: readString,
+  userSettings: readMap(
+    readObject<MediaSafetySettings>({
+      contentFilter: orElse(
+        readGuard(isMediaContentFilter),
+        DEFAULT_MEDIA_CONTENT_FILTER,
+      ),
+    }),
+  ),
+});
 
 export const useMediaSafetySettingsStore = create<MediaSafetySettingsState>()(
   persist(
@@ -115,6 +143,10 @@ export const useMediaSafetySettingsStore = create<MediaSafetySettingsState>()(
     {
       name: "media-safety-settings-storage",
       version: 1,
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...readPersistedMediaSafety(persistedState),
+      }),
     },
   ),
 );

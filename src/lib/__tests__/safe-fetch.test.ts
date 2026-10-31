@@ -1,4 +1,7 @@
+import { Schema } from "effect";
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { lenientNumber, lenientString } from "../lenient-schema";
+import { looseStruct } from "../schema";
 import {
   safeFetch,
   readTextCapped,
@@ -103,14 +106,44 @@ describe("readJsonCapped", () => {
     const res = streamResponse(
       new TextEncoder().encode(JSON.stringify(payload)),
     );
-    await expect(readJsonCapped(res)).resolves.toEqual(payload);
+    await expect(readJsonCapped(res, Schema.Unknown)).resolves.toEqual(payload);
   });
 
   it("propagates the cap to the underlying text read", async () => {
     const big = new Uint8Array(4096).fill(123);
     const res = streamResponse(big);
-    await expect(readJsonCapped(res, 1024)).rejects.toBeInstanceOf(
-      ResponseTooLargeError,
+    await expect(
+      readJsonCapped(res, Schema.Unknown, 1024),
+    ).rejects.toBeInstanceOf(ResponseTooLargeError);
+  });
+
+  it("decodes with the schema and returns a typed value", async () => {
+    const Payload = looseStruct({ title: lenientString, views: lenientNumber });
+    const res = streamResponse(
+      new TextEncoder().encode(
+        JSON.stringify({ title: "clip", views: "many", extra: 1 }),
+      ),
     );
+
+    const payload = await readJsonCapped(res, Payload);
+
+    expect(payload).toEqual({ title: "clip", extra: 1 });
+    expect(payload?.title).toBe("clip");
+  });
+
+  it("resolves to undefined when the root does not fit the schema", async () => {
+    const Payload = looseStruct({ title: lenientString });
+
+    for (const body of ["null", "[]", "3", '"text"']) {
+      const res = streamResponse(new TextEncoder().encode(body));
+      await expect(readJsonCapped(res, Payload)).resolves.toBeUndefined();
+    }
+  });
+
+  it("still rejects text that is not JSON", async () => {
+    const res = streamResponse(new TextEncoder().encode("<html>"));
+    await expect(
+      readJsonCapped(res, looseStruct({ title: lenientString })),
+    ).rejects.toBeInstanceOf(SyntaxError);
   });
 });

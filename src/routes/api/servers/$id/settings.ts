@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
 import { safeParse } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
+import { readJsonBody } from "@/lib/validate-body";
 import { UpdateServerSchema } from "@/lib/validations";
 import {
   recordR2CleanupFailure,
@@ -19,15 +20,16 @@ import {
 } from "@/services/service-helpers";
 
 // PATCH /api/servers/:id/settings — update server settings
-const PATCH = async ({ request, params }: any) => {
+export const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: serverId } = params;
 
-  const raw = await request.json();
-  const parsed = safeParse(UpdateServerSchema, raw);
+  const read = await readJsonBody(request);
+  if (read instanceof Response) return read;
+  const parsed = safeParse(UpdateServerSchema, read.value);
   if (!parsed.success) {
     return Response.json(
       { error: parsed.issues[0]?.message ?? "Invalid input" },

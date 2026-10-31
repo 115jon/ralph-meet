@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { readBoolean, readNumber, readObject } from "@/lib/persisted-guard";
 
 export interface MediaPlaybackSettings {
   videoVolume: number;
@@ -14,6 +15,14 @@ export const DEFAULT_MEDIA_PLAYBACK_SETTINGS: MediaPlaybackSettings = {
   videoVolume: 1,
   videoMuted: false,
 };
+
+/** What localStorage may hold: a finite volume and a boolean flag, or neither. */
+const readPersistedPlaybackSettings = readObject<
+  Partial<MediaPlaybackSettings>
+>({
+  videoVolume: readNumber,
+  videoMuted: readBoolean,
+});
 
 export function normalizeMediaPlaybackSettings(
   settings?: Partial<MediaPlaybackSettings>,
@@ -55,7 +64,7 @@ export const useMediaPlaybackSettingsStore =
         merge: (persistedState, currentState) => ({
           ...currentState,
           ...normalizeMediaPlaybackSettings(
-            persistedState as Partial<MediaPlaybackSettings> | undefined,
+            readPersistedPlaybackSettings(persistedState),
           ),
         }),
       },

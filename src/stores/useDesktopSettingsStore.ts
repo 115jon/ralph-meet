@@ -8,6 +8,7 @@
 
 import { isDesktop } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
+import { readBoolean, readObject } from "@/lib/persisted-guard";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -44,6 +45,15 @@ const defaults: DesktopSettings = {
   hardwareAcceleration: true,
   desktopNotifications: true,
 };
+
+/** What localStorage may hold: each flag is a boolean or falls back to its default. */
+const readPersistedDesktopSettings = readObject<Partial<DesktopSettings>>({
+  openOnStartup: readBoolean,
+  startMinimized: readBoolean,
+  closeToTray: readBoolean,
+  hardwareAcceleration: readBoolean,
+  desktopNotifications: readBoolean,
+});
 
 /**
  * Detect the user's OS name for the settings tab label.
@@ -119,6 +129,10 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
     {
       name: "desktop-settings-storage",
       version: 1,
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...readPersistedDesktopSettings(persistedState),
+      }),
     },
   ),
 );

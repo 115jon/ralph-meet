@@ -1,4 +1,13 @@
 import emojiMartData from "@emoji-mart/data";
+import {
+  orElse,
+  readList,
+  readOneOf,
+  readObject,
+  readStoredJson,
+  readString,
+  required,
+} from "@/lib/persisted-guard";
 
 export const MAX_AI_EMOJI_PROMPT_LENGTH = 300;
 export const MAX_EMOJI_RECENTS = 36;
@@ -706,17 +715,17 @@ export function toCustomEmojiRecentItem(
   };
 }
 
-function isEmojiRecentItem(value: unknown): value is EmojiRecentItem {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Partial<EmojiRecentItem>;
-  return (
-    (item.type === "native" || item.type === "custom") &&
-    typeof item.id === "string" &&
-    typeof item.shortcode === "string" &&
-    typeof item.insertText === "string" &&
-    typeof item.label === "string"
-  );
-}
+/** A recent as stored. Entries missing the required fields are dropped; the optional ones get their defaults. */
+const readStoredEmojiRecent = readObject<EmojiRecentItem>({
+  type: required(readOneOf(["native", "custom"])),
+  id: required(readString),
+  shortcode: required(readString),
+  native: orElse<string | null>(readString, null),
+  imageUrl: orElse<string | null>(readString, null),
+  insertText: required(readString),
+  label: required(readString),
+  prompt: readString,
+});
 
 export function loadEmojiRecents(): EmojiRecentItem[] {
   if (
@@ -735,20 +744,10 @@ export function loadEmojiRecents(): EmojiRecentItem[] {
   if (raw === cachedEmojiRecentsRaw) return cachedEmojiRecents;
   cachedEmojiRecentsRaw = raw;
 
-  try {
-    if (!raw) {
-      cachedEmojiRecents = [];
-      return cachedEmojiRecents;
-    }
-    const parsed = JSON.parse(raw);
-    cachedEmojiRecents = Array.isArray(parsed)
-      ? parsed.filter(isEmojiRecentItem).slice(0, MAX_EMOJI_RECENTS)
-      : [];
-    return cachedEmojiRecents;
-  } catch {
-    cachedEmojiRecents = [];
-    return cachedEmojiRecents;
-  }
+  cachedEmojiRecents = (
+    readStoredJson(raw, readList(readStoredEmojiRecent)) ?? []
+  ).slice(0, MAX_EMOJI_RECENTS);
+  return cachedEmojiRecents;
 }
 
 export function saveEmojiRecents(items: EmojiRecentItem[]): void {

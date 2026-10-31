@@ -55,7 +55,7 @@ vi.mock("@/services/service-helpers", () => ({
   executeBroadcast: mocks.executeBroadcast,
 }));
 
-import { DELETE } from "../channels/$id/reactions";
+import { DELETE, PUT } from "../channels/$id/reactions";
 
 const MESSAGE_ID = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -158,5 +158,27 @@ describe("reaction removal authorization", () => {
 
     expect(response.status).toBe(403);
     expect(mocks.removeReaction).not.toHaveBeenCalled();
+  });
+
+  it("answers an unparseable body with a 400 instead of throwing", async () => {
+    const malformed = () =>
+      new Request("https://meet.test/api/channels/channel-1/reactions", {
+        method: "DELETE",
+        body: "{not json",
+      });
+
+    const removed = await DELETE({
+      request: malformed(),
+      params: { id: "channel-1" },
+    });
+    const added = await PUT({
+      request: malformed(),
+      params: { id: "channel-1" },
+    });
+
+    expect(removed.status).toBe(400);
+    expect(added.status).toBe(400);
+    expect(mocks.removeReaction).not.toHaveBeenCalled();
+    expect(mocks.addReaction).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,13 @@
 import type { EmbedInfo } from "@/lib/types";
 import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
+import { safeParseJson } from "@/lib/schema";
+import { Schema } from "effect";
+import {
+  OEmbedResponse,
+  YouTubePbjResponse,
+  YouTubePlayerResponse,
+  readYouTubePbjPlayerResponse,
+} from "@/lib/vendor-payloads/oembed";
 import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
 import {
   fetchTikTokProxyLookup,
@@ -489,7 +497,8 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
     return await fetchOpenGraphData(url);
   }
 
-  const data = (await readJsonCapped(res)) as any;
+  const data = await readJsonCapped(res, OEmbedResponse);
+  if (!data) return null;
   const isShort = /youtube\.com\/shorts\//i.test(url);
   const videoDimensions = await fetchYouTubeVideoDimensions(videoId, url);
   const fallbackDimensions = isShort
@@ -502,20 +511,21 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
     url,
     type: "video",
     rawTitle: data.title,
-    author: {
-      name: data.author_name,
-      url: data.author_url,
-    },
+    author: data.author_name
+      ? { name: data.author_name, url: data.author_url }
+      : undefined,
     provider: {
       name: "YouTube",
       url: "https://www.youtube.com",
     },
     color: "#FF0000",
-    thumbnail: {
-      url: data.thumbnail_url,
-      width: data.thumbnail_width ?? 480,
-      height: data.thumbnail_height ?? 360,
-    },
+    thumbnail: data.thumbnail_url
+      ? {
+          url: data.thumbnail_url,
+          width: data.thumbnail_width ?? 480,
+          height: data.thumbnail_height ?? 360,
+        }
+      : undefined,
     video: {
       url: `https://www.youtube.com/embed/${videoId}`,
       width: resolvedDimensions.width,
@@ -617,7 +627,7 @@ async function fetchYouTubeInnertubeDimensions(
         continue;
       }
 
-      const playerResponse = (await readJsonCapped(res)) as any;
+      const playerResponse = await readJsonCapped(res, YouTubePlayerResponse);
       const dimensions = extractLargestYouTubeFormatDimensions(playerResponse);
       if (dimensions) {
         return dimensions;
@@ -644,63 +654,41 @@ function buildYouTubeWatchUrl(videoId: string, sourceUrl: string): string {
   }
 }
 
-function extractYouTubePlayerResponse(html: string): any | null {
+function extractYouTubePlayerResponse(
+  html: string,
+): YouTubePlayerResponse | null {
   const match = html.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
   if (!match?.[1]) return null;
 
-  try {
-    return JSON.parse(match[1]);
-  } catch {
-    return null;
-  }
+  const parsed = safeParseJson(YouTubePlayerResponse, match[1]);
+  return parsed.success ? parsed.data : null;
 }
 
-function extractYouTubePbjPlayerResponse(rawBody: string): any | null {
+function extractYouTubePbjPlayerResponse(
+  rawBody: string,
+): YouTubePlayerResponse | null {
   const sanitizedBody = rawBody.replace(/^\s*\)\]\}'\s*/, "").trim();
 
-  try {
-    const parsed = JSON.parse(sanitizedBody);
-    if (parsed?.playerResponse) {
-      return parsed.playerResponse;
-    }
-
-    if (Array.isArray(parsed)) {
-      for (const item of parsed) {
-        if (item?.playerResponse) {
-          return item.playerResponse;
-        }
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
+  const parsed = safeParseJson(YouTubePbjResponse, sanitizedBody);
+  return parsed.success
+    ? (readYouTubePbjPlayerResponse(parsed.data) ?? null)
+    : null;
 }
 
 function extractLargestYouTubeFormatDimensions(
-  playerResponse: any,
+  playerResponse: YouTubePlayerResponse | null | undefined,
 ): { width: number; height: number } | null {
   if (!playerResponse) return null;
 
   const formats = [
-    ...(playerResponse.streamingData?.formats || []),
-    ...(playerResponse.streamingData?.adaptiveFormats || []),
+    ...(playerResponse.streamingData?.formats ?? []),
+    ...(playerResponse.streamingData?.adaptiveFormats ?? []),
   ];
 
   let bestDimensions: { width: number; height: number; pixels: number } | null =
     null;
-  for (const format of formats) {
-    const width = Number(format?.width);
-    const height = Number(format?.height);
-    if (
-      !Number.isFinite(width) ||
-      !Number.isFinite(height) ||
-      width <= 0 ||
-      height <= 0
-    ) {
-      continue;
-    }
+  for (const { width, height } of formats) {
+    if (width === undefined || height === undefined) continue;
 
     const pixels = width * height;
     if (!bestDimensions || pixels > bestDimensions.pixels) {
@@ -733,7 +721,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
 
       const contentType = res.headers.get("content-type") || "";
       const data = contentType.includes("json")
-        ? ((await readJsonCapped(res).catch(() => null)) as unknown)
+        ? await readJsonCapped(res, Schema.Unknown).catch(() => null)
         : null;
 
       if (
@@ -1831,7 +1819,7 @@ async function fetchTikTokDataRefreshed(
     return null;
   }
 
-  const data = res?.ok ? ((await readJsonCapped(res)) as any) : {};
+  const data = (res?.ok ? await readJsonCapped(res, OEmbedResponse) : {}) ?? {};
   const videoIdMatch =
     data.html?.match(/data-video-id="([^"]+)"/) ||
     url.match(/(?:video|photo|player\/v1)\/(\d+)/) ||
@@ -2165,7 +2153,8 @@ async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
     return await fetchOpenGraphData(url);
   }
 
-  const data = (await readJsonCapped(res)) as any;
+  const data = await readJsonCapped(res, OEmbedResponse);
+  if (!data) return null;
 
   return {
     id: nextEmbedId(url),

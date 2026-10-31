@@ -18,6 +18,23 @@ import { apiError } from "@/lib/api-helpers";
 import { safeParse } from "@/lib/schema";
 
 /**
+ * Parse a JSON request body without validating it, for routes that report
+ * their own validation errors. Returns `{ value }` on success or the standard
+ * 400 INVALID_JSON Response when the body is not JSON, so a malformed body is
+ * never an unhandled throw (a 500).
+ */
+export async function readJsonBody(
+  request: Request,
+  req?: Request,
+): Promise<{ readonly value: unknown } | Response> {
+  try {
+    return { value: await request.json() };
+  } catch {
+    return apiError("Invalid JSON body", 400, "INVALID_JSON", req ?? request);
+  }
+}
+
+/**
  * Parse and validate a JSON request body against an Effect Schema.
  *
  * Returns the parsed value on success, or an `apiError` Response (400) when the
@@ -30,14 +47,10 @@ export async function validateBody<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   req?: Request,
 ): Promise<S["Type"] | Response> {
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return apiError("Invalid JSON body", 400, "INVALID_JSON", req ?? request);
-  }
+  const read = await readJsonBody(request, req);
+  if (read instanceof Response) return read;
 
-  const parsed = safeParse(schema, raw);
+  const parsed = safeParse(schema, read.value);
   if (!parsed.success) {
     const firstIssue = parsed.issues[0];
     const path = firstIssue?.path.map(String).join(".") || "body";

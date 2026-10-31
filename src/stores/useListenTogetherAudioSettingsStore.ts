@@ -1,7 +1,8 @@
 import {
-  LISTEN_TOGETHER_LOUDNESS_PRESETS,
+  isListenTogetherLoudnessPreset,
   type ListenTogetherAudioSettings,
 } from "@/lib/voice/listen-together-audio";
+import { readBoolean, readGuard, readObject } from "@/lib/persisted-guard";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -10,6 +11,14 @@ export const DEFAULT_LISTEN_TOGETHER_AUDIO_SETTINGS: ListenTogetherAudioSettings
     enabled: true,
     preset: "balanced",
   };
+
+/** What localStorage may hold: a boolean and a known preset, or neither. */
+const readPersistedAudioSettings = readObject<
+  Partial<ListenTogetherAudioSettings>
+>({
+  enabled: readBoolean,
+  preset: readGuard(isListenTogetherLoudnessPreset),
+});
 
 interface ListenTogetherAudioSettingsState extends ListenTogetherAudioSettings {
   updateSettings: (updates: Partial<ListenTogetherAudioSettings>) => void;
@@ -24,7 +33,7 @@ export function normalizeListenTogetherAudioSettings(
         ? settings.enabled
         : DEFAULT_LISTEN_TOGETHER_AUDIO_SETTINGS.enabled,
     preset:
-      settings?.preset && settings.preset in LISTEN_TOGETHER_LOUDNESS_PRESETS
+      settings?.preset && isListenTogetherLoudnessPreset(settings.preset)
         ? settings.preset
         : DEFAULT_LISTEN_TOGETHER_AUDIO_SETTINGS.preset,
   };
@@ -53,7 +62,7 @@ export const useListenTogetherAudioSettingsStore =
         merge: (persistedState, currentState) => ({
           ...currentState,
           ...normalizeListenTogetherAudioSettings(
-            persistedState as Partial<ListenTogetherAudioSettings> | undefined,
+            readPersistedAudioSettings(persistedState),
           ),
         }),
       },
