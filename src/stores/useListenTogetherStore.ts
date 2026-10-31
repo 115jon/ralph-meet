@@ -8,9 +8,9 @@ import {
 } from "@/lib/listen-together-local";
 import { create } from "zustand";
 
-export type ListenTogetherLocalPlaybackSource = "command" | "native" | "seek";
+type ListenTogetherLocalPlaybackSource = "command" | "native" | "seek";
 
-export interface ListenTogetherPendingPlaybackState {
+interface ListenTogetherPendingPlaybackState {
   paused: boolean;
   positionMs: number;
   snapshotRevision: number;

@@ -22,15 +22,15 @@ export type SearchScope =
   | { kind: "server"; serverId: string }
   | { kind: "channel"; channelId: string };
 
-export function searchEndpoint(scope: SearchScope): string {
+function searchEndpoint(scope: SearchScope): string {
   return scope.kind === "server"
     ? `/api/servers/${encodeURIComponent(scope.serverId)}/search`
     : `/api/channels/${encodeURIComponent(scope.channelId)}/search`;
 }
 
-export type SearchStatus = "idle" | "loading" | "success" | "error";
+type SearchStatus = "idle" | "loading" | "success" | "error";
 
-export interface MessageSearchState {
+interface MessageSearchState {
   status: SearchStatus;
   results: SearchResultMessage[];
   total: number;

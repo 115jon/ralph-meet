@@ -6,11 +6,10 @@ import { readBoolean, readGuard, readObject } from "@/lib/persisted-guard";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export const DEFAULT_LISTEN_TOGETHER_AUDIO_SETTINGS: ListenTogetherAudioSettings =
-  {
-    enabled: true,
-    preset: "balanced",
-  };
+const DEFAULT_LISTEN_TOGETHER_AUDIO_SETTINGS: ListenTogetherAudioSettings = {
+  enabled: true,
+  preset: "balanced",
+};
 
 /** What localStorage may hold: a boolean and a known preset, or neither. */
 const readPersistedAudioSettings = readObject<

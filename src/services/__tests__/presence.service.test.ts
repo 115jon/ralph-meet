@@ -67,7 +67,15 @@ describe("updatePresence", () => {
       custom_status: "Afk",
     });
 
-    db.assertCalled(/UPDATE users SET status/);
+    // status, custom status, user, then the same pair for the unchanged check.
+    db.assertCalledWith("UPDATE users SET status", [
+      "idle",
+      "Afk",
+      USER_ID,
+      "idle",
+      "Afk",
+    ]);
+    db.assertCalledWith("SELECT server_id FROM server_members", [USER_ID]);
     const membershipQueryIndex = db.calls.findIndex((call) =>
       call.sql.includes("SELECT server_id FROM server_members"),
     );
@@ -111,7 +119,13 @@ describe("updatePresence", () => {
     });
 
     expect(result.custom_status).toBeNull();
-    db.assertCalled(/UPDATE users SET status/);
+    db.assertCalledWith("UPDATE users SET status", [
+      "online",
+      null,
+      USER_ID,
+      "online",
+      null,
+    ]);
   });
 
   it("returns server-scoped broadcasts", async () => {

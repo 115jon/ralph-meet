@@ -123,7 +123,7 @@ export default function SharedMessagePage({
 }
 
 /** 14.1: the share was deleted, revoked or expired. One way forward. */
-export function ShareGone() {
+function ShareGone() {
   return (
     <PageState
       icon="linkBroken"
@@ -136,7 +136,7 @@ export function ShareGone() {
 }
 
 /** 14.3: anything other than "gone" is a load failure, so offer a retry. */
-export function ShareError({ onRetry }: { onRetry: () => void }) {
+function ShareError({ onRetry }: { onRetry: () => void }) {
   return (
     <PageState
       icon="alert"

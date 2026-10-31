@@ -119,6 +119,13 @@ describe("listMessages embed hydration", () => {
       },
     ]);
     expect(db.getCalls("UPDATE messages SET embeds")).toHaveLength(1);
+    db.assertCalledWith("UPDATE messages SET embeds", [
+      JSON.stringify(refreshedEmbeds),
+      "msg_1",
+      CHANNEL_ID,
+      4,
+      JSON.stringify(originalEmbeds),
+    ]);
   });
 
   it("does not return an embed update when the captured revision was replaced", async () => {

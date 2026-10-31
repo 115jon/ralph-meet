@@ -97,10 +97,59 @@ describe("Infrastructure: MockD1Database", () => {
     expect(() => db.assertCalled(/users/)).toThrow("Expected query matching");
   });
 
+  it("assertCalled refuses a write, so ids cannot go unchecked", async () => {
+    await db.prepare("DELETE FROM servers WHERE id = ?").bind("s1").run();
+    expect(() => db.assertCalled(/DELETE.*servers/)).toThrow(
+      "assertCalledWith",
+    );
+  });
+
   it("assertCalledWith matches bindings", async () => {
     await db.prepare("DELETE FROM servers WHERE id = ?").bind("s1").run();
     expect(() => db.assertCalledWith(/DELETE.*servers/, ["s1"])).not.toThrow();
     expect(() => db.assertCalledWith(/DELETE.*servers/, ["s999"])).toThrow();
+  });
+
+  it("assertCalledWith compares the whole binding list in order", async () => {
+    await db
+      .prepare("UPDATE channels SET name = ? WHERE id = ? AND server_id = ?")
+      .bind("general", "c1", "s1")
+      .run();
+
+    const update = /UPDATE channels SET name/;
+    expect(() =>
+      db.assertCalledWith(update, ["general", "c1", "s1"]),
+    ).not.toThrow();
+    // A subset, a different order and an extra value are all different calls.
+    expect(() => db.assertCalledWith(update, ["c1"])).toThrow();
+    expect(() =>
+      db.assertCalledWith(update, ["general", "s1", "c1"]),
+    ).toThrow();
+    expect(() =>
+      db.assertCalledWith(update, ["general", "c1", "s1", "extra"]),
+    ).toThrow();
+  });
+
+  it("assertCalledWith accepts asymmetric matchers for generated values", async () => {
+    await db
+      .prepare("INSERT INTO servers (id, name, created_at) VALUES (?, ?, ?)")
+      .bind("generated-id", "My Server", "2026-01-01T00:00:00.000Z")
+      .run();
+
+    expect(() =>
+      db.assertCalledWith(/INSERT INTO servers/, [
+        expect.any(String),
+        "My Server",
+        expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      db.assertCalledWith(/INSERT INTO servers/, [
+        expect.any(Number),
+        "My Server",
+        expect.any(String),
+      ]),
+    ).toThrow();
   });
 
   it("assertNotCalled succeeds when query was not called", () => {

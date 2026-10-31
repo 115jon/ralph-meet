@@ -38,7 +38,7 @@ export type SettingsRowDef = {
   rail?: boolean;
 };
 
-export type SettingsSectionDef = {
+type SettingsSectionDef = {
   id: string;
   title: string;
   desc?: string;
@@ -62,7 +62,7 @@ export type SettingsPanelDef = {
   sections: SettingsSectionDef[];
 };
 
-export const SETTINGS_PANELS: SettingsPanelDef[] = [
+const SETTINGS_PANELS: SettingsPanelDef[] = [
   {
     id: "account",
     title: "Account",

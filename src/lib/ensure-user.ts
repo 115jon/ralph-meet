@@ -1,12 +1,12 @@
 // ── Read-only user lookup ────────────────────────────────────────────────────
 // Pure SELECT — no side-effects. User creation is handled exclusively by:
-//   1. Clerk webhook → POST /api/auth/sync (production)
+//   1. Auth webhook → POST /api/auth/sync (production)
 //   2. GET /api/users/me → auto-sync fallback (local dev / DB rebuild)
 
 import { getDB } from "@/lib/api-helpers";
 
 /**
- * Look up a user in D1 by their Clerk user ID.
+ * Look up a user in D1 by their user ID.
  * Returns their username and avatar, or `null` if the user hasn't been synced yet.
  */
 export async function lookupUser(userId: string): Promise<{

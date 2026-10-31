@@ -152,10 +152,10 @@ const NAME: Record<ProfileCardSize, string> = {
 };
 
 /** Expanding content fades in (140ms-ish, opacity only, no height). */
-export const PROFILE_REVEAL =
+const PROFILE_REVEAL =
   "transition-opacity duration-(--dur-2) ease-out starting:opacity-0";
 
-export type ProfileCardUser = Pick<
+type ProfileCardUser = Pick<
   User,
   "username" | "display_name" | "pronouns" | "custom_status"
 > & {
@@ -385,7 +385,7 @@ function ProfileAvatar({
 }
 
 /** Presence dot plus label, and the custom status after it. */
-export function ProfileStatusLine({
+function ProfileStatusLine({
   status,
   customStatus,
 }: {
@@ -628,7 +628,7 @@ export function ProfileSections({
 }
 
 /** A neutral strip (not an error): "You blocked Grace…". */
-export function ProfileNotice({ children }: { children: ReactNode }) {
+function ProfileNotice({ children }: { children: ReactNode }) {
   return (
     <p
       role="status"

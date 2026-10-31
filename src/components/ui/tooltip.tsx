@@ -7,8 +7,8 @@ import { lastInputWasKeyboard } from "@/components/ui/dialog-stack";
 import { cn } from "@/lib/utils";
 
 /** App-wide tooltip timing (talk-tree-spec §7, overlays issue 11). */
-export const TOOLTIP_DELAY_MS = 500;
-export const TOOLTIP_SKIP_MS = 300;
+const TOOLTIP_DELAY_MS = 500;
+const TOOLTIP_SKIP_MS = 300;
 
 /**
  * 500ms before the first tooltip, then instant between neighbours for 300ms

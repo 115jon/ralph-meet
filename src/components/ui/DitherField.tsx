@@ -80,7 +80,7 @@ export interface DitherFieldProps {
   paint?: FieldPainter;
 }
 
-export type FieldPainter = (
+type FieldPainter = (
   ctx: CanvasRenderingContext2D,
   size: number,
   t?: number,
@@ -428,5 +428,3 @@ export function DitherField({
     </div>
   );
 }
-
-export default DitherField;

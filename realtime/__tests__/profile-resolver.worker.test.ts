@@ -1,11 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   resolveMeetingProfile,
   type ResolveMeetingProfileInput,
 } from "../meeting-room/profile-resolver";
 
-type ProfileCache = ResolveMeetingProfileInput["cache"];
-type CachedProfile = { name: string; imageUrl?: string };
+// Profiles come from our own D1 `users` row and nothing else. With no row the
+// answer is `null` (the caller keeps the identity the client sent); there is no
+// third-party lookup to fall back to, and these tests fail if one appears.
 
 type ProfileRow = {
   username: string;
@@ -15,128 +16,138 @@ type ProfileRow = {
 };
 
 function createDb(row: ProfileRow | null) {
-  return {
-    prepare: () => ({
-      // The resolver asks for its own row type through `first<T>()`; the fake
-      // returns the canned row whatever T is.
-      bind: () => ({ first: async <T>() => row as T | null }),
-    }),
+  const bound: string[] = [];
+  const queries: string[] = [];
+  const db: ResolveMeetingProfileInput["db"] = {
+    prepare: (query) => {
+      queries.push(query);
+      return {
+        // The resolver asks for its own row type through `first<T>()`; the
+        // fake returns the canned row whatever T is.
+        bind: (value) => {
+          bound.push(value);
+          return { first: async <T>() => row as T | null };
+        },
+      };
+    },
   };
+  return { db, bound, queries };
 }
-// `get` is generic in the resolver's cache contract (KVNamespace-shaped), so
-// the spies sit behind generic wrappers; the fake returns its canned value
-// whatever T the caller asks for.
-function createCache(value: CachedProfile | null) {
-  const get = vi.fn<(key: string, type: "json") => CachedProfile | null>(
-    () => value,
-  );
-  const put = vi.fn<ProfileCache["put"]>(async () => undefined);
-  const cache: ProfileCache = {
-    get: async <T>(key: string, type: "json") => get(key, type) as T | null,
-    put,
+
+function resolve(row: ProfileRow | null, userId = "user-1") {
+  const { db, bound, queries } = createDb(row);
+  const log = { error: vi.fn() };
+  return {
+    bound,
+    log,
+    queries,
+    profile: resolveMeetingProfile({ db, log, userId }),
   };
-  return { cache, get, put };
 }
 
 describe("Meeting profile resolver", () => {
-  it("combines D1 identity and cached Clerk profile data", async () => {
-    const { cache, get } = createCache({
-      name: "Clerk Name",
-      imageUrl: "clerk.png",
-    });
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
 
-    await expect(
-      resolveMeetingProfile({
-        db: createDb({
-          username: "d1-user",
-          display_name: "D1 Display",
-          avatar_url: "/api/avatars/custom.png",
-          avatar_display: "cover",
-        }),
-        cache,
-        clerkSecret: "secret",
-        fetch: vi.fn(),
-        log: { error: vi.fn() },
-        userId: "user-1",
-      }),
-    ).resolves.toEqual({
+  afterEach(() => {
+    // Whatever the case, nothing may leave the Worker to build a profile.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockClear();
+  });
+
+  it("returns the stored identity of the requested user", async () => {
+    const { profile, bound, queries } = resolve(
+      {
+        username: "d1-user",
+        display_name: "D1 Display",
+        avatar_url: "/api/avatars/custom.png",
+        avatar_display: "cover",
+      },
+      "user-42",
+    );
+
+    await expect(profile).resolves.toEqual({
       name: "D1 Display",
       username: "d1-user",
       displayName: "D1 Display",
       avatarUrl: "/api/avatars/custom.png",
       avatarDisplay: "cover",
     });
-    expect(get).toHaveBeenCalledWith("clerk:profile:user-1", "json");
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain("FROM users WHERE id = ?");
+    expect(bound).toEqual(["user-42"]);
   });
 
-  it("uses Clerk API on cache miss and stores the response for five minutes", async () => {
-    const { cache, put } = createCache(null);
-    const fetch = vi.fn(async () =>
-      Response.json({
-        username: "clerk-user",
-        first_name: "Ada",
-        last_name: "Lovelace",
-        image_url: "clerk.png",
-      }),
-    );
-
+  it("names the user after their handle when there is no display name", async () => {
     await expect(
-      resolveMeetingProfile({
-        db: createDb(null),
-        cache,
-        clerkSecret: "secret",
-        fetch,
-        log: { error: vi.fn() },
-        userId: "user-1",
-      }),
-    ).resolves.toEqual({
-      name: "Ada Lovelace",
-      username: "Ada Lovelace",
-      displayName: null,
-      avatarUrl: "clerk.png",
-      avatarDisplay: null,
-    });
-    expect(fetch).toHaveBeenCalledWith(
-      "https://api.clerk.com/v1/users/user-1",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer secret",
-        }),
-      }),
-    );
-    expect(put).toHaveBeenCalledWith(
-      "clerk:profile:user-1",
-      JSON.stringify({ name: "Ada Lovelace", imageUrl: "clerk.png" }),
-      { expirationTtl: 300 },
-    );
-  });
-
-  it("falls back to D1 identity when Clerk is unavailable", async () => {
-    const { cache } = createCache(null);
-    const fetch = vi.fn(
-      async () => new Response("unavailable", { status: 503 }),
-    );
-
-    await expect(
-      resolveMeetingProfile({
-        db: createDb({
-          username: "d1-user",
-          display_name: null,
-          avatar_url: "https://clerk.example/avatar.png",
-          avatar_display: null,
-        }),
-        cache,
-        clerkSecret: "secret",
-        fetch,
-        log: { error: vi.fn() },
-        userId: "user-1",
-      }),
+      resolve({
+        username: "d1-user",
+        display_name: null,
+        avatar_url: null,
+        avatar_display: null,
+      }).profile,
     ).resolves.toEqual({
       name: "d1-user",
       username: "d1-user",
       displayName: null,
-      avatarUrl: "https://clerk.example/avatar.png",
+      avatarUrl: undefined,
       avatarDisplay: null,
     });
+
+    const blank = await resolve({
+      username: "d1-user",
+      display_name: "   ",
+      avatar_url: null,
+      avatar_display: null,
+    }).profile;
+    expect(blank?.name).toBe("d1-user");
+  });
+
+  it("trims a padded display name for the name", async () => {
+    const result = await resolve({
+      username: "d1-user",
+      display_name: "  Ada  ",
+      avatar_url: null,
+      avatar_display: null,
+    }).profile;
+
+    expect(result?.name).toBe("Ada");
+  });
+
+  it("keeps an avatar hosted outside our own avatar route", async () => {
+    const result = await resolve({
+      username: "d1-user",
+      display_name: null,
+      avatar_url: "https://cdn.example/avatar.png",
+      avatar_display: null,
+    }).profile;
+
+    expect(result?.avatarUrl).toBe("https://cdn.example/avatar.png");
+  });
+
+  it("has no profile for a user without a stored row", async () => {
+    const { profile, log } = resolve(null);
+
+    await expect(profile).resolves.toBeNull();
+    expect(log.error).not.toHaveBeenCalled();
+  });
+
+  it("has no profile, and says why, when D1 cannot be read", async () => {
+    const failure = new Error("D1 unavailable");
+    const log = { error: vi.fn() };
+    const db: ResolveMeetingProfileInput["db"] = {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => {
+            throw failure;
+          },
+        }),
+      }),
+    };
+
+    await expect(
+      resolveMeetingProfile({ db, log, userId: "user-1" }),
+    ).resolves.toBeNull();
+    expect(log.error).toHaveBeenCalledWith("D1 profile fetch failed:", failure);
   });
 });

@@ -18,7 +18,7 @@
  *   limit    1..50, offset >= 0
  */
 
-export const SEARCH_FILTER_KEYS = [
+const SEARCH_FILTER_KEYS = [
   "from",
   "mentions",
   "in",
@@ -40,15 +40,15 @@ export const SEARCH_HAS_VALUES = [
 ] as const;
 export type SearchHasValue = (typeof SEARCH_HAS_VALUES)[number];
 
-export const SEARCH_SORTS = ["newest", "oldest", "relevant"] as const;
+const SEARCH_SORTS = ["newest", "oldest", "relevant"] as const;
 export type SearchSort = (typeof SEARCH_SORTS)[number];
 
-export const SEARCH_PAGE_SIZE = 25;
-export const SEARCH_MAX_LIMIT = 50;
-export const SEARCH_MIN_TEXT = 2;
-export const SEARCH_MAX_TEXT = 200;
-export const SEARCH_MAX_TERMS = 8;
-export const SEARCH_MAX_IDS = 10;
+const SEARCH_PAGE_SIZE = 25;
+const SEARCH_MAX_LIMIT = 50;
+const SEARCH_MIN_TEXT = 2;
+const SEARCH_MAX_TEXT = 200;
+const SEARCH_MAX_TERMS = 8;
+const SEARCH_MAX_IDS = 10;
 
 /** Wire-level query, identical on client and server. */
 export interface MessageSearchQuery {
@@ -72,7 +72,7 @@ export interface SearchResultAttachment {
   size_bytes: number;
 }
 
-export interface SearchResultAuthor {
+interface SearchResultAuthor {
   id: string;
   username: string;
   display_name: string | null;
@@ -185,7 +185,7 @@ export function addFilter(
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Parses YYYY-MM-DD as a local calendar day. */
-export function parseLocalDate(value: string): Date | null {
+function parseLocalDate(value: string): Date | null {
   const match = DATE_RE.exec(value.trim());
   if (!match) return null;
   const [, y, m, d] = match;
@@ -465,7 +465,7 @@ export interface SearchMemberSource {
   display_name?: string | null;
 }
 
-export interface SearchChannelSource {
+interface SearchChannelSource {
   id: string;
   name: string;
 }

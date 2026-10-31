@@ -11,7 +11,7 @@ export function isSessionEnded(error: unknown): boolean {
 }
 
 /** Sign in, then come back to where you were. */
-export function signInAgain() {
+function signInAgain() {
   if (typeof window === "undefined") return;
   const back = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(back)}`);

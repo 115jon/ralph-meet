@@ -50,7 +50,7 @@ export const isLeftCorner = (corner: FloatingCorner) =>
 export const isTopCorner = (corner: FloatingCorner) =>
   corner === "top-left" || corner === "top-right";
 
-export function cornerFrom(top: boolean, left: boolean): FloatingCorner {
+function cornerFrom(top: boolean, left: boolean): FloatingCorner {
   return `${top ? "top" : "bottom"}-${left ? "left" : "right"}`;
 }
 

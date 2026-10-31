@@ -44,7 +44,7 @@ export type ProfileEffectSelection = {
   effects?: ProfileEffectLayer[];
 };
 
-export type NameplateSelection = {
+type NameplateSelection = {
   skuId: string;
   name: string;
   staticUrl: string;

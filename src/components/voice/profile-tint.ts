@@ -25,7 +25,7 @@ export function useProfileTint(userId: string | null | undefined): string {
 }
 
 /** A stable mid-tone hue per id (FNV-1a), fixed lightness and chroma. */
-export function fallbackTint(id: string): string {
+function fallbackTint(id: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < id.length; i += 1) {
     hash ^= id.charCodeAt(i);

@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 
-export const MAX_USER_AVATAR_UPLOADS = 6;
+const MAX_USER_AVATAR_UPLOADS = 6;
 
 export interface UserAvatarUpload {
   id: string;

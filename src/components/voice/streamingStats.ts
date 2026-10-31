@@ -68,7 +68,7 @@ import type { NativeShareStatsSnapshot } from "@/types/native-share-stats";
 import { connectionStatus } from "@/lib/voice/connection-status-label";
 
 /** Visual tone for the capture-mode badge. */
-export type CaptureModeTone = "hook" | "wgc" | "unavailable";
+type CaptureModeTone = "hook" | "wgc" | "unavailable";
 
 /** A capture-mode label plus the tone the panel uses to color it (Req 8.2). */
 export interface CaptureModeDisplay {

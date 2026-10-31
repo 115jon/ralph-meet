@@ -17,7 +17,7 @@ export const u32 = (value: number) => [
   (value >>> 8) & 0xff,
   value & 0xff,
 ];
-export const u16be = (value: number) => [(value >>> 8) & 0xff, value & 0xff];
+const u16be = (value: number) => [(value >>> 8) & 0xff, value & 0xff];
 export const u16le = (value: number) => [value & 0xff, (value >>> 8) & 0xff];
 
 export function pngHeader(width: number, height: number): Uint8Array {

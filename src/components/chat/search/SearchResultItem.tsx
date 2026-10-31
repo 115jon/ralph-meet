@@ -41,7 +41,7 @@ function TextWithMentions({ text }: { text: string }) {
   );
 }
 
-export function HighlightedExcerpt({
+function HighlightedExcerpt({
   content,
   terms,
 }: {

@@ -6,13 +6,13 @@ export type CollectibleKind =
   | "nameplate"
   | "profile_frame";
 
-export type CollectiblePrice = {
+type CollectiblePrice = {
   amount: number;
   currency: string;
   exponent: number;
 };
 
-export type CollectibleFrameLayer = {
+type CollectibleFrameLayer = {
   id: string;
   src: string;
   type: string;
@@ -21,7 +21,7 @@ export type CollectibleFrameLayer = {
   responsive: boolean;
 };
 
-export type CollectibleProfileEffectLayer = {
+type CollectibleProfileEffectLayer = {
   src: string;
   loop?: boolean;
   duration?: number;
@@ -112,7 +112,7 @@ export type CollectibleCatalogCategory = {
   itemIds: string[];
 };
 
-export type CollectiblesSyncOutcome =
+type CollectiblesSyncOutcome =
   | "updated"
   | "not_modified"
   | "rejected"
@@ -176,7 +176,7 @@ type VariantMeta = {
   variantColor?: string;
 };
 
-export type CollectiblesSyncTrigger = "cron" | "manual" | "request" | "ingest";
+type CollectiblesSyncTrigger = "cron" | "manual" | "request" | "ingest";
 
 export type CatalogValidationOptions = {
   minItems?: number;
@@ -201,20 +201,20 @@ export const CATALOG_NORMALIZER_VERSION = 3;
 /** Dedicated hourly cron for the catalog (wrangler.toml [triggers]). */
 export const COLLECTIBLES_SYNC_CRON = "17 * * * *";
 /** Stale once several hourly runs in a row have been missed or failed. */
-export const CATALOG_STALE_AFTER_MS = 1000 * 60 * 60 * 4;
+const CATALOG_STALE_AFTER_MS = 1000 * 60 * 60 * 4;
 /** Minimum gap between request-triggered background refreshes. */
-export const REQUEST_REFRESH_COOLDOWN_MS = 1000 * 60 * 10;
+const REQUEST_REFRESH_COOLDOWN_MS = 1000 * 60 * 10;
 /** Minimum gap between manual (admin) syncs, measured from the last attempt. */
 export const MANUAL_SYNC_COOLDOWN_MS = 1000 * 60 * 5;
 /** D1 caps a row/string at 2,000,000 bytes; keep headroom. */
-export const MAX_ENCODED_PAYLOAD_BYTES = 1_800_000;
+const MAX_ENCODED_PAYLOAD_BYTES = 1_800_000;
 /** Minimum gap between ingest uploads (a not-modified ping is free). */
 export const INGEST_COOLDOWN_MS = 1000 * 60 * 5;
 /** A cron/request fetch failure is only a warning this soon after an ingest. */
 export const INGEST_FALLBACK_WINDOW_MS = 1000 * 60 * 60 * 2;
 /** Cap on an uploaded (decompressed) upstream body; the real one is ~3.5 MB. */
 export const MAX_INGEST_BODY_BYTES = 16 * 1024 * 1024;
-export const DEFAULT_CATALOG_VALIDATION: Required<CatalogValidationOptions> = {
+const DEFAULT_CATALOG_VALIDATION: Required<CatalogValidationOptions> = {
   minItems: 100,
   minCategories: 5,
   maxShrinkRatio: 0.4,
@@ -759,7 +759,7 @@ export function normalizeYapperCatalog(
 }
 
 /** Throws CatalogValidationError when `raw` is not a usable upstream list. */
-export function assertUpstreamShape(raw: unknown): asserts raw is unknown[] {
+function assertUpstreamShape(raw: unknown): asserts raw is unknown[] {
   if (!Array.isArray(raw)) {
     throw new CatalogValidationError(
       "Upstream catalog is not a list of categories",

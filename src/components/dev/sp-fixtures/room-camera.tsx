@@ -20,7 +20,7 @@ import SettingsModal from "@/components/chat/SettingsModal";
 import { useState, type ReactNode } from "react";
 import { ok, useApiStub } from "./api-stub";
 
-export const ROOM_CAMERA_SURFACES = [
+const ROOM_CAMERA_SURFACES = [
   "sp-room",
   "sp-room-camera",
   "sp-room-appearance",
@@ -96,7 +96,7 @@ function canvasStream(): MediaStream {
 }
 
 /** Point navigator.mediaDevices at a fake set of devices for one state. */
-export function useFixtureCamera(mode: CameraMode) {
+function useFixtureCamera(mode: CameraMode) {
   useState(() => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices) return 0;
     const media = navigator.mediaDevices;

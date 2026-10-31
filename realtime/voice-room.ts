@@ -1724,8 +1724,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       ),
     ];
     if (rows.length === 0) return null;
-    const clerkUserId = rows[0].clerk_user_id as string | null;
-    return clerkUserId || participantId;
+    const userId = rows[0].clerk_user_id as string | null;
+    return userId || participantId;
   }
 
   private getActiveScreenParticipantIdForUserId(userId: string): string | null {
@@ -1979,7 +1979,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       return;
     }
 
-    const clerkUserId =
+    const userId =
       admission.accessMode === "authenticated" ? admission.subject : undefined;
 
     const connectionId = crypto.randomUUID();
@@ -2032,7 +2032,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
          last_heartbeat = excluded.last_heartbeat,
          connection_id = excluded.connection_id`,
       d.participant_id,
-      clerkUserId ?? null,
+      userId ?? null,
       Date.now(),
       connectionId,
     );
@@ -2979,7 +2979,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       }
 
       // Look up the sender's clerk_user_id so clients can filter per-card
-      let clerkUserId: string | null = null;
+      let userId: string | null = null;
       try {
         const pRows = [
           ...this.sql.exec<{ clerk_user_id: string }>(
@@ -2987,8 +2987,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
             pid,
           ),
         ];
-        clerkUserId =
-          pRows.length > 0 ? (pRows[0].clerk_user_id ?? null) : null;
+        userId = pRows.length > 0 ? (pRows[0].clerk_user_id ?? null) : null;
       } catch {
         // non-fatal — overlay will fall back to showing on all cards
       }
@@ -3002,7 +3001,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           contentType,
           displayMode: ALLOWED_MODES.has(displayMode) ? displayMode : "single",
           participant_id: pid,
-          user_id: clerkUserId ?? undefined,
+          user_id: userId ?? undefined,
           sent_at: Date.now(),
         },
       });

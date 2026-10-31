@@ -4,7 +4,6 @@ import { TypedEventEmitter } from "./event-emitter";
 import { wsUrl } from "./platform";
 import { onPageWake } from "./realtime-socket/page-wake";
 import {
-  VoiceOpcode,
   type IceServer,
   type SFUEventMap,
   type TrackInfo,
@@ -12,6 +11,7 @@ import {
   type VoiceState,
   type VoiceStateDelta,
 } from "./types";
+import { GatewayOp } from "./gateway-protocol";
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { AudioSentinel, OutboundAudioSentinel } from "./voice/audio-sentinel";
 import { RoomGateway } from "./voice/gateways/room-gateway";
@@ -66,7 +66,7 @@ interface ConnectArguments {
   name: string;
   avatarUrl?: string;
   channelId?: string;
-  clerkUserId?: string;
+  userId?: string;
   serverId?: string;
   username?: string;
   displayName?: string | null;
@@ -724,13 +724,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
             trackName: track.track_name,
           });
           this.voiceGW.send({
-            op: VoiceOpcode.Video,
+            op: GatewayOp.Video,
             d: { tracks: [track] },
           });
         },
         onPublicationStopped: (trackName) => {
           this.voiceGW.send({
-            op: VoiceOpcode.StopTracks,
+            op: GatewayOp.StopTracks,
             d: { track_names: [trackName] },
           });
         },
@@ -875,7 +875,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public connect(
     name: string,
     avatarUrl?: string,
-    clerkUserId?: string,
+    userId?: string,
     username?: string,
     displayName?: string | null,
     avatarDisplay?:
@@ -895,7 +895,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.connectArgs = {
       name,
       avatarUrl,
-      clerkUserId,
+      userId,
       username,
       displayName,
       avatarDisplay,
@@ -912,7 +912,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       avatarUrl,
       avatarDisplay,
       channelId: options?.channelId,
-      clerkUserId,
+      userId,
       serverId: options?.serverId,
       standby: options?.standby === true,
       roomSlug: this.roomSlug,
@@ -1026,8 +1026,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.clearCredentialRefreshTimer();
     this.rejectVoiceReadiness(new Error("SFU client disconnected"));
     this.rejectPartyTracksReadiness(new Error("SFU client disconnected"));
-    this.roomGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
-    this.voiceGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
+    this.roomGW.send({ op: GatewayOp.ClientDisconnect, d: {} });
+    this.voiceGW.send({ op: GatewayOp.ClientDisconnect, d: {} });
     this.roomGW.disconnect();
     this.voiceGW.disconnect();
     this.disposePartyTracksMedia();
@@ -1073,7 +1073,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public sendChatMessage(content: string): void {
     this.roomGW.send({
-      op: VoiceOpcode.MessageCreate,
+      op: GatewayOp.MessageCreate,
       d: { channel_id: this.roomSlug, content, nonce: String(Math.random()) },
     });
   }
@@ -1095,7 +1095,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   public sendSpeaking(speaking: number): void {
-    this.voiceGW.send({ op: VoiceOpcode.Speaking, d: { speaking } });
+    this.voiceGW.send({ op: GatewayOp.Speaking, d: { speaking } });
   }
 
   public setParticipantVolume(participantId: string, volume: number): void {
@@ -1360,7 +1360,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     );
     if (remainingTrackNames.length > 0) {
       this.voiceGW.send({
-        op: VoiceOpcode.StopTracks,
+        op: GatewayOp.StopTracks,
         d: { track_names: remainingTrackNames },
       });
     }
@@ -1386,22 +1386,22 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.stats.getDetailedStats();
   }
 
-  public getStatsByClerkId(
-    clerkId: string,
+  public getStatsByUserId(
+    appUserId: string,
     trackPrefix: "cam" | "screen",
-  ): ReturnType<ConnectionStatsMonitor["getStatsByClerkId"]> {
-    return this.stats.getStatsByClerkId(clerkId, trackPrefix);
+  ): ReturnType<ConnectionStatsMonitor["getStatsByUserId"]> {
+    return this.stats.getStatsByUserId(appUserId, trackPrefix);
   }
 
-  public setClerkMapping(participantId: string, clerkId: string): void {
-    this.stats.setClerkMapping(participantId, clerkId);
+  public setUserMapping(participantId: string, appUserId: string): void {
+    this.stats.setUserMapping(participantId, appUserId);
   }
 
-  public deleteClerkMapping(participantId: string): void {
-    this.stats.deleteClerkMapping(participantId);
+  public deleteUserMapping(participantId: string): void {
+    this.stats.deleteUserMapping(participantId);
   }
 
-  /** Notified after every stats snapshot; then read getStatsByClerkId(). */
+  /** Notified after every stats snapshot; then read getStatsByUserId(). */
   public subscribeTrackStats(callback: () => void): () => void {
     return this.stats.subscribeTrackStats(callback);
   }

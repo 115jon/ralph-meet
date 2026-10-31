@@ -693,54 +693,6 @@
       "description": "Permission identifier",
       "oneOf": [
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-client`",
-          "type": "string",
-          "const": "clerk:default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-client`"
-        },
-        {
-          "description": "Enables use of Clerk in JS code",
-          "type": "string",
-          "const": "clerk:allow-client",
-          "markdownDescription": "Enables use of Clerk in JS code"
-        },
-        {
-          "description": "Enables the get_client_authorization_header command without any pre-configured scope.",
-          "type": "string",
-          "const": "clerk:allow-get-client-authorization-header",
-          "markdownDescription": "Enables the get_client_authorization_header command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the initialize command without any pre-configured scope.",
-          "type": "string",
-          "const": "clerk:allow-initialize",
-          "markdownDescription": "Enables the initialize command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the set_client_authorization_header command without any pre-configured scope.",
-          "type": "string",
-          "const": "clerk:allow-set-client-authorization-header",
-          "markdownDescription": "Enables the set_client_authorization_header command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_client_authorization_header command without any pre-configured scope.",
-          "type": "string",
-          "const": "clerk:deny-get-client-authorization-header",
-          "markdownDescription": "Denies the get_client_authorization_header command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the initialize command without any pre-configured scope.",
-          "type": "string",
-          "const": "clerk:deny-initialize",
-          "markdownDescription": "Denies the initialize command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_client_authorization_header command without any pre-configured scope.",
-          "type": "string",
-          "const": "clerk:deny-set-client-authorization-header",
-          "markdownDescription": "Denies the set_client_authorization_header command without any pre-configured scope."
-        },
-        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

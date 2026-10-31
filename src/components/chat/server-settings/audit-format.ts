@@ -12,7 +12,7 @@
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
 import type { ServerAuditLog } from "@/lib/types";
 
-export const PERMISSION_LABELS: Record<PermissionKey, string> = {
+const PERMISSION_LABELS: Record<PermissionKey, string> = {
   ADMINISTRATOR: "Administrator",
   MANAGE_SERVER: "Manage server",
   MANAGE_ROLES: "Manage roles",
@@ -35,13 +35,13 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
 };
 
 /** Permission names set in `bits`, in bit order. */
-export function permissionNames(bits: number): string[] {
+function permissionNames(bits: number): string[] {
   return (Object.keys(PERMISSIONS) as PermissionKey[])
     .filter((key) => (bits & PERMISSIONS[key]) === PERMISSIONS[key])
     .map((key) => PERMISSION_LABELS[key]);
 }
 
-export type TargetKind = "role" | "channel" | "member" | "invite" | "server";
+type TargetKind = "role" | "channel" | "member" | "invite" | "server";
 
 export type AuditLookup = {
   roles: Map<string, string>;

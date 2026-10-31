@@ -40,7 +40,7 @@ function isSource(value: unknown): value is SoundboardTriggerSource {
   return value === "default" || value === "server" || value === "custom";
 }
 
-export function parseSoundboardTriggerConfig(
+function parseSoundboardTriggerConfig(
   value: unknown,
 ): SoundboardTriggerConfig | null {
   if (!isRecord(value) || typeof value.enabled !== "boolean") return null;

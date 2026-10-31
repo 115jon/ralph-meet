@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CacheKey } from "../../lib/cache";
+import {
+  DEFAULT_EVERYONE_PERMISSIONS,
+  PERMISSIONS,
+} from "../../lib/permissions";
 import { DEFAULT_PROFILE_THEME } from "../../lib/profile-customization";
-import { createMockD1 } from "../../lib/__tests__/mock-d1";
+import { anyId, anyTimestamp, createMockD1 } from "../../lib/__tests__/mock-d1";
 import { ServiceError } from "../../lib/service-error";
 import {
   createServer,
@@ -101,15 +105,67 @@ describe("createServer", () => {
     expect(result.server.name).toBe("New Server");
     expect(result.server.owner_id).toBe(USER_ID);
     expect(result.server.icon_url).toBeNull();
-    expect(result.server.id).toBeDefined();
-    expect(result.server.created_at).toBeDefined();
+    expect(result.server.id).toEqual(anyId());
+    expect(result.server.created_at).toEqual(anyTimestamp());
 
-    // Should have made a batch call (server + member + roles + categories + channels)
-    db.assertCalled(/INSERT INTO servers/);
-    db.assertCalled(/INSERT INTO server_members/);
-    db.assertCalled(/INSERT INTO roles/);
-    db.assertCalled(/INSERT INTO categories/);
-    db.assertCalled(/INSERT INTO channels/);
+    // One batch: the server, its owner as a member, two roles, two categories
+    // and a text and a voice channel, all keyed to the new server's id.
+    const { id: serverId, created_at: createdAt } = result.server;
+    db.assertCalledWith("INSERT INTO servers", [
+      serverId,
+      "New Server",
+      USER_ID,
+      null,
+      createdAt,
+    ]);
+    db.assertCalledWith("INSERT INTO server_members", [
+      serverId,
+      USER_ID,
+      createdAt,
+    ]);
+
+    const [everyoneRole, ownerRole] = db.getCalls("INSERT INTO roles");
+    expect(everyoneRole.bindings).toEqual([
+      anyId(),
+      serverId,
+      DEFAULT_EVERYONE_PERMISSIONS,
+      createdAt,
+    ]);
+    expect(ownerRole.bindings).toEqual([
+      anyId(),
+      serverId,
+      PERMISSIONS.ADMINISTRATOR,
+      createdAt,
+    ]);
+    // The owner holds both roles.
+    db.assertCalledWith("INSERT INTO member_roles", [
+      serverId,
+      USER_ID,
+      everyoneRole.bindings[0],
+    ]);
+    db.assertCalledWith("INSERT INTO member_roles", [
+      serverId,
+      USER_ID,
+      ownerRole.bindings[0],
+    ]);
+
+    const [textCategory, voiceCategory] = db.getCalls("INSERT INTO categories");
+    expect(textCategory.bindings).toEqual([anyId(), serverId]);
+    expect(voiceCategory.bindings).toEqual([anyId(), serverId]);
+    // Each default channel sits in its own category.
+    const [textChannel, voiceChannel] = db.getCalls("INSERT INTO channels");
+    expect(textChannel.bindings).toEqual([
+      anyId(),
+      serverId,
+      textCategory.bindings[0],
+      createdAt,
+    ]);
+    expect(voiceChannel.bindings).toEqual([
+      anyId(),
+      serverId,
+      voiceCategory.bindings[0],
+      createdAt,
+    ]);
   });
 
   it("creates server with icon_url when provided", async () => {
@@ -182,8 +238,11 @@ describe("updateServer", () => {
       name: "New Name",
     });
 
-    db.assertCalled(/UPDATE servers SET/);
-    expect(result.data).toBeDefined();
+    db.assertCalledWith("UPDATE servers SET name = ? WHERE id = ?", [
+      "New Name",
+      SERVER_ID,
+    ]);
+    expect(result.data.server?.id).toBe(SERVER_ID);
     expect(result.data.server?.allow_public_shares).toBe(true);
     expect(result.data.server?.show_source_in_shares).toBe(false);
     expect(result.broadcast?.data).toMatchObject({
@@ -198,7 +257,10 @@ describe("updateServer", () => {
       icon_url: "/new-icon.png",
     });
 
-    db.assertCalled(/UPDATE servers SET/);
+    db.assertCalledWith("UPDATE servers SET icon_url = ? WHERE id = ?", [
+      "/new-icon.png",
+      SERVER_ID,
+    ]);
   });
 
   it("updates invites_paused", async () => {
@@ -206,7 +268,10 @@ describe("updateServer", () => {
       invites_paused: true,
     });
 
-    db.assertCalled(/UPDATE servers SET/);
+    db.assertCalledWith("UPDATE servers SET invites_paused = ? WHERE id = ?", [
+      "1",
+      SERVER_ID,
+    ]);
   });
 
   it("throws ServiceError when no changes provided", async () => {
@@ -224,8 +289,10 @@ describe("updateServer", () => {
       name: "Updated",
     });
 
-    expect(result.cacheKeysToInvalidate).toBeDefined();
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.server(SERVER_ID),
+      CacheKey.userServers(USER_ID),
+    ]);
   });
 
   it("returns broadcast payload", async () => {
@@ -233,11 +300,11 @@ describe("updateServer", () => {
       name: "Updated",
     });
 
-    expect(result.broadcast).toBeDefined();
-    expect(result.broadcast).toMatchObject({
+    expect(result.broadcast).toEqual({
       type: "server",
       target: SERVER_ID,
       event: "GUILD_UPDATE",
+      data: result.data.server,
     });
   });
 
@@ -246,8 +313,12 @@ describe("updateServer", () => {
       name: "Updated",
     });
 
-    expect(result.auditLog).toBeDefined();
-    expect(result.auditLog!.actionType).toBe("SERVER_UPDATE");
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "SERVER_UPDATE",
+      changes: { name: "Updated" },
+    });
   });
 });
 
@@ -274,24 +345,37 @@ describe("deleteServer", () => {
 
     const result = await deleteServer(db as any, SERVER_ID, USER_ID);
 
-    db.assertCalled(/DELETE FROM servers WHERE id/);
-    db.assertCalledWith(/SELECT file_key FROM attachments/, [SERVER_ID]);
+    db.assertCalledWith("DELETE FROM servers WHERE id", [SERVER_ID]);
+    // Soundboard files are looked up by server, directly and through messages.
+    db.assertCalledWith("SELECT file_key FROM attachments", [
+      SERVER_ID,
+      SERVER_ID,
+    ]);
     expect(result.soundboardFileKeys).toEqual([
       "attachments/channel-1/sound-1/airhorn.mp3",
       "attachments/channel-2/sound-2/boop.ogg",
     ]);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.server(SERVER_ID),
+      CacheKey.serverChannels(SERVER_ID),
+      CacheKey.serverMembers(SERVER_ID),
+      CacheKey.serverSoundboard(SERVER_ID),
+      CacheKey.userServers(USER_ID),
+      CacheKey.userServers("u2"),
+    ]);
     expect(result.broadcasts).toEqual([
-      expect.objectContaining({
+      {
         type: "user",
         target: USER_ID,
         event: "GUILD_DELETE",
-      }),
-      expect.objectContaining({
+        data: { id: SERVER_ID },
+      },
+      {
         type: "user",
         target: "u2",
         event: "GUILD_DELETE",
-      }),
+        data: { id: SERVER_ID },
+      },
     ]);
   });
 
@@ -420,22 +504,37 @@ describe("kickMember", () => {
     );
 
     expect(result.kicked).toBe(true);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverMembers(SERVER_ID),
+      CacheKey.userServers("target_user"),
+    ]);
+    const removed = { server_id: SERVER_ID, user_id: "target_user" };
     expect(result.broadcasts).toEqual([
-      expect.objectContaining({
+      {
         type: "server",
         target: SERVER_ID,
         event: "GUILD_MEMBER_REMOVE",
-      }),
-      expect.objectContaining({
+        data: removed,
+      },
+      {
         type: "user",
         target: "target_user",
         event: "GUILD_MEMBER_REMOVE",
-      }),
+        data: removed,
+      },
     ]);
-    expect(result.auditLog).toBeDefined();
-    db.assertCalled(/DELETE FROM server_members/);
-    db.assertCalled(/DELETE FROM member_roles/);
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "MEMBER_KICK",
+      targetId: "target_user",
+    });
+    // The target is removed, not the actor, and from this server only.
+    db.assertCalledWith("DELETE FROM server_members", [
+      SERVER_ID,
+      "target_user",
+    ]);
+    db.assertCalledWith("DELETE FROM member_roles", [SERVER_ID, "target_user"]);
   });
 
   it("throws 403 when actor lacks KICK_MEMBERS", async () => {

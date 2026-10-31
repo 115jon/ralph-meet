@@ -20,7 +20,6 @@ const storage = window.localStorage;
 const NOT_STATE = [undefined, null, 7, "text", [], true];
 
 // The hydrated state differs per store and the tests only probe parts of it.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Hydrated = any;
 
 function options(store: { persist: { getOptions: () => object } }) {

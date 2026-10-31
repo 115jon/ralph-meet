@@ -1,6 +1,6 @@
 const TIKTOK_CDN_HOST_PATTERN = /(^|\.)tiktokcdn-[a-z0-9-]+\.com$/i;
 
-export function isTikTokCdnHostname(hostname: string): boolean {
+function isTikTokCdnHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
 
   return (

@@ -57,13 +57,6 @@ vi.mock("@/lib/sounds", () => ({
   playVoiceJoin: vi.fn(),
   playVoiceLeave: vi.fn(),
 }));
-vi.mock("@/lib/voice/heartbeat-manager", () => ({
-  HeartbeatManager: class {
-    start = vi.fn();
-    stop = vi.fn();
-    onAck = vi.fn();
-  },
-}));
 vi.mock("./useCallStore", () => ({
   useCallStore: { getState: () => ({}) },
 }));
@@ -262,7 +255,7 @@ describe("chat gateway continuity", () => {
     });
     first.disconnect();
 
-    gateway.setClerkUserId("user-2");
+    gateway.setGatewayUserId("user-2");
     gateway.initGateway("user-2");
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -356,6 +349,71 @@ describe("chat gateway wake", () => {
     gateway.wake();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+});
+
+describe("chat gateway heartbeat", () => {
+  // The real HeartbeatManager, scheduled on the fake timers: it is not stubbed
+  // here, so a regression in the beat or the zombie check shows up.
+  const HEARTBEAT_OP = 3;
+  const ACK_OP = 6;
+
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockResolvedValue([]);
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function openHelloedSocket() {
+    const { gateway } = createFixture();
+    gateway.initGateway("user-1");
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    const beats = () =>
+      sentMessages(socket).filter((message) => message.op === HEARTBEAT_OP)
+        .length;
+    return { gateway, socket, beats };
+  }
+
+  it("beats once per server interval while the beats are acknowledged", async () => {
+    const { gateway, socket, beats } = await openHelloedSocket();
+
+    await vi.advanceTimersByTimeAsync(44_999);
+    expect(beats()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(beats()).toBe(1);
+
+    socket.message({ op: ACK_OP, d: {} });
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(beats()).toBe(2);
+    socket.message({ op: ACK_OP, d: {} });
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(beats()).toBe(3);
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+
+    gateway.disconnectGateway();
+  });
+
+  it("drops a socket that stops acknowledging after three missed beats", async () => {
+    const { gateway, socket, beats } = await openHelloedSocket();
+
+    // Beats at 45s, 90s and 135s go unanswered; the 180s check gives up.
+    await vi.advanceTimersByTimeAsync(135_000);
+    expect(beats()).toBe(3);
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(beats()).toBe(3);
+
+    gateway.disconnectGateway();
   });
 });
 

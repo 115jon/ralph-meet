@@ -22,7 +22,6 @@ interface BucketEntry {
  * is retained purely as a read-through cache for hot keys; the durable source
  * of truth is the `buckets` table.
  */
-// @ts-ignore — workerd environment types vs Next.js node types conflict
 export class RateLimiterDO extends DurableObject {
   // In-memory cache of the durable buckets table. Fast, but NOT authoritative:
   // it is hydrated from storage on construction and written through on every
@@ -35,7 +34,7 @@ export class RateLimiterDO extends DurableObject {
   private static readonly MAX_AGE_MS = 3_600_000; // keep buckets up to 1h
 
   constructor(
-    public ctx: DurableObjectState,
+    public ctx: DurableObjectState<{}>,
     public env: Env,
   ) {
     super(ctx, env);

@@ -84,7 +84,7 @@ export function useVoiceSettingsForSettings(override?: string | null) {
 }
 
 /** "Default - Shure MV7" -> "Shure MV7" (also "Communications - …"). */
-export function stripDefaultPrefix(label: string): string {
+function stripDefaultPrefix(label: string): string {
   return label.replace(/^(default|communications)\s*[-–—]\s*/i, "").trim();
 }
 

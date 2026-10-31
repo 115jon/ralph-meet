@@ -276,27 +276,6 @@ type AsChildProps = {
   asChild?: boolean;
 };
 
-function DrawerTrigger({
-  asChild,
-  children,
-  ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Trigger> & AsChildProps) {
-  if (asChild && React.isValidElement(children)) {
-    return (
-      <DrawerPrimitive.Trigger
-        data-slot="drawer-trigger"
-        render={children as React.ReactElement<Record<string, unknown>>}
-        {...props}
-      />
-    );
-  }
-  return (
-    <DrawerPrimitive.Trigger data-slot="drawer-trigger" {...props}>
-      {children}
-    </DrawerPrimitive.Trigger>
-  );
-}
-
 function DrawerPortal({
   className,
   ...props
@@ -606,8 +585,5 @@ export {
   DrawerFooter,
   DrawerHandle,
   DrawerHeader,
-  DrawerOverlay,
-  DrawerPortal,
   DrawerTitle,
-  DrawerTrigger,
 };

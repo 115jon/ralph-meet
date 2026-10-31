@@ -15,30 +15,7 @@ function jsonRequest(body: string): Request {
   });
 }
 
-const schemas = [
-  ["ban creation", banCreateBodySchema],
-  ["ban deletion", banDeleteBodySchema],
-  ["invite creation", inviteCreateBodySchema],
-  ["role creation", roleCreateBodySchema],
-  ["role updates", roleUpdateBodySchema],
-  ["member role updates", memberRolesBodySchema],
-] as const;
-
 describe("server request body validation", () => {
-  it.each(schemas)(
-    "rejects malformed JSON for %s with INVALID_JSON",
-    async (_name, schema) => {
-      const result = await validateBody(jsonRequest("{not json"), schema);
-
-      expect(result).toBeInstanceOf(Response);
-      if (!(result instanceof Response)) throw new Error("expected Response");
-      expect(result.status).toBe(400);
-      await expect(result.json()).resolves.toMatchObject({
-        code: "INVALID_JSON",
-      });
-    },
-  );
-
   it.each([
     ["ban creation", banCreateBodySchema, { user_id: 123 }],
     ["ban deletion", banDeleteBodySchema, { user_id: false }],

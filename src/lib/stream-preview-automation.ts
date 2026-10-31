@@ -3,7 +3,7 @@ export type StreamPreviewAutomationState =
   | "shown-for-mini-preview"
   | "paused-for-inactive";
 
-export type StreamPreviewAutomationAction =
+type StreamPreviewAutomationAction =
   | "none"
   | "show-preview"
   | "hide-preview"

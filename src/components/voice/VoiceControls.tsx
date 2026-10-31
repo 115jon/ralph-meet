@@ -25,12 +25,11 @@ const SoundboardPicker = lazy(
   () => import("@/components/chat/SoundboardPicker"),
 );
 
-/**
- * Container width (px) at which the bar shows every control inline. Below
- * it (phones, narrow columns) it keeps the call's core controls and Leave,
- * and folds the rest into More.
+/*
+ * The bar shows every control inline from a 680px container (the
+ * `@min-[680px]` classes). Below it (phones, narrow columns) it keeps the
+ * call's core controls and Leave, and folds the rest into More.
  */
-export const DOCK_FULL_MIN_WIDTH = 680;
 
 const DIVIDER = "hidden h-8 w-px shrink-0 bg-line @min-[680px]:block";
 
@@ -48,7 +47,7 @@ const KEY_FIT = "shrink min-w-11";
  */
 const KEY = { size: "lg", iconSize: "lg", className: KEY_FIT } as const;
 
-export interface DockMoreItem {
+interface DockMoreItem {
   key: string;
   label: string;
   icon: IconName;
@@ -57,7 +56,7 @@ export interface DockMoreItem {
 }
 
 /** What the soundboard picker needs to play into this call. */
-export interface StageSoundboardContext {
+interface StageSoundboardContext {
   serverId?: string | null;
   channelId?: string | null;
   roomSlug?: string | null;
@@ -211,7 +210,7 @@ export function VoiceControls({
       : "Fullscreen";
   const fullscreenIcon: IconName = isFullscreen ? "minimize" : "maximize";
 
-  /* The controls that fold into More below DOCK_FULL_MIN_WIDTH, in order. */
+  /* The controls that fold into More below 680px, in order. */
   const moreItems: DockMoreItem[] = [];
   if (onOpenActivities) {
     moreItems.push({

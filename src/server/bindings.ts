@@ -13,7 +13,7 @@ import type { BroadcastDescriptor } from "@/services/server.service";
 import { executeBroadcast } from "@/services/service-helpers";
 
 /** Secrets and vars set with `wrangler secret` / `[vars]`, all optional at runtime. */
-export interface WorkerSecrets {
+interface WorkerSecrets {
   CALLS_APP_SECRET?: string;
   REALTIME_TICKET_SECRET?: string;
   TURN_TOKEN_ID?: string;

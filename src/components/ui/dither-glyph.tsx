@@ -29,7 +29,7 @@ import { bayerLit, cellMask } from "@/components/ui/dither";
 import { cn } from "@/lib/utils";
 
 export type GlyphMotif = "mark" | "empty" | "screen" | "voice";
-export type GlyphSize = "sm" | "md" | "lg";
+type GlyphSize = "sm" | "md" | "lg";
 
 const CELL: Record<GlyphSize, number> = { sm: 2, md: 3, lg: 4 };
 

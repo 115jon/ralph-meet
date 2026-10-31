@@ -88,7 +88,7 @@ function serverInitials(name: string): string {
   return letters.join("").toUpperCase() || "?";
 }
 
-export function ServerIcon({
+function ServerIcon({
   server,
   className,
 }: {
@@ -129,7 +129,7 @@ function dmName(dm: CommandDm): string {
   );
 }
 
-export function CommandDmRow({
+function CommandDmRow({
   dm,
   onSelect,
   tag,
@@ -178,7 +178,7 @@ export function CommandDmRow({
   );
 }
 
-export function CommandChannelRow({
+function CommandChannelRow({
   channel,
   kind,
   server,

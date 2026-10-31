@@ -11,7 +11,7 @@ import {
 } from "@/lib/profile-frame";
 import { cn } from "@/lib/utils";
 
-export type ProfileSurfaceVariant = "card" | "popover" | "sheet";
+type ProfileSurfaceVariant = "card" | "popover" | "sheet";
 
 interface ProfileSurfaceShellProps extends React.HTMLAttributes<HTMLDivElement> {
   display?: AvatarDisplay | string | null;

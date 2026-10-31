@@ -1102,7 +1102,7 @@ export function useVoiceChannel({
   const focusedIdRef = useRef<string | null>(null);
 
   const myIdRef = useRef<string>("");
-  const uuidToClerkRef = useRef<Map<string, string>>(new Map());
+  const uuidToUserIdRef = useRef<Map<string, string>>(new Map());
   const speakingByParticipantRef = useRef<Record<string, boolean>>({});
   // Mirrors `currentScreenSource` for synchronous reads inside imperative
   // callbacks (toggleScreenShare) without adding it to their dependency arrays.
@@ -1355,10 +1355,10 @@ export function useVoiceChannel({
 
   useEffect(() => {
     if (!sfuRef.current) return;
-    const uuidMap = uuidToClerkRef.current;
+    const uuidMap = uuidToUserIdRef.current;
 
-    for (const [uuid, clerkId] of uuidMap.entries()) {
-      const settings: any = peerSettings[clerkId] || {
+    for (const [uuid, appUserId] of uuidMap.entries()) {
+      const settings: any = peerSettings[appUserId] || {
         volume: 100,
         streamVolume: 100,
         muted: false,
@@ -1369,13 +1369,13 @@ export function useVoiceChannel({
       const finalVolume = isPeerSilenced ? 0 : settings.volume / 100;
       const member = (
         channelId ? (voiceChannelStates[channelId] ?? []) : []
-      ).find((entry) => entry.clerk_user_id === clerkId);
+      ).find((entry) => entry.clerk_user_id === appUserId);
       const decision = `${member?.self_mute ?? ""}:${member?.self_deaf ?? ""}:${member?.connection_state ?? ""}:${finalVolume}`;
-      if (volumeDecisionLogRef.current.get(clerkId) !== decision) {
-        volumeDecisionLogRef.current.set(clerkId, decision);
-        const attachedAt = remoteAudioAttachedAtRef.current.get(clerkId);
+      if (volumeDecisionLogRef.current.get(appUserId) !== decision) {
+        volumeDecisionLogRef.current.set(appUserId, decision);
+        const attachedAt = remoteAudioAttachedAtRef.current.get(appUserId);
         vcLog.info("Remote volume decision", {
-          clerkId,
+          appUserId,
           rosterSelfMute: member?.self_mute ?? null,
           rosterSelfDeaf: member?.self_deaf ?? null,
           connectionState: member?.connection_state ?? null,
@@ -1397,8 +1397,8 @@ export function useVoiceChannel({
       // Screen-audio should only be audible when focused or alwaysHear.
       const alwaysHearPeer = !!settings.alwaysHear;
       const isFocusedPeer =
-        focusedId === `remote-screen-${clerkId}` ||
-        focusedId === `remote-camera-${clerkId}`;
+        focusedId === `remote-screen-${appUserId}` ||
+        focusedId === `remote-camera-${appUserId}`;
       const wantsScreenAudio = isFocusedPeer || alwaysHearPeer;
       sfuRef.current?.setTrackVolume(
         uuid,
@@ -1489,21 +1489,21 @@ export function useVoiceChannel({
     const sfu = sfuRef.current;
 
     const vcMembers = channelId ? (voiceChannelStates[channelId] ?? []) : [];
-    const localClerkId = user?.id;
+    const localAppUserId = user?.id;
 
     let hasRemoteSubs = false;
-    for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
+    for (const [uuid, appUserId] of uuidToUserIdRef.current.entries()) {
       // Skip the local user — we never subscribe to our own tracks
-      if (uuid === myIdRef.current || clerkId === localClerkId) continue;
+      if (uuid === myIdRef.current || appUserId === localAppUserId) continue;
 
-      const isWatched = !!watchedStreams[clerkId];
+      const isWatched = !!watchedStreams[appUserId];
       const settings: any = currentSettingsRef.current.peerSettings[
-        clerkId
+        appUserId
       ] || { volume: 100, streamVolume: 100 };
-      const alwaysHear = !!bandwidthPeerSettings[clerkId];
+      const alwaysHear = !!bandwidthPeerSettings[appUserId];
       const isFocused =
-        focusedId === `remote-screen-${clerkId}` ||
-        focusedId === `remote-camera-${clerkId}`;
+        focusedId === `remote-screen-${appUserId}` ||
+        focusedId === `remote-camera-${appUserId}`;
       const camRid = resolveCameraVideoSubscriptionRid();
 
       // Verify the user is still in the channel (voice channel or call/room)
@@ -1511,7 +1511,7 @@ export function useVoiceChannel({
       const isStillInChannel =
         isCall ||
         mode === "room" ||
-        vcMembers.some((m: any) => m.clerk_user_id === clerkId);
+        vcMembers.some((m: any) => m.clerk_user_id === appUserId);
       if (!isStillInChannel) continue;
 
       hasRemoteSubs = true;
@@ -1621,7 +1621,7 @@ export function useVoiceChannel({
         participantId === myIdRef.current ||
         participantId === sfu.getParticipantId();
       if (isLocal && user?.id && mode !== "room") return user.id;
-      return uuidToClerkRef.current.get(participantId) || participantId;
+      return uuidToUserIdRef.current.get(participantId) || participantId;
     };
 
     const rememberParticipant = (participant: VoiceState) => {
@@ -1629,8 +1629,8 @@ export function useVoiceChannel({
       const participantUserId =
         mode === "room" ? participant.id : participant.clerk_user_id;
       if (participantUserId) {
-        uuidToClerkRef.current.set(participant.id, participantUserId);
-        sfu.setClerkMapping(participant.id, participantUserId);
+        uuidToUserIdRef.current.set(participant.id, participantUserId);
+        sfu.setUserMapping(participant.id, participantUserId);
 
         if (participant.id !== participantUserId) {
           voiceDispatch({
@@ -1684,23 +1684,23 @@ export function useVoiceChannel({
       const nextIds = new Set(participants.map((p) => p.id));
       for (const [participantId] of participantsRef.current) {
         if (!nextIds.has(participantId)) {
-          const clerkId =
-            uuidToClerkRef.current.get(participantId) || participantId;
-          const hasOtherClerkIdentity = Array.from(
-            uuidToClerkRef.current.entries(),
+          const appUserId =
+            uuidToUserIdRef.current.get(participantId) || participantId;
+          const hasOtherUserIdentity = Array.from(
+            uuidToUserIdRef.current.entries(),
           ).some(
-            ([otherId, otherClerkId]) =>
-              otherId !== participantId && otherClerkId === clerkId,
+            ([otherId, otherUserId]) =>
+              otherId !== participantId && otherUserId === appUserId,
           );
           participantsRef.current.delete(participantId);
-          uuidToClerkRef.current.delete(participantId);
+          uuidToUserIdRef.current.delete(participantId);
           delete speakingByParticipantRef.current[participantId];
-          sfu.deleteClerkMapping(participantId);
-          const hasOtherClerkSpeaking = Array.from(
-            uuidToClerkRef.current.entries(),
+          sfu.deleteUserMapping(participantId);
+          const hasOtherUserSpeaking = Array.from(
+            uuidToUserIdRef.current.entries(),
           ).some(
-            ([otherId, otherClerkId]) =>
-              otherClerkId === clerkId &&
+            ([otherId, otherUserId]) =>
+              otherUserId === appUserId &&
               speakingByParticipantRef.current[otherId],
           );
           voiceDispatch({
@@ -1708,30 +1708,30 @@ export function useVoiceChannel({
             payload: (previous: Record<string, boolean>) => {
               const next = { ...previous };
               delete next[participantId];
-              if (!hasOtherClerkSpeaking) delete next[clerkId];
+              if (!hasOtherUserSpeaking) delete next[appUserId];
               return next;
             },
           });
           voiceDispatch({
             type: "UPDATE_REMOTE_STREAMS",
             payload: (previous: RemoteStreamsByUser) => {
-              if (!(participantId in previous) && !(clerkId in previous)) {
+              if (!(participantId in previous) && !(appUserId in previous)) {
                 return previous;
               }
               const next = { ...previous };
               delete next[participantId];
-              if (!hasOtherClerkIdentity) {
-                delete next[clerkId];
-              } else if (next[clerkId]) {
-                next[clerkId] = Object.fromEntries(
-                  Object.entries(next[clerkId]).filter(
+              if (!hasOtherUserIdentity) {
+                delete next[appUserId];
+              } else if (next[appUserId]) {
+                next[appUserId] = Object.fromEntries(
+                  Object.entries(next[appUserId]).filter(
                     ([trackName]) => !trackName.endsWith(participantId),
                   ),
                 );
               }
               delete remoteAggregatorsRef.current[participantId];
-              if (!hasOtherClerkIdentity) {
-                delete remoteAggregatorsRef.current[clerkId];
+              if (!hasOtherUserIdentity) {
+                delete remoteAggregatorsRef.current[appUserId];
               }
               return next;
             },
@@ -1810,8 +1810,8 @@ export function useVoiceChannel({
         });
         myIdRef.current = participantId;
         if (user?.id && mode !== "room") {
-          uuidToClerkRef.current.set(participantId, user.id);
-          sfu.setClerkMapping(participantId, user.id);
+          uuidToUserIdRef.current.set(participantId, user.id);
+          sfu.setUserMapping(participantId, user.id);
           voiceDispatch({
             type: "SET_SPEAKING",
             payload: (previous: Record<string, boolean>) => {
@@ -2094,8 +2094,8 @@ export function useVoiceChannel({
         avatarDisplay,
       }) => {
         const p = participantsRef.current.get(participantId);
-        const clerkUserId =
-          p?.clerk_user_id ?? uuidToClerkRef.current.get(participantId);
+        const profileUserId =
+          p?.clerk_user_id ?? uuidToUserIdRef.current.get(participantId);
         if (p) {
           const updated = {
             ...p,
@@ -2115,10 +2115,10 @@ export function useVoiceChannel({
           });
           voiceDispatch({ type: "BUMP_PARTICIPANTS" });
         }
-        if (clerkUserId) {
+        if (profileUserId) {
           dispatch({
             type: "UPDATE_MEMBER_PROFILE",
-            userId: clerkUserId,
+            userId: profileUserId,
             name: newName,
             ...(username !== undefined ? { username } : {}),
             ...(displayName !== undefined ? { display_name: displayName } : {}),
@@ -2132,29 +2132,30 @@ export function useVoiceChannel({
     );
 
     onSfu("participant-left", ({ participantId }) => {
-      const clerkId =
-        uuidToClerkRef.current.get(participantId) || participantId;
-      const hasOtherClerkIdentity = Array.from(
-        uuidToClerkRef.current.entries(),
+      const appUserId =
+        uuidToUserIdRef.current.get(participantId) || participantId;
+      const hasOtherUserIdentity = Array.from(
+        uuidToUserIdRef.current.entries(),
       ).some(
-        ([otherId, otherClerkId]) =>
-          otherId !== participantId && otherClerkId === clerkId,
+        ([otherId, otherUserId]) =>
+          otherId !== participantId && otherUserId === appUserId,
       );
-      if (!hasOtherClerkIdentity) {
+      if (!hasOtherUserIdentity) {
         stopAutomaticJoinSoundboardPlaybacksByOwner(
-          clerkId,
+          appUserId,
           getSoundboardServerKey(isCall ? "dm-call" : serverId),
         );
       }
       participantsRef.current.delete(participantId);
-      uuidToClerkRef.current.delete(participantId);
+      uuidToUserIdRef.current.delete(participantId);
       delete speakingByParticipantRef.current[participantId];
-      sfu.deleteClerkMapping(participantId);
-      const hasOtherClerkSpeaking = Array.from(
-        uuidToClerkRef.current.entries(),
+      sfu.deleteUserMapping(participantId);
+      const hasOtherUserSpeaking = Array.from(
+        uuidToUserIdRef.current.entries(),
       ).some(
-        ([otherId, otherClerkId]) =>
-          otherClerkId === clerkId && speakingByParticipantRef.current[otherId],
+        ([otherId, otherUserId]) =>
+          otherUserId === appUserId &&
+          speakingByParticipantRef.current[otherId],
       );
       voiceDispatch({
         type: "SET_PARTICIPANTS",
@@ -2167,12 +2168,12 @@ export function useVoiceChannel({
           const next = { ...prev };
           delete next[participantId];
           delete remoteAggregatorsRef.current[participantId];
-          if (!hasOtherClerkIdentity) {
-            delete next[clerkId];
-            delete remoteAggregatorsRef.current[clerkId];
-          } else if (next[clerkId]) {
-            next[clerkId] = Object.fromEntries(
-              Object.entries(next[clerkId]).filter(
+          if (!hasOtherUserIdentity) {
+            delete next[appUserId];
+            delete remoteAggregatorsRef.current[appUserId];
+          } else if (next[appUserId]) {
+            next[appUserId] = Object.fromEntries(
+              Object.entries(next[appUserId]).filter(
                 ([trackName]) => !trackName.endsWith(participantId),
               ),
             );
@@ -2185,7 +2186,7 @@ export function useVoiceChannel({
         payload: (prev: Record<string, boolean>) => {
           const next = { ...prev };
           delete next[participantId];
-          if (!hasOtherClerkSpeaking) delete next[clerkId];
+          if (!hasOtherUserSpeaking) delete next[appUserId];
           return next;
         },
       });
@@ -2193,29 +2194,29 @@ export function useVoiceChannel({
     });
 
     onSfu("remote-track", ({ participantId, track, trackInfo, action }) => {
-      // Use clerk ID if mapped, otherwise fall back to raw participant UUID.
+      // Use the user id if mapped, otherwise fall back to the raw participant UUID.
       // For calls, both users join simultaneously so the mapping may not be
       // populated before the first remote-track fires.
-      const clerkId =
-        uuidToClerkRef.current.get(participantId) || participantId;
+      const appUserId =
+        uuidToUserIdRef.current.get(participantId) || participantId;
 
       const cleanupRemoteScreenThumbnail = () => {
-        capturingThumbnails.current.delete(clerkId);
-        const capture = thumbnailCaptureRefs.current[clerkId];
+        capturingThumbnails.current.delete(appUserId);
+        const capture = thumbnailCaptureRefs.current[appUserId];
         if (capture) {
           if (capture.timeoutId !== null) {
             window.clearTimeout(capture.timeoutId);
           }
           capture.video.pause();
           capture.video.srcObject = null;
-          delete thumbnailCaptureRefs.current[clerkId];
+          delete thumbnailCaptureRefs.current[appUserId];
         }
         voiceDispatch({
           type: "SET_THUMBNAILS",
           payload: (prev: Record<string, string>) => {
-            if (!(clerkId in prev)) return prev;
+            if (!(appUserId in prev)) return prev;
             const next = { ...prev };
-            delete next[clerkId];
+            delete next[appUserId];
             return next;
           },
         });
@@ -2226,7 +2227,7 @@ export function useVoiceChannel({
         voiceDispatch({
           type: "UPDATE_REMOTE_STREAMS",
           payload: (prev: RemoteStreamsByUser) =>
-            removeRemoteTrackStream(prev, clerkId, trackInfo.track_name),
+            removeRemoteTrackStream(prev, appUserId, trackInfo.track_name),
         });
 
         if (trackInfo.track_name.startsWith("screen-video-")) {
@@ -2255,13 +2256,13 @@ export function useVoiceChannel({
               trackInfo.track_name.startsWith("screen-audio-");
             if (isScreenAudio) {
               const peerSetting = currentSettingsRef.current.peerSettings[
-                clerkId
+                appUserId
               ] as any;
               const alwaysHearPeer = !!peerSetting?.alwaysHear;
               const currentFocused = focusedIdRef.current;
               const isFocusedNow =
-                currentFocused === `remote-screen-${clerkId}` ||
-                currentFocused === `remote-camera-${clerkId}`;
+                currentFocused === `remote-screen-${appUserId}` ||
+                currentFocused === `remote-camera-${appUserId}`;
               const streamVolume =
                 currentSettingsRef.current.isDeafened || peerSetting?.muted
                   ? 0
@@ -2274,9 +2275,9 @@ export function useVoiceChannel({
               );
             } else {
               const peerSetting =
-                currentSettingsRef.current.peerSettings[clerkId];
+                currentSettingsRef.current.peerSettings[appUserId];
               const member = voiceChannelMembersRef.current.find(
-                (entry) => entry.clerk_user_id === clerkId,
+                (entry) => entry.clerk_user_id === appUserId,
               );
               const finalVolume =
                 currentSettingsRef.current.isDeafened ||
@@ -2284,10 +2285,10 @@ export function useVoiceChannel({
                   ? 0
                   : ((peerSetting as any)?.volume ?? 100) / 100;
               const attachedAt =
-                remoteAudioAttachedAtRef.current.get(clerkId) ?? Date.now();
-              remoteAudioAttachedAtRef.current.set(clerkId, attachedAt);
+                remoteAudioAttachedAtRef.current.get(appUserId) ?? Date.now();
+              remoteAudioAttachedAtRef.current.set(appUserId, attachedAt);
               vcLog.info("Remote audio volume applied", {
-                clerkId,
+                appUserId,
                 trackName: trackInfo.track_name,
                 rosterSelfMute: member?.self_mute ?? null,
                 rosterSelfDeaf: member?.self_deaf ?? null,
@@ -2305,7 +2306,7 @@ export function useVoiceChannel({
           }
           return upsertRemoteTrackStream(
             prev,
-            clerkId,
+            appUserId,
             trackInfo.track_name,
             nextStream,
           );
@@ -2329,19 +2330,19 @@ export function useVoiceChannel({
       if (
         track.kind === "video" &&
         trackInfo.track_name.startsWith("screen-video-") &&
-        !capturingThumbnails.current.has(clerkId)
+        !capturingThumbnails.current.has(appUserId)
       ) {
-        capturingThumbnails.current.add(clerkId);
+        capturingThumbnails.current.add(appUserId);
         const cleanupThumb = () => {
-          capturingThumbnails.current.delete(clerkId);
-          const capture = thumbnailCaptureRefs.current[clerkId];
+          capturingThumbnails.current.delete(appUserId);
+          const capture = thumbnailCaptureRefs.current[appUserId];
           if (!capture) return;
           if (capture.timeoutId !== null) {
             window.clearTimeout(capture.timeoutId);
           }
           capture.video.pause();
           capture.video.srcObject = null;
-          delete thumbnailCaptureRefs.current[clerkId];
+          delete thumbnailCaptureRefs.current[appUserId];
         };
         const captureThumb = () => {
           if (track.readyState !== "live") {
@@ -2349,7 +2350,7 @@ export function useVoiceChannel({
             return;
           }
           try {
-            let capture = thumbnailCaptureRefs.current[clerkId];
+            let capture = thumbnailCaptureRefs.current[appUserId];
             if (!capture) {
               capture = {
                 canvas: document.createElement("canvas"),
@@ -2359,7 +2360,7 @@ export function useVoiceChannel({
               capture.video.muted = true;
               capture.video.playsInline = true;
               capture.video.srcObject = new MediaStream([track]);
-              thumbnailCaptureRefs.current[clerkId] = capture;
+              thumbnailCaptureRefs.current[appUserId] = capture;
             }
             const { canvas, video } = capture;
             if (track.muted) {
@@ -2383,7 +2384,7 @@ export function useVoiceChannel({
                     type: "SET_THUMBNAILS",
                     payload: (prev: Record<string, string>) => ({
                       ...prev,
-                      [clerkId]: dataUrl,
+                      [appUserId]: dataUrl,
                     }),
                   });
                 }
@@ -2393,7 +2394,7 @@ export function useVoiceChannel({
             /* ignore */
           }
           // Recapture every 5 seconds
-          const capture = thumbnailCaptureRefs.current[clerkId];
+          const capture = thumbnailCaptureRefs.current[appUserId];
           if (!capture) return;
           capture.timeoutId = window.setTimeout(() => {
             if (track.readyState === "live") captureThumb();
@@ -2406,25 +2407,25 @@ export function useVoiceChannel({
     });
 
     onSfu("speaking", ({ participantId, speaking }) => {
-      const clerkId = resolveSpeakingUserId(participantId);
+      const appUserId = resolveSpeakingUserId(participantId);
       speakingByParticipantRef.current[participantId] = speaking > 0;
       const hasMappedSpeakingParticipant = Array.from(
-        uuidToClerkRef.current.entries(),
+        uuidToUserIdRef.current.entries(),
       ).some(
-        ([mappedId, mappedClerkId]) =>
-          mappedClerkId === clerkId &&
+        ([mappedId, mappedUserId]) =>
+          mappedUserId === appUserId &&
           speakingByParticipantRef.current[mappedId],
       );
       const nextSpeaking =
         hasMappedSpeakingParticipant ||
-        (!uuidToClerkRef.current.has(participantId) && speaking > 0);
+        (!uuidToUserIdRef.current.has(participantId) && speaking > 0);
       voiceDispatch({
         type: "SET_SPEAKING",
         payload: (prev: Record<string, boolean>) => {
           const next = { ...prev };
           delete next[participantId];
-          if (nextSpeaking) next[clerkId] = true;
-          else delete next[clerkId];
+          if (nextSpeaking) next[appUserId] = true;
+          else delete next[appUserId];
           return next;
         },
       });
@@ -2433,7 +2434,7 @@ export function useVoiceChannel({
     onSfu("voice-ready", ({ speaking }) => {
       const nextSpeakingUsers: Record<string, boolean> = {};
       const speakingParticipantIds = new Set(Object.keys(speaking ?? {}));
-      for (const [participantId] of uuidToClerkRef.current.entries()) {
+      for (const [participantId] of uuidToUserIdRef.current.entries()) {
         if (participantId !== myIdRef.current) {
           speakingByParticipantRef.current[participantId] =
             speakingParticipantIds.has(participantId);
@@ -2442,8 +2443,8 @@ export function useVoiceChannel({
       for (const [participantId, flags] of Object.entries(speaking ?? {})) {
         if (flags <= 0) continue;
         speakingByParticipantRef.current[participantId] = true;
-        const clerkId = resolveSpeakingUserId(participantId);
-        nextSpeakingUsers[clerkId] = true;
+        const appUserId = resolveSpeakingUserId(participantId);
+        nextSpeakingUsers[appUserId] = true;
       }
       const localParticipantId = myIdRef.current || sfu.getParticipantId();
       const localUserId = localParticipantId
@@ -2471,25 +2472,25 @@ export function useVoiceChannel({
     });
 
     onSfu("vad-speaking", ({ participantId, isSpeaking }) => {
-      const clerkId = resolveSpeakingUserId(participantId);
+      const appUserId = resolveSpeakingUserId(participantId);
       speakingByParticipantRef.current[participantId] = isSpeaking;
       const hasMappedSpeakingParticipant = Array.from(
-        uuidToClerkRef.current.entries(),
+        uuidToUserIdRef.current.entries(),
       ).some(
-        ([mappedId, mappedClerkId]) =>
-          mappedClerkId === clerkId &&
+        ([mappedId, mappedUserId]) =>
+          mappedUserId === appUserId &&
           speakingByParticipantRef.current[mappedId],
       );
       const nextSpeaking =
         hasMappedSpeakingParticipant ||
-        (!uuidToClerkRef.current.has(participantId) && isSpeaking);
+        (!uuidToUserIdRef.current.has(participantId) && isSpeaking);
       voiceDispatch({
         type: "SET_SPEAKING",
         payload: (prev: Record<string, boolean>) => {
           const next = { ...prev };
           delete next[participantId];
-          if (nextSpeaking) next[clerkId] = true;
-          else delete next[clerkId];
+          if (nextSpeaking) next[appUserId] = true;
+          else delete next[appUserId];
           return next;
         },
       });
@@ -3901,7 +3902,7 @@ export function useVoiceChannel({
 
   useEffect(() => {
     const participants = participantsRef.current;
-    const uuidToClerk = uuidToClerkRef.current;
+    const uuidToUserId = uuidToUserIdRef.current;
     const thumbnails = capturingThumbnails.current;
 
     return () => {
@@ -3945,7 +3946,7 @@ export function useVoiceChannel({
 
         participants.clear();
         remoteAggregatorsRef.current = {};
-        uuidToClerk.clear();
+        uuidToUserId.clear();
         thumbnails.clear();
 
         voiceDispatch({ type: "LEFT" });
@@ -4211,7 +4212,7 @@ export function useVoiceChannel({
     // Clear stale participant references
     participantsRef.current.clear();
     remoteAggregatorsRef.current = {};
-    uuidToClerkRef.current.clear();
+    uuidToUserIdRef.current.clear();
     capturingThumbnails.current.clear();
 
     voiceDispatch({ type: "LEFT" });
@@ -5316,11 +5317,11 @@ export function useVoiceChannel({
     // ── Shared helpers ─────────────────────────────────────────────────
 
     /** Resolve remote user's media streams, falling back to UUID-keyed entries */
-    const resolveStreams = (clerkId: string): Record<string, MediaStream> => {
-      let streams = remoteStreams[clerkId] || {};
+    const resolveStreams = (appUserId: string): Record<string, MediaStream> => {
+      let streams = remoteStreams[appUserId] || {};
       if (Object.keys(streams).length === 0) {
-        for (const [uuid, cId] of uuidToClerkRef.current.entries()) {
-          if (cId === clerkId && remoteStreams[uuid]) {
+        for (const [uuid, cId] of uuidToUserIdRef.current.entries()) {
+          if (cId === appUserId && remoteStreams[uuid]) {
             streams = remoteStreams[uuid] as any;
             break;
           }
@@ -5331,16 +5332,16 @@ export function useVoiceChannel({
 
     /** Sync aggregator MediaStreams for cam/screen tracks, returns { cam, screen } */
     const syncAggregator = (
-      clerkId: string,
+      appUserId: string,
       userStreams: Record<string, MediaStream>,
     ) => {
-      if (!remoteAggregatorsRef.current[clerkId]) {
-        remoteAggregatorsRef.current[clerkId] = {
+      if (!remoteAggregatorsRef.current[appUserId]) {
+        remoteAggregatorsRef.current[appUserId] = {
           cam: new MediaStream(),
           screen: new MediaStream(),
         };
       }
-      const agg = remoteAggregatorsRef.current[clerkId];
+      const agg = remoteAggregatorsRef.current[appUserId];
       const sync = (type: "cam" | "screen", prefix: string) => {
         const targetTracks = new Set<MediaStreamTrack>();
         Object.entries(userStreams).forEach(([name, s]) => {
@@ -5369,7 +5370,7 @@ export function useVoiceChannel({
     // ── Build normalized remote participant list ──────────────────────
 
     interface RemoteInfo {
-      clerkId: string;
+      appUserId: string;
       name: string;
       avatar?: string;
       avatarDisplay?:
@@ -5389,7 +5390,7 @@ export function useVoiceChannel({
     vcMembers.forEach((m) => {
       if (m.clerk_user_id === user?.id) return;
       // find their SFU participant info if they have joined the SFU
-      const pId = Array.from(uuidToClerkRef.current.entries()).find(
+      const pId = Array.from(uuidToUserIdRef.current.entries()).find(
         ([, cId]) => cId === m.clerk_user_id,
       )?.[0];
       const p = pId ? participantsRef.current.get(pId) : null;
@@ -5403,7 +5404,7 @@ export function useVoiceChannel({
         avatar_display: m.avatar_display ?? null,
       });
       remotes.push({
-        clerkId: m.clerk_user_id,
+        appUserId: m.clerk_user_id,
         name: identity.name,
         avatar: identity.avatarUrl ?? undefined,
         avatarDisplay: identity.avatarDisplay,
@@ -5416,10 +5417,10 @@ export function useVoiceChannel({
 
     // Supplement with directly-connected SFU participants who might be missing
     // from the Gateway state (e.g. DM Calls where `VOICE_CHANNEL_STATES` isn't fully broadcast)
-    for (const [pId, clerkId] of uuidToClerkRef.current.entries()) {
+    for (const [pId, appUserId] of uuidToUserIdRef.current.entries()) {
       if (pId === myIdRef.current) continue;
-      if (clerkId === user?.id) continue;
-      if (remotes.some((r) => r.clerkId === clerkId)) continue;
+      if (appUserId === user?.id) continue;
+      if (remotes.some((r) => r.appUserId === appUserId)) continue;
 
       const p = participantsRef.current.get(pId);
       if (!p) continue;
@@ -5433,7 +5434,7 @@ export function useVoiceChannel({
       });
 
       remotes.push({
-        clerkId,
+        appUserId,
         name: identity.name,
         avatar: identity.avatarUrl ?? undefined,
         avatarDisplay: identity.avatarDisplay,
@@ -5447,16 +5448,16 @@ export function useVoiceChannel({
     // ── Build grid items from normalized list ─────────────────────────
 
     for (const remote of remotes) {
-      const peerSetting = peerSettings[remote.clerkId];
-      const userStreams = resolveStreams(remote.clerkId);
-      const agg = syncAggregator(remote.clerkId, userStreams);
+      const peerSetting = peerSettings[remote.appUserId];
+      const userStreams = resolveStreams(remote.appUserId);
+      const agg = syncAggregator(remote.appUserId, userStreams);
       const hasScreenTracks = agg.screen
         .getTracks()
         .some((t) => t.readyState === "live");
 
       items.push({
-        id: `remote-camera-${remote.clerkId}`,
-        userId: remote.clerkId,
+        id: `remote-camera-${remote.appUserId}`,
+        userId: remote.appUserId,
         name: remote.name,
         avatar: remote.avatar,
         avatarDisplay: remote.avatarDisplay,
@@ -5471,8 +5472,8 @@ export function useVoiceChannel({
 
       if (remote.isStreaming || hasScreenTracks) {
         items.push({
-          id: `remote-screen-${remote.clerkId}`,
-          userId: remote.clerkId,
+          id: `remote-screen-${remote.appUserId}`,
+          userId: remote.appUserId,
           name: `${remote.name}'s Stream`,
           avatar: remote.avatar,
           avatarDisplay: remote.avatarDisplay,
@@ -5531,14 +5532,14 @@ export function useVoiceChannel({
         ...remoteSpatialParticipants(gridItems),
       ].filter((p) => p.userId);
       const positions = calculateSpatialPositions(participants, state);
-      for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
-        if (uuid === myIdRef.current || clerkId === user?.id) continue;
-        const peerPosition = positions[clerkId];
+      for (const [uuid, appUserId] of uuidToUserIdRef.current.entries()) {
+        if (uuid === myIdRef.current || appUserId === user?.id) continue;
+        const peerPosition = positions[appUserId];
         const selfPosition = positions[user?.id || myIdRef.current] ?? {
           x: 50,
           y: 78,
         };
-        const settings: any = peerSettings[clerkId] || {
+        const settings: any = peerSettings[appUserId] || {
           volume: 100,
           muted: false,
         };

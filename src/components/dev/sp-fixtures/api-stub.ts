@@ -24,7 +24,7 @@ export type StubRoute = {
   reply: (request: { url: URL; method: string; body: unknown }) => StubReply;
 };
 
-export const NOW = Date.parse("2026-10-22T14:32:00Z");
+const NOW = Date.parse("2026-10-22T14:32:00Z");
 export const at = (minutesAgo: number) =>
   new Date(NOW - minutesAgo * 60_000).toISOString();
 export const inMinutes = (minutes: number) =>
@@ -127,10 +127,4 @@ export function useApiStub(routes: StubRoute[]) {
   );
   useEffect(() => uninstall, [uninstall]);
   useLayoutEffect(() => installPlaceholderSession(), []);
-}
-
-/** Extra fixture query params the route doesn't validate. */
-export function fixtureParam(name: string): string | null {
-  if (typeof window === "undefined") return null;
-  return new URLSearchParams(window.location.search).get(name);
 }

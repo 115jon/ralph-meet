@@ -19,7 +19,7 @@ export interface RealtimeAdmissionContext {
   subject: string;
 }
 
-export interface RealtimeAdmissionConfig {
+interface RealtimeAdmissionConfig {
   ticketSecret: string;
 }
 
@@ -58,7 +58,7 @@ export async function createRealtimeAdmissionContext(
   };
 }
 
-export async function digestNonce(nonce: string): Promise<string> {
+async function digestNonce(nonce: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
     textEncoder.encode(nonce),

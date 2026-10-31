@@ -122,7 +122,7 @@ export function clearStoredKovaAuthSessionToken() {
   notifyDesktopTokenChanged(null);
 }
 
-export function setDesktopToken(token: string) {
+function setDesktopToken(token: string) {
   if (isTauriRuntime() && typeof localStorage !== "undefined") {
     if (localStorage.getItem(TOKEN_KEY) === token) {
       notifyDesktopTokenChanged(token);
@@ -165,7 +165,7 @@ export async function waitForDesktopToken(
   return getDesktopAuthHandoffToken();
 }
 
-export function clearDesktopToken() {
+function clearDesktopToken() {
   if (isTauriRuntime() && typeof localStorage !== "undefined") {
     if (DEBUG_DESKTOP_AUTH) {
       log.info("Clearing desktop token");
@@ -211,7 +211,7 @@ export function clearDesktopAuthSession() {
  * write emits no event, and this call (from `onSessionTokenChange` or the
  * token sync) is how listeners such as the chat page's auth gate learn of it.
  */
-export function rememberKovaSessionToken(token: string) {
+function rememberKovaSessionToken(token: string) {
   const missing = isTauriRuntime()
     ? !getDesktopToken()
     : !getDesktopAuthHandoffToken();
@@ -257,7 +257,7 @@ export function isDesktopAuthenticated(): boolean {
 type TokenRefresher = () => Promise<string | null>;
 let tokenRefresher: TokenRefresher | null = null;
 
-export function registerTokenRefresher(fn: TokenRefresher) {
+function registerTokenRefresher(fn: TokenRefresher) {
   tokenRefresher = fn;
 }
 

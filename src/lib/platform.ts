@@ -36,7 +36,7 @@ export function isDesktop(): boolean {
 }
 
 /** True when running as a standard web app (SSR or SPA in browser). */
-export function isWeb(): boolean {
+function isWeb(): boolean {
   return !isTauri();
 }
 

@@ -1,9 +1,4 @@
-export const MEDIA_CONTENT_FILTER_LEVELS = [
-  "high",
-  "medium",
-  "low",
-  "off",
-] as const;
+const MEDIA_CONTENT_FILTER_LEVELS = ["high", "medium", "low", "off"] as const;
 
 export type MediaContentFilter = (typeof MEDIA_CONTENT_FILTER_LEVELS)[number];
 

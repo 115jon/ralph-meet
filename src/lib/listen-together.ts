@@ -11,11 +11,10 @@ export type ListenTogetherMusicProvider =
   | "youtube"
   | "youtube_music"
   | "spotify";
-export type ListenTogetherProvider = ListenTogetherMusicProvider | "radio";
 export type ListenTogetherSearchFilter = "track" | "collection";
 export type ListenTogetherEnqueueMode = "append" | "play-next" | "play-now";
 
-export interface ListenTogetherRequester {
+interface ListenTogetherRequester {
   userId: string;
   displayName: string;
   avatarUrl?: string | null;
@@ -69,7 +68,7 @@ export interface ListenTogetherSearchTrackResult {
   sourceLabel: string;
 }
 
-export interface ListenTogetherSearchCollectionResult {
+interface ListenTogetherSearchCollectionResult {
   kind: "collection";
   id: string;
   provider: ListenTogetherMusicProvider;
@@ -153,7 +152,7 @@ export interface ListenTogetherStateSnapshot extends ListenTogetherPersistentSta
   durationMs: number | null;
 }
 
-export interface ListenTogetherStateRequestCommand {
+interface ListenTogetherStateRequestCommand {
   type: "listen_together.state.request";
   room_slug: string;
 }
@@ -165,39 +164,39 @@ export interface ListenTogetherEnqueueCommand {
   entries: ListenTogetherQueueEntrySeed[];
 }
 
-export interface ListenTogetherPlayCommand {
+interface ListenTogetherPlayCommand {
   type: "listen_together.play";
   room_slug: string;
   entryId?: string | null;
 }
 
-export interface ListenTogetherPauseCommand {
+interface ListenTogetherPauseCommand {
   type: "listen_together.pause";
   room_slug: string;
   paused: boolean;
   entryId: string;
 }
 
-export interface ListenTogetherSeekCommand {
+interface ListenTogetherSeekCommand {
   type: "listen_together.seek";
   room_slug: string;
   positionMs: number;
   entryId: string;
 }
 
-export interface ListenTogetherSkipCommand {
+interface ListenTogetherSkipCommand {
   type: "listen_together.skip";
   room_slug: string;
   entryId: string;
 }
 
-export interface ListenTogetherRemoveCommand {
+interface ListenTogetherRemoveCommand {
   type: "listen_together.remove";
   room_slug: string;
   entryId: string;
 }
 
-export interface ListenTogetherClearCommand {
+interface ListenTogetherClearCommand {
   type: "listen_together.clear";
   room_slug: string;
 }
@@ -212,25 +211,25 @@ export type ListenTogetherCommand =
   | ListenTogetherRemoveCommand
   | ListenTogetherClearCommand;
 
-export interface ListenTogetherSnapshotEvent {
+interface ListenTogetherSnapshotEvent {
   type: "listen_together.snapshot";
   room_slug: string;
   snapshot: ListenTogetherStateSnapshot;
 }
 
-export interface ListenTogetherQueueUpdatedEvent {
+interface ListenTogetherQueueUpdatedEvent {
   type: "listen_together.queue.updated";
   room_slug: string;
   snapshot: ListenTogetherStateSnapshot;
 }
 
-export interface ListenTogetherPlaybackUpdatedEvent {
+interface ListenTogetherPlaybackUpdatedEvent {
   type: "listen_together.playback.updated";
   room_slug: string;
   snapshot: ListenTogetherStateSnapshot;
 }
 
-export interface ListenTogetherErrorEvent {
+interface ListenTogetherErrorEvent {
   type: "listen_together.error";
   room_slug: string;
   code: string;
@@ -339,15 +338,6 @@ export function buildListenTogetherSnapshot(
     positionMs: getListenTogetherPositionMs(state, durationMs, now),
     recentlyPlayed: state.recentlyPlayed,
   };
-}
-
-export function getListenTogetherStreamPath(
-  videoId: string,
-  roomSlug?: string | null,
-): string {
-  const params = new URLSearchParams({ videoId });
-  if (roomSlug) params.set("roomSlug", roomSlug);
-  return `/api/listen-together/stream?${params.toString()}`;
 }
 
 export function isValidListenTogetherVideoId(videoId: string): boolean {

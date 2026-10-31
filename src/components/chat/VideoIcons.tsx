@@ -17,7 +17,6 @@ export const PlayAgainIcon = ({ className }: GlyphProps) => (
 export const PauseIcon = ({ className }: GlyphProps) => (
   <Icon name="pause" state="active" size="lg" className={className} />
 );
-export const BigPlayIcon = () => <PlayIcon />;
 export const VolumeHighIcon = ({ className }: GlyphProps) => (
   <Icon name="speakerHigh" size="lg" className={className} />
 );

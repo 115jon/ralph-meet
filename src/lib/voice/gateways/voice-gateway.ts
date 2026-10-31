@@ -3,12 +3,12 @@ import {
   type VoiceGatewayServerMessage,
 } from "@/lib/gateway-protocol";
 import {
-  VoiceOpcode,
   type ClientDisconnectPayload,
   type NegotiationDonePayload,
   type SessionDescriptionPayload,
   type TrackInfo,
 } from "@/lib/types";
+import { GatewayOp } from "@/lib/gateway-protocol";
 import { markVoice } from "@/lib/voice/latency-marks";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
@@ -150,14 +150,14 @@ export class VoiceGateway extends BaseGateway<
 
   protected handleMessage(msg: VoiceGatewayServerMessage) {
     switch (msg.op) {
-      case VoiceOpcode.Hello: {
+      case GatewayOp.Hello: {
         this.log.info("Hello received");
         this.helloReceived = true;
         this.maybeSendIdentify();
         break;
       }
 
-      case VoiceOpcode.VoiceReady: {
+      case GatewayOp.VoiceReady: {
         this.socket.markReady();
 
         const vr = msg.d;
@@ -177,17 +177,17 @@ export class VoiceGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.SessionDescription: {
+      case GatewayOp.SessionDescription: {
         this.emit("session-description", msg.d);
         break;
       }
 
-      case VoiceOpcode.NegotiationDone: {
+      case GatewayOp.NegotiationDone: {
         this.emit("negotiation-done", msg.d);
         break;
       }
 
-      case VoiceOpcode.Video: {
+      case GatewayOp.Video: {
         const v = msg.d;
         if (Array.isArray(v.tracks)) {
           for (const track of v.tracks) {
@@ -200,7 +200,7 @@ export class VoiceGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.Error: {
+      case GatewayOp.Error: {
         const err = msg.d;
         this.emit("error", {
           message: err.message,
@@ -212,7 +212,7 @@ export class VoiceGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.Speaking: {
+      case GatewayOp.Speaking: {
         const speak = msg.d;
         this.emit("speaking", {
           participantId: speak.participant_id,
@@ -221,7 +221,7 @@ export class VoiceGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.ClientDisconnect: {
+      case GatewayOp.ClientDisconnect: {
         const disconnect = msg.d;
         if (disconnect.participant_id !== this.participantId) {
           this.emit("client-disconnect", disconnect);
@@ -229,7 +229,7 @@ export class VoiceGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.StopTracks: {
+      case GatewayOp.StopTracks: {
         const st = msg.d;
         this.emit("stop-tracks", {
           track_names: st.track_names,
@@ -238,7 +238,7 @@ export class VoiceGateway extends BaseGateway<
         break;
       }
 
-      case VoiceOpcode.VoiceAppEvent: {
+      case GatewayOp.VoiceAppEvent: {
         this.emit("app-event", msg.d);
         break;
       }
@@ -278,7 +278,7 @@ export class VoiceGateway extends BaseGateway<
       return false;
     }
 
-    return this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload });
+    return this.send({ op: GatewayOp.VoiceAppEvent, d: payload });
   }
 
   private resetSocketIdentityState() {
@@ -304,7 +304,7 @@ export class VoiceGateway extends BaseGateway<
     if (
       !this.send(
         {
-          op: VoiceOpcode.VoiceIdentify,
+          op: GatewayOp.VoiceIdentify,
           d: {
             participant_id: participantId,
             voice_token: voiceToken,

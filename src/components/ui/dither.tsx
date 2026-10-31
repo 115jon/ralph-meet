@@ -77,7 +77,7 @@ export function cellMask(
 const tileCache = new Map<number, string>();
 
 /** A 4x4 Bayer tile at `coverage` (0-1), as a CSS `url()` mask. */
-export function bayerTileMask(coverage: number): string {
+function bayerTileMask(coverage: number): string {
   const key = Math.round(coverage * 16);
   const cached = tileCache.get(key);
   if (cached) return cached;
@@ -98,7 +98,7 @@ const RAMP_CACHE_MAX = 48;
  * left to right (8x8 Bayer). `lift` adds coverage toward the vertical
  * middle, so a rule reads as one row of light rather than a flat band.
  */
-export function bayerRampMask(
+function bayerRampMask(
   cols: number,
   rows: number,
   from: number,

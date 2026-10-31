@@ -65,11 +65,11 @@ export interface WarpRushStepResult {
 export const WARP_RUSH_STEP_SECONDS = 1 / 120;
 export const WARP_RUSH_BASE_SPEED = 58;
 export const WARP_RUSH_SLIPSTREAM_BONUS = 0.12;
-export const WARP_RUSH_SCORE_PER_UNIT = 10;
+const WARP_RUSH_SCORE_PER_UNIT = 10;
 export const WARP_RUSH_SHIP_Z = 5.1;
-export const WARP_RUSH_SHIP_RANGE_X = 4.3;
-export const WARP_RUSH_SHIP_RANGE_Y = 2.8;
-export const WARP_RUSH_LOOP_LENGTH = 960;
+const WARP_RUSH_SHIP_RANGE_X = 4.3;
+const WARP_RUSH_SHIP_RANGE_Y = 2.8;
+const WARP_RUSH_LOOP_LENGTH = 960;
 export const WARP_RUSH_INTRO_DISTANCE = 140;
 
 const COURSE_SEED_VERSION = "warp-rush-v2";
@@ -250,7 +250,7 @@ export function createWarpRushRunState(): WarpRushRunState {
   };
 }
 
-export function getWarpRushObstacleOffset(
+function getWarpRushObstacleOffset(
   obstacle: WarpRushCourseObstacle,
   travelDistance: number,
 ) {
@@ -311,7 +311,7 @@ export function getWarpRushRingRenderState(
   };
 }
 
-export function hasWarpRushCollision(
+function hasWarpRushCollision(
   course: WarpRushCourse,
   previousWorldDistance: number,
   nextWorldDistance: number,

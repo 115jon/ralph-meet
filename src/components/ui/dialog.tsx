@@ -356,14 +356,14 @@ const DialogSurface = React.forwardRef<
  *   xl 768  two-pane detail (shop item)
  * The settings workbench (1120 x 820) is its own shell, SettingsWorkbench.
  */
-export const DIALOG_SIZE = {
+const DIALOG_SIZE = {
   sm: "md:max-w-[400px]",
   md: "md:max-w-[480px]",
   lg: "md:max-w-[560px]",
   xl: "md:max-w-[768px]",
 } as const;
 
-export type DialogSize = keyof typeof DIALOG_SIZE;
+type DialogSize = keyof typeof DIALOG_SIZE;
 
 /**
  * C1 plate (DESIGN.md, Dialog): 2px corners, ply-3, a line-strong edge,
@@ -531,8 +531,6 @@ function DialogDescription({
 
 Object.assign(DialogTitle, { rmSlot: "title" });
 Object.assign(DialogDescription, { rmSlot: "description" });
-
-export type { DialogContentFrameProps as DialogContentProps };
 
 export {
   Dialog,

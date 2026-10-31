@@ -1,6 +1,6 @@
-export type YtDlpUpdateChannel = "stable" | "nightly" | "master";
+type YtDlpUpdateChannel = "stable" | "nightly" | "master";
 
-export type YtDlpSolverSource = "bundled" | "kv" | "sync";
+type YtDlpSolverSource = "bundled" | "kv" | "sync";
 
 export interface YtDlpSolverBundle {
   version: string;

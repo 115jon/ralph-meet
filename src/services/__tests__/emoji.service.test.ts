@@ -30,7 +30,15 @@ describe("emoji.service", () => {
       createdAt: CREATED_AT,
     });
 
-    db.assertCalled(/INSERT INTO generated_emojis/);
+    db.assertCalledWith("INSERT INTO generated_emojis", [
+      EMOJI_ID,
+      USER_ID,
+      "party_blob",
+      "party blob with confetti",
+      "pending",
+      CREATED_AT,
+      CREATED_AT,
+    ]);
   });
 
   it("maps listed user creations into client-friendly emoji items", async () => {
@@ -136,6 +144,17 @@ describe("emoji.service", () => {
       updatedAt: CREATED_AT,
     });
 
-    db.assertCalled(/UPDATE generated_emojis/);
+    db.assertCalledWith("UPDATE generated_emojis", [
+      "emoji-assets/user-1/emoji-1.png",
+      "image/png",
+      2048,
+      CREATED_AT,
+      EMOJI_ID,
+    ]);
+    db.assertCalledWith("UPDATE generated_emojis", [
+      "bad prompt",
+      CREATED_AT,
+      EMOJI_ID,
+    ]);
   });
 });

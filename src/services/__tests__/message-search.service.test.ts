@@ -109,7 +109,11 @@ describe("searchMessages", () => {
       scope,
       query({ text: "hi", channelIds: ["c-2", "c-hidden"] }),
     );
-    db.assertCalledWith("FROM messages m", ["s-1", JSON.stringify(["c-2"])]);
+    // The page query (with limit and offset) and the count query both see only
+    // the visible channel, never the hidden one.
+    const visibleOnly = ["s-1", JSON.stringify(["c-2"]), "hi"];
+    db.assertCalledWith("FROM messages m", [...visibleOnly, 25, 0]);
+    db.assertCalledWith("FROM messages m", visibleOnly);
   });
 
   it("binds every term, author, mention, pinned and date filter", async () => {

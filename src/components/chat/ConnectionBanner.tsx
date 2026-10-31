@@ -191,7 +191,7 @@ const ANNOUNCE_DELAY_MS = 100;
 // ── Sources ────────────────────────────────────────────────────────────
 
 /** A call's connection state as an issue; `null` while it is healthy. */
-export function callConnectionIssue(
+function callConnectionIssue(
   connectionState: string | null | undefined,
   joined: boolean,
   retry?: () => void,
@@ -433,7 +433,7 @@ function gatewayBannerReducer(
   }
 }
 
-export function useChatLinkIssue(
+function useChatLinkIssue(
   initialHasConnected: boolean,
 ): ConnectionIssue | null {
   const connected = useChatStore((s) => s.connected);

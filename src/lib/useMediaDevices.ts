@@ -17,7 +17,6 @@ import {
   getMediaDeviceSnapshot,
   type MediaDeviceInfo_Custom,
 } from "@/lib/media-device-snapshot";
-export type { MediaDeviceInfo_Custom } from "@/lib/media-device-snapshot";
 
 interface MediaDeviceState {
   hasMicrophone: boolean;
@@ -115,12 +114,6 @@ export function useDeviceAvailability() {
       hasCamera: s.hasCamera,
     })),
   );
-}
-
-interface AudioConstraintOptions {
-  noiseSuppression: boolean;
-  echoCancellation: boolean;
-  autoGainControl: boolean;
 }
 
 // ── Module-level dedup: only the first mount triggers full enumeration ───
@@ -242,31 +235,4 @@ export function useMediaDevices(): MediaDeviceState {
     audioOutputs: store.audioOutputs,
     videoInputs: store.videoInputs,
   };
-}
-
-/** Apply audio constraints to an existing stream when settings change */
-export function useAudioConstraintSync(
-  stream: MediaStream | null,
-  opts: AudioConstraintOptions,
-) {
-  useEffect(() => {
-    if (!stream) return;
-    const audioTrack = stream.getAudioTracks()[0];
-    if (!audioTrack) return;
-
-    audioTrack
-      .applyConstraints({
-        noiseSuppression: opts.noiseSuppression,
-        echoCancellation: opts.echoCancellation,
-        autoGainControl: opts.autoGainControl,
-      })
-      .catch((err) => {
-        mediaLog.warn("Failed to apply audio constraints:", err);
-      });
-  }, [
-    stream,
-    opts.noiseSuppression,
-    opts.echoCancellation,
-    opts.autoGainControl,
-  ]);
 }

@@ -398,4 +398,106 @@ describe("message history GET limit", () => {
       ).toBe(400);
     });
   });
+
+  // The limit is enforced by the route, so these go through the real POST and
+  // PATCH handlers; the service is stubbed to see whether it was reached.
+  describe("message length limit", () => {
+    const url = "https://meet.test/api/channels/channel-1/messages";
+    const MAX = 4000;
+
+    const created = {
+      id: "message-1",
+      channel_id: "channel-1",
+      author_id: "user-1",
+      content_revision: 1,
+    };
+    const edited = {
+      id: "message-1",
+      channel_id: "channel-1",
+      content: "",
+      updated_at: "2026-07-22T00:01:00.000Z",
+      content_revision: 2,
+    };
+
+    beforeEach(async () => {
+      const { createMessage, editMessage } =
+        await import("@/services/message.service");
+      vi.mocked(createMessage).mockReset();
+      vi.mocked(createMessage).mockResolvedValue(created as never);
+      vi.mocked(editMessage).mockReset();
+      vi.mocked(editMessage).mockResolvedValue(edited as never);
+    });
+
+    const post = (content: string) =>
+      POST({
+        request: new Request(url, {
+          method: "POST",
+          body: JSON.stringify({ content }),
+        }),
+        params: { id: "channel-1" },
+      });
+
+    const patch = (content: string) =>
+      PATCH({
+        request: new Request(url, {
+          method: "PATCH",
+          body: JSON.stringify({ message_id: "message-1", content }),
+        }),
+        params: { id: "channel-1" },
+      });
+
+    it("rejects a new message of 4001 characters before it reaches the service", async () => {
+      const { createMessage } = await import("@/services/message.service");
+
+      const response = await post("x".repeat(MAX + 1));
+
+      expect(response.status).toBe(400);
+      expect(createMessage).not.toHaveBeenCalled();
+      expect(mocks.broadcastToServerMembers).not.toHaveBeenCalled();
+    });
+
+    it("accepts a new message of exactly 4000 characters", async () => {
+      const { createMessage } = await import("@/services/message.service");
+      const content = "x".repeat(MAX);
+
+      const response = await post(content);
+
+      expect(response.status).toBe(201);
+      expect(createMessage).toHaveBeenCalledWith(
+        {},
+        "channel-1",
+        "user-1",
+        "message-1",
+        expect.objectContaining({ content }),
+      );
+    });
+
+    it("rejects an edit to 4001 characters before it reaches the service", async () => {
+      const { editMessage } = await import("@/services/message.service");
+
+      const response = await patch("x".repeat(MAX + 1));
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: "Message content is too long",
+      });
+      expect(editMessage).not.toHaveBeenCalled();
+    });
+
+    it("accepts an edit to exactly 4000 characters", async () => {
+      const { editMessage } = await import("@/services/message.service");
+      const content = "x".repeat(MAX);
+
+      const response = await patch(content);
+
+      expect(response.status).toBe(200);
+      expect(editMessage).toHaveBeenCalledWith(
+        {},
+        "channel-1",
+        "user-1",
+        "message-1",
+        content,
+      );
+    });
+  });
 });

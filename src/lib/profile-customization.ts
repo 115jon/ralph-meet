@@ -46,12 +46,6 @@ export interface DisplayNameStyle {
   secondaryColor: string;
 }
 
-export interface HsvColor {
-  h: number;
-  s: number;
-  v: number;
-}
-
 export interface ProfileCustomizationInput {
   profile_accent_color?: string | null;
   profile_background_color?: string | null;
@@ -83,9 +77,6 @@ export const DEFAULT_PROFILE_THEME = {
   accent: "#5865F2",
   background: "#161A22",
 } as const;
-
-/** Alias that names the role of `DEFAULT_PROFILE_THEME` on the client. */
-export const LEGACY_DEFAULT_PROFILE_COLORS = DEFAULT_PROFILE_THEME;
 
 const LEGACY_DEFAULT_PROFILE_THEME = {
   accent: "#0B0BE6",
@@ -265,82 +256,12 @@ function rgbToHex(r: number, g: number, b: number) {
     .toUpperCase()}`;
 }
 
-export function hexToHsv(hex: string): HsvColor {
-  const { r, g, b } = hexToRgb(hex);
-  const red = r / 255;
-  const green = g / 255;
-  const blue = b / 255;
-  const max = Math.max(red, green, blue);
-  const min = Math.min(red, green, blue);
-  const delta = max - min;
-
-  let hue = 0;
-  if (delta !== 0) {
-    if (max === red) {
-      hue = 60 * (((green - blue) / delta) % 6);
-    } else if (max === green) {
-      hue = 60 * ((blue - red) / delta + 2);
-    } else {
-      hue = 60 * ((red - green) / delta + 4);
-    }
-  }
-
-  if (hue < 0) {
-    hue += 360;
-  }
-
-  return {
-    h: hue,
-    s: max === 0 ? 0 : delta / max,
-    v: max,
-  };
-}
-
-export function hsvToHex(hue: number, saturation: number, value: number) {
-  const normalizedHue = ((hue % 360) + 360) % 360;
-  const normalizedSaturation = clamp(saturation, 0, 1);
-  const normalizedValue = clamp(value, 0, 1);
-  const chroma = normalizedValue * normalizedSaturation;
-  const intermediate = chroma * (1 - Math.abs(((normalizedHue / 60) % 2) - 1));
-  const match = normalizedValue - chroma;
-
-  let red = 0;
-  let green = 0;
-  let blue = 0;
-
-  if (normalizedHue < 60) {
-    red = chroma;
-    green = intermediate;
-  } else if (normalizedHue < 120) {
-    red = intermediate;
-    green = chroma;
-  } else if (normalizedHue < 180) {
-    green = chroma;
-    blue = intermediate;
-  } else if (normalizedHue < 240) {
-    green = intermediate;
-    blue = chroma;
-  } else if (normalizedHue < 300) {
-    red = intermediate;
-    blue = chroma;
-  } else {
-    red = chroma;
-    blue = intermediate;
-  }
-
-  return rgbToHex(
-    (red + match) * 255,
-    (green + match) * 255,
-    (blue + match) * 255,
-  );
-}
-
-export function withAlpha(hex: string, alpha: number) {
+function withAlpha(hex: string, alpha: number) {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
 }
 
-export function mixHexColors(
+function mixHexColors(
   baseHex: string,
   targetHex: string,
   targetWeight: number,
@@ -367,7 +288,7 @@ function getRelativeLuminance(hex: string) {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
-export function getContrastRatio(foreground: string, background: string) {
+function getContrastRatio(foreground: string, background: string) {
   const foregroundHex = normalizeDisplayColor(foreground);
   const backgroundHex = normalizeDisplayColor(background);
 
@@ -387,7 +308,7 @@ export function getContrastRatio(foreground: string, background: string) {
   return (brighter + 0.05) / (darker + 0.05);
 }
 
-export function getContrastTextColor(hex: string) {
+function getContrastTextColor(hex: string) {
   return getRelativeLuminance(hex) > 0.47 ? "#12131A" : "#F8FAFC";
 }
 
@@ -768,22 +689,6 @@ export function getDisplayNameEffectOverlayStyle(
   }
 }
 
-export function getDisplayNameStyleLabel(
-  style: DisplayNameStyle | null | undefined,
-) {
-  const normalized = normalizeDisplayNameStyle(style);
-  if (!normalized) return "Default";
-
-  const fontLabel =
-    DISPLAY_NAME_FONT_OPTIONS.find((option) => option.id === normalized.font)
-      ?.label ?? "Style";
-  const effectLabel =
-    DISPLAY_NAME_EFFECT_OPTIONS.find(
-      (option) => option.id === normalized.effect,
-    )?.label ?? "Solid";
-  return `${fontLabel} + ${effectLabel}`;
-}
-
 export function createRandomDisplayNameStyle() {
   const font =
     DISPLAY_NAME_FONT_OPTIONS[
@@ -945,21 +850,4 @@ export function resolveProfileTheme(
     accentColor: resolvedAccent,
     isLightSurface,
   };
-}
-
-/**
- * Backing for chips that sit on the banner edge (custom status pill). The
- * card tints are translucent, so on a light banner image white text vanished;
- * this lays the tint over the opaque card colour instead.
- */
-export const PROFILE_BANNER_CHIP_STYLE: CSSProperties = {
-  backgroundColor: "var(--rm-profile-custom-background)",
-  backgroundImage:
-    "linear-gradient(var(--rm-profile-custom-card-bg-strong), var(--rm-profile-custom-card-bg-strong))",
-};
-
-export function getProfileThemeVariables(
-  input: ProfileCustomizationInput,
-): CSSProperties {
-  return resolveProfileTheme(input).variables;
 }

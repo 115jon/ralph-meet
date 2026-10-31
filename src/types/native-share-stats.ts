@@ -13,10 +13,10 @@
 // ============================================================================
 
 /** Resolved capture policy for a session (Req 5.5). */
-export type CapturePolicy = "hook-exclusive" | "wgc-enabled";
+type CapturePolicy = "hook-exclusive" | "wgc-enabled";
 
 /** Active capture strategy for a session (Req 4.4, 8.2). */
-export type CaptureMode = "hook" | "wgc";
+type CaptureMode = "hook" | "wgc";
 
 /**
  * Serialized snapshot of the native screen-share pipeline stats.

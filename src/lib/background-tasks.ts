@@ -11,11 +11,10 @@ import {
   type R2CleanupTask,
 } from "@/services/r2-cleanup.service";
 
-export const BACKGROUND_TASK_VERSION = 1 as const;
-export const PRESENCE_CACHE_INVALIDATE_TASK =
-  "presence.cache.invalidate" as const;
-export const MESSAGE_POSTPROCESS_TASK = "message.postprocess" as const;
-export const R2_CLEANUP_TASK = "r2.cleanup" as const;
+const BACKGROUND_TASK_VERSION = 1 as const;
+const PRESENCE_CACHE_INVALIDATE_TASK = "presence.cache.invalidate" as const;
+const MESSAGE_POSTPROCESS_TASK = "message.postprocess" as const;
+const R2_CLEANUP_TASK = "r2.cleanup" as const;
 const MAX_QUEUE_MESSAGE_BYTES = 120 * 1024;
 const MAX_SERVER_IDS_PER_TASK = 100;
 const MESSAGE_POSTPROCESSING_MAX_ATTEMPTS = 10;
@@ -46,20 +45,20 @@ const MAX_QUEUE_DELAY_SECONDS = 12 * 60 * 60;
  */
 const CRON_RETRY_SLACK_MS = 15 * 60 * 1000;
 
-export interface PresenceCacheInvalidationTask {
+interface PresenceCacheInvalidationTask {
   type: typeof PRESENCE_CACHE_INVALIDATE_TASK;
   serverIds: string[];
 }
 
-export interface MessagePostprocessingEnvelopeTask extends MessagePostprocessingTask {
+interface MessagePostprocessingEnvelopeTask extends MessagePostprocessingTask {
   type: typeof MESSAGE_POSTPROCESS_TASK;
 }
 
-export interface R2CleanupEnvelopeTask extends R2CleanupTask {
+interface R2CleanupEnvelopeTask extends R2CleanupTask {
   type: typeof R2_CLEANUP_TASK;
 }
 
-export type BackgroundTask =
+type BackgroundTask =
   | PresenceCacheInvalidationTask
   | MessagePostprocessingEnvelopeTask
   | R2CleanupEnvelopeTask;
@@ -285,7 +284,7 @@ export function parseBackgroundTask(value: unknown): BackgroundTaskParseResult {
   return { ok: false, reason: "unknown-task" };
 }
 
-export async function deleteServerMemberCacheKeys(
+async function deleteServerMemberCacheKeys(
   cache: KVNamespace,
   serverIds: readonly string[],
 ): Promise<void> {
@@ -304,7 +303,7 @@ export async function deleteServerMemberCacheKeys(
   }
 }
 
-export async function publishPresenceCacheInvalidation(
+async function publishPresenceCacheInvalidation(
   env: BackgroundTaskRuntimeEnv,
   serverIds: readonly string[],
 ): Promise<boolean> {
@@ -361,7 +360,7 @@ async function processMessageTaskInRuntime(
   );
 }
 
-export async function recordMessagePostprocessingJob(
+async function recordMessagePostprocessingJob(
   db: D1Database,
   task: MessagePostprocessingTask,
 ): Promise<void> {
@@ -383,7 +382,7 @@ export async function recordMessagePostprocessingJob(
     .run();
 }
 
-export async function clearMessagePostprocessingJob(
+async function clearMessagePostprocessingJob(
   db: D1Database,
   task: MessagePostprocessingTask,
 ): Promise<void> {
@@ -402,7 +401,7 @@ export async function clearMessagePostprocessingJob(
  * delayed queue delivery when a producer is bound (the cron is the safety
  * net), and gives up after the attempt cap.
  */
-export async function deferMessagePostprocessingJob(
+async function deferMessagePostprocessingJob(
   db: D1Database,
   task: MessagePostprocessingTask,
   queue?: Queue<BackgroundTaskEnvelope>,
@@ -472,7 +471,7 @@ export async function deferMessagePostprocessingJob(
 }
 
 /** Clear a finished job, or keep it for another embed attempt. */
-export async function settleMessagePostprocessingJob(
+async function settleMessagePostprocessingJob(
   db: D1Database,
   task: MessagePostprocessingTask,
   outcome: MessagePostprocessingOutcome | void,

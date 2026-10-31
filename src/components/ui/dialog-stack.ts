@@ -36,7 +36,7 @@ export function isDrawerLayerTarget(target: EventTarget | null): boolean {
  * render a Dialog or Drawer title (ResponsiveDialogTitle) tag themselves with
  * the same slot so the surface doesn't add a second, competing name.
  */
-export type SlotTagged = { rmSlot?: "title" | "description" };
+type SlotTagged = { rmSlot?: "title" | "description" };
 
 export function containsSlot(
   children: React.ReactNode,
@@ -85,7 +85,7 @@ function syncBehind() {
 }
 
 /** Registers an open modal surface; returns its unregister. */
-export function registerModalLayer(el: HTMLElement): () => void {
+function registerModalLayer(el: HTMLElement): () => void {
   if (!layers.includes(el)) layers.push(el);
   syncBehind();
   return () => {

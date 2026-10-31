@@ -1,7 +1,7 @@
 import { Schema, SchemaTransformation } from "effect";
 import { withDefault } from "@/lib/schema";
 
-export function normalizeUsername(value: string): string {
+function normalizeUsername(value: string): string {
   return value.trim().toLowerCase();
 }
 
@@ -61,13 +61,6 @@ export const ProfileIdentityPatchSchema = Schema.Struct({
   username: Schema.optional(UsernameSchema),
 });
 
-export type ProfileIdentityPatch = typeof ProfileIdentityPatchSchema.Type;
-
-export const ChannelNameSchema = Schema.String.check(
-  Schema.isMinLength(1, { message: "Name is required" }),
-  Schema.isMaxLength(100, { message: "Name is too long" }),
-).pipe(Schema.decodeTo(Schema.String, trimmed));
-
 /** An empty string stands for "no category" and decodes to `null`. */
 const CategoryIdSchema = Schema.Union([
   Schema.NullOr(uuid()),
@@ -106,9 +99,6 @@ export const CreateCategorySchema = Schema.Struct({
   ),
 });
 
-// Moved to channel-name.ts so client code can use it without loading Schema.
-export { sanitizeChannelName } from "@/lib/channel-name";
-
 // ── API Route Input Schemas ────────────────────────────────────────────────
 
 export const CreateServerSchema = Schema.Struct({
@@ -119,32 +109,6 @@ export const CreateServerSchema = Schema.Struct({
   icon_url: Schema.optional(
     Schema.NullOr(Schema.String.check(Schema.isMinLength(1))),
   ),
-});
-
-export const SendMessageSchema = Schema.Struct({
-  content: withDefault(
-    Schema.String.check(
-      Schema.isMaxLength(4000, { message: "Message too long" }),
-    ),
-    "",
-  ),
-  reply_to_id: Schema.optional(Schema.NullOr(uuid())),
-  nonce: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
-  attachment_ids: Schema.optional(
-    Schema.mutable(Schema.Array(uuid())).check(Schema.isMaxLength(10)),
-  ),
-});
-
-export const EditMessageSchema = Schema.Struct({
-  message_id: uuid("Invalid message ID"),
-  content: Schema.String.check(
-    Schema.isMinLength(1, { message: "Content is required" }),
-    Schema.isMaxLength(4000, { message: "Message too long" }),
-  ).pipe(Schema.decodeTo(Schema.String, trimmed)),
-});
-
-export const DeleteMessageSchema = Schema.Struct({
-  message_id: uuid("Invalid message ID"),
 });
 
 export const UpdateServerSchema = Schema.Struct({
@@ -173,10 +137,6 @@ export const UpdateServerSchema = Schema.Struct({
   ),
 );
 
-export const UpdateRoleSchema = Schema.Struct({
-  role: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2 })),
-});
-
 export const AddReactionSchema = Schema.Struct({
   message_id: uuid("Invalid message ID"),
   emoji: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
@@ -187,9 +147,4 @@ export const RemoveReactionSchema = Schema.Struct({
   target_user_id: Schema.optional(
     Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
   ),
-});
-
-export const PinMessageSchema = Schema.Struct({
-  message_id: uuid("Invalid message ID"),
-  pinned: Schema.Boolean,
 });

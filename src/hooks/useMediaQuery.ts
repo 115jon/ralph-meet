@@ -100,8 +100,8 @@ export function useMediaQuery(query: string): boolean {
  * The one phone breakpoint: below Tailwind's `md` (768px). CSS uses `md:`;
  * JS uses these, so layout and behavior switch at the same width.
  */
-export const MOBILE_MAX_WIDTH_PX = 767;
-export const MOBILE_QUERY = `(max-width: ${MOBILE_MAX_WIDTH_PX}px)`;
+const MOBILE_MAX_WIDTH_PX = 767;
+const MOBILE_QUERY = `(max-width: ${MOBILE_MAX_WIDTH_PX}px)`;
 
 /** Event-time check (click handlers, positioning). */
 export function isMobileViewport(): boolean {
@@ -137,7 +137,7 @@ export function useIsMobile(): boolean {
 }
 
 /** The one wide breakpoint: Tailwind's `lg` (1024px) and up. */
-export const WIDE_MIN_WIDTH_PX = 1024;
+const WIDE_MIN_WIDTH_PX = 1024;
 export const WIDE_QUERY = `(min-width: ${WIDE_MIN_WIDTH_PX}px)`;
 
 /** Event-time check for `lg`+ (pane drag handlers, positioning). */

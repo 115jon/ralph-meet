@@ -82,7 +82,7 @@ export function readReplaySeq(frame: GatewayFrame): number | undefined {
 
 // ── Payload rules ──────────────────────────────────────────────────────────
 
-export interface PayloadRule<S extends Schema.Top = Schema.Top> {
+interface PayloadRule<S extends Schema.Top = Schema.Top> {
   readonly schema: S;
   /** The Error frame `message` (server) or log line (client) on failure. */
   readonly invalid: string;

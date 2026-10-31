@@ -63,7 +63,7 @@ export const POST = async ({ request, params: _params }: any) => {
   const db = getDB();
 
   // Verify the user exists in D1 before creating a server (FK constraint).
-  // User creation is handled by /api/users/me or the Clerk webhook.
+  // User creation is handled by /api/users/me or the auth webhook.
   const userExists = await db
     .prepare(`SELECT 1 FROM users WHERE id = ?`)
     .bind(userId)

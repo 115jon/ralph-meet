@@ -1,6 +1,6 @@
 import type { AvatarDisplay } from "@/lib/avatar-display";
 
-export type VoiceMemberConnectionState = "connected" | "reconnecting";
+type VoiceMemberConnectionState = "connected" | "reconnecting";
 
 export interface VoiceMemberConnectionInfo {
   connected?: boolean;

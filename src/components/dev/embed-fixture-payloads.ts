@@ -9,7 +9,7 @@
 import type { EmbedInfo } from "@/lib/types";
 
 /** A labelled gradient as an SVG data URI (stands in for a signed image). */
-export function placeholder(
+function placeholder(
   label: string,
   w: number,
   h: number,

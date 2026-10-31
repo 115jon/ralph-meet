@@ -48,7 +48,7 @@ export interface RealtimeClock {
   readonly random: () => number;
 }
 
-export const systemClock: RealtimeClock = {
+const systemClock: RealtimeClock = {
   schedule: (callback, ms) => {
     const handle = setTimeout(callback, ms);
     return () => clearTimeout(handle);
@@ -95,9 +95,9 @@ export interface InboundMessage {
 }
 
 /** Why a socket that closed will not be retried. */
-export type SocketGiveUp = "admission-rejected" | "replaced";
+type SocketGiveUp = "admission-rejected" | "replaced";
 
-export interface SocketClosed {
+interface SocketClosed {
   readonly code: number;
   readonly reason: string;
   /** What the lifecycle does next. */
@@ -171,7 +171,7 @@ type Phase =
   | { readonly kind: "auth-failed" };
 
 /** A ticket request refused because the session is gone (SocketTicketError 401). */
-export function isAuthRefusal(error: unknown): boolean {
+function isAuthRefusal(error: unknown): boolean {
   // Duck-typed on `status` so this module does not load the ticket client.
   return (
     typeof error === "object" &&

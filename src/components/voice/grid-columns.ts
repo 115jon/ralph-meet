@@ -7,9 +7,9 @@
  * tile width the grid stops shrinking and scrolls instead.
  */
 export const GRID_GAP = 8;
-export const MIN_TILE_W = 200;
+const MIN_TILE_W = 200;
 /** One person alone gets a modest tile, not a 1000px wall. */
-export const SOLO_MAX_TILE_W = 640;
+const SOLO_MAX_TILE_W = 640;
 
 /**
  * Phone calls: below this stage width, 2–4 people fill the stage's height.
@@ -17,9 +17,9 @@ export const SOLO_MAX_TILE_W = 640;
  * tiles take whatever shape the stage gives them (8px gaps), instead of a
  * width-sized grid floating in an empty stage.
  */
-export const PHONE_GRID_MAX_W = 560;
+const PHONE_GRID_MAX_W = 560;
 
-export type TileAspect = "video" | "fill";
+type TileAspect = "video" | "fill";
 
 export interface GridFit {
   cols: number;
@@ -33,7 +33,7 @@ export interface GridFit {
 }
 
 /** Whether a call this size, on a stage this wide, fills the stage. */
-export function usesPhoneFill(width: number, count: number): boolean {
+function usesPhoneFill(width: number, count: number): boolean {
   return width > 0 && width < PHONE_GRID_MAX_W && count >= 2 && count <= 4;
 }
 

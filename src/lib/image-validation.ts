@@ -1,5 +1,5 @@
 /** Allowed image types with their canonical extensions */
-export const ALLOWED_IMAGE_TYPES: ReadonlyMap<string, string> = new Map([
+const ALLOWED_IMAGE_TYPES: ReadonlyMap<string, string> = new Map([
   ["image/png", "png"],
   ["image/jpeg", "jpg"],
   ["image/gif", "gif"],
@@ -11,7 +11,7 @@ export const ALLOWED_IMAGE_TYPES: ReadonlyMap<string, string> = new Map([
  * Detect actual image type from the first bytes (magic bytes).
  * Returns the MIME type if it matches a known image format, or null if unknown.
  */
-export function detectImageType(bytes: Uint8Array): string | null {
+function detectImageType(bytes: Uint8Array): string | null {
   if (bytes.length < 12) return null;
 
   // PNG: 89 50 4E 47 0D 0A 1A 0A

@@ -68,17 +68,8 @@ export function normalizeServerRecord(
   return normalized;
 }
 
-// ─── ID generator (injectable for testing) ───────────────────────────────────
-
-let _genId = (): string => crypto.randomUUID();
-
-/** Override the ID generator (useful in tests) */
-export function setIdGenerator(fn: () => string): void {
-  _genId = fn;
-}
-
 function genId(): string {
-  return _genId();
+  return crypto.randomUUID();
 }
 
 // ─── listUserServers ─────────────────────────────────────────────────────────

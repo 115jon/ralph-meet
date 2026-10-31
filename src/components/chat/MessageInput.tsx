@@ -12,14 +12,7 @@ import {
   MessageInputPlaceholder,
 } from "./MessageInputPlaceholder";
 
-import {
-  useMessageInput,
-  type PendingUpload,
-  type UploadedFile,
-  type UploadedFileInfo,
-} from "./useMessageInput";
-
-export type { PendingUpload, UploadedFile, UploadedFileInfo };
+import { useMessageInput, type UploadedFileInfo } from "./useMessageInput";
 
 interface Props {
   channelId: string;
@@ -83,7 +76,7 @@ const COMPOSER_ROW = "flex items-start";
  * A 48px slot key inside the plate. The plate clips, so the focus ring
  * draws inside the key.
  */
-export const COMPOSER_SLOT = "rounded-none focus-visible:outline-offset-[-2px]";
+const COMPOSER_SLOT = "rounded-none focus-visible:outline-offset-[-2px]";
 
 /**
  * Text metrics shared by the textarea, its transparent-text twin, the

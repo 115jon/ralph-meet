@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export type UserStatus = "online" | "idle" | "dnd" | "offline";
 
 /** Presence fills from the theme's `--status-*` tokens (never accent). */
-export const USER_STATUS_COLOR_CLASSES: Record<UserStatus, string> = {
+const USER_STATUS_COLOR_CLASSES: Record<UserStatus, string> = {
   online: "bg-status-online",
   idle: "bg-status-idle",
   dnd: "bg-status-dnd",

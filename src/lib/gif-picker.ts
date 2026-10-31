@@ -215,9 +215,7 @@ export function getGifAttachmentProvider(
   return null;
 }
 
-export function inferGifProviderFromUrl(
-  url: string | null | undefined,
-): GifProvider {
+function inferGifProviderFromUrl(url: string | null | undefined): GifProvider {
   if (!url) return DEFAULT_GIF_PROVIDER;
 
   const lowerUrl = url.toLowerCase();
@@ -501,13 +499,6 @@ export function toggleGifFavorite(
     gif,
     ...favorites.filter((item) => getGifItemIdentityKey(item) !== gifKey),
   ].slice(0, MAX_GIF_FAVORITES);
-}
-
-export function isGifFavorite(
-  favorites: GifPickerItem[],
-  gifId: string,
-): boolean {
-  return favorites.some((item) => item.id === gifId);
 }
 
 /** An asset as stored: it needs a url; size fields from older saves may be missing. */

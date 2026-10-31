@@ -24,7 +24,7 @@ interface GithubRelease {
 }
 
 export const REPO_URL = "https://github.com/115jon/ralph-meet";
-export const RELEASES_API_URL =
+const RELEASES_API_URL =
   "https://api.github.com/repos/115jon/ralph-meet/releases";
 
 export const FALLBACK_RELEASES: DesktopRelease[] = [

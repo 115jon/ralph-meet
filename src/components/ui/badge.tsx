@@ -86,4 +86,4 @@ function CountBadge({
   );
 }
 
-export { Badge, badgeVariants, CountBadge };
+export { Badge, CountBadge };

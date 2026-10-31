@@ -130,7 +130,6 @@ jobs:
         run: |
           cat > .dev.vars <<'EOF'
           CALLS_APP_SECRET=ci-test-only-value
-          CLERK_SECRET_KEY=ci-test-only-value
           TURN_TOKEN_SECRET=ci-test-only-value
           REALTIME_TICKET_SECRET=ci-test-only-value
           EOF

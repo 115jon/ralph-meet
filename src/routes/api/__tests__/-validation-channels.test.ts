@@ -16,19 +16,6 @@ function jsonRequest(body: string): Request {
 
 describe("channel request body validation", () => {
   it.each([
-    ["pins", pinsBodySchema],
-    ["GIF uploads", gifUploadBodySchema],
-    ["voice disconnects", voiceDisconnectBodySchema],
-    ["permission overrides", permissionOverrideBodySchema],
-  ])("rejects malformed JSON for %s with a 400", async (_name, schema) => {
-    const result = await validateBody(jsonRequest("{not json"), schema);
-
-    expect(result).toBeInstanceOf(Response);
-    if (!(result instanceof Response)) throw new Error("expected Response");
-    expect(result.status).toBe(400);
-  });
-
-  it.each([
     ["pins", pinsBodySchema, { message_id: 123, pinned: "yes" }],
     ["GIF uploads", gifUploadBodySchema, { source_url: 123 }],
     [

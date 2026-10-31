@@ -21,7 +21,7 @@ export type StandaloneUpdaterStatus =
  * 10 s) no longer holds the app back. The main window's UpdateChecker checks
  * again in the background and offers the update there.
  */
-export const UPDATE_CHECK_BUDGET_MS = 1200;
+const UPDATE_CHECK_BUDGET_MS = 1200;
 const HANDOFF_RETRY_COUNT = 3;
 const HANDOFF_RETRY_DELAY_MS = 250;
 const HANDOFF_TIMEOUT_MS = 5_000;

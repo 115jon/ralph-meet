@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createMockD1 } from "../../lib/__tests__/mock-d1";
+import { CacheKey } from "../../lib/cache";
+import { anyTimestamp, createMockD1 } from "../../lib/__tests__/mock-d1";
 import {
   acceptFriendRequest,
   blockUser,
@@ -75,7 +76,22 @@ describe("sendFriendRequest", () => {
 
     const result = await sendFriendRequest(db as any, USER_ID, "bob");
 
-    db.assertCalled(/INSERT INTO relationships/);
+    // The sender gets an outgoing request (3), the target an incoming one (2).
+    db.assertCalledWith("INSERT INTO relationships", [
+      USER_ID,
+      TARGET_ID,
+      anyTimestamp(),
+      anyTimestamp(),
+    ]);
+    db.assertCalledWith("INSERT INTO relationships", [
+      TARGET_ID,
+      USER_ID,
+      anyTimestamp(),
+      anyTimestamp(),
+    ]);
+    const [outgoing, incoming] = db.getCalls("INSERT INTO relationships");
+    expect(outgoing.sql).toContain("VALUES (?, ?, 3, ?, ?)");
+    expect(incoming.sql).toContain("VALUES (?, ?, 2, ?, ?)");
     expect(result.type).toBe(3);
     expect(result.broadcasts).toHaveLength(2);
   });
@@ -109,7 +125,16 @@ describe("sendFriendRequest", () => {
 
     const result = await sendFriendRequest(db as any, USER_ID, "bob");
     expect(result.type).toBe(0); // Friends now
-    db.assertCalled(/UPDATE relationships/);
+    db.assertCalledWith("UPDATE relationships SET type = 0", [
+      anyTimestamp(),
+      USER_ID,
+      TARGET_ID,
+    ]);
+    db.assertCalledWith("UPDATE relationships SET type = 0", [
+      anyTimestamp(),
+      TARGET_ID,
+      USER_ID,
+    ]);
   });
 });
 
@@ -130,7 +155,17 @@ describe("acceptFriendRequest", () => {
 
     const result = await acceptFriendRequest(db as any, USER_ID, TARGET_ID);
     expect(result.type).toBe(0);
-    db.assertCalled(/UPDATE relationships/);
+    // Both directions become friends, each row keyed (user, target).
+    db.assertCalledWith("UPDATE relationships SET type = 0", [
+      anyTimestamp(),
+      USER_ID,
+      TARGET_ID,
+    ]);
+    db.assertCalledWith("UPDATE relationships SET type = 0", [
+      anyTimestamp(),
+      TARGET_ID,
+      USER_ID,
+    ]);
   });
 
   it("throws 404 when no pending request", async () => {
@@ -154,8 +189,15 @@ describe("blockUser", () => {
   it("blocks user and removes reverse relationship", async () => {
     const result = await blockUser(db as any, USER_ID, TARGET_ID);
     expect(result.type).toBe(1);
-    db.assertCalled(/INSERT OR REPLACE INTO relationships/);
-    db.assertCalled(/DELETE FROM relationships/);
+    // The blocker's row is written (1 = blocked); the blocked user's row
+    // pointing back at the blocker is removed.
+    db.assertCalledWith("INSERT OR REPLACE INTO relationships", [
+      USER_ID,
+      TARGET_ID,
+      anyTimestamp(),
+      anyTimestamp(),
+    ]);
+    db.assertCalledWith("DELETE FROM relationships", [TARGET_ID, USER_ID]);
     expect(result.broadcasts).toHaveLength(2);
   });
 });
@@ -171,7 +213,8 @@ describe("removeRelationship", () => {
 
   it("removes both sides of relationship", async () => {
     const result = await removeRelationship(db as any, USER_ID, TARGET_ID);
-    db.assertCalled(/DELETE FROM relationships/);
+    db.assertCalledWith("DELETE FROM relationships", [USER_ID, TARGET_ID]);
+    db.assertCalledWith("DELETE FROM relationships", [TARGET_ID, USER_ID]);
     expect(result.broadcasts).toHaveLength(2);
   });
 });
@@ -256,7 +299,14 @@ describe("getOrCreateDM", () => {
         }),
       ]),
     );
-    db.assertCalled(/INSERT INTO channels/);
+    db.assertCalledWith("INSERT INTO channels", [
+      result.dm.id,
+      `DM-${USER_ID}-${TARGET_ID}`,
+      result.dm.created_at,
+    ]);
+    // Both people are recipients of the new channel.
+    db.assertCalledWith("INSERT INTO dm_recipients", [result.dm.id, USER_ID]);
+    db.assertCalledWith("INSERT INTO dm_recipients", [result.dm.id, TARGET_ID]);
   });
 
   it("throws 400 when DMing yourself", async () => {
@@ -284,9 +334,18 @@ describe("createInvite", () => {
   it("creates an invite", async () => {
     const result = await createInvite(db as any, SERVER_ID, USER_ID, {});
 
-    db.assertCalled(/INSERT INTO invites/);
-    expect(result.code).toBeDefined();
-    expect(result.code.length).toBeGreaterThan(0);
+    expect(result.code).toMatch(/^[0-9a-f]{8}$/);
+    // code, server, channel, inviter, max uses, temporary, expiry, created_at.
+    db.assertCalledWith("INSERT INTO invites", [
+      result.code,
+      SERVER_ID,
+      null,
+      USER_ID,
+      null,
+      0,
+      null,
+      anyTimestamp(),
+    ]);
   });
 
   it("creates invite with expiry", async () => {
@@ -357,10 +416,22 @@ describe("joinServer", () => {
     const result = await joinServer(db as any, "abc", USER_ID, "alice", null);
 
     expect(result.joined).toBe(true);
-    db.assertCalled(/INSERT INTO server_members/);
-    db.assertCalled(/INSERT INTO member_roles/);
-    db.assertCalled(/UPDATE invites SET uses/);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
+    db.assertCalledWith("INSERT INTO server_members", [
+      SERVER_ID,
+      USER_ID,
+      anyTimestamp(),
+    ]);
+    db.assertCalledWith("INSERT INTO member_roles", [
+      SERVER_ID,
+      USER_ID,
+      "role_everyone",
+    ]);
+    db.assertCalledWith("UPDATE invites SET uses", ["abc"]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverMembers(SERVER_ID),
+      CacheKey.userServers(USER_ID),
+      CacheKey.invite("abc"),
+    ]);
     expect(result.broadcasts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

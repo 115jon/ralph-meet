@@ -122,7 +122,7 @@ export function selectedSkuForKind(
   return collectibles?.profileFrame?.skuId;
 }
 
-export function isBundleCollectible(item: CollectibleCatalogItem) {
+function isBundleCollectible(item: CollectibleCatalogItem) {
   const isNameplate = item.kind === "nameplate";
   return (
     !isNameplate &&

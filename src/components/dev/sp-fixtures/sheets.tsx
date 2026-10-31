@@ -22,7 +22,7 @@ import {
 } from "./profiles";
 import { FIXTURE_ROLES } from "./server";
 
-export const SHEET_SURFACES = [
+const SHEET_SURFACES = [
   "sp-sheet-banner",
   "sp-sheet-friend",
   "sp-sheet-blocked",

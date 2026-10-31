@@ -24,11 +24,6 @@ export interface SharedSpatialAudioState {
   updatedAt: number;
 }
 
-export interface SpatialAudioCapability {
-  enabled: boolean;
-  highFidelity: boolean;
-}
-
 export const DEFAULT_SHARED_SPATIAL_STATE: SharedSpatialAudioState = {
   enabled: false,
   placementMode: "arc",

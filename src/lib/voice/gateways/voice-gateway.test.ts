@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { VoiceOpcode } from "@/lib/types";
+import { GatewayOp } from "@/lib/gateway-protocol";
 
 const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
@@ -90,7 +90,7 @@ describe("VoiceGateway", () => {
     socket.readyState = TestWebSocket.OPEN;
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
@@ -113,7 +113,7 @@ describe("VoiceGateway", () => {
     );
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
@@ -122,7 +122,7 @@ describe("VoiceGateway", () => {
     expect(TestWebSocket.instances).toHaveLength(1);
     expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "participant-1",
           voice_token: "voice-token-1",
@@ -158,7 +158,7 @@ describe("VoiceGateway", () => {
       socket.readyState = TestWebSocket.OPEN;
       socket.onmessage?.({
         data: JSON.stringify({
-          op: VoiceOpcode.Hello,
+          op: GatewayOp.Hello,
           d: { heartbeat_interval: 45_000 },
         }),
       } as MessageEvent);
@@ -187,7 +187,7 @@ describe("VoiceGateway", () => {
     first.readyState = TestWebSocket.OPEN;
     first.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
@@ -205,14 +205,14 @@ describe("VoiceGateway", () => {
     second.readyState = TestWebSocket.OPEN;
     second.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
 
     expect(first.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "participant-1",
           voice_token: "voice-token-1",
@@ -222,7 +222,7 @@ describe("VoiceGateway", () => {
     ]);
     expect(second.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "participant-2",
           voice_token: "voice-token-2",
@@ -255,7 +255,7 @@ describe("VoiceGateway", () => {
     socket.readyState = TestWebSocket.OPEN;
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
@@ -269,7 +269,7 @@ describe("VoiceGateway", () => {
     expect(socket.readyState).toBe(TestWebSocket.OPEN);
     expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "participant-1",
           voice_token: "bootstrap-token",
@@ -301,7 +301,7 @@ describe("VoiceGateway", () => {
     first.readyState = TestWebSocket.OPEN;
     first.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
@@ -322,14 +322,14 @@ describe("VoiceGateway", () => {
     staleClose?.({ code: 1006, reason: "stale close" } as CloseEvent);
     second.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
 
     expect(second.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "participant-2",
           voice_token: "voice-token-2",
@@ -361,13 +361,13 @@ describe("VoiceGateway", () => {
     oldSocket.readyState = TestWebSocket.OPEN;
     oldSocket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
     expect(oldSocket.sent.map((message) => JSON.parse(message))).toContainEqual(
       expect.objectContaining({
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: expect.objectContaining({
           participant_id: "old-participant",
           voice_token: "old-token",
@@ -383,7 +383,7 @@ describe("VoiceGateway", () => {
     preparedSocket.readyState = TestWebSocket.OPEN;
     preparedSocket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
@@ -399,7 +399,7 @@ describe("VoiceGateway", () => {
 
     expect(preparedSocket.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "new-participant",
           voice_token: "new-token",
@@ -445,7 +445,7 @@ describe("VoiceGateway", () => {
     preparedSocket.readyState = TestWebSocket.OPEN;
     preparedSocket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
@@ -461,7 +461,7 @@ describe("VoiceGateway", () => {
 
     expect(preparedSocket.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "new-participant",
           voice_token: "new-token",
@@ -518,14 +518,14 @@ describe("VoiceGateway", () => {
     socket.readyState = TestWebSocket.OPEN;
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Hello,
+        op: GatewayOp.Hello,
         d: { heartbeat_interval: 45_000 },
       }),
     } as MessageEvent);
 
     expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceIdentify,
+        op: GatewayOp.VoiceIdentify,
         d: {
           participant_id: "participant-1",
           voice_token: "voice-token",
@@ -565,7 +565,7 @@ describe("VoiceGateway", () => {
     };
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.VoiceReady,
+        op: GatewayOp.VoiceReady,
         d: {
           participant_id: "participant-1",
           tracks: [track],
@@ -614,13 +614,13 @@ describe("VoiceGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.Video,
+        op: GatewayOp.Video,
         d: { participant_id: "participant-remote", tracks: [track] },
       }),
     } as MessageEvent);
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.StopTracks,
+        op: GatewayOp.StopTracks,
         d: { track_names: [track.track_name], tracks: [track] },
       }),
     } as MessageEvent);
@@ -654,7 +654,7 @@ describe("VoiceGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.onmessage?.({
       data: JSON.stringify({
-        op: VoiceOpcode.ClientDisconnect,
+        op: GatewayOp.ClientDisconnect,
         d: { participant_id: "participant-remote" },
       }),
     } as MessageEvent);
@@ -685,11 +685,11 @@ describe("VoiceGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.readyState = TestWebSocket.OPEN;
     socket.onmessage?.({
-      data: JSON.stringify({ op: VoiceOpcode.VoiceReady, d: {} }),
+      data: JSON.stringify({ op: GatewayOp.VoiceReady, d: {} }),
     } as MessageEvent);
 
     expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({
-      op: VoiceOpcode.VoiceAppEvent,
+      op: GatewayOp.VoiceAppEvent,
       d: { type: "listen_together.state.request" },
     });
   });
@@ -731,12 +731,12 @@ describe("VoiceGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.readyState = TestWebSocket.OPEN;
     socket.onmessage?.({
-      data: JSON.stringify({ op: VoiceOpcode.VoiceReady, d: {} }),
+      data: JSON.stringify({ op: GatewayOp.VoiceReady, d: {} }),
     } as MessageEvent);
 
     expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
       {
-        op: VoiceOpcode.VoiceAppEvent,
+        op: GatewayOp.VoiceAppEvent,
         d: { type: "listen_together.state.request", room_slug: "room-1" },
       },
     ]);
@@ -773,7 +773,7 @@ describe("VoiceGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.readyState = TestWebSocket.OPEN;
     socket.onmessage?.({
-      data: JSON.stringify({ op: VoiceOpcode.VoiceReady, d: {} }),
+      data: JSON.stringify({ op: GatewayOp.VoiceReady, d: {} }),
     } as MessageEvent);
 
     expect(
@@ -824,13 +824,13 @@ describe("VoiceGateway frame decoding", () => {
       raw("{");
       raw('"text"');
       raw('{"d":{}}');
-      frame(VoiceOpcode.Hello, { heartbeat_interval: null });
-      frame(VoiceOpcode.VoiceReady, { tracks: "none" });
-      frame(VoiceOpcode.VoiceReady, { speaking: { p: "loud" } });
-      frame(VoiceOpcode.Speaking, { participant_id: "p" });
-      frame(VoiceOpcode.Video, { participant_id: "p", tracks: [1] });
-      frame(VoiceOpcode.StopTracks, { track_names: "screen" });
-      frame(VoiceOpcode.VoiceAppEvent, ["not", "an", "object"]);
+      frame(GatewayOp.Hello, { heartbeat_interval: null });
+      frame(GatewayOp.VoiceReady, { tracks: "none" });
+      frame(GatewayOp.VoiceReady, { speaking: { p: "loud" } });
+      frame(GatewayOp.Speaking, { participant_id: "p" });
+      frame(GatewayOp.Video, { participant_id: "p", tracks: [1] });
+      frame(GatewayOp.StopTracks, { track_names: "screen" });
+      frame(GatewayOp.VoiceAppEvent, ["not", "an", "object"]);
       frame(4242, { unknown: true });
     }).not.toThrow();
     expect(socket.sent).toEqual([]);
@@ -838,11 +838,11 @@ describe("VoiceGateway frame decoding", () => {
     expect(speaking).not.toHaveBeenCalled();
     expect(offered).not.toHaveBeenCalled();
 
-    frame(VoiceOpcode.Hello, { heartbeat_interval: 45_000 });
-    frame(VoiceOpcode.VoiceReady, { participant_id: "participant-1" });
-    frame(VoiceOpcode.Speaking, { participant_id: "p", speaking: 1 });
+    frame(GatewayOp.Hello, { heartbeat_interval: 45_000 });
+    frame(GatewayOp.VoiceReady, { participant_id: "participant-1" });
+    frame(GatewayOp.Speaking, { participant_id: "p", speaking: 1 });
     expect(socket.sent.map((message) => JSON.parse(message).op)).toEqual([
-      VoiceOpcode.VoiceIdentify,
+      GatewayOp.VoiceIdentify,
     ]);
     expect(voiceReady).toHaveBeenCalledOnce();
     expect(speaking).toHaveBeenCalledWith({ participantId: "p", speaking: 1 });

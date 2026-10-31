@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /** How long the loader may run before it settles into a static line. */
-export const STREAM_LOADER_CAP_MS = 8000;
+const STREAM_LOADER_CAP_MS = 8000;
 
 /**
  * A stream that is on its way. The pending spinner is one of the allowed

@@ -108,13 +108,13 @@ function apiGetDedupeKey(url: string, opts?: ApiOptions) {
  * for cross-platform (web / Tauri desktop) compatibility.
  *
  * On desktop, if a request returns 401, it will automatically
- * refresh the Clerk token and retry the request once.
+ * refresh the desktop token and retry the request once.
  */
 interface ApiFetchInit extends RequestInit {
   skipAuth?: boolean;
 }
 
-export async function apiFetch<T>(
+async function apiFetch<T>(
   input: RequestInfo | URL,
   init?: ApiFetchInit,
 ): Promise<T> {

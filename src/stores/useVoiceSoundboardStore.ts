@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export interface SoundboardPlaybackState {
+interface SoundboardPlaybackState {
   playbackId: string;
   ownerId: string;
   serverKey: string;

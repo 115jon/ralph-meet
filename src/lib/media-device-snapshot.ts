@@ -20,8 +20,6 @@ export interface NativeDevice {
   is_default: boolean;
 }
 
-export type NativeAudioDevice = NativeDevice;
-
 export interface MediaDeviceSnapshot {
   audioInputs: MediaDeviceInfo_Custom[];
   audioOutputs: MediaDeviceInfo_Custom[];
@@ -107,7 +105,7 @@ function hasCompleteDesktopDeviceList(
   return audioComplete && videoComplete;
 }
 
-export async function getDesktopNativeAudioDevices(): Promise<NativeDevice[]> {
+async function getDesktopNativeAudioDevices(): Promise<NativeDevice[]> {
   if (!isDesktop()) return [];
   try {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -118,7 +116,7 @@ export async function getDesktopNativeAudioDevices(): Promise<NativeDevice[]> {
   }
 }
 
-export async function getDesktopNativeVideoDevices(): Promise<NativeDevice[]> {
+async function getDesktopNativeVideoDevices(): Promise<NativeDevice[]> {
   if (!isDesktop()) return [];
   try {
     const { invoke } = await import("@tauri-apps/api/core");

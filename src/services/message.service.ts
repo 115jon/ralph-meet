@@ -37,7 +37,7 @@ export interface Attachment {
   url: string;
 }
 
-export interface FormattedReaction {
+interface FormattedReaction {
   emoji: string;
   count: number;
   me: boolean;
@@ -870,7 +870,7 @@ export interface MessagePostprocessingTask {
   notify?: boolean;
 }
 
-export type MessagePostprocessingBroadcastTarget =
+type MessagePostprocessingBroadcastTarget =
   | { kind: "server"; id: string }
   | { kind: "channel"; id: string }
   | { kind: "user"; id: string };

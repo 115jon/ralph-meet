@@ -13,14 +13,13 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isMobile, isWindows } from "@/lib/platform";
 
-export { startDeviceSignIn };
 export type { DeviceSignInController, DeviceSignInOptions, DeviceSignInState };
 export type DeviceInfo = NonNullable<DeviceSignInOptions["device"]>;
 
-export type DevicePlatform = "windows" | "macos" | "linux" | "android" | "ios";
+type DevicePlatform = "windows" | "macos" | "linux" | "android" | "ios";
 
 /** Best-effort OS name for the device-approval screen. */
-export function getDevicePlatform(): DevicePlatform | undefined {
+function getDevicePlatform(): DevicePlatform | undefined {
   if (typeof navigator === "undefined") return undefined;
   const ua = navigator.userAgent || "";
   // Android/iOS checks come first: their UAs also mention Linux / Mac OS.

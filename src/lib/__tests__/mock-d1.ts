@@ -10,7 +10,17 @@
  * const result = await service.listServers(db as any, "user1");
  * db.assertCalledWith(/SELECT.*FROM servers/, ["user1"]);
  * ```
+ *
+ * A statement's SQL text says what it does; its bindings say to which rows.
+ * `deleteChannel` deleting the server id instead of the channel id has the
+ * same SQL text, so a test that only matches the text cannot fail on it.
+ * `assertCalledWith` therefore compares the bindings exactly and in order
+ * (values may be vitest asymmetric matchers such as `expect.any(String)`), and
+ * `assertCalled` refuses INSERT, UPDATE and DELETE statements, which must
+ * always be asserted with their bound values.
  */
+
+import { expect } from "vitest";
 
 interface D1Result {
   results?: Record<string, unknown>[];
@@ -46,11 +56,20 @@ export interface MockD1 {
   /** All recorded query calls */
   readonly calls: ReadonlyArray<QueryCall>;
 
-  /** Assert a query matching the pattern was called */
+  /**
+   * Assert a read (SELECT) matching the pattern was run. Throws when the
+   * match is a write: use `assertCalledWith` so the bound ids are checked too.
+   */
   assertCalled(pattern: RegExp | string): void;
 
-  /** Assert a query matching the pattern was called with specific bindings */
-  assertCalledWith(pattern: RegExp | string, bindings: unknown[]): void;
+  /**
+   * Assert one query matching the pattern ran with exactly these bindings, in
+   * this order. Entries may be asymmetric matchers (`expect.any(String)`).
+   */
+  assertCalledWith(
+    pattern: RegExp | string,
+    bindings: readonly unknown[],
+  ): void;
 
   /** Assert a query matching the pattern was NOT called */
   assertNotCalled(pattern: RegExp | string): void;
@@ -80,9 +99,42 @@ function matchesPattern(sql: string, pattern: RegExp | string): boolean {
   return pattern.test(sql);
 }
 
+/** Whether the bindings contain every expected value (response routing). */
 function matchesBindings(actual: unknown[], expected?: unknown[]): boolean {
   if (!expected) return true;
   return expected.every((exp) => actual.includes(exp));
+}
+
+/** Exact, ordered comparison; expected entries may be asymmetric matchers. */
+function bindingsEqual(
+  actual: readonly unknown[],
+  expected: readonly unknown[],
+): boolean {
+  try {
+    expect(actual).toEqual(expected);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Matchers for bound values the service generates itself (`crypto.randomUUID()`
+ * ids, `new Date().toISOString()` timestamps). Every other bound value should
+ * be spelled out.
+ */
+export const anyId = () => expect.stringMatching(/^[0-9a-f-]{36}$/);
+export const anyTimestamp = () =>
+  expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+const WRITE_STATEMENT = /^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i;
+
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 export function createMockD1(): MockD1 {
@@ -193,30 +245,35 @@ export function createMockD1(): MockD1 {
     },
 
     assertCalled(pattern: RegExp | string) {
-      const found = calls.some((c) => matchesPattern(c.sql, pattern));
-      if (!found) {
+      const matching = calls.filter((c) => matchesPattern(c.sql, pattern));
+      if (matching.length === 0) {
         const allSqls = calls.map((c) => `  - ${c.sql}`).join("\n");
         throw new Error(
           `Expected query matching ${pattern} to have been called.\nActual queries:\n${allSqls || "  (none)"}`,
         );
       }
+      const write = matching.find((c) => WRITE_STATEMENT.test(c.sql));
+      if (write) {
+        throw new Error(
+          `assertCalled(${pattern}) matched a write (${write.sql.trim().slice(0, 60)}...). ` +
+            `Assert writes with assertCalledWith(pattern, bindings) so the bound ids and values are checked.`,
+        );
+      }
     },
 
-    assertCalledWith(pattern: RegExp | string, expectedBindings: unknown[]) {
-      const found = calls.some(
-        (c) =>
-          matchesPattern(c.sql, pattern) &&
-          matchesBindings(c.bindings, expectedBindings),
-      );
-      if (!found) {
-        const matching = calls.filter((c) => matchesPattern(c.sql, pattern));
+    assertCalledWith(
+      pattern: RegExp | string,
+      expectedBindings: readonly unknown[],
+    ) {
+      const matching = calls.filter((c) => matchesPattern(c.sql, pattern));
+      if (!matching.some((c) => bindingsEqual(c.bindings, expectedBindings))) {
         const details = matching.length
           ? matching
-              .map((c) => `  bindings: ${JSON.stringify(c.bindings)}`)
+              .map((c) => `  bindings: ${safeJson(c.bindings)}`)
               .join("\n")
           : "  (no matching queries found)";
         throw new Error(
-          `Expected query matching ${pattern} to have been called with bindings including ${JSON.stringify(expectedBindings)}.\nMatching queries:\n${details}`,
+          `Expected query matching ${pattern} to have been called with exactly ${safeJson(expectedBindings)}.\nMatching queries:\n${details}`,
         );
       }
     },

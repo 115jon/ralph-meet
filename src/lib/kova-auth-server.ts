@@ -18,7 +18,6 @@ import {
 } from "@/server/kova-auth";
 
 export type { KovaAuthSession, KovaAuthUser } from "@/server/kova-auth";
-export { isKovaUnavailableStatus } from "@/server/kova-auth";
 
 /**
  * What Kova said about a request's credentials. `unavailable` means it could
@@ -124,9 +123,4 @@ export async function auth() {
 
 export async function getCurrentUser(headers?: Headers) {
   return (await getKovaAuthSession(headers))?.user ?? null;
-}
-
-/** Check a bearer token (desktop app token, or a `?token=` query param). */
-export async function checkToken(token: string): Promise<KovaSessionCheck> {
-  return settle(lookup({ authorization: `Bearer ${token}`, cookie: null }));
 }

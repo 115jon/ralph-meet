@@ -229,4 +229,3 @@ function Spinner({ className }: { className?: string }) {
 }
 
 export { Button, ButtonDefaults, buttonVariants, Spinner };
-export type { ButtonProps };

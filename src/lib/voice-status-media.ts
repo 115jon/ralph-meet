@@ -3,12 +3,12 @@ import type {
   VoiceChannelStatusMediaAsset,
 } from "@/lib/types";
 
-export const VOICE_STATUS_MEDIA_PREFIX = "voice-status-media";
-export const EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX = "external-url:";
+const VOICE_STATUS_MEDIA_PREFIX = "voice-status-media";
+const EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX = "external-url:";
 export const MAX_VOICE_STATUS_MEDIA_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const MAX_VOICE_STATUS_MEDIA_RECENTS = 12;
 
-export const ALLOWED_VOICE_STATUS_MEDIA_CONTENT_TYPES = new Set<
+const ALLOWED_VOICE_STATUS_MEDIA_CONTENT_TYPES = new Set<
   VoiceChannelStatusMedia["preview_content_type"]
 >([
   "image/gif",
@@ -65,10 +65,7 @@ export function buildExternalVoiceStatusMediaFileKey(
   return `${EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX}${previewUrl}`;
 }
 
-export function buildVoiceStatusMediaUrl(
-  assetId: string,
-  filename: string,
-): string {
+function buildVoiceStatusMediaUrl(assetId: string, filename: string): string {
   return `/api/voice-status-media/${assetId}/${encodeURIComponent(filename)}`;
 }
 
@@ -84,7 +81,7 @@ function resolveVoiceStatusMediaPreviewUrl(
   return buildVoiceStatusMediaUrl(assetId, filename);
 }
 
-export function buildVoiceStatusMediaItem(input: {
+function buildVoiceStatusMediaItem(input: {
   id: string;
   provider?: string;
   title?: string | null;

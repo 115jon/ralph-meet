@@ -40,10 +40,6 @@ type MediaKind = "image" | "video";
 export const PROFILE_EFFECT_STAGE_WIDTH = 450;
 export const PROFILE_EFFECT_STAGE_HEIGHT = 880;
 
-export function getProfileEffectStageHeight(width: number) {
-  return (width / PROFILE_EFFECT_STAGE_WIDTH) * PROFILE_EFFECT_STAGE_HEIGHT;
-}
-
 function usePrefersReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 

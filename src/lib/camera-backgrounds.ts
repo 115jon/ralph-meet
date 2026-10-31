@@ -1,10 +1,7 @@
 import { apiDelete, apiGet, apiUpload } from "@/lib/api-client";
 export {
   CAMERA_BACKGROUND_ACCEPT,
-  CAMERA_BACKGROUND_UPLOAD_LIMIT_BYTES,
-  CAMERA_BACKGROUND_UPLOAD_LIMIT_MB,
   getCameraBackgroundValidationError,
-  isSupportedCameraBackgroundMimeType,
 } from "@/lib/camera-background-validation";
 
 export interface CameraBackgroundAsset {

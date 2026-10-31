@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createMockD1 } from "../../lib/__tests__/mock-d1";
+import { anyId, anyTimestamp, createMockD1 } from "../../lib/__tests__/mock-d1";
+import { CacheKey } from "../../lib/cache";
 import {
   createRole,
   deleteRole,
@@ -116,10 +117,31 @@ describe("createRole", () => {
       permissions: 0,
     });
 
-    db.assertCalled(/INSERT INTO roles/);
     expect(result.data.name).toBe("New Role");
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.auditLog?.actionType).toBe("ROLE_CREATE");
+    expect(result.data.id).toEqual(anyId());
+    // The role is inserted for this server under the id the caller gets back,
+    // one position above the highest existing role (max_pos 1 -> 2).
+    db.assertCalledWith("INSERT INTO roles", [
+      result.data.id,
+      SERVER_ID,
+      "New Role",
+      "#00FF00",
+      0,
+      2,
+      anyTimestamp(),
+    ]);
+    db.assertCalledWith("SELECT MAX(position) as max_pos FROM roles", [
+      SERVER_ID,
+    ]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverMembers(SERVER_ID),
+    ]);
+    expect(result.auditLog).toMatchObject({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "ROLE_CREATE",
+      targetId: result.data.id,
+    });
   });
 
   it("throws 403 when actor lacks MANAGE_ROLES", async () => {
@@ -144,10 +166,20 @@ describe("createRole", () => {
   });
 
   it("places role above existing roles (max_pos + 1)", async () => {
-    await createRole(db as any, SERVER_ID, USER_ID, { name: "Role" });
+    const result = await createRole(db as any, SERVER_ID, USER_ID, {
+      name: "Role",
+    });
 
-    // The INSERT should have been called (position logic is internal)
-    db.assertCalled(/INSERT INTO roles/);
+    // max_pos is 1 and the actor's top role is 10, so the new role takes 2.
+    db.assertCalledWith("INSERT INTO roles", [
+      result.data.id,
+      SERVER_ID,
+      "Role",
+      null,
+      0,
+      2,
+      anyTimestamp(),
+    ]);
   });
   it("throws 403 when non-owner tries to create an administrator role", async () => {
     await expect(
@@ -184,8 +216,18 @@ describe("updateRole", () => {
       name: "Updated",
     });
 
-    db.assertCalled(/UPDATE roles SET/);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
+    // name, color, permissions, position, then the role and its server.
+    db.assertCalledWith("UPDATE roles SET", [
+      "Updated",
+      "#FF0000",
+      0,
+      1,
+      ROLE_ID,
+      SERVER_ID,
+    ]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverMembers(SERVER_ID),
+    ]);
   });
 
   it("throws 403 when actor lacks MANAGE_ROLES", async () => {
@@ -225,8 +267,16 @@ describe("updateRole", () => {
       { name: "Hijacked" }, // should be ignored for default roles
     );
 
-    // No audit log entry for name change since it was blocked
-    expect(result).toBeDefined();
+    // The default role keeps its name and the rename is not audited.
+    db.assertCalledWith("UPDATE roles SET", [
+      "@everyone",
+      "#FF0000",
+      0,
+      1,
+      ROLE_ID,
+      SERVER_ID,
+    ]);
+    expect(result.auditLog?.changes).toEqual({});
   });
 
   it("returns audit log when fields changed", async () => {
@@ -237,8 +287,21 @@ describe("updateRole", () => {
       color: "#0000FF",
     });
 
-    expect(result.auditLog).toBeDefined();
-    expect(result.auditLog?.actionType).toBe("ROLE_UPDATE");
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "ROLE_UPDATE",
+      targetId: ROLE_ID,
+      changes: { name: "Changed", color: "#0000FF" },
+    });
+    db.assertCalledWith("UPDATE roles SET", [
+      "Changed",
+      "#0000FF",
+      0,
+      1,
+      ROLE_ID,
+      SERVER_ID,
+    ]);
   });
 
   it("throws 403 when non-owner tries to elevate a role to administrator", async () => {
@@ -275,9 +338,17 @@ describe("deleteRole", () => {
 
     const result = await deleteRole(db as any, SERVER_ID, ROLE_ID, USER_ID);
 
-    db.assertCalled(/DELETE FROM roles/);
-    expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.auditLog?.actionType).toBe("ROLE_DELETE");
+    db.assertCalledWith("DELETE FROM roles", [ROLE_ID, SERVER_ID]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverMembers(SERVER_ID),
+    ]);
+    expect(result.auditLog).toEqual({
+      serverId: SERVER_ID,
+      actorId: USER_ID,
+      actionType: "ROLE_DELETE",
+      targetId: ROLE_ID,
+      changes: { name: "Moderator" },
+    });
   });
 
   it("throws 403 when actor lacks MANAGE_ROLES", async () => {

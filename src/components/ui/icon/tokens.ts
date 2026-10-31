@@ -26,9 +26,3 @@ export const ICON_SIZE = {
 } as const;
 
 export type IconSize = keyof typeof ICON_SIZE;
-
-/** Minimum hit area for an icon-only control at each toolbar step. */
-export const ICON_HIT = {
-  lg: 32,
-  xl: 44,
-} as const;

@@ -87,7 +87,6 @@ interface Env {
   CALLS_APP_SECRET: string;
   TURN_TOKEN_ID: string;
   TURN_TOKEN_SECRET: string;
-  CLERK_SECRET_KEY: string;
   DB: D1Database;
   BUCKET: R2Bucket;
   CACHE: KVNamespace;
@@ -138,7 +137,6 @@ interface VoiceState {
 /** An outbound frame. Inbound frames are decoded by the gateway protocol. */
 interface ServerMsg {
   op: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   d: any;
 }
 
@@ -205,7 +203,7 @@ interface ResumableSessionSnapshot {
   persist_writes?: number;
 }
 
-export interface VoiceChannelMember {
+interface VoiceChannelMember {
   clerk_user_id: string;
   name: string;
   username?: string;
@@ -315,7 +313,7 @@ export class MeetingRoom extends DurableObject<Env> {
   private channelSubscriptions: Map<string, Set<WebSocket>> = new Map();
   /** Server → Set<WebSocket> — tracks which clients are members of which servers (message delivery) */
   private serverSubscriptions: Map<string, Set<WebSocket>> = new Map();
-  /** Voice channel presence: channelId → Map<clerkUserId, member info> */
+  /** Voice channel presence: channelId → Map<userId, member info> */
   private voiceChannelMembers: Map<string, Map<string, VoiceChannelMember>> =
     new Map();
   /** Pending calls: calleeId → PendingCall (only one pending per callee) */
@@ -1397,7 +1395,7 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private getPresencePlatformsForUser(
-    clerkUserId: string,
+    userId: string,
     options?: { excludeWs?: WebSocket },
   ): PresencePlatform[] {
     const orderedPlatforms: PresencePlatform[] = [];
@@ -1405,7 +1403,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     for (const [sessionWs, session] of this.sessions) {
       if (options?.excludeWs && sessionWs === options.excludeWs) continue;
-      if (session.clerk_user_id !== clerkUserId) continue;
+      if (session.clerk_user_id !== userId) continue;
       const platform = normalizePresencePlatform(session.platform);
       if (!platform || seen.has(platform)) continue;
       seen.add(platform);
@@ -1416,12 +1414,12 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private getPresenceStatusForUser(
-    clerkUserId: string,
+    userId: string,
     options?: { excludeWs?: WebSocket },
   ): "online" | "idle" | "dnd" | "offline" {
     for (const [sessionWs, session] of this.sessions) {
       if (options?.excludeWs && sessionWs === options.excludeWs) continue;
-      if (session.clerk_user_id !== clerkUserId) continue;
+      if (session.clerk_user_id !== userId) continue;
       if (session.status) {
         return session.status;
       }
@@ -1430,13 +1428,13 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private buildPresenceSnapshotForUser(
-    clerkUserId: string,
+    userId: string,
     options?: { excludeWs?: WebSocket },
   ) {
     return {
-      user_id: clerkUserId,
-      status: this.getPresenceStatusForUser(clerkUserId, options),
-      platforms: this.getPresencePlatformsForUser(clerkUserId, options),
+      user_id: userId,
+      status: this.getPresenceStatusForUser(userId, options),
+      platforms: this.getPresencePlatformsForUser(userId, options),
     };
   }
 
@@ -1867,10 +1865,10 @@ export class MeetingRoom extends DurableObject<Env> {
     // Build a set of clerk_user_ids that have active sessions OR resumable sessions
     // (pending reconnect within grace period). This prevents premature cleanup
     // of voice members who are just reconnecting their WebSocket.
-    const activeClerkIds = new Set<string>();
+    const activeUserIds = new Set<string>();
     for (const [, session] of this.sessions) {
       if (session.clerk_user_id) {
-        activeClerkIds.add(session.clerk_user_id);
+        activeUserIds.add(session.clerk_user_id);
       }
     }
     // Also include resumable sessions (disconnected but within grace period)
@@ -1878,20 +1876,20 @@ export class MeetingRoom extends DurableObject<Env> {
       if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) continue;
       const resumable = this.resumableSessions.get(sessionId);
       if (resumable?.clerk_user_id) {
-        activeClerkIds.add(resumable.clerk_user_id);
+        activeUserIds.add(resumable.clerk_user_id);
       }
     }
 
     let changed = false;
     const changedChannelIds = new Set<string>();
     for (const [channelId, members] of this.voiceChannelMembers) {
-      for (const [clerkId] of members) {
-        if (!activeClerkIds.has(clerkId)) {
-          members.delete(clerkId);
+      for (const [userId] of members) {
+        if (!activeUserIds.has(userId)) {
+          members.delete(userId);
           changed = true;
           changedChannelIds.add(channelId);
           log.info(
-            `Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`,
+            `Reconcile: removed stale voice member ${userId} from channel ${channelId}`,
           );
         }
       }
@@ -2167,7 +2165,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async generateVoiceToken(
     participantId: string,
-    clerkUserId?: string,
+    userId?: string,
   ): Promise<string> {
     try {
       if (!this.env.CALLS_APP_SECRET) {
@@ -2177,7 +2175,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return await issueVoiceToken({
         participantId,
         roomSlug: this.roomSlug ?? "unknown",
-        subject: clerkUserId,
+        subject: userId,
         secret: this.env.CALLS_APP_SECRET,
       });
     } catch (err) {
@@ -2456,7 +2454,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // Now total latency = max(single call) instead of sum(all calls).
       const [iceServers, profile, userRow, voiceToken] = await Promise.all([
         this.generateTurnCredentials(),
-        admittedUserId ? this.fetchClerkProfile(admittedUserId) : null,
+        admittedUserId ? this.fetchProfile(admittedUserId) : null,
         admittedUserId
           ? this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
               .bind(admittedUserId)
@@ -2478,7 +2476,7 @@ export class MeetingRoom extends DurableObject<Env> {
         },
       });
 
-      // Resolve actual profile from Clerk if possible
+      // Prefer the stored profile (D1) over the identity the client sent
       let resolvedName = d.name;
       let resolvedUsername = d.username ?? d.name;
       let resolvedDisplayName = d.display_name ?? null;
@@ -3103,18 +3101,18 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   /** Persist presence immediately without blocking the WebSocket response. */
-  private async persistPresence(clerkId: string, status: string) {
+  private async persistPresence(userId: string, status: string) {
     try {
       const { results } = await this.env.DB.prepare(
         "SELECT server_id FROM server_members WHERE user_id = ?",
       )
-        .bind(clerkId)
+        .bind(userId)
         .all();
 
       const presenceUpdate = await this.env.DB.prepare(
         "UPDATE users SET status = ?, updated_at = ? WHERE id = ? AND status IS NOT ?",
       )
-        .bind(status, new Date().toISOString(), clerkId, status)
+        .bind(status, new Date().toISOString(), userId, status)
         .run();
 
       if (presenceUpdate.meta.changes === 0) return;
@@ -3144,7 +3142,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const profileRequest = this.profileRequestCoordinator.begin(
       session.clerk_user_id,
     );
-    const verified = await this.fetchClerkProfile(session.clerk_user_id);
+    const verified = await this.fetchProfile(session.clerk_user_id);
     if (!verified || this.getSession(ws) !== session) return;
     if (!this.profileRequestCoordinator.acceptSuccess(profileRequest)) return;
 
@@ -3284,9 +3282,9 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
-  // ── Clerk profile verification ─────────────────────────────────────────
+  // ── Stored profile lookup ──────────────────────────────────────────────
 
-  private async fetchClerkProfile(clerkUserId: string): Promise<{
+  private async fetchProfile(userId: string): Promise<{
     name: string;
     username?: string;
     displayName?: string | null;
@@ -3296,14 +3294,11 @@ export class MeetingRoom extends DurableObject<Env> {
     try {
       return await resolveMeetingProfile({
         db: this.env.DB,
-        cache: this.env.CACHE,
-        clerkSecret: this.env.CLERK_SECRET_KEY,
-        fetch,
         log: meetingLog,
-        userId: clerkUserId,
+        userId,
       });
     } catch (err) {
-      meetingLog.error("Failed to fetch Clerk profile:", err);
+      meetingLog.error("Failed to fetch profile:", err);
       return null;
     }
   }
@@ -5127,7 +5122,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persistPendingCalls();
 
       // Also remove caller from voiceChannelMembers since they are abandoning the entire call attempt
-      const callerWs = this.findWsByClerkUserId(pending.callerId);
+      const callerWs = this.findWsByUserId(pending.callerId);
       if (callerWs) {
         const callerSession = this.getSession(callerWs);
         if (callerSession) {
@@ -5260,9 +5255,9 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   /** Find a WebSocket by clerk_user_id */
-  private findWsByClerkUserId(clerkUserId: string): WebSocket | null {
+  private findWsByUserId(userId: string): WebSocket | null {
     for (const [ws, session] of this.sessions) {
-      if (session.clerk_user_id === clerkUserId) return ws;
+      if (session.clerk_user_id === userId) return ws;
     }
     return null;
   }

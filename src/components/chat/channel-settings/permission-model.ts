@@ -104,7 +104,7 @@ export function triStateOf(
   return "inherit";
 }
 
-export function applyTriState(
+function applyTriState(
   override: PermissionOverride,
   mask: number,
   value: TriState,

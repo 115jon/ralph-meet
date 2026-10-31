@@ -60,7 +60,7 @@ function requireMetadataField(
   return value;
 }
 
-export function toPartyTracksMetadata(track: TrackInfo): TrackMetadata {
+function toPartyTracksMetadata(track: TrackInfo): TrackMetadata {
   return {
     location: "remote",
     trackName: track.sfu_track_name ?? track.track_name,

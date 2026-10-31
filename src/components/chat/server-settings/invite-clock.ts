@@ -30,11 +30,6 @@ function subscribe(listener: () => void) {
   };
 }
 
-/** Number of live subscribers (tests). */
-export function inviteClockSubscribers() {
-  return listeners.size;
-}
-
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /**

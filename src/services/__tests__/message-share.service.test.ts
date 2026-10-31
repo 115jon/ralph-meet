@@ -122,7 +122,24 @@ describe("message share service", () => {
       avatar_url: "/api/avatars/alice.png",
       avatar_display: '{"zoom":1.1,"offsetX":0.2}',
     });
-    db.assertCalled(/INSERT INTO message_shares/);
+    db.assertCalledWith("INSERT INTO message_shares", [
+      "share_1",
+      "tok_public",
+      "msg_1",
+      "channel_1",
+      "server_1",
+      "user_reader",
+      "A shareable server message",
+      JSON.stringify(share.snapshot.author),
+      JSON.stringify(share.snapshot.attachments),
+      JSON.stringify(share.snapshot.embeds),
+      JSON.stringify(share.snapshot.reactions),
+      1,
+      3,
+      0,
+      "2026-05-23T12:00:00.000Z",
+      "2026-06-22T12:00:00.000Z",
+    ]);
   });
 
   it("keeps external provider GIF URLs in public snapshots", async () => {

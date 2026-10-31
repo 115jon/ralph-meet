@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VoiceOpcode } from "@/lib/types";
+import { GatewayOp } from "@/lib/gateway-protocol";
 
 const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
@@ -90,7 +90,7 @@ describe("RoomGateway", () => {
 
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
@@ -168,7 +168,7 @@ describe("RoomGateway", () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
@@ -177,11 +177,11 @@ describe("RoomGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.readyState = TestWebSocket.OPEN;
     socket.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     socket.message({
-      op: VoiceOpcode.Ready,
+      op: GatewayOp.Ready,
       d: {
         participant_id: "session-1",
         ice_servers: [],
@@ -190,23 +190,23 @@ describe("RoomGateway", () => {
       },
     });
     socket.message({
-      op: VoiceOpcode.Error,
+      op: GatewayOp.Error,
       d: { code: 4006, message: "Continuity lost" },
     });
 
     const identifyMessages = sentMessages(socket).filter(
-      (message) => message.op === VoiceOpcode.Identify,
+      (message) => message.op === GatewayOp.Identify,
     );
     expect(identifyMessages).toEqual([
       {
-        op: VoiceOpcode.Identify,
+        op: GatewayOp.Identify,
         d: expect.objectContaining({
           clerk_user_id: "user-1",
           supports_voice_state_deltas: true,
         }),
       },
       {
-        op: VoiceOpcode.Identify,
+        op: GatewayOp.Identify,
         d: expect.objectContaining({
           clerk_user_id: "user-1",
           supports_voice_state_deltas: true,
@@ -221,7 +221,7 @@ describe("RoomGateway", () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       standby: true,
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
@@ -231,15 +231,15 @@ describe("RoomGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.readyState = TestWebSocket.OPEN;
     socket.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     socket.message({
-      op: VoiceOpcode.Error,
+      op: GatewayOp.Error,
       d: { code: 4006, message: "Continuity lost" },
     });
     socket.message({
-      op: VoiceOpcode.Ready,
+      op: GatewayOp.Ready,
       d: {
         participant_id: "session-1",
         ice_servers: [],
@@ -249,12 +249,12 @@ describe("RoomGateway", () => {
     });
     gateway.promoteStandby();
     socket.message({
-      op: VoiceOpcode.Error,
+      op: GatewayOp.Error,
       d: { code: 4006, message: "Continuity lost" },
     });
 
     const identifyMessages = sentMessages(socket).filter(
-      (message) => message.op === VoiceOpcode.Identify,
+      (message) => message.op === GatewayOp.Identify,
     );
     expect(identifyMessages.map((message) => message.d)).toEqual([
       expect.objectContaining({ clerk_user_id: "user-1", standby: true }),
@@ -262,7 +262,7 @@ describe("RoomGateway", () => {
       expect.not.objectContaining({ standby: true }),
     ]);
     expect(sentMessages(socket)).toContainEqual({
-      op: VoiceOpcode.VoiceStateUpdate,
+      op: GatewayOp.VoiceStateUpdate,
       d: { promote_standby: true },
     });
 
@@ -273,7 +273,7 @@ describe("RoomGateway", () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
@@ -282,11 +282,11 @@ describe("RoomGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.readyState = TestWebSocket.OPEN;
     socket.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     socket.message({
-      op: VoiceOpcode.Ready,
+      op: GatewayOp.Ready,
       d: {
         participant_id: "session-1",
         ice_servers: [],
@@ -298,7 +298,7 @@ describe("RoomGateway", () => {
     gateway.refreshProfile();
 
     expect(sentMessages(socket)).toContainEqual({
-      op: VoiceOpcode.ProfileRefresh,
+      op: GatewayOp.ProfileRefresh,
       d: {},
     });
     gateway.disconnect();
@@ -310,7 +310,7 @@ describe("RoomGateway", () => {
     gateway.on("media-ready", onMediaReady);
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
@@ -319,7 +319,7 @@ describe("RoomGateway", () => {
     const socket = TestWebSocket.instances[0]!;
     socket.readyState = TestWebSocket.OPEN;
     socket.message({
-      op: VoiceOpcode.MediaReady,
+      op: GatewayOp.MediaReady,
       d: {
         participant_id: "participant-1",
         ice_servers: [{ urls: ["stun:example.test"] }],
@@ -339,7 +339,7 @@ describe("RoomGateway", () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
@@ -348,11 +348,11 @@ describe("RoomGateway", () => {
     const first = TestWebSocket.instances[0]!;
     first.readyState = TestWebSocket.OPEN;
     first.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     first.message({
-      op: VoiceOpcode.Ready,
+      op: GatewayOp.Ready,
       d: {
         participant_id: "session-1",
         ice_servers: [],
@@ -361,7 +361,7 @@ describe("RoomGateway", () => {
       },
     });
     first.message({
-      op: VoiceOpcode.ProfileUpdate,
+      op: GatewayOp.ProfileUpdate,
       d: {
         seq: 12,
         participant_id: "remote",
@@ -369,7 +369,7 @@ describe("RoomGateway", () => {
       },
     });
     first.message({
-      op: VoiceOpcode.HeartbeatACK,
+      op: GatewayOp.HeartbeatACK,
       d: { seq: 99 },
     });
 
@@ -379,12 +379,12 @@ describe("RoomGateway", () => {
     const second = TestWebSocket.instances[1]!;
     second.readyState = TestWebSocket.OPEN;
     second.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
 
     expect(sentMessages(second)).toContainEqual({
-      op: VoiceOpcode.Resume,
+      op: GatewayOp.Resume,
       d: { session_id: "session-1", seq_ack: 12 },
     });
 
@@ -406,7 +406,7 @@ describe("RoomGateway frame decoding", () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
@@ -432,18 +432,18 @@ describe("RoomGateway frame decoding", () => {
       raw("[]");
       raw('{"op":"2"}');
       raw(new ArrayBuffer(4));
-      socket.message({ op: VoiceOpcode.Hello, d: { heartbeat_interval: "x" } });
-      socket.message({ op: VoiceOpcode.Ready, d: { participant_id: 7 } });
-      socket.message({ op: VoiceOpcode.Ready, d: null });
+      socket.message({ op: GatewayOp.Hello, d: { heartbeat_interval: "x" } });
+      socket.message({ op: GatewayOp.Ready, d: { participant_id: 7 } });
+      socket.message({ op: GatewayOp.Ready, d: null });
       socket.message({
-        op: VoiceOpcode.VoiceStateUpdate,
+        op: GatewayOp.VoiceStateUpdate,
         d: { participant: {}, action: "join" },
       });
       socket.message({
-        op: VoiceOpcode.VoiceStateUpdate,
+        op: GatewayOp.VoiceStateUpdate,
         d: { participant: { id: "p" }, action: "teleport" },
       });
-      socket.message({ op: VoiceOpcode.Error, d: { code: "4006" } });
+      socket.message({ op: GatewayOp.Error, d: { code: "4006" } });
       socket.message({ op: 4242, d: { anything: true } });
     }).not.toThrow();
 
@@ -453,11 +453,11 @@ describe("RoomGateway frame decoding", () => {
     expect(errors).not.toHaveBeenCalled();
 
     socket.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     socket.message({
-      op: VoiceOpcode.Ready,
+      op: GatewayOp.Ready,
       d: {
         participant_id: "session-1",
         ice_servers: [],
@@ -467,7 +467,7 @@ describe("RoomGateway frame decoding", () => {
       },
     });
     expect(sentMessages(socket).map((message) => message.op)).toEqual([
-      VoiceOpcode.Identify,
+      GatewayOp.Identify,
     ]);
     expect(ready).toHaveBeenCalledOnce();
     gateway.disconnect();
@@ -476,11 +476,11 @@ describe("RoomGateway frame decoding", () => {
   it("tracks the replay cursor from frames it does not otherwise handle", async () => {
     const { gateway, socket } = await connectedGateway();
     socket.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     socket.message({
-      op: VoiceOpcode.Ready,
+      op: GatewayOp.Ready,
       d: {
         participant_id: "session-1",
         ice_servers: [],
@@ -488,9 +488,9 @@ describe("RoomGateway frame decoding", () => {
         participants: [],
       },
     });
-    socket.message({ op: VoiceOpcode.Dispatch, d: { seq: 4, event: "X" } });
+    socket.message({ op: GatewayOp.Dispatch, d: { seq: 4, event: "X" } });
     socket.message({ op: 4242, d: { seq: 9 } });
-    socket.message({ op: VoiceOpcode.HeartbeatACK, d: { seq: 99 } });
+    socket.message({ op: GatewayOp.HeartbeatACK, d: { seq: 99 } });
     socket.onclose?.({ code: 1006, reason: "" } as CloseEvent);
 
     await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(2), {
@@ -499,12 +499,12 @@ describe("RoomGateway frame decoding", () => {
     const second = TestWebSocket.instances[1]!;
     second.readyState = TestWebSocket.OPEN;
     second.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     expect(sentMessages(second)).toEqual([
       {
-        op: VoiceOpcode.Resume,
+        op: GatewayOp.Resume,
         d: { session_id: "session-1", seq_ack: 9 },
       },
     ]);
@@ -531,7 +531,7 @@ describe("RoomGateway lifecycle", () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({
       name: "Test User",
-      clerkUserId: "user-1",
+      userId: "user-1",
       roomSlug: "voice-server-channel",
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
@@ -546,11 +546,11 @@ describe("RoomGateway lifecycle", () => {
     const disconnected = vi.fn();
     gateway.on("disconnected", disconnected);
     socket.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     socket.message({
-      op: VoiceOpcode.Ready,
+      op: GatewayOp.Ready,
       d: {
         participant_id: "session-1",
         ice_servers: [],
@@ -570,11 +570,11 @@ describe("RoomGateway lifecycle", () => {
     const second = TestWebSocket.instances[1]!;
     second.readyState = TestWebSocket.OPEN;
     second.message({
-      op: VoiceOpcode.Hello,
+      op: GatewayOp.Hello,
       d: { heartbeat_interval: 45_000 },
     });
     expect(sentMessages(second)).toEqual([
-      { op: VoiceOpcode.Resume, d: { session_id: "session-1", seq_ack: 0 } },
+      { op: GatewayOp.Resume, d: { session_id: "session-1", seq_ack: 0 } },
     ]);
     gateway.disconnect();
   });
@@ -582,7 +582,7 @@ describe("RoomGateway lifecycle", () => {
   it("keeps an answering socket on wake", async () => {
     const { gateway, socket } = await connectedGateway();
     gateway.wake();
-    socket.message({ op: VoiceOpcode.HeartbeatACK, d: { seq: 1 } });
+    socket.message({ op: GatewayOp.HeartbeatACK, d: { seq: 1 } });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(TestWebSocket.instances).toHaveLength(1);
     expect(socket.readyState).toBe(TestWebSocket.OPEN);

@@ -2,10 +2,10 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauri } from "@/lib/platform";
 
-export const DESKTOP_THUMBNAIL_TOOLBAR_ACTION_EVENT =
+const DESKTOP_THUMBNAIL_TOOLBAR_ACTION_EVENT =
   "desktop-thumbnail-toolbar-action";
 
-export type DesktopThumbnailToolbarAction =
+type DesktopThumbnailToolbarAction =
   | "toggle-camera"
   | "toggle-mic"
   | "toggle-deafen"

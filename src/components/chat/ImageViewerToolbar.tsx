@@ -45,7 +45,7 @@ import { PreviewAvatar } from "./MessagePreviewCard";
 import { useMessageTimeFormat } from "./message-time";
 
 /** `182 KB`, `1.4 MB`: one decimal from MB up. */
-export const formatBytes = (bytes: number) => {
+const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.min(

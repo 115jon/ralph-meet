@@ -1,4 +1,5 @@
-import { VoiceOpcode, type TrackInfo, type VoiceState } from "@/lib/types";
+import { type TrackInfo, type VoiceState } from "@/lib/types";
+import { GatewayOp } from "@/lib/gateway-protocol";
 import type {
   PartyTracksClientTransport,
   SFUClientOptions,
@@ -17,8 +18,8 @@ import {
 setupWebRTCMocks();
 
 const FORBIDDEN_BROWSER_NATIVE_SIGNALING_OPCODES = new Set<number>([
-  VoiceOpcode.SelectProtocol,
-  VoiceOpcode.TracksReady,
+  GatewayOp.SelectProtocol,
+  GatewayOp.TracksReady,
 ]);
 
 const FIRST_ICE_SERVERS = [{ urls: ["stun:first.example.test"] }];
@@ -67,7 +68,7 @@ function announcedSfuTracks(send: {
 }): string[] {
   return send.mock.calls
     .map(([message]) => message)
-    .filter((message) => message.op === VoiceOpcode.Video)
+    .filter((message) => message.op === GatewayOp.Video)
     .flatMap(
       (message) =>
         (message.d as { tracks?: TrackInfo[] } | undefined)?.tracks ?? [],
@@ -478,7 +479,7 @@ describe("SFUClient PartyTracks facade", () => {
     });
 
     expect(
-      send.mock.calls.filter(([message]) => message.op === VoiceOpcode.Video),
+      send.mock.calls.filter(([message]) => message.op === GatewayOp.Video),
     ).toHaveLength(1);
     client.disconnect("component-unmount");
   });
@@ -754,7 +755,7 @@ describe("SFUClient PartyTracks facade", () => {
     const send = vi
       .spyOn(client.voiceGW, "send")
       .mockImplementation((message) => {
-        if (message.op === VoiceOpcode.Video) {
+        if (message.op === GatewayOp.Video) {
           transport.operationOrder.push("announce:local");
         }
         return true;
@@ -795,7 +796,7 @@ describe("SFUClient PartyTracks facade", () => {
     ]);
     expect(send).toHaveBeenCalledOnce();
     expect(send).toHaveBeenCalledWith({
-      op: VoiceOpcode.Video,
+      op: GatewayOp.Video,
       d: { tracks: [localMetadata] },
     });
     expect(transport.push).toHaveBeenCalledOnce();
@@ -819,12 +820,12 @@ describe("SFUClient PartyTracks facade", () => {
 
     expect(
       roomSend.mock.calls.filter(
-        ([message]) => message.op === VoiceOpcode.ClientDisconnect,
+        ([message]) => message.op === GatewayOp.ClientDisconnect,
       ),
     ).toHaveLength(1);
     expect(
       voiceSend.mock.calls.filter(
-        ([message]) => message.op === VoiceOpcode.ClientDisconnect,
+        ([message]) => message.op === GatewayOp.ClientDisconnect,
       ),
     ).toHaveLength(1);
     expect(roomDisconnect).toHaveBeenCalledOnce();
@@ -883,7 +884,7 @@ describe("SFUClient PartyTracks facade", () => {
     expect(client.getPublishedTrack(trackName)).toBeNull();
     expect(
       send.mock.calls.filter(
-        ([message]) => message.op === VoiceOpcode.StopTracks,
+        ([message]) => message.op === GatewayOp.StopTracks,
       ),
     ).toHaveLength(1);
     client.disconnect("component-unmount");

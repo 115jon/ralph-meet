@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sanitizeChannelName as fromChannelName } from "@/lib/channel-name";
-import { sanitizeChannelName } from "@/lib/validations";
+import { sanitizeChannelName } from "@/lib/channel-name";
 
 describe("sanitizeChannelName", () => {
   it("preserves decorative unicode in text channel names", () => {
@@ -13,9 +12,5 @@ describe("sanitizeChannelName", () => {
     expect(sanitizeChannelName("My Cool Channel!!!", "text", true)).toBe(
       "my-cool-channel!!!",
     );
-  });
-
-  it("is the same function the schema-free channel-name module exports", () => {
-    expect(sanitizeChannelName).toBe(fromChannelName);
   });
 });

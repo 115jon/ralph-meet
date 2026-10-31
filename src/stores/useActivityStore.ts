@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export const ACTIVITY_TYPES = ["wordle", "warp-rush"] as const;
+const ACTIVITY_TYPES = ["wordle", "warp-rush"] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
@@ -10,7 +10,7 @@ export function isActivityType(value: unknown): value is ActivityType {
   );
 }
 
-export interface ActivityPresence {
+interface ActivityPresence {
   userId: string;
   channelId: string;
   activity: ActivityType;

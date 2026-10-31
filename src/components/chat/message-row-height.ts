@@ -16,7 +16,7 @@ const VIDEO_PX = 220;
 const EMBED_PX = 200;
 const SINGLE_IMAGE_PX = 240;
 const MULTI_IMAGE_HEIGHTS = [0, 240, 300, 350, 400, 420] as const;
-export const DEFAULT_MESSAGE_ITEM_SIZE = 62;
+const DEFAULT_MESSAGE_ITEM_SIZE = 62;
 
 export function estimateMessageRowHeight(
   message: Message,

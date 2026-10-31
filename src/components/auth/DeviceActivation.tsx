@@ -175,7 +175,7 @@ export function outcomeForError(error: DeviceApprovalError): Outcome | null {
   }
 }
 
-export function deviceName(request: DeviceRequest): string | undefined {
+function deviceName(request: DeviceRequest): string | undefined {
   return (
     request.device.label?.trim() ||
     prettyPlatform(request.device.platform) ||

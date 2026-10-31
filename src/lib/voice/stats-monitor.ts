@@ -97,8 +97,8 @@ export class ConnectionStatsMonitor {
     }
   > = new Map();
 
-  // -- UUID → Clerk ID mapping for getStatsByClerkId --
-  private uuidToClerk = new Map<string, string>();
+  // -- UUID → user ID mapping for getStatsByUserId --
+  private uuidToUserId = new Map<string, string>();
 
   private readonly accessor: StatsAccessor;
 
@@ -106,19 +106,19 @@ export class ConnectionStatsMonitor {
     this.accessor = accessor;
   }
 
-  /** Set a mapping from participant UUID to Clerk user ID */
-  setClerkMapping(uuid: string, clerkId: string): void {
-    this.uuidToClerk.set(uuid, clerkId);
+  /** Set a mapping from participant UUID to user ID */
+  setUserMapping(uuid: string, userId: string): void {
+    this.uuidToUserId.set(uuid, userId);
   }
 
-  /** Remove a participant's Clerk mapping */
-  deleteClerkMapping(uuid: string): void {
-    this.uuidToClerk.delete(uuid);
+  /** Remove a participant's user mapping */
+  deleteUserMapping(uuid: string): void {
+    this.uuidToUserId.delete(uuid);
   }
 
   /**
    * Called after every track-stats ingest. Readers then call
-   * getStatsByClerkId(); returns an unsubscribe function.
+   * getStatsByUserId(); returns an unsubscribe function.
    */
   subscribeTrackStats(cb: () => void): () => void {
     this.trackStatsListeners.add(cb);
@@ -141,10 +141,10 @@ export class ConnectionStatsMonitor {
     return this.remoteTrackStats.get(trackName);
   }
 
-  getStatsByClerkId(clerkId: string, trackPrefix: "cam" | "screen") {
+  getStatsByUserId(userId: string, trackPrefix: "cam" | "screen") {
     let uuid: string | null = null;
-    for (const [u, c] of Array.from(this.uuidToClerk.entries())) {
-      if (c === clerkId) {
+    for (const [u, c] of Array.from(this.uuidToUserId.entries())) {
+      if (c === userId) {
         uuid = u;
         break;
       }
@@ -954,6 +954,6 @@ export class ConnectionStatsMonitor {
     this.stopConnectionStatsMonitoring();
     this.connStatsListeners.clear();
     this.trackStatsListeners.clear();
-    this.uuidToClerk.clear();
+    this.uuidToUserId.clear();
   }
 }

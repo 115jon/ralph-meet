@@ -22,7 +22,6 @@ import * as React from "react";
 
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -31,7 +30,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
@@ -186,19 +184,11 @@ function ResponsiveDialogDescription(
   );
 }
 
-function ResponsiveDialogClose(
-  props: React.ComponentProps<typeof DialogClose>,
-) {
-  const drawer = useDrawerMode();
-  return drawer ? <DrawerClose {...props} /> : <DialogClose {...props} />;
-}
-
 Object.assign(ResponsiveDialogTitle, { rmSlot: "title" });
 Object.assign(ResponsiveDialogDescription, { rmSlot: "description" });
 
 export {
   ResponsiveDialog,
-  ResponsiveDialogClose,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
   ResponsiveDialogFooter,

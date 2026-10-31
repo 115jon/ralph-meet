@@ -1,10 +1,10 @@
 import { clog } from "@/lib/console-logger";
 import {
-  VoiceOpcode,
   type IceServer,
   type NegotiationDonePayload,
   type SessionDescriptionPayload,
 } from "@/lib/types";
+import { GatewayOp } from "@/lib/gateway-protocol";
 import type { VoiceGateway } from "@/lib/voice/gateways/voice-gateway";
 
 const nativeScreenLog = clog("NativeScreenShare");
@@ -183,7 +183,7 @@ export class NativeScreenShareTransport {
       };
       this.pendingNegotiation = pending;
       this.config.gateway.send({
-        op: VoiceOpcode.SelectProtocol,
+        op: GatewayOp.SelectProtocol,
         d: {
           sdp: offer.sdp,
           push_tracks: pushTracks,
@@ -206,7 +206,7 @@ export class NativeScreenShareTransport {
       this.assertCurrent(generation);
 
       this.config.gateway.send({
-        op: VoiceOpcode.TracksReady,
+        op: GatewayOp.TracksReady,
         d: { track_names: [...this.trackNames] },
       });
       this.pendingNegotiation = null;
@@ -474,7 +474,7 @@ export class NativeScreenShareTransport {
     }
     if (wereTracksOffered && ownedTrackNames.length > 0) {
       this.config.gateway.send({
-        op: VoiceOpcode.StopTracks,
+        op: GatewayOp.StopTracks,
         d: { track_names: ownedTrackNames },
       });
     }

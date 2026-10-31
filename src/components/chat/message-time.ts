@@ -154,7 +154,7 @@ const getServerToday = () => null;
  * Start of the local day, as ms. `null` during SSR and hydration. Updates for
  * every subscriber at local midnight. Waking from sleep re-checks on focus.
  */
-export function useTodayStart(): number | null {
+function useTodayStart(): number | null {
   return useSyncExternalStore(subscribeToday, getTodaySnapshot, getServerToday);
 }
 
@@ -185,7 +185,7 @@ function useClientReady(): boolean {
 // ── Pure formatters (client = browser locale) ──────────────────────────────
 
 /** `8:12 PM` */
-export function formatTime(value: TimeValue, client = true): string {
+function formatTime(value: TimeValue, client = true): string {
   return fmt(value, TIME_OPTIONS, client);
 }
 
@@ -209,7 +209,7 @@ export function formatClock(value: TimeValue, client = true): string {
 }
 
 /** `Thursday, October 22, 2026 at 8:12 PM` (tooltip / title text). */
-export function formatFull(value: TimeValue, client = true): string {
+function formatFull(value: TimeValue, client = true): string {
   return fmt(value, FULL_OPTIONS, client);
 }
 
@@ -259,25 +259,6 @@ export function formatShortDate(
     }
   }
   return fmt(date, SHORT_DAY_YEAR_OPTIONS, client);
-}
-
-/** `now`, `5m`, `3h`, `2d`, then the short date. */
-export function formatRelative(
-  value: TimeValue,
-  now: number,
-  today: number | null,
-  client = true,
-): string {
-  const date = toDate(value);
-  if (!date) return "Unknown time";
-  const diff = Math.max(0, now - date.getTime());
-  const minute = 60_000;
-  if (diff < minute) return "now";
-  if (diff < 60 * minute) return `${Math.floor(diff / minute)}m`;
-  if (diff < 24 * 60 * minute) return `${Math.floor(diff / (60 * minute))}h`;
-  if (diff < 7 * 24 * 60 * minute)
-    return `${Math.floor(diff / (24 * 60 * minute))}d`;
-  return formatShortDate(date, today, client);
 }
 
 export interface MessageTimeFormat {
