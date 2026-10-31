@@ -1,10 +1,14 @@
 import { Tabs } from "expo-router/js-tabs";
 
+import { useUnreadActivityCount } from "@/features/activity/store";
 import { AppBar } from "@/features/app-bar/AppBar";
+import { useUnreadDmCount } from "@/features/dms/store";
 import { useTheme } from "@/theme";
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const unreadDms = useUnreadDmCount();
+  const unreadActivity = useUnreadActivityCount();
   return (
     <Tabs
       tabBar={(props) => <AppBar {...props} />}
@@ -14,8 +18,17 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="servers" options={{ title: "Servers" }} />
-      <Tabs.Screen name="dms" options={{ title: "DMs", tabBarBadge: 3 }} />
-      <Tabs.Screen name="activity" options={{ title: "Activity" }} />
+      <Tabs.Screen
+        name="dms"
+        options={{ title: "DMs", tabBarBadge: unreadDms || undefined }}
+      />
+      <Tabs.Screen
+        name="activity"
+        options={{
+          title: "Activity",
+          tabBarBadge: unreadActivity || undefined,
+        }}
+      />
       <Tabs.Screen name="you" options={{ title: "You" }} />
     </Tabs>
   );

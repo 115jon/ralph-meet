@@ -1,35 +1,33 @@
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback } from "react";
-import { View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect } from "react";
 
-import { closeChannel, openChannel } from "@/features/chat/actions";
-import { ChannelHeader } from "@/features/chat/ChannelHeader";
-import { ComposerStub } from "@/features/chat/ComposerStub";
-import { MessageList } from "@/features/chat/MessageList";
+import { loadMembers } from "@/features/chat/actions";
+import { ChatView } from "@/features/chat/ChatView";
+import { useMembers } from "@/features/chat/store";
 import { useChannel, useChannelServer } from "@/features/servers/store";
-import { useTheme } from "@/theme";
 
-/** A text channel, pushed over the tabs: header, history, composer. */
+/** A server text channel, pushed over the tabs. */
 export default function ChannelScreen() {
-  const theme = useTheme();
   const params = useLocalSearchParams<{ id: string; name?: string }>();
   const id = params.id;
   const channel = useChannel(id);
   const server = useChannelServer(id);
+  const serverId = server?.id ?? null;
+  const members = useMembers(serverId);
   const name = channel?.name ?? params.name ?? "channel";
 
-  useFocusEffect(
-    useCallback(() => {
-      openChannel(id);
-      return () => closeChannel(id);
-    }, [id]),
-  );
+  useEffect(() => {
+    if (serverId) void loadMembers(serverId);
+  }, [serverId]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.ply0 }}>
-      <ChannelHeader name={name} serverName={server?.name ?? null} />
-      <MessageList channelId={id} name={name} />
-      <ComposerStub name={name} />
-    </View>
+    <ChatView
+      channelId={id}
+      title={`#${name}`}
+      subtitle={server?.name ?? "Channel"}
+      placeholder={`Message #${name}`}
+      intro={`This is the start of #${name}.`}
+      people={members}
+    />
   );
 }

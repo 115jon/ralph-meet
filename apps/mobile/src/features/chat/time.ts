@@ -42,3 +42,19 @@ export function formatDay(date: Date, now = new Date()): string {
     ? weekday.format(date)
     : fullDate.format(date);
 }
+
+const shortWeekday = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+const shortDate = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+});
+
+/** A list row's stamp: the time today, a weekday this week, else the date. */
+export function formatListTime(date: Date, now = new Date()): string {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.round((today.getTime() - day.getTime()) / 86_400_000);
+  if (days === 0) return time.format(date);
+  if (days < 7) return shortWeekday.format(date);
+  return shortDate.format(date);
+}

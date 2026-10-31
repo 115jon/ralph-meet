@@ -1,4 +1,4 @@
-import type { Message } from "./schema";
+import type { ChatMessage } from "./store";
 import { dayKey, formatDay, parseTimestamp } from "./time";
 
 /** Follow-ups from one author within this window share the first's header. */
@@ -8,7 +8,7 @@ export type ChatRow =
   | {
       readonly kind: "message";
       readonly key: string;
-      readonly message: Message;
+      readonly message: ChatMessage;
       readonly sentAt: Date;
       /** Same author as the message above it, so no avatar or name. */
       readonly grouped: boolean;
@@ -19,7 +19,7 @@ export type ChatRow =
  * Rows for an inverted list from messages newest first: each message, and a
  * day divider after the oldest message of each day (so it draws above it).
  */
-export function buildRows(messages: readonly Message[]): ChatRow[] {
+export function buildRows(messages: readonly ChatMessage[]): ChatRow[] {
   const rows: ChatRow[] = [];
   const dates = messages.map((message) => parseTimestamp(message.created_at));
   for (let i = 0; i < messages.length; i++) {
@@ -30,6 +30,7 @@ export function buildRows(messages: readonly Message[]): ChatRow[] {
     const olderAt = dates[i + 1];
     const sameDay = olderAt !== undefined && dayKey(olderAt) === dayKey(sentAt);
     const grouped =
+      !message.reply_to_id &&
       older !== undefined &&
       olderAt !== undefined &&
       sameDay &&

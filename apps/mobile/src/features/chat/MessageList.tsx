@@ -1,28 +1,36 @@
-import { useCallback, useMemo } from "react";
-import { FlatList, View, type ListRenderItem } from "react-native";
+import { useCallback, useEffect, useMemo } from "react";
+import {
+  FlatList,
+  View,
+  type ListRenderItem,
+  type ListViewToken,
+} from "react-native";
 
 import { EmptyState, Skeleton, Text } from "@/ui";
 
 import { loadLatest, loadOlder } from "./actions";
 import { DayDivider, MessageRow } from "./MessageRow";
 import { buildRows, type ChatRow } from "./rows";
-import { useChannelMessages } from "./store";
-
-const renderRow: ListRenderItem<ChatRow> = ({ item }) =>
-  item.kind === "day" ? (
-    <DayDivider label={item.label} />
-  ) : (
-    <MessageRow
-      message={item.message}
-      sentAt={item.sentAt}
-      grouped={item.grouped}
-    />
-  );
+import { useChannelMessages, type ChatMessage } from "./store";
+import { setVisibleMessages } from "./visibility";
 
 const keyOf = (row: ChatRow) => row.key;
 
-/** The top of the history: where the channel begins. */
-function ChannelStart({ name }: { name: string }) {
+const VIEWABILITY = { itemVisiblePercentThreshold: 10 };
+
+/** Message rows are keyed by message id; day dividers by "day-…". */
+function onViewableItemsChanged({
+  viewableItems,
+}: {
+  viewableItems: ListViewToken[];
+}): void {
+  setVisibleMessages(
+    viewableItems.flatMap(({ key }) => (key.startsWith("day-") ? [] : [key])),
+  );
+}
+
+/** The top of the history: where the conversation begins. */
+function ChannelStart({ title, intro }: { title: string; intro: string }) {
   return (
     <View
       style={{
@@ -32,9 +40,9 @@ function ChannelStart({ name }: { name: string }) {
         gap: 4,
       }}
     >
-      <Text variant="title">#{name}</Text>
+      <Text variant="title">{title}</Text>
       <Text variant="body" tone="ink2">
-        This is the start of #{name}.
+        {intro}
       </Text>
     </View>
   );
@@ -65,15 +73,38 @@ function MessagesSkeleton() {
   );
 }
 
+interface MessageListProps {
+  channelId: string;
+  /** "#general" or a person's name, for the top of the history. */
+  title: string;
+  intro: string;
+  onLongPress: (message: ChatMessage) => void;
+}
+
 /** Newest at the bottom; scrolling up pages in older messages. */
 export function MessageList({
   channelId,
-  name,
-}: {
-  channelId: string;
-  name: string;
-}) {
+  title,
+  intro,
+  onLongPress,
+}: MessageListProps) {
   const state = useChannelMessages(channelId);
+  const renderRow: ListRenderItem<ChatRow> = useCallback(
+    ({ item }) =>
+      item.kind === "day" ? (
+        <DayDivider label={item.label} />
+      ) : (
+        <MessageRow
+          message={item.message}
+          sentAt={item.sentAt}
+          grouped={item.grouped}
+          onLongPress={onLongPress}
+        />
+      ),
+    [onLongPress],
+  );
+  // Nothing plays once the list is gone.
+  useEffect(() => () => setVisibleMessages([]), []);
   const messages = state?.messages;
   const rows = useMemo(() => (messages ? buildRows(messages) : []), [messages]);
   const onEndReached = useCallback(
@@ -87,7 +118,7 @@ export function MessageList({
       <View style={{ flex: 1, justifyContent: "flex-end" }}>
         <EmptyState
           title="Messages did not load"
-          description={`Could not fetch the history of #${name}.`}
+          description={`Could not fetch the history of ${title}.`}
           action={{
             label: "Try again",
             onPress: () => void loadLatest(channelId),
@@ -99,7 +130,7 @@ export function MessageList({
   if (rows.length === 0) {
     return (
       <View style={{ flex: 1, justifyContent: "flex-end" }}>
-        <ChannelStart name={name} />
+        <ChannelStart title={title} intro={intro} />
       </View>
     );
   }
@@ -115,6 +146,10 @@ export function MessageList({
       initialNumToRender={20}
       windowSize={11}
       contentContainerStyle={{ paddingTop: 8 }}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      viewabilityConfig={VIEWABILITY}
+      onViewableItemsChanged={onViewableItemsChanged}
       ListFooterComponent={
         state.hasMore ? (
           <View style={{ paddingVertical: 16, alignItems: "center" }}>
@@ -123,7 +158,7 @@ export function MessageList({
             </Text>
           </View>
         ) : (
-          <ChannelStart name={name} />
+          <ChannelStart title={title} intro={intro} />
         )
       }
     />

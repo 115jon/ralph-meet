@@ -62,6 +62,22 @@ export function mediaUrl(path: string | null | undefined): string | null {
   return path.startsWith("/") ? `${config.apiBaseUrl}${path}` : path;
 }
 
+/**
+ * An image source for `url`: the API's own media (attachments sit behind
+ * auth) gets the session's Bearer token, anything else goes bare.
+ */
+export interface MediaSource {
+  readonly uri: string;
+  readonly headers?: Readonly<Record<string, string>>;
+}
+
+export function mediaSource(url: string): MediaSource {
+  const uri = mediaUrl(url) ?? url;
+  const { token } = useSession.getState();
+  if (!token || !uri.startsWith(`${config.apiBaseUrl}/`)) return { uri };
+  return { uri, headers: { Authorization: `Bearer ${token}` } };
+}
+
 // Only what the app shows; the server sends more and we ignore it.
 const MeSchema = Schema.Struct({
   id: Schema.String,
