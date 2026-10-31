@@ -115,6 +115,16 @@ export enum GatewayOp {
   TracksReady = 102,
   /** C<->S: Lightweight voice-session app events (activities, soundboard) */
   VoiceAppEvent = 106,
+  /**
+   * C→S voice: a listener's pulls of another participant's track keep
+   * getting not_found_track_error from the SFU.
+   */
+  TrackUnavailable = 109,
+  /**
+   * S→C voice: push this publication again under a new SFU track name
+   * (listeners cannot pull the current one). Old clients ignore it.
+   */
+  RepublishRequest = 110,
 }
 
 /**

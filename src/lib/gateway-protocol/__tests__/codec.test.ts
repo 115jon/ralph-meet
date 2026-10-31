@@ -260,6 +260,15 @@ const VALID_VOICE_CLIENT_PAYLOADS = {
   [GatewayOp.TracksReady]: [{ track_names: ["screen-video-p"] }],
   [GatewayOp.Speaking]: [{ speaking: 1 }, { speaking: 0, delay: 0, ssrc: 1 }],
   [GatewayOp.VoiceAppEvent]: [{ type: "soundboard.play", sound_id: "x" }],
+  [GatewayOp.TrackUnavailable]: [
+    {
+      participant_id: "p",
+      track_name: "cam-audio-p",
+      sfu_track_name: "opaque",
+      session_id: "s".repeat(1_000),
+    },
+    { participant_id: "p", track_name: "cam-audio-p", session_id: "s" },
+  ],
 } satisfies Record<number, unknown[]>;
 
 describe("client → server rules", () => {
@@ -326,6 +335,15 @@ describe("client → server rules", () => {
     expect(video([{ ...track, sfu_track_name: "opaque" }])).toBe(true);
     expect(video([{ ...track, session_id: "s", track_name: "" }])).toBe(false);
     expect(video([{ ...track, session_id: "s", kind: "data" }])).toBe(false);
+
+    const unavailable = (d: Record<string, unknown>) =>
+      decodeVoiceGatewayClientFrame(frame(GatewayOp.TrackUnavailable, d)).ok;
+    const report = { participant_id: "p", track_name: "t", session_id: "s" };
+    expect(unavailable(report)).toBe(true);
+    expect(unavailable({ ...report, session_id: "" })).toBe(false);
+    expect(unavailable({ ...report, track_name: "t".repeat(201) })).toBe(false);
+    expect(unavailable({ ...report, sfu_track_name: "" })).toBe(false);
+    expect(unavailable({ track_name: "t", session_id: "s" })).toBe(false);
     expect(
       video(Array.from({ length: 33 }, () => ({ ...track, session_id: "s" }))),
     ).toBe(false);
@@ -464,10 +482,36 @@ describe("server → client rules", () => {
       { participant_id: "p", track_names: ["t"], tracks: [] },
     ],
     [GatewayOp.VoiceAppEvent, { type: "listen_together.state", state: {} }],
+    [
+      GatewayOp.RepublishRequest,
+      { track_name: "cam-audio-p", sfu_track_name: "opaque", session_id: "s" },
+    ],
+    [GatewayOp.RepublishRequest, { track_name: "cam-audio-p" }],
   ] as const)("VoiceGateway accepts op %s", (op, d) => {
     expect(decodeVoiceGatewayServerFrame(frame(op, d))).toMatchObject({
       ok: true,
     });
+  });
+
+  it("rejects a malformed RepublishRequest and keeps its opcode stable", () => {
+    expect([GatewayOp.TrackUnavailable, GatewayOp.RepublishRequest]).toEqual([
+      109, 110,
+    ]);
+    for (const d of [
+      {},
+      { track_name: 1 },
+      { track_name: "t", session_id: 2 },
+    ]) {
+      expect(
+        decodeVoiceGatewayServerFrame(frame(GatewayOp.RepublishRequest, d)).ok,
+      ).toBe(false);
+    }
+    // Only the voice gateway knows it; the other sockets ignore it.
+    expect(
+      decodeRoomGatewayServerFrame(
+        frame(GatewayOp.RepublishRequest, { track_name: "t" }),
+      ),
+    ).toEqual({ ok: false, reason: "unknown-op" });
   });
 
   it("ignores opcodes a client does not handle", () => {

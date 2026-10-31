@@ -221,6 +221,16 @@ const StopTracksServerPayload = Schema.Struct({
 
 const VoiceAppEventServerPayload = Schema.Record(Schema.String, Schema.Unknown);
 
+/**
+ * Names the publication to push again. The SFU track and session are the ones
+ * listeners failed to pull; a publisher that has moved on ignores the request.
+ */
+export const RepublishRequestPayload = Schema.Struct({
+  track_name: Schema.String,
+  sfu_track_name: Schema.optional(Schema.String),
+  session_id: Schema.optional(Schema.String),
+});
+
 /** Server opcodes VoiceGateway handles. */
 export const voiceGatewayServerRules = {
   [GatewayOp.Hello]: { schema: HelloPayload, invalid: "Invalid Hello" },
@@ -255,6 +265,10 @@ export const voiceGatewayServerRules = {
     schema: VoiceAppEventServerPayload,
     invalid: "Invalid VoiceAppEvent",
   },
+  [GatewayOp.RepublishRequest]: {
+    schema: RepublishRequestPayload,
+    invalid: "Invalid RepublishRequest",
+  },
 } as const satisfies PayloadRules;
 
 // ── Payload types ──────────────────────────────────────────────────────────
@@ -276,3 +290,4 @@ type SpeakingServerPayload = typeof SpeakingServerPayload.Type;
 export type ClientDisconnectPayload = typeof ClientDisconnectPayload.Type;
 type StopTracksServerPayload = typeof StopTracksServerPayload.Type;
 type VoiceAppEventServerPayload = typeof VoiceAppEventServerPayload.Type;
+export type RepublishRequestPayload = typeof RepublishRequestPayload.Type;

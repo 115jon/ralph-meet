@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { TrackInfo } from "@/lib/types";
-import type { PartyTracksConfig } from "partytracks/client";
+import type { ApiHistoryEntry, PartyTracksConfig } from "partytracks/client";
 import { BehaviorSubject, Observable, Subject, of } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -348,5 +348,46 @@ describe("PartyTracksTransport", () => {
     expect(peerConnection.oniceconnectionstatechange).toBeNull();
     expect(peerConnection.ontrack).toBeNull();
     expect(peerConnection.close).toHaveBeenCalledOnce();
+  });
+
+  it("reads pull errors from the PartyTracks API history", () => {
+    const history = Object.assign(new EventTarget(), {
+      entries: [] as ApiHistoryEntry[],
+    });
+    const log = (entry: ApiHistoryEntry) => {
+      history.entries.push(entry);
+      history.dispatchEvent(new Event("logentry"));
+    };
+    const fake = Object.assign(new FakePartyTracks(), { history });
+    const transport = new PartyTracksTransport(
+      {
+        roomSlug: "room-one",
+        participantId: "participant-one",
+        voiceToken: "voice-token",
+      },
+      { factory: () => fake, resolveApiUrl: (path) => path },
+    );
+    const errors: unknown[] = [];
+    transport.pullErrors$.subscribe((error) => errors.push(error));
+
+    const endpoint =
+      "/api/channels/room-one/partytracks/sessions/S/tracks/new?";
+    log({
+      type: "request",
+      method: "POST",
+      endpoint,
+      body: {
+        tracks: [{ location: "remote", trackName: "t", sessionId: "J" }],
+      },
+    });
+    log({
+      type: "response",
+      endpoint,
+      body: { errorCode: "not_found_track_error" },
+    });
+
+    expect(errors).toEqual([
+      { sessionId: "J", trackName: "t", errorCode: "not_found_track_error" },
+    ]);
   });
 });

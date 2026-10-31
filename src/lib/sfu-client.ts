@@ -11,7 +11,11 @@ import {
   type VoiceState,
   type VoiceStateDelta,
 } from "./types";
-import { GatewayOp } from "./gateway-protocol";
+import {
+  GatewayCloseCode,
+  GatewayOp,
+  type RepublishRequestPayload,
+} from "./gateway-protocol";
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { AudioSentinel, OutboundAudioSentinel } from "./voice/audio-sentinel";
 import { RoomGateway } from "./voice/gateways/room-gateway";
@@ -35,6 +39,8 @@ import type { Observable, Subscription } from "rxjs";
 
 const sfuLog = clog("SFU");
 const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
+/** Republishes of one track on listeners' request: at most one per this. */
+const REPUBLISH_REQUEST_INTERVAL_MS = 5_000;
 
 export type { SFUEventMap, VoiceConnectionStats } from "./types";
 
@@ -133,6 +139,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private nativeScreenReconnectRequired = false;
   private nativeScreenResetPromise: Promise<void> = Promise.resolve();
   private remoteSpeakingUntil = new Map<string, number>();
+  private readonly lastRepublishRequestAt = new Map<string, number>();
   private audioTrackOperation: Promise<void> = Promise.resolve();
   private latencyTimeline: {
     timelineId: string;
@@ -459,6 +466,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private wireVoiceEvents(): void {
     this.voiceGW.on("error", (event) => {
+      if (
+        event.code === GatewayCloseCode.UnknownOpcode &&
+        event.message.endsWith(`opcode: ${GatewayOp.TrackUnavailable}`)
+      ) {
+        // A voice room older than the track-unavailable report: nothing to do.
+        sfuLog.info("Voice room does not take track-unavailable reports");
+        return;
+      }
       if (event.message === "Voice token expired" || event.code === 4004) {
         sfuLog.warn(
           "Voice token expired; requesting fresh RoomGateway credentials",
@@ -511,6 +526,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     this.voiceGW.on("app-event", (event) => {
       this.emit("app-event", event);
+    });
+    this.voiceGW.on("republish-request", (request) => {
+      this.handleRepublishRequest(request);
     });
     this.voiceGW.on("speaking", (event) => {
       if (event.participantId !== this.participantId) {
@@ -771,6 +789,34 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         },
         onPullStarted: (trackName) => {
           this.markLatency("pullRequestedAt", { trackName });
+        },
+        onTrackUnavailable: (event) => {
+          this.markLatency("trackUnavailableReportedAt", {
+            participantId: event.participant_id,
+            trackName: event.track_name,
+            sfuTrackName: event.sfu_track_name,
+            notFoundCount: event.notFoundCount,
+            notFoundForMs: Math.round(event.notFoundForMs),
+            report: event.report,
+          });
+          sfuLog.warn(
+            "SFU keeps not finding a pulled track; asking for a republish",
+            {
+              participantId: event.participant_id,
+              trackName: event.track_name,
+              notFoundCount: event.notFoundCount,
+              report: event.report,
+            },
+          );
+          this.voiceGW.send({
+            op: GatewayOp.TrackUnavailable,
+            d: {
+              participant_id: event.participant_id,
+              track_name: event.track_name,
+              sfu_track_name: event.sfu_track_name,
+              session_id: event.session_id,
+            },
+          });
         },
       },
     );
@@ -1188,11 +1234,62 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
    * Pushes a publication again as a new SFU track (same alias and source),
    * for one the SFU may have garbage-collected; see publication-liveness.
    */
-  public republishTrack(trackName: string): boolean {
+  public republishTrack(
+    trackName: string,
+    cause: "standby-stale" | "track-unavailable" = "standby-stale",
+  ): boolean {
     const republished =
       this.partyTracksMedia?.republishTrack(trackName) ?? false;
-    if (republished) this.markLatency("republishRequestedAt", { trackName });
+    if (republished) {
+      this.markLatency("republishRequestedAt", { trackName, cause });
+    }
     return republished;
+  }
+
+  /**
+   * A listener could not pull one of our publications (the SFU keeps
+   * answering not_found_track_error) and the voice room checked that it is
+   * our current one: push it again under a new SFU track name. Only for the
+   * SFU track we still announce, at most once per
+   * REPUBLISH_REQUEST_INTERVAL_MS per track: each republish briefly
+   * interrupts the track for everyone pulling it.
+   */
+  private handleRepublishRequest(request: RepublishRequestPayload): void {
+    const trackName = request.track_name;
+    const now = Date.now();
+    const ignored = this.republishRequestIgnoredReason(request, now);
+    this.markLatency("republishRequestReceivedAt", {
+      trackName,
+      accepted: ignored === null,
+      ignored,
+    });
+    if (ignored) return;
+    this.lastRepublishRequestAt.set(trackName, now);
+    this.republishTrack(trackName, "track-unavailable");
+  }
+
+  private republishRequestIgnoredReason(
+    request: RepublishRequestPayload,
+    now: number,
+  ): string | null {
+    if (this.standby || this.isLeaving) return "inactive";
+    const current = this.partyTracksMedia?.getPublicationMetadata(
+      request.track_name,
+    );
+    if (!current) return "not-published";
+    if (
+      (request.sfu_track_name !== undefined &&
+        request.sfu_track_name !== current.sfu_track_name) ||
+      (request.session_id !== undefined &&
+        request.session_id !== current.session_id)
+    ) {
+      return "stale";
+    }
+    const lastAt = this.lastRepublishRequestAt.get(request.track_name);
+    if (lastAt !== undefined && now - lastAt < REPUBLISH_REQUEST_INTERVAL_MS) {
+      return "rate-limited";
+    }
+    return null;
   }
 
   public getPublishedTrack(trackName: string): MediaStreamTrack | null {

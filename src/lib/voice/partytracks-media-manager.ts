@@ -1,5 +1,9 @@
 import type { TrackInfo } from "@/lib/types";
 import type { ScheduleTimer } from "@/lib/voice/heartbeat-manager";
+import {
+  type PartyTracksPullError,
+  SFU_TRACK_NOT_FOUND,
+} from "@/lib/voice/partytracks-pull-errors";
 import type { RalphPublishedTrack } from "@/lib/voice/partytracks-transport";
 import { BehaviorSubject, type Observable, Subscription } from "rxjs";
 
@@ -10,6 +14,22 @@ export interface PartyTracksMediaTransport {
     identity: RalphPublishedTrack,
   ): Observable<TrackInfo>;
   pull(track$: Observable<TrackInfo>): Observable<MediaStreamTrack>;
+  /** SFU errors of pulls the transport is retrying (see partytracks-pull-errors). */
+  readonly pullErrors$?: Observable<PartyTracksPullError>;
+}
+
+/** A remote track the SFU keeps answering `not_found_track_error` for. */
+export interface TrackUnavailableEvent {
+  readonly participant_id: string;
+  /** Ralph's alias (`cam-audio-<participant id>`). */
+  readonly track_name: string;
+  readonly sfu_track_name: string;
+  readonly session_id: string;
+  /** Not-found errors for this SFU track so far, and over how long. */
+  readonly notFoundCount: number;
+  readonly notFoundForMs: number;
+  /** 1 for the first report of this alias since it last arrived. */
+  readonly report: number;
 }
 
 interface PartyTracksRemoteTrackEvent {
@@ -26,6 +46,11 @@ export interface PartyTracksMediaManagerCallbacks {
   onError?(error: unknown): void;
   onPushStarted?(trackName: string, kind: "audio" | "video"): void;
   onPullStarted?(trackName: string): void;
+  /**
+   * The SFU has persistently not found a pulled track although its publisher
+   * announced it: only a fresh push of it (republish) recovers.
+   */
+  onTrackUnavailable?(event: TrackUnavailableEvent): void;
 }
 
 interface Publication {
@@ -45,6 +70,19 @@ export interface PartyTracksMediaManagerOptions {
   readonly pullRetryBaseMs?: number;
   readonly pullRetryMaxMs?: number;
   readonly schedule?: ScheduleTimer;
+  /**
+   * A pull is reported unavailable once the SFU has answered not-found for
+   * the same SFU track at least `trackUnavailableMinErrors` times spanning at
+   * least `trackUnavailableAfterMs`. The pull-after-push race heals within a
+   * few hundred ms (PartyTracks retries after 100, 200, 400 ms), so a report
+   * takes about 1.5 s of failures.
+   */
+  readonly trackUnavailableAfterMs?: number;
+  readonly trackUnavailableMinErrors?: number;
+  /** Reports of one alias: at most this often, at most this many until it arrives. */
+  readonly trackUnavailableReportIntervalMs?: number;
+  readonly trackUnavailableMaxReports?: number;
+  readonly now?: () => number;
 }
 
 // PartyTracks retries a failing pull itself (100 ms doubling to 10 s) and
@@ -53,6 +91,10 @@ export interface PartyTracksMediaManagerOptions {
 const DEFAULT_PULL_WATCHDOG_MS = 10_000;
 const DEFAULT_PULL_RETRY_BASE_MS = 1_000;
 const DEFAULT_PULL_RETRY_MAX_MS = 30_000;
+const DEFAULT_TRACK_UNAVAILABLE_AFTER_MS = 1_000;
+const DEFAULT_TRACK_UNAVAILABLE_MIN_ERRORS = 2;
+const DEFAULT_TRACK_UNAVAILABLE_REPORT_INTERVAL_MS = 5_000;
+const DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS = 3;
 
 const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
   const handle = setTimeout(callback, ms);
@@ -72,6 +114,17 @@ interface PullRetry {
   failures: number;
   /** Set while the re-pull waits out its backoff. */
   cancel?: () => void;
+}
+
+/** Not-found errors of one remote alias, until its track arrives. */
+interface TrackNotFound {
+  /** The SFU track (session id + SFU name) `firstAt` and `count` are for. */
+  sfuTrack: string;
+  firstAt: number;
+  count: number;
+  /** Kept across SFU tracks of the alias, so republishes stay bounded. */
+  reports: number;
+  lastReportAt?: number;
 }
 
 function isMediaKind(kind: string): kind is "audio" | "video" {
@@ -115,6 +168,13 @@ export class PartyTracksMediaManager {
   private readonly pullRetryBaseMs: number;
   private readonly pullRetryMaxMs: number;
   private readonly schedule: ScheduleTimer;
+  private readonly notFound = new Map<string, TrackNotFound>();
+  private readonly pullErrorSubscription?: Subscription;
+  private readonly trackUnavailableAfterMs: number;
+  private readonly trackUnavailableMinErrors: number;
+  private readonly trackUnavailableReportIntervalMs: number;
+  private readonly trackUnavailableMaxReports: number;
+  private readonly now: () => number;
 
   constructor(
     private readonly transport: PartyTracksMediaTransport,
@@ -127,6 +187,20 @@ export class PartyTracksMediaManager {
       options.pullRetryBaseMs ?? DEFAULT_PULL_RETRY_BASE_MS;
     this.pullRetryMaxMs = options.pullRetryMaxMs ?? DEFAULT_PULL_RETRY_MAX_MS;
     this.schedule = options.schedule ?? scheduleWithGlobalTimers;
+    this.trackUnavailableAfterMs =
+      options.trackUnavailableAfterMs ?? DEFAULT_TRACK_UNAVAILABLE_AFTER_MS;
+    this.trackUnavailableMinErrors =
+      options.trackUnavailableMinErrors ?? DEFAULT_TRACK_UNAVAILABLE_MIN_ERRORS;
+    this.trackUnavailableReportIntervalMs =
+      options.trackUnavailableReportIntervalMs ??
+      DEFAULT_TRACK_UNAVAILABLE_REPORT_INTERVAL_MS;
+    this.trackUnavailableMaxReports =
+      options.trackUnavailableMaxReports ??
+      DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS;
+    this.now = options.now ?? (() => performance.now());
+    this.pullErrorSubscription = this.transport.pullErrors$?.subscribe(
+      (error) => this.onPullError(error),
+    );
     this.stateSubscription = this.transport.peerConnectionState$.subscribe({
       next: (state) => {
         this.peerConnectionState = state;
@@ -251,6 +325,11 @@ export class PartyTracksMediaManager {
     return this.replaceTrack(trackName, newTrack);
   }
 
+  /** The SFU track a publication was last announced as, once answered. */
+  getPublicationMetadata(trackName: string): TrackInfo | null {
+    return this.publications.get(trackName)?.latestMetadata ?? null;
+  }
+
   getPublishedTrack(trackName: string): MediaStreamTrack | null {
     return this.publications.get(trackName)?.currentTrack ?? null;
   }
@@ -349,6 +428,7 @@ export class PartyTracksMediaManager {
       this.offers.delete(trackName);
       this.stopPull(trackName);
       this.clearPullRetry(trackName);
+      this.notFound.delete(trackName);
     }
   }
 
@@ -409,6 +489,8 @@ export class PartyTracksMediaManager {
     }
     this.offers.clear();
     this.unsubscribedTrackNames.clear();
+    this.notFound.clear();
+    this.pullErrorSubscription?.unsubscribe();
     this.stateSubscription.unsubscribe();
   }
 
@@ -426,6 +508,7 @@ export class PartyTracksMediaManager {
         pull.cancelWatchdog?.();
         pull.cancelWatchdog = undefined;
         this.pullRetries.delete(track.track_name);
+        this.notFound.delete(track.track_name);
         const currentMetadata = this.offers.get(track.track_name) ?? track;
         if (pull.currentTrack === remoteTrack) return;
         if (pull.currentTrack) {
@@ -447,6 +530,70 @@ export class PartyTracksMediaManager {
         this.callbacks.onError?.(error);
         this.dropPull(track.track_name, pull);
       },
+    });
+  }
+
+  /**
+   * Counts the SFU's not-found answers per pulled alias and reports the alias
+   * once they persist. A not-found that outlives PartyTracks' first retries
+   * does not heal by pulling again (the SFU keeps answering it for that
+   * track); only a fresh push by the publisher does.
+   */
+  private onPullError(error: PartyTracksPullError): void {
+    if (this.disposed || error.errorCode !== SFU_TRACK_NOT_FOUND) return;
+    for (const [trackName, offer] of this.offers) {
+      const sfuTrackName = offer.sfu_track_name ?? offer.track_name;
+      if (
+        offer.session_id !== error.sessionId ||
+        sfuTrackName !== error.trackName ||
+        !this.pulls.has(trackName)
+      ) {
+        continue;
+      }
+      this.countNotFound(trackName, offer, sfuTrackName);
+    }
+  }
+
+  private countNotFound(
+    trackName: string,
+    offer: TrackInfo,
+    sfuTrackName: string,
+  ): void {
+    const now = this.now();
+    const sfuTrack = `${offer.session_id}\n${sfuTrackName}`;
+    const previous = this.notFound.get(trackName);
+    const state: TrackNotFound =
+      previous?.sfuTrack === sfuTrack
+        ? previous
+        : {
+            sfuTrack,
+            firstAt: now,
+            count: 0,
+            reports: previous?.reports ?? 0,
+            lastReportAt: previous?.lastReportAt,
+          };
+    state.count += 1;
+    this.notFound.set(trackName, state);
+    const notFoundForMs = now - state.firstAt;
+    if (
+      state.count < this.trackUnavailableMinErrors ||
+      notFoundForMs < this.trackUnavailableAfterMs ||
+      state.reports >= this.trackUnavailableMaxReports ||
+      (state.lastReportAt !== undefined &&
+        now - state.lastReportAt < this.trackUnavailableReportIntervalMs)
+    ) {
+      return;
+    }
+    state.reports += 1;
+    state.lastReportAt = now;
+    this.callbacks.onTrackUnavailable?.({
+      participant_id: offer.participant_id,
+      track_name: trackName,
+      sfu_track_name: sfuTrackName,
+      session_id: offer.session_id,
+      notFoundCount: state.count,
+      notFoundForMs,
+      report: state.reports,
     });
   }
 

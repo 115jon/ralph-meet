@@ -288,6 +288,20 @@ const SelectProtocolPayload = Schema.Struct({
   request_id: Schema.optional(TrackId),
 });
 
+/**
+ * A listener reporting a publication the SFU does not find. The room checks
+ * it against its own track row before asking the publisher to republish.
+ */
+const TrackUnavailablePayload = Schema.Struct({
+  participant_id: TrackId,
+  track_name: TrackId,
+  session_id: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(MAX_SFU_SESSION_ID_LENGTH),
+  ),
+  sfu_track_name: Schema.optional(TrackId),
+});
+
 /** App events are routed by `type` inside the room; only the envelope is checked here. */
 const VoiceAppEventPayload = Schema.Record(Schema.String, Schema.Unknown);
 
@@ -325,6 +339,10 @@ export const voiceGatewayClientRules = {
     schema: VoiceAppEventPayload,
     invalid: "Voice app event payload must be a plain object",
   },
+  [GatewayOp.TrackUnavailable]: {
+    schema: TrackUnavailablePayload,
+    invalid: "Invalid track unavailable payload",
+  },
 } as const satisfies PayloadRules;
 
 // ── Payload types ──────────────────────────────────────────────────────────
@@ -351,3 +369,4 @@ type SpeakingClientPayload = typeof SpeakingClientPayload.Type;
 type PushTrackDescriptor = typeof PushTrackDescriptor.Type;
 type SelectProtocolPayload = typeof SelectProtocolPayload.Type;
 type VoiceAppEventPayload = typeof VoiceAppEventPayload.Type;
+type TrackUnavailablePayload = typeof TrackUnavailablePayload.Type;
