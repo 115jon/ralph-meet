@@ -1,6 +1,10 @@
 import { PartyTracks, type TrackMetadata } from "partytracks/client";
 import { of, Subscription } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  observePullErrors,
+  type PartyTracksPullError,
+} from "../partytracks-pull-errors";
 
 // Drives the real (patched) PartyTracks pull path. A batched pull whose
 // tracks/new request fails must error the pull so PartyTracks' own
@@ -120,7 +124,13 @@ class FakePeerConnection extends EventTarget {
 /** The parts of the Realtime API bodies this test sends. */
 interface ApiBody {
   sessionId?: string;
-  tracks?: Array<{ trackName: string; sessionId: string; mid: string }>;
+  tracks?: Array<{
+    trackName: string;
+    sessionId: string;
+    mid?: string;
+    errorCode?: string;
+    errorDescription?: string;
+  }>;
   requiresImmediateRenegotiation?: boolean;
   sessionDescription?: FakeDescription;
   errorCode?: string;
@@ -452,4 +462,54 @@ describe("patched PartyTracks bulk pull", () => {
     expect(FakePeerConnection.instances).toHaveLength(2);
     expect(sfu.calls).toEqual(["S2 pull", "S2 renegotiate"]);
   });
+
+  // PartyTracks retries a failed pull itself and never surfaces the SFU's
+  // error code; Ralph reads it from PartyTracks' API history instead.
+  it.each([
+    [
+      "a top-level errorCode",
+      jsonResponse({
+        errorCode: "not_found_track_error",
+        errorDescription: "Track not found",
+      }),
+    ],
+    [
+      "a per-track errorCode",
+      jsonResponse({
+        tracks: [
+          {
+            trackName: "t",
+            sessionId: "J",
+            errorCode: "not_found_track_error",
+            errorDescription: "Track not found",
+          },
+        ],
+        requiresImmediateRenegotiation: false,
+      }),
+    ],
+  ])(
+    "reports the not-found answer of a retried pull with %s",
+    async (_case, failure) => {
+      stubFetch(failure);
+      const partyTracks = makePartyTracks();
+      const errors: PartyTracksPullError[] = [];
+      subscription = observePullErrors(partyTracks.history).subscribe((error) =>
+        errors.push(error),
+      );
+      subscription.add(partyTracks.pull(of(REMOTE_TRACK)).subscribe());
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(errors).toEqual([
+        {
+          sessionId: "J",
+          trackName: "t",
+          errorCode: "not_found_track_error",
+        },
+      ]);
+
+      // The retry succeeds: nothing more to report.
+      for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(50);
+      expect(errors).toHaveLength(1);
+    },
+  );
 });

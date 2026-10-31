@@ -5100,6 +5100,200 @@ describe("VoiceRoom lifecycle", () => {
   });
 });
 
+describe("VoiceRoom track-unavailable reports", () => {
+  const SFU_TRACK = "partytracks-opaque-audio";
+
+  /** A publisher with one announced PartyTracks track, and a listener. */
+  async function publishedRoom(
+    accessMode: "authenticated" | "public-demo" = "authenticated",
+  ) {
+    const roomName = crypto.randomUUID();
+    const publisherId = crypto.randomUUID();
+    const listenerId = crypto.randomUUID();
+    const trackName = `cam-audio-${publisherId}`;
+    const sessionId = await issuePartyTracksSessionCapability(
+      publisherId,
+      roomName,
+      "raw-publisher-session",
+    );
+    const publisher = await openVoiceSocket(
+      roomName,
+      "publisher-user",
+      accessMode,
+    );
+    await identifyVoiceSocket(
+      publisher,
+      publisherId,
+      roomName,
+      "publisher-user",
+    );
+    const listener = await openVoiceSocket(
+      roomName,
+      "listener-user",
+      accessMode,
+    );
+    await identifyVoiceSocket(listener, listenerId, roomName, "listener-user");
+
+    const announced = nextMessageWithOpcode(listener, GatewayOp.Video);
+    publisher.send(
+      JSON.stringify({
+        op: GatewayOp.Video,
+        d: {
+          tracks: [
+            {
+              participant_id: publisherId,
+              track_name: trackName,
+              sfu_track_name: SFU_TRACK,
+              session_id: sessionId,
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+    await announced;
+
+    const report = (socket: WebSocket, patch: Record<string, unknown> = {}) =>
+      socket.send(
+        JSON.stringify({
+          op: GatewayOp.TrackUnavailable,
+          d: {
+            participant_id: publisherId,
+            track_name: trackName,
+            sfu_track_name: SFU_TRACK,
+            session_id: sessionId,
+            ...patch,
+          },
+        }),
+      );
+    const close = () => {
+      publisher.close();
+      listener.close();
+    };
+    return {
+      roomName,
+      publisherId,
+      trackName,
+      sessionId,
+      publisher,
+      listener,
+      report,
+      close,
+    };
+  }
+
+  /** Lets the next republish request through the per-track interval. */
+  async function expireRepublishInterval(roomName: string) {
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    await runInDurableObject(room, (_instance, state) => {
+      state.storage.sql.exec(
+        "UPDATE ws_rate_limits SET window_start = window_start - 3000 " +
+          "WHERE rate_key LIKE 'republish:%'",
+      );
+    });
+  }
+
+  it.each(["authenticated", "public-demo"] as const)(
+    "asks the publisher to republish a track a listener cannot pull (%s)",
+    async (accessMode) => {
+      const room = await publishedRoom(accessMode);
+      const request = nextMessageWithOpcode(
+        room.publisher,
+        GatewayOp.RepublishRequest,
+      );
+      const listenerCopy = nextMessageWithOpcodeOrNull(
+        room.listener,
+        GatewayOp.RepublishRequest,
+      );
+      room.report(room.listener);
+
+      expect(await request).toEqual({
+        op: GatewayOp.RepublishRequest,
+        d: {
+          track_name: room.trackName,
+          sfu_track_name: SFU_TRACK,
+          session_id: room.sessionId,
+        },
+      });
+      expect(await listenerCopy).toBeNull();
+      room.close();
+    },
+  );
+
+  it("ignores reports that do not match the publisher's current track", async () => {
+    const room = await publishedRoom();
+    const request = nextMessageWithOpcodeOrNull(
+      room.publisher,
+      GatewayOp.RepublishRequest,
+    );
+    room.report(room.listener, { track_name: `cam-video-${room.publisherId}` });
+    room.report(room.listener, { sfu_track_name: "republished-already" });
+    room.report(room.listener, { session_id: "another-session" });
+    room.report(room.listener, { participant_id: crypto.randomUUID() });
+    // Nobody asks itself.
+    room.report(room.publisher);
+    expect(await request).toBeNull();
+
+    // A listener in another room cannot reach this publisher.
+    const otherRoom = crypto.randomUUID();
+    const outsider = await openVoiceSocket(otherRoom, "outsider-user");
+    await identifyVoiceSocket(
+      outsider,
+      crypto.randomUUID(),
+      otherRoom,
+      "outsider-user",
+    );
+    const fromOutside = nextMessageWithOpcodeOrNull(
+      room.publisher,
+      GatewayOp.RepublishRequest,
+    );
+    room.report(outsider);
+    expect(await fromOutside).toBeNull();
+
+    outsider.close();
+    room.close();
+  });
+
+  it("asks at most once per 3 s per track, whoever reports it", async () => {
+    const room = await publishedRoom();
+    const second = await openVoiceSocket(room.roomName, "second-listener");
+    await identifyVoiceSocket(
+      second,
+      crypto.randomUUID(),
+      room.roomName,
+      "second-listener",
+    );
+
+    const first = nextMessageWithOpcode(
+      room.publisher,
+      GatewayOp.RepublishRequest,
+    );
+    room.report(room.listener);
+    await first;
+
+    const limited = nextMessageWithOpcodeOrNull(
+      room.publisher,
+      GatewayOp.RepublishRequest,
+    );
+    room.report(room.listener);
+    room.report(second);
+    expect(await limited).toBeNull();
+
+    await expireRepublishInterval(room.roomName);
+    const later = nextMessageWithOpcode(
+      room.publisher,
+      GatewayOp.RepublishRequest,
+    );
+    room.report(second);
+    await expect(later).resolves.toMatchObject({
+      d: { track_name: room.trackName },
+    });
+
+    second.close();
+    room.close();
+  });
+});
+
 describe("VoiceRoom gateway protocol edge", () => {
   /** A mistyped payload per opcode (non-objects are sent too). */
   const MISTYPED_PAYLOADS = new Map<number, unknown>([
@@ -5118,6 +5312,7 @@ describe("VoiceRoom gateway protocol edge", () => {
     [GatewayOp.TracksReady, { track_names: "screen-video-p" }],
     [GatewayOp.Speaking, { speaking: "1" }],
     [GatewayOp.VoiceAppEvent, [{ type: "soundboard.play" }]],
+    [GatewayOp.TrackUnavailable, { participant_id: "p", track_name: "t" }],
   ]);
   const payloadOps = Object.entries(voiceGatewayClientRules).flatMap(
     ([op, rule]) => (rule ? [[Number(op), rule.invalid] as const] : []),

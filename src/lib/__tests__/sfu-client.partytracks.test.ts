@@ -4,6 +4,7 @@ import type {
   PartyTracksClientTransport,
   SFUClientOptions,
 } from "@/lib/sfu-client";
+import type { PartyTracksPullError } from "@/lib/voice/partytracks-pull-errors";
 import type { RalphPublishedTrack } from "@/lib/voice/partytracks-transport";
 import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
@@ -84,6 +85,7 @@ class TestPartyTracksTransport implements PartyTracksClientTransport {
   readonly publicationMetadata = new Map<string, Subject<TrackInfo>>();
   readonly pullMetadata = new Map<string, TrackInfo[]>();
   readonly remoteTracks = new Map<string, Subject<MediaStreamTrack>>();
+  readonly pullErrors$ = new Subject<PartyTracksPullError>();
   readonly updateVoiceToken = vi.fn();
   readonly updateIceServers = vi.fn();
   readonly dispose = vi.fn();
@@ -1434,5 +1436,154 @@ describe("SFUClient socket lifecycle", () => {
     client.voiceGW.emit("auth-failed", undefined as never);
     expect(authFailed).toHaveBeenCalledTimes(2);
     client.disconnect("component-unmount");
+  });
+});
+
+describe("SFUClient track-unavailable recovery", () => {
+  const LOCAL_TRACK = "cam-audio-local-participant";
+
+  async function publishingClient() {
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => transport,
+    });
+    vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+    const send = vi.spyOn(client.voiceGW, "send").mockReturnValue(true);
+    emitMediaReady(client);
+    await client.publishTracks(
+      new MockMediaStream([
+        new MockMediaStreamTrack("audio"),
+      ]) as unknown as MediaStream,
+      "cam",
+    );
+    const answer = (sfuTrackName: string) =>
+      transport.publicationMetadata.get(LOCAL_TRACK)?.next({
+        participant_id: "local-participant",
+        track_name: LOCAL_TRACK,
+        sfu_track_name: sfuTrackName,
+        session_id: "local-session",
+        kind: "audio",
+      });
+    return { transport, client, send, answer };
+  }
+
+  it("republishes its current track once when the voice room asks", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const { transport, client, send, answer } = await publishingClient();
+    answer("sfu-1");
+    expect(transport.push).toHaveBeenCalledTimes(1);
+
+    client.voiceGW.emit("republish-request", {
+      track_name: LOCAL_TRACK,
+      sfu_track_name: "sfu-1",
+      session_id: "local-session",
+    });
+    expect(transport.push).toHaveBeenCalledTimes(2);
+    // Announced only once the new push is answered.
+    expect(announcedSfuTracks(send)).toEqual(["sfu-1"]);
+    answer("sfu-2");
+    expect(announcedSfuTracks(send)).toEqual(["sfu-1", "sfu-2"]);
+
+    // Another listener's report of the same track, 1 s later.
+    now.mockReturnValue(1_001_000);
+    client.voiceGW.emit("republish-request", {
+      track_name: LOCAL_TRACK,
+      sfu_track_name: "sfu-2",
+      session_id: "local-session",
+    });
+    expect(transport.push).toHaveBeenCalledTimes(2);
+
+    now.mockReturnValue(1_005_000);
+    client.voiceGW.emit("republish-request", {
+      track_name: LOCAL_TRACK,
+      sfu_track_name: "sfu-2",
+      session_id: "local-session",
+    });
+    expect(transport.push).toHaveBeenCalledTimes(3);
+    client.disconnect("component-unmount");
+    now.mockRestore();
+  });
+
+  it("ignores a request for a track that is not its current publication", async () => {
+    const { transport, client, answer } = await publishingClient();
+    for (const request of [
+      { track_name: "cam-audio-someone-else", sfu_track_name: "sfu-1" },
+      // Already republished, or the session moved on.
+      { track_name: LOCAL_TRACK, sfu_track_name: "sfu-0" },
+      { track_name: LOCAL_TRACK, session_id: "old-session" },
+    ]) {
+      answer("sfu-1");
+      client.voiceGW.emit("republish-request", request);
+    }
+    expect(transport.push).toHaveBeenCalledTimes(1);
+
+    // Pushed but not answered yet: nothing current to replace.
+    client.voiceGW.emit("republish-request", { track_name: LOCAL_TRACK });
+    expect(transport.push).toHaveBeenCalledTimes(2);
+    client.voiceGW.emit("republish-request", { track_name: LOCAL_TRACK });
+    expect(transport.push).toHaveBeenCalledTimes(2);
+    client.disconnect("component-unmount");
+  });
+
+  it("reports a remote track the SFU keeps not finding to the voice room", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(50_000);
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => transport,
+    });
+    vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+    const send = vi.spyOn(client.voiceGW, "send").mockReturnValue(true);
+    emitMediaReady(client);
+    const remote: TrackInfo = {
+      participant_id: "remote",
+      track_name: "cam-audio-remote",
+      sfu_track_name: "opaque-remote",
+      session_id: "session-remote",
+      kind: "audio",
+    };
+    client.voiceGW.emit("track-offered", remote);
+    expect(transport.pullMetadata.has("cam-audio-remote")).toBe(true);
+
+    const notFound = {
+      sessionId: "session-remote",
+      trackName: "opaque-remote",
+      errorCode: "not_found_track_error",
+    };
+    transport.pullErrors$.next(notFound);
+    clock.mockReturnValue(51_500);
+    transport.pullErrors$.next(notFound);
+
+    const reports = send.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.op === GatewayOp.TrackUnavailable);
+    expect(reports).toEqual([
+      {
+        op: GatewayOp.TrackUnavailable,
+        d: {
+          participant_id: "remote",
+          track_name: "cam-audio-remote",
+          sfu_track_name: "opaque-remote",
+          session_id: "session-remote",
+        },
+      },
+    ]);
+    client.disconnect("component-unmount");
+    clock.mockRestore();
+  });
+
+  it("does not surface an old voice room's unknown-opcode reply as an error", () => {
+    const client = new SFUClient("test-room");
+    const errors = vi.fn();
+    client.on("error", errors);
+    client.voiceGW.emit("error", {
+      code: 4001,
+      message: `Unknown voice opcode: ${GatewayOp.TrackUnavailable}`,
+    });
+    expect(errors).not.toHaveBeenCalled();
+    client.voiceGW.emit("error", {
+      code: 4001,
+      message: "Unknown voice opcode: 99",
+    });
+    expect(errors).toHaveBeenCalledOnce();
   });
 });

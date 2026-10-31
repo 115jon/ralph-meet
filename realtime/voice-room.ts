@@ -173,7 +173,15 @@ const VOICE_WS_RATE_LIMITS: Record<number, number> = {
   [Op.StopTracks]: 40,
   [Op.TracksReady]: 60,
   [Op.VoiceAppEvent]: 60,
+  // A listener reports each unpullable track at most 3 times until it
+  // arrives; this only stops a client from spamming.
+  [Op.TrackUnavailable]: 30,
 };
+/**
+ * Republish requests for one publication: at most one per this, whoever
+ * reports it. Each one costs everyone pulling the track a short gap.
+ */
+const REPUBLISH_REQUEST_INTERVAL_MS = 3_000;
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
@@ -642,6 +650,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
       case Op.VoiceAppEvent:
         await this.handleVoiceAppEvent(ws, msg.d);
+        break;
+
+      case Op.TrackUnavailable:
+        this.handleTrackUnavailable(ws, msg.d);
         break;
 
       default: {
@@ -1636,6 +1648,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       op === Op.Speaking ||
       op === Op.ClientDisconnect ||
       op === Op.VoiceAppEvent ||
+      op === Op.TrackUnavailable ||
       RETIRED_BROWSER_SFU_OPS.has(op)
     );
   }
@@ -1694,6 +1707,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       op === Op.Speaking ||
       op === Op.ClientDisconnect ||
       op === Op.VoiceAppEvent ||
+      op === Op.TrackUnavailable ||
       RETIRED_BROWSER_SFU_OPS.has(op)
     );
   }
@@ -2130,6 +2144,86 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   }
 
   // ── Op 5: Speaking (forwarded to all other voice participants) ─────────
+
+  /**
+   * A listener's pulls of another participant's track keep getting
+   * not_found_track_error. If that track is the publisher's current
+   * PartyTracks publication in this room, ask the publisher to push it again
+   * (RepublishRequest); the new SFU track is announced as usual. The report
+   * is a hint, never trusted beyond that: the track row must match, and a
+   * publication is asked at most once per REPUBLISH_REQUEST_INTERVAL_MS.
+   */
+  private handleTrackUnavailable(
+    ws: WebSocket,
+    d: VoiceClientPayload<Op.TrackUnavailable>,
+  ): void {
+    const reporterId = this.requireParticipantId(ws);
+    if (!reporterId || reporterId === d.participant_id) return;
+    const row = [
+      ...this.sql.exec(
+        "SELECT sfu_track_name, session_id FROM tracks " +
+          "WHERE track_name = ? AND participant_id = ? AND native_screen_pending = 0",
+        d.track_name,
+        d.participant_id,
+      ),
+    ][0];
+    if (
+      !row ||
+      typeof row.sfu_track_name !== "string" ||
+      row.session_id !== d.session_id ||
+      (d.sfu_track_name !== undefined &&
+        row.sfu_track_name !== d.sfu_track_name)
+    ) {
+      return;
+    }
+    const publisher = this.getWsByParticipant(d.participant_id);
+    if (!publisher) return;
+    if (this.isRepublishRequestRateLimited(d.participant_id, d.track_name)) {
+      return;
+    }
+    roomLog.info("Asking a publisher to republish an unpullable track", {
+      reporterId,
+      publisherId: d.participant_id,
+      trackName: d.track_name,
+    });
+    this.sendTo(publisher, {
+      op: Op.RepublishRequest,
+      d: {
+        track_name: d.track_name,
+        sfu_track_name: row.sfu_track_name,
+        session_id: row.session_id,
+      },
+    });
+  }
+
+  /** In storage, so a hibernation between reports does not reset it. */
+  private isRepublishRequestRateLimited(
+    publisherId: string,
+    trackName: string,
+  ): boolean {
+    const key = `republish:${publisherId}:${trackName}`;
+    const now = Date.now();
+    const last = [
+      ...this.sql.exec(
+        "SELECT window_start FROM ws_rate_limits WHERE rate_key = ?",
+        key,
+      ),
+    ][0];
+    if (
+      last &&
+      now - Number(last.window_start) < REPUBLISH_REQUEST_INTERVAL_MS
+    ) {
+      return true;
+    }
+    this.sql.exec(
+      `INSERT INTO ws_rate_limits (rate_key, window_start, count)
+       VALUES (?, ?, 1)
+       ON CONFLICT(rate_key) DO UPDATE SET window_start = excluded.window_start, count = 1`,
+      key,
+      now,
+    );
+    return false;
+  }
 
   private handleSpeaking(ws: WebSocket, d: VoiceClientPayload<Op.Speaking>) {
     const pid = this.requireParticipantId(ws);

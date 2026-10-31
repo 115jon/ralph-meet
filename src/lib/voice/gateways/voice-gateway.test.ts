@@ -665,6 +665,40 @@ describe("VoiceGateway", () => {
     gateway.disconnect();
   });
 
+  it("emits a republish request and drops a malformed one", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    const onRepublish = vi.fn();
+    gateway.on("republish-request", onRepublish);
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    const request = {
+      track_name: "cam-audio-participant-1",
+      sfu_track_name: "opaque",
+      session_id: "session",
+    };
+    for (const d of [request, { track_name: 7 }]) {
+      socket.onmessage?.({
+        data: JSON.stringify({ op: GatewayOp.RepublishRequest, d }),
+      } as MessageEvent);
+    }
+
+    expect(onRepublish).toHaveBeenCalledExactlyOnceWith(request);
+    gateway.disconnect();
+  });
+
   it("flushes app events queued while the initial ticket is loading", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",

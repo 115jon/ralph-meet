@@ -5,7 +5,12 @@ import {
   type PartyTracksConfig,
   type TrackMetadata,
 } from "partytracks/client";
-import { map, type Observable, type Subscription } from "rxjs";
+import { EMPTY, map, type Observable, type Subscription } from "rxjs";
+import {
+  observePullErrors,
+  type PartyTracksApiHistory,
+  type PartyTracksPullError,
+} from "./partytracks-pull-errors";
 
 const BOOTSTRAP_STUN_SERVERS: IceServer[] = [
   { urls: ["stun:stun.cloudflare.com:3478"] },
@@ -21,6 +26,8 @@ export interface PartyTracksClient {
     sessionId: string;
   }>;
   readonly peerConnectionState$: Observable<RTCPeerConnectionState>;
+  /** PartyTracks' API log; read for SFU errors its retries swallow. */
+  readonly history?: PartyTracksApiHistory;
   push(
     sourceTrack$: Observable<MediaStreamTrack>,
     options?: PushOptions,
@@ -82,6 +89,11 @@ export class PartyTracksTransport {
     sessionId: string;
   }>;
   readonly peerConnectionState$: Observable<RTCPeerConnectionState>;
+  /**
+   * SFU errors of pulls PartyTracks is retrying, per requested track (it
+   * names tracks by SFU session id and SFU track name).
+   */
+  readonly pullErrors$: Observable<PartyTracksPullError>;
 
   private readonly headers: Headers;
   private readonly client: PartyTracksClient;
@@ -115,6 +127,9 @@ export class PartyTracksTransport {
     this.peerConnection$ = this.client.peerConnection$;
     this.session$ = this.client.session$;
     this.peerConnectionState$ = this.client.peerConnectionState$;
+    this.pullErrors$ = this.client.history
+      ? observePullErrors(this.client.history)
+      : EMPTY;
     this.peerConnectionSubscription = this.peerConnection$.subscribe(
       (peerConnection) => {
         this.activePeerConnection = peerConnection;

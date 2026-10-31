@@ -1,5 +1,6 @@
 import {
   decodeVoiceGatewayServerFrame,
+  type RepublishRequestPayload,
   type VoiceGatewayServerMessage,
 } from "@/lib/gateway-protocol";
 import {
@@ -25,6 +26,8 @@ export interface VoiceGatewayEvents extends BaseGatewayEvents {
   "client-disconnect": ClientDisconnectPayload;
   "stop-tracks": { track_names: string[]; tracks?: TrackInfo[] };
   "app-event": Record<string, unknown>;
+  /** Listeners cannot pull one of this client's publications. */
+  "republish-request": RepublishRequestPayload;
   error: {
     message: string;
     code?: number;
@@ -240,6 +243,11 @@ export class VoiceGateway extends BaseGateway<
 
       case GatewayOp.VoiceAppEvent: {
         this.emit("app-event", msg.d);
+        break;
+      }
+
+      case GatewayOp.RepublishRequest: {
+        this.emit("republish-request", msg.d);
         break;
       }
     }
