@@ -1,5 +1,47 @@
 # Changelog
 
+## [3.4.0](https://github.com/115jon/ralph-meet/compare/v3.3.0...v3.4.0) (2026-10-31)
+
+
+### Features
+
+* **voice:** ✨ add a spectral noise floor estimator ([96d6d49](https://github.com/115jon/ralph-meet/commit/96d6d49ab858baef244c7fba70d942528d9c8d80))
+* **voice:** ✨ keep warm standby sessions for occupied voice channels ([e97fd89](https://github.com/115jon/ralph-meet/commit/e97fd89f516eb7a5c130f67626052fc0eb36e1df))
+* **voice:** ✨ republish a track listeners cannot pull ([301ebeb](https://github.com/115jon/ralph-meet/commit/301ebebefba6f701af928198e7c61733ad191a6b))
+* **voice:** ✨ time each voice join stage ([ffe8d99](https://github.com/115jon/ralph-meet/commit/ffe8d9928b52426ad96d9542f86cb732bc5ba075))
+
+
+### Bug Fixes
+
+* **lint:** 🐛 guard unsafe optional chains and make three rules errors ([4d4abf8](https://github.com/115jon/ralph-meet/commit/4d4abf8edb28b592bdc4de292315fcb0e4bdc88a))
+* **realtime:** 🐛 pass the payload to voice leave and call end ([b255626](https://github.com/115jon/ralph-meet/commit/b255626ca2b11b334b9850b29c01f2ff621f8eaa))
+* **realtime:** 🐛 skip tracks a restart left behind in voice ready ([d3c3241](https://github.com/115jon/ralph-meet/commit/d3c3241fb20657f00fa45bdaecb57d2b13a1b460))
+* **realtime:** pass leave and call-end payloads; typecheck workerd tests ([5fe7451](https://github.com/115jon/ralph-meet/commit/5fe74516b55a0ea0f7a3b6dad2aee582bc7d1340))
+* **voice:** 🐛 hold a pull until the peer connection is connected ([c354fe8](https://github.com/115jon/ralph-meet/commit/c354fe85c9e6be50af81a31619d9a639686e7d3f))
+* **voice:** 🐛 keep isolated clicks from opening the gate ([556fbe0](https://github.com/115jon/ralph-meet/commit/556fbe0824d3f89f40c4d22dd1d12e28461c3669))
+* **voice:** 🐛 keep warm standby private and idle ([e67ac9c](https://github.com/115jon/ralph-meet/commit/e67ac9cd2d5f483aeb285d41889ba4aed84f7f03))
+* **voice:** 🐛 republish stale standby track on join ([1c40fed](https://github.com/115jon/ralph-meet/commit/1c40fed41ead14b9a8c000b31752a347e5312fd1))
+* **voice:** 🐛 require a channel join for voice identify and pulls ([29c2079](https://github.com/115jon/ralph-meet/commit/29c2079fc881196e28c33113972c61a56ab76f81))
+* **voice:** 🐛 retry a partytracks pull when its bulk request fails ([4099417](https://github.com/115jon/ralph-meet/commit/40994179463ecb00e28c2931265834858762d768))
+* **voice:** hold a pull until the peer connection is connected ([2aa797d](https://github.com/115jon/ralph-meet/commit/2aa797d7d0e1f3ea53806060b567794d4388cb24))
+* **voice:** republish stale standby track on join ([811a3d3](https://github.com/115jon/ralph-meet/commit/811a3d39b87d67b3ef9b1b06890eda029ab7b4e8))
+* **voice:** require a channel join for voice identify and pulls ([5b0299b](https://github.com/115jon/ralph-meet/commit/5b0299b9e288dac6d03f43644a5b4642b11ef733))
+* **voice:** retry failed partytracks pulls and skip stale tracks after a restart ([ff9ad73](https://github.com/115jon/ralph-meet/commit/ff9ad734264e01c99b6ca6eb0ad1fbd342084c87))
+
+
+### Performance Improvements
+
+* **app:** ⚡️ load the call stack, chat store and panels only when needed ([bf194fb](https://github.com/115jon/ralph-meet/commit/bf194fbfa1298a9c2440885b817ba69664d806bb))
+* **app:** lazy-load the call stack, chat store and panels ([74d6f83](https://github.com/115jon/ralph-meet/commit/74d6f83c3cc07daf174b119f18ed3dbe096653d7))
+* **realtime:** ⚡️ retry waiting sockets once the server is reachable ([8f4dfb0](https://github.com/115jon/ralph-meet/commit/8f4dfb06772fd423d5952fea22360bbf057dbd6d))
+* **voice:** ⚡️ build the gated processor while the gateway connects ([bd66d0f](https://github.com/115jon/ralph-meet/commit/bd66d0f62819dc3a6bb33818e4e0c8f16e501f98))
+* **voice:** ⚡️ gate the mic in the audio graph with a 20 ms lookahead ([125457d](https://github.com/115jon/ralph-meet/commit/125457d62ced99fb00aef7a0fc4c18e6b774f193))
+* **voice:** ⚡️ identify on the voice socket from the ticket bootstrap ([3c08c01](https://github.com/115jon/ralph-meet/commit/3c08c0123378c6320ffa2214b425053603e7e688))
+* **voice:** ⚡️ retry early partytracks pulls from 100 ms ([2519c70](https://github.com/115jon/ralph-meet/commit/2519c7051cf9ce64030a40af6bcdac410ca733e9))
+* **voice:** ⚡️ send 10 ms opus frames ([0973b0c](https://github.com/115jon/ralph-meet/commit/0973b0c046c23f05ebdfec66c588320061b140e0))
+* **voice:** ⚡️ skip the rtp wait and send ice with the socket ticket ([1d23263](https://github.com/115jon/ralph-meet/commit/1d232630147535f02a7ff760fa24213f83db2985))
+* **voice:** cut mouth-to-ear latency from about 170 to 100 ms ([83b28e6](https://github.com/115jon/ralph-meet/commit/83b28e6c4c381c1d42b96e732fd4cb5f12c9a9c7))
+
 ## [3.3.0](https://github.com/115jon/ralph-meet/compare/v3.2.0...v3.3.0) (2026-10-30)
 
 
