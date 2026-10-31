@@ -148,6 +148,7 @@ mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.prettierrc.json
 # Showcase
 showcase/
 
+!/docs/deploy.md
 !/docs/design-system.md
 !/docs/design-audit.md
 !/docs/performance.md
