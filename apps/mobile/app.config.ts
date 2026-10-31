@@ -1,5 +1,11 @@
 import type { ExpoConfig } from "expo/config";
 
+import {
+  DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY,
+  DEFAULT_KOVA_AUTH_URL,
+  DEFAULT_PUBLIC_WEB_URL,
+} from "../../src/lib/site-defaults.ts";
+
 type AppVariant = "development" | "preview" | "production";
 
 const VARIANTS = {
@@ -29,12 +35,17 @@ function resolveVariant(value: string | undefined): AppVariant {
 
 const variant = VARIANTS[resolveVariant(process.env.APP_VARIANT)];
 
-// Mirrors the web app's DEFAULT_PUBLIC_WEB_URL / VITE_API_BASE_URL and
-// VITE_KOVA_AUTH_PUBLISHABLE_KEY (src/lib/site-defaults.ts,
-// src/lib/kova-auth-config.ts). No publishable key is checked in.
+// Mirrors the web app's VITE_API_BASE_URL, VITE_KOVA_AUTH_URL and
+// VITE_KOVA_AUTH_PUBLISHABLE_KEY. All defaults come from the web
+// app's dependency-free src/lib/site-defaults.ts; the publishable key is
+// public by design.
 const apiBaseUrl =
-  process.env.EXPO_PUBLIC_RALPH_API_URL ?? "https://meet.115jon.com";
-const kovaPublishableKey = process.env.EXPO_PUBLIC_KOVA_PUBLISHABLE_KEY;
+  process.env.EXPO_PUBLIC_RALPH_API_URL ?? DEFAULT_PUBLIC_WEB_URL;
+const kovaAuthUrl =
+  process.env.EXPO_PUBLIC_KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL;
+const kovaPublishableKey =
+  process.env.EXPO_PUBLIC_KOVA_PUBLISHABLE_KEY ??
+  DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY;
 
 const config: ExpoConfig = {
   name: variant.name,
@@ -59,6 +70,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-secure-store",
+    "expo-web-browser",
     [
       "expo-splash-screen",
       {
@@ -74,7 +86,7 @@ const config: ExpoConfig = {
     "./plugins/withAndroidPredictiveBackCompat.cjs",
   ],
   experiments: { typedRoutes: true },
-  extra: { apiBaseUrl, kovaPublishableKey },
+  extra: { apiBaseUrl, kovaAuthUrl, kovaPublishableKey },
 };
 
 export default config;
