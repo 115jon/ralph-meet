@@ -210,6 +210,7 @@ const VALID_MAIN_CLIENT_PAYLOADS = {
     { channel_id: "c", self_mute: true },
     { channel_id: "c", self_mute: false, started_at: 1_700_000_000_000 },
   ],
+  [GatewayOp.VoiceChannelLeave]: [{}, { channel_id: "c" }],
   [GatewayOp.ServerSubscribe]: [{ server_id: "s" }],
   [GatewayOp.CallInitiate]: [{ target_user_id: "u", channel_id: "c" }],
   [GatewayOp.CallAccept]: [{ call_id: "call" }],

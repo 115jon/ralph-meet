@@ -20,7 +20,7 @@ async function createAdmissionHeaders(
   roomName: string,
   audience: "global" | "room",
   subject = "user-test",
-  nonce = crypto.randomUUID(),
+  nonce: string = crypto.randomUUID(),
 ) {
   const roomSlug = audience === "global" ? "global-gateway" : roomName;
   const ticket = await issueSocketTicket(
@@ -76,9 +76,9 @@ async function createVoiceAdmissionHeaders(roomName: string) {
 }
 
 async function openMeetingSocket(
-  roomName = crypto.randomUUID(),
+  roomName: string = crypto.randomUUID(),
   subject = "user-test",
-  nonce = crypto.randomUUID(),
+  nonce: string = crypto.randomUUID(),
 ): Promise<WebSocket> {
   const roomId = env.MEETING_ROOM.idFromName(roomName);
   const room = env.MEETING_ROOM.get(roomId);
@@ -1606,6 +1606,98 @@ describe("MeetingRoom lifecycle", () => {
     callee.close();
   }, 12_000);
 
+  it("ignores a CALL_END for an earlier call and cancels the ring on a matching call_id", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS dm_recipients (channel_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS relationships (user_id TEXT NOT NULL, target_user_id TEXT NOT NULL, type INTEGER NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const channelId = `call-end-${crypto.randomUUID()}`;
+    const callerId = `call-end-caller-${crypto.randomUUID()}`;
+    const calleeId = `call-end-callee-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, NULL, 'dm')",
+    )
+      .bind(channelId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?), (?, ?)",
+    )
+      .bind(channelId, callerId, channelId, calleeId)
+      .run();
+
+    const caller = await openMeetingSocket(roomName, callerId);
+    await identifyMeetingSocket(caller, { name: "End Caller" });
+    const callee = await openMeetingSocket(roomName, calleeId);
+    await identifyMeetingSocket(callee, { name: "End Callee" });
+
+    const calleeRing = nextDispatchEvent(callee, "CALL_RING");
+    caller.send(
+      JSON.stringify({
+        op: 36,
+        d: { target_user_id: calleeId, channel_id: channelId },
+      }),
+    );
+    const callId = ((await calleeRing).d as { data: { call_id: string } }).data
+      .call_id;
+
+    const pendingCallIds = () =>
+      runInDurableObject(meetingRoom(roomName), (instance) =>
+        [
+          ...(
+            instance as unknown as {
+              pendingCalls: Map<string, { callId: string }>;
+            }
+          ).pendingCalls.values(),
+        ].map((call) => call.callId),
+      );
+    /** A heartbeat ack proves the frames sent before it were handled. */
+    const settled = async () => {
+      const ack = nextMessageWithOpcode(caller, 6);
+      caller.send(HEARTBEAT_FRAME);
+      await ack;
+    };
+    expect(await pendingCallIds()).toEqual([callId]);
+
+    // A CALL_END that names an earlier call must not cancel this ring.
+    caller.send(
+      JSON.stringify({
+        op: 39,
+        d: { call_id: `stale-${crypto.randomUUID()}` },
+      }),
+    );
+    await settled();
+    expect(await pendingCallIds()).toEqual([callId]);
+
+    const stopMatching = (socket: WebSocket) =>
+      nextDispatchEventMatching(
+        socket,
+        "CALL_RING_STOP",
+        (message) =>
+          (message.d as { data?: { call_id?: string } }).data?.call_id ===
+          callId,
+      );
+    const callerStop = stopMatching(caller);
+    const calleeStop = stopMatching(callee);
+    caller.send(JSON.stringify({ op: 39, d: { call_id: callId } }));
+    await expect(callerStop).resolves.toMatchObject({
+      d: { data: { call_id: callId, reason: "cancelled" } },
+    });
+    await expect(calleeStop).resolves.toMatchObject({
+      d: { data: { call_id: callId, reason: "cancelled" } },
+    });
+    expect(await pendingCallIds()).toEqual([]);
+
+    caller.close();
+    callee.close();
+  });
+
   it("keeps a throttled background tab (one heartbeat a minute) and prunes a dead one", async () => {
     const roomName = crypto.randomUUID();
     const userId = `throttled-${crypto.randomUUID()}`;
@@ -2038,6 +2130,103 @@ describe("MeetingRoom lifecycle", () => {
       voiceSocket.close();
     },
   );
+
+  it("ignores a stale voice-channel leave and honours a matching one", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS dm_recipients (channel_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const firstChannel = `leave-first-${crypto.randomUUID()}`;
+    const secondChannel = `leave-second-${crypto.randomUUID()}`;
+    for (const channelId of [firstChannel, secondChannel]) {
+      await env.DB.prepare(
+        "INSERT INTO channels (id, server_id, channel_type) VALUES (?, NULL, 'dm')",
+      )
+        .bind(channelId)
+        .run();
+      await env.DB.prepare(
+        "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?), (?, ?)",
+      )
+        .bind(channelId, "user-test", channelId, "observer")
+        .run();
+    }
+
+    const owner = await openMeetingSocket(roomName, "user-test");
+    await identifyMeetingSocket(owner);
+
+    /** Where the room believes `user-test` is, per session and per channel. */
+    const voicePlacement = () =>
+      runInDurableObject(meetingRoom(roomName), (instance) => {
+        const live = instance as unknown as {
+          sessions: Map<unknown, { voice_channel_id?: string }>;
+          voiceChannelMembers: Map<string, Map<string, unknown>>;
+        };
+        return {
+          session: [...live.sessions.values()].map(
+            (session) => session.voice_channel_id,
+          ),
+          channels: [...live.voiceChannelMembers.entries()].flatMap(
+            ([channelId, members]) =>
+              members.has("user-test") ? [channelId] : [],
+          ),
+        };
+      });
+    /** A heartbeat ack proves the frames sent before it were handled. */
+    const settled = async () => {
+      const ack = nextMessageWithOpcode(owner, 6);
+      owner.send(HEARTBEAT_FRAME);
+      await ack;
+    };
+    const join = async (channelId: string) => {
+      owner.send(
+        JSON.stringify({
+          op: 33,
+          d: { channel_id: channelId, self_mute: true },
+        }),
+      );
+      await vi.waitFor(async () => {
+        expect((await voicePlacement()).channels).toEqual([channelId]);
+      });
+    };
+
+    await join(firstChannel);
+    await join(secondChannel);
+    expect(await voicePlacement()).toEqual({
+      session: [secondChannel],
+      channels: [secondChannel],
+    });
+
+    // A late leave for the channel the user already switched away from.
+    owner.send(JSON.stringify({ op: 34, d: { channel_id: firstChannel } }));
+    await settled();
+    expect(await voicePlacement()).toEqual({
+      session: [secondChannel],
+      channels: [secondChannel],
+    });
+
+    // A leave for the current channel removes the user from it.
+    owner.send(JSON.stringify({ op: 34, d: { channel_id: secondChannel } }));
+    await settled();
+    expect(await voicePlacement()).toEqual({
+      session: [undefined],
+      channels: [],
+    });
+
+    // A leave that names no channel (the forced disconnect) leaves the current one.
+    await join(firstChannel);
+    owner.send(JSON.stringify({ op: 34, d: {} }));
+    await settled();
+    expect(await voicePlacement()).toEqual({
+      session: [undefined],
+      channels: [],
+    });
+
+    owner.close();
+  });
 
   it("applies profile broadcasts before a later voice-channel join", async () => {
     await env.DB.prepare(
@@ -3161,6 +3350,7 @@ describe("MeetingRoom gateway protocol edge", () => {
     [GatewayOp.ChannelUnsubscribe, { channel_id: ["c"] }],
     [GatewayOp.PresenceUpdate, { status: 1 }],
     [GatewayOp.VoiceChannelJoin, { channel_id: "c", self_mute: "no" }],
+    [GatewayOp.VoiceChannelLeave, { channel_id: 5 }],
     [GatewayOp.ServerSubscribe, { server_id: [] }],
     [GatewayOp.CallInitiate, { target_user_id: "u" }],
     [GatewayOp.CallAccept, { call_id: 1 }],
