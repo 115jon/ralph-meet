@@ -1,5 +1,4 @@
 import {
-  DEFAULT_HEARTBEAT_INTERVAL_MS,
   decodeVoiceGatewayServerFrame,
   type VoiceGatewayServerMessage,
 } from "@/lib/gateway-protocol";
@@ -35,17 +34,25 @@ export interface VoiceGatewayEvents extends BaseGatewayEvents {
   };
 }
 
+interface VoiceSocketTarget {
+  readonly roomSlug: string;
+  readonly wsUrlGenerator: (path: string) => string;
+  readonly ticketContext: { channelId?: string; serverId?: string };
+}
+
+/**
+ * The voice socket (VoiceRoom DO): media metadata, speaking and app events.
+ * It carries signalling only; the WebRTC peer connections live in SFUClient
+ * and survive a reconnect of this socket, which re-identifies and replays
+ * the room's tracks on VoiceReady.
+ */
 export class VoiceGateway extends BaseGateway<
   VoiceGatewayEvents,
   VoiceGatewayServerMessage
 > {
   private participantId: string | null = null;
   private voiceToken: string | null = null;
-  private roomSlug: string | null = null;
-  private wsUrlGenerator: ((path: string) => string) | null = null;
-  private ticketContext: { channelId?: string; serverId?: string } = {};
-  private connecting = false;
-  private reconnectQueued = false;
+  private target: VoiceSocketTarget | null = null;
   private helloReceived = false;
   private identifySent = false;
   private identifiedParticipantId: string | null = null;
@@ -68,19 +75,9 @@ export class VoiceGateway extends BaseGateway<
       this.participantId = null;
       this.voiceToken = null;
       this.clearCredentialsOnNextPrepare = false;
-      if (this.connecting) {
-        this.connectionRequestGeneration++;
-        this.reconnectQueued = true;
-      }
     }
-    this.roomSlug = roomSlug;
-    this.wsUrlGenerator = wsUrlGenerator;
-    this.ticketContext = ticketContext;
-    this.isLeaving = false;
-
-    if (!this.ws && !this.connecting) {
-      void this.openVoiceSocket(true);
-    }
+    this.target = { roomSlug, wsUrlGenerator, ticketContext };
+    this.socket.connect();
   }
 
   public connectVoice(
@@ -103,68 +100,41 @@ export class VoiceGateway extends BaseGateway<
 
     this.participantId = participantId;
     this.voiceToken = voiceToken;
-    this.roomSlug = roomSlug;
-    this.wsUrlGenerator = wsUrlGenerator;
-    this.ticketContext = ticketContext;
-    this.isLeaving = false;
+    this.target = { roomSlug, wsUrlGenerator, ticketContext };
 
     if (replacingIdentifiedGeneration) {
-      super.disconnect();
-      this.isLeaving = false;
+      this.socket.stop();
       this.resetSocketIdentityState();
     }
 
     this.maybeSendIdentify();
-    void this.openVoiceSocket(true);
+    this.socket.connect();
   }
 
-  private async openVoiceSocket(resetReconnectAttempt: boolean) {
-    if (!this.roomSlug || !this.wsUrlGenerator) return;
-    if (
-      this.ws &&
-      (this.ws.readyState === WebSocket.CONNECTING ||
-        this.ws.readyState === WebSocket.OPEN)
-    ) {
-      return;
-    }
-    if (this.connecting) {
-      this.reconnectQueued = true;
-      return;
-    }
-    this.connecting = true;
-    const requestGeneration = ++this.connectionRequestGeneration;
-    try {
-      markVoice("VoiceGW:ticket-start", { roomSlug: this.roomSlug });
-      const protocols = await fetchSocketProtocols({
-        audience: "voice",
-        channelId: this.ticketContext.channelId,
-        roomSlug: this.roomSlug,
-        serverId: this.ticketContext.serverId,
-      });
-      if (
-        this.isLeaving ||
-        requestGeneration !== this.connectionRequestGeneration
-      )
-        return;
-      markVoice("VoiceGW:ticket-done", { roomSlug: this.roomSlug });
-      const url = this.wsUrlGenerator(
-        `/api/channels/${this.roomSlug}/voice?v=1`,
-      );
-      this.resetSocketIdentityState();
-      super.connect(url, resetReconnectAttempt, protocols);
-    } catch (error) {
-      this.log.error("Failed to open voice socket", error);
-      this.emit("error", { message: "Could not open voice socket" });
-      this.scheduleReconnect();
-    } finally {
-      this.connecting = false;
-      if (this.reconnectQueued && !this.isLeaving) {
-        this.reconnectQueued = false;
-        void this.openVoiceSocket(false);
-      } else {
-        this.reconnectQueued = false;
-      }
-    }
+  protected async acquireTicket() {
+    const target = this.target;
+    if (!target) throw new Error("Voice socket has no room to connect to");
+    markVoice("VoiceGW:ticket-start", { roomSlug: target.roomSlug });
+    const protocols = await fetchSocketProtocols({
+      audience: "voice",
+      channelId: target.ticketContext.channelId,
+      roomSlug: target.roomSlug,
+      serverId: target.ticketContext.serverId,
+    });
+    return {
+      url: target.wsUrlGenerator(`/api/channels/${target.roomSlug}/voice?v=1`),
+      protocols,
+    };
+  }
+
+  protected onTicket() {
+    markVoice("VoiceGW:ticket-done", { roomSlug: this.target?.roomSlug });
+    this.resetSocketIdentityState();
+  }
+
+  protected onTicketFailed(error: unknown) {
+    this.log.error("Failed to open voice socket", error);
+    this.emit("error", { message: "Could not open voice socket" });
   }
 
   public updateVoiceToken(token: string) {
@@ -178,36 +148,17 @@ export class VoiceGateway extends BaseGateway<
       this.participantId !== null || this.voiceToken !== null;
   }
 
-  protected performReconnect() {
-    if (this.roomSlug && this.wsUrlGenerator) {
-      this.log.info(
-        "Voice connection lost — attempting to reconnect while preserving WebRTC peer connections",
-      );
-      void this.openVoiceSocket(false);
-    }
-  }
-
   protected handleMessage(msg: VoiceGatewayServerMessage) {
     switch (msg.op) {
       case VoiceOpcode.Hello: {
-        const interval =
-          msg.d.heartbeat_interval ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
-        this.log.info(`Hello received, interval=${interval}ms`);
-        this.heartbeat.start(interval);
+        this.log.info("Hello received");
         this.helloReceived = true;
         this.maybeSendIdentify();
         break;
       }
 
-      case VoiceOpcode.HeartbeatACK: {
-        this.heartbeat.onAck();
-        break;
-      }
-
       case VoiceOpcode.VoiceReady: {
-        this.isIdentified = true;
-        this.reconnectAttempt = 0;
-        this.flushQueue();
+        this.socket.markReady();
 
         const vr = msg.d;
         this.emit("voice-ready", {
@@ -297,7 +248,7 @@ export class VoiceGateway extends BaseGateway<
   // --- External API ---
 
   public get isReady() {
-    return this.isIdentified && this.ws?.readyState === WebSocket.OPEN;
+    return this.socket.isReady;
   }
 
   public sendAppEvent(payload: Record<string, unknown>): boolean {
@@ -343,7 +294,7 @@ export class VoiceGateway extends BaseGateway<
       this.identifySent ||
       !this.participantId ||
       !this.voiceToken ||
-      this.ws?.readyState !== WebSocket.OPEN
+      !this.socket.isOpen
     ) {
       return;
     }

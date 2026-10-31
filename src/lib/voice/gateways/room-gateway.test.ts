@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VoiceOpcode } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
@@ -508,6 +508,117 @@ describe("RoomGateway frame decoding", () => {
         d: { session_id: "session-1", seq_ack: 9 },
       },
     ]);
+    gateway.disconnect();
+  });
+});
+
+describe("RoomGateway lifecycle", () => {
+  beforeEach(() => {
+    TestWebSocket.instances = [];
+    mocks.fetchSocketTicketBundle.mockReset();
+    mocks.fetchSocketTicketBundle.mockResolvedValue({
+      protocols: ["ralph.realtime.v1", "ralph.ticket.test"],
+    });
+    vi.stubGlobal("WebSocket", TestWebSocket);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function connectedGateway() {
+    const gateway = new RoomGateway();
+    gateway.connectRoom({
+      name: "Test User",
+      clerkUserId: "user-1",
+      roomSlug: "voice-server-channel",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = TestWebSocket.instances.at(-1)!;
+    socket.readyState = TestWebSocket.OPEN;
+    return { gateway, socket };
+  }
+
+  it("probes on wake and replaces a socket that does not answer, resuming", async () => {
+    const { gateway, socket } = await connectedGateway();
+    const disconnected = vi.fn();
+    gateway.on("disconnected", disconnected);
+    socket.message({
+      op: VoiceOpcode.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    socket.message({
+      op: VoiceOpcode.Ready,
+      d: {
+        participant_id: "session-1",
+        ice_servers: [],
+        participants: [],
+        voice_token: "voice-token",
+      },
+    });
+
+    gateway.wake();
+    expect(socket.sent.at(-1)).toBe('{"op":3}');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(disconnected).toHaveBeenCalledOnce();
+    expect(socket.readyState).toBe(TestWebSocket.CLOSED);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(TestWebSocket.instances).toHaveLength(2);
+    const second = TestWebSocket.instances[1]!;
+    second.readyState = TestWebSocket.OPEN;
+    second.message({
+      op: VoiceOpcode.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    expect(sentMessages(second)).toEqual([
+      { op: VoiceOpcode.Resume, d: { session_id: "session-1", seq_ack: 0 } },
+    ]);
+    gateway.disconnect();
+  });
+
+  it("keeps an answering socket on wake", async () => {
+    const { gateway, socket } = await connectedGateway();
+    gateway.wake();
+    socket.message({ op: VoiceOpcode.HeartbeatACK, d: { seq: 1 } });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(TestWebSocket.instances).toHaveLength(1);
+    expect(socket.readyState).toBe(TestWebSocket.OPEN);
+    gateway.disconnect();
+  });
+
+  it("keeps retrying a 503, then stops on a second 401 and reports auth-failed", async () => {
+    const { SocketTicketError } = await vi.importActual<
+      typeof import("@/lib/voice/socket-ticket-client")
+    >("@/lib/voice/socket-ticket-client");
+    mocks.fetchSocketTicketBundle.mockRejectedValue(new SocketTicketError(503));
+    const gateway = new RoomGateway();
+    const authFailed = vi.fn();
+    const errors = vi.fn();
+    gateway.on("auth-failed", authFailed);
+    gateway.on("error", errors);
+    gateway.connectRoom({
+      name: "Test User",
+      roomSlug: "voice-server-channel",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(
+      mocks.fetchSocketTicketBundle.mock.calls.length,
+    ).toBeGreaterThanOrEqual(4);
+    expect(authFailed).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledWith({
+      message: "Could not open room socket",
+    });
+
+    mocks.fetchSocketTicketBundle.mockRejectedValue(new SocketTicketError(401));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(authFailed).toHaveBeenCalledOnce();
+    const afterRefusal = mocks.fetchSocketTicketBundle.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(mocks.fetchSocketTicketBundle).toHaveBeenCalledTimes(afterRefusal);
     gateway.disconnect();
   });
 });

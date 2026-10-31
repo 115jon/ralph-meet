@@ -6,6 +6,7 @@ import path from "path";
 import { defineConfig, type Plugin } from "vite";
 import killerInstincts from "vite-plugin-killer-instincts";
 import { unstable_readConfig } from "wrangler";
+import { prefetchManifest } from "./tools/vite/prefetch-manifest";
 import {
   describeDevAuth,
   resolveDevAuthTarget,
@@ -194,6 +195,14 @@ export default defineConfig(({ command, isPreview }) => {
         viteEnvironment: { name: "ssr" },
       }),
       clientEnvironmentShims(),
+      // Chunks to fetch at idle after load, by what the visitor does next
+      // (read by src/lib/prefetch.ts; see docs/performance.md).
+      prefetchManifest({
+        chat: ["src/routes/chat.tsx?tsr-split"],
+        "sign-in": ["src/routes/sign-in.tsx?tsr-split"],
+        room: ["src/routes/room.$slug.tsx?tsr-split"],
+        "room-voice": ["src/components/RoomVoiceView.tsx"],
+      }),
       viteReact(),
       tailwindcss(),
     ],

@@ -22,6 +22,7 @@ import {
   fetchDesktopReleases,
   type DesktopRelease,
 } from "@/components/home/releases";
+import { afterLoadIdle } from "@/lib/idle";
 import { isWindows } from "@/lib/platform";
 import { useAuth } from "@kova/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -51,11 +52,16 @@ export default function HomePageClient() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchDesktopReleases().then((mapped) => {
-      if (!cancelled && mapped.length > 0) setReleases(mapped);
-    });
+    // The pinned fallback already gives the download button a target, so the
+    // feed (about 45 KB from GitHub) waits until the page has loaded and idled.
+    const cancelIdle = afterLoadIdle(() => {
+      fetchDesktopReleases().then((mapped) => {
+        if (!cancelled && mapped.length > 0) setReleases(mapped);
+      });
+    }, 4000);
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, []);
 

@@ -1,6 +1,6 @@
 import { AUTH_CARD_APPEARANCE } from "@/components/auth/auth-card-appearance";
 import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
-import DesktopLogin from "@/components/DesktopLogin";
+import { LazyDesktopLogin } from "@/components/LazyDesktopLogin";
 import {
   buildAuthRouteUrl,
   buildPostAuthSignInUrl,
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/sign-up")({
 
 function SignUpPage() {
   if (isTauri()) {
-    return <DesktopLogin />;
+    return <LazyDesktopLogin />;
   }
 
   return <WebSignUpPage />;

@@ -1,0 +1,17 @@
+{
+  // The Durable Objects and the Worker entry, which tsconfig.json does not
+  // include. `node` because wrangler.toml sets nodejs_compat. The workerd tests under realtime/__tests__ are left out for now:
+  // they have about 80 type errors (mostly implicit any) to fix first.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": [
+    "realtime/**/*.ts",
+    "custom-server-entry.ts",
+    "realtime-test-entry.ts",
+    "src/env.d.ts"
+  ],
+  "exclude": ["realtime/__tests__/**", "node_modules"]
+}

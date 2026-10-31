@@ -849,3 +849,89 @@ describe("VoiceGateway frame decoding", () => {
     gateway.disconnect();
   });
 });
+
+describe("VoiceGateway lifecycle", () => {
+  beforeEach(() => {
+    TestWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockReset();
+    vi.stubGlobal("WebSocket", TestWebSocket);
+  });
+
+  const connect = (gateway: VoiceGateway) =>
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token-1",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+
+  it("stops retrying after two 401 ticket refusals and tries once more on wake", async () => {
+    const { SocketTicketError } = await vi.importActual<
+      typeof import("@/lib/voice/socket-ticket-client")
+    >("@/lib/voice/socket-ticket-client");
+    mocks.fetchSocketProtocols.mockRejectedValue(new SocketTicketError(401));
+    const gateway = new VoiceGateway();
+    const authFailed = vi.fn();
+    gateway.on("auth-failed", authFailed);
+
+    connect(gateway);
+    await vi.waitFor(() => expect(authFailed).toHaveBeenCalledOnce(), {
+      timeout: 2_000,
+    });
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+
+    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    gateway.wake();
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(3);
+    gateway.disconnect();
+  });
+
+  it("is kicked without reconnecting when the room replaces the socket", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    const gateway = new VoiceGateway();
+    const kicked = vi.fn();
+    const disconnected = vi.fn();
+    gateway.on("kicked", kicked);
+    gateway.on("disconnected", disconnected);
+
+    connect(gateway);
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onclose?.({
+      code: 1000,
+      reason: "Replaced by new connection",
+    } as CloseEvent);
+
+    expect(kicked).toHaveBeenCalledOnce();
+    expect(disconnected).toHaveBeenCalledOnce();
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledOnce();
+  });
+
+  it("wakes a pending retry at once instead of waiting out the backoff", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    vi.useFakeTimers();
+    try {
+      const gateway = new VoiceGateway();
+      connect(gateway);
+      await vi.advanceTimersByTimeAsync(0);
+      const first = TestWebSocket.instances[0]!;
+      first.readyState = TestWebSocket.OPEN;
+      first.onclose?.({ code: 1006, reason: "" } as CloseEvent);
+      expect(mocks.fetchSocketProtocols).toHaveBeenCalledOnce();
+
+      gateway.wake();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+      expect(TestWebSocket.instances).toHaveLength(2);
+      gateway.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
