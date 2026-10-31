@@ -328,3 +328,193 @@ describe("PartyTracksMediaManager", () => {
     expect(manager.republishTrack("cam-audio-participant")).toBe(false);
   });
 });
+
+/** Timers the test advances by hand. */
+class ManualTimers {
+  private now = 0;
+  private timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
+
+  readonly schedule = (fn: () => void, ms: number) => {
+    const timer = { at: this.now + ms, fn, live: true };
+    this.timers.push(timer);
+    return () => {
+      timer.live = false;
+    };
+  };
+
+  pending(): number {
+    return this.timers.filter((timer) => timer.live).length;
+  }
+
+  advance(ms: number): void {
+    const end = this.now + ms;
+    for (;;) {
+      const due = this.timers
+        .filter((timer) => timer.live && timer.at <= end)
+        .sort((a, b) => a.at - b.at)[0];
+      if (!due) break;
+      due.live = false;
+      this.now = due.at;
+      due.fn();
+    }
+    this.now = end;
+  }
+}
+
+describe("PartyTracksMediaManager pull watchdog", () => {
+  const WATCHDOG_MS = 8_000;
+  const offer: TrackInfo = {
+    participant_id: "joiner",
+    track_name: "cam-audio-joiner",
+    sfu_track_name: "opaque-joiner-audio",
+    session_id: "joiner-session",
+    kind: "audio",
+  };
+
+  function setup() {
+    const timers = new ManualTimers();
+    const transport = new TestTransport();
+    const remoteEvents: string[] = [];
+    const onError = vi.fn();
+    const manager = new PartyTracksMediaManager(
+      transport,
+      "listener",
+      {
+        onPublicationMetadata: vi.fn(),
+        onPublicationStopped: vi.fn(),
+        onRemoteTrack: ({ action, track }) =>
+          remoteEvents.push(`${action}:${track.id}`),
+        onError,
+      },
+      {
+        pullWatchdogMs: WATCHDOG_MS,
+        pullRetryBaseMs: 500,
+        pullRetryMaxMs: 4_000,
+        schedule: timers.schedule,
+      },
+    );
+    const pulled = () => transport.pulledTracks.get(offer.track_name);
+    return { timers, transport, remoteEvents, onError, manager, pulled };
+  }
+
+  it("drops a pull that never produces a track and pulls again with backoff", () => {
+    const { timers, transport, remoteEvents, manager, pulled } = setup();
+    manager.offerTracks([offer]);
+    const hung = pulled();
+    expect(transport.pullCount).toBe(1);
+
+    timers.advance(WATCHDOG_MS - 1);
+    expect(hung?.observed).toBe(true);
+    timers.advance(1);
+    expect(hung?.observed).toBe(false);
+    expect(manager.hasRemotePulls).toBe(false);
+
+    timers.advance(499);
+    expect(transport.pullCount).toBe(1);
+    timers.advance(1);
+    expect(transport.pullCount).toBe(2);
+    expect(transport.pullMetadata.get(offer.track_name)).toEqual([offer]);
+
+    // Hung again: the next re-pull waits twice as long.
+    timers.advance(WATCHDOG_MS + 999);
+    expect(transport.pullCount).toBe(2);
+    timers.advance(1);
+    expect(transport.pullCount).toBe(3);
+
+    pulled()?.next(mediaTrack("audio", "joiner-audio"));
+    expect(remoteEvents).toEqual(["add:joiner-audio"]);
+    timers.advance(10 * 60_000);
+    expect(transport.pullCount).toBe(3);
+    expect(timers.pending()).toBe(0);
+    manager.dispose();
+  });
+
+  it("does not let a same-metadata offer pin a dead pull", () => {
+    const { timers, transport, remoteEvents, manager, pulled } = setup();
+    manager.offerTracks([offer]);
+    // Deduplicated: the pull in flight is not restarted.
+    manager.offerTracks([{ ...offer }]);
+    expect(transport.pullCount).toBe(1);
+
+    timers.advance(WATCHDOG_MS);
+    expect(manager.hasRemotePulls).toBe(false);
+    // The same offer again (a VoiceReady sync) waits out the backoff.
+    manager.syncRemoteTracks([{ ...offer }]);
+    expect(transport.pullCount).toBe(1);
+    timers.advance(500);
+    expect(transport.pullCount).toBe(2);
+
+    pulled()?.next(mediaTrack("audio", "joiner-audio"));
+    expect(remoteEvents).toEqual(["add:joiner-audio"]);
+    manager.dispose();
+  });
+
+  it("pulls a republished track at once instead of waiting for the backoff", () => {
+    const { timers, transport, manager } = setup();
+    manager.offerTracks([offer]);
+    timers.advance(WATCHDOG_MS);
+
+    const republished = { ...offer, session_id: "joiner-session-2" };
+    manager.offerTracks([republished]);
+    expect(transport.pullCount).toBe(2);
+    expect(transport.pullMetadata.get(offer.track_name)).toEqual([republished]);
+    timers.advance(500);
+    expect(transport.pullCount).toBe(2);
+    manager.dispose();
+  });
+
+  it("re-arms when an active pull is sent new metadata", () => {
+    const { timers, transport, remoteEvents, manager, pulled } = setup();
+    manager.offerTracks([offer]);
+    pulled()?.next(mediaTrack("audio", "first"));
+    timers.advance(60_000);
+    expect(transport.pullCount).toBe(1);
+
+    manager.offerTracks([{ ...offer, session_id: "joiner-session-2" }]);
+    timers.advance(WATCHDOG_MS);
+    expect(remoteEvents).toEqual(["add:first", "remove:first"]);
+    timers.advance(500);
+    expect(transport.pullCount).toBe(2);
+    manager.dispose();
+  });
+
+  it("retries a pull that errors", () => {
+    const { timers, transport, onError, manager, pulled } = setup();
+    manager.offerTracks([offer]);
+    const failure = new Error("pull failed");
+    pulled()?.error(failure);
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(manager.hasRemotePulls).toBe(false);
+
+    timers.advance(500);
+    expect(transport.pullCount).toBe(2);
+    manager.dispose();
+  });
+
+  it("cancels the watchdog and any pending re-pull when tracks stop or the manager is disposed", () => {
+    const { timers, transport, manager } = setup();
+    const other: TrackInfo = {
+      ...offer,
+      track_name: "screen-video-joiner",
+      sfu_track_name: "opaque-joiner-screen",
+      kind: "video",
+    };
+    manager.offerTracks([offer, other]);
+    expect(transport.pullCount).toBe(2);
+
+    manager.stopRemoteTracks([offer.track_name]);
+    timers.advance(WATCHDOG_MS);
+    // Only the other pull's re-pull is waiting.
+    expect(timers.pending()).toBe(1);
+    manager.setRemoteTrackSubscription(other.track_name, false);
+    expect(timers.pending()).toBe(0);
+
+    manager.setRemoteTrackSubscription(other.track_name, true);
+    expect(transport.pullCount).toBe(3);
+    expect(timers.pending()).toBe(1);
+    manager.dispose();
+    expect(timers.pending()).toBe(0);
+    timers.advance(10 * 60_000);
+    expect(transport.pullCount).toBe(3);
+  });
+});

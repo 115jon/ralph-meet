@@ -1,4 +1,5 @@
 import type { TrackInfo } from "@/lib/types";
+import type { ScheduleTimer } from "@/lib/voice/heartbeat-manager";
 import type { RalphPublishedTrack } from "@/lib/voice/partytracks-transport";
 import { BehaviorSubject, type Observable, Subscription } from "rxjs";
 
@@ -34,10 +35,43 @@ interface Publication {
   latestMetadata?: TrackInfo;
 }
 
+export interface PartyTracksMediaManagerOptions {
+  /**
+   * A pull that has produced no track this long after it started (or after
+   * its metadata changed) is dropped and pulled again.
+   */
+  readonly pullWatchdogMs?: number;
+  /** Backoff before pulling a dropped track again: first delay and cap. */
+  readonly pullRetryBaseMs?: number;
+  readonly pullRetryMaxMs?: number;
+  readonly schedule?: ScheduleTimer;
+}
+
+// PartyTracks retries a failing pull itself (100 ms doubling to 10 s) and
+// gives up resolving a pulled transceiver after 5 s, so 10 s without a track
+// means the pull is stuck, not slow.
+const DEFAULT_PULL_WATCHDOG_MS = 10_000;
+const DEFAULT_PULL_RETRY_BASE_MS = 1_000;
+const DEFAULT_PULL_RETRY_MAX_MS = 30_000;
+
+const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
+  const handle = setTimeout(callback, ms);
+  return () => clearTimeout(handle);
+};
+
 interface RemotePull {
   currentTrack?: MediaStreamTrack;
   metadata$: BehaviorSubject<TrackInfo>;
   subscription: Subscription;
+  /** Armed until the pull produces a track for its current metadata. */
+  cancelWatchdog?: () => void;
+}
+
+interface PullRetry {
+  /** Pulls dropped in a row (watchdog or error) without producing a track. */
+  failures: number;
+  /** Set while the re-pull waits out its backoff. */
+  cancel?: () => void;
 }
 
 function isMediaKind(kind: string): kind is "audio" | "video" {
@@ -54,6 +88,13 @@ function sameMetadata(left: TrackInfo, right: TrackInfo): boolean {
   );
 }
 
+function sameSfuTrack(left: TrackInfo, right: TrackInfo): boolean {
+  return (
+    left.sfu_track_name === right.sfu_track_name &&
+    left.session_id === right.session_id
+  );
+}
+
 /**
  * Adapts Ralph's semantic track aliases to one PartyTracks transport.
  * Publication sources and pull metadata stay hot so PartyTracks can replace
@@ -65,16 +106,27 @@ export class PartyTracksMediaManager {
   private readonly retiredPublications: Publication[] = [];
   private readonly offers = new Map<string, TrackInfo>();
   private readonly pulls = new Map<string, RemotePull>();
+  private readonly pullRetries = new Map<string, PullRetry>();
   private readonly unsubscribedTrackNames = new Set<string>();
   private readonly stateSubscription: Subscription;
   private peerConnectionState: RTCPeerConnectionState = "new";
   private disposed = false;
+  private readonly pullWatchdogMs: number;
+  private readonly pullRetryBaseMs: number;
+  private readonly pullRetryMaxMs: number;
+  private readonly schedule: ScheduleTimer;
 
   constructor(
     private readonly transport: PartyTracksMediaTransport,
     private readonly participantId: string,
     private readonly callbacks: PartyTracksMediaManagerCallbacks,
+    options: PartyTracksMediaManagerOptions = {},
   ) {
+    this.pullWatchdogMs = options.pullWatchdogMs ?? DEFAULT_PULL_WATCHDOG_MS;
+    this.pullRetryBaseMs =
+      options.pullRetryBaseMs ?? DEFAULT_PULL_RETRY_BASE_MS;
+    this.pullRetryMaxMs = options.pullRetryMaxMs ?? DEFAULT_PULL_RETRY_MAX_MS;
+    this.schedule = options.schedule ?? scheduleWithGlobalTimers;
     this.stateSubscription = this.transport.peerConnectionState$.subscribe({
       next: (state) => {
         this.peerConnectionState = state;
@@ -236,12 +288,27 @@ export class PartyTracksMediaManager {
       }
       const previous = this.offers.get(track.track_name);
       this.offers.set(track.track_name, track);
+      const changed = !previous || !sameMetadata(previous, track);
       const pull = this.pulls.get(track.track_name);
       if (pull) {
-        if (!previous || !sameMetadata(previous, track)) {
+        if (changed) {
+          // PartyTracks pulls again (and must produce a track) only when
+          // the SFU track it names changes.
+          if (!previous || !sameSfuTrack(previous, track)) {
+            this.armPullWatchdog(track.track_name, pull);
+          }
           pull.metadata$.next(track);
         }
-      } else if (!this.unsubscribedTrackNames.has(track.track_name)) {
+      } else if (this.unsubscribedTrackNames.has(track.track_name)) {
+        continue;
+      } else if (this.pullRetries.get(track.track_name)?.cancel) {
+        // A dropped pull is waiting out its backoff; the re-pull takes the
+        // latest offer. A different publication need not wait for it.
+        if (changed) {
+          this.cancelPullRetry(track.track_name);
+          this.startPull(track);
+        }
+      } else {
         this.startPull(track);
       }
     }
@@ -274,12 +341,14 @@ export class PartyTracksMediaManager {
     }
     this.unsubscribedTrackNames.add(trackName);
     this.stopPull(trackName);
+    this.clearPullRetry(trackName);
   }
 
   stopRemoteTracks(trackNames: string[]): void {
     for (const trackName of trackNames) {
       this.offers.delete(trackName);
       this.stopPull(trackName);
+      this.clearPullRetry(trackName);
     }
   }
 
@@ -335,6 +404,9 @@ export class PartyTracksMediaManager {
     this.publications.clear();
     this.releaseRetiredPublications();
     for (const trackName of [...this.pulls.keys()]) this.stopPull(trackName);
+    for (const trackName of [...this.pullRetries.keys()]) {
+      this.clearPullRetry(trackName);
+    }
     this.offers.clear();
     this.unsubscribedTrackNames.clear();
     this.stateSubscription.unsubscribe();
@@ -347,9 +419,13 @@ export class PartyTracksMediaManager {
       subscription: new Subscription(),
     };
     this.pulls.set(track.track_name, pull);
+    this.armPullWatchdog(track.track_name, pull);
     this.callbacks.onPullStarted?.(track.track_name);
     pull.subscription = this.transport.pull(metadata$).subscribe({
       next: (remoteTrack) => {
+        pull.cancelWatchdog?.();
+        pull.cancelWatchdog = undefined;
+        this.pullRetries.delete(track.track_name);
         const currentMetadata = this.offers.get(track.track_name) ?? track;
         if (pull.currentTrack === remoteTrack) return;
         if (pull.currentTrack) {
@@ -367,14 +443,72 @@ export class PartyTracksMediaManager {
           trackInfo: currentMetadata,
         });
       },
-      error: (error) => this.callbacks.onError?.(error),
+      error: (error) => {
+        this.callbacks.onError?.(error);
+        this.dropPull(track.track_name, pull);
+      },
     });
+  }
+
+  /**
+   * A pull that never settles would otherwise keep its track name forever:
+   * later offers with the same metadata are deduplicated here and in
+   * PartyTracks, so nothing would ever pull that track again.
+   */
+  private armPullWatchdog(trackName: string, pull: RemotePull): void {
+    pull.cancelWatchdog?.();
+    pull.cancelWatchdog = this.schedule(() => {
+      pull.cancelWatchdog = undefined;
+      this.dropPull(trackName, pull);
+    }, this.pullWatchdogMs);
+  }
+
+  /** Drops a pull that failed or produced nothing, and pulls again later. */
+  private dropPull(trackName: string, pull: RemotePull): void {
+    if (this.disposed || this.pulls.get(trackName) !== pull) return;
+    this.stopPull(trackName);
+    const retry = this.pullRetries.get(trackName) ?? { failures: 0 };
+    retry.failures += 1;
+    this.pullRetries.set(trackName, retry);
+    const delay = Math.min(
+      this.pullRetryBaseMs * 2 ** (retry.failures - 1),
+      this.pullRetryMaxMs,
+    );
+    retry.cancel?.();
+    retry.cancel = this.schedule(() => {
+      retry.cancel = undefined;
+      const offer = this.offers.get(trackName);
+      if (
+        this.disposed ||
+        !offer ||
+        this.pulls.has(trackName) ||
+        this.unsubscribedTrackNames.has(trackName)
+      ) {
+        return;
+      }
+      this.startPull(offer);
+    }, delay);
+  }
+
+  /** Cancels a pending re-pull but keeps the failure count (backoff). */
+  private cancelPullRetry(trackName: string): void {
+    const retry = this.pullRetries.get(trackName);
+    if (!retry) return;
+    retry.cancel?.();
+    retry.cancel = undefined;
+  }
+
+  private clearPullRetry(trackName: string): void {
+    this.cancelPullRetry(trackName);
+    this.pullRetries.delete(trackName);
   }
 
   private stopPull(trackName: string): void {
     const pull = this.pulls.get(trackName);
     if (!pull) return;
     this.pulls.delete(trackName);
+    pull.cancelWatchdog?.();
+    pull.cancelWatchdog = undefined;
     pull.subscription.unsubscribe();
     pull.metadata$.complete();
     if (!pull.currentTrack) return;
