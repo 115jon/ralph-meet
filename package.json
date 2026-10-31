@@ -87,9 +87,9 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.44.0",
-    "@cloudflare/vitest-pool-workers": "0.18.4",
-    "@cloudflare/workers-types": "^5.20260718.1",
+    "@cloudflare/vite-plugin": "1.66.0",
+    "@cloudflare/vitest-plugin": "1.4.11",
+    "@cloudflare/workers-types": "^5.20261031.1",
     "@lhci/cli": "^0.15.1",
     "@oxlint/plugins": "1.85.0",
     "@phosphor-icons/core": "2.1.1",
@@ -122,6 +122,6 @@
     "vite": "^7.3.1",
     "vite-plugin-killer-instincts": "^1.0.0",
     "vitest": "^4.1.9",
-    "wrangler": "4.110.0"
+    "wrangler": "4.156.0"
   }
 }
