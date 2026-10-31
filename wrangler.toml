@@ -5,6 +5,11 @@ compatibility_flags = [
     "nodejs_compat",
     "no_handle_cross_request_promise_resolution",
 ]
+# @cloudflare/vite-plugin >= 1.5x builds and uploads Worker source maps by
+# default. Off keeps the bundle that was deployed before the upgrade, and the
+# upload check fails anyway: the bundled RNNoise worklet asset ends with a
+# sourceMappingURL to a .map file that is not emitted.
+upload_source_maps = false
 
 # ── Secrets ───────────────────────────────────────────────────────────────
 # Set these via `wrangler secret put <NAME>` (never commit secret values):
@@ -107,6 +112,56 @@ max_batch_timeout = 5
 max_retries = 5
 retry_delay = 30
 dead_letter_queue = "ralph-meet-background-tasks-dlq"
+
+# ── Worker Previews ─────────────────────────────────────────────────────
+# `wrangler preview` (CI: .github/workflows/deploy-web.yml, docs/deploy.md)
+# uses only this block, never the top-level bindings above. Every binding
+# points at a preview-only resource. Durable Object classes and migrations stay
+# top level; each Preview gets its own Durable Object namespace. Queue
+# consumers and cron triggers cannot target a Preview, so they are not here.
+# Preview secrets: `wrangler preview base-config secret put <NAME>`.
+
+[previews.vars]
+CALLS_APP_ID = "19e070aa92dd233340bfb829a1ffd742"
+TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
+# KOVA_AUTH_URL and VITE_KOVA_AUTH_URL are left unset on purpose: both fall back
+# to DEFAULT_KOVA_AUTH_URL in src/lib/site-defaults.ts, the production value.
+VITE_KOVA_AUTH_PUBLISHABLE_KEY = "pk_live_yl2Z9ssEwlWuOYHVRWozk9WThozu4nFP3QAhCWAsPhE"
+COLLECTIBLES_ADMIN_USER_IDS = "DADtHxPYMksiibowh0LmZFu8TWT5DI9b"
+# The Preview's own origin is always allowed; the production origin is not.
+REALTIME_ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:1420,http://tauri.localhost,https://tauri.localhost"
+
+[[previews.durable_objects.bindings]]
+name = "MEETING_ROOM"
+class_name = "RootMeetingRoom"
+
+[[previews.durable_objects.bindings]]
+name = "VOICE_ROOM"
+class_name = "RootVoiceRoom"
+
+[[previews.durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RootRateLimiterDO"
+
+# Keep in step with wrangler.preview-migrations.toml, which applies migrations
+# to this database before each Preview deploy.
+[[previews.d1_databases]]
+binding = "DB"
+database_name = "ralph-chat-db-preview"
+database_id = "6377d48f-0660-4e9c-bb32-f6252474b95d"
+migrations_dir = "migrations"
+
+[[previews.kv_namespaces]]
+binding = "CACHE"
+id = "f88422d0cbad46f49e807608a10e0a6d"
+
+[[previews.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ralph-chat-attachments-preview"
+
+# No BACKGROUND_TASKS producer: a Preview cannot consume a queue, so queued
+# tasks would never run. Without the binding the Worker does that work inline,
+# which is what a smoke test should exercise.
 
 # The mobile-dev environment runs Worker code locally while using the deployed
 # data resources so an Android dev session starts with real server membership.

@@ -1,0 +1,12 @@
+# D1 migrations for the database that Worker Previews bind to. It must name
+# the same database as [[previews.d1_databases]] in wrangler.toml. Used by
+# .github/workflows/deploy-web.yml before every `wrangler preview`:
+#   pnpm exec wrangler d1 migrations apply PREVIEW_DB --remote \
+#     --config wrangler.preview-migrations.toml
+# Production migrations use wrangler.toml (`pnpm run migrate:main`).
+
+[[d1_databases]]
+binding = "PREVIEW_DB"
+database_name = "ralph-chat-db-preview"
+database_id = "6377d48f-0660-4e9c-bb32-f6252474b95d"
+migrations_dir = "migrations"
