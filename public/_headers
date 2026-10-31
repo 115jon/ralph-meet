@@ -1,0 +1,5 @@
+# Vite names everything in /assets with a content hash, so a file at a given
+# URL never changes: cache it for a year and skip revalidation. HTML and the
+# unhashed files in /public keep Cloudflare's default (revalidate every time).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

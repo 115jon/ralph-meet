@@ -1,3 +1,5 @@
+import { afterLoadIdle } from "@/lib/idle";
+
 async function bootstrap() {
   // React Scan's toolbar is a dev aid for a desk browser. On a phone (dev
   // previews through a door) it collapses to a ">" tab on the left edge
@@ -17,6 +19,12 @@ async function bootstrap() {
   ]);
 
   hydrateRoot(document, <StartClient />);
+
+  // Once the page has loaded and the browser is idle, download (not run) the
+  // chunks this visitor will probably need next.
+  afterLoadIdle(() => {
+    void import("@/lib/prefetch").then((mod) => mod.prefetchLikelyNext());
+  });
 }
 
 void bootstrap();

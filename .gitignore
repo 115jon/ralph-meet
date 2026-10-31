@@ -150,6 +150,7 @@ showcase/
 
 !/docs/design-system.md
 !/docs/design-audit.md
+!/docs/performance.md
 
 # Lighthouse CI
 .lighthouseci/

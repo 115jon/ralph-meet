@@ -1,7 +1,7 @@
 import { AUTH_CARD_APPEARANCE } from "@/components/auth/auth-card-appearance";
 import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { DeviceWaitingNotice } from "@/components/auth/DeviceWaitingNotice";
-import DesktopLogin from "@/components/DesktopLogin";
+import { LazyDesktopLogin } from "@/components/LazyDesktopLogin";
 import { SplashScreen } from "@/components/SplashScreen";
 import {
   consumeAuthLogoutIntent,
@@ -51,7 +51,7 @@ export const Route = createFileRoute("/sign-in")({
 
 function SignInPage() {
   if (isTauri()) {
-    return <DesktopLogin />;
+    return <LazyDesktopLogin />;
   }
 
   return <WebSignInPage />;

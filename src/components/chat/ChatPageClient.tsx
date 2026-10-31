@@ -5,12 +5,10 @@ import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
 import { AppConnectionBanner } from "@/components/chat/ConnectionBanner";
 import { EmptyState } from "@/components/ui/empty-state";
 import ChatArea from "@/components/chat/ChatArea";
-import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailToolbarSync";
 import DMSidebar from "@/components/chat/DMSidebar";
 import FloatingStreamPreview from "@/components/chat/FloatingStreamPreview";
 import FriendsView from "@/components/chat/FriendsView";
 import { MobileNavigationSheet } from "@/components/chat/MobileNavigationSheet";
-import ShopView from "@/components/chat/ShopView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
 import {
@@ -42,6 +40,7 @@ import { useOccupiedVoiceStandby } from "@/lib/voice/voice-standby";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
+import { warmLazyPanels } from "./lazy-panels";
 import { getPersistentVoiceViewIdentity } from "./voice-session-view";
 import {
   lazy,
@@ -102,6 +101,15 @@ const VoiceMediaManager = lazy(() =>
     default: mod.VoiceMediaManager,
   })),
 );
+
+// Desktop-only (taskbar thumbnail buttons) and the shop tab: neither is on
+// screen when the shell first paints, so neither ships with it.
+const DesktopThumbnailToolbarSync = lazy(() =>
+  import("@/components/chat/DesktopThumbnailToolbarSync").then((mod) => ({
+    default: mod.DesktopThumbnailToolbarSync,
+  })),
+);
+const ShopView = lazy(() => import("@/components/chat/ShopView"));
 
 const EMPTY_GRID_ITEMS: never[] = [];
 const TAILWIND_SPACING_UNIT_PX = 4;
@@ -206,6 +214,7 @@ export default function ChatPage() {
     isDmMode,
     setProfileUser,
   } = useChatPageLogic();
+  useEffect(() => warmLazyPanels(), []);
   useOccupiedVoiceStandby({
     serverId: activeServerId,
     joinedChannelId: voiceState.joined ? voiceState.channelId : null,
@@ -1420,11 +1429,13 @@ export default function ChatPage() {
           {!showVoiceAsMain &&
             (isDmMode && !activeChannelId ? (
               dmHomeView === "shop" ? (
-                <ShopView
-                  onMenuClick={() =>
-                    uiDispatch({ type: "SET_SIDEBAR", open: true })
-                  }
-                />
+                <Suspense fallback={null}>
+                  <ShopView
+                    onMenuClick={() =>
+                      uiDispatch({ type: "SET_SIDEBAR", open: true })
+                    }
+                  />
+                </Suspense>
               ) : (
                 <FriendsView
                   onMenuClick={() =>
@@ -1597,11 +1608,15 @@ export default function ChatPage() {
             />
           ))}
 
-        <DesktopThumbnailToolbarSync
-          currentUserId={user?.id ?? null}
-          localStreamState={localStreamState}
-          voiceJoined={voiceState.joined}
-        />
+        {isTauri() && (
+          <Suspense fallback={null}>
+            <DesktopThumbnailToolbarSync
+              currentUserId={user?.id ?? null}
+              localStreamState={localStreamState}
+              voiceJoined={voiceState.joined}
+            />
+          </Suspense>
+        )}
 
         {(localStreamState?.sfu ?? null) && (
           <Suspense fallback={null}>
