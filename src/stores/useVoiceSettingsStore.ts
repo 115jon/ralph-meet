@@ -1,6 +1,24 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { CameraQualityId } from "@/lib/camera-quality";
+import {
+  CAMERA_QUALITY_PROFILES,
+  type CameraQualityId,
+} from "@/lib/camera-quality";
+import {
+  isRecord,
+  orElse,
+  orElseWith,
+  readBoolean,
+  readGuard,
+  readList,
+  readMap,
+  readNumber,
+  readOneOf,
+  readObject,
+  readString,
+  required,
+  type Read,
+} from "@/lib/persisted-guard";
 import type { NoiseReductionProviderId } from "@/lib/voice/noise-reduction";
 import {
   VOICE_INPUT_PROFILE_SETTINGS,
@@ -209,9 +227,166 @@ export function normalizePeerSettings(
   };
 }
 
+// ── Persisted state ─────────────────────────────────────────────────────────
+// localStorage outlives the code that wrote it, so everything read back is
+// checked: a field that is missing, from an older release or the wrong type
+// becomes the default instead of reaching the store. The id lists below repeat
+// the members of types that live in modules this store must not import at
+// runtime (they pull in wasm and audio code); `satisfies` checks that every id
+// listed is a valid member of those types.
+
+const readCameraQuality = readGuard((value): value is CameraQualityId =>
+  CAMERA_QUALITY_PROFILES.some((profile) => profile.id === value),
+);
+
+const readInputProfile = readOneOf([
+  "standard",
+  "studio",
+  "custom",
+] satisfies VoiceInputProfile[]);
+
+const readNoiseReductionProvider = readOneOf([
+  "rnnoise",
+  "krisp-browser",
+] satisfies NoiseReductionProviderId[]);
+
+const readSpatialPlacementMode = readOneOf([
+  "line",
+  "arc",
+  "grid",
+  "manual",
+] satisfies SpatialPlacementMode[]);
+
+const readCameraBackground: Read<CameraBackgroundSetting> = (value) => {
+  if (!isRecord(value)) return undefined;
+  if (value.type === "none") return { type: "none" };
+  if (value.type === "blur") {
+    return value.strength === "light" || value.strength === "strong"
+      ? { type: "blur", strength: value.strength }
+      : undefined;
+  }
+  if (value.type === "image" && typeof value.id === "string") {
+    return { type: "image", id: value.id };
+  }
+  return undefined;
+};
+
+const readCustomCameraBackground = readObject<CustomCameraBackground>({
+  id: required(readString),
+  name: required(readString),
+  dataUrl: readString,
+  url: readString,
+  contentType: readString,
+  sizeBytes: readNumber,
+  createdAt: required(readNumber),
+});
+
+const readSpatialPosition = readObject<SpatialPosition>({
+  x: required(readNumber),
+  y: required(readNumber),
+});
+
+/** A peer entry as stored: any field may be missing in entries from older releases. */
+const readStoredPeerSettings = readObject<Partial<PeerSettings>>({
+  volume: readNumber,
+  streamVolume: readNumber,
+  muted: readBoolean,
+  alwaysHear: readBoolean,
+  attenuationEnabled: readBoolean,
+  attenuationStrength: readNumber,
+  soundboardMuted: readBoolean,
+});
+
+/** Peer entries are completed by `normalizePeerSettings`, which also backfills `streamVolume` from `volume`. */
+const readPeerSettings: Read<PeerSettings> = (value) => {
+  const stored = readStoredPeerSettings(value);
+  return stored && normalizePeerSettings(stored);
+};
+
+const readUserSettings = readObject<UserSettings>({
+  inputDeviceId: orElse(readString, defaultSettings.inputDeviceId),
+  inputDeviceLabel: readString,
+  inputDeviceGroupId: readString,
+  outputDeviceId: orElse(readString, defaultSettings.outputDeviceId),
+  outputDeviceLabel: readString,
+  outputDeviceGroupId: readString,
+  videoDeviceId: orElse(readString, defaultSettings.videoDeviceId),
+  videoDeviceLabel: readString,
+  videoDeviceGroupId: readString,
+  cameraQuality: orElse(readCameraQuality, defaultSettings.cameraQuality),
+  cameraBackground: orElse(
+    readCameraBackground,
+    defaultSettings.cameraBackground,
+  ),
+  customCameraBackgrounds: orElseWith(
+    readList(readCustomCameraBackground),
+    () => [],
+  ),
+  inputProfile: orElse(readInputProfile, defaultSettings.inputProfile),
+  noiseSuppression: orElse(readBoolean, defaultSettings.noiseSuppression),
+  noiseReductionEnabled: orElse(
+    readBoolean,
+    defaultSettings.noiseReductionEnabled,
+  ),
+  noiseReductionProvider: orElse(
+    readNoiseReductionProvider,
+    defaultSettings.noiseReductionProvider,
+  ),
+  echoCancellation: orElse(readBoolean, defaultSettings.echoCancellation),
+  sensitivity: orElse(readNumber, defaultSettings.sensitivity),
+  autoSensitivity: orElse(readBoolean, defaultSettings.autoSensitivity),
+  outputVolume: orElse(readNumber, defaultSettings.outputVolume),
+  inputVolume: orElse(readNumber, defaultSettings.inputVolume),
+  streamHighFidelity: orElse(readBoolean, defaultSettings.streamHighFidelity),
+  screenShareQuality: orElse(readString, defaultSettings.screenShareQuality),
+  screenShareWithAudio: orElse(
+    readBoolean,
+    defaultSettings.screenShareWithAudio,
+  ),
+  isMuted: orElse(readBoolean, defaultSettings.isMuted),
+  isDeafened: orElse(readBoolean, defaultSettings.isDeafened),
+  wasMutedBeforeDeafen: orElse(
+    readBoolean,
+    defaultSettings.wasMutedBeforeDeafen,
+  ),
+  alwaysHearScreenShareAudio: orElse(
+    readBoolean,
+    defaultSettings.alwaysHearScreenShareAudio,
+  ),
+  lastChannelId: orElse<string | null>(readString, null),
+  lastServerId: orElse<string | null>(readString, null),
+  peerSettings: orElseWith(readMap(readPeerSettings), () => ({})),
+  spatialAudioEnabled: orElse(readBoolean, defaultSettings.spatialAudioEnabled),
+  spatialPlacementMode: orElse(
+    readSpatialPlacementMode,
+    defaultSettings.spatialPlacementMode,
+  ),
+  spatialRoomSize: orElse(readNumber, defaultSettings.spatialRoomSize),
+  spatialDistance: orElse(readNumber, defaultSettings.spatialDistance),
+  spatialArcAngle: orElse(readNumber, defaultSettings.spatialArcAngle),
+  spatialManualPositions: orElseWith(readMap(readSpatialPosition), () => ({})),
+  alwaysPreviewVideo: readBoolean,
+  alwaysShowStreamPreview: readBoolean,
+});
+
+/** `_cache` is derived and never read back. */
+const readPersistedVoiceSettings = readObject<{
+  currentUser?: string;
+  userSettings: Record<string, UserSettings>;
+}>({
+  currentUser: readString,
+  userSettings: orElseWith(readMap(readUserSettings), () => ({})),
+});
+
+/** What `persist` writes and `migrate` returns; derived state such as `_cache` is not stored. */
+type PersistedVoiceState = {
+  currentUser: string | null;
+  userSettings: Record<string, UserSettings>;
+};
+
 const ROOM_GUEST_SETTINGS_USER_ID = "room-guest";
 
-function migrateRoomScopedSettings(state: VoiceSettingsState): void {
+function migrateRoomScopedSettings(state: PersistedVoiceState): void {
   if (!state?.userSettings) return;
 
   const roomKeys = Object.keys(state.userSettings).filter(
@@ -234,7 +409,7 @@ function migrateRoomScopedSettings(state: VoiceSettingsState): void {
 }
 
 export const useVoiceSettingsStore = create<VoiceSettingsState>()(
-  persist(
+  persist<VoiceSettingsState, [], [], PersistedVoiceState>(
     (set, get) => ({
       currentUser: null,
       userSettings: {},
@@ -619,8 +794,23 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
     {
       name: "voice-settings-storage",
       version: 5,
-      migrate: (persisted: any, version: number) => {
-        const state = persisted as VoiceSettingsState;
+      partialize: (state) => ({
+        currentUser: state.currentUser,
+        userSettings: state.userSettings,
+      }),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...readPersistedVoiceSettings(persistedState),
+      }),
+      migrate: (persisted, version) => {
+        // Read first so the version steps below work on checked data. Missing
+        // fields come out as defaults, which is what the older versions' `??=`
+        // backfills did.
+        const stored = readPersistedVoiceSettings(persisted);
+        const state: PersistedVoiceState = {
+          currentUser: stored?.currentUser ?? null,
+          userSettings: stored?.userSettings ?? {},
+        };
         if (version === 0 || version === undefined) {
           // High fidelity only disables browser capture processing. RNNoise
           // and the local sensitivity gate run after capture and remain valid.

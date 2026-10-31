@@ -13,6 +13,14 @@ import {
   type SoundboardTriggerMap,
 } from "@/lib/voice/soundboard-trigger";
 import { apiPatch } from "@/lib/api-client";
+import {
+  orElse,
+  readBoolean,
+  readMap,
+  readNumber,
+  readObject,
+  readString,
+} from "@/lib/persisted-guard";
 
 export type {
   SoundboardTriggerMap,
@@ -75,6 +83,49 @@ const defaultSoundSettings: SoundSettings = {
   voiceJoinSoundboard: { "*": { ...EMPTY_SOUNDBOARD_TRIGGER } },
   voiceLeaveSoundboard: { "*": { ...EMPTY_SOUNDBOARD_TRIGGER } },
 };
+
+/**
+ * What localStorage may hold. Every field of a user's entry is valid or the
+ * default, so an entry written by an older release or hand-edited never leaks a
+ * wrong type into the store. Trigger maps are validated by
+ * `normalizeSoundboardTriggerMap`, which also migrates the legacy single-trigger
+ * shape. `_cache` is derived and never read back.
+ */
+const readPersistedSoundSettings = readObject<{
+  currentUser?: string;
+  userSettings?: Record<string, SoundSettings>;
+}>({
+  currentUser: readString,
+  userSettings: readMap(
+    readObject<SoundSettings>({
+      soundsEnabled: orElse(readBoolean, defaultSoundSettings.soundsEnabled),
+      voiceJoinLeave: orElse(readBoolean, defaultSoundSettings.voiceJoinLeave),
+      muteDeafen: orElse(readBoolean, defaultSoundSettings.muteDeafen),
+      notifications: orElse(readBoolean, defaultSoundSettings.notifications),
+      selfConnectDisconnect: orElse(
+        readBoolean,
+        defaultSoundSettings.selfConnectDisconnect,
+      ),
+      screenShare: orElse(readBoolean, defaultSoundSettings.screenShare),
+      streamWatcherActivity: orElse(
+        readBoolean,
+        defaultSoundSettings.streamWatcherActivity,
+      ),
+      messageReceived: orElse(
+        readBoolean,
+        defaultSoundSettings.messageReceived,
+      ),
+      calls: orElse(readBoolean, defaultSoundSettings.calls),
+      soundVolume: orElse(readNumber, defaultSoundSettings.soundVolume),
+      soundboardVolume: orElse(
+        readNumber,
+        defaultSoundSettings.soundboardVolume,
+      ),
+      voiceJoinSoundboard: normalizeSoundboardTriggerMap,
+      voiceLeaveSoundboard: normalizeSoundboardTriggerMap,
+    }),
+  ),
+});
 
 type TriggerField =
   | "voiceJoinSoundboard"
@@ -258,6 +309,10 @@ export const useSoundSettingsStore = create<SoundSettingsState>()(
     {
       name: "sound-settings-storage",
       version: 1,
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...readPersistedSoundSettings(persistedState),
+      }),
     },
   ),
 );

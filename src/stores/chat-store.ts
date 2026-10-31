@@ -4,6 +4,12 @@ import {
   type ChatAction,
   type ChatState,
 } from "@/lib/chat-reducer";
+import {
+  orElseWith,
+  readMap,
+  readObject,
+  readString,
+} from "@/lib/persisted-guard";
 import type { User } from "@/lib/types";
 import { useMemo } from "react";
 import { create } from "zustand";
@@ -21,6 +27,18 @@ export interface ChatStore extends ChatState {
   actions: ChatRestActions;
   gateway: ChatGatewayActions;
 }
+
+/**
+ * What localStorage may hold: the per-channel scroll and jump positions, as
+ * message ids. Anything else (including `activeServerId` and
+ * `activeChannelId`, which older versions persisted) is dropped.
+ */
+const readPersistedChatState = readObject<
+  Pick<ChatState, "scrollPositions" | "jumpAnchors">
+>({
+  scrollPositions: orElseWith(readMap(readString), () => ({})),
+  jumpAnchors: orElseWith(readMap(readString), () => ({})),
+});
 
 export const useChatStore = create<ChatStore>()(
   persist(
@@ -46,14 +64,11 @@ export const useChatStore = create<ChatStore>()(
         scrollPositions: state.scrollPositions,
         jumpAnchors: state.jumpAnchors,
       }),
-      migrate: (persisted: unknown) => {
-        if (!persisted || typeof persisted !== "object") return persisted;
-
-        const state = { ...(persisted as Partial<ChatState>) };
-        delete state.activeServerId;
-        delete state.activeChannelId;
-        return state;
-      },
+      migrate: (persisted) => readPersistedChatState(persisted) ?? {},
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...readPersistedChatState(persistedState),
+      }),
     },
   ),
 );

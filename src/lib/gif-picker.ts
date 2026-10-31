@@ -1,3 +1,13 @@
+import {
+  orElse,
+  readList,
+  readNonBlankString,
+  readNumber,
+  readObject,
+  readStoredJson,
+  readString,
+  required,
+} from "@/lib/persisted-guard";
 import { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";
 
 export const GIF_FAVORITES_STORAGE_KEY = "chat:gifs:favorites";
@@ -500,52 +510,62 @@ export function isGifFavorite(
   return favorites.some((item) => item.id === gifId);
 }
 
+/** An asset as stored: it needs a url; size fields from older saves may be missing. */
+const readStoredGifAsset = readObject<GifPickerAsset>(
+  {
+    url: required(readNonBlankString),
+    width: orElse(readNumber, 0),
+    height: orElse(readNumber, 0),
+    sizeBytes: orElse(readNumber, 0),
+    contentType: normalizeGifPickerContentType,
+  },
+  { keepUnknown: true },
+);
+
+type StoredGifFavorite = Omit<GifPickerItem, "provider" | "mediaType"> & {
+  provider?: string;
+  mediaType?: string;
+};
+
+/**
+ * A favorite as stored. Only an id and playable urls are required; the media
+ * type and provider are re-derived below, so saves from older releases that
+ * lack them still load. Fields this release does not know are kept.
+ */
+const readStoredGifFavorite = readObject<StoredGifFavorite>(
+  {
+    id: required(readString),
+    title: orElse(readString, ""),
+    provider: readString,
+    sourceUrl: orElse(readString, ""),
+    aspectRatio: orElse(readNumber, 1),
+    duration: readNumber,
+    mediaType: readString,
+    altText: readString,
+    query: readString,
+    preview: required(readStoredGifAsset),
+    send: required(readStoredGifAsset),
+  },
+  { keepUnknown: true },
+);
+
 export function parseStoredGifFavorites(
   raw: string | null | undefined,
 ): GifPickerItem[] {
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (item) =>
-          item &&
-          typeof item.id === "string" &&
-          item.preview?.url &&
-          item.send?.url,
-      )
-      .map((item) => {
-        const normalizedPreview = {
-          ...item.preview,
-          contentType: normalizeGifPickerContentType(item.preview?.contentType),
-        };
-        const normalizedSend = {
-          ...item.send,
-          contentType: normalizeGifPickerContentType(item.send?.contentType),
-        };
-        const inferredMediaType = inferGifPickerMediaType({
-          ...item,
-          preview: normalizedPreview,
-          send: normalizedSend,
-        });
-        return {
-          ...item,
-          preview: normalizedPreview,
-          send: normalizedSend,
-          mediaType: inferredMediaType,
-          provider:
-            item.provider === "klipy" || item.provider === "tenor"
-              ? item.provider
-              : item.provider === "external"
-                ? "external"
-                : inferGifProviderFromUrl(
-                    item.sourceUrl || item.send?.url || item.preview?.url,
-                  ),
-        };
-      });
-  } catch {
-    return [];
-  }
+  const stored = readStoredJson(raw, readList(readStoredGifFavorite)) ?? [];
+  return stored.map((item) => {
+    const provider =
+      item.provider === "klipy" ||
+      item.provider === "tenor" ||
+      item.provider === "external"
+        ? item.provider
+        : inferGifProviderFromUrl(
+            item.sourceUrl || item.send.url || item.preview.url,
+          );
+    return {
+      ...item,
+      provider,
+      mediaType: inferGifPickerMediaType(item),
+    };
+  });
 }

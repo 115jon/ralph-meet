@@ -1,3 +1,4 @@
+import { readMap, readStoredJson, readString } from "@/lib/persisted-guard";
 import type { VoiceSessionStreamState } from "@/components/chat/VoiceChannelView";
 import {
   getDesktopAuthHandoffToken,
@@ -206,17 +207,12 @@ export function useChatPageLogic() {
   useEffect(() => {
     if (!chatUser?.id) return;
 
-    const saved = localStorage.getItem(lastActiveChannelsKey(chatUser.id));
-    if (saved) {
-      try {
-        lastActiveChannels.current = JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse lastActiveChannels", e);
-        lastActiveChannels.current = {};
-      }
-    } else {
-      lastActiveChannels.current = {};
-    }
+    // Corrupt or hand-edited storage falls back to "no recents".
+    lastActiveChannels.current =
+      readStoredJson(
+        localStorage.getItem(lastActiveChannelsKey(chatUser.id)),
+        readMap(readString),
+      ) ?? {};
 
     // Remove the pre-auth-migration global cache once we have a known user.
     localStorage.removeItem(LEGACY_LAST_ACTIVE_CHANNELS_KEY);

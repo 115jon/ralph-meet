@@ -1,4 +1,10 @@
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
+import {
+  orElse,
+  readBoolean,
+  readObject,
+  readStoredJson,
+} from "@/lib/persisted-guard";
 import { describeApiError } from "@/lib/api-errors";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -259,32 +265,22 @@ function writeStoredProgress(
   }
 }
 
+/** What localStorage may hold: each flag is a boolean or falls back to its default. */
+const readWordleSettings = readObject<WordleSettings>({
+  hardMode: orElse(readBoolean, DEFAULT_SETTINGS.hardMode),
+  darkTheme: orElse(readBoolean, DEFAULT_SETTINGS.darkTheme),
+  highContrast: orElse(readBoolean, DEFAULT_SETTINGS.highContrast),
+  keyboardOnly: orElse(readBoolean, DEFAULT_SETTINGS.keyboardOnly),
+  remindersMuted: orElse(readBoolean, DEFAULT_SETTINGS.remindersMuted),
+});
+
 function readStoredSettings(): WordleSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
-    const parsed = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-    return {
-      hardMode:
-        typeof parsed.hardMode === "boolean"
-          ? parsed.hardMode
-          : DEFAULT_SETTINGS.hardMode,
-      darkTheme:
-        typeof parsed.darkTheme === "boolean"
-          ? parsed.darkTheme
-          : DEFAULT_SETTINGS.darkTheme,
-      highContrast:
-        typeof parsed.highContrast === "boolean"
-          ? parsed.highContrast
-          : DEFAULT_SETTINGS.highContrast,
-      keyboardOnly:
-        typeof parsed.keyboardOnly === "boolean"
-          ? parsed.keyboardOnly
-          : DEFAULT_SETTINGS.keyboardOnly,
-      remindersMuted:
-        typeof parsed.remindersMuted === "boolean"
-          ? parsed.remindersMuted
-          : DEFAULT_SETTINGS.remindersMuted,
-    };
+    return (
+      readStoredJson(localStorage.getItem(SETTINGS_KEY), readWordleSettings) ??
+      DEFAULT_SETTINGS
+    );
   } catch {
     return DEFAULT_SETTINGS;
   }
