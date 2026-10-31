@@ -1,12 +1,31 @@
 import rnnoiseSimdWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url";
 import rnnoiseWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise.wasm?url";
 import rnnoiseWorkletUrl from "@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url";
+import {
+  acquireCaptureAudioContext,
+  loadCaptureWorkletModule,
+  releaseCaptureAudioContext,
+  reportLocalAudioIssue,
+} from "./capture-audio-context";
+import { markVoice } from "./latency-marks";
+import {
+  type InGraphVoiceGate,
+  type VoiceGateEvent,
+  type VoiceGateMode,
+  vadWorkletUrl,
+} from "./vad";
+import {
+  GATE_LOOKAHEAD_MS,
+  VAD_SILENCE_DELAY_MS,
+} from "./vad-processor.worklet.js";
 
 export type NoiseReductionProviderId = "rnnoise" | "krisp-browser";
 export type LocalAudioProcessingMode =
   | "passthrough"
   | "true-stereo"
   | "rnnoise";
+/** What the microphone publication is: a processor's output, or "direct". */
+export type LocalAudioPublicationMode = LocalAudioProcessingMode | "direct";
 
 export interface VoiceAudioProcessingSettings {
   noiseSuppression: boolean;
@@ -15,6 +34,11 @@ export interface VoiceAudioProcessingSettings {
   streamHighFidelity: boolean;
   noiseReductionEnabled: boolean;
   noiseReductionProvider: NoiseReductionProviderId;
+  /**
+   * The sensitivity (noise) gate on the published microphone. Off for the
+   * Studio profile. Defaults to on.
+   */
+  voiceGateEnabled?: boolean;
 }
 
 export interface LocalAudioCaptureProcessing {
@@ -29,19 +53,18 @@ export interface LocalAudioProcessorHandle {
   publicationStream: MediaStream;
   createMonitorStream: () => MediaStream;
   gateController: LocalAudioGateController;
+  /** Delay the publication's gate adds (0: no lookahead), in ms. */
+  gateLookaheadMs?: number;
   resume: () => void;
   destroy: () => void;
 }
 
 export interface LocalAudioGateController {
+  /** Manual override: closed (true) or open (false). */
   setGated: (gated: boolean) => void;
   resume: () => void;
-}
-
-export interface LocalAudioGateHandle {
-  outputStream: MediaStream;
-  gateController: LocalAudioGateController;
-  destroy: () => void;
+  /** The in-graph gate; VoiceActivityDetector drives it by mode. */
+  inGraph?: InGraphVoiceGate;
 }
 
 export const NOISE_REDUCTION_PROVIDER_LABELS: Record<
@@ -52,40 +75,19 @@ export const NOISE_REDUCTION_PROVIDER_LABELS: Record<
   "krisp-browser": "Krisp Browser SDK",
 };
 
-const WORKLET_SAMPLE_RATE = 48_000;
 const MAX_CHANNELS = 2;
+/** Matches getVoiceActivityThreshold(true, …); the detector sets the real one. */
+const DEFAULT_GATE_THRESHOLD = 3;
+/**
+ * A context created or resumed with user activation starts once the output
+ * device is open (tens of ms); one still suspended after this needs a
+ * gesture (see reportLocalAudioIssue). Nothing waits for it: the publication
+ * track exists at once and carries audio as soon as the context runs.
+ */
+const CONTEXT_START_REPORT_MS = 250;
 
 let rnnoiseBinaryPromise: Promise<ArrayBuffer> | null = null;
-let localAudioGateContext: AudioContext | null = null;
-let localAudioGateContextUsers = 0;
 type RnnoiseModule = typeof import("@sapphi-red/web-noise-suppressor");
-
-function getLocalAudioGateContext(): AudioContext | null {
-  if (localAudioGateContext) return localAudioGateContext;
-  if (typeof AudioContext === "undefined") return null;
-  try {
-    localAudioGateContext = new AudioContext({
-      sampleRate: WORKLET_SAMPLE_RATE,
-    });
-    return localAudioGateContext;
-  } catch {
-    return null;
-  }
-}
-
-function resumeLocalAudioGateContext(): Promise<void> {
-  const context = localAudioGateContext;
-  if (context?.state === "suspended") return context.resume().catch(() => {});
-  return Promise.resolve();
-}
-
-export function closeLocalAudioGateContext(): void {
-  localAudioGateContextUsers = Math.max(0, localAudioGateContextUsers - 1);
-  if (localAudioGateContextUsers > 0) return;
-  const context = localAudioGateContext;
-  localAudioGateContext = null;
-  context?.close().catch(() => {});
-}
 
 export function isNoiseReductionProviderSupported(
   provider: NoiseReductionProviderId,
@@ -116,6 +118,20 @@ export function resolveLocalAudioProcessingMode(
   }
 
   return "passthrough";
+}
+
+/**
+ * Whether the published microphone needs a processor at all. Without the
+ * gate and without RNNoise the browser-processed capture track is published
+ * as is ("direct"): routing it through Web Audio adds latency (a
+ * MediaStreamAudioDestinationNode hop) and changes nothing.
+ */
+export function resolveLocalAudioPublicationMode(
+  settings: VoiceAudioProcessingSettings,
+): LocalAudioPublicationMode {
+  const mode = resolveLocalAudioProcessingMode(settings);
+  if (mode === "rnnoise") return mode;
+  return settings.voiceGateEnabled === false ? "direct" : mode;
 }
 
 export function resolveCaptureAudioProcessing(
@@ -161,229 +177,58 @@ function configureChannelGraph(
   destination.channelInterpretation = "discrete";
 }
 
-export function createLocalAudioGate(
-  stream: MediaStream,
-): LocalAudioGateHandle | null {
-  const inputTrack = stream.getAudioTracks()[0];
-  if (!inputTrack) return null;
-
-  const context = getLocalAudioGateContext();
-  if (!context || context.state === "suspended") return null;
-  let source: MediaStreamAudioSourceNode | null = null;
-  let inputClone: MediaStreamTrack | null = null;
-  let outputTrack: MediaStreamTrack | null = null;
-  let gain: GainNode | null = null;
-  let destroyed = false;
-
+function disconnectQuietly(node: { disconnect: () => void } | null): void {
   try {
-    inputClone = inputTrack.clone();
-    source = context.createMediaStreamSource(new MediaStream([inputClone]));
-    gain = context.createGain();
-    const destination = context.createMediaStreamDestination();
-
-    configureChannelGraph(
-      source,
-      destination,
-      getEffectiveChannelCount(inputTrack),
-    );
-    source.connect(gain);
-    gain.connect(destination);
-    gain.gain.value = 1;
-    resumeLocalAudioGateContext();
-
-    outputTrack = destination.stream.getAudioTracks()[0] ?? null;
-    if (!outputTrack) {
-      throw new Error("Audio gate did not produce an output track");
-    }
-    outputTrack.contentHint = "speech";
-
-    return {
-      outputStream: new MediaStream([outputTrack]),
-      gateController: {
-        setGated: (gated) => {
-          if (!destroyed && gain) gain.gain.value = gated ? 0 : 1;
-        },
-        resume: () => {
-          if (!destroyed && context.state === "suspended") {
-            context.resume().catch(() => {});
-          }
-        },
-      },
-      destroy: () => {
-        if (destroyed) return;
-        destroyed = true;
-        try {
-          source?.disconnect();
-        } catch {
-          // Ignore teardown races.
-        }
-        try {
-          gain?.disconnect();
-        } catch {
-          // Ignore teardown races.
-        }
-        outputTrack?.stop();
-        inputClone?.stop();
-      },
-    };
+    node?.disconnect();
   } catch {
-    try {
-      source?.disconnect();
-    } catch {
-      // Ignore teardown races.
-    }
-    try {
-      gain?.disconnect();
-    } catch {
-      // Ignore teardown races.
-    }
-    outputTrack?.stop();
-    inputClone?.stop();
-    return null;
+    // Ignore teardown races.
   }
 }
 
-function createAudioProcessorHandle({
-  mode,
-  context,
-  inputTrack,
-  source,
-  preGateDestination,
-  publicationDestination,
-  gateGain,
-  destroyProcessedNode,
-}: {
-  mode: LocalAudioProcessingMode;
-  context: AudioContext;
-  inputTrack: MediaStreamTrack;
-  source: MediaStreamAudioSourceNode;
-  preGateDestination: MediaStreamAudioDestinationNode;
-  publicationDestination: MediaStreamAudioDestinationNode;
-  gateGain: GainNode;
-  destroyProcessedNode?: () => void;
-}): LocalAudioProcessorHandle | null {
-  const preGateTrack = preGateDestination.stream.getAudioTracks()[0] ?? null;
-  const publicationTrack =
-    publicationDestination.stream.getAudioTracks()[0] ?? null;
-  if (!preGateTrack || !publicationTrack) return null;
-
-  preGateTrack.contentHint = "speech";
-  publicationTrack.contentHint = "speech";
-  let destroyed = false;
-
+/** Main-thread side of an "rm-voice-gate" node. */
+function createInGraphGate(
+  node: AudioWorkletNode,
+  initialMode: VoiceGateMode,
+): InGraphVoiceGate & { dispose: () => void } {
+  let mode = initialMode;
+  let threshold = DEFAULT_GATE_THRESHOLD;
+  let speaking = false;
+  let stalled = false;
+  let rms = 0;
+  const listeners = new Set<(event: VoiceGateEvent) => void>();
+  node.port.onmessage = (message: MessageEvent) => {
+    const event = message.data as VoiceGateEvent | null;
+    if (event?.type !== "speaking" && event?.type !== "stalled") return;
+    if (typeof event.rms === "number") rms = event.rms;
+    if (event.type === "speaking") speaking = event.value;
+    else stalled = event.value;
+    for (const listener of [...listeners]) listener(event);
+  };
   return {
-    mode,
-    preGateStream: preGateDestination.stream,
-    publicationStream: publicationDestination.stream,
-    createMonitorStream: () => new MediaStream([preGateTrack.clone()]),
-    gateController: {
-      setGated: (gated) => {
-        if (!destroyed) gateGain.gain.value = gated ? 0 : 1;
-      },
-      resume: () => {
-        if (!destroyed && context.state === "suspended") {
-          context.resume().catch(() => {});
-        }
-      },
+    setMode(next) {
+      if (next === mode) return;
+      mode = next;
+      node.port.postMessage({ type: "mode", value: next });
     },
-    resume: () => {
-      if (!destroyed && context.state === "suspended") {
-        context.resume().catch(() => {});
-      }
+    setThreshold(next) {
+      if (next === threshold) return;
+      threshold = next;
+      node.port.postMessage({ type: "threshold", value: next });
     },
-    destroy: () => {
-      if (destroyed) return;
-      destroyed = true;
-      destroyProcessedNode?.();
-      try {
-        source.disconnect();
-      } catch {
-        // Ignore teardown races.
-      }
-      try {
-        gateGain.disconnect();
-      } catch {
-        // Ignore teardown races.
-      }
-      try {
-        preGateDestination.disconnect();
-      } catch {
-        // Ignore teardown races.
-      }
-      try {
-        publicationDestination.disconnect();
-      } catch {
-        // Ignore teardown races.
-      }
-      preGateTrack.stop();
-      publicationTrack.stop();
-      inputTrack.stop();
-      context.close().catch(() => {});
+    subscribe(listener) {
+      listeners.add(listener);
+      listener({ type: "stalled", value: stalled, rms });
+      listener({ type: "speaking", value: speaking, rms });
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    dispose() {
+      listeners.clear();
+      node.port.onmessage = null;
+      node.port.postMessage({ type: "stop" });
     },
   };
-}
-
-function createIdentityProcessor(
-  track: MediaStreamTrack,
-  mode: "passthrough" | "true-stereo" = "passthrough",
-): LocalAudioProcessorHandle | null {
-  let context: AudioContext | null = null;
-  let inputTrack: MediaStreamTrack | null = null;
-  let source: MediaStreamAudioSourceNode | null = null;
-  let preGateDestination: MediaStreamAudioDestinationNode | null = null;
-  let publicationDestination: MediaStreamAudioDestinationNode | null = null;
-  let gateGain: GainNode | null = null;
-
-  try {
-    context = new AudioContext({ sampleRate: WORKLET_SAMPLE_RATE });
-    inputTrack = track.clone();
-    source = context.createMediaStreamSource(new MediaStream([inputTrack]));
-    preGateDestination = context.createMediaStreamDestination();
-    publicationDestination = context.createMediaStreamDestination();
-    gateGain = context.createGain();
-
-    const channelCount = getEffectiveChannelCount(track);
-    configureChannelGraph(source, preGateDestination, channelCount);
-    configureChannelGraph(source, publicationDestination, channelCount);
-    source.connect(preGateDestination);
-    source.connect(gateGain);
-    gateGain.connect(publicationDestination);
-    gateGain.gain.value = 1;
-    context.resume().catch(() => {});
-
-    const processor = createAudioProcessorHandle({
-      mode,
-      context,
-      inputTrack,
-      source,
-      preGateDestination,
-      publicationDestination,
-      gateGain,
-    });
-    if (processor) return processor;
-  } catch {
-    // Fall through to the common cleanup below.
-  }
-
-  try {
-    source?.disconnect();
-  } catch {
-    // Ignore teardown races.
-  }
-  try {
-    gateGain?.disconnect();
-  } catch {
-    // Ignore teardown races.
-  }
-  preGateDestination?.stream.getTracks().forEach((outputTrack) => {
-    outputTrack.stop();
-  });
-  publicationDestination?.stream.getTracks().forEach((outputTrack) => {
-    outputTrack.stop();
-  });
-  inputTrack?.stop();
-  context?.close().catch(() => {});
-  return null;
 }
 
 async function loadRnnoiseBinaryOnce(
@@ -400,96 +245,175 @@ async function loadRnnoiseBinaryOnce(
   return rnnoiseBinaryPromise;
 }
 
-async function createRnnoiseProcessor(
+/** Starts `context` without waiting; reports it if it stays suspended. */
+function watchContextStart(
+  context: AudioContext,
+  isDestroyed: () => boolean,
+): void {
+  if (context.state === "running") return;
+  Promise.resolve(context.resume?.()).catch(() => {});
+  setTimeout(() => {
+    if (!isDestroyed() && context.state === "suspended") {
+      // Only a user gesture starts it now. The published microphone stays
+      // gated (silent) until then; the voice session's audio-blocked prompt
+      // and click listener resume it through resume().
+      reportLocalAudioIssue("capture-context-suspended", context.state);
+    }
+  }, CONTEXT_START_REPORT_MS);
+}
+
+/**
+ * Builds source → [RNNoise] → pre-gate monitor, and → voice gate →
+ * publication, on the shared capture context.
+ */
+async function createProcessor(
   track: MediaStreamTrack,
+  mode: LocalAudioProcessingMode,
+  voiceGate: boolean,
 ): Promise<LocalAudioProcessorHandle> {
-  let context: AudioContext | null = null;
+  const startedAt = performance.now();
+  const context = acquireCaptureAudioContext();
+  if (!context) {
+    reportLocalAudioIssue("capture-context-unavailable");
+    throw new Error("Capture AudioContext is unavailable");
+  }
   let inputTrack: MediaStreamTrack | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let rnnoiseNode: { destroy: () => void; disconnect: () => void } | null =
     null;
+  let gateNode: AudioWorkletNode | null = null;
+  let gate: ReturnType<typeof createInGraphGate> | null = null;
   let preGateDestination: MediaStreamAudioDestinationNode | null = null;
   let publicationDestination: MediaStreamAudioDestinationNode | null = null;
-  let gateGain: GainNode | null = null;
-  try {
-    context = new AudioContext({ sampleRate: WORKLET_SAMPLE_RATE });
-    const { RnnoiseWorkletNode, loadRnnoise } =
-      await import("@sapphi-red/web-noise-suppressor");
-    await context.audioWorklet.addModule(rnnoiseWorkletUrl);
+  const teardown = () => {
+    gate?.dispose();
+    rnnoiseNode?.destroy();
+    disconnectQuietly(rnnoiseNode);
+    disconnectQuietly(source);
+    disconnectQuietly(gateNode);
+    disconnectQuietly(preGateDestination);
+    disconnectQuietly(publicationDestination);
+    preGateDestination?.stream.getTracks().forEach((t) => t.stop());
+    publicationDestination?.stream.getTracks().forEach((t) => t.stop());
+    inputTrack?.stop();
+    releaseCaptureAudioContext(context);
+  };
 
-    const wasmBinary = await loadRnnoiseBinaryOnce(loadRnnoise);
+  try {
+    let rnnoise: {
+      Node: RnnoiseModule["RnnoiseWorkletNode"];
+      wasmBinary: ArrayBuffer;
+    } | null = null;
+    if (mode === "rnnoise") {
+      const { RnnoiseWorkletNode, loadRnnoise } =
+        await import("@sapphi-red/web-noise-suppressor");
+      await loadCaptureWorkletModule(context, rnnoiseWorkletUrl);
+      rnnoise = {
+        Node: RnnoiseWorkletNode,
+        wasmBinary: await loadRnnoiseBinaryOnce(loadRnnoise),
+      };
+    }
+    try {
+      await loadCaptureWorkletModule(context, vadWorkletUrl());
+    } catch (error) {
+      reportLocalAudioIssue("gate-unavailable", String(error));
+      throw error;
+    }
+
     inputTrack = track.clone();
-    const sourceStream = new MediaStream([inputTrack]);
-    source = context.createMediaStreamSource(sourceStream);
+    source = context.createMediaStreamSource(new MediaStream([inputTrack]));
     preGateDestination = context.createMediaStreamDestination();
     publicationDestination = context.createMediaStreamDestination();
     const channelCount = getEffectiveChannelCount(track);
-
     configureChannelGraph(source, preGateDestination, channelCount);
     configureChannelGraph(source, publicationDestination, channelCount);
 
-    const rnnoise = new RnnoiseWorkletNode(context, {
-      maxChannels: channelCount,
-      wasmBinary,
-    });
-    rnnoiseNode = rnnoise;
-    gateGain = context.createGain();
+    let processed: AudioNode = source;
+    if (rnnoise) {
+      const node = new rnnoise.Node(context, {
+        maxChannels: channelCount,
+        wasmBinary: rnnoise.wasmBinary,
+      });
+      rnnoiseNode = node;
+      source.connect(node);
+      processed = node;
+    }
 
-    source.connect(rnnoise);
-    rnnoise.connect(preGateDestination);
-    rnnoise.connect(gateGain);
-    gateGain.connect(publicationDestination);
-    gateGain.gain.value = 1;
-    context.resume().catch(() => {});
-
-    const processor = createAudioProcessorHandle({
-      mode: "rnnoise",
-      context,
-      inputTrack,
-      source,
-      preGateDestination,
-      publicationDestination,
-      gateGain,
-      destroyProcessedNode: () => {
-        rnnoise.destroy();
-        try {
-          rnnoise.disconnect();
-        } catch {
-          // Ignore teardown races.
-        }
+    const lookaheadMs = voiceGate ? GATE_LOOKAHEAD_MS : 0;
+    const initialMode: VoiceGateMode = voiceGate ? "auto" : "open";
+    gateNode = new AudioWorkletNode(context, "rm-voice-gate", {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [channelCount],
+      channelCount,
+      channelCountMode: "max",
+      channelInterpretation: "discrete",
+      processorOptions: {
+        channels: channelCount,
+        threshold: DEFAULT_GATE_THRESHOLD,
+        silenceDelayMs: VAD_SILENCE_DELAY_MS,
+        lookaheadMs,
+        mode: initialMode,
       },
     });
-    if (!processor) throw new Error("RNNoise did not produce output tracks");
-    return processor;
+    gate = createInGraphGate(gateNode, initialMode);
+    processed.connect(preGateDestination);
+    processed.connect(gateNode);
+    gateNode.connect(publicationDestination);
+
+    const preGateTrack = preGateDestination.stream.getAudioTracks()[0];
+    const publicationTrack = publicationDestination.stream.getAudioTracks()[0];
+    if (!preGateTrack || !publicationTrack) {
+      throw new Error("Audio processor did not produce output tracks");
+    }
+    preGateTrack.contentHint = "speech";
+    publicationTrack.contentHint = "speech";
+
+    let destroyed = false;
+    watchContextStart(context, () => destroyed);
+    markVoice("audio-processor-ready", {
+      mode,
+      buildMs: Math.round(performance.now() - startedAt),
+      contextState: context.state,
+    });
+    const resume = () => {
+      if (!destroyed && context.state === "suspended") {
+        context.resume().catch(() => {});
+      }
+    };
+    const activeGate = gate;
+    return {
+      mode,
+      preGateStream: preGateDestination.stream,
+      publicationStream: publicationDestination.stream,
+      createMonitorStream: () => new MediaStream([preGateTrack.clone()]),
+      gateController: {
+        setGated: (gated) => {
+          if (!destroyed) activeGate.setMode(gated ? "closed" : "open");
+        },
+        resume,
+        inGraph: activeGate,
+      },
+      gateLookaheadMs: lookaheadMs,
+      resume,
+      destroy: () => {
+        if (destroyed) return;
+        destroyed = true;
+        teardown();
+      },
+    };
   } catch (error) {
-    rnnoiseNode?.destroy();
-    try {
-      rnnoiseNode?.disconnect();
-    } catch {
-      // Ignore teardown races.
-    }
-    try {
-      source?.disconnect();
-    } catch {
-      // Ignore teardown races.
-    }
-    try {
-      gateGain?.disconnect();
-    } catch {
-      // Ignore teardown races.
-    }
-    preGateDestination?.stream
-      .getTracks()
-      .forEach((outputTrack) => outputTrack.stop());
-    publicationDestination?.stream
-      .getTracks()
-      .forEach((outputTrack) => outputTrack.stop());
-    inputTrack?.stop();
-    context?.close().catch(() => {});
+    teardown();
     throw error;
   }
 }
 
+/**
+ * The outbound microphone processor for `settings`: RNNoise when enabled
+ * (falling back to the identity graph if it fails to load), always with the
+ * in-graph voice gate in front of the publication stream (lookahead only
+ * when the sensitivity gate is on).
+ */
 export async function createLocalAudioProcessor(
   stream: MediaStream,
   settings: VoiceAudioProcessingSettings,
@@ -500,23 +424,26 @@ export async function createLocalAudioProcessor(
   }
 
   const mode = resolveLocalAudioProcessingMode(settings);
+  const voiceGate = settings.voiceGateEnabled !== false;
   if (
     mode === "rnnoise" &&
     isNoiseReductionProviderSupported(settings.noiseReductionProvider)
   ) {
     try {
-      return await createRnnoiseProcessor(audioTrack);
+      return await createProcessor(audioTrack, "rnnoise", voiceGate);
     } catch {
-      return createIdentityProcessor(audioTrack);
+      // Fall back to the identity graph below.
     }
   }
 
-  if (mode === "true-stereo") {
-    return (
-      createIdentityProcessor(audioTrack, "true-stereo") ??
-      createIdentityProcessor(audioTrack)
+  try {
+    return await createProcessor(
+      audioTrack,
+      mode === "true-stereo" ? "true-stereo" : "passthrough",
+      voiceGate,
     );
+  } catch (error) {
+    reportLocalAudioIssue("processor-unavailable", String(error));
+    return null;
   }
-
-  return createIdentityProcessor(audioTrack);
 }

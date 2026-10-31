@@ -6,9 +6,13 @@ import {
   disposePrewarmedAudioContext,
   prewarmAudioContext,
 } from "../audio-pipeline";
+import { prewarmCaptureAudioContext } from "../capture-audio-context";
 
 vi.mock("@/lib/sounds", () => ({
   resumeSoundContext: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/voice/capture-audio-context", () => ({
+  prewarmCaptureAudioContext: vi.fn(),
 }));
 
 type MockNode = {
@@ -300,6 +304,11 @@ describe("AudioPipeline lifecycle", () => {
     await pipeline.resumeAudioContext();
 
     expect(audioContext).toHaveBeenCalledWith({ latencyHint: "interactive" });
+    // The same gesture wakes the outbound capture context (gate / RNNoise)
+    // and starts loading the gate worklet.
+    expect(prewarmCaptureAudioContext).toHaveBeenCalledWith([
+      expect.stringContaining("vad-processor.worklet"),
+    ]);
     expect(
       (pipeline as unknown as { volumeContext: AudioContext }).volumeContext,
     ).toBe(context);
