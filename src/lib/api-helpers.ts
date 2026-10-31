@@ -8,9 +8,6 @@ export { genId } from "@/lib/id";
 
 const authLog = clog("requireAuth");
 const voiceSessionLog = clog("voice-session");
-const broadcastLog = clog("broadcast");
-const broadcastServerLog = clog("broadcastToServerMembers");
-const broadcastUserLog = clog("broadcastToUser");
 
 // ── Desktop CORS origins ─────────────────────────────────────────────────────
 // The Tauri desktop app runs at http://tauri.localhost (useHttpsScheme: false)
@@ -344,85 +341,75 @@ export async function requireActiveVoiceChannelSession(
  * Who is calling, or the response to send instead: 401 when Kova says there
  * is no session, 503 (AUTH_UNAVAILABLE) when Kova could not answer. Clients
  * retry a 503 with their normal backoff; only a 401 means "sign in again".
+ *
+ * Routes on the Effect edge (`@/server/edge`) get the same answers from
+ * `runRoute`; this is the same typed lookup for the routes not moved yet.
  */
 export async function requireAuth(
   req?: Request,
 ): Promise<{ userId: string } | Response> {
-  const { auth, checkToken } = await import("@/lib/kova-auth-server");
+  const { checkCredentials, requestCredentials } =
+    await import("@/lib/kova-auth-server");
   const requestContext = getRequestLogContext(req);
   try {
-    const authState = await auth();
+    const credentials = requestCredentials(req);
+    const check = await checkCredentials(credentials);
 
-    if (authState.userId) {
-      return { userId: authState.userId };
-    }
-    let unavailable = authState.unavailable;
-
-    // Try verifying manually if auth() didn't pick it up (e.g. custom desktop JWT in header or query param)
-    const { getRequestHeader } = await import(
-      /* @vite-ignore */ "@tanstack/react-start" + "/server"
-    );
-    const authHeader =
-      req?.headers.get("authorization") ?? getRequestHeader("authorization");
-
-    const bearerToken =
-      authHeader && authHeader.startsWith("Bearer ")
-        ? authHeader.substring(7)
-        : null;
-    let token = bearerToken;
-    let hasQueryToken = false;
-
-    if (!token && req?.url) {
-      const url = new URL(req.url);
-      token = url.searchParams.get("token");
-      hasQueryToken = !!token;
+    if (check.status === "signed-in") {
+      return { userId: check.user.id };
     }
 
-    if (token) {
-      const check = await checkToken(token);
-      if (check.status === "signed-in") {
-        return { userId: check.user.id };
-      }
-      if (check.status === "unavailable") unavailable = true;
-    }
+    const credentialContext = {
+      hasAuthorizationHeader: !!credentials.authorization,
+      hasBearerToken: !!credentials.authorization?.startsWith("Bearer "),
+      hasQueryToken: !!credentials.queryToken,
+    };
 
-    if (unavailable) {
+    if (check.status === "unavailable") {
       authLog.warn("Session check unavailable", {
         ...requestContext,
-        hasAuthorizationHeader: !!authHeader,
-        hasQueryToken,
+        ...credentialContext,
+        reason: check.reason,
       });
-      return authUnavailable(req);
+      return authUnavailableResponse(req);
     }
 
     authLog.warn("Unauthorized request", {
       ...requestContext,
-      hasAuthorizationHeader: !!authHeader,
-      hasBearerToken: !!bearerToken,
-      hasQueryToken,
+      ...credentialContext,
     });
-
-    return Response.json(
-      { error: "Unauthorized" },
-      { status: 401, headers: getCorsHeaders(req) },
-    );
+    return unauthorizedResponse(req);
   } catch (error: unknown) {
     // The check itself broke: that says nothing about the session.
     authLog.error("Authorization check failed", {
       ...requestContext,
       error,
     });
-    return authUnavailable(req);
+    return authUnavailableResponse(req);
   }
 }
 
-function authUnavailable(req?: Request): Response {
-  return apiError(
+/** Seconds a client should wait before retrying a 503 AUTH_UNAVAILABLE. */
+export const AUTH_RETRY_AFTER_SECONDS = 5;
+
+/** The 401 for a request with no session. Clients read it as "sign in again". */
+export function unauthorizedResponse(req?: Request): Response {
+  return Response.json(
+    { error: "Unauthorized" },
+    { status: 401, headers: getCorsHeaders(req) },
+  );
+}
+
+/** The 503 for "Kova could not answer". Clients retry it; it is not a sign-out. */
+export function authUnavailableResponse(req?: Request): Response {
+  const response = apiError(
     "Couldn't check your session right now. Try again shortly.",
     503,
     "AUTH_UNAVAILABLE",
     req,
   );
+  response.headers.set("Retry-After", String(AUTH_RETRY_AFTER_SECONDS));
+  return response;
 }
 
 /** Standardized successful API response — returns data directly */
@@ -443,6 +430,56 @@ export function apiError(
   );
 }
 
+/** Who a broadcast is for, as the global gateway's `/broadcast` reads it. */
+type BroadcastTarget =
+  | { channel_id: string }
+  | { server_id: string }
+  | { member_user_id: string }
+  | { target_user_id: string };
+
+/**
+ * Send one dispatch to the global gateway Durable Object. Delivery is best
+ * effort: a failure is not raised to the route. It is logged as one flat
+ * object (target and event, never the payload) so dropped fan-out shows up.
+ */
+async function sendToGateway(
+  target: BroadcastTarget,
+  event: string,
+  data: unknown,
+): Promise<void> {
+  try {
+    const doId = env.MEETING_ROOM.idFromName("global-gateway");
+    const stub = env.MEETING_ROOM.get(doId);
+    const response = await stub.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...target, event, data }),
+    });
+    if (!response.ok) {
+      logDroppedBroadcast(target, event, { status: response.status });
+    }
+  } catch (error) {
+    logDroppedBroadcast(target, event, {
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
+}
+
+function logDroppedBroadcast(
+  target: BroadcastTarget,
+  event: string,
+  failure: { status: number } | { error: string },
+): void {
+  console.error({
+    level: "ERROR",
+    message: "gateway.broadcast_dropped",
+    timestamp: new Date().toISOString(),
+    event,
+    ...target,
+    ...failure,
+  });
+}
+
 /**
  * Broadcast a dispatch event to all WS clients subscribed to a channel.
  * Sends an internal HTTP request to the global gateway MeetingRoom DO.
@@ -453,17 +490,7 @@ export async function broadcastToChannel(
 
   data: any,
 ): Promise<void> {
-  try {
-    const doId = env.MEETING_ROOM.idFromName("global-gateway");
-    const stub = env.MEETING_ROOM.get(doId);
-    await stub.fetch("https://internal/broadcast", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channel_id: channelId, event, data }),
-    });
-  } catch (e) {
-    broadcastLog.error("Failed to notify gateway:", e);
-  }
+  await sendToGateway({ channel_id: channelId }, event, data);
 }
 
 /**
@@ -475,17 +502,7 @@ export async function broadcastToServerMembers(
   event: string,
   data: any,
 ): Promise<void> {
-  try {
-    const doId = env.MEETING_ROOM.idFromName("global-gateway");
-    const stub = env.MEETING_ROOM.get(doId);
-    await stub.fetch("https://internal/broadcast", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ server_id: serverId, event, data }),
-    });
-  } catch (e) {
-    broadcastServerLog.error("Failed to notify gateway:", e);
-  }
+  await sendToGateway({ server_id: serverId }, event, data);
 }
 
 /** Broadcast a user profile event only to members of servers containing the user. */
@@ -494,17 +511,7 @@ export async function broadcastToUserServers(
   event: string,
   data: unknown,
 ): Promise<void> {
-  try {
-    const doId = env.MEETING_ROOM.idFromName("global-gateway");
-    const stub = env.MEETING_ROOM.get(doId);
-    await stub.fetch("https://internal/broadcast", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ member_user_id: userId, event, data }),
-    });
-  } catch (e) {
-    broadcastServerLog.error("Failed to notify user server members:", e);
-  }
+  await sendToGateway({ member_user_id: userId }, event, data);
 }
 
 /**
@@ -517,15 +524,5 @@ export async function broadcastToUser(
 
   data: any,
 ): Promise<void> {
-  try {
-    const doId = env.MEETING_ROOM.idFromName("global-gateway");
-    const stub = env.MEETING_ROOM.get(doId);
-    await stub.fetch("https://internal/broadcast", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target_user_id: userId, event, data }),
-    });
-  } catch (e) {
-    broadcastUserLog.error("Failed to notify gateway:", e);
-  }
+  await sendToGateway({ target_user_id: userId }, event, data);
 }

@@ -47,6 +47,31 @@ describe("VoiceGateway", () => {
     vi.stubGlobal("WebSocket", TestWebSocket);
   });
 
+  it("backs off and retries when the ticket request fails with 503 (auth unavailable)", async () => {
+    const { SocketTicketError } = await vi.importActual<
+      typeof import("@/lib/voice/socket-ticket-client")
+    >("@/lib/voice/socket-ticket-client");
+    mocks.fetchSocketProtocols
+      .mockRejectedValueOnce(new SocketTicketError(503))
+      .mockResolvedValue(["ralph.realtime.v1", "ralph.ticket.test"]);
+    const gateway = new VoiceGateway();
+    const errors: unknown[] = [];
+    gateway.on("error", (error) => errors.push(error));
+
+    gateway.prepareVoice(
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1), {
+      timeout: 2_000,
+    });
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    expect(errors).toEqual([{ message: "Could not open voice socket" }]);
+    gateway.disconnect();
+  });
+
   it("prepares without credentials and identifies once when credentials arrive after Hello", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",

@@ -5,7 +5,7 @@ import { gifFavoriteBodySchema } from "../gifs";
 import { generateEmojiBodySchema } from "../emojis";
 import { listenTogetherResolveBodySchema } from "../listen-together/resolve";
 import { myInstantsFavoriteBodySchema } from "../myinstants/favorites";
-import { socketTicketRequestBodySchema } from "../voice/socket-ticket";
+import { socketTicketRequestBodySchema } from "@/server/routes/socket-ticket";
 
 function jsonRequest(body: string): Request {
   return new Request("https://meet.test/api/media", {

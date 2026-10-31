@@ -1,67 +1,69 @@
+// /api/voice/socket-ticket on the Effect edge: the real route with a D1
+// stand-in and test layers for Kova and the rate limiter. No module mocks.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  env: {} as Record<string, unknown>,
-  getDB: vi.fn(),
-  requireAuth: vi.fn(),
-  requireChannelAccess: vi.fn(),
-  getUserChannelPermissions: vi.fn(),
-}));
-
-vi.mock("@/lib/api-helpers", () => ({
-  apiError: (error: string, status = 400, code?: string) =>
-    Response.json({ error, code }, { status }),
-  buildVoiceChannelRoomSlug: (serverId: string, channelId: string) =>
-    `voice-${serverId}-${channelId}`,
-  getCorsHeaders: (request?: Request) => ({
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Origin": request?.headers.get("origin") ?? "",
-  }),
-  getDB: mocks.getDB,
-  getEnv: () => mocks.env,
-  handleCorsPreflightIfNeeded: (request: Request) =>
-    request.method === "OPTIONS"
-      ? new Response(null, {
-          status: 204,
-          headers: {
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Origin": request.headers.get("origin") ?? "",
-          },
-        })
-      : null,
-  requireAuth: mocks.requireAuth,
-}));
-
-vi.mock("@/lib/require-channel-access", () => ({
-  requireChannelAccess: mocks.requireChannelAccess,
-}));
-vi.mock("@/lib/require-permission", () => ({
-  getUserChannelPermissions: mocks.getUserChannelPermissions,
-}));
-vi.mock("@/lib/rate-limit", () => ({
-  checkRateLimitDOFailClosed: vi.fn().mockResolvedValue(null),
-}));
-
+import { createMockD1, type MockD1 } from "@/lib/__tests__/mock-d1";
+import { PERMISSIONS } from "@/lib/permissions";
+import type { WorkerBindings } from "@/server/bindings";
+import { brokenAuth, memoryAuth, testServices } from "@/server/testing";
 import { verifySocketTicket } from "@/lib/voice/socket-ticket";
 import { verifyVoiceToken } from "../../../../realtime/voice-token";
-import { socketTicketOptions, socketTicketPost } from "../voice/socket-ticket";
+import { socketTicketRoutes } from "@/server/routes/socket-ticket";
 
 const ticketSecret = "test-realtime-ticket-secret";
 const callsSecret = "test-calls-secret";
 
+const TOKEN = "Bearer good-token";
+
+let env: Partial<WorkerBindings>;
+let db: MockD1;
+let auth = memoryAuth({ [TOKEN]: "user-123" });
+
+function routes() {
+  return socketTicketRoutes(testServices({ auth, db, env }));
+}
+
+function socketTicketPost(args: { request: Request }) {
+  return routes().POST(args);
+}
+
+function socketTicketOptions(args: { request: Request }) {
+  return routes().OPTIONS(args);
+}
+
+/** channel-1: a voice channel in server-1 that user-123 may see and join. */
+function voiceChannelInServer1() {
+  db.mockQuery("SELECT id, server_id, channel_type FROM channels", {
+    id: "channel-1",
+    server_id: "server-1",
+    channel_type: "voice",
+  });
+  db.mockQuery("SELECT 1 FROM server_members", { 1: 1 });
+  db.mockQuery("JOIN member_roles", {
+    results: [
+      {
+        id: "role-everyone",
+        permissions: PERMISSIONS.VIEW_CHANNELS | PERMISSIONS.CONNECT,
+        position: 0,
+        is_default: 1,
+      },
+    ],
+  });
+  db.mockQuery("SELECT channel_type FROM channels WHERE id = ? AND server_id", {
+    channel_type: "voice",
+  });
+}
+
 describe("socket ticket route", () => {
   beforeEach(() => {
-    mocks.env = {
+    env = {
       CALLS_APP_SECRET: callsSecret,
       REALTIME_TICKET_SECRET: ticketSecret,
     };
-    mocks.requireAuth.mockReset();
-    mocks.getDB.mockReset();
-    mocks.requireChannelAccess.mockReset();
-    mocks.getUserChannelPermissions.mockReset();
-    mocks.requireAuth.mockResolvedValue({ userId: "user-123" });
-    mocks.requireChannelAccess.mockResolvedValue({ serverId: "server-1" });
-    mocks.getUserChannelPermissions.mockResolvedValue(8192);
+    db = createMockD1();
+    auth = memoryAuth({ [TOKEN]: "user-123" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   it("allows credentialed Tauri preflight requests", async () => {
@@ -90,6 +92,7 @@ describe("socket ticket route", () => {
     const response = await socketTicketPost({
       request: new Request("https://meet.test/api/voice/socket-ticket", {
         method: "POST",
+        headers: { authorization: TOKEN },
         body: JSON.stringify({ audience: "global" }),
       }),
     });
@@ -116,14 +119,12 @@ describe("socket ticket route", () => {
   });
 
   it("returns a room-only media bootstrap bound to the signed ticket nonce", async () => {
-    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
-    mocks.getDB.mockReturnValue({
-      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
-    });
+    voiceChannelInServer1();
 
     const response = await socketTicketPost({
       request: new Request("https://meet.test/api/voice/socket-ticket", {
         method: "POST",
+        headers: { authorization: TOKEN },
         body: JSON.stringify({
           audience: "room",
           channelId: "channel-1",
@@ -208,15 +209,13 @@ describe("socket ticket route", () => {
   });
 
   it("fails closed when a room bootstrap cannot be signed", async () => {
-    mocks.env = { REALTIME_TICKET_SECRET: ticketSecret };
-    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
-    mocks.getDB.mockReturnValue({
-      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
-    });
+    env = { REALTIME_TICKET_SECRET: ticketSecret };
+    voiceChannelInServer1();
 
     const response = await socketTicketPost({
       request: new Request("https://meet.test/api/voice/socket-ticket", {
         method: "POST",
+        headers: { authorization: TOKEN },
         body: JSON.stringify({
           audience: "room",
           channelId: "channel-1",
@@ -233,10 +232,11 @@ describe("socket ticket route", () => {
   });
 
   it("fails closed when deployment ticket configuration is incomplete", async () => {
-    mocks.env = {};
+    env = {};
     const response = await socketTicketPost({
       request: new Request("https://meet.test/api/voice/socket-ticket", {
         method: "POST",
+        headers: { authorization: TOKEN },
         body: JSON.stringify({ audience: "global" }),
       }),
     });
@@ -249,14 +249,12 @@ describe("socket ticket route", () => {
   });
 
   it("includes the canonical serverId in production voice ticket claims", async () => {
-    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
-    mocks.getDB.mockReturnValue({
-      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
-    });
+    voiceChannelInServer1();
 
     const response = await socketTicketPost({
       request: new Request("https://meet.test/api/voice/socket-ticket", {
         method: "POST",
+        headers: { authorization: TOKEN },
         body: JSON.stringify({
           audience: "voice",
           channelId: "channel-1",
@@ -286,14 +284,12 @@ describe("socket ticket route", () => {
   });
 
   it("rejects a production voice ticket when body serverId mismatches the channel", async () => {
-    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
-    mocks.getDB.mockReturnValue({
-      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
-    });
+    voiceChannelInServer1();
 
     const response = await socketTicketPost({
       request: new Request("https://meet.test/api/voice/socket-ticket", {
         method: "POST",
+        headers: { authorization: TOKEN },
         body: JSON.stringify({
           audience: "voice",
           channelId: "channel-1",
@@ -309,7 +305,7 @@ describe("socket ticket route", () => {
   });
 
   it("uses a stable anonymous subject for configured public-demo rooms", async () => {
-    mocks.env = {
+    env = {
       CALLS_APP_SECRET: callsSecret,
       REALTIME_TICKET_SECRET: ticketSecret,
     };
@@ -384,6 +380,67 @@ describe("socket ticket route", () => {
     });
     await expect(reservedSlug.json()).resolves.toMatchObject({
       code: "DEMO_ROOM_NOT_ALLOWED",
+    });
+  });
+  it("answers 401 with no-store when Kova finds no session", async () => {
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        headers: { authorization: "Bearer expired-token" },
+        body: JSON.stringify({ audience: "global" }),
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
+  });
+
+  it("answers 503 AUTH_UNAVAILABLE, not 401, when Kova cannot answer", async () => {
+    auth = brokenAuth("HTTP 502");
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        headers: { authorization: TOKEN, origin: "http://tauri.localhost" },
+        body: JSON.stringify({ audience: "global" }),
+      }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Retry-After")).toBe("5");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "http://tauri.localhost",
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      code: "AUTH_UNAVAILABLE",
+    });
+  });
+
+  it("refuses a voice ticket without CONNECT", async () => {
+    voiceChannelInServer1();
+    db.mockQuery("JOIN member_roles", {
+      results: [
+        {
+          id: "role-everyone",
+          permissions: PERMISSIONS.VIEW_CHANNELS,
+          position: 0,
+          is_default: 1,
+        },
+      ],
+    });
+
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        headers: { authorization: TOKEN },
+        body: JSON.stringify({ audience: "voice", channelId: "channel-1" }),
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "CONNECT_DENIED",
     });
   });
 });

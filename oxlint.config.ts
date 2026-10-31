@@ -235,14 +235,14 @@ export default defineConfig({
     "anti-slop/require-safety-comment-for-type-assertion": "off", // 2185
     // 15077, autofixable, but a repo-wide rewrite is out of scope for step 0.
     "anti-slop/require-readable-spacing": "off",
-    // Effect rules: Ralph has no Effect code yet, so these cost nothing.
+    // Effect rules. The Worker request path (src/server/) runs on Effect.
     "anti-slop-effect/no-manual-effect-error-tag": "error", // 0
     "anti-slop-effect/no-manual-tag-comparison": "error", // 0
     "anti-slop-effect/no-manual-tagged-construction": "error", // 0
     "anti-slop-effect/no-service-constructor-imports": "error", // 0
-    // 61 chained literal ternaries. The rule wants Effect's `Match`, which is
-    // not a dependency yet. Turn it on together with the Effect adoption.
-    "anti-slop-effect/prefer-effect-match": "off",
+    // Chained literal ternaries; the rule wants Effect's `Match`. A ratchet:
+    // new code should not add to it.
+    "anti-slop-effect/prefer-effect-match": "warn", // 63
   },
   overrides: [
     {
