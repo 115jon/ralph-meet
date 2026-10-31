@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
+import { unregisterPushToken } from "@/features/push/push";
 import { FONT, RADIUS, useTheme } from "@/theme";
 import { Button, Led, Skeleton, Text } from "@/ui";
 
@@ -239,7 +240,8 @@ function SignOutSection() {
         <Button
           variant="ghost"
           label="Sign out"
-          onPress={() => void signOut()}
+          // Unregister while the session can still authenticate the DELETE.
+          onPress={() => void unregisterPushToken().finally(signOut)}
         />
       </View>
     </Section>

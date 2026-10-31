@@ -33,7 +33,14 @@ function resolveVariant(value: string | undefined): AppVariant {
   return value === "development" || value === "preview" ? value : "production";
 }
 
-const variant = VARIANTS[resolveVariant(process.env.APP_VARIANT)];
+const appVariant = resolveVariant(process.env.APP_VARIANT);
+const variant = VARIANTS[appVariant];
+
+// Firebase (FCM) config for all three package names. It is not committed: CI
+// and EAS point GOOGLE_SERVICES_JSON at it, local builds copy it here
+// (gitignored).
+const googleServicesFile =
+  process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json";
 
 const MICROPHONE_USAGE = "Ralph Meet uses the microphone in voice channels.";
 
@@ -62,6 +69,7 @@ const config: ExpoConfig = {
   // they have no config keys.
   android: {
     package: variant.package,
+    googleServicesFile,
     predictiveBackGestureEnabled: true,
     // Voice: the microphone and call audio routing. The background call's
     // foreground service, notification, Telecom and Bluetooth permissions come
@@ -70,6 +78,7 @@ const config: ExpoConfig = {
       "android.permission.INTERNET",
       "android.permission.RECORD_AUDIO",
       "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
     ],
     // The WebRTC plugin also asks for these; voice needs neither (no camera
     // publishing yet, no overlay).
@@ -87,6 +96,8 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-web-browser",
     "expo-image",
+    // Message pushes post on the `messages` channel the app creates at launch.
+    ["expo-notifications", { defaultChannel: "messages" }],
     // The composer picks from the system photo picker only: drop the camera
     // permission the library would add. The microphone is voice's (set, not
     // false: false would block RECORD_AUDIO for the whole app).
@@ -113,7 +124,7 @@ const config: ExpoConfig = {
     "./plugins/withAndroidPredictiveBackCompat.cjs",
   ],
   experiments: { typedRoutes: true },
-  extra: { apiBaseUrl, kovaAuthUrl, kovaPublishableKey },
+  extra: { apiBaseUrl, kovaAuthUrl, kovaPublishableKey, appVariant },
 };
 
 export default config;

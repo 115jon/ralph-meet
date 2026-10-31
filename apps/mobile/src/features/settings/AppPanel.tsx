@@ -1,9 +1,10 @@
 import Constants from "expo-constants";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 
+import { useNotificationPermission } from "@/features/push/use-notification-permission";
 import { config } from "@/lib/config";
 import { THEME_IDS, THEME_LABELS, useThemeOverride } from "@/theme";
-import { Text } from "@/ui";
+import { Button, Led, Text } from "@/ui";
 
 import { ChoiceRow, Row, Section } from "./rows";
 
@@ -21,6 +22,31 @@ function ThemeSection() {
             onPress={() => setOverride(id)}
           />
         ))}
+      </View>
+    </Section>
+  );
+}
+
+function NotificationsSection() {
+  const granted = useNotificationPermission();
+  if (granted === null) return null;
+  return (
+    <Section title="Notifications">
+      <Row
+        leading={<Led state={granted ? "talk" : "off"} />}
+        label={granted ? "On" : "Off"}
+        description={
+          granted
+            ? "Direct messages, mentions and replies reach this phone."
+            : "Turn notifications on in system settings to get messages here."
+        }
+      />
+      <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
+        <Button
+          variant="ghost"
+          label="Open system settings"
+          onPress={() => void Linking.openSettings()}
+        />
       </View>
     </Section>
   );
@@ -51,11 +77,12 @@ function AboutSection() {
   );
 }
 
-/** 03 App: how the app looks, and which build this is. */
+/** 03 App: how the app looks, notifications, and which build this is. */
 export function AppPanel() {
   return (
     <View style={{ gap: 24 }}>
       <ThemeSection />
+      <NotificationsSection />
       <AboutSection />
     </View>
   );

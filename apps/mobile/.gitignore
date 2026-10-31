@@ -12,3 +12,6 @@ expo-env.d.ts
 
 # Gradle output of local Expo modules
 modules/*/android/build/
+
+# Firebase config: copied from ~/.config/ralph-meet/firebase for local builds
+google-services.json
