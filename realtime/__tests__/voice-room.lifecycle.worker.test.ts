@@ -11,7 +11,7 @@ import {
 } from "../realtime-admission";
 import { createSoundboardPlaybackId } from "../../src/lib/voice/soundboard-playback-id";
 import { verifySoundboardMediaCapability } from "../../src/lib/voice/soundboard-media-capability";
-import { GET as GET_SOUNDBOARD_UPLOAD } from "../../src/routes/api/soundboard/uploads/$id";
+import { GET as GET_SOUNDBOARD_UPLOAD } from "../../src/lib/voice/soundboard-upload-handler";
 import {
   GatewayOp,
   HEARTBEAT_FRAME,
@@ -63,7 +63,7 @@ async function createAdmissionHeaders(
 }
 
 async function openVoiceSocket(
-  roomName = crypto.randomUUID(),
+  roomName: string = crypto.randomUUID(),
   subject = TEST_SUBJECT,
   accessMode: "authenticated" | "public-demo" = "authenticated",
   serverId = accessMode === "authenticated" ? "server-1" : undefined,
@@ -4703,7 +4703,7 @@ describe("VoiceRoom lifecycle", () => {
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
 
     await runInDurableObject(room, (instance) => {
-      const sql = (instance as { sql: SqlStorage }).sql;
+      const { sql } = instance as unknown as { sql: SqlStorage };
       sql.exec(
         `INSERT OR REPLACE INTO soundboard_legacy_playback_owners (playback_id, owner_id, created_at)
          VALUES (?, ?, ?)`,
@@ -4716,7 +4716,7 @@ describe("VoiceRoom lifecycle", () => {
     await runDurableObjectAlarm(room);
 
     await runInDurableObject(room, (instance) => {
-      const sql = (instance as { sql: SqlStorage }).sql;
+      const { sql } = instance as unknown as { sql: SqlStorage };
       const rows = [
         ...sql.exec(
           "SELECT playback_id FROM soundboard_legacy_playback_owners WHERE playback_id = ?",

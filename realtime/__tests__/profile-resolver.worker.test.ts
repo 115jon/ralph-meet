@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveMeetingProfile } from "../meeting-room/profile-resolver";
+import {
+  resolveMeetingProfile,
+  type ResolveMeetingProfileInput,
+} from "../meeting-room/profile-resolver";
+
+type ProfileCache = ResolveMeetingProfileInput["cache"];
+type CachedProfile = { name: string; imageUrl?: string };
 
 type ProfileRow = {
   username: string;
@@ -11,21 +17,33 @@ type ProfileRow = {
 function createDb(row: ProfileRow | null) {
   return {
     prepare: () => ({
-      bind: () => ({ first: async () => row }),
+      // The resolver asks for its own row type through `first<T>()`; the fake
+      // returns the canned row whatever T is.
+      bind: () => ({ first: async <T>() => row as T | null }),
     }),
   };
 }
-
-function createCache(value: { name: string; imageUrl?: string } | null) {
-  return {
-    get: vi.fn(async () => value),
-    put: vi.fn(async () => undefined),
+// `get` is generic in the resolver's cache contract (KVNamespace-shaped), so
+// the spies sit behind generic wrappers; the fake returns its canned value
+// whatever T the caller asks for.
+function createCache(value: CachedProfile | null) {
+  const get = vi.fn<(key: string, type: "json") => CachedProfile | null>(
+    () => value,
+  );
+  const put = vi.fn<ProfileCache["put"]>(async () => undefined);
+  const cache: ProfileCache = {
+    get: async <T>(key: string, type: "json") => get(key, type) as T | null,
+    put,
   };
+  return { cache, get, put };
 }
 
 describe("Meeting profile resolver", () => {
   it("combines D1 identity and cached Clerk profile data", async () => {
-    const cache = createCache({ name: "Clerk Name", imageUrl: "clerk.png" });
+    const { cache, get } = createCache({
+      name: "Clerk Name",
+      imageUrl: "clerk.png",
+    });
 
     await expect(
       resolveMeetingProfile({
@@ -48,11 +66,11 @@ describe("Meeting profile resolver", () => {
       avatarUrl: "/api/avatars/custom.png",
       avatarDisplay: "cover",
     });
-    expect(cache.get).toHaveBeenCalledWith("clerk:profile:user-1", "json");
+    expect(get).toHaveBeenCalledWith("clerk:profile:user-1", "json");
   });
 
   it("uses Clerk API on cache miss and stores the response for five minutes", async () => {
-    const cache = createCache(null);
+    const { cache, put } = createCache(null);
     const fetch = vi.fn(async () =>
       Response.json({
         username: "clerk-user",
@@ -86,7 +104,7 @@ describe("Meeting profile resolver", () => {
         }),
       }),
     );
-    expect(cache.put).toHaveBeenCalledWith(
+    expect(put).toHaveBeenCalledWith(
       "clerk:profile:user-1",
       JSON.stringify({ name: "Ada Lovelace", imageUrl: "clerk.png" }),
       { expirationTtl: 300 },
@@ -94,7 +112,7 @@ describe("Meeting profile resolver", () => {
   });
 
   it("falls back to D1 identity when Clerk is unavailable", async () => {
-    const cache = createCache(null);
+    const { cache } = createCache(null);
     const fetch = vi.fn(
       async () => new Response("unavailable", { status: 503 }),
     );

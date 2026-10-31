@@ -10,6 +10,7 @@ import {
   createRealtimeAdmissionContext,
 } from "../realtime-admission";
 import { issueVoiceToken } from "../voice-token";
+import { VOICE_JOIN_GRANT_WAIT_MS } from "../voice-join-grant";
 import {
   handlePartyTracksProxyRequest,
   type PartyTracksProxyEnv,
@@ -35,7 +36,7 @@ async function admissionHeaders(
   roomName: string,
   audience: "room" | "voice",
   subject: string,
-  nonce = crypto.randomUUID(),
+  nonce: string = crypto.randomUUID(),
 ) {
   const ticket = await issueSocketTicket(
     {
@@ -266,6 +267,22 @@ describe("voice join grants", () => {
     await joinRoom(room);
     await waitForGrant(roomName, participantId, subject, true);
 
+    // `join_wait_ms` is wall-clock elapsed time around the grant lookup, so it
+    // reads 1 when the process is descheduled between the two clock reads
+    // (workerd does not freeze Date.now() locally). "No wait" is the lookup
+    // answering from the stored grant without asking the MeetingRoom.
+    let grantChecks = 0;
+    await runInDurableObject(voiceRoom(roomName), (instance) => {
+      const live = instance as unknown as {
+        confirmVoiceJoinGrant(query: unknown): Promise<boolean>;
+      };
+      const confirm = live.confirmVoiceJoinGrant.bind(live);
+      live.confirmVoiceJoinGrant = (query) => {
+        grantChecks += 1;
+        return confirm(query);
+      };
+    });
+
     const voice = await openVoiceSocket(roomName, subject);
     const ready = nextMessage(voice, VOICE_READY);
     await sendVoiceIdentify(
@@ -273,9 +290,15 @@ describe("voice join grants", () => {
       participantId,
       await voiceToken(participantId, roomName, subject),
     );
-    await expect(ready).resolves.toMatchObject({
-      d: { participant_id: participantId, join_wait_ms: 0 },
+    const readyMessage = await ready;
+    expect(readyMessage).toMatchObject({
+      d: { participant_id: participantId },
     });
+    expect(grantChecks).toBe(0);
+    expect(readyMessage.d.join_wait_ms).toEqual(expect.any(Number));
+    expect(readyMessage.d.join_wait_ms as number).toBeLessThan(
+      VOICE_JOIN_GRANT_WAIT_MS,
+    );
 
     voice.close();
     room.close();
@@ -437,8 +460,10 @@ describe("voice join grants", () => {
       );
     const newSession = async (participantId: string, token: string) => {
       const response = await proxy(participantId, token, "/sessions/new");
-      expect(response?.status).toBe(200);
-      return ((await response?.json()) as { sessionId: string }).sessionId;
+      if (!response)
+        throw new Error("Expected the proxy to handle the request");
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { sessionId: string }).sessionId;
     };
 
     const publisherToken = await voiceToken(publisherId, roomName, "publisher");
