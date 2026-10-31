@@ -346,4 +346,100 @@ describe("resolveInstagramVideoMetadata", () => {
     release();
     await Promise.allSettled([first, second]);
   });
+
+  describe("media info payload drift", () => {
+    const POST_URL = "https://www.instagram.com/reel/DZK623pN9P2/";
+
+    function stubMediaInfo(respond: () => Response) {
+      workerEnv.INSTAGRAM_SESSIONID = "sessionid";
+      workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
+      hoisted.cacheGetMock.mockResolvedValue(null);
+      hoisted.fetchInstagramOEmbedMetadataMock.mockResolvedValue({
+        mediaId: "123",
+        title: "from oembed",
+        thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/oembed.jpg",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url = input.toString();
+          if (url.includes("/api/v1/media/")) return respond();
+          return new Response("not found", { status: 404 });
+        }),
+      );
+    }
+
+    it("falls back to the oEmbed metadata when the payload root is not an object", async () => {
+      stubMediaInfo(() => Response.json([]));
+
+      const result = await resolveInstagramVideoMetadata(POST_URL, {
+        bypassCache: true,
+      });
+
+      expect(result).toMatchObject({
+        title: "from oembed",
+        thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/oembed.jpg",
+        videoUrl: null,
+      });
+    });
+
+    it("keeps the usable fields when others are retyped or malformed", async () => {
+      stubMediaInfo(() =>
+        Response.json({
+          items: [
+            {
+              caption: { text: 42 },
+              like_count: "1073",
+              comment_count: 15,
+              taken_at: "not a date",
+              user: "tasyiu",
+              video_duration: "27",
+              video_versions: [
+                { url: 5, width: 9999, height: 9999 },
+                { url: "https://cdn.test/small.mp4", width: 100, height: 100 },
+                { url: "https://cdn.test/big.mp4", width: 400, height: 400 },
+                null,
+              ],
+              image_versions2: {
+                candidates: [
+                  {
+                    url: "https://cdn.test/poster.jpg",
+                    width: 400,
+                    height: 400,
+                  },
+                  { width: 1 },
+                ],
+              },
+              future_field: { whatever: true },
+            },
+          ],
+        }),
+      );
+
+      const result = await resolveInstagramVideoMetadata(POST_URL, {
+        bypassCache: true,
+      });
+
+      expect(result).toMatchObject({
+        title: "from oembed",
+        videoUrl: "https://cdn.test/big.mp4",
+        thumbnailUrl: "https://cdn.test/poster.jpg",
+        commentCount: 15,
+        likeCount: null,
+        timestamp: null,
+        authorName: null,
+        durationSeconds: null,
+      });
+      expect(result?.media).toEqual([
+        {
+          type: "video",
+          url: "https://cdn.test/big.mp4",
+          width: 400,
+          height: 400,
+          thumbnailUrl: "https://cdn.test/poster.jpg",
+          contentType: "video/mp4",
+        },
+      ]);
+    });
+  });
 });

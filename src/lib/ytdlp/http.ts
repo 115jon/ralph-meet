@@ -1,4 +1,7 @@
 import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
+import { lenient, lenientBoolean, lenientString } from "@/lib/lenient-schema";
+import { safeParse } from "@/lib/schema";
+import { Schema } from "effect";
 import { getYtDlpUpstreamStatus, syncYtDlpUpstream } from "./upstream";
 import { resolveYouTubePlayback } from "./youtube";
 
@@ -8,16 +11,17 @@ interface ExecutionContextLike {
   waitUntil(promise: Promise<unknown>): void;
 }
 
-interface ResolveRequestBody {
-  url?: string;
-  videoId?: string;
-  roomSlug?: string;
-  serverId?: string | null;
-  channelId?: string | null;
-  preferredKind?: "audio" | "video" | "muxed" | "any";
-  preferredContainer?: "mp4" | "webm";
-  includeFormats?: boolean;
-}
+/** The resolve request. A field of the wrong type is ignored rather than failing the call. */
+const ResolveRequestBody = Schema.Struct({
+  url: lenientString,
+  videoId: lenientString,
+  roomSlug: lenientString,
+  serverId: lenientString,
+  channelId: lenientString,
+  preferredKind: lenient(Schema.Literals(["audio", "video", "muxed", "any"])),
+  preferredContainer: lenient(Schema.Literals(["mp4", "webm"])),
+  includeFormats: lenientBoolean,
+});
 
 function isStaleStatus(status: { syncedAt: string | null }) {
   if (!status.syncedAt) return true;
@@ -26,12 +30,14 @@ function isStaleStatus(status: { syncedAt: string | null }) {
   return Date.now() - timestamp > BACKGROUND_SYNC_MAX_AGE_MS;
 }
 
-async function readJsonBody(request: Request) {
-  try {
-    return (await request.json()) as ResolveRequestBody;
-  } catch {
-    return {};
-  }
+async function readResolveBody(
+  request: Request,
+): Promise<typeof ResolveRequestBody.Type> {
+  const body = safeParse(
+    ResolveRequestBody,
+    await request.json().catch(() => null),
+  );
+  return body.success ? body.data : {};
 }
 
 export async function handleYtDlpRequest(
@@ -70,7 +76,7 @@ export async function handleYtDlpRequest(
   }
 
   if (url.pathname === "/api/ytdlp/resolve" && request.method === "POST") {
-    const body = await readJsonBody(request);
+    const body = await readResolveBody(request);
     const source = body.url?.trim() || body.videoId?.trim();
     if (!source) {
       return Response.json(

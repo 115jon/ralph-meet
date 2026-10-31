@@ -410,3 +410,129 @@ describe("fetchTikTokProxyMetadata", () => {
     ]);
   });
 });
+
+describe("TikTok payload drift", () => {
+  const POST_URL = "https://www.tiktok.com/@someone/video/7644940658603592973";
+  const PLAYER_API = "https://www.tiktok.com/player/api/v1/items";
+
+  function stubTikTok(handlers: {
+    player?: () => Response;
+    tikwm?: () => Response;
+  }) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith(PLAYER_API) && handlers.player) {
+          return handlers.player();
+        }
+        if (url.includes("tikwm.com/api/") && handlers.tikwm) {
+          return handlers.tikwm();
+        }
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+  }
+
+  it.each([
+    ["null", "null"],
+    ["an array", "[]"],
+    ["a string", '"nope"'],
+  ])(
+    "player API body is %s: no metadata, not gone, not a retry",
+    async (_label, body) => {
+      stubTikTok({
+        player: () =>
+          new Response(body, {
+            headers: { "content-type": "application/json" },
+          }),
+      });
+
+      await expect(fetchTikTokProxyLookup(POST_URL)).resolves.toEqual({
+        metadata: null,
+        unavailable: false,
+        transient: false,
+      });
+    },
+  );
+
+  it("keeps the fields that decode when others are retyped", async () => {
+    stubTikTok({
+      player: () =>
+        Response.json({
+          items: [
+            {
+              id_str: "7644940658603592973",
+              desc: ["not", "a", "string"],
+              author_info: { unique_id: "someone", nickname: 42 },
+              statistics_info: { digg_count: "17", comment_count: "many" },
+              video_info: {
+                meta: { duration: "soon", width: 576 },
+                url_list: [
+                  "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+                ],
+              },
+              music_info: "none",
+              fresh_vendor_field: { anything: true },
+            },
+          ],
+        }),
+    });
+
+    const result = await fetchTikTokProxyMetadata(POST_URL);
+
+    expect(result).toMatchObject({
+      id: "7644940658603592973",
+      authorHandle: "someone",
+      authorName: "someone",
+      likeCount: 17,
+      videoUrl:
+        "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+    });
+    expect(result?.title).toBeUndefined();
+    expect(result?.commentCount).toBeUndefined();
+    expect(result?.audio).toBeUndefined();
+    expect(result?.media?.[0]).toMatchObject({ width: 576 });
+    expect(result?.media?.[0].durationSeconds).toBeUndefined();
+  });
+
+  it("falls through to tikwm when the player item has nothing usable", async () => {
+    stubTikTok({
+      player: () => Response.json({ items: [{ id_str: 5, video_info: "x" }] }),
+      tikwm: () =>
+        Response.json({
+          code: 0,
+          data: { id: "99", title: "from tikwm", author: { unique_id: "u" } },
+        }),
+    });
+
+    const result = await fetchTikTokProxyMetadata(POST_URL);
+
+    expect(result).toMatchObject({ id: "99", title: "from tikwm" });
+  });
+
+  it.each([
+    ["an array", [1, 2]],
+    ["a string", "oops"],
+    ["null", null],
+  ])("skips a tikwm payload whose data is %s", async (_label, data) => {
+    stubTikTok({ tikwm: () => Response.json({ code: 0, data }) });
+
+    await expect(fetchTikTokProxyMetadata(POST_URL)).resolves.toBeNull();
+  });
+
+  it("does not choke on a tikwm create_time it cannot read", async () => {
+    stubTikTok({
+      tikwm: () =>
+        Response.json({
+          code: 0,
+          data: { id: "5", title: "t", create_time: 1e20 },
+        }),
+    });
+
+    const result = await fetchTikTokProxyMetadata(POST_URL);
+
+    expect(result).toMatchObject({ id: "5", title: "t" });
+    expect(result?.timestamp).toBeUndefined();
+  });
+});

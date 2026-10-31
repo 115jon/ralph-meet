@@ -81,3 +81,21 @@ export function safeParse<S extends Schema.ConstraintDecoder<unknown>>(
     })),
   };
 }
+
+/**
+ * `JSON.parse` followed by {@link safeParse}, without throwing. Text that is not
+ * JSON is a failed parse with one root issue, so callers have a single
+ * "use the fallback" branch for stored or received text.
+ */
+export function safeParseJson<S extends Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+  text: string,
+): SafeParseResult<S["Type"]> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { success: false, issues: [{ path: [], message: "Invalid JSON" }] };
+  }
+  return safeParse(schema, raw);
+}

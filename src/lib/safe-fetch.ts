@@ -14,6 +14,9 @@
 // runaway upstreams, not to constrain legitimate media. Streamed media never
 // flows through the capped readers, so large video playback is unaffected.
 
+import type { Schema } from "effect";
+import { safeParse } from "@/lib/schema";
+
 /** Default request timeout for a single upstream fetch. */
 export const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
 
@@ -128,13 +131,25 @@ export async function readTextCapped(
 }
 
 /**
- * Read a response body as JSON, aborting once `maxBytes` is exceeded. Use this
- * for API/metadata reads instead of `response.json()`.
+ * Read a response body as JSON, aborting once `maxBytes` is exceeded, and decode
+ * it with `schema`. Use this for API/metadata reads instead of `response.json()`:
+ * the payload's shape is checked in one place and the caller gets a typed value.
+ *
+ * Throws on an oversized body (`ResponseTooLargeError`) and on text that is not
+ * JSON. A body that parses but does not fit `schema` resolves to `undefined`:
+ * the caller takes the same "no data" path it took when the fields it wanted
+ * were missing. Vendor schemas are tolerant per field (see
+ * `@/lib/lenient-schema`), so that only happens for a wrong root, e.g. `null`
+ * or an array where an object was expected.
  */
-export async function readJsonCapped<T = unknown>(
+export async function readJsonCapped<
+  S extends Schema.ConstraintDecoder<unknown>,
+>(
   response: Response,
+  schema: S,
   maxBytes: number = DEFAULT_MAX_BUFFER_BYTES,
-): Promise<T> {
+): Promise<S["Type"] | undefined> {
   const text = await readTextCapped(response, maxBytes);
-  return JSON.parse(text) as T;
+  const decoded = safeParse(schema, JSON.parse(text));
+  return decoded.success ? decoded.data : undefined;
 }
