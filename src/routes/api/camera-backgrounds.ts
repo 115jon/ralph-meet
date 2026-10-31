@@ -10,6 +10,9 @@ import {
 import { CAMERA_BACKGROUND_UPLOAD_LIMIT_BYTES } from "@/lib/camera-background-validation";
 import { validateImageBuffer } from "@/lib/image-validation";
 import { logger } from "@/lib/logger";
+import { safeParse } from "@/lib/schema";
+import { readJsonBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 
 interface CameraBackgroundAsset {
@@ -177,22 +180,22 @@ export const POST = async ({ request }: any) => {
   );
 };
 
+const backgroundDeleteSchema = Schema.Struct({
+  id: Schema.Trim.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/)),
+});
+
 export const DELETE = async ({ request }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  let body: { id?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return apiError("Invalid request body", 400, undefined, request);
-  }
-
-  const id = body.id?.trim();
-  if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+  const read = await readJsonBody(request, request);
+  if (read instanceof Response) return read;
+  const body = safeParse(backgroundDeleteSchema, read.value);
+  if (!body.success) {
     return apiError("Invalid background id", 400, undefined, request);
   }
+  const { id } = body.data;
 
   const bucket = getBucket();
   const listed = await bucket.list({ prefix: `${userPrefix(userId)}${id}/` });

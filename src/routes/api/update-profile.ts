@@ -18,45 +18,48 @@ import {
   normalizeHexColor,
   serializeDisplayNameStyle,
 } from "@/lib/profile-customization";
-import { safeParse } from "@/lib/schema";
+import { looseStruct, safeParse } from "@/lib/schema";
+import { readJsonBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import { isAppTheme } from "@/lib/theme-preferences";
 import {
   normalizeAvatarDisplay,
   serializeAvatarDisplay,
 } from "@/lib/avatar-display";
 import { findUserAvatarUploadByUrl } from "@/services/user-avatar.service";
-import {
-  ProfileIdentityPatchSchema,
-  type ProfileIdentityPatch,
-} from "@/lib/validations";
+import { ProfileIdentityPatchSchema } from "@/lib/validations";
 
 const log = clog("update-profile");
 
-const PATCH = async ({ request: req }: any) => {
+// Envelope only. Each field is validated by hand below with a message of its
+// own, so the schema guarantees just that the body is an object.
+const profilePatchSchema = looseStruct({
+  displayName: Schema.optional(Schema.Unknown),
+  username: Schema.optional(Schema.Unknown),
+  themePreference: Schema.optional(Schema.Unknown),
+  themeSyncEnabled: Schema.optional(Schema.Unknown),
+  mediaContentFilter: Schema.optional(Schema.Unknown),
+  avatarDisplay: Schema.optional(Schema.Unknown),
+  avatarUrl: Schema.optional(Schema.Unknown),
+  removeAvatar: Schema.optional(Schema.Unknown),
+  profileAccentColor: Schema.optional(Schema.Unknown),
+  profileBackgroundColor: Schema.optional(Schema.Unknown),
+  profileBannerColor: Schema.optional(Schema.Unknown),
+  displayNameStyle: Schema.optional(Schema.Unknown),
+  bio: Schema.optional(Schema.Unknown),
+  pronouns: Schema.optional(Schema.Unknown),
+});
+
+export const PATCH = async ({ request: req }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  let body: ProfileIdentityPatch & {
-    themePreference?: string | null;
-    themeSyncEnabled?: boolean;
-    mediaContentFilter?: string;
-    avatarDisplay?: unknown;
-    avatarUrl?: string | null;
-    removeAvatar?: boolean;
-    profileAccentColor?: string | null;
-    profileBackgroundColor?: string | null;
-    profileBannerColor?: string | null;
-    displayNameStyle?: unknown | null;
-    bio?: string | null;
-    pronouns?: string | null;
-  };
-
-  try {
-    body = await req.json();
-  } catch {
-    return apiError("Invalid JSON", 400);
-  }
+  const read = await readJsonBody(req);
+  if (read instanceof Response) return read;
+  const envelope = safeParse(profilePatchSchema, read.value);
+  if (!envelope.success) return apiError("Invalid JSON", 400);
+  const body = envelope.data;
 
   const {
     displayName,
@@ -103,7 +106,7 @@ const PATCH = async ({ request: req }: any) => {
   if (
     themePreference !== undefined &&
     themePreference !== null &&
-    !isAppTheme(themePreference)
+    !(typeof themePreference === "string" && isAppTheme(themePreference))
   ) {
     return apiError("Invalid theme preference", 400);
   }

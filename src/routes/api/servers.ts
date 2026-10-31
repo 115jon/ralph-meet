@@ -5,6 +5,7 @@ import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
 import { safeParse } from "@/lib/schema";
+import { readJsonBody } from "@/lib/validate-body";
 import { CreateServerSchema } from "@/lib/validations";
 import {
   executeBroadcast,
@@ -35,7 +36,7 @@ const GET = async ({ request, params: _params }: any) => {
 };
 
 // POST /api/servers — create a new server
-const POST = async ({ request, params: _params }: any) => {
+export const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -49,8 +50,9 @@ const POST = async ({ request, params: _params }: any) => {
   if (rl) return rl;
 
   // Validate input with Effect Schema
-  const raw = await request.json();
-  const parsed = safeParse(CreateServerSchema, raw);
+  const read = await readJsonBody(request);
+  if (read instanceof Response) return read;
+  const parsed = safeParse(CreateServerSchema, read.value);
   if (!parsed.success) {
     return Response.json(
       { error: parsed.issues[0]?.message ?? "Invalid input" },

@@ -10,8 +10,10 @@ import {
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { requireChannelPermission } from "@/lib/require-permission";
+import { looseStruct } from "@/lib/schema";
 import { ServiceError } from "@/lib/service-error";
-import type { VoiceChannelStatus } from "@/lib/types";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import { updateVoiceChannelStatus } from "@/services/channel.service";
 import {
   executeAuditLog,
@@ -19,7 +21,19 @@ import {
   executeInvalidation,
 } from "@/services/service-helpers";
 
-const PATCH = async ({ request, params }: any) => {
+// Structure only; `sanitizeVoiceChannelStatus` still normalizes text and media.
+const voiceStatusUpdateSchema = Schema.Struct({
+  voice_status: Schema.optional(
+    Schema.NullOr(
+      looseStruct({
+        text: Schema.optional(Schema.NullOr(Schema.String)),
+        media: Schema.optional(Schema.NullOr(Schema.Unknown)),
+      }),
+    ),
+  ),
+});
+
+export const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -54,8 +68,9 @@ const PATCH = async ({ request, params }: any) => {
   if (activeVoiceSessionResult instanceof Response)
     return activeVoiceSessionResult;
 
-  const body = await request.json();
-  const { voice_status } = body as { voice_status?: VoiceChannelStatus | null };
+  const body = await validateBody(request, voiceStatusUpdateSchema);
+  if (body instanceof Response) return body;
+  const { voice_status } = body;
 
   if (voice_status === undefined) {
     return apiError("Nothing to update", 400);

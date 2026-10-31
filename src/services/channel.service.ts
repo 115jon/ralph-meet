@@ -250,7 +250,7 @@ export async function updateVoiceChannelStatus(
   db: D1Database,
   channelId: string,
   actorId: string,
-  status: VoiceChannelStatus | null,
+  status: { text?: string | null; media?: unknown } | null,
 ): Promise<{
   channel: Record<string, unknown>;
   cacheKeysToInvalidate: string[];

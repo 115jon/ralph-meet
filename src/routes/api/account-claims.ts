@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { getCurrentUser } from "@/lib/kova-auth-server";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import { applyProfileThemeDefaults } from "@/lib/profile-customization";
 import { normalizeUsernameForStorage } from "@/lib/validations";
 import { getMe } from "@/services/user.service";
@@ -78,17 +80,17 @@ const GET = async ({ request }: any) => {
   return apiSuccess({ claimed: false, candidates });
 };
 
-const POST = async ({ request }: any) => {
+const claimAccountSchema = Schema.Struct({
+  legacyUserId: Schema.optional(Schema.String),
+});
+
+export const POST = async ({ request }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  let body: { legacyUserId?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return apiError("Invalid request body", 400);
-  }
+  const body = await validateBody(request, claimAccountSchema);
+  if (body instanceof Response) return body;
 
   const legacyUserId = body.legacyUserId?.trim();
   if (!legacyUserId || legacyUserId === userId) {

@@ -7,6 +7,8 @@ import {
   requireAuth,
 } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
+import { safeParse } from "@/lib/schema";
+import { Schema } from "effect";
 import {
   markChannelAsRead,
   markChannelUnreadFromMessage,
@@ -30,16 +32,22 @@ const PUT = async ({ params }: any) => {
   return apiSuccess(result);
 };
 
+const readStateBodySchema = Schema.Struct({
+  message_id: Schema.optional(Schema.String),
+});
+
 // PATCH /api/channels/:id/read-state — mark unread starting at a message
-const PATCH = async ({ request, params }: any) => {
+export const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = params;
-  const body = await request.json().catch(() => ({}));
-  const messageId =
-    typeof body.message_id === "string" ? body.message_id : null;
+  const body = safeParse(
+    readStateBodySchema,
+    await request.json().catch(() => null),
+  );
+  const messageId = body.success ? (body.data.message_id ?? null) : null;
 
   if (!messageId) {
     return new Response(JSON.stringify({ error: "message_id is required" }), {

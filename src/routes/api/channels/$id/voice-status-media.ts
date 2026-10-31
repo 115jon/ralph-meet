@@ -28,6 +28,13 @@ import {
   listRecentVoiceStatusMediaAssets,
 } from "@/services/voice-status-media.service";
 import type { VoiceChannelStatusMedia } from "@/lib/types";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
+
+// Structure only; `sanitizeVoiceChannelStatusMedia` validates the media itself.
+const externalMediaBodySchema = Schema.Struct({
+  media: Schema.optional(Schema.Unknown),
+});
 
 function extensionForVoiceStatusMedia(
   contentType: VoiceChannelStatusMedia["preview_content_type"],
@@ -122,7 +129,7 @@ const GET = async ({ request, params }: any) => {
   return apiSuccess({ items }, 200, request);
 };
 
-const POST = async ({ request, params }: any) => {
+export const POST = async ({ request, params }: any) => {
   const { id: channelId } = params;
   const access = await requireVoiceStatusMediaAccess(request, channelId);
   if (access instanceof Response) return access;
@@ -213,10 +220,9 @@ const POST = async ({ request, params }: any) => {
     }
   }
 
-  const body = await request.json();
-  const media = sanitizeVoiceChannelStatusMedia(
-    (body as { media?: unknown }).media,
-  );
+  const body = await validateBody(request, externalMediaBodySchema, request);
+  if (body instanceof Response) return body;
+  const media = sanitizeVoiceChannelStatusMedia(body.media);
   if (!media) {
     return apiError("No valid media was provided.", 400, undefined, request);
   }

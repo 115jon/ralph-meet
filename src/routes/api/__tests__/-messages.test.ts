@@ -339,4 +339,63 @@ describe("message history GET limit", () => {
       undefined,
     );
   });
+
+  describe("request bodies", () => {
+    const url = "https://meet.test/api/channels/channel-1/messages";
+    const send = (
+      handler: typeof PATCH | typeof DELETE,
+      method: "PATCH" | "DELETE",
+      body: BodyInit,
+    ) =>
+      handler({
+        request: new Request(url, { method, body }),
+        params: { id: "channel-1" },
+      });
+
+    it("rejects a non-array message_ids instead of reading its length", async () => {
+      const response = await send(
+        PATCH,
+        "PATCH",
+        JSON.stringify({ refresh_embeds: true, message_ids: "message-1" }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mocks.refreshMessageEmbeds).not.toHaveBeenCalled();
+    });
+
+    it("rejects an edit body that is not an object", async () => {
+      expect((await send(PATCH, "PATCH", "null")).status).toBe(400);
+      expect((await send(PATCH, "PATCH", "not json")).status).toBe(400);
+    });
+
+    it("rejects wrong-typed edit fields", async () => {
+      const response = await send(
+        PATCH,
+        "PATCH",
+        JSON.stringify({ message_id: "message-1", content: 42 }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    it("keeps the specific error for an edit without a message id", async () => {
+      const response = await send(
+        PATCH,
+        "PATCH",
+        JSON.stringify({ content: "hello" }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "message_id required" });
+    });
+
+    it("rejects a delete body that is not an object or has a non-string id", async () => {
+      expect((await send(DELETE, "DELETE", "null")).status).toBe(400);
+      expect((await send(DELETE, "DELETE", "{")).status).toBe(400);
+      expect(
+        (await send(DELETE, "DELETE", JSON.stringify({ message_id: 7 })))
+          .status,
+      ).toBe(400);
+    });
+  });
 });

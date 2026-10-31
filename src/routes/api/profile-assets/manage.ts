@@ -17,6 +17,8 @@ import {
 } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import {
   MAX_PROFILE_BANNER_SIZE,
   MAX_PROFILE_NAMEPLATE_SIZE,
@@ -198,17 +200,18 @@ const POST = async ({ request }: any) => {
   );
 };
 
-const DELETE = async ({ request }: any) => {
+// Structure only: the kind itself is checked below with its own message.
+const profileAssetDeleteSchema = Schema.Struct({
+  kind: Schema.optional(Schema.Unknown),
+});
+
+export const DELETE = async ({ request }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  let body: { kind?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return apiError("Invalid request body", 400);
-  }
+  const body = await validateBody(request, profileAssetDeleteSchema);
+  if (body instanceof Response) return body;
 
   if (!isProfileAssetKind(body.kind)) {
     return apiError("Invalid profile asset kind", 400);

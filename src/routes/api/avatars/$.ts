@@ -8,6 +8,9 @@ import {
   requireAuth,
 } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
+import { safeParse } from "@/lib/schema";
+import { readJsonBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import {
   deleteUserAvatarUpload,
   findUserAvatarUpload,
@@ -66,20 +69,21 @@ const GET = async ({ request, params }: any) => {
   });
 };
 
-const DELETE = async ({ request, params }: any) => {
+const avatarDeleteSchema = Schema.Struct({
+  id: Schema.Trim.check(Schema.isMinLength(1)),
+});
+
+export const DELETE = async ({ request, params }: any) => {
   const { _splat } = params as { _splat?: string };
   if (_splat !== "history") return apiError("Avatar not found", 404);
 
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
 
-  let body: { id?: unknown };
-  try {
-    body = (await request.json()) as { id?: unknown };
-  } catch {
-    return apiError("Invalid request body", 400);
-  }
-  if (typeof body.id !== "string" || !body.id.trim()) {
+  const read = await readJsonBody(request);
+  if (read instanceof Response) return read;
+  const body = safeParse(avatarDeleteSchema, read.value);
+  if (!body.success) {
     return apiError("Invalid avatar upload id", 400);
   }
 
@@ -87,7 +91,7 @@ const DELETE = async ({ request, params }: any) => {
   const upload = await findUserAvatarUpload(
     db,
     authResult.userId,
-    body.id.trim(),
+    body.data.id,
     true,
   );
   if (!upload) return apiError("Avatar upload not found", 404);

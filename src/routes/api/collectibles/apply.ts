@@ -20,16 +20,23 @@ import {
   type AvatarDisplay,
 } from "@/lib/avatar-display";
 import { collectibleItemToSelection } from "@/lib/collectible-selection";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 
-type ApplyBody = {
-  kind?: CollectibleKind;
-  skuId?: string | null;
-  selections?: Array<{
-    kind?: CollectibleKind;
-    skuId?: string | null;
-  }>;
-  avatarDisplay?: unknown;
-};
+// Structure only: each `kind` is checked below with its own error code.
+const applySelectionSchema = Schema.Struct({
+  kind: Schema.optional(Schema.Unknown),
+  skuId: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+const applyBodySchema = Schema.Struct({
+  kind: Schema.optional(Schema.Unknown),
+  skuId: Schema.optional(Schema.NullOr(Schema.String)),
+  selections: Schema.optional(
+    Schema.mutable(Schema.Array(applySelectionSchema)),
+  ),
+  avatarDisplay: Schema.optional(Schema.Unknown),
+});
 
 const COLLECTIBLE_KEYS: Record<CollectibleKind, keyof AvatarCollectibles> = {
   avatar_decoration: "avatarDecoration",
@@ -88,17 +95,13 @@ function mergeCollectibleSelection(
   });
 }
 
-const PATCH = async ({ request }: any) => {
+export const PATCH = async ({ request }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  let body: ApplyBody;
-  try {
-    body = await request.json();
-  } catch {
-    return apiError("Invalid request body", 400, undefined, request);
-  }
+  const body = await validateBody(request, applyBodySchema, request);
+  if (body instanceof Response) return body;
 
   const db = getDB();
   const catalog = await getCollectiblesCatalog(db);

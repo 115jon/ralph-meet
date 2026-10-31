@@ -4,6 +4,8 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
+import { Schema } from "effect";
 import { deleteChannel, updateChannel } from "@/services/channel.service";
 import {
   executeAuditLog,
@@ -11,8 +13,14 @@ import {
   executeInvalidation,
 } from "@/services/service-helpers";
 
+const channelUpdateSchema = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  allow_public_shares: Schema.optional(Schema.NullOr(Schema.Boolean)),
+});
+
 // PATCH /api/channels/:id — update channel name/description
-const PATCH = async ({ request, params }: any) => {
+export const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -38,12 +46,9 @@ const PATCH = async ({ request, params }: any) => {
   if (permResult instanceof Response) return permResult;
 
   try {
-    const body = await request.json();
-    const { name, description, allow_public_shares } = body as {
-      name?: string;
-      description?: string | null;
-      allow_public_shares?: boolean | null;
-    };
+    const body = await validateBody(request, channelUpdateSchema);
+    if (body instanceof Response) return body;
+    const { name, description, allow_public_shares } = body;
 
     if (
       name === undefined &&
