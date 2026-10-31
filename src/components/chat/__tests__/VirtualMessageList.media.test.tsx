@@ -10,7 +10,6 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("virtua", async () => {
-  const React = await import("react");
   return {
     Virtualizer: forwardRef<
       unknown,

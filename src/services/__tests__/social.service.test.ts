@@ -377,8 +377,8 @@ describe("joinServer", () => {
     const memberAdd = result.broadcasts?.find(
       (broadcast) => broadcast.event === "GUILD_MEMBER_ADD",
     );
-    expect(memberAdd).toBeDefined();
-    expect((memberAdd?.data as any).roles[0]).toMatchObject({
+    if (!memberAdd) throw new Error("Expected a GUILD_MEMBER_ADD broadcast");
+    expect((memberAdd.data as { roles: unknown[] }).roles[0]).toMatchObject({
       id: "role_everyone",
       is_default: true,
       name: "@everyone",

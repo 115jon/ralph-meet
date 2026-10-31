@@ -113,6 +113,15 @@ export const VoiceChannelJoinPayload = Schema.Struct({
   started_at: Schema.optional(Schema.Unknown),
 });
 
+/**
+ * Clients name the channel they are leaving so a late leave for an old
+ * channel cannot drop them from the one they joined since. A leave without
+ * a channel (the forced disconnect sends `{}`) applies to the current one.
+ */
+export const VoiceChannelLeavePayload = Schema.Struct({
+  channel_id: Schema.optional(Schema.String),
+});
+
 export const ServerSubscribePayload = Schema.Struct({
   server_id: Schema.String,
 });
@@ -186,7 +195,10 @@ export const mainGatewayClientRules = {
     schema: VoiceChannelJoinPayload,
     invalid: "Invalid voice channel payload",
   },
-  [GatewayOp.VoiceChannelLeave]: null,
+  [GatewayOp.VoiceChannelLeave]: {
+    schema: VoiceChannelLeavePayload,
+    invalid: "Invalid voice channel payload",
+  },
   [GatewayOp.ServerSubscribe]: {
     schema: ServerSubscribePayload,
     invalid: "Invalid server payload",
@@ -332,6 +344,7 @@ export type ReactionPayload = typeof ReactionPayload.Type;
 export type PresenceUpdateClientPayload =
   typeof PresenceUpdateClientPayload.Type;
 export type VoiceChannelJoinPayload = typeof VoiceChannelJoinPayload.Type;
+export type VoiceChannelLeavePayload = typeof VoiceChannelLeavePayload.Type;
 export type ServerSubscribePayload = typeof ServerSubscribePayload.Type;
 export type CallInitiatePayload = typeof CallInitiatePayload.Type;
 export type CallIdPayload = typeof CallIdPayload.Type;

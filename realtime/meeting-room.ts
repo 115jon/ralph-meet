@@ -1039,7 +1039,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.VoiceChannelLeave:
-        this.handleVoiceChannelLeave(ws);
+        this.handleVoiceChannelLeave(ws, msg.d);
         break;
 
       case Op.ServerSubscribe:
@@ -1097,7 +1097,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
       for (const [ws, session] of this.sessions) {
         // Use last_heartbeat as the primary liveness signal.
-        let lastActivity = session.last_heartbeat ?? 0;
+        const lastActivity = session.last_heartbeat ?? 0;
 
         if (lastActivity && now - lastActivity >= ZOMBIE_TIMEOUT_MS) {
           log.info(
@@ -3997,7 +3997,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 34: VoiceChannelLeave ───────────────────────────────────────────
 
-  private handleVoiceChannelLeave(ws: WebSocket, d?: { channel_id?: string }) {
+  private handleVoiceChannelLeave(
+    ws: WebSocket,
+    d: MainClientPayload<Op.VoiceChannelLeave>,
+  ) {
     const session = this.requireSession(ws);
     if (!session) return;
 
@@ -5116,8 +5119,9 @@ export class MeetingRoom extends DurableObject<Env> {
     // CALL_END is now purely designated for aborting/declining pending Rings!
 
     // Maybe they're cancelling an outgoing ring
+    // A CALL_END for an earlier call must not cancel the ring that replaced it.
     const pending = this.findPendingCallForUser(userId);
-    if (pending) {
+    if (pending && pending.callId === d.call_id) {
       clearTimeout(pending.timeout);
       this.pendingCalls.delete(pending.calleeId);
       this.persistPendingCalls();

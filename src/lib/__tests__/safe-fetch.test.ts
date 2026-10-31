@@ -28,10 +28,11 @@ describe("safeFetch", () => {
 
     expect(spy).toHaveBeenCalledTimes(1);
     const [, init] = spy.mock.calls[0];
-    expect(init?.method).toBe("POST");
-    expect((init?.headers as Record<string, string>)["x-test"]).toBe("1");
-    expect(init?.signal).toBeInstanceOf(AbortSignal);
-    expect(init?.signal?.aborted).toBe(false);
+    if (!init) throw new Error("Expected safeFetch to pass request options");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["x-test"]).toBe("1");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal?.aborted).toBe(false);
   });
 
   it("combines a caller signal with the timeout signal", async () => {

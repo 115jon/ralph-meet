@@ -66,7 +66,7 @@ vi.mock("@/services/r2-cleanup.service", () => ({
   retryR2Cleanup: mocks.retryR2Cleanup,
 }));
 
-import { GET } from "../soundboard/uploads/$id";
+import { GET } from "@/lib/voice/soundboard-upload-handler";
 import { GET as GET_SERVER_SOUNDBOARD } from "../servers/$id/soundboard";
 import { DELETE as DELETE_SERVER_SOUNDBOARD } from "../servers/$id/soundboard";
 import { POST } from "../channels/$id/messages/upload";
