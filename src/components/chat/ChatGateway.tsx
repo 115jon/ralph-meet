@@ -1,5 +1,6 @@
 import { getDesktopAuthHandoffToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
+import { onPageWake } from "@/lib/realtime-socket/page-wake";
 import { useChatStore } from "@/stores/chat-store";
 import { useAuth } from "@kova/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -65,20 +66,8 @@ export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
   // pending retry can sit for its whole backoff (up to 30s) after the user is
   // back, and a socket that died in the background is only noticed after
   // three missed heartbeats. Wake the gateway the moment the page returns.
-  useEffect(() => {
-    const wake = () => useChatStore.getState().gateway.wake();
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") wake();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("online", wake);
-    window.addEventListener("pageshow", wake);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("online", wake);
-      window.removeEventListener("pageshow", wake);
-    };
-  }, []);
+  // (Each SFUClient wakes its call sockets from the same page-wake source.)
+  useEffect(() => onPageWake(() => useChatStore.getState().gateway.wake()), []);
 
   // Listen for invite deep links while the user is signed in (desktop only)
   useEffect(() => {

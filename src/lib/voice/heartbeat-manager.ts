@@ -2,13 +2,14 @@ import { clog, ScopedLogger } from "@/lib/console-logger";
 // ============================================================================
 // HeartbeatManager — Reusable timer for WebSocket heartbeat lifecycle
 //
-// One instance per WebSocket (main + voice). Handles:
+// One instance per WebSocket, owned by its RealtimeSocket lifecycle
+// (src/lib/realtime-socket). Handles:
 //   - Periodic heartbeat sends at configurable intervals
 //   - Missed-beat tracking with zombie detection
 //   - Clean start/stop lifecycle
 // ============================================================================
 
-/** Callbacks from HeartbeatManager to the owning SFUClient */
+/** Callbacks from HeartbeatManager to the socket that owns it */
 export interface HeartbeatCallbacks {
   /** Send a heartbeat beat (payload construction is caller's responsibility) */
   sendBeat(): void;
@@ -16,26 +17,42 @@ export interface HeartbeatCallbacks {
   onZombie(): void;
 }
 
+/** Runs `callback` once after `ms`; returns a function that cancels it. */
+export type ScheduleTimer = (callback: () => void, ms: number) => () => void;
+
+const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
+  const handle = setTimeout(callback, ms);
+  return () => clearTimeout(handle);
+};
+
 export class HeartbeatManager {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private cancelBeat: (() => void) | null = null;
   private lastAckReceived: boolean = true;
   private missedBeats: number = 0;
 
   private readonly label: string;
   private readonly maxMissed: number;
   private readonly callbacks: HeartbeatCallbacks;
+  private readonly schedule: ScheduleTimer;
   private log: ScopedLogger;
 
   /**
    * @param label - A label for logging (e.g. "ChatGW", "VoiceGW")
    * @param callbacks - Send beat and zombie handlers
    * @param maxMissed - Max consecutive missed beats before zombie (default 3)
+   * @param schedule - Timer source (the lifecycle's clock in tests)
    */
-  constructor(label: string, callbacks: HeartbeatCallbacks, maxMissed = 3) {
+  constructor(
+    label: string,
+    callbacks: HeartbeatCallbacks,
+    maxMissed = 3,
+    schedule: ScheduleTimer = scheduleWithGlobalTimers,
+  ) {
     this.label = label;
     this.log = clog(label);
     this.callbacks = callbacks;
     this.maxMissed = maxMissed;
+    this.schedule = schedule;
   }
 
   /**
@@ -47,7 +64,8 @@ export class HeartbeatManager {
     this.lastAckReceived = true;
     this.missedBeats = 0;
 
-    this.timer = setInterval(() => {
+    const beat = () => {
+      this.cancelBeat = null;
       if (!this.lastAckReceived) {
         this.missedBeats++;
         this.log.warn(
@@ -55,14 +73,15 @@ export class HeartbeatManager {
         );
         if (this.missedBeats >= this.maxMissed) {
           this.log.error(`Zombie connection detected — triggering reconnect`);
-          this.stop();
           this.callbacks.onZombie();
           return;
         }
       }
       this.lastAckReceived = false;
+      this.cancelBeat = this.schedule(beat, interval);
       this.callbacks.sendBeat();
-    }, interval);
+    };
+    this.cancelBeat = this.schedule(beat, interval);
 
     this.log.info(`Heartbeat started (interval: ${interval}ms)`);
   }
@@ -75,10 +94,8 @@ export class HeartbeatManager {
 
   /** Stop the heartbeat timer */
   stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    this.cancelBeat?.();
+    this.cancelBeat = null;
   }
 
   /** Dispose resources */

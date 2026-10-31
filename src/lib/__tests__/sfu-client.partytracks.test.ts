@@ -1364,3 +1364,38 @@ describe("SFUClient PartyTracks facade", () => {
     }
   });
 });
+
+describe("SFUClient socket lifecycle", () => {
+  it("wakes both call sockets until it disconnects", () => {
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: vi.fn(() => new TestPartyTracksTransport()),
+    });
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    const roomWake = vi.spyOn(client.roomGW, "wake");
+    const voiceWake = vi.spyOn(client.voiceGW, "wake");
+    client.connect("Test User");
+
+    client.wake();
+    expect(roomWake).toHaveBeenCalledOnce();
+    expect(voiceWake).toHaveBeenCalledOnce();
+
+    client.disconnect("user-leave");
+    client.wake();
+    expect(roomWake).toHaveBeenCalledOnce();
+    expect(voiceWake).toHaveBeenCalledOnce();
+  });
+
+  it("reports a refused ticket on either call socket as auth-failed", () => {
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: vi.fn(() => new TestPartyTracksTransport()),
+    });
+    const authFailed = vi.fn();
+    client.on("auth-failed", authFailed);
+
+    client.roomGW.emit("auth-failed", undefined as never);
+    client.voiceGW.emit("auth-failed", undefined as never);
+    expect(authFailed).toHaveBeenCalledTimes(2);
+    client.disconnect("component-unmount");
+  });
+});

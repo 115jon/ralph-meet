@@ -2,6 +2,7 @@ import { markVoice } from "@/lib/voice/latency-marks";
 import { clog } from "./console-logger";
 import { TypedEventEmitter } from "./event-emitter";
 import { wsUrl } from "./platform";
+import { onPageWake } from "./realtime-socket/page-wake";
 import {
   VoiceOpcode,
   type IceServer,
@@ -115,6 +116,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private partyTracksSessionSubscription: Subscription | null = null;
   private isLeaving = false;
   private credentialRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Unsubscribes this client's sockets from page wake (set while connected). */
+  private stopPageWake: (() => void) | null = null;
   private voiceReadyPromise: Promise<void> = Promise.resolve();
   private voiceReadyResolve: (() => void) | null = null;
   private voiceReadyReject: ((reason?: unknown) => void) | null = null;
@@ -424,6 +427,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.roomGW.on("error", (event) => {
       this.emit("error", { message: event.message });
     });
+    this.roomGW.on("auth-failed", () => {
+      sfuLog.warn("Room socket ticket refused: the session is gone");
+      this.emit("auth-failed", undefined as never);
+    });
     this.roomGW.on("participant-joined", (event) => {
       this.upsertStandbyParticipant(event.participant);
       this.emit("participant-joined", event);
@@ -562,6 +569,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         participantId: participant_id,
         speaking: 0,
       });
+    });
+    this.voiceGW.on("auth-failed", () => {
+      sfuLog.warn("Voice socket ticket refused: the session is gone");
+      this.emit("auth-failed", undefined as never);
     });
     this.voiceGW.on("kicked", () => {
       sfuLog.warn("Kicked from VoiceGateway by a replacement connection");
@@ -893,6 +904,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     };
     this.createVoiceReadinessBarrier();
     this.createPartyTracksReadinessBarrier();
+    this.stopPageWake ??= onPageWake(() => this.wake());
     this.roomGW.connectRoom({
       name,
       username,
@@ -910,6 +922,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       channelId: options?.channelId,
       serverId: options?.serverId,
     });
+  }
+
+  /**
+   * The page is back (visible, online): each socket retries now if it was
+   * waiting, or probes its open connection and replaces it if nothing
+   * answers. The voice socket reconnecting leaves the peer connection alone.
+   */
+  public wake(): void {
+    if (this.isLeaving) return;
+    this.roomGW.wake();
+    this.voiceGW.wake();
   }
 
   public waitForVoiceGatewayReady(): Promise<void> {
@@ -998,6 +1021,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       voiceGateway: this.voiceGW.getDebugState(),
     });
     this.isLeaving = true;
+    this.stopPageWake?.();
+    this.stopPageWake = null;
     this.clearCredentialRefreshTimer();
     this.rejectVoiceReadiness(new Error("SFU client disconnected"));
     this.rejectPartyTracksReadiness(new Error("SFU client disconnected"));
