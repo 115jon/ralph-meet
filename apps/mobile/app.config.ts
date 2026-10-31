@@ -3,6 +3,7 @@ import type { ExpoConfig } from "expo/config";
 import {
   DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY,
   DEFAULT_KOVA_AUTH_URL,
+  DEFAULT_PUBLIC_WEB_URL,
 } from "../../src/lib/site-defaults.ts";
 
 type AppVariant = "development" | "preview" | "production";
@@ -35,11 +36,11 @@ function resolveVariant(value: string | undefined): AppVariant {
 const variant = VARIANTS[resolveVariant(process.env.APP_VARIANT)];
 
 // Mirrors the web app's VITE_API_BASE_URL, VITE_KOVA_AUTH_URL and
-// VITE_KOVA_AUTH_PUBLISHABLE_KEY. The Kova defaults come from the web
+// VITE_KOVA_AUTH_PUBLISHABLE_KEY. All defaults come from the web
 // app's dependency-free src/lib/site-defaults.ts; the publishable key is
 // public by design.
 const apiBaseUrl =
-  process.env.EXPO_PUBLIC_RALPH_API_URL ?? "https://meet.115jon.com";
+  process.env.EXPO_PUBLIC_RALPH_API_URL ?? DEFAULT_PUBLIC_WEB_URL;
 const kovaAuthUrl =
   process.env.EXPO_PUBLIC_KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL;
 const kovaPublishableKey =
