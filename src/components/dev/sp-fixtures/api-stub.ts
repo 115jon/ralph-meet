@@ -57,7 +57,7 @@ export function useFixtureSetup(setup: () => (() => void) | void): boolean {
   useLayoutEffect(() => {
     const cleanup = setupRef.current();
     // The point of the hook: flip once the external writes are done.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks-js/set-state-in-effect
     setReady(true);
     return () => cleanup?.();
   }, []);

@@ -63,7 +63,7 @@ export function IncomingCallModal() {
   useEffect(() => {
     if (status === "ringing_incoming" && remoteUser && callId) {
       // Retain caller data while the controlled Dialog exits.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setRenderedCall({ callId, channelId: callChannelId, remoteUser });
     }
   }, [callChannelId, callId, remoteUser, status]);

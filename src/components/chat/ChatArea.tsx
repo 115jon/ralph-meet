@@ -126,7 +126,7 @@ export default function ChatArea({
   useEffect(() => {
     if (pinModal.message) {
       // Retain the confirmation payload while Radix runs the close animation.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setRenderedPinMessage(pinModal.message);
     }
   }, [pinModal.message]);
@@ -136,7 +136,7 @@ export default function ChatArea({
   useEffect(() => {
     if (channelData) {
       // Retain the channel payload while Radix runs the close animation.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setRenderedChannelSettings(channelData);
     }
   }, [channelData]);

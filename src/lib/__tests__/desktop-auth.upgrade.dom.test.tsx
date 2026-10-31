@@ -58,7 +58,7 @@ function DesktopShell() {
   const state = useRef({ seenSessionToken: false });
   useEffect(() => {
     // Same post-mount read as RootComponent.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks-js/set-state-in-effect
     setSessionToken(getDesktopAuthHandoffToken() ?? undefined);
     return subscribeDesktopTokenChanges((token) =>
       setSessionToken(token ?? undefined),

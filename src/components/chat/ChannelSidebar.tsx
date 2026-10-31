@@ -1045,21 +1045,21 @@ export default function ChannelSidebar({
   useEffect(() => {
     if (liveChannelSettings) {
       // Retain the controlled dialog payload through Radix's exit state.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setRetainedChannelSettings(liveChannelSettings);
     }
   }, [liveChannelSettings]);
   useEffect(() => {
     if (liveInviteChannel) {
       // Retain the controlled dialog payload through Radix's exit state.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setRetainedInviteChannel(liveInviteChannel);
     }
   }, [liveInviteChannel]);
   useEffect(() => {
     if (showCreateChannel) {
       // Retain the category payload while the controlled dialog exits.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setRetainedCreateChannel(showCreateChannel);
     }
   }, [showCreateChannel]);

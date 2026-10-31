@@ -231,7 +231,7 @@ export default function ChatPage() {
     profilePayloadGenerationRef.current += 1;
     if (profileUser) {
       // Keep the last payload mounted while Radix runs the close animation.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setRenderedProfileUser(profileUser);
     }
   }, [profileUser]);
@@ -240,7 +240,7 @@ export default function ChatPage() {
 
     previousViewerIdRef.current = user?.id;
     profilePayloadGenerationRef.current += 1;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks-js/set-state-in-effect
     setRenderedProfileUser(null);
     if (profileUserRef.current) setProfileUser(null);
   }, [setProfileUser, user?.id]);

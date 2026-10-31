@@ -492,14 +492,14 @@ const MessageItem = memo(
     const emojiDataReady = useEmojiDataReady();
     useEffect(() => {
       // Load persisted reaction preferences only after the server snapshot exists.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks-js/set-state-in-effect
       setToolbarQuickReactions(getQuickReactionItems(3));
     }, [emojiDataReady]);
 
     // The echo arrived with the text we saved: drop the optimistic copy.
     useEffect(() => {
       if (savingContent !== null && message.content === savingContent) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        // eslint-disable-next-line react-hooks-js/set-state-in-effect
         setSavingContent(null);
       }
     }, [message.content, savingContent]);
