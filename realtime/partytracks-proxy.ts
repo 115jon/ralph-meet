@@ -338,7 +338,7 @@ export async function handlePartyTracksProxyRequest(
   const sessionPathPrefix = `${prefix}/sessions/`;
   const capabilitiesBySession = new Map<string, string>();
   const referencedParticipants = new Set<string>();
-  let routedUrl = new URL(url);
+  const routedUrl = new URL(url);
 
   if (
     routedUrl.pathname.startsWith(sessionPathPrefix) &&

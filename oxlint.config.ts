@@ -120,9 +120,9 @@ export default defineConfig({
     "no-unsafe-finally": "error",
     "no-unsafe-negation": "error",
     // Oxlint also flags `(a?.b as T).c`, which ESLint's rule does not see
-    // through a TS assertion. It is a real hazard, so keep it visible, but
-    // as a warning until the 4 existing test cases are cleaned up.
-    "no-unsafe-optional-chaining": "warn",
+    // through a TS assertion. It is a real hazard: if `a` is nullish the
+    // access throws a TypeError instead of failing an assertion.
+    "no-unsafe-optional-chaining": "error",
     "no-unused-labels": "error",
     "no-unused-private-class-members": "error",
     "no-useless-backreference": "error",
@@ -133,7 +133,7 @@ export default defineConfig({
     "use-isnan": "error",
     "valid-typeof": "error",
     "no-var": "error",
-    "prefer-const": "warn",
+    "prefer-const": "error",
     "prefer-rest-params": "error",
     "prefer-spread": "error",
 
@@ -159,7 +159,7 @@ export default defineConfig({
     "typescript/no-require-imports": "off",
     "typescript/no-unused-expressions": "warn",
     "typescript/no-unused-vars": [
-      "warn",
+      "error",
       {
         argsIgnorePattern: "^_",
         varsIgnorePattern: "^_",

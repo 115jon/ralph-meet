@@ -145,10 +145,9 @@ function hoursAgo(hours: number) {
 }
 
 function requestHeaders(fetchMock: ReturnType<typeof vi.fn>, call: number) {
-  return (fetchMock.mock.calls[call]?.[1] as RequestInit).headers as Record<
-    string,
-    string
-  >;
+  const init = fetchMock.mock.calls[call]?.[1] as RequestInit | undefined;
+  if (!init) throw new Error(`Expected fetch call ${call} to carry options`);
+  return init.headers as Record<string, string>;
 }
 
 beforeEach(() => {

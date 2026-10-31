@@ -467,8 +467,10 @@ describe("PartyTracks proxy", () => {
         route,
         { authorizeRemotePull },
       );
-      expect(response?.status).toBe(200);
-      return ((await response?.json()) as { sessionId: string }).sessionId;
+      if (!response)
+        throw new Error("Expected the proxy to handle the request");
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { sessionId: string }).sessionId;
     };
     const publisher = await createSession("publisher");
     // Session creation and local pushes are how standby warms up; they never
@@ -543,7 +545,9 @@ describe("PartyTracks proxy", () => {
         env,
         route,
       );
-      return ((await response?.json()) as { sessionId: string }).sessionId;
+      if (!response)
+        throw new Error("Expected the proxy to handle the request");
+      return ((await response.json()) as { sessionId: string }).sessionId;
     };
     const publisher = await createSession("publisher");
     const subscriber = await createSession("subscriber");

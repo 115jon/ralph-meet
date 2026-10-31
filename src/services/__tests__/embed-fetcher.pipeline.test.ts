@@ -345,8 +345,9 @@ describe("URL-level embed cache", () => {
     const entry = hoisted.store.get(
       embedCacheKey("https://cache.test/missing"),
     );
-    expect(entry?.ttl).toBe(EMBED_NEGATIVE_CACHE_SECONDS);
-    expect((entry?.value as EmbedCacheEntry).status).toBe("none");
+    if (!entry) throw new Error("Expected a negative cache entry");
+    expect(entry.ttl).toBe(EMBED_NEGATIVE_CACHE_SECONDS);
+    expect((entry.value as EmbedCacheEntry).status).toBe("none");
   });
 
   it("never caches a transient failure", async () => {
