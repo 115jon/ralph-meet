@@ -24,7 +24,7 @@
     "test:worker": "vitest run --config vitest.realtime.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.realtime.json",
     "logs": "node scripts/query-logs.mjs",
     "idle-probe": "node scripts/idle-probe.mjs",
     "bench:voice": "node scripts/voice-latency/bench.mjs",
