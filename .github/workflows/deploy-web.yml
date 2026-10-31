@@ -1,0 +1,365 @@
+name: Deploy web
+
+# Preview first, then production. See docs/deploy.md.
+#
+# Every successful CI run for a push to main builds that commit once, deploys
+# the build to the Worker Preview named "main", smoke tests it and, only when
+# the repository variable WEB_DEPLOY_ENABLED is "true", deploys the same build
+# to production, smoke tests production and rolls back automatically if that
+# smoke test fails. Manual runs redeploy any ref, or roll production back to a
+# given Worker version.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref (branch, tag or SHA) to build and deploy. Ignored for rollbacks.
+        required: false
+        default: main
+      rollback_version_id:
+        description: Roll production back to this Worker version id instead of deploying.
+        required: false
+        default: ""
+      production_url:
+        description: Production base URL to smoke test. Defaults to vars.WEB_PRODUCTION_URL.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web-production
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  # CLOUDFLARE_API_TOKEN is set only on the steps that call Cloudflare, so
+  # dependency install and build scripts never see it.
+  # Kill switch: production steps run only when this is "true".
+  WEB_DEPLOY_ENABLED: ${{ vars.WEB_DEPLOY_ENABLED == 'true' }}
+  PREVIEW_NAME: main
+
+jobs:
+  deploy:
+    name: deploy
+    # Only pushes to main in this repository, never a pull request (a fork can
+    # name its branch main), and never a failed CI run.
+    if: >-
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && inputs.rollback_version_id == '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Resolve ref
+        id: ref
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            echo "ref=$RUN_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${INPUT_REF:-main}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+          persist-credentials: false
+
+      - name: Describe commit
+        id: commit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:8}" >> "$GITHUB_OUTPUT"
+          # A re-run of an old CI-triggered run must not put an older commit
+          # back on production. Manual runs deploy exactly the ref asked for.
+          latest=true
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            tip="$(git ls-remote "$REPO_URL" refs/heads/main | cut -f1)"
+            if [[ -n "$tip" && "$tip" != "$RUN_SHA" ]]; then
+              latest=false
+              echo "::notice::$RUN_SHA is no longer the tip of main ($tip); production steps will be skipped."
+            fi
+          fi
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve production URL
+        id: urls
+        env:
+          INPUT_URL: ${{ inputs.production_url }}
+          VAR_URL: ${{ vars.WEB_PRODUCTION_URL }}
+        run: |
+          url="${INPUT_URL:-$VAR_URL}"
+          if [[ -z "$url" ]]; then
+            # Fall back to the app's own default public URL.
+            url="$(sed -nE 's/^export const DEFAULT_PUBLIC_WEB_URL = "([^"]+)";$/\1/p' src/lib/site-defaults.ts)"
+          fi
+          if [[ ! "$url" =~ ^https://[A-Za-z0-9.-]+/?$ ]]; then
+            echo "::error::Production URL '$url' is not an https origin."
+            exit 1
+          fi
+          echo "production=${url%/}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm workspace
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Write the Preview config
+        run: node scripts/write-preview-config.mjs
+
+      - name: Apply migrations to the Preview D1 database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/migrate-preview-d1.mjs
+
+      - name: Deploy Preview
+        id: preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SHORT_SHA: ${{ steps.commit.outputs.short }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
+        run: |
+          pnpm exec wrangler preview \
+            --config dist/server/wrangler.preview.json \
+            --name "$PREVIEW_NAME" \
+            --message "deploy-web $SHORT_SHA"
+          record="$(jq -c 'select(.type == "preview")' "$WRANGLER_OUTPUT_FILE_PATH" | tail -n 1)"
+          url="$(jq -er '.preview_urls[0]' <<<"$record")"
+          {
+            echo "url=$url"
+            echo "deployment_id=$(jq -r '.deployment_id // ""' <<<"$record")"
+            echo "deployment_url=$(jq -r '.deployment_urls[0] // ""' <<<"$record")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test Preview
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        run: node scripts/smoke-web.mjs "$PREVIEW_URL" --label "Preview $PREVIEW_NAME"
+
+      - name: Check production gate
+        id: gate
+        env:
+          LATEST: ${{ steps.commit.outputs.latest }}
+        run: |
+          if [[ "$WEB_DEPLOY_ENABLED" != "true" ]]; then
+            echo "::notice::Production deploy skipped: repository variable WEB_DEPLOY_ENABLED is not 'true'."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$LATEST" != "true" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record the current production version
+        id: previous
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          pnpm exec wrangler deployments list --json > "$RUNNER_TEMP/deployments.json"
+          # Newest deployment last; its largest version share is what serves.
+          version="$(sed -n '/^\[/,$p' "$RUNNER_TEMP/deployments.json" \
+            | jq -er 'last | .versions | max_by(.percentage) | .version_id')"
+          echo "version_id=$version" >> "$GITHUB_OUTPUT"
+          echo "Production is on version $version"
+
+      - name: Apply migrations to the production D1 database
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm exec wrangler d1 migrations apply ralph-chat-db --remote --config wrangler.toml
+
+      - name: Deploy production
+        id: production
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SHORT_SHA: ${{ steps.commit.outputs.short }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-deploy.ndjson
+        run: |
+          # Same build that passed the Preview smoke test. --env="" keeps the
+          # top-level (production) configuration, as `pnpm run deploy:main`.
+          pnpm exec wrangler deploy --env="" --message "deploy-web $SHORT_SHA"
+          version="$(jq -r 'select(.type == "deploy") | .version_id' "$WRANGLER_OUTPUT_FILE_PATH" | tail -n 1)"
+          echo "version_id=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test production
+        id: smoke_production
+        if: steps.production.outcome == 'success'
+        env:
+          PRODUCTION_URL: ${{ steps.urls.outputs.production }}
+        run: node scripts/smoke-web.mjs "$PRODUCTION_URL" --label production
+
+      - name: Roll production back
+        id: rollback
+        if: >-
+          always() && steps.previous.outputs.version_id != '' &&
+          (steps.production.outcome == 'failure' || steps.smoke_production.outcome == 'failure')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PREVIOUS_VERSION: ${{ steps.previous.outputs.version_id }}
+          SHORT_SHA: ${{ steps.commit.outputs.short }}
+        run: |
+          pnpm exec wrangler deployments list --json > "$RUNNER_TEMP/deployments-now.json"
+          current="$(sed -n '/^\[/,$p' "$RUNNER_TEMP/deployments-now.json" \
+            | jq -er 'last | .versions | max_by(.percentage) | .version_id')"
+          if [[ "$current" == "$PREVIOUS_VERSION" ]]; then
+            echo "Production is still on $PREVIOUS_VERSION; nothing to roll back."
+            echo "result=not needed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          pnpm exec wrangler rollback "$PREVIOUS_VERSION" \
+            --message "deploy-web: automatic rollback after failed deploy of $SHORT_SHA" --yes
+          echo "result=rolled back to $PREVIOUS_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test production after rollback
+        if: always() && steps.rollback.outputs.result != '' && steps.rollback.outputs.result != 'not needed'
+        continue-on-error: true
+        env:
+          PRODUCTION_URL: ${{ steps.urls.outputs.production }}
+        run: node scripts/smoke-web.mjs "$PRODUCTION_URL" --label "production after rollback"
+
+      - name: Fail after rollback
+        if: always() && steps.rollback.outcome == 'success'
+        run: |
+          echo "::error::Production deploy failed and was handled by the rollback step."
+          exit 1
+
+      - name: Write job summary
+        if: always()
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+          REF: ${{ steps.ref.outputs.ref }}
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          PREVIEW_DEPLOYMENT_ID: ${{ steps.preview.outputs.deployment_id }}
+          PREVIEW_DEPLOYMENT_URL: ${{ steps.preview.outputs.deployment_url }}
+          GATE: ${{ steps.gate.outputs.enabled }}
+          LATEST: ${{ steps.commit.outputs.latest }}
+          PREVIOUS_VERSION: ${{ steps.previous.outputs.version_id }}
+          NEW_VERSION: ${{ steps.production.outputs.version_id }}
+          PRODUCTION_URL: ${{ steps.urls.outputs.production }}
+          PRODUCTION_OUTCOME: ${{ steps.production.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke_production.outcome }}
+          ROLLBACK: ${{ steps.rollback.outputs.result }}
+        run: |
+          production="skipped"
+          if [[ "$GATE" == "true" ]]; then
+            production="deploy: ${PRODUCTION_OUTCOME:-not run}, smoke: ${SMOKE_OUTCOME:-not run}"
+          elif [[ "$LATEST" == "false" ]]; then
+            production="skipped: commit is no longer the tip of main"
+          elif [[ -n "$PREVIEW_URL" ]]; then
+            production="skipped: WEB_DEPLOY_ENABLED is not 'true'"
+          fi
+          {
+            echo "## Deploy web"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Ref | \`${REF}\` (\`${SHA}\`) |"
+            echo "| Preview \`${PREVIEW_NAME}\` | ${PREVIEW_URL:-not deployed} |"
+            echo "| Preview deployment | ${PREVIEW_DEPLOYMENT_ID:-none} ${PREVIEW_DEPLOYMENT_URL} |"
+            echo "| Production | ${production} |"
+            echo "| Production URL | ${PRODUCTION_URL} |"
+            echo "| Version before deploy | ${PREVIOUS_VERSION:-n/a} |"
+            echo "| Version deployed | ${NEW_VERSION:-n/a} |"
+            echo "| Rollback | ${ROLLBACK:-not needed} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rollback:
+    name: rollback
+    if: github.event_name == 'workflow_dispatch' && inputs.rollback_version_id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # A manual rollback is deliberately not gated by WEB_DEPLOY_ENABLED:
+      # turning deploys off must never take away the way back.
+      - name: Validate version id
+        env:
+          VERSION_ID: ${{ inputs.rollback_version_id }}
+        run: |
+          if [[ ! "$VERSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            echo "::error::'$VERSION_ID' is not a Worker version id (UUID)."
+            exit 1
+          fi
+
+      - name: Checkout
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm workspace
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Resolve production URL
+        id: urls
+        env:
+          INPUT_URL: ${{ inputs.production_url }}
+          VAR_URL: ${{ vars.WEB_PRODUCTION_URL }}
+        run: |
+          url="${INPUT_URL:-$VAR_URL}"
+          if [[ -z "$url" ]]; then
+            url="$(sed -nE 's/^export const DEFAULT_PUBLIC_WEB_URL = "([^"]+)";$/\1/p' src/lib/site-defaults.ts)"
+          fi
+          if [[ ! "$url" =~ ^https://[A-Za-z0-9.-]+/?$ ]]; then
+            echo "::error::Production URL '$url' is not an https origin."
+            exit 1
+          fi
+          echo "production=${url%/}" >> "$GITHUB_OUTPUT"
+
+      - name: Roll back
+        id: rollback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VERSION_ID: ${{ inputs.rollback_version_id }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          pnpm exec wrangler deployments list --json > "$RUNNER_TEMP/deployments.json"
+          before="$(sed -n '/^\[/,$p' "$RUNNER_TEMP/deployments.json" \
+            | jq -er 'last | .versions | max_by(.percentage) | .version_id')"
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+          pnpm exec wrangler rollback "$VERSION_ID" \
+            --message "deploy-web: manual rollback by $ACTOR" --yes
+
+      - name: Smoke test production
+        env:
+          PRODUCTION_URL: ${{ steps.urls.outputs.production }}
+        run: node scripts/smoke-web.mjs "$PRODUCTION_URL" --label "production after rollback"
+
+      - name: Write job summary
+        if: always()
+        env:
+          VERSION_ID: ${{ inputs.rollback_version_id }}
+          BEFORE: ${{ steps.rollback.outputs.before }}
+          OUTCOME: ${{ steps.rollback.outcome }}
+          PRODUCTION_URL: ${{ steps.urls.outputs.production }}
+        run: |
+          {
+            echo "## Roll back web"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Version before | ${BEFORE:-unknown} |"
+            echo "| Rolled back to | ${VERSION_ID} |"
+            echo "| Rollback | ${OUTCOME:-not run} |"
+            echo "| Production URL | ${PRODUCTION_URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"

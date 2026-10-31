@@ -83,6 +83,15 @@ live key from `[vars]`.
 Prod sign-in only works from an origin listed on the live Kova app (its
 `allowed_origins` and `redirect_uris`). Localhost is not listed by default.
 
+### Deploying the web app
+
+Pushes to `main` deploy through the **Deploy web** workflow: build, a Worker
+Preview named `main`, a smoke test, then production with an automatic rollback
+if the production smoke test fails. Production steps run only while the
+repository variable `WEB_DEPLOY_ENABLED` is `true`. `pnpm deploy:main` remains
+the manual fallback. See [docs/deploy.md](docs/deploy.md) for the steps,
+rollbacks, Preview resources and required settings.
+
 Do not use locally built desktop or CEF artifacts as release-signing inputs.
 Release provenance must be verified by the repository's release workflow.
 

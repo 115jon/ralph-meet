@@ -1,14 +1,14 @@
 {
   // The Durable Objects, the Worker entry and their workerd tests, which
   // tsconfig.json does not include. `node` because wrangler.toml sets
-  // nodejs_compat. `@cloudflare/vitest-pool-workers/types` declares the
+  // nodejs_compat. `@cloudflare/vitest-plugin/types` declares the
   // `cloudflare:test` module the *.worker.test.ts files import.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "incremental": false,
     "types": [
       "@cloudflare/workers-types",
-      "@cloudflare/vitest-pool-workers/types",
+      "@cloudflare/vitest-plugin/types",
       "node"
     ]
   },
