@@ -25,6 +25,8 @@ declare global {
     INSTAGRAM_MID?: string;
     INSTAGRAM_IG_DID?: string;
     INSTAGRAM_RUR?: string;
+    /** Secret: the FCM service-account JSON. Unset, push is a no-op. */
+    FCM_SERVICE_ACCOUNT?: string;
   }
 
   namespace Cloudflare {

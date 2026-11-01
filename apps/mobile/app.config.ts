@@ -33,7 +33,23 @@ function resolveVariant(value: string | undefined): AppVariant {
   return value === "development" || value === "preview" ? value : "production";
 }
 
-const variant = VARIANTS[resolveVariant(process.env.APP_VARIANT)];
+const appVariant = resolveVariant(process.env.APP_VARIANT);
+const variant = VARIANTS[appVariant];
+
+// Firebase (FCM) config for all three package names. It is not committed: CI
+// and EAS point GOOGLE_SERVICES_JSON at it, local builds copy it here
+// (gitignored).
+const googleServicesFile =
+  process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json";
+
+// Release versioning. The release workflow derives both from a `mobile-vX.Y.Z`
+// tag: RALPH_APP_VERSION=X.Y.Z and RALPH_VERSION_CODE=X*10000+Y*100+Z, which
+// rises with every semver bump while minor and patch stay below 100. Local
+// builds fall back to the defaults.
+const appVersion = process.env.RALPH_APP_VERSION ?? "0.1.0";
+const versionCode = Number.parseInt(process.env.RALPH_VERSION_CODE ?? "1", 10);
+
+const MICROPHONE_USAGE = "Ralph Meet uses the microphone in voice channels.";
 
 // Mirrors the web app's VITE_API_BASE_URL, VITE_KOVA_AUTH_URL and
 // VITE_KOVA_AUTH_PUBLISHABLE_KEY. All defaults come from the web
@@ -50,7 +66,7 @@ const kovaPublishableKey =
 const config: ExpoConfig = {
   name: variant.name,
   slug: "ralph-meet",
-  version: "0.1.0",
+  version: appVersion,
   scheme: variant.scheme,
   platforms: ["android", "ios"],
   orientation: "portrait",
@@ -60,8 +76,24 @@ const config: ExpoConfig = {
   // they have no config keys.
   android: {
     package: variant.package,
+    versionCode,
+    googleServicesFile,
     predictiveBackGestureEnabled: true,
-    permissions: ["android.permission.INTERNET"],
+    // Voice: the microphone and call audio routing. The background call's
+    // foreground service, notification, Telecom and Bluetooth permissions come
+    // from modules/ralph-call's own AndroidManifest.xml.
+    permissions: [
+      "android.permission.INTERNET",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+    ],
+    // The WebRTC plugin also asks for these; voice needs neither (no camera
+    // publishing yet, no overlay).
+    blockedPermissions: [
+      "android.permission.CAMERA",
+      "android.permission.SYSTEM_ALERT_WINDOW",
+    ],
     adaptiveIcon: {
       foregroundImage: "./assets/icon.png",
       backgroundColor: "#000000",
@@ -72,11 +104,18 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-web-browser",
     "expo-image",
-    // The composer picks from the system photo picker only: drop the
-    // camera and microphone permissions the library would add.
+    // Message pushes post on the `messages` channel the app creates at launch.
+    ["expo-notifications", { defaultChannel: "messages" }],
+    // The composer picks from the system photo picker only: drop the camera
+    // permission the library would add. The microphone is voice's (set, not
+    // false: false would block RECORD_AUDIO for the whole app).
     [
       "expo-image-picker",
-      { cameraPermission: false, microphonePermission: false },
+      { cameraPermission: false, microphonePermission: MICROPHONE_USAGE },
+    ],
+    [
+      "@config-plugins/react-native-webrtc",
+      { microphonePermission: MICROPHONE_USAGE },
     ],
     [
       "expo-splash-screen",
@@ -88,12 +127,25 @@ const config: ExpoConfig = {
         dark: { image: "./assets/icon.png", backgroundColor: "#000000" },
       },
     ],
-    ["expo-build-properties", { android: { minSdkVersion: 24 } }],
+    [
+      "expo-build-properties",
+      {
+        android: {
+          minSdkVersion: 24,
+          // Release builds run R8. WebRTC reaches its classes from native
+          // code (JNI), and libwebrtc references an optional Dav1d decoder
+          // that the Android build does not ship.
+          extraProguardRules:
+            "-keep class org.webrtc.** { *; }\n-dontwarn org.webrtc.Dav1dDecoder$Natives",
+        },
+      },
+    ],
     "./plugins/withAndroidGradleHeap.cjs",
     "./plugins/withAndroidPredictiveBackCompat.cjs",
+    "./plugins/withReleaseSigning.cjs",
   ],
   experiments: { typedRoutes: true },
-  extra: { apiBaseUrl, kovaAuthUrl, kovaPublishableKey },
+  extra: { apiBaseUrl, kovaAuthUrl, kovaPublishableKey, appVariant },
 };
 
 export default config;

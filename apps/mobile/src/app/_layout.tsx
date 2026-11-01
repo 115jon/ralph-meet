@@ -8,17 +8,22 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSession } from "@/features/auth/session";
 import { useCurrentUser } from "@/features/auth/use-current-user";
 import { ImageViewer } from "@/features/media/ImageViewer";
+import { loadCallPreferences } from "@/features/preferences/call-preferences";
+import { configurePush } from "@/features/push/push";
+import { usePush } from "@/features/push/use-push";
 import { useRealtime } from "@/features/realtime/use-realtime";
 import { FONT_ASSETS, ThemeProvider, useTheme } from "@/theme";
 import { ToastHost } from "@/ui";
 
 void SplashScreen.preventAutoHideAsync();
+configurePush();
 
 function ThemedStack() {
   const theme = useTheme();
   const signedIn = useSession((s) => s.status === "signed-in");
   useCurrentUser();
   useRealtime();
+  usePush();
   return (
     <>
       <StatusBar style={theme.scheme === "dark" ? "light" : "dark"} />
@@ -33,6 +38,10 @@ function ThemedStack() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="channel/[id]" />
           <Stack.Screen name="dm/[id]" />
+          <Stack.Screen
+            name="call"
+            options={{ animation: "slide_from_bottom" }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="sign-in" />
@@ -51,6 +60,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     void useSession.getState().hydrate();
+    void loadCallPreferences();
   }, []);
 
   useEffect(() => {

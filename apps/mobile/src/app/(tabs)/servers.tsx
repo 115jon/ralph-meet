@@ -15,7 +15,8 @@ import {
   useServerTree,
 } from "@/features/servers/store";
 import { channelKind } from "@/features/servers/tree";
-import { EmptyState, Header, Screen, showToast } from "@/ui";
+import { joinVoiceChannel } from "@/features/voice/actions";
+import { EmptyState, Header, Screen } from "@/ui";
 
 function SelectedServerTree() {
   const router = useRouter();
@@ -25,11 +26,14 @@ function SelectedServerTree() {
   const openChannel = useCallback(
     (channel: Channel) => {
       if (channelKind(channel) === "voice") {
-        showToast({
-          label: channel.name,
-          text: "Voice lands in a later build",
-          led: "idle",
+        if (!server) return;
+        // Joining the channel already in the call just opens the call.
+        void joinVoiceChannel({
+          serverId: server.id,
+          channelId: channel.id,
+          channelName: channel.name,
         });
+        router.push("/call");
         return;
       }
       router.push({
@@ -37,7 +41,7 @@ function SelectedServerTree() {
         params: { id: channel.id, name: channel.name },
       });
     },
-    [router],
+    [router, server],
   );
 
   if (!server || !tree || tree.status === "loading") {

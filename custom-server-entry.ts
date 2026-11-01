@@ -203,6 +203,7 @@ interface Env {
   REALTIME_ALLOWED_ORIGINS?: string;
   KOVA_AUTH_URL?: string;
   REALTIME_TICKET_SECRET?: string;
+  FCM_SERVICE_ACCOUNT?: string;
   [key: string]: unknown;
 }
 
@@ -556,6 +557,7 @@ export default {
       CACHE: env.CACHE,
       MEETING_ROOM: env.MEETING_ROOM,
       BACKGROUND_TASKS: env.BACKGROUND_TASKS,
+      FCM_SERVICE_ACCOUNT: env.FCM_SERVICE_ACCOUNT,
     });
   },
 };
