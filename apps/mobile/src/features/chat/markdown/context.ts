@@ -12,3 +12,15 @@ export const MembersContext = createContext<ReadonlySet<string>>(NOBODY);
 export function useMemberNames(): ReadonlySet<string> {
   return useContext(MembersContext);
 }
+
+/**
+ * Opens the profile behind an `@username` the conversation knows; returns
+ * false for a name it does not (drawn, but not a button).
+ */
+export const MentionPress = createContext<
+  ((username: string) => boolean) | undefined
+>(undefined);
+
+export function useMentionPress() {
+  return useContext(MentionPress);
+}

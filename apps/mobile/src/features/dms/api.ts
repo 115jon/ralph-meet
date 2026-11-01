@@ -21,3 +21,12 @@ export async function fetchLatestMessage(channelId: string) {
   );
   return page.messages.at(-1) ?? null;
 }
+
+/** POST /api/dms {target_user_id}: the DM with them, opened or created. */
+export function postDm(userId: string) {
+  return apiJson("/api/dms", Schema.Struct({ id: Schema.String }), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_user_id: userId }),
+  });
+}

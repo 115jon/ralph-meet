@@ -2,11 +2,14 @@ import { markChannelRead as readChannelActivity } from "@/features/activity/acti
 import { subscribeChannel } from "@/features/realtime/gateway";
 import { markRead } from "@/features/servers/actions";
 
-import { fetchMembers, fetchMessages } from "./api";
+import { ApiError } from "@/lib/api";
+
+import { fetchMessages } from "./api";
 import { evictChannels, trimChannel } from "./cache";
 import type { Message, Reaction } from "./schema";
 import {
   mergeMessages,
+  pendingId,
   useChatStore,
   type ChannelMessages,
   type ChatMessage,
@@ -47,12 +50,18 @@ function localRows(current: ChannelMessages | undefined): ChatMessage[] {
   return current?.messages.filter((message) => message.send) ?? [];
 }
 
+// channelId → how many times a jump replaced its cache. A page that was
+// asked for before a jump must not land on top of the jump's.
+const epochs = new Map<string, number>();
+const epochOf = (channelId: string) => epochs.get(channelId) ?? 0;
+
 /**
  * Loads the newest page. It replaces what is cached rather than merging, so
  * a reconnect that missed more than a page never leaves a hole; only the
  * user's unsent rows carry over.
  */
 export async function loadLatest(channelId: string): Promise<void> {
+  const epoch = epochOf(channelId);
   patchChannel(channelId, (current) =>
     current?.status === "ready"
       ? current
@@ -65,6 +74,7 @@ export async function loadLatest(channelId: string): Promise<void> {
   );
   try {
     const page = await fetchMessages(channelId);
+    if (epochOf(channelId) !== epoch) return;
     patchChannel(channelId, (current) => ({
       status: "ready",
       messages: mergeMessages(localRows(current), page.messages),
@@ -72,6 +82,7 @@ export async function loadLatest(channelId: string): Promise<void> {
       loadingOlder: false,
     }));
   } catch {
+    if (epochOf(channelId) !== epoch) return;
     patchChannel(channelId, (current) =>
       current?.status === "ready"
         ? current
@@ -91,7 +102,7 @@ export async function loadOlder(channelId: string): Promise<void> {
   if (!current || !oldest || !current.hasMore || current.loadingOlder) return;
   patchChannel(channelId, (c) => c && { ...c, loadingOlder: true });
   try {
-    const page = await fetchMessages(channelId, oldest);
+    const page = await fetchMessages(channelId, { before: oldest });
     patchChannel(
       channelId,
       (c) =>
@@ -108,17 +119,87 @@ export async function loadOlder(channelId: string): Promise<void> {
   }
 }
 
-/** The members of `serverId`, fetched once per session for suggestions. */
-export async function loadMembers(serverId: string): Promise<void> {
-  if (getState().members[serverId]) return;
+/**
+ * Loads the page around `messageId` in place of the cache (which then has
+ * newer messages to page back in), voiding any older load still in flight.
+ * Answers whether the message is loaded now; false when it is gone.
+ */
+export async function loadAround(
+  channelId: string,
+  messageId: string,
+): Promise<boolean> {
+  const has = () =>
+    getState().channels[channelId]?.messages.some((m) => m.id === messageId) ??
+    false;
+  const epoch = epochOf(channelId) + 1;
+  epochs.set(channelId, epoch);
+  patchChannel(channelId, (current) => ({
+    status: "loading",
+    messages: localRows(current),
+    hasMore: false,
+    loadingOlder: false,
+  }));
   try {
-    const list = await fetchMembers(serverId);
-    setState((s) => ({
-      members: { ...s.members, [serverId]: list.map((member) => member.user) },
+    const page = await fetchMessages(channelId, { around: messageId });
+    if (epochOf(channelId) !== epoch) return has();
+    patchChannel(channelId, (current) => ({
+      status: "ready",
+      messages: mergeMessages(localRows(current), page.messages),
+      hasMore: page.hasMoreBefore ?? false,
+      loadingOlder: false,
+      hasNewer: page.hasMoreAfter ?? false,
     }));
-  } catch {
-    // Suggestions are a nicety; typing a name by hand still mentions.
+    return has();
+  } catch (error) {
+    if (epochOf(channelId) !== epoch) return has();
+    // Deleted, or never there: back to the present.
+    if (error instanceof ApiError && error.status === 404) {
+      epochs.set(channelId, epoch + 1);
+    }
+    await loadLatest(channelId);
+    return false;
   }
+}
+
+/** Pages newer messages back in after a jump, until the present. */
+export async function loadNewer(channelId: string): Promise<void> {
+  const current = getState().channels[channelId];
+  const newest = current?.messages.find((message) => !message.send);
+  if (!current?.hasNewer || current.loadingNewer || !newest) return;
+  patchChannel(channelId, (c) => c && { ...c, loadingNewer: true });
+  try {
+    const page = await fetchMessages(channelId, { after: newest });
+    patchChannel(
+      channelId,
+      (c) =>
+        c && {
+          ...c,
+          messages: mergeMessages(c.messages, page.messages),
+          hasNewer: page.hasMoreAfter ?? false,
+          loadingNewer: false,
+        },
+    );
+  } catch {
+    patchChannel(channelId, (c) => c && { ...c, loadingNewer: false });
+  }
+}
+
+let jumpSeq = 0;
+
+/** Scroll to `messageId` (and flash it) once `channelId` is on screen. */
+export function requestJump(channelId: string, messageId: string): void {
+  jumpSeq += 1;
+  setState({ jump: { channelId, messageId, seq: jumpSeq } });
+}
+
+/** The list scrolled to it; the row stays lit until clearJump. */
+export function landJump(seq: number): void {
+  const { jump } = getState();
+  if (jump?.seq === seq) setState({ jump: { ...jump, landed: true } });
+}
+
+export function clearJump(seq: number): void {
+  if (getState().jump?.seq === seq) setState({ jump: null });
 }
 
 /** Conversations by when they were last opened, most recent first. */
@@ -147,11 +228,16 @@ export function closeChannel(channelId: string): void {
 // ── Local changes, from gateway events and optimistic writes ──────────────
 
 export function receiveMessage(message: ChatMessage): void {
-  patchChannel(message.channel_id, (c) =>
-    c?.status === "ready"
-      ? { ...c, messages: mergeMessages(c.messages, [message]) }
-      : c,
-  );
+  patchChannel(message.channel_id, (c) => {
+    if (c?.status !== "ready") return c;
+    // Scrolled back by a jump: only the user's own send lands (it confirms
+    // a row already there); anything else arrives when paging reaches it.
+    const { nonce } = message;
+    const confirms =
+      nonce !== undefined && c.messages.some((m) => m.id === pendingId(nonce));
+    if (c.hasNewer && !confirms && !message.send) return c;
+    return { ...c, messages: mergeMessages(c.messages, [message]) };
+  });
 }
 
 /** What MESSAGE_UPDATE may change; an absent key is left as it was. */

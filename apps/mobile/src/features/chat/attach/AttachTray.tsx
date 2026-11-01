@@ -3,28 +3,14 @@ import {
   Paperclip,
   type Icon as PhosphorIcon,
 } from "phosphor-react-native";
-import { useCallback, useEffect, useState } from "react";
-import {
-  BackHandler,
-  Pressable,
-  useWindowDimensions,
-  View,
-} from "react-native";
-import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
-import Animated, {
-  Easing,
-  useAnimatedReaction,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { useCallback } from "react";
+import { Pressable, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { scheduleOnRN } from "react-native-worklets";
 
-import { SHEET_TOP_RADIUS, useTheme } from "@/theme";
+import { useTheme } from "@/theme";
 import { Icon, Text } from "@/ui";
 
+import { SlotGrabber, SlotHandle } from "../slot/SlotPanel";
 import { MAX_FILES } from "./limits";
 import { MediaGrid } from "./MediaGrid";
 import {
@@ -37,16 +23,6 @@ import {
 } from "./sources";
 import type { AttachController } from "./useAttach";
 import { useRecentMedia } from "./useRecentMedia";
-
-/** Resting height: a little under half the screen, like the keyboard. */
-const REST = 0.45;
-/** Dragged up: most of the screen, leaving the header and some history. */
-const EXPANDED = 0.72;
-const ENTER = { duration: 250, easing: Easing.out(Easing.cubic) };
-const EXIT = { duration: 175, easing: Easing.out(Easing.cubic) };
-const SETTLE = { duration: 200, easing: Easing.inOut(Easing.cubic) };
-/** A flick faster than this (px/s) decides the drag on its own. */
-const FLING = 900;
 
 function ActionKey({
   icon,
@@ -81,90 +57,22 @@ function ActionKey({
 }
 
 /**
- * The attach tray: a ply-3 panel that rises under the composer while the
- * keyboard steps aside. Camera first, then recent media to pick several at
- * once, and Photos and Files for anything older. The composer stays on top
- * of it (ChatView pads the conversation by `lift`); drag the top strip down
- * to close or up to see more. Back closes it.
+ * The attach tray, in the composer's slot (SlotPanel): camera first, then
+ * recent media to pick several at once, and Photos and Files for anything
+ * older. Drag the top strip down to close or up to see more.
  */
-export function AttachTray({ attach }: { attach: AttachController }) {
+export function AttachTray({
+  attach,
+  open,
+}: {
+  attach: AttachController;
+  /** On screen: recent media loads only then. */
+  open: boolean;
+}) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { width, height: screen } = useWindowDimensions();
-  const reducedMotion = useReducedMotion();
-  const { trayOpen: open, closeTray, lift } = attach;
-  // Built on first open, then kept, so reopening is instant.
-  const [built, setBuilt] = useState(open);
-  if (open && !built) setBuilt(true);
+  const { width } = useWindowDimensions();
   const media = useRecentMedia(open);
-
-  const rest = Math.round(screen * REST);
-  const expanded = Math.round(screen * EXPANDED);
-  const height = useSharedValue(rest);
-  const progress = useSharedValue(0);
-  const dragFrom = useSharedValue(0);
-
-  useEffect(() => {
-    const motion = reducedMotion ? { duration: 0 } : open ? ENTER : EXIT;
-    if (open) height.set(rest);
-    progress.set(withTiming(open ? 1 : 0, motion));
-  }, [open, reducedMotion, rest, height, progress]);
-
-  useAnimatedReaction(
-    () => height.get() * progress.get(),
-    (shown) => {
-      lift.set(shown);
-    },
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      closeTray();
-      return true;
-    });
-    return () => sub.remove();
-  }, [open, closeTray]);
-
-  const drag = usePanGesture({
-    onActivate: () => {
-      "worklet";
-      dragFrom.set(height.get() * progress.get());
-    },
-    onUpdate: (event) => {
-      "worklet";
-      const next = dragFrom.get() - event.translationY;
-      if (next >= rest) {
-        height.set(Math.min(expanded, next));
-        progress.set(1);
-      } else {
-        height.set(rest);
-        progress.set(Math.max(0, next / rest));
-      }
-    },
-    onDeactivate: (event) => {
-      "worklet";
-      const motion = reducedMotion ? { duration: 0 } : SETTLE;
-      const shown = height.get() * progress.get();
-      if (event.velocityY > FLING || shown < rest * 0.6) {
-        progress.set(withTiming(0, reducedMotion ? motion : EXIT));
-        scheduleOnRN(closeTray);
-        return;
-      }
-      progress.set(withTiming(1, motion));
-      const up =
-        event.velocityY < -FLING ||
-        (event.velocityY <= FLING && height.get() > (rest + expanded) / 2);
-      height.set(withTiming(up ? expanded : rest, motion));
-    },
-  });
-
-  const panelStyle = useAnimatedStyle(() => ({
-    height: height.get(),
-    // Parked below the screen, its shadow would still rim the bottom edge.
-    opacity: progress.get() > 0 ? 1 : 0,
-    transform: [{ translateY: height.get() * (1 - progress.get()) }],
-  }));
 
   const remaining = MAX_FILES - attach.items.length;
   const { add, warn } = attach;
@@ -190,44 +98,11 @@ export function AttachTray({ attach }: { attach: AttachController }) {
     add(await pickFiles());
   }, [add, remaining, sayFull]);
 
-  if (!built) return null;
-
   return (
-    <Animated.View
-      accessibilityLabel="Attach files"
-      importantForAccessibility={open ? "auto" : "no-hide-descendants"}
-      pointerEvents={open ? "auto" : "none"}
-      style={[
-        {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: theme.ply3,
-          borderTopWidth: 2,
-          borderTopColor: theme.ink1,
-          borderTopLeftRadius: SHEET_TOP_RADIUS,
-          borderTopRightRadius: SHEET_TOP_RADIUS,
-          shadowColor: theme.shadow,
-          shadowOffset: { width: 0, height: -12 },
-          shadowOpacity: 1,
-          shadowRadius: 32,
-          elevation: 24,
-        },
-        panelStyle,
-      ]}
-    >
-      <GestureDetector gesture={drag}>
+    <View accessibilityLabel="Attach files" style={{ flex: 1 }}>
+      <SlotHandle>
         <View style={{ paddingTop: 10, paddingHorizontal: 12 }}>
-          <View
-            style={{
-              width: 32,
-              height: 3,
-              borderRadius: 2,
-              alignSelf: "center",
-              backgroundColor: theme.lineStrong,
-            }}
-          />
+          <SlotGrabber />
           <View
             style={{
               height: 28,
@@ -250,7 +125,7 @@ export function AttachTray({ attach }: { attach: AttachController }) {
             ) : null}
           </View>
         </View>
-      </GestureDetector>
+      </SlotHandle>
       <View style={{ flex: 1 }}>
         <MediaGrid
           width={width}
@@ -295,6 +170,6 @@ export function AttachTray({ attach }: { attach: AttachController }) {
       ) : (
         <View style={{ height: insets.bottom }} />
       )}
-    </Animated.View>
+    </View>
   );
 }

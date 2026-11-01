@@ -1,8 +1,10 @@
 import {
   ArrowBendUpLeft,
+  Keyboard as KeyboardGlyph,
   PaperPlaneRight,
   PencilSimple,
   PlusCircle,
+  Smiley,
   X,
   XCircle,
   type Icon as PhosphorIcon,
@@ -36,15 +38,22 @@ import { authorName } from "./authors";
 import { clearDraft, readDraft, saveDraft } from "./drafts";
 import type { ComposerIntent } from "./MessageActionsSheet";
 import { insertMention, mentionQueryAt, suggestPeople } from "./mentions";
-import { editMessage, notifyTyping, sendMessage } from "./mutations";
+import { editMessage, notifyTyping, sendGif, sendMessage } from "./mutations";
+import type { Gif } from "./picker/api";
 import type { Author } from "./schema";
+import type { ComposerSlot } from "./slot/useComposerSlot";
+import { insertAt, type Selection } from "./text-insert";
 
 const MAX_INPUT_HEIGHT = 128;
 const KEY = 52;
 
-/** What the message sheet asks of the composer. */
+/** What the message sheet and the emoji panel ask of the composer. */
 export interface ComposerHandle {
   compose: (intent: ComposerIntent) => void;
+  /** Types `value` at the caret, as a keyboard would. */
+  insert: (value: string) => void;
+  /** Sends a GIF now, as a reply when one is set; the text stays. */
+  sendGif: (gif: Gif) => void;
 }
 
 interface ComposerProps {
@@ -54,8 +63,10 @@ interface ComposerProps {
   placeholder: string;
   /** Who can be @mentioned here. */
   people: readonly Author[];
-  /** The files on the next message and the tray that picks them. */
+  /** The files on the next message. */
   attach: AttachController;
+  /** The space under the composer: keyboard, emoji panel or attach tray. */
+  slot: ComposerSlot;
   /** The chat is in front, so back cancels a reply or an edit here first. */
   attended: boolean;
 }
@@ -228,13 +239,19 @@ export function Composer({
   placeholder,
   people,
   attach,
+  slot,
   attended,
 }: ComposerProps) {
   const theme = useTheme();
   const myId = useSession((s) => s.user?.id);
   const input = useRef<TextInputInstance>(null);
   const [text, setText] = useState(() => readDraft(channelId));
-  const [cursor, setCursor] = useState(0);
+  const [selection, setSelection] = useState<Selection>(() => {
+    const end = readDraft(channelId).length;
+    return { start: end, end };
+  });
+  const cursor = selection.end;
+  const setCursor = (at: number) => setSelection({ start: at, end: at });
   const [intent, setIntent] = useState<ComposerIntent | null>(null);
   const editingNow = intent?.kind === "edit";
 
@@ -260,6 +277,9 @@ export function Composer({
     return () => sub.remove();
   }, [intent, attended]);
 
+  const editing = intent?.kind === "edit" ? intent.message : null;
+  const replyTo = intent?.kind === "reply" ? intent.message : undefined;
+
   useImperativeHandle(ref, () => ({
     compose: (next) => {
       setIntent(next);
@@ -270,13 +290,27 @@ export function Composer({
       } else if (editingNow) {
         setText(readDraft(channelId));
       }
-      attach.closeTray();
+      slot.yieldToKeyboard();
       input.current?.focus();
+    },
+    insert: (value) => {
+      const next = insertAt(text, selection, value);
+      changeText(next.text);
+      setCursor(next.cursor);
+      if (!editingNow) notifyTyping(channelId);
+    },
+    sendGif: (gif) => {
+      void sendGif(channelId, gif, replyTo);
+      if (replyTo) setIntent(null);
     },
   }));
 
-  const editing = intent?.kind === "edit" ? intent.message : null;
-  const replyTo = intent?.kind === "reply" ? intent.message : undefined;
+  /** Back to typing: the keyboard takes the slot, the caret where it was. */
+  const showKeyboard = () => {
+    input.current?.focus();
+    input.current?.setSelection(selection.start, selection.end);
+  };
+
   const query = mentionQueryAt(text, cursor);
   const suggestions = query ? suggestPeople(people, query.text, myId) : [];
   const files = editing ? [] : attach.items;
@@ -284,6 +318,8 @@ export function Composer({
     !attach.sending &&
     (text.trim().length > 0 || (!editing && files.length > 0));
   const showAttach = canAttach && !editing;
+  const trayOpen = slot.panel === "attach";
+  const emojiOpen = slot.panel === "emoji";
 
   const submit = async () => {
     if (!canSend) return;
@@ -308,7 +344,8 @@ export function Composer({
     sendMessage(channelId, { content, replyTo, attachments });
     tapHaptic();
     attach.clear();
-    attach.closeTray();
+    // The emoji panel stays for the next message; the tray's work is done.
+    if (trayOpen) slot.close();
     clearDraft(channelId);
     setText("");
     setIntent(null);
@@ -359,7 +396,7 @@ export function Composer({
             alignItems: "flex-end",
             gap: 2,
             paddingLeft: showAttach ? 6 : 12,
-            paddingRight: 8,
+            paddingRight: 2,
             borderRadius: RADIUS,
             borderWidth: 1,
             borderColor: theme.lineField,
@@ -369,11 +406,11 @@ export function Composer({
           {showAttach ? (
             <View style={{ paddingVertical: 5 }}>
               <IconButton
-                icon={attach.trayOpen ? XCircle : PlusCircle}
-                active={attach.trayOpen}
-                label={attach.trayOpen ? "Close attachments" : "Attach files"}
+                icon={trayOpen ? XCircle : PlusCircle}
+                active={trayOpen}
+                label={trayOpen ? "Close attachments" : "Attach files"}
                 disabled={attach.sending}
-                onPress={attach.trayOpen ? attach.closeTray : attach.openTray}
+                onPress={trayOpen ? slot.close : () => slot.open("attach")}
               />
             </View>
           ) : null}
@@ -386,10 +423,10 @@ export function Composer({
               if (next.trim() && !editing) notifyTyping(channelId);
             }}
             onSelectionChange={(event) =>
-              setCursor(event.nativeEvent.selection.end)
+              setSelection(event.nativeEvent.selection)
             }
-            // The keyboard and the tray share the space under the composer.
-            onFocus={attach.closeTray}
+            // The keyboard takes the slot back from a panel.
+            onFocus={slot.yieldToKeyboard}
             placeholder={placeholder}
             placeholderTextColor={theme.ink3}
             multiline
@@ -409,6 +446,14 @@ export function Composer({
               textAlignVertical: "center",
             }}
           />
+          <View style={{ paddingVertical: 5 }}>
+            <IconButton
+              icon={emojiOpen ? KeyboardGlyph : Smiley}
+              label={emojiOpen ? "Show keyboard" : "Emoji and GIFs"}
+              disabled={attach.sending}
+              onPress={emojiOpen ? showKeyboard : () => slot.open("emoji")}
+            />
+          </View>
         </View>
         <SendKey enabled={canSend} onPress={() => void submit()} />
       </View>

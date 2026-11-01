@@ -1,5 +1,13 @@
 import { ArrowDown } from "phosphor-react-native";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   FlatList,
   Platform,
@@ -20,12 +28,20 @@ import Animated, {
 import { useSession } from "@/features/auth/session";
 import { useServersStore } from "@/features/servers/store";
 import { RADIUS, useTheme } from "@/theme";
-import { EmptyState, Icon, Skeleton, Text } from "@/ui";
+import { EmptyState, Icon, showToast, Skeleton, Text } from "@/ui";
 
-import { loadLatest, loadOlder } from "./actions";
+import {
+  clearJump,
+  landJump,
+  loadAround,
+  loadLatest,
+  loadNewer,
+  loadOlder,
+} from "./actions";
 import { DayDivider, MessageRow } from "./MessageRow";
+import { PAGE_SIZE } from "./api";
 import { buildRows, UNREAD_KEY, type ChatRow } from "./rows";
-import { useChannelMessages, type ChatMessage } from "./store";
+import { useChannelMessages, useJump, type ChatMessage } from "./store";
 import { parseTimestamp } from "./time";
 import { setChatCovered, setVisibleMessages } from "./visibility";
 
@@ -35,6 +51,10 @@ const VIEWABILITY = { itemVisiblePercentThreshold: 10 };
 
 /** Scrolled further than this from the newest message, the jump pill shows. */
 const AWAY_FROM_PRESENT = 480;
+/** How long a jumped-to message stays lit. */
+const HIGHLIGHT_MS = 1800;
+/** A row's rough height, for scrolling near one that is not rendered yet. */
+const ROW_ESTIMATE = 72;
 
 /** Message rows are keyed by message id; dividers by "day-…" and UNREAD_KEY. */
 function onViewableItemsChanged({
@@ -231,9 +251,71 @@ interface MessageListProps {
 }
 
 /**
+ * A pending jump into this list: loads the message's page if it is not
+ * cached, scrolls it to the middle and lights it for a moment. Gone
+ * messages say so and leave the list at the present.
+ */
+function useJumpTo(
+  channelId: string,
+  messages: readonly ChatMessage[] | undefined,
+  rows: readonly ChatRow[],
+  ready: boolean,
+  list: RefObject<FlatList<ChatRow> | null>,
+  animated: boolean,
+): string | null {
+  const jump = useJump(channelId);
+  const loading = useRef<number | null>(null);
+  const lit = jump?.landed ? jump.messageId : null;
+
+  useEffect(() => {
+    if (!jump || jump.landed || !ready || !messages) return;
+    const loaded = loading.current === jump.seq;
+    const at = messages.findIndex((message) => message.id === jump.messageId);
+    // Past the newest page, a cached message may be dropped by the reload
+    // that opening the chat started; its own page keeps it.
+    if (at < 0 || (at >= PAGE_SIZE && !loaded)) {
+      if (loaded) return;
+      loading.current = jump.seq;
+      void loadAround(channelId, jump.messageId).then((found) => {
+        if (found) return;
+        clearJump(jump.seq);
+        showToast({
+          label: "Message",
+          text: "That message is no longer here",
+          led: "idle",
+        });
+      });
+      return;
+    }
+    const index = rows.findIndex((row) => row.key === jump.messageId);
+    if (index < 0) return;
+    // After the rows it needs have laid out.
+    requestAnimationFrame(() =>
+      list.current?.scrollToIndex({ index, viewPosition: 0.5, animated }),
+    );
+    landJump(jump.seq);
+  }, [jump, ready, messages, rows, channelId, list, animated]);
+
+  // Lit for a moment, then the jump is done.
+  const seq = jump?.landed ? jump.seq : null;
+  useEffect(() => {
+    if (seq === null) return;
+    const timer = setTimeout(() => clearJump(seq), HIGHLIGHT_MS);
+    // Leaving the chat ends it too, so it never lights up again later.
+    return () => {
+      clearTimeout(timer);
+      clearJump(seq);
+    };
+  }, [seq]);
+
+  return lit;
+}
+
+/**
  * Newest at the bottom; scrolling up pages in older messages. Opening it
  * marks where the user had read up to with a "New" line, and scrolling up
- * into history brings a pill back to the present.
+ * into history brings a pill back to the present. A jump (a link, a push)
+ * may load a page from the past; scrolling down then pages newer ones in.
  */
 export function MessageList({
   channelId,
@@ -250,6 +332,21 @@ export function MessageList({
   // Where the user had read up to when the conversation opened; opening it
   // marks it read, so this is taken once, before that lands.
   const [readAt] = useState(() => useServersStore.getState().readAt[channelId]);
+  useEffect(() => setChatCovered(!attended), [attended]);
+  useEffect(() => () => setVisibleMessages([]), []);
+  const messages = state?.messages;
+  const rows = useMemo(
+    () => (messages ? buildRows(messages, { readAt, myId }) : []),
+    [messages, readAt, myId],
+  );
+  const lit = useJumpTo(
+    channelId,
+    messages,
+    rows,
+    state?.status === "ready",
+    list,
+    !reducedMotion,
+  );
   const renderRow: ListRenderItem<ChatRow> = useCallback(
     ({ item }) => {
       if (item.kind === "day") return <DayDivider label={item.label} />;
@@ -259,28 +356,54 @@ export function MessageList({
           message={item.message}
           sentAt={item.sentAt}
           grouped={item.grouped}
+          highlighted={item.message.id === lit}
           onLongPress={onLongPress}
           onReply={onReply}
         />
       );
     },
-    [onLongPress, onReply],
-  );
-  useEffect(() => setChatCovered(!attended), [attended]);
-  useEffect(() => () => setVisibleMessages([]), []);
-  const messages = state?.messages;
-  const rows = useMemo(
-    () => (messages ? buildRows(messages, { readAt, myId }) : []),
-    [messages, readAt, myId],
+    [onLongPress, onReply, lit],
   );
   const present = usePresentTracker(messages, myId);
+  const detached = state?.hasNewer === true;
   const onEndReached = useCallback(
     () => void loadOlder(channelId),
     [channelId],
   );
+  const onStartReached = useCallback(
+    () => void loadNewer(channelId),
+    [channelId],
+  );
   const jumpToPresent = useCallback(() => {
+    // Back from a jump: the present is not loaded, so load it first.
+    if (detached) void loadLatest(channelId);
     list.current?.scrollToOffset({ offset: 0, animated: !reducedMotion });
-  }, [reducedMotion]);
+  }, [reducedMotion, detached, channelId]);
+  const onScrollToIndexFailed = useCallback(
+    ({
+      index,
+      averageItemLength,
+    }: {
+      index: number;
+      averageItemLength: number;
+    }) => {
+      // Not laid out yet: get close, then aim again once it is.
+      list.current?.scrollToOffset({
+        offset: index * (averageItemLength || ROW_ESTIMATE),
+        animated: false,
+      });
+      setTimeout(
+        () =>
+          list.current?.scrollToIndex({
+            index,
+            viewPosition: 0.5,
+            animated: !reducedMotion,
+          }),
+        120,
+      );
+    },
+    [reducedMotion],
+  );
 
   if (!state || state.status === "loading") return <MessagesSkeleton />;
   if (state.status === "error") {
@@ -315,6 +438,14 @@ export function MessageList({
         keyExtractor={keyOf}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.6}
+        onStartReached={detached ? onStartReached : undefined}
+        onStartReachedThreshold={0.6}
+        // Newer pages land under the reader without moving what they see.
+        maintainVisibleContentPosition={
+          detached ? { minIndexForVisible: 0 } : undefined
+        }
+        onScrollToIndexFailed={onScrollToIndexFailed}
+        extraData={lit}
         initialNumToRender={20}
         windowSize={11}
         contentContainerStyle={{ paddingTop: 8 }}
@@ -337,7 +468,7 @@ export function MessageList({
           )
         }
       />
-      {present.away ? (
+      {present.away || detached ? (
         <JumpToPresent count={present.count} onPress={jumpToPresent} />
       ) : null}
     </View>

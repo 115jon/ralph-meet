@@ -8,10 +8,13 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSession } from "@/features/auth/session";
 import { useCurrentUser } from "@/features/auth/use-current-user";
 import { ImageViewer } from "@/features/media/ImageViewer";
+import { ProfileHost } from "@/features/profile/ProfileHost";
 import { loadCallPreferences } from "@/features/preferences/call-preferences";
 import { configurePush } from "@/features/push/push";
+import { useNativeNotifications } from "@/features/push/use-native-notifications";
 import { usePush } from "@/features/push/use-push";
 import { useRealtime } from "@/features/realtime/use-realtime";
+import { useIncomingShare } from "@/features/share/use-incoming-share";
 import { FONT_ASSETS, ThemeProvider, useTheme } from "@/theme";
 import { ToastHost } from "@/ui";
 
@@ -24,6 +27,8 @@ function ThemedStack() {
   useCurrentUser();
   useRealtime();
   usePush();
+  useNativeNotifications();
+  useIncomingShare();
   return (
     <>
       <StatusBar style={theme.scheme === "dark" ? "light" : "dark"} />
@@ -40,6 +45,14 @@ function ThemedStack() {
           <Stack.Screen name="channel/[id]" options={{ animation: "none" }} />
           <Stack.Screen name="dm/[id]" options={{ animation: "none" }} />
           <Stack.Screen name="activity" />
+          <Stack.Screen
+            name="invite/[code]"
+            options={{ animation: "slide_from_bottom" }}
+          />
+          <Stack.Screen
+            name="share"
+            options={{ animation: "slide_from_bottom" }}
+          />
           <Stack.Screen name="settings" />
           <Stack.Screen
             name="call"
@@ -50,6 +63,7 @@ function ThemedStack() {
           <Stack.Screen name="sign-in" />
         </Stack.Protected>
       </Stack>
+      {signedIn ? <ProfileHost /> : null}
       <ImageViewer />
       <ToastHost />
     </>

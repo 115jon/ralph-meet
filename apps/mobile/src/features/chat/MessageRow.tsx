@@ -5,6 +5,7 @@ import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   Extrapolation,
+  FadeOut,
   interpolate,
   useAnimatedStyle,
   useReducedMotion,
@@ -14,6 +15,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { useSession } from "@/features/auth/session";
+import { openProfile } from "@/features/profile/store";
 import { mediaUrl } from "@/lib/api";
 import { tapHaptic } from "@/lib/haptics";
 import { FONT, RADIUS, useTheme } from "@/theme";
@@ -21,18 +23,20 @@ import { Avatar, Icon, Led, Text } from "@/ui";
 
 import { authorName } from "./authors";
 import { LONG_PRESS_MS, MessageLongPress } from "./long-press";
-import { CustomEmoji } from "./markdown/CustomEmoji";
 import { Markdown } from "./markdown/Markdown";
 import { mentionsViewer } from "./markdown/mentions-viewer";
 import { parseMessage } from "./markdown/parse";
 import { messageMedia } from "./media/classify";
 import { MessageMedia } from "./media/MessageMedia";
 import { discardSend, retrySend, toggleReaction } from "./mutations";
+import { EmojiGlyph } from "./picker/EmojiGlyph";
+import { useReactionDetails } from "./reaction-details";
 import type { Reaction, ReplyPreview } from "./schema";
 import type { ChatMessage } from "./store";
 import { formatTime } from "./time";
 
 const AVATAR = 40;
+const HIGHLIGHT_OUT = FadeOut.duration(600).easing(Easing.out(Easing.cubic));
 const GUTTER = 12;
 
 /** Pulled this far left, letting go replies; past it the row drags heavier. */
@@ -105,6 +109,8 @@ interface MessageRowProps {
   sentAt: Date;
   /** A follow-up from the same author: no avatar, no name line. */
   grouped: boolean;
+  /** Just jumped to (a link, a push): lit for a moment, then fades. */
+  highlighted?: boolean;
   onLongPress: (message: ChatMessage) => void;
   onReply: (message: ChatMessage) => void;
 }
@@ -113,6 +119,7 @@ export const MessageRow = memo(function MessageRow({
   message,
   sentAt,
   grouped,
+  highlighted = false,
   onLongPress,
   onReply,
 }: MessageRowProps) {
@@ -131,6 +138,10 @@ export const MessageRow = memo(function MessageRow({
     [onLongPress, message],
   );
   const reply = useCallback(() => onReply(message), [onReply, message]);
+  const showAuthor = useCallback(
+    () => openProfile(message.author_id, message.author),
+    [message.author_id, message.author],
+  );
   const swipe = useSwipeToReply(!message.send, reply);
 
   return (
@@ -173,6 +184,22 @@ export const MessageRow = memo(function MessageRow({
                     : theme.ply0,
               })}
             >
+              {highlighted ? (
+                <Animated.View
+                  pointerEvents="none"
+                  exiting={HIGHLIGHT_OUT}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: theme.accentTint,
+                    borderLeftWidth: 2,
+                    borderLeftColor: theme.accentInk,
+                  }}
+                />
+              ) : null}
               {targetsMe ? (
                 <View
                   style={{
@@ -192,11 +219,23 @@ export const MessageRow = memo(function MessageRow({
                 {grouped ? (
                   <View style={{ width: AVATAR }} />
                 ) : (
-                  <Avatar
-                    name={name}
-                    size={AVATAR}
-                    uri={mediaUrl(message.author?.avatar_url)}
-                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${name}'s profile`}
+                    onPress={showAuthor}
+                    onLongPress={openActions}
+                    delayLongPress={LONG_PRESS_MS}
+                    style={({ pressed }) => ({
+                      alignSelf: "flex-start",
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Avatar
+                      name={name}
+                      size={AVATAR}
+                      uri={mediaUrl(message.author?.avatar_url)}
+                    />
+                  </Pressable>
                 )}
                 <View
                   style={{
@@ -216,6 +255,9 @@ export const MessageRow = memo(function MessageRow({
                       <Text
                         variant="name"
                         numberOfLines={1}
+                        accessibilityRole="button"
+                        onPress={showAuthor}
+                        onLongPress={openActions}
                         style={{ flexShrink: 1 }}
                       >
                         {name}
@@ -307,7 +349,10 @@ function ReplyQuote({ reply }: { reply: ReplyPreview }) {
   );
 }
 
-/** Count chips; the user's own reaction sits on the accent tint. */
+/**
+ * Count chips; the user's own reaction sits on the accent tint. Tap toggles
+ * yours; long-press shows who reacted.
+ */
 function Reactions({
   message,
   reactions,
@@ -316,6 +361,7 @@ function Reactions({
   reactions: readonly Reaction[];
 }) {
   const theme = useTheme();
+  const showDetails = useReactionDetails();
   return (
     <View
       style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 }}
@@ -331,6 +377,16 @@ function Reactions({
             tapHaptic();
             void toggleReaction(message, reaction.emoji);
           }}
+          onLongPress={
+            showDetails
+              ? () => {
+                  tapHaptic();
+                  showDetails(message, reaction.emoji);
+                }
+              : undefined
+          }
+          delayLongPress={LONG_PRESS_MS}
+          accessibilityHint="Long press to see who reacted"
           // 32 tall and 8 more above and below: a 48dp target. Neighbours
           // sit 6 apart, so 3 a side never overlaps.
           hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}
@@ -352,7 +408,7 @@ function Reactions({
                 : "transparent",
           })}
         >
-          <ReactionEmoji emoji={reaction.emoji} />
+          <EmojiGlyph value={reaction.emoji} size={16} animate />
           <Text
             variant="num"
             style={{
@@ -366,25 +422,6 @@ function Reactions({
       ))}
     </View>
   );
-}
-
-const REACTION_TEXT = { fontSize: 15, lineHeight: 20 } as const;
-
-/** Unicode as text; a server emoji, `<:name:id>`, as its image. */
-function ReactionEmoji({ emoji }: { emoji: string }) {
-  const theme = useTheme();
-  const custom = /^<a?:(\w+):([\w-]+)>$/.exec(emoji);
-  if (custom?.[1] && custom[2]) {
-    return (
-      <CustomEmoji
-        name={custom[1]}
-        id={custom[2]}
-        size={18}
-        fallbackStyle={{ ...REACTION_TEXT, color: theme.ink1 }}
-      />
-    );
-  }
-  return <Text style={REACTION_TEXT}>{emoji}</Text>;
 }
 
 /** "Not sent" with Retry and Delete, under a send that failed. */
