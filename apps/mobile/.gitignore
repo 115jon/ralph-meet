@@ -1,0 +1,17 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+*.tsbuildinfo
+.env*.local
+
+# CNG output: regenerate with `expo prebuild`
+/android
+/ios
+
+# Gradle output of local Expo modules
+modules/*/android/build/
+
+# Firebase config: copied from ~/.config/ralph-meet/firebase for local builds
+google-services.json

@@ -20,7 +20,7 @@
 // nothing. Timers come from an injectable clock and sockets from an
 // injectable factory, so tests drive the whole state machine by hand.
 
-import { clog, type ScopedLogger } from "@/lib/console-logger";
+import { clog, type ScopedLogger } from "./logger";
 import {
   DEFAULT_HEARTBEAT_INTERVAL_MS,
   GatewayCloseCode,
@@ -29,11 +29,8 @@ import {
   parseGatewayFrame,
   type GatewayFrame,
   type PayloadDecodeResult,
-} from "@/lib/gateway-protocol";
-import {
-  HeartbeatManager,
-  type ScheduleTimer,
-} from "@/lib/voice/heartbeat-manager";
+} from "@ralph/protocol";
+import { HeartbeatManager, type ScheduleTimer } from "./heartbeat";
 import { backoffDelay, type RealtimeSocketPolicy } from "./policy";
 import { serverReachability, type ServerReachability } from "./reachability";
 
@@ -140,7 +137,7 @@ export interface RealtimeSocketOptions<
 > {
   readonly label: string;
   readonly policy: RealtimeSocketPolicy;
-  /** The endpoint's payload decoder from @/lib/gateway-protocol. */
+  /** The endpoint's payload decoder from @ralph/protocol. */
   readonly decode: (frame: GatewayFrame) => PayloadDecodeResult<M>;
   /** Fetches a ticket and names the URL for one attempt. */
   readonly acquireTicket: () => Promise<T>;

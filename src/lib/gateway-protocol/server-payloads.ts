@@ -1,7 +1,9 @@
-// ── Server → client payloads ────────────────────────────────────────────────
-// What the browser gateways accept in `d`, per opcode. Clients check frames
-// against these at the socket edge (see codec.ts); a frame that fails is
-// logged and dropped, an opcode a client does not know is ignored.
+// ── Server → client payloads: the call sockets ─────────────────────────────
+// What RoomGateway and VoiceGateway accept in `d`, per opcode. Hello, Error
+// and the chat socket's rules are shared with the mobile app and live in
+// @ralph/protocol. Clients check frames against these at the socket edge
+// (see codec.ts); a frame that fails is logged and dropped, an opcode a
+// client does not know is ignored.
 //
 // These are deliberately looser than what the Durable Objects send: a field
 // is required only when the client reads it without a fallback. Nested domain
@@ -9,6 +11,12 @@
 // data) are checked only to be objects; their shape is the server's to keep.
 // Extra keys are never rejected, and the client receives the original object.
 
+import {
+  ErrorPayload,
+  GatewayOp,
+  HelloPayload,
+  type PayloadRules,
+} from "@ralph/protocol";
 import { Schema } from "effect";
 import type {
   IceServer,
@@ -17,8 +25,6 @@ import type {
   VoiceStateDelta,
 } from "../types";
 import type { SharedSpatialAudioState } from "../voice/spatial-audio";
-import { GatewayOp } from "./opcodes";
-import type { PayloadRules } from "./codec";
 
 function isObject(value: unknown): value is object {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -54,25 +60,6 @@ const IceServers = Schema.mutable(Schema.Array(IceServerObject));
 const TrackInfos = Schema.mutable(Schema.Array(TrackInfoObject));
 const VoiceStates = Schema.mutable(Schema.Array(VoiceStateObject));
 const NullableString = Schema.NullOr(Schema.String);
-
-// ── Both gateways ──────────────────────────────────────────────────────────
-
-/** Used when a Hello carries no interval (no current server omits it). */
-export const DEFAULT_HEARTBEAT_INTERVAL_MS = 45_000;
-
-const HelloPayload = Schema.Struct({
-  heartbeat_interval: Schema.optional(Schema.Finite),
-  gateway_version: Schema.optional(Schema.Unknown),
-});
-
-const ErrorPayload = Schema.Struct({
-  code: Schema.Number,
-  message: Schema.String,
-  /** Native screen-share errors only. */
-  request_id: Schema.optional(Schema.String),
-  operation: Schema.optional(Schema.Literal("push")),
-  push_prefix: Schema.optional(Schema.Literal("screen")),
-});
 
 // ── Main gateway (MeetingRoom) ─────────────────────────────────────────────
 
@@ -123,35 +110,6 @@ const ProfileUpdatePayload = Schema.Struct({
   avatar_url: Schema.optional(NullableString),
   avatar_display: Schema.optional(NullableString),
 });
-
-/** The event payload is routed by `event` in the chat store, not checked here. */
-const DispatchPayload = Schema.Struct({
-  event: Schema.String,
-  data: Schema.optional(Schema.Unknown),
-  /** Replay cursor; also read generically by readReplaySeq. */
-  seq: Schema.optional(Schema.Number),
-});
-
-/** The chat store reads only the session id from Ready. */
-const ChatReadyPayload = Schema.Struct({
-  participant_id: Schema.optional(Schema.String),
-});
-
-/**
- * Server opcodes the chat store handles on /api/gateway. `null`: the payload
- * is not decoded (HeartbeatACK may arrive with no `d`; Resumed is not read).
- */
-export const chatGatewayServerRules = {
-  [GatewayOp.Hello]: { schema: HelloPayload, invalid: "Invalid Hello" },
-  [GatewayOp.HeartbeatACK]: null,
-  [GatewayOp.Ready]: { schema: ChatReadyPayload, invalid: "Invalid Ready" },
-  [GatewayOp.Resumed]: null,
-  [GatewayOp.Error]: { schema: ErrorPayload, invalid: "Invalid Error" },
-  [GatewayOp.Dispatch]: {
-    schema: DispatchPayload,
-    invalid: "Invalid Dispatch",
-  },
-} as const satisfies PayloadRules;
 
 /** Server opcodes RoomGateway handles (MeetingRoom, room or global socket). */
 export const roomGatewayServerRules = {
@@ -273,15 +231,11 @@ export const voiceGatewayServerRules = {
 
 // ── Payload types ──────────────────────────────────────────────────────────
 
-type HelloPayload = typeof HelloPayload.Type;
-type ErrorPayload = typeof ErrorPayload.Type;
 type MediaReadyPayload = typeof MediaReadyPayload.Type;
 type ReadyPayload = typeof ReadyPayload.Type;
 type ResumedPayload = typeof ResumedPayload.Type;
 type VoiceStateUpdatePayload = typeof VoiceStateUpdatePayload.Type;
 type ProfileUpdatePayload = typeof ProfileUpdatePayload.Type;
-type DispatchPayload = typeof DispatchPayload.Type;
-type ChatReadyPayload = typeof ChatReadyPayload.Type;
 type VoiceReadyPayload = typeof VoiceReadyPayload.Type;
 export type SessionDescriptionPayload = typeof SessionDescriptionPayload.Type;
 export type NegotiationDonePayload = typeof NegotiationDonePayload.Type;

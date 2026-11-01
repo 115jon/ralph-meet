@@ -1,0 +1,13 @@
+{
+  "name": "@ralph/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ralph Meet gateway wire protocol: opcodes, codec and payload schemas.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "effect": "^4.1.1"
+  }
+}

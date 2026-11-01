@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 18.4.0",
+    "appVersionSource": "remote",
+    "promptToConfigurePushNotifications": false
+  },
+  "build": {
+    "development": {
+      "corepack": true,
+      "env": { "APP_VARIANT": "development" },
+      "channel": "development",
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "preview": {
+      "corepack": true,
+      "env": { "APP_VARIANT": "preview" },
+      "channel": "preview",
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "corepack": true,
+      "env": { "APP_VARIANT": "production" },
+      "channel": "production",
+      "autoIncrement": true
+    }
+  }
+}
