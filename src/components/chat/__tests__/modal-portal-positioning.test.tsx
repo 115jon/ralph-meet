@@ -49,7 +49,13 @@ describe("modal portal positioning", () => {
     const surface = document.body.querySelector('[data-slot="dialog-surface"]');
 
     // One frame: full-screen fixed layer on phones, workbench size above md.
-    expect(surface?.className).toContain("fixed inset-0");
+    // Both start under the desktop title bar (--app-chrome-top, 0 on web).
+    expect(surface?.className).toContain(
+      "fixed inset-x-0 top-[var(--app-chrome-top,0px)] bottom-0",
+    );
+    expect(surface?.className).toContain(
+      "md:h-[min(820px,calc(100dvh-var(--app-chrome-top,0px)-32px))]",
+    );
     expect(surface?.className).toContain("z-50");
     expect(surface).toHaveTextContent("Profile settings");
     expect(

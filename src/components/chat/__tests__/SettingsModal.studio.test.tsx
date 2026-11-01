@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   signOut: vi.fn(() => Promise.resolve()),
   markAuthLogoutIntent: vi.fn(),
   clearDesktopAuthSession: vi.fn(),
+  endKovaBrowserSession: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@kova/react", () => ({
@@ -20,6 +21,11 @@ vi.mock("@kova/react", () => ({
     },
   }),
   useAuth: () => ({ signOut: mocks.signOut }),
+  useLinkedAccounts: () => ({ accounts: [], isLoaded: true, error: null }),
+}));
+
+vi.mock("@/lib/kova-sign-out", () => ({
+  endKovaBrowserSession: mocks.endKovaBrowserSession,
 }));
 
 vi.mock("@/lib/desktop-auth", () => ({
@@ -272,7 +278,10 @@ describe("SettingsModal (Studio)", () => {
 
       expect(mocks.markAuthLogoutIntent).toHaveBeenCalledOnce();
       expect(mocks.clearDesktopAuthSession).toHaveBeenCalledOnce();
-      expect(mocks.signOut).toHaveBeenCalledWith("/sign-in");
+      expect(mocks.endKovaBrowserSession).toHaveBeenCalledOnce();
+      await waitFor(() =>
+        expect(mocks.signOut).toHaveBeenCalledWith("/sign-in"),
+      );
       await waitFor(() =>
         expect(window.location.replace).toHaveBeenCalledWith("/sign-in"),
       );
