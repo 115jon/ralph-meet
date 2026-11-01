@@ -969,6 +969,13 @@ pub fn run() {
                     let hw = windows::Win32::Foundation::HWND(hwnd.0 as _);
                     window::set_dark_title_bar(hw, true);
                 }
+                // The default window icon is the .ico's 32 px entry, which the
+                // tray and its unread badge are drawn from. Give the window
+                // itself the 256 px art, so the taskbar and Alt+Tab scale down
+                // at 125% and above instead of up.
+                if let Err(err) = win.set_icon(tauri::include_image!("icons/128x128@2x.png")) {
+                    log::warn!("[Window] failed to set the 256px window icon: {err}");
+                }
             }
 
             #[cfg(target_os = "windows")]
