@@ -1,0 +1,32 @@
+[package]
+name = "ralph-meet-launcher"
+version = "3.5.1"
+description = "RalphMeet root launcher: starts the active app-<version> RalphMeet.exe"
+authors = ["115jon"]
+license = "MIT"
+edition = "2021"
+publish = false
+
+# Standalone crate: no Tauri, CEF or app dependencies. See docs/desktop/launch.md.
+[workspace]
+
+[[bin]]
+name = "ralph-meet-launcher"
+path = "src/main.rs"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Environment",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
