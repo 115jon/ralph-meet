@@ -27,6 +27,22 @@ export interface ParticipantVideo {
   readonly screen: string | null;
 }
 
+/** What we publish ourselves, besides the microphone. */
+export interface LocalMedia {
+  /** Our camera as a react-native-webrtc stream URL, while it is on. */
+  readonly camera: string | null;
+  /** The front camera: the self-view is mirrored, like a mirror. */
+  readonly mirror: boolean;
+  /** Our screen is being shared. It is never shown back to us. */
+  readonly sharing: boolean;
+}
+
+export const NO_LOCAL_MEDIA: LocalMedia = {
+  camera: null,
+  mirror: true,
+  sharing: false,
+};
+
 export interface ActiveCall {
   readonly serverId: string;
   readonly channelId: string;
@@ -41,6 +57,7 @@ export interface ActiveCall {
   readonly speaking: Readonly<Record<string, true>>;
   /** Pulled video by participant id; absent when none is pulled. */
   readonly videos: Readonly<Record<string, ParticipantVideo>>;
+  readonly local: LocalMedia;
 }
 
 interface VoiceStoreState {
@@ -65,6 +82,8 @@ export interface CallSummary {
   readonly status: CallStatus;
   readonly muted: boolean;
   readonly deafened: boolean;
+  readonly camera: boolean;
+  readonly sharing: boolean;
   readonly count: number;
 }
 
@@ -80,6 +99,8 @@ export function useCallSummary(): CallSummary | null {
             status: s.call.status,
             muted: s.call.muted,
             deafened: s.call.deafened,
+            camera: s.call.local.camera !== null,
+            sharing: s.call.local.sharing,
             count: Object.keys(s.call.participants).length,
           }
         : null,
@@ -143,15 +164,32 @@ export function useCallTiles(): readonly CallTile[] {
   return useMemo(() => keys.map(parseTile), [keys]);
 }
 
-/** A tile's stream URL: the camera only while it is on, or the screen. */
+/**
+ * A tile's stream URL: the camera only while it is on, or the screen. Our
+ * own tile shows the local camera, never a pull of ourselves.
+ */
 export function useTileStream(tile: CallTile): string | null {
   return useVoiceStore((s) => {
     const call = s.call;
+    if (call && tile.participantId === call.selfId) {
+      return tile.kind === "person" ? call.local.camera : null;
+    }
     const video = call?.videos[tile.participantId];
     if (!video) return null;
     if (tile.kind === "screen") return video.screen;
     return call?.participants[tile.participantId]?.camera ? video.camera : null;
   });
+}
+
+/** Our front-camera tile is mirrored; everything else shows as sent. */
+export function useTileMirrored(tile: CallTile): boolean {
+  return useVoiceStore(
+    (s) =>
+      tile.kind === "person" &&
+      s.call?.selfId === tile.participantId &&
+      s.call.local.camera !== null &&
+      s.call.local.mirror,
+  );
 }
 
 export function useParticipant(id: string): CallParticipant | null {

@@ -181,21 +181,21 @@ export function notifyTyping(channelId: string): void {
 
 // ── Attachments ────────────────────────────────────────────────────────────
 
-/** Uploads one picked file; the attachment rides on the next send. */
+/**
+ * Uploads one file for the next send and answers with the attachment the
+ * message will name. Throws what api.uploadAttachment throws; the composer
+ * shows it on the file's chip instead of a toast.
+ */
 export async function uploadFile(
   channelId: string,
   file: api.UploadFile,
-): Promise<Attachment | null> {
-  try {
-    const uploaded = await api.uploadAttachment(channelId, file);
-    return {
-      id: uploaded.id,
-      filename: uploaded.file_name,
-      content_type: uploaded.content_type,
-      url: uploaded.file_url,
-    };
-  } catch {
-    failed(`${file.name} did not upload.`);
-    return null;
-  }
+  options?: api.UploadOptions,
+): Promise<Attachment> {
+  const uploaded = await api.uploadAttachment(channelId, file, options);
+  return {
+    id: uploaded.id,
+    filename: uploaded.file_name,
+    content_type: uploaded.content_type,
+    url: uploaded.file_url,
+  };
 }

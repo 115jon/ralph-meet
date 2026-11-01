@@ -6,9 +6,10 @@ import { CountChip, Icon } from "@/ui";
 
 /**
  * ghost: bare until pressed (the "you" row's keys). rest: tint-1. off: a
- * muted or deafened key in danger ink. danger: Leave, the only solid fill.
+ * muted or deafened key in danger ink. live: camera on, in live azure.
+ * danger: Leave, the only solid fill.
  */
-export type PanelKeyTone = "ghost" | "rest" | "off" | "danger";
+export type PanelKeyTone = "ghost" | "rest" | "off" | "live" | "danger";
 
 interface PanelKeyProps {
   icon: PhosphorIcon;
@@ -36,12 +37,14 @@ export function PanelKey({
     ghost: "transparent",
     rest: theme.tint1,
     off: theme.dangerTint,
+    live: theme.liveTint,
     danger: theme.dangerFill,
   }[tone];
   const color = {
     ghost: theme.ink2,
     rest: theme.ink1,
     off: theme.dangerInk,
+    live: theme.live,
     danger: theme.onDanger,
   }[tone];
   return (
@@ -63,7 +66,7 @@ export function PanelKey({
     >
       <Icon
         icon={icon}
-        active={tone === "off" || tone === "danger"}
+        active={tone === "off" || tone === "live" || tone === "danger"}
         size={22}
         color={color}
       />

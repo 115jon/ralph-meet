@@ -5,6 +5,12 @@ import { Platform } from "react-native";
 import InCallManager from "react-native-incall-manager";
 
 export { VoiceSession } from "./session";
+export {
+  captureCamera,
+  captureScreen,
+  isPermissionRefusal,
+  stopStream,
+} from "./local-media";
 
 /**
  * The microphone with the platform's voice processing (echo cancellation,
