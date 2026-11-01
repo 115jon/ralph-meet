@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.7.0](https://github.com/115jon/ralph-meet/compare/v3.6.0...v3.7.0) (2026-11-01)
+
+
+### Features
+
+* **desktop:** ✨ add a native root launcher stub ([85be7fa](https://github.com/115jon/ralph-meet/commit/85be7fa3f42bb817c2ff527fe56ddeb3d80b087a))
+* **desktop:** ✨ relaunch via the root stub and set the window aumid ([19d5ffe](https://github.com/115jon/ralph-meet/commit/19d5ffe1e615d6e9b29d9d1ee3759526264642e7))
+* **desktop:** launch through a native root stub like Squirrel ([3e7049b](https://github.com/115jon/ralph-meet/commit/3e7049bf3dfe52f1de2c4004fcdd18b0559bb9f4))
+* **installer:** ✨ install the root stub and point entry points at it ([18bb5e3](https://github.com/115jon/ralph-meet/commit/18bb5e3bbe37982734726ef0511e2c319b991eeb))
+* **mobile:** markdown, swipe pager, pickers, people, links and native notifications ([3e26f01](https://github.com/115jon/ralph-meet/commit/3e26f01e84483455e803b144aa820f90604363b7))
+* **voice:** ✨ fall back to cef capture when native share drops ([0aaa430](https://github.com/115jon/ralph-meet/commit/0aaa4307728c4fb514e81a4eb9510ce016bb9c69))
+
 ## [3.6.0](https://github.com/115jon/ralph-meet/compare/v3.5.1...v3.6.0) (2026-11-01)
 
 
