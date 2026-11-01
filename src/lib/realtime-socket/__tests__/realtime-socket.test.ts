@@ -545,6 +545,17 @@ describe("server give-ups", () => {
     expect(h.socket.debugState().leaving).toBe(true);
   });
 
+  it("treats a session moved to another device (4010) as replaced", async () => {
+    const h = harness();
+    const fake = await h.connected();
+    fake.serverClose(4010, "Voice moved to another device");
+
+    expect(h.events).toContain("closed:replaced");
+    expect(h.clock.pending()).toEqual([]);
+    h.socket.wake();
+    expect(h.acquireTicket).toHaveBeenCalledTimes(1);
+  });
+
   it("does not schedule a retry when the closed hook leaves", async () => {
     const clock = new FakeClock();
     const fake = new FakeSocket("wss://x");

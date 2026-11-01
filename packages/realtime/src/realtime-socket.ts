@@ -196,6 +196,7 @@ function helloInterval(d: unknown): number {
 
 function giveUpReason(code: number, reason: string): SocketGiveUp | null {
   if (code === 1000 && reason === REPLACED_REASON) return "replaced";
+  if (code === GatewayCloseCode.SessionReplaced) return "replaced";
   if (code === GatewayCloseCode.AdmissionRejected) return "admission-rejected";
   return null;
 }

@@ -280,6 +280,48 @@ describe("VoiceGateway", () => {
     gateway.disconnect();
   });
 
+  it("identifies again with a refreshed token after the voice room refused an expired one", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    gateway.connectVoice(
+      "participant-1",
+      "expired-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: GatewayOp.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+    // The voice room answers the identify with an error and keeps the socket.
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: GatewayOp.Error,
+        d: { code: 4004, message: "Voice token expired" },
+      }),
+    } as MessageEvent);
+
+    gateway.updateVoiceToken("fresh-token");
+
+    expect(TestWebSocket.instances).toHaveLength(1);
+    expect(
+      socket.sent
+        .map((message) => JSON.parse(message))
+        .filter((message) => message.op === GatewayOp.VoiceIdentify)
+        .map((message) => message.d.voice_token),
+    ).toEqual(["expired-token", "fresh-token"]);
+    gateway.disconnect();
+  });
+
   it("ignores a stale close callback after creating a replacement socket", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",
