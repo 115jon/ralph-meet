@@ -12,6 +12,11 @@ export interface ScreenShareOptions {
   sourceIcon?: string;
   pickerOpenedAt?: number;
   pickerSelectionElapsedMs?: number;
+  /**
+   * Skip the native hardware publisher and capture through CEF. Set when a
+   * native share lost its connection and is restarted on the fallback path.
+   */
+  skipNative?: boolean;
 }
 
 export interface ScreenShareSourceState {

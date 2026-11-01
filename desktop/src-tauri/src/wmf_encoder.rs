@@ -43,51 +43,52 @@
 //! window during which the shared context is held and waited on) is directly
 //! measurable.
 use std::result::Result as StdResult;
-use std::slice;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
+use std::time::{Duration, Instant};
 use windows::core::{Result as WinResult, *};
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
 use windows::Win32::Media::MediaFoundation::*;
-use windows::Win32::System::Com::CoTaskMemFree;
 
 use crate::d3d_device::{D3dDevice, GpuCompletionSignal};
+use crate::hardware_encoder::{enumerate_hardware_encoder_activates, read_activate_string};
+use crate::native_share::quality::{even_dimension, fit_within, ResizeDebouncer};
 use crate::native_share::NativeShareStats;
 use crate::ring_buffer::RingBuffer;
 use crate::wgc_capture::CapturedFrame;
-use std::time::Instant;
 
 // Safety: D3dDevice is only accessed from dedicated threads (encoder + capture)
 // and is protected by ID3D11Multithread internally.
 
 // ── Codec selection ────────────────────────────────────────────────────────
 
+/// The codec the native publisher encodes. H.264 is the only one the SFU
+/// path negotiates today.
 #[derive(Clone, Copy, Debug)]
 pub enum VideoCodec {
     H264,
-    Hevc,
 }
 
 impl VideoCodec {
     fn mf_subtype(&self) -> GUID {
         match self {
             VideoCodec::H264 => MFVideoFormat_H264,
-            VideoCodec::Hevc => MFVideoFormat_HEVC,
         }
     }
     pub fn mime_type(&self) -> &'static str {
         match self {
             VideoCodec::H264 => "video/H264",
-            VideoCodec::Hevc => "video/H265",
         }
     }
+    /// SDP fmtp for the WebRTC track. NOTE: `profile-level-id=42e01f`
+    /// advertises Constrained Baseline level 3.1 even when encoding 1080p+;
+    /// changing it affects SFU negotiation, so it is intentionally untouched.
     pub fn sdp_fmtp(&self) -> &'static str {
         match self {
             VideoCodec::H264 => {
                 "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f"
             }
-            VideoCodec::Hevc => "",
         }
     }
 }
@@ -120,8 +121,10 @@ pub enum EncoderBackend {
     /// Any `MFT_ENUM_FLAG_HARDWARE` MFT not matched to a specific vendor — a
     /// usable hardware encoder of unknown vendor (Req 6.2).
     GenericHwMft,
-    /// Last-resort CPU encoder, used when no hardware backend is available
-    /// rather than terminating the session (Req 6.3).
+    /// No hardware backend. `select_encoder` still resolves to this (it is
+    /// total), but the native pipeline refuses to start on it: the renderer
+    /// only takes the native path when a hardware H.264 encoder was probed and
+    /// otherwise captures through CEF. Also the stats default before selection.
     Software,
 }
 
@@ -256,173 +259,182 @@ pub fn select_encoder(candidates: &[EncoderCandidate]) -> EncoderBackend {
 
 // ── Public handle ──────────────────────────────────────────────────────────
 
-/// A live, in-place reconfiguration request sent to the running encoder worker
-/// so a quality change (resolution / fps / bitrate) is applied WITHOUT tearing
-/// down the encoder thread, the WebRTC peer connection, the track, or the live
-/// game-capture hook — i.e. seamless quality switching with no re-injection and
-/// no SDP renegotiation. Applied at a frame boundary on the encoder thread.
+/// A live, in-place reconfiguration request: the quality preset changed. The
+/// worker refits the source aspect ratio inside the new box and applies it at
+/// the next frame boundary WITHOUT tearing down the encoder thread, the WebRTC
+/// peer connection, the track, or the live game-capture hook.
 #[derive(Debug, Clone, Copy)]
 pub struct EncoderReconfig {
-    /// New target encode width (the VP output + MFT output type).
-    pub width: u32,
-    /// New target encode height.
-    pub height: u32,
-    /// New target frame rate (fps).
+    /// The preset's bounding box width (the encode width is the source aspect
+    /// ratio fitted inside `max_width × max_height`).
+    pub max_width: u32,
+    /// The preset's bounding box height.
+    pub max_height: u32,
+    /// New target frame rate (fps). The GOP follows it (~1 s).
     pub fps: u32,
     /// New target average bitrate (bits/sec).
     pub bitrate: u32,
 }
 
-/// A control message applied to the running encoder at a frame boundary on the
-/// encoder thread — without tearing down the thread, the WebRTC peer
-/// connection, the track, or the live game-capture hook.
-///
-/// `Reconfig` is the heavyweight path (resolution/fps change ⇒ rebuild the VP
-/// output + reset the MFT output type). `SetBitrate` and `RequestKeyframe` are
-/// the lightweight Phase-1 additions: a live `ICodecAPI` setter and a one-shot
-/// force-IDR, neither of which flushes the MFT or rebuilds the VP. These power
-/// adaptive bitrate (no resolution churn) and on-demand keyframes (PLI/FIR
-/// recovery, late-joiner resync).
+/// A control message applied to the running encoder at a frame boundary.
 #[derive(Debug, Clone, Copy)]
 pub enum EncoderControl {
-    /// Full reconfigure: resolution / fps / bitrate (rebuilds VP output + MFT
-    /// output type). The seamless quality-switch path.
+    /// Quality preset change (box / fps / bitrate).
     Reconfig(EncoderReconfig),
-    /// Bitrate-only change (bits/sec) applied live via `ICodecAPI`
-    /// `CODECAPI_AVEncCommonMeanBitRate` — no flush, no output-type reset, no
-    /// forced keyframe. Drives adaptive bitrate.
-    SetBitrate(u32),
     /// Force the encoder to emit a keyframe (IDR) on the next frame, via
     /// `CODECAPI_AVEncVideoForceKeyFrame`. Driven by inbound RTCP PLI/FIR; the
     /// sender debounces so a PLI burst yields at most one IDR per window.
     RequestKeyframe,
 }
 
-/// A cloneable, `Send` handle to a running encoder's control channel.
-///
-/// Lets components that do not own the [`MftEncoderWorker`] (notably the
-/// inbound-RTCP reader spawned on the WebRTC peer connection) drive on-demand
-/// keyframes and live bitrate changes. All sends are non-blocking and fail
-/// silently once the encoder thread has exited (the receiver is dropped), so a
-/// late RTCP packet after teardown is harmless.
+/// Everything that wakes the encoder thread. Frames, MFT events, control
+/// messages, and stop all funnel through one bounded channel so the thread
+/// blocks in exactly one place (no busy poll, no blocking `GetEvent`).
+pub enum WorkerInput {
+    Frame(CapturedFrame),
+    /// Something else is ready (an MFT event, a control message, or stop).
+    Wake,
+}
+
+/// Cloneable sender that capture sources (WGC callback, hook thread) use to
+/// hand frames to the encoder. Never blocks: a full queue drops the frame,
+/// which releases it back to its source immediately.
+#[derive(Clone)]
+pub struct FrameSender {
+    tx: mpsc::SyncSender<WorkerInput>,
+}
+
+impl FrameSender {
+    /// Queue `frame` for encoding. Returns `false` (and drops the frame) when
+    /// the encoder queue is full or the encoder has exited.
+    pub fn try_send(&self, frame: CapturedFrame) -> bool {
+        self.tx.try_send(WorkerInput::Frame(frame)).is_ok()
+    }
+}
+
+/// A cloneable, `Send` handle to a running encoder's control channel, for
+/// components that do not own the [`MftEncoderWorker`] (the RTCP readers on
+/// the WebRTC peer connections). Sends never block and are silently ignored
+/// once the encoder thread has exited.
 #[derive(Clone)]
 pub struct EncoderControlHandle {
     tx: mpsc::Sender<EncoderControl>,
+    wake: mpsc::SyncSender<WorkerInput>,
 }
 
 impl EncoderControlHandle {
     /// Request a keyframe (IDR) on the next frame. No-op if the encoder is gone.
     pub fn request_keyframe(&self) {
         let _ = self.tx.send(EncoderControl::RequestKeyframe);
-    }
-
-    /// Set the encoder's mean bitrate (bits/sec) live. No-op if the encoder is
-    /// gone. Used by the adaptive-bitrate controller (Phase 2).
-    pub fn set_bitrate(&self, bitrate_bps: u32) {
-        let _ = self.tx.send(EncoderControl::SetBitrate(bitrate_bps));
+        let _ = self.wake.try_send(WorkerInput::Wake);
     }
 }
 
+/// Encoded H.264 access units (Annex-B) leave the encoder on this bounded
+/// channel. `try_send` from the encoder thread: a full queue drops the frame,
+/// counts it, and forces a keyframe so the decoder chain recovers (B18).
+pub type EncodedSender = tokio::sync::mpsc::Sender<Vec<u8>>;
+
+/// How long `MftEncoderWorker::new` waits for the encoder thread to finish MFT
+/// and VideoProcessor setup before giving up (B13: never block forever).
+const ENCODER_INIT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Upper bound on how long the encoder thread sleeps with nothing to do. Every
+/// real event wakes it immediately; this only bounds stop/debounce latency.
+const IDLE_WAKE: Duration = Duration::from_millis(100);
+/// Frames queued between capture and the encoder thread.
+const FRAME_QUEUE: usize = 4;
+
 pub struct MftEncoderWorker {
-    pub frame_tx: mpsc::SyncSender<CapturedFrame>,
-    /// Live reconfiguration channel into the running encoder thread. Carries
-    /// [`EncoderControl`] messages (resolution/fps `Reconfig`, live `SetBitrate`,
-    /// one-shot `RequestKeyframe`) applied at the next frame boundary — no
-    /// thread/PC/track/hook teardown. Dropped on stop.
+    frames: FrameSender,
     control_tx: mpsc::Sender<EncoderControl>,
     stop_flag: Arc<AtomicBool>,
     join: Option<std::thread::JoinHandle<()>>,
-    /// The vendor-neutral encoder backend selected for this session
-    /// (Req 6.5). Resolved inside the worker thread by [`init_mft`] /
-    /// [`select_encoder`] and reported back over the init channel, so the
-    /// session/status layer (task 9.1) can surface it through `NativeShareStats`
-    /// without reaching into the encoder thread. `selected_backend()` exposes it.
+    /// The vendor-neutral hardware encoder backend selected for this session
+    /// (Req 6.5), reported back over the init channel.
     selected_backend: EncoderBackend,
 }
 
 impl MftEncoderWorker {
+    /// Start the encoder thread. `src_*` is the capture source size and
+    /// `max_*` the quality preset box; the encode size is the source aspect
+    /// ratio fitted inside the box (and refitted whenever the source resizes).
+    ///
+    /// Blocks the calling thread for MFT setup (bounded by
+    /// [`ENCODER_INIT_TIMEOUT`]); call it from a blocking context.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         codec: VideoCodec,
-        // Native WGC capture width (e.g. 1920 for a 1080p monitor).
         src_width: u32,
-        // Native WGC capture height.
         src_height: u32,
-        // Target encode width (e.g. 1280 for 720p).
-        width: u32,
-        // Target encode height.
-        height: u32,
+        max_width: u32,
+        max_height: u32,
         fps: u32,
         bitrate: u32,
         d3d: Arc<D3dDevice>,
-        output_tx: mpsc::SyncSender<Vec<u8>>,
+        output_tx: EncodedSender,
         stats: Arc<NativeShareStats>,
     ) -> StdResult<Self, String> {
-        let (frame_tx, frame_rx) = mpsc::sync_channel::<CapturedFrame>(4);
+        let (input_tx, input_rx) = mpsc::sync_channel::<WorkerInput>(FRAME_QUEUE);
         let (control_tx, control_rx) = mpsc::channel::<EncoderControl>();
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_clone = Arc::clone(&stop_flag);
+        let wake_tx = input_tx.clone();
 
-        // One-shot channel: thread sends Ok(EncoderBackend) or Err(msg) to
-        // confirm MFT init and report the selected encoder backend (Req 6.5).
+        // One-shot channel: the thread reports Ok(backend) or Err(msg) once MFT
+        // + VideoProcessor setup finishes.
         let (init_tx, init_rx) = mpsc::sync_channel::<StdResult<EncoderBackend, String>>(1);
 
-        let join = match std::thread::Builder::new()
+        let config = EncoderSettings {
+            codec,
+            src: (src_width, src_height),
+            max: (max_width, max_height),
+            fps,
+            bitrate,
+        };
+        let join = std::thread::Builder::new()
             .name("RalphMftEncoder".to_owned())
             .spawn(move || {
-                // init_mft runs *inside* the thread — no COM pointers cross the spawn.
-                let (encoder_mft, event_gen, provides_samples, backend) =
-                    match init_mft(codec, width, height, fps, bitrate, &d3d) {
-                        Ok(t) => {
-                            let _ = init_tx.send(Ok(t.3));
-                            t
-                        }
-                        Err(e) => {
-                            let _ = init_tx.send(Err(format!(
-                                "Init hardware {} MFT: {e}",
-                                codec.mime_type()
-                            )));
-                            return;
-                        }
-                    };
-
-                log::info!(
-                    "[MftEncoder] Worker started codec={:?} {}x{} fps={fps} bitrate={bitrate} backend={}",
-                    codec,
-                    width,
-                    height,
-                    backend.as_str()
-                );
-                run_encoder_loop(
-                    encoder_mft,
-                    event_gen,
-                    provides_samples,
-                    frame_rx,
-                    control_rx,
-                    output_tx,
-                    stop_clone,
-                    stats,
-                    d3d,
-                    src_width,
-                    src_height,
-                    width,
-                    height,
-                    fps,
-                );
+                // COM objects are created and used only on this thread.
+                let mut encoder = match Encoder::init(config, d3d, stats, output_tx, wake_tx) {
+                    Ok(encoder) => encoder,
+                    Err(e) => {
+                        let _ = init_tx.send(Err(format!(
+                            "Init hardware {} encoder: {e}",
+                            codec.mime_type()
+                        )));
+                        return;
+                    }
+                };
+                if stop_clone.load(Ordering::Relaxed) {
+                    // `new` already gave up waiting (init timeout).
+                    encoder.shutdown();
+                    return;
+                }
+                let _ = init_tx.send(Ok(encoder.backend));
+                encoder.run(&input_rx, &control_rx, &stop_clone);
+                encoder.shutdown();
                 log::info!("[MftEncoder] Worker stopped");
-            }) {
-            Ok(h) => h,
-            Err(e) => return Err(format!("Spawn encoder thread: {e}")),
-        };
+            })
+            .map_err(|e| format!("Spawn encoder thread: {e}"))?;
 
-        // Wait for MFT init result from the thread, capturing the selected backend.
-        let selected_backend = match init_rx.recv() {
+        let selected_backend = match init_rx.recv_timeout(ENCODER_INIT_TIMEOUT) {
             Ok(Ok(backend)) => backend,
             Ok(Err(msg)) => return Err(msg),
-            Err(_) => return Err("Encoder thread died before reporting init".into()),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // Detach: the thread notices the flag after init and exits.
+                stop_flag.store(true, Ordering::Relaxed);
+                return Err(format!(
+                    "Encoder init timed out after {}s",
+                    ENCODER_INIT_TIMEOUT.as_secs()
+                ));
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("Encoder thread died before reporting init".into())
+            }
         };
 
         Ok(Self {
-            frame_tx,
+            frames: FrameSender { tx: input_tx },
             control_tx,
             stop_flag,
             join: Some(join),
@@ -431,59 +443,39 @@ impl MftEncoderWorker {
     }
 
     /// The vendor-neutral [`EncoderBackend`] chosen for this session (Req 6.5).
-    /// Consumed by the session/status layer (task 9.1) to report the active
-    /// encoder in `NativeShareStats` / `Capture_Status`.
     pub fn selected_backend(&self) -> EncoderBackend {
         self.selected_backend
     }
 
-    /// Request a live, in-place quality reconfiguration of the running encoder
-    /// (resolution / fps / bitrate). The worker applies it at the next frame
-    /// boundary by rebuilding its GPU VideoProcessor output + MFT output type
-    /// and updating the bitrate — WITHOUT restarting the encoder thread, the
-    /// WebRTC peer connection, the track, or the live game-capture hook. This is
-    /// what makes a quality switch seamless and zero-restart. Returns an error
-    /// only if the encoder thread has already exited.
+    /// Sender capture sources use to feed frames to this encoder.
+    pub fn frame_sender(&self) -> FrameSender {
+        self.frames.clone()
+    }
+
+    /// Apply a quality preset change in place (see [`EncoderReconfig`]).
+    /// Returns an error only if the encoder thread has already exited.
     pub fn reconfigure(&self, cfg: EncoderReconfig) -> StdResult<(), String> {
         self.control_tx
             .send(EncoderControl::Reconfig(cfg))
-            .map_err(|_| "encoder worker thread is no longer running".to_string())
+            .map_err(|_| "encoder worker thread is no longer running".to_string())?;
+        let _ = self.frames.tx.try_send(WorkerInput::Wake);
+        Ok(())
     }
 
-    /// Change the encoder's target average bitrate (bits/sec) live, without
-    /// changing resolution, flushing the MFT, or forcing a keyframe. Drives
-    /// adaptive bitrate. Returns an error only if the encoder thread has exited.
-    pub fn set_bitrate(&self, bitrate_bps: u32) -> StdResult<(), String> {
-        self.control_tx
-            .send(EncoderControl::SetBitrate(bitrate_bps))
-            .map_err(|_| "encoder worker thread is no longer running".to_string())
-    }
-
-    /// Request the encoder emit a keyframe (IDR) on the next frame — driven by
-    /// inbound RTCP PLI/FIR and late-joiner resync. The encoder thread applies
-    /// it via `CODECAPI_AVEncVideoForceKeyFrame`. Callers should debounce bursts.
-    /// Returns an error only if the encoder thread has exited.
-    pub fn request_keyframe(&self) -> StdResult<(), String> {
-        self.control_tx
-            .send(EncoderControl::RequestKeyframe)
-            .map_err(|_| "encoder worker thread is no longer running".to_string())
-    }
-
-    /// A cloneable, `Send` handle to the encoder's control channel, for tasks
-    /// that live elsewhere (e.g. the inbound-RTCP reader on the WebRTC PC) and
-    /// need to drive keyframes / bitrate without owning the worker.
+    /// Cloneable control handle for components that do not own the worker.
     pub fn control_handle(&self) -> EncoderControlHandle {
         EncoderControlHandle {
             tx: self.control_tx.clone(),
+            wake: self.frames.tx.clone(),
         }
     }
 
-    pub fn try_send_frame(&self, frame: CapturedFrame) -> bool {
-        self.frame_tx.try_send(frame).is_ok()
-    }
-
+    /// Signal the encoder thread to exit and join it. The thread wakes within
+    /// [`IDLE_WAKE`] at most; joining can still block if the driver is stuck
+    /// inside an MFT call, so callers run this off the async runtime.
     pub fn stop(&mut self) {
         self.stop_flag.store(true, Ordering::Relaxed);
+        let _ = self.frames.tx.try_send(WorkerInput::Wake);
         if let Some(h) = self.join.take() {
             let _ = h.join();
         }
@@ -496,34 +488,20 @@ impl Drop for MftEncoderWorker {
     }
 }
 
-// ── Encoder enumeration + selection wiring (vendor-neutral, task 8.2) ─────────
-//
-// `init_mft` enumerates the hardware video-encoder MFTs via
-// `MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE | …)`, reads
-// each activate's friendly name (`MFT_FRIENDLY_NAME_Attribute`) and vendor id
-// (`MFT_ENUM_HARDWARE_VENDOR_ID_Attribute`), classifies it with
-// [`classify_mft`], and picks the winner with the pure [`select_encoder`]
-// (Req 6.1, 6.2). When no hardware encoder is available, `select_encoder`
-// resolves to [`EncoderBackend::Software`] and the encoder enumerates a
-// software MFT instead of failing the session (Req 6.3). The chosen MFT is then
-// activated and configured, and the selected [`EncoderBackend`] is returned so
-// the session/status layer (task 9.1) can report it (Req 6.5).
+// ── Hardware encoder enumeration + selection ───────────────────────────────
 
-/// Read an `IMFActivate` allocated-string attribute (e.g.
-/// `MFT_FRIENDLY_NAME_Attribute`), freeing the `CoTaskMemAlloc`'d buffer that
-/// `GetAllocatedString` hands back. Returns `None` if the attribute is absent.
-unsafe fn read_activate_string(activate: &IMFActivate, key: &GUID) -> Option<String> {
-    let mut value = PWSTR::null();
-    let mut len = 0u32;
-    match activate.GetAllocatedString(key, &mut value, &mut len) {
-        Ok(()) => {
-            let s = value.to_string().ok();
-            if !value.is_null() {
-                CoTaskMemFree(Some(value.as_ptr() as *const core::ffi::c_void));
-            }
-            s
-        }
-        Err(_) => None,
+/// Build an [`EncoderCandidate`] from one enumerated hardware `IMFActivate` by
+/// reading its friendly name + vendor id and classifying it (Req 6.1, 6.2).
+unsafe fn read_encoder_candidate(activate: &IMFActivate) -> EncoderCandidate {
+    let friendly_name =
+        read_activate_string(activate, &MFT_FRIENDLY_NAME_Attribute).unwrap_or_default();
+    let vendor_id = read_activate_string(activate, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute)
+        .and_then(|s| parse_vendor_id(&s));
+    let backend = classify_mft(&friendly_name, vendor_id, true);
+    EncoderCandidate {
+        backend,
+        friendly_name,
+        is_hardware: true,
     }
 }
 
@@ -541,100 +519,24 @@ fn parse_vendor_id(raw: &str) -> Option<u32> {
     u32::from_str_radix(hex, 16).ok()
 }
 
-/// Build an [`EncoderCandidate`] from one enumerated `IMFActivate` by reading
-/// its friendly name + vendor id and classifying it (Req 6.1, 6.2). `is_hardware`
-/// reflects the enumeration flag used (`MFT_ENUM_FLAG_HARDWARE` ⇒ `true`).
-unsafe fn read_encoder_candidate(activate: &IMFActivate, is_hardware: bool) -> EncoderCandidate {
-    let friendly_name =
-        read_activate_string(activate, &MFT_FRIENDLY_NAME_Attribute).unwrap_or_default();
-    let vendor_id = read_activate_string(activate, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute)
-        .and_then(|s| parse_vendor_id(&s));
-    let backend = classify_mft(&friendly_name, vendor_id, is_hardware);
-    EncoderCandidate {
-        backend,
-        friendly_name,
-        is_hardware,
-    }
-}
-
-/// Enumerate the video-encoder MFTs (NV12 in → `codec` out) with the given
-/// hardware/software flag, taking ownership of each returned `IMFActivate` and
-/// freeing the `CoTaskMemAlloc`'d array. An empty result is `Ok(vec![])` (not an
-/// error) so the caller can fall back from hardware to software (Req 6.3).
-unsafe fn enumerate_encoders(codec: VideoCodec, hardware: bool) -> WinResult<Vec<IMFActivate>> {
-    let input = MFT_REGISTER_TYPE_INFO {
-        guidMajorType: MFMediaType_Video,
-        guidSubtype: MFVideoFormat_NV12,
-    };
-    let output = MFT_REGISTER_TYPE_INFO {
-        guidMajorType: MFMediaType_Video,
-        guidSubtype: codec.mf_subtype(),
-    };
-    // Hardware: enumerate async hardware MFTs. Software: enumerate synchronous
-    // software MFTs (the built-in CPU encoder), used only as the last-resort
-    // fallback when no hardware encoder is present.
-    let base = if hardware {
-        MFT_ENUM_FLAG_HARDWARE.0
-    } else {
-        MFT_ENUM_FLAG_SYNCMFT.0
-    };
-    let flags = MFT_ENUM_FLAG(base | MFT_ENUM_FLAG_SORTANDFILTER.0);
-
-    let mut activates = std::ptr::null_mut();
-    let mut count = 0u32;
-    MFTEnumEx(
-        MFT_CATEGORY_VIDEO_ENCODER,
-        flags,
-        Some(&input),
-        Some(&output),
-        &mut activates,
-        &mut count,
-    )?;
-
-    let mut result = Vec::with_capacity(count as usize);
-    if count > 0 && !activates.is_null() {
-        for item in slice::from_raw_parts_mut(activates, count as usize) {
-            if let Some(a) = item.take() {
-                result.push(a);
-            }
-        }
-    }
-    CoTaskMemFree(Some(activates as _));
-    Ok(result)
-}
-
-// ── MFT initialisation ─────────────────────────────────────────────────────
-
-/// Initialise the encoder MFT for `codec`, selecting a vendor-neutral encoder
-/// backend (Req 6.1–6.4).
+/// Activate and configure the hardware encoder MFT for `codec`.
 ///
-/// Returns the activated `IMFTransform`, an optional `IMFMediaEventGenerator`
-/// (present for the async hardware MFTs, `None` for a synchronous software MFT),
-/// the `provides_samples` flag, and the selected [`EncoderBackend`] (Req 6.5).
-/// Hardware MFTs run the existing async, GPU-backed path; the software fallback
-/// runs the synchronous, CPU `bgra_to_nv12` path (no D3D manager) so a captured
-/// surface is encoded without assuming NVENC (Req 6.4).
+/// Only hardware (async, D3D-backed) MFTs are supported: the renderer takes
+/// the native path only when `probe_hardware_video_encoders` reports a
+/// hardware H.264 encoder, and falls back to CEF capture otherwise.
 fn init_mft(
-    codec: VideoCodec,
-    width: u32,
-    height: u32,
-    fps: u32,
-    bitrate: u32,
+    settings: &EncoderSettings,
+    out: (u32, u32),
     d3d: &D3dDevice,
-) -> WinResult<(
-    IMFTransform,
-    Option<IMFMediaEventGenerator>,
-    bool,
-    EncoderBackend,
-)> {
+) -> StdResult<(IMFTransform, IMFMediaEventGenerator, bool, EncoderBackend), String> {
     unsafe {
-        // 1. Enumerate hardware encoders and classify each into a candidate.
-        let hw_activates = enumerate_encoders(codec, true)?;
-        let hw_candidates: Vec<EncoderCandidate> = hw_activates
+        let activates = enumerate_hardware_encoder_activates(settings.codec.mf_subtype())
+            .map_err(|e| format!("MFTEnumEx: {e}"))?;
+        let candidates: Vec<EncoderCandidate> = activates
             .iter()
-            .map(|a| read_encoder_candidate(a, true))
+            .map(|a| read_encoder_candidate(a))
             .collect();
-        for c in &hw_candidates {
+        for c in &candidates {
             log::info!(
                 "[MftEncoder] enumerated HW encoder: '{}' → {}",
                 c.friendly_name,
@@ -642,109 +544,690 @@ fn init_mft(
             );
         }
 
-        // 2. Pure, deterministic selection across the enumerated candidates.
-        let selected = select_encoder(&hw_candidates);
-
-        // 3. Resolve the winning activate. A hardware backend is always present
-        //    in `hw_candidates` when selected (select_encoder returns the
-        //    minimum present rank); `Software` means the hardware list was empty
-        //    so we enumerate a software MFT instead (Req 6.3).
-        let (activate, backend, use_d3d): (IMFActivate, EncoderBackend, bool) = if selected
-            != EncoderBackend::Software
-        {
-            let idx = hw_candidates
-                .iter()
-                .position(|c| c.backend == selected)
-                .expect("select_encoder returns a backend present in the candidates");
-            (hw_activates[idx].clone(), selected, true)
-        } else {
-            log::warn!("[MftEncoder] no hardware encoder available; falling back to software MFT");
-            let activate = enumerate_encoders(codec, false)?
-                .into_iter()
-                .next()
-                .ok_or_else(|| Error::from_hresult(HRESULT(0xC00D36B3u32 as i32)))?;
-            (activate, EncoderBackend::Software, false)
+        let backend = select_encoder(&candidates);
+        let Some(idx) = candidates.iter().position(|c| c.backend == backend) else {
+            return Err("no hardware video encoder available".to_string());
         };
-
         log::info!(
             "[MftEncoder] selected encoder backend: {}",
             backend.as_str()
         );
 
-        let encoder_mft: IMFTransform = activate.ActivateObject()?;
-
-        // 4. Hardware MFTs are async + GPU-backed: unlock async operation and
-        //    attach the DXGI device manager. The software MFT is synchronous
-        //    and CPU-fed, so neither applies (and attaching a D3D manager to it
-        //    would fail).
-        if use_d3d {
-            if let Ok(attrs) = encoder_mft.GetAttributes() {
-                let _ = attrs.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1);
-            }
-
-            // Attach DXGI device manager for GPU-backed samples.
-            encoder_mft.ProcessMessage(
+        let encoder_mft: IMFTransform = activates[idx]
+            .ActivateObject()
+            .map_err(|e| format!("ActivateObject: {e}"))?;
+        if let Ok(attrs) = encoder_mft.GetAttributes() {
+            let _ = attrs.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1);
+        }
+        encoder_mft
+            .ProcessMessage(
                 MFT_MESSAGE_SET_D3D_MANAGER,
                 windows::core::Interface::as_raw(&d3d.dxgi_manager) as usize,
-            )?;
-            log::info!("[MftEncoder] D3D manager attached");
-        }
+            )
+            .map_err(|e| format!("Attach D3D manager: {e}"))?;
 
-        let frame_rate_packed = ((fps as u64) << 32) | 1;
-        let frame_size_packed = ((width as u64) << 32) | (height as u64);
+        set_media_types(
+            &encoder_mft,
+            settings.codec.mf_subtype(),
+            out,
+            settings.fps,
+            settings.bitrate,
+        )
+        .map_err(|e| format!("Set media types: {e}"))?;
 
-        // Set output type first.
-        let out_type: IMFMediaType = MFCreateMediaType()?;
-        out_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-        out_type.SetGUID(&MF_MT_SUBTYPE, &codec.mf_subtype())?;
-        out_type.SetUINT32(&MF_MT_AVG_BITRATE, bitrate)?;
-        out_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
-        out_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
-        out_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
-        encoder_mft.SetOutputType(0, &out_type, 0)?;
+        // Low-latency tuning (Req 1): low-delay rate control, no B-frames /
+        // lookahead, ~1 s GOP. Best-effort; logs the knobs that took.
+        configure_low_latency(&encoder_mft, settings.fps);
 
-        // Set input type (NV12).
-        let in_type: IMFMediaType = MFCreateMediaType()?;
-        in_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-        in_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
-        in_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
-        in_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
-        in_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
-        in_type.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1)?;
-        // Stride for NV12: width bytes per row (no padding in our aligned texture)
-        in_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, width)?;
-        encoder_mft.SetInputType(0, &in_type, 0)?;
+        let start = || -> WinResult<()> {
+            encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)?;
+            encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
+            encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)
+        };
+        start().map_err(|e| format!("Start streaming: {e}"))?;
 
-        // Low-latency tuning for the hardware encoder (Req 1): low-delay rate
-        // control, no B-frames/lookahead, bounded GOP. Best-effort — applied
-        // before streaming begins; logs the knobs that took. Skipped for the
-        // software MFT (no ICodecAPI / not GPU-backed).
-        if use_d3d {
-            configure_low_latency(&encoder_mft, fps);
-        }
-
-        encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)?;
-        encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
-        encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
-
-        let info = encoder_mft.GetOutputStreamInfo(0)?;
+        let info = encoder_mft
+            .GetOutputStreamInfo(0)
+            .map_err(|e| format!("GetOutputStreamInfo: {e}"))?;
         let provides_samples = (info.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 as u32) != 0;
         log::info!(
             "[MftEncoder] output_stream flags=0x{:X} provides_samples={provides_samples}",
             info.dwFlags
         );
 
-        // Async hardware MFTs expose an IMFMediaEventGenerator that drives the
-        // METransformNeedInput/HaveOutput pump. A synchronous software MFT does
-        // not, so the event generator is optional and the loop falls back to a
-        // synchronous ProcessInput/ProcessOutput drive for software (Req 6.4).
-        let event_gen: Option<IMFMediaEventGenerator> = encoder_mft.cast().ok();
-        if event_gen.is_none() {
-            log::info!(
-                "[MftEncoder] no event generator (synchronous MFT) — using sync encode drive"
-            );
-        }
+        // Hardware MFTs are asynchronous: METransformNeedInput/HaveOutput
+        // arrive through the event generator.
+        let event_gen: IMFMediaEventGenerator = encoder_mft
+            .cast()
+            .map_err(|e| format!("hardware MFT has no event generator: {e}"))?;
         Ok((encoder_mft, event_gen, provides_samples, backend))
+    }
+}
+
+/// Set the encoder output type (codec, size, rate, bitrate) then the matching
+/// NV12 input type. Used at init and on every resolution / fps reconfigure.
+unsafe fn set_media_types(
+    encoder_mft: &IMFTransform,
+    subtype: GUID,
+    size: (u32, u32),
+    fps: u32,
+    bitrate: u32,
+) -> WinResult<()> {
+    let frame_rate_packed = ((fps.max(1) as u64) << 32) | 1;
+    let frame_size_packed = ((size.0 as u64) << 32) | (size.1 as u64);
+
+    let out_type: IMFMediaType = MFCreateMediaType()?;
+    out_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+    out_type.SetGUID(&MF_MT_SUBTYPE, &subtype)?;
+    out_type.SetUINT32(&MF_MT_AVG_BITRATE, bitrate)?;
+    out_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
+    out_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
+    out_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
+    encoder_mft.SetOutputType(0, &out_type, 0)?;
+
+    let in_type: IMFMediaType = MFCreateMediaType()?;
+    in_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+    in_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
+    in_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
+    in_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
+    in_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
+    in_type.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1)?;
+    // Stride for NV12: width bytes per row (no padding in our aligned texture).
+    in_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, size.0)?;
+    encoder_mft.SetInputType(0, &in_type, 0)
+}
+
+// ── Async MFT event pump ───────────────────────────────────────────────────
+
+/// One message from the MFT event generator, delivered by
+/// [`MftEventCallback`] on a Media Foundation work-queue thread.
+enum MftEventMsg {
+    Event(u32),
+    Failed(HRESULT),
+}
+
+/// `IMFAsyncCallback` for `BeginGetEvent`: forwards each MFT event to the
+/// encoder thread and wakes it. The generator travels as the async *state*, so
+/// the callback holds no COM reference back to the MFT (no ref cycle).
+#[windows::core::implement(IMFAsyncCallback)]
+struct MftEventCallback {
+    events: mpsc::Sender<MftEventMsg>,
+    wake: mpsc::SyncSender<WorkerInput>,
+}
+
+impl IMFAsyncCallback_Impl for MftEventCallback_Impl {
+    fn GetParameters(&self, _flags: *mut u32, _queue: *mut u32) -> WinResult<()> {
+        // E_NOTIMPL selects the default work queue and flags.
+        Err(windows::Win32::Foundation::E_NOTIMPL.into())
+    }
+
+    fn Invoke(&self, result: Ref<'_, IMFAsyncResult>) -> WinResult<()> {
+        let result = result.ok()?;
+        let msg = unsafe {
+            result
+                .GetState()
+                .and_then(|state| state.cast::<IMFMediaEventGenerator>())
+                .and_then(|generator| generator.EndGetEvent(result))
+                .map(|event| MftEventMsg::Event(event.GetType().unwrap_or(0)))
+                .unwrap_or_else(|e| MftEventMsg::Failed(e.code()))
+        };
+        let _ = self.events.send(msg);
+        let _ = self.wake.try_send(WorkerInput::Wake);
+        Ok(())
+    }
+}
+
+// ── Encoder thread state ───────────────────────────────────────────────────
+
+#[derive(Clone, Copy)]
+struct EncoderSettings {
+    codec: VideoCodec,
+    src: (u32, u32),
+    max: (u32, u32),
+    fps: u32,
+    bitrate: u32,
+}
+
+/// The newest captured frame waiting for (or, during a pending resize, kept
+/// after) encoding. At most one frame is ever held, so a 2-buffer WGC pool and
+/// the hook's retain-at-most-one rule are both respected.
+struct HeldFrame {
+    frame: CapturedFrame,
+    encoded: bool,
+}
+
+/// Normalize a frame's content size for comparison with the configured source
+/// size (the encoder works in even dimensions).
+fn frame_dims(frame: &CapturedFrame) -> (u32, u32) {
+    (even_dimension(frame.width), even_dimension(frame.height))
+}
+
+/// All state owned by the encoder thread.
+struct Encoder {
+    mft: IMFTransform,
+    event_gen: IMFMediaEventGenerator,
+    callback: IMFAsyncCallback,
+    event_rx: mpsc::Receiver<MftEventMsg>,
+    provides_samples: bool,
+    backend: EncoderBackend,
+    vp: VideoProcessor,
+    completion: GpuCompletionSignal,
+    d3d: Arc<D3dDevice>,
+    stats: Arc<NativeShareStats>,
+    output_tx: EncodedSender,
+    settings: EncoderSettings,
+    /// Current encode (VideoProcessor output + MFT frame) size.
+    out: (u32, u32),
+    duration_hns: i64,
+    pts: i64,
+    /// METransformNeedInput events not yet answered with ProcessInput. Every
+    /// event is counted (B14: extra NeedInput events are no longer discarded,
+    /// so the MFT can keep more than one frame in flight).
+    need_input: u32,
+    held: Option<HeldFrame>,
+    resize: ResizeDebouncer,
+    want_keyframe: bool,
+    output_drop_logged: bool,
+}
+
+impl Encoder {
+    fn init(
+        settings: EncoderSettings,
+        d3d: Arc<D3dDevice>,
+        stats: Arc<NativeShareStats>,
+        output_tx: EncodedSender,
+        wake: mpsc::SyncSender<WorkerInput>,
+    ) -> StdResult<Self, String> {
+        let src = (
+            even_dimension(settings.src.0),
+            even_dimension(settings.src.1),
+        );
+        let out = fit_within(src, settings.max);
+        let (mft, event_gen, provides_samples, backend) = init_mft(&settings, out, &d3d)?;
+        let vp = VideoProcessor::new(&d3d, src.0, src.1, out.0, out.1)
+            .map_err(|e| format!("GPU video processor: {e}"))?;
+        let completion = d3d.create_completion_signal();
+        log::info!(
+            "[MftEncoder] GPU completion signal: path={}",
+            completion.path_name()
+        );
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let callback: IMFAsyncCallback = MftEventCallback {
+            events: event_tx,
+            wake,
+        }
+        .into();
+
+        stats.set_encoder_backend(backend);
+        stats.set_negotiated_params(out.0, out.1, f64::from(settings.fps));
+        log::info!(
+            "[MftEncoder] Worker started codec={:?} src={}x{} out={}x{} (box {}x{}) fps={} bitrate={} backend={}",
+            settings.codec,
+            src.0,
+            src.1,
+            out.0,
+            out.1,
+            settings.max.0,
+            settings.max.1,
+            settings.fps,
+            settings.bitrate,
+            backend.as_str()
+        );
+
+        let mut encoder = Self {
+            mft,
+            event_gen,
+            callback,
+            event_rx,
+            provides_samples,
+            backend,
+            vp,
+            completion,
+            d3d,
+            stats,
+            output_tx,
+            settings: EncoderSettings { src, ..settings },
+            out,
+            duration_hns: 10_000_000i64 / settings.fps.max(1) as i64,
+            pts: 0,
+            need_input: 0,
+            held: None,
+            resize: ResizeDebouncer::new(src),
+            want_keyframe: false,
+            output_drop_logged: false,
+        };
+        encoder
+            .arm_event()
+            .map_err(|e| format!("BeginGetEvent: {e}"))?;
+        Ok(encoder)
+    }
+
+    /// Request the next MFT event. Exactly one request is outstanding at a
+    /// time; it is re-armed after each delivered event.
+    fn arm_event(&mut self) -> WinResult<()> {
+        unsafe {
+            let state: IUnknown = self.event_gen.cast()?;
+            self.event_gen.BeginGetEvent(&self.callback, &state)
+        }
+    }
+
+    fn run(
+        &mut self,
+        input_rx: &mpsc::Receiver<WorkerInput>,
+        control_rx: &mpsc::Receiver<EncoderControl>,
+        stop: &AtomicBool,
+    ) {
+        while !stop.load(Ordering::Relaxed) {
+            // 1. Control messages (latest reconfig wins; any keyframe request
+            //    in the batch is honored).
+            let mut reconfig = None;
+            while let Ok(ctrl) = control_rx.try_recv() {
+                match ctrl {
+                    EncoderControl::Reconfig(cfg) => reconfig = Some(cfg),
+                    EncoderControl::RequestKeyframe => self.want_keyframe = true,
+                }
+            }
+            if let Some(cfg) = reconfig {
+                self.apply_quality(cfg);
+            }
+
+            // 2. MFT events.
+            if !self.pump_events() {
+                break;
+            }
+
+            // 3. Trailing edge of a debounced source resize.
+            if let Some(src) = self.resize.poll(Instant::now()) {
+                self.apply_source_size(src);
+            }
+
+            // 4. Feed the MFT if it asked for input and a frame is waiting.
+            self.feed();
+
+            // 5. Sleep until something happens.
+            match input_rx.recv_timeout(IDLE_WAKE) {
+                Ok(WorkerInput::Frame(frame)) => self.accept_frame(frame),
+                Ok(WorkerInput::Wake) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+    }
+
+    /// Drain delivered MFT events. Returns `false` when the event stream is
+    /// dead (MFT shut down or errored) and the thread should exit.
+    fn pump_events(&mut self) -> bool {
+        while let Ok(msg) = self.event_rx.try_recv() {
+            match msg {
+                MftEventMsg::Event(kind) => {
+                    if kind == METransformNeedInput.0 as u32 {
+                        self.need_input = self.need_input.saturating_add(1);
+                    } else if kind == METransformHaveOutput.0 as u32 {
+                        self.drain_output();
+                    }
+                    if let Err(e) = self.arm_event() {
+                        log::error!("[MftEncoder] BeginGetEvent failed: {e}");
+                        return false;
+                    }
+                }
+                MftEventMsg::Failed(hr) => {
+                    if hr != MF_E_SHUTDOWN {
+                        log::error!("[MftEncoder] GetEvent failed: {hr:?}");
+                    }
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// Take ownership of a newly captured frame: detect a source resize, then
+    /// make it the held frame (replacing an older unencoded one, which drops
+    /// and releases back to its source immediately).
+    fn accept_frame(&mut self, frame: CapturedFrame) {
+        if let Some(src) = self.resize.observe(frame_dims(&frame), Instant::now()) {
+            self.apply_source_size(src);
+        }
+        let replaced = self.held.replace(HeldFrame {
+            frame,
+            encoded: false,
+        });
+        if replaced.is_some_and(|old| !old.encoded) {
+            self.stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn feed(&mut self) {
+        if self.need_input == 0 {
+            return;
+        }
+        let Some(held) = self.held.as_mut().filter(|h| !h.encoded) else {
+            return;
+        };
+        if self.want_keyframe {
+            self.want_keyframe = false;
+            unsafe { force_keyframe(&self.mft) };
+        }
+        match process_input_frame(
+            &self.mft,
+            &mut self.vp,
+            &mut self.completion,
+            &self.d3d,
+            &held.frame,
+            self.pts,
+            self.duration_hns,
+            &self.stats,
+        ) {
+            Ok(true) => {
+                self.need_input -= 1;
+                self.pts = self.pts.saturating_add(self.duration_hns);
+                held.encoded = true;
+                if self.stats.negotiated_width.load(Ordering::Relaxed) == 0 {
+                    // A capture-path change cleared the negotiated params;
+                    // republish now that frames flow again.
+                    self.stats.set_negotiated_params(
+                        self.out.0,
+                        self.out.1,
+                        f64::from(self.settings.fps),
+                    );
+                }
+                // While a resize is pending keep the (already encoded) frame,
+                // so it can be re-encoded at the new size if the source goes
+                // static; otherwise release it right away.
+                if !self.resize.is_pending() {
+                    self.held = None;
+                }
+            }
+            Ok(false) => {
+                // GPU completion timed out; the frame was not submitted.
+                self.held = None;
+            }
+            Err(e) if e.code() == MF_E_NOTACCEPTING => {
+                // The MFT is not ready (stale NeedInput after a flush). Keep the
+                // frame for the next real request.
+                self.need_input = 0;
+            }
+            Err(e) => {
+                let errors = self.stats.encode_errors.fetch_add(1, Ordering::Relaxed) + 1;
+                if errors <= 3 {
+                    log::warn!("[MftEncoder] ProcessInput error: {e}");
+                } else if errors == 4 {
+                    log::warn!("[MftEncoder] ProcessInput errors suppressed after 3");
+                }
+                self.held = None;
+            }
+        }
+    }
+
+    /// Quality preset change from the renderer.
+    fn apply_quality(&mut self, cfg: EncoderReconfig) {
+        self.settings.max = (cfg.max_width, cfg.max_height);
+        self.settings.fps = cfg.fps;
+        self.settings.bitrate = cfg.bitrate;
+        self.reconfigure(self.settings.src, true);
+    }
+
+    /// The captured source changed shape (debounced).
+    fn apply_source_size(&mut self, src: (u32, u32)) {
+        self.reconfigure(src, false);
+        // Re-encode the newest frame at the new size so a source that goes
+        // static after resizing does not leave the old geometry on screen.
+        if let Some(held) = self.held.as_mut() {
+            held.encoded = false;
+        }
+    }
+
+    /// Fit `src` inside the quality box and rebuild whatever changed: the
+    /// VideoProcessor (source and/or output size) and, when the encode size,
+    /// fps, or bitrate changed, the MFT media types + GOP. Forces a keyframe
+    /// after any change that alters the bitstream. A failure keeps the previous
+    /// configuration.
+    fn reconfigure(&mut self, src: (u32, u32), quality_changed: bool) {
+        let out = fit_within(src, self.settings.max);
+        if let Err(e) = self.vp.reconfigure(&self.d3d, src, out) {
+            log::warn!(
+                "[MftEncoder] VideoProcessor reconfigure to {}x{} → {}x{} failed ({e}); keeping prior config",
+                src.0,
+                src.1,
+                out.0,
+                out.1
+            );
+            return;
+        }
+        self.settings.src = src;
+
+        if out != self.out || quality_changed {
+            let result = unsafe {
+                self.mft
+                    .ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)
+                    .and_then(|()| {
+                        set_media_types(
+                            &self.mft,
+                            self.settings.codec.mf_subtype(),
+                            out,
+                            self.settings.fps,
+                            self.settings.bitrate,
+                        )
+                    })
+                    .and_then(|()| {
+                        set_gop_size(&self.mft, self.settings.fps);
+                        self.mft
+                            .ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
+                        self.mft
+                            .ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)
+                    })
+            };
+            if let Err(e) = result {
+                log::warn!(
+                    "[MftEncoder] MFT reconfigure to {}x{} failed ({e})",
+                    out.0,
+                    out.1
+                );
+                return;
+            }
+            self.out = out;
+            self.duration_hns = 10_000_000i64 / self.settings.fps.max(1) as i64;
+            self.want_keyframe = true;
+        }
+
+        self.stats
+            .set_negotiated_params(out.0, out.1, f64::from(self.settings.fps));
+        log::info!(
+            "[MftEncoder] reconfigured src={}x{} out={}x{} (box {}x{}) fps={} bitrate={}",
+            src.0,
+            src.1,
+            out.0,
+            out.1,
+            self.settings.max.0,
+            self.settings.max.1,
+            self.settings.fps,
+            self.settings.bitrate
+        );
+    }
+
+    /// One `ProcessOutput` per `METransformHaveOutput` (async MFT contract),
+    /// continuing only while the MFT flags the buffer as incomplete.
+    fn drain_output(&mut self) {
+        loop {
+            let out_sample: Option<IMFSample> = if self.provides_samples {
+                None
+            } else {
+                let alloc = || -> WinResult<IMFSample> {
+                    unsafe {
+                        let s = MFCreateSample()?;
+                        let b = MFCreateMemoryBuffer(4 * 1024 * 1024)?;
+                        s.AddBuffer(&b)?;
+                        Ok(s)
+                    }
+                };
+                match alloc() {
+                    Ok(s) => Some(s),
+                    Err(e) => {
+                        log::warn!("[MftEncoder] Alloc output sample error: {e}");
+                        return;
+                    }
+                }
+            };
+
+            let mut status_flags = 0u32;
+            let mut buffers = [MFT_OUTPUT_DATA_BUFFER {
+                dwStreamID: 0,
+                pSample: std::mem::ManuallyDrop::new(out_sample),
+                dwStatus: 0,
+                pEvents: std::mem::ManuallyDrop::new(None),
+            }];
+            let result = unsafe { self.mft.ProcessOutput(0, &mut buffers, &mut status_flags) };
+
+            // Take the COM refs out of the ManuallyDrop fields so they release
+            // on every path, including errors (previously the error path leaked
+            // the output sample).
+            let sample = unsafe { std::mem::ManuallyDrop::take(&mut buffers[0].pSample) };
+            drop(unsafe { std::mem::ManuallyDrop::take(&mut buffers[0].pEvents) });
+            let incomplete =
+                buffers[0].dwStatus & (MFT_OUTPUT_DATA_BUFFER_INCOMPLETE.0 as u32) != 0;
+
+            match result {
+                Ok(()) => {}
+                Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => return,
+                Err(e) => {
+                    log::warn!("[MftEncoder] ProcessOutput error: {e}");
+                    return;
+                }
+            }
+
+            if let Some(sample) = sample.as_ref() {
+                match extract_sample_bytes(sample) {
+                    Ok(raw) if !raw.is_empty() => self.send_encoded(ensure_annexb(&raw)),
+                    Ok(_) => {}
+                    Err(e) => log::warn!("[MftEncoder] Extract sample error: {e}"),
+                }
+            }
+
+            if !incomplete {
+                return;
+            }
+        }
+    }
+
+    fn send_encoded(&mut self, annexb: Vec<u8>) {
+        use tokio::sync::mpsc::error::TrySendError;
+        self.stats.encoded_frames.fetch_add(1, Ordering::Relaxed);
+        match self.output_tx.try_send(annexb) {
+            Ok(()) => {}
+            Err(TrySendError::Full(_)) => {
+                // The writer is behind. Dropping an H.264 frame breaks the
+                // reference chain, so count it and start a fresh GOP.
+                self.stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
+                self.want_keyframe = true;
+                if !self.output_drop_logged {
+                    self.output_drop_logged = true;
+                    log::warn!(
+                        "[MftEncoder] encoded-frame queue full; dropping and forcing a keyframe"
+                    );
+                }
+            }
+            Err(TrySendError::Closed(_)) => {}
+        }
+    }
+
+    /// End the stream and shut the MFT down, which also cancels the pending
+    /// `BeginGetEvent` (its callback receives `MF_E_SHUTDOWN`).
+    fn shutdown(&mut self) {
+        self.held = None;
+        unsafe {
+            let _ = self.mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
+            let _ = self.mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
+            if let Ok(shutdown) = self.mft.cast::<IMFShutdown>() {
+                let _ = shutdown.Shutdown();
+            }
+        }
+    }
+}
+
+/// Fused GPU convert + downscale of `frame` into a pooled NV12 slot, then
+/// `ProcessInput`. Returns `Ok(false)` when the GPU completion wait timed out
+/// (the frame is skipped, not an encoder error).
+#[allow(clippy::too_many_arguments)]
+fn process_input_frame(
+    encoder_mft: &IMFTransform,
+    vp: &mut VideoProcessor,
+    completion_signal: &mut GpuCompletionSignal,
+    d3d: &D3dDevice,
+    frame: &CapturedFrame,
+    pts: i64,
+    duration_hns: i64,
+    stats: &NativeShareStats,
+) -> WinResult<bool> {
+    unsafe {
+        let sample: IMFSample = MFCreateSample()?;
+        sample.SetSampleTime(pts)?;
+        sample.SetSampleDuration(duration_hns)?;
+
+        let fused_start = Instant::now();
+
+        // Acquire the NV12 destination slot from the rotating ring, or fall
+        // back to the single retained texture if the ring is unavailable
+        // (Req 3.4).
+        let slot_idx = match vp.nv12_ring.as_mut() {
+            Some(ring) => ring.acquire_rotating(),
+            None => None,
+        };
+        let (output_view, nv12_tex): (ID3D11VideoProcessorOutputView, ID3D11Texture2D) =
+            match slot_idx.zip(vp.nv12_ring.as_ref()) {
+                Some((i, ring)) => {
+                    let slot = ring
+                        .ring
+                        .get(i)
+                        .expect("just-acquired NV12 slot must exist");
+                    (slot.output_view.clone(), slot.texture.clone())
+                }
+                None => (vp.fallback_view.clone(), vp.fallback_tex.clone()),
+            };
+
+        // ── Immediate_Context critical section START (Req 4.2) ──
+        // `convert_into` records the single fused VideoProcessorBlt; the
+        // completion signal below closes out this frame's GPU recording.
+        vp.convert_into(
+            &frame.texture,
+            (frame.width, frame.height),
+            &output_view,
+            d3d,
+        )
+        .map_err(|e| {
+            log::warn!("[MftEncoder] VP convert_into failed: {e}");
+            e
+        })?;
+        completion_signal.signal(&d3d.context);
+        // ── Immediate_Context critical section END (Req 4.2) ──
+
+        // Wait (outside the critical section) until the GPU has finished
+        // reading the source, so the caller may release the frame safely.
+        if completion_signal.is_active() && !completion_signal.wait(&d3d.context) {
+            stats.encode_errors.fetch_add(1, Ordering::Relaxed);
+            log::warn!(
+                "[MftEncoder] GPU completion signal timed out (path={}); dropping frame",
+                completion_signal.path_name()
+            );
+            return Ok(false);
+        }
+        stats.record_fused_gpu_ns(fused_start.elapsed().as_nanos() as u64);
+
+        let buffer: IMFMediaBuffer =
+            MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, &nv12_tex, 0, false).map_err(|e| {
+                log::warn!("[MftEncoder] MFCreateDXGISurfaceBuffer failed: {e}");
+                e
+            })?;
+        sample.AddBuffer(&buffer)?;
+
+        let submit_start = Instant::now();
+        encoder_mft.ProcessInput(0, &sample, 0)?;
+        stats.record_encode_submit_ns(submit_start.elapsed().as_nanos() as u64);
+
+        // The NV12 slot stays in use until the ring rotation releases it on a
+        // future acquire (Req 3.9).
+        log::trace!("[MftEncoder] ProcessInput ok pts={pts}");
+        stats.captured_frames.fetch_add(1, Ordering::Relaxed);
+        Ok(true)
     }
 }
 
@@ -857,6 +1340,25 @@ fn coerce_vp_input_format(
 /// next blit targets slot N+1.
 const NV12_RING_SLOTS: usize = 3;
 
+/// VideoProcessor content descriptor for `src` → `dst` (both aligned for NV12:
+/// 16-wide, 2-tall).
+fn vp_content_desc(src: (u32, u32), dst: (u32, u32)) -> D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
+    let rate = windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL {
+        Numerator: 30,
+        Denominator: 1,
+    };
+    D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
+        InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
+        InputWidth: (src.0 + 15) & !15,
+        InputHeight: (src.1 + 1) & !1,
+        OutputWidth: (dst.0 + 15) & !15,
+        OutputHeight: (dst.1 + 1) & !1,
+        Usage: D3D11_VIDEO_USAGE_OPTIMAL_SPEED,
+        InputFrameRate: rate,
+        OutputFrameRate: rate,
+    }
+}
+
 impl VideoProcessor {
     /// Create a video processor that scales from `src_w×src_h` (native capture)
     /// to `dst_w×dst_h` (target encode resolution) while converting BGRA→NV12.
@@ -865,30 +1367,11 @@ impl VideoProcessor {
             let video_dev: ID3D11VideoDevice = d3d.device.cast()?;
             let video_ctx: ID3D11VideoContext = d3d.context.cast()?;
 
-            // Align to 16×2 for NV12 HW requirements.
             let aligned_src_w = (src_w + 15) & !15;
             let aligned_src_h = (src_h + 1) & !1;
             let aligned_dst_w = (dst_w + 15) & !15;
             let aligned_dst_h = (dst_h + 1) & !1;
-
-            // The content descriptor drives internal VP resource sizing.
-            // Use the larger source dims for Input, target dims for Output.
-            let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
-                InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
-                InputWidth: aligned_src_w,
-                InputHeight: aligned_src_h,
-                OutputWidth: aligned_dst_w,
-                OutputHeight: aligned_dst_h,
-                Usage: D3D11_VIDEO_USAGE_OPTIMAL_SPEED,
-                InputFrameRate: windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL {
-                    Numerator: 30,
-                    Denominator: 1,
-                },
-                OutputFrameRate: windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL {
-                    Numerator: 30,
-                    Denominator: 1,
-                },
-            };
+            let content_desc = vp_content_desc((src_w, src_h), (dst_w, dst_h));
             let vp_enum = video_dev
                 .CreateVideoProcessorEnumerator(&content_desc)
                 .map_err(|e| {
@@ -954,44 +1437,23 @@ impl VideoProcessor {
         }
     }
 
-    /// Rebuild the output side of the processor for a new encode resolution
-    /// (a live quality switch) WITHOUT recreating the device, video context, or
-    /// tearing down the encoder. Recreates the VP enumerator + processor (their
-    /// content descriptor pins the output size), the fallback NV12 slot, and the
-    /// NV12 ring at the new dimensions. The source dims are unchanged (the hook/
-    /// WGC still delivers the game's native frame); only the scale target moves.
+    /// Rebuild the processor for a new source size and/or encode size (a live
+    /// quality switch or a resized capture source) WITHOUT recreating the
+    /// device, video context, or encoder thread. Recreates the VP enumerator +
+    /// processor (their content descriptor pins both sizes), the fallback NV12
+    /// slot, and the NV12 ring.
     ///
-    /// On success the new resources atomically replace the old ones (the old
-    /// COM objects drop here, after the new ones are built, so a failure leaves
-    /// the processor fully intact and the caller keeps encoding at the old size).
-    fn reconfigure_output(&mut self, d3d: &D3dDevice, dst_w: u32, dst_h: u32) -> WinResult<()> {
+    /// The new resources are built before `self` is touched, so a failure
+    /// leaves the processor intact and the caller keeps encoding at the old
+    /// configuration.
+    fn reconfigure(&mut self, d3d: &D3dDevice, src: (u32, u32), dst: (u32, u32)) -> WinResult<()> {
+        if src == (self.src_width, self.src_height) && dst == (self.dst_width, self.dst_height) {
+            return Ok(());
+        }
         unsafe {
-            let aligned_src_w = (self.src_width + 15) & !15;
-            let aligned_src_h = (self.src_height + 1) & !1;
-            let aligned_dst_w = (dst_w + 15) & !15;
-            let aligned_dst_h = (dst_h + 1) & !1;
-            if dst_w == self.dst_width && dst_h == self.dst_height {
-                return Ok(()); // no resolution change
-            }
-
-            let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
-                InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
-                InputWidth: aligned_src_w,
-                InputHeight: aligned_src_h,
-                OutputWidth: aligned_dst_w,
-                OutputHeight: aligned_dst_h,
-                Usage: D3D11_VIDEO_USAGE_OPTIMAL_SPEED,
-                InputFrameRate: windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL {
-                    Numerator: 30,
-                    Denominator: 1,
-                },
-                OutputFrameRate: windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL {
-                    Numerator: 30,
-                    Denominator: 1,
-                },
-            };
-            // Build all new resources BEFORE mutating self, so any failure is
-            // non-destructive (we return Err and keep encoding at the old size).
+            let aligned_dst_w = (dst.0 + 15) & !15;
+            let aligned_dst_h = (dst.1 + 1) & !1;
+            let content_desc = vp_content_desc(src, dst);
             let new_enum = self
                 .video_dev
                 .CreateVideoProcessorEnumerator(&content_desc)?;
@@ -1019,17 +1481,19 @@ impl VideoProcessor {
             self.fallback_tex = fallback.texture;
             self.fallback_view = fallback.output_view;
             self.nv12_ring = new_ring;
-            self.dst_width = dst_w;
-            self.dst_height = dst_h;
+            self.src_width = src.0;
+            self.src_height = src.1;
+            self.dst_width = dst.0;
+            self.dst_height = dst.1;
 
             log::info!(
-                "[VP] reconfigured output active={}x{} aligned={}x{} (src {}x{} unchanged)",
-                dst_w,
-                dst_h,
+                "[VP] reconfigured src={}x{} dst={}x{} (aligned dst {}x{})",
+                src.0,
+                src.1,
+                dst.0,
+                dst.1,
                 aligned_dst_w,
                 aligned_dst_h,
-                self.src_width,
-                self.src_height
             );
             Ok(())
         }
@@ -1134,6 +1598,7 @@ impl VideoProcessor {
     fn convert_into(
         &mut self,
         src: &ID3D11Texture2D,
+        content: (u32, u32),
         output_view: &ID3D11VideoProcessorOutputView,
         d3d: &D3dDevice,
     ) -> WinResult<()> {
@@ -1200,16 +1665,17 @@ impl VideoProcessor {
                 }
             };
 
-            // Source rect must stay within the actual source texture bounds.
-            // WGC can hand us an odd-width texture (for example 1115x628) while
-            // the session's active encode size is rounded down to an even width.
-            // Using aligned bookkeeping widths here overruns the real texture and
-            // makes VideoProcessorBlt fail with E_INVALIDARG.
+            // Source rect = the frame's content rect, clipped to the texture.
+            // WGC reports the window's live ContentSize, which can be smaller
+            // than the pool texture while a resize is in flight (the rest of the
+            // texture is stale), and can be odd (for example 1115x628). Never
+            // overrun the real texture: that makes VideoProcessorBlt fail with
+            // E_INVALIDARG.
             let src_rect = windows::Win32::Foundation::RECT {
                 left: 0,
                 top: 0,
-                right: src_desc.Width.min(self.src_width) as i32,
-                bottom: src_desc.Height.min(self.src_height) as i32,
+                right: content.0.min(src_desc.Width).max(1) as i32,
+                bottom: content.1.min(src_desc.Height).max(1) as i32,
             };
             // Destination rect = target encode resolution (VP scales in hardware).
             let dst_rect = windows::Win32::Foundation::RECT {
@@ -1250,19 +1716,17 @@ impl VideoProcessor {
             // SAFETY: We borrow `stream` without moving it (from_raw_parts), so
             // pInputSurface is still accessible for the explicit ManuallyDrop::drop
             // afterwards. This releases the COM ref every frame, preventing leaks.
-            let result = unsafe {
-                self.video_ctx.VideoProcessorBlt(
-                    &self.vp,
-                    output_view,
-                    0,
-                    std::slice::from_raw_parts(&stream, 1),
-                )
-            };
+            let result = self.video_ctx.VideoProcessorBlt(
+                &self.vp,
+                output_view,
+                0,
+                std::slice::from_raw_parts(&stream, 1),
+            );
 
             // Explicitly release the input view COM ref to prevent per-frame leaks.
             // ManuallyDrop::drop() calls the destructor without moving the value.
             // SAFETY: stream is still valid here (not moved); this is the only drop.
-            unsafe { std::mem::ManuallyDrop::drop(&mut stream.pInputSurface) };
+            std::mem::ManuallyDrop::drop(&mut stream.pInputSurface);
 
             result?;
             Ok(())
@@ -1406,480 +1870,6 @@ fn ensure_annexb(data: &[u8]) -> Vec<u8> {
     }
 }
 
-// ── CPU BGRA→NV12 conversion (fallback when GPU video processor unavailable) ──
-
-fn bgra_to_nv12(bgra: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let w = width as usize;
-    let h = height as usize;
-    // Align to 16-wide, 2-tall for NV12 plane layout.
-    let aw = (w + 15) & !15;
-    let ah = (h + 1) & !1;
-    let mut out = vec![0u8; aw * ah * 3 / 2]; // Y plane + interleaved UV
-
-    // BT.601 limited-range coefficients (matches what hardware encoders expect)
-    for row in 0..h {
-        for col in 0..w {
-            let b = bgra[(row * w + col) * 4] as f32;
-            let g = bgra[(row * w + col) * 4 + 1] as f32;
-            let r = bgra[(row * w + col) * 4 + 2] as f32;
-            let y = (16.0 + 0.257 * r + 0.504 * g + 0.098 * b).clamp(16.0, 235.0) as u8;
-            out[row * aw + col] = y;
-
-            if row % 2 == 0 && col % 2 == 0 {
-                let u = (128.0 - 0.148 * r - 0.291 * g + 0.439 * b).clamp(16.0, 240.0) as u8;
-                let v = (128.0 + 0.439 * r - 0.368 * g - 0.071 * b).clamp(16.0, 240.0) as u8;
-                let uv_base = aw * ah + (row / 2) * aw + col;
-                out[uv_base] = u;
-                out[uv_base + 1] = v;
-            }
-        }
-    }
-    out
-}
-
-// ── Encoder loop ───────────────────────────────────────────────────────────
-
-fn run_encoder_loop(
-    encoder_mft: IMFTransform,
-    event_gen: Option<IMFMediaEventGenerator>,
-    provides_samples: bool,
-    frame_rx: mpsc::Receiver<CapturedFrame>,
-    control_rx: mpsc::Receiver<EncoderControl>,
-    output_tx: mpsc::SyncSender<Vec<u8>>,
-    stop_flag: Arc<AtomicBool>,
-    stats: Arc<NativeShareStats>,
-    d3d: Arc<D3dDevice>,
-    // Native WGC capture dims — VP reads from these.
-    src_width: u32,
-    src_height: u32,
-    // Target encode dims — VP writes to these; MFT encodes at this resolution.
-    width: u32,
-    height: u32,
-    fps: u32,
-) {
-    // A synchronous software MFT (no event generator) cannot read a DXGI-backed
-    // sample, so the software fallback uses the CPU `bgra_to_nv12` path with
-    // system-memory buffers (Req 6.3, 6.4). Hardware (async) MFTs use the GPU
-    // VideoProcessor fused-blit path. So when there is no event generator we do
-    // not even create the GPU video processor — we go straight to CPU NV12.
-    let software = event_gen.is_none();
-
-    // GPU video processor converts BGRA→NV12 AND downscales to the target resolution.
-    let mut vp: Option<VideoProcessor> = if software {
-        log::info!(
-            "[MftEncoder] software encode path active (CPU BGRA→NV12, system-memory samples)"
-        );
-        None
-    } else {
-        match VideoProcessor::new(&d3d, src_width, src_height, width, height) {
-            Ok(v) => {
-                log::info!("[MftEncoder] GPU video processor ready");
-                Some(v)
-            }
-            Err(e) => {
-                log::warn!("[MftEncoder] GPU video processor unavailable ({e}), falling back to CPU BGRA→NV12");
-                None
-            }
-        }
-    };
-
-    // GPU-completion signal for the fused VP blit + MFT-read ordering.
-    // Prefers the `ID3D11Fence` path (true OS-event sleep, zero CPU spin);
-    // falls back to `D3D11_QUERY_EVENT` poll on pre-Creators-Update hardware.
-    // Created once here; reused for every frame (monotonic fence counter).
-    let mut completion_signal: GpuCompletionSignal = if vp.is_some() {
-        let sig = d3d.create_completion_signal();
-        log::info!(
-            "[MftEncoder] GPU completion signal: path={}",
-            sig.path_name()
-        );
-        sig
-    } else {
-        GpuCompletionSignal::None
-    };
-
-    let duration_hns: i64 = 10_000_000i64 / fps.max(1) as i64;
-
-    // ── Synchronous software MFT drive ───────────────────────────────────────
-    // No async event pump: pull a frame, ProcessInput, then drain ProcessOutput
-    // until the MFT reports NEED_MORE_INPUT, repeating until stop.
-    let Some(event_gen) = event_gen else {
-        run_sync_encoder_loop(
-            &encoder_mft,
-            &mut vp,
-            &mut completion_signal,
-            provides_samples,
-            frame_rx,
-            control_rx,
-            output_tx,
-            stop_flag,
-            stats,
-            &d3d,
-            duration_hns,
-        );
-        unsafe {
-            let _ = encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
-            let _ = encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
-        }
-        return;
-    };
-
-    // ── Asynchronous hardware MFT event pump ─────────────────────────────────
-    let mut pts: i64 = 0;
-    let mut needs_input = false;
-    let mut event_log_count = 0u32;
-    let frame_wait = std::time::Duration::from_millis(2);
-    // Live encode params — mutated in place on a reconfigure (seamless quality
-    // switch) so the VP output + MFT output type + frame duration track the new
-    // resolution/fps without restarting the thread/PC/track/hook.
-    let mut duration_hns = duration_hns;
-
-    loop {
-        if stop_flag.load(Ordering::Relaxed) {
-            break;
-        }
-
-        // Apply any pending encoder control messages at this frame boundary.
-        // Drain the channel: collapse repeated Reconfig/SetBitrate to the latest
-        // value, but honor a keyframe request if any arrived in the batch.
-        let mut pending_reconfig: Option<EncoderReconfig> = None;
-        let mut pending_bitrate: Option<u32> = None;
-        let mut want_keyframe = false;
-        while let Ok(ctrl) = control_rx.try_recv() {
-            match ctrl {
-                EncoderControl::Reconfig(cfg) => pending_reconfig = Some(cfg),
-                EncoderControl::SetBitrate(bps) => pending_bitrate = Some(bps),
-                EncoderControl::RequestKeyframe => want_keyframe = true,
-            }
-        }
-        if let Some(cfg) = pending_reconfig {
-            match apply_encoder_reconfig(&encoder_mft, &mut vp, &d3d, src_width, src_height, cfg) {
-                Ok(()) => {
-                    duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
-                    log::info!(
-                        "[MftEncoder] live reconfigure applied: {}x{} fps={} bitrate={}",
-                        cfg.width,
-                        cfg.height,
-                        cfg.fps,
-                        cfg.bitrate
-                    );
-                }
-                Err(e) => {
-                    log::warn!("[MftEncoder] live reconfigure failed ({e}); keeping prior config");
-                }
-            }
-        } else if let Some(bps) = pending_bitrate {
-            // Bitrate-only: a Reconfig already re-set the output bitrate, so only
-            // apply a standalone SetBitrate when there was no reconfigure.
-            unsafe { set_mean_bitrate(&encoder_mft, bps) };
-        }
-        if want_keyframe {
-            unsafe { force_keyframe(&encoder_mft) };
-        }
-
-        // ── When the encoder is hungry for a frame, prioritise frame delivery ──
-        // Use non-blocking GetEvent so we can spin on frame_rx without getting
-        // stuck waiting for an event that will never come (the MFT won't fire
-        // METransformNeedInput again until we call ProcessInput).
-        if needs_input {
-            // Try to push a frame first.
-            match frame_rx.recv_timeout(frame_wait) {
-                Ok(frame) => {
-                    match process_input_frame(
-                        &encoder_mft,
-                        &mut vp,
-                        &mut completion_signal,
-                        &d3d,
-                        frame,
-                        pts,
-                        duration_hns,
-                        &stats,
-                    ) {
-                        Ok(()) => {
-                            pts = pts.saturating_add(duration_hns);
-                            needs_input = false;
-                        }
-                        Err(e) => {
-                            stats.encode_errors.fetch_add(1, Ordering::Relaxed);
-                            // Only log first few errors to avoid spam.
-                            if stats.encode_errors.load(Ordering::Relaxed) <= 3 {
-                                log::warn!("[MftEncoder] ProcessInput error: {e}");
-                            } else if stats.encode_errors.load(Ordering::Relaxed) == 4 {
-                                log::warn!("[MftEncoder] ProcessInput errors suppressed after 3");
-                            }
-                        }
-                    }
-                }
-                Err(_) => {
-                    // No frame yet — check if the MFT has output ready (non-blocking).
-                }
-            }
-
-            // Drain any pending output even while waiting for the next input frame.
-            let maybe_event = unsafe { event_gen.GetEvent(MF_EVENT_FLAG_NO_WAIT).ok() };
-            if let Some(event) = maybe_event {
-                let event_type = unsafe { event.GetType().unwrap_or(0) };
-                if event_type == METransformHaveOutput.0 as u32 {
-                    drain_output_loop(&encoder_mft, provides_samples, &output_tx, &stats);
-                }
-            }
-            continue;
-        }
-
-        // ── When idle (needs_input == false), block on GetEvent until the MFT
-        //    fires METransformNeedInput or METransformHaveOutput.  The prior
-        //    pattern (NO_WAIT + sleep 1 ms) caused ~1 000 scheduler wakeups/s
-        //    for no benefit; blocking here costs nothing while the GPU encodes.
-        //    Worst-case shutdown latency = time until next MFT event (~1 frame).
-        //
-        //    `MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(0)` is the blocking variant;
-        //    `MF_EVENT_FLAG_NO_WAIT` is `MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(1)`.
-        let event = unsafe {
-            use windows::Win32::Media::MediaFoundation::MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS;
-            match event_gen.GetEvent(MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(0)) {
-                Ok(e) => e,
-                Err(e) => {
-                    log::error!("[MftEncoder] GetEvent error: {e}");
-                    break;
-                }
-            }
-        };
-
-        let event_type = unsafe { event.GetType().unwrap_or(0) };
-        let event_status = unsafe { event.GetStatus().unwrap_or(HRESULT(0)) };
-
-        if event_log_count < 30 {
-            log::info!(
-                "[MftEncoder] event type={event_type} status=0x{:08X}",
-                event_status.0 as u32
-            );
-            event_log_count += 1;
-        }
-
-        match event_type {
-            // METransformNeedInput = 601
-            t if t == METransformNeedInput.0 as u32 => {
-                needs_input = true;
-                // Immediately try to satisfy the request without another loop iteration.
-                if let Ok(frame) = frame_rx.try_recv() {
-                    match process_input_frame(
-                        &encoder_mft,
-                        &mut vp,
-                        &mut completion_signal,
-                        &d3d,
-                        frame,
-                        pts,
-                        duration_hns,
-                        &stats,
-                    ) {
-                        Ok(()) => {
-                            pts = pts.saturating_add(duration_hns);
-                            needs_input = false;
-                        }
-                        Err(e) => {
-                            log::warn!("[MftEncoder] ProcessInput error: {e}");
-                            stats.encode_errors.fetch_add(1, Ordering::Relaxed);
-                        }
-                    }
-                }
-            }
-
-            // METransformHaveOutput = 602
-            t if t == METransformHaveOutput.0 as u32 => {
-                drain_output_loop(&encoder_mft, provides_samples, &output_tx, &stats);
-            }
-
-            _ => {}
-        }
-    }
-
-    unsafe {
-        let _ = encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
-        let _ = encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
-    }
-}
-
-/// Synchronous encode drive for a software MFT (no `IMFMediaEventGenerator`).
-///
-/// A synchronous MFT does not raise `METransformNeedInput` /
-/// `METransformHaveOutput` events, so instead of an event pump we feed one frame
-/// at a time with `ProcessInput` and then drain `ProcessOutput` until the MFT
-/// reports `MF_E_TRANSFORM_NEED_MORE_INPUT`. This is the last-resort CPU encode
-/// path used when no hardware encoder is available (Req 6.3, 6.4); it reuses the
-/// shared [`process_input_frame`] (which falls back to CPU `bgra_to_nv12` when
-/// `vp` is `None`) and the shared [`drain_output_loop`].
-#[allow(clippy::too_many_arguments)]
-fn run_sync_encoder_loop(
-    encoder_mft: &IMFTransform,
-    vp: &mut Option<VideoProcessor>,
-    completion_signal: &mut GpuCompletionSignal,
-    provides_samples: bool,
-    frame_rx: mpsc::Receiver<CapturedFrame>,
-    control_rx: mpsc::Receiver<EncoderControl>,
-    output_tx: mpsc::SyncSender<Vec<u8>>,
-    stop_flag: Arc<AtomicBool>,
-    stats: Arc<NativeShareStats>,
-    d3d: &D3dDevice,
-    duration_hns: i64,
-) {
-    let mut pts: i64 = 0;
-    let mut duration_hns = duration_hns;
-    let frame_wait = std::time::Duration::from_millis(5);
-    // Software path scales on the CPU; reconfigure needs the native source dims
-    // the VP (if any) reads from. They are constant for the session, so capture
-    // them from the VP when present (software path usually has no VP).
-    let (src_w, src_h) = vp
-        .as_ref()
-        .map(|v| (v.src_width, v.src_height))
-        .unwrap_or((0, 0));
-
-    loop {
-        if stop_flag.load(Ordering::Relaxed) {
-            break;
-        }
-
-        // Apply any pending encoder control messages (latest reconfig/bitrate
-        // wins; honor a keyframe request if any arrived in the batch).
-        let mut pending_reconfig: Option<EncoderReconfig> = None;
-        let mut pending_bitrate: Option<u32> = None;
-        let mut want_keyframe = false;
-        while let Ok(ctrl) = control_rx.try_recv() {
-            match ctrl {
-                EncoderControl::Reconfig(cfg) => pending_reconfig = Some(cfg),
-                EncoderControl::SetBitrate(bps) => pending_bitrate = Some(bps),
-                EncoderControl::RequestKeyframe => want_keyframe = true,
-            }
-        }
-        if let Some(cfg) = pending_reconfig {
-            match apply_encoder_reconfig(encoder_mft, vp, d3d, src_w, src_h, cfg) {
-                Ok(()) => {
-                    duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
-                    log::info!(
-                        "[MftEncoder] (sw) live reconfigure applied: {}x{} fps={} bitrate={}",
-                        cfg.width,
-                        cfg.height,
-                        cfg.fps,
-                        cfg.bitrate
-                    );
-                }
-                Err(e) => {
-                    log::warn!(
-                        "[MftEncoder] (sw) live reconfigure failed ({e}); keeping prior config"
-                    );
-                }
-            }
-        } else if let Some(bps) = pending_bitrate {
-            unsafe { set_mean_bitrate(encoder_mft, bps) };
-        }
-        if want_keyframe {
-            unsafe { force_keyframe(encoder_mft) };
-        }
-
-        match frame_rx.recv_timeout(frame_wait) {
-            Ok(frame) => {
-                match process_input_frame(
-                    encoder_mft,
-                    vp,
-                    completion_signal,
-                    d3d,
-                    frame,
-                    pts,
-                    duration_hns,
-                    &stats,
-                ) {
-                    Ok(()) => {
-                        pts = pts.saturating_add(duration_hns);
-                        // Drain everything the MFT produced for this input.
-                        drain_output_loop(encoder_mft, provides_samples, &output_tx, &stats);
-                    }
-                    Err(e) => {
-                        stats.encode_errors.fetch_add(1, Ordering::Relaxed);
-                        if stats.encode_errors.load(Ordering::Relaxed) <= 3 {
-                            log::warn!("[MftEncoder] (sw) ProcessInput error: {e}");
-                        } else if stats.encode_errors.load(Ordering::Relaxed) == 4 {
-                            log::warn!("[MftEncoder] (sw) ProcessInput errors suppressed after 3");
-                        }
-                    }
-                }
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => continue,
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
-        }
-    }
-}
-
-/// Apply a live quality reconfiguration (resolution / fps / bitrate) to the
-/// running encoder in place — the seamless-quality-switch core. Reconfigures
-/// the GPU VideoProcessor output (scale target) and resets the MFT output type
-/// (frame size + frame rate + average bitrate) WITHOUT recreating the MFT,
-/// device, peer connection, track, or capture source.
-///
-/// H.264/HEVC carry resolution + parameter sets inline, and the SFU + remote
-/// decoders renegotiate from the new keyframe the MFT emits after an output-type
-/// change, so no SDP renegotiation is needed. The MFT is flushed before the
-/// output type changes so no half-encoded frame straddles the switch; encoding
-/// resumes with a fresh IDR at the new size.
-///
-/// Source dims are intentionally unchanged: the hook/WGC always delivers the
-/// game's native frame, and only the downscale target moves — so there is never
-/// a second copy or a recapture on a quality switch.
-fn apply_encoder_reconfig(
-    encoder_mft: &IMFTransform,
-    vp: &mut Option<VideoProcessor>,
-    d3d: &D3dDevice,
-    _src_width: u32,
-    _src_height: u32,
-    cfg: EncoderReconfig,
-) -> WinResult<()> {
-    unsafe {
-        // 1. Rebuild the VP output (scale target) for the new resolution. The
-        //    source side and the shared device/context are untouched.
-        if let Some(vp) = vp.as_mut() {
-            vp.reconfigure_output(d3d, cfg.width, cfg.height)?;
-        }
-
-        // 2. Reset the MFT output type. Read the current output type and clone
-        //    its GUIDs, then overwrite frame size / frame rate / bitrate so we
-        //    do not depend on the codec subtype being threaded in here. The MFT
-        //    must be flushed and the output type re-set while streaming; the
-        //    async hardware MFT accepts a SetOutputType after a flush and emits
-        //    a new IDR, which the WebRTC track carries without renegotiation.
-        let current_out = encoder_mft.GetOutputCurrentType(0)?;
-        let subtype = current_out.GetGUID(&MF_MT_SUBTYPE)?;
-
-        encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)?;
-
-        let frame_rate_packed = ((cfg.fps as u64) << 32) | 1;
-        let frame_size_packed = ((cfg.width as u64) << 32) | (cfg.height as u64);
-
-        let out_type: IMFMediaType = MFCreateMediaType()?;
-        out_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-        out_type.SetGUID(&MF_MT_SUBTYPE, &subtype)?;
-        out_type.SetUINT32(&MF_MT_AVG_BITRATE, cfg.bitrate)?;
-        out_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
-        out_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
-        out_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
-        encoder_mft.SetOutputType(0, &out_type, 0)?;
-
-        // Re-set the NV12 input type at the new frame size so input/output
-        // agree (the VP now writes NV12 at the new resolution).
-        let in_type: IMFMediaType = MFCreateMediaType()?;
-        in_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-        in_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
-        in_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
-        in_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
-        in_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
-        in_type.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1)?;
-        in_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, cfg.width)?;
-        encoder_mft.SetInputType(0, &in_type, 0)?;
-
-        // Resume streaming at the new config.
-        encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
-        encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
-        Ok(())
-    }
-}
-
 // ── ICodecAPI helpers: low-latency config, live bitrate, force keyframe ──────
 //
 // These drive Phase-1 of the streaming-quality spec. They are all best-effort:
@@ -1941,7 +1931,7 @@ unsafe fn variant_bool(value: bool) -> windows::Win32::System::Variant::VARIANT 
 unsafe fn configure_low_latency(encoder_mft: &IMFTransform, fps: u32) {
     use windows::Win32::Media::MediaFoundation::{
         eAVEncCommonRateControlMode_LowDelayVBR, CODECAPI_AVEncCommonRateControlMode,
-        CODECAPI_AVEncMPVGOPSize, CODECAPI_AVLowLatencyMode, ICodecAPI,
+        CODECAPI_AVLowLatencyMode, ICodecAPI,
     };
 
     let codec_api: ICodecAPI = match encoder_mft.cast() {
@@ -1984,41 +1974,14 @@ unsafe fn configure_low_latency(encoder_mft: &IMFTransform, fps: u32) {
 
     // Bounded GOP (~1s). Keeps late-joiner / recovery keyframes bounded while
     // letting on-demand PLI keyframes carry steady-state recovery.
-    {
-        let gop = fps.max(1);
-        let val = variant_u32(gop);
-        let r = codec_api.SetValue(&CODECAPI_AVEncMPVGOPSize, &val);
-        if r.is_ok() {
-            applied.push("GOPSize=fps(~1s)");
-        } else {
-            log::info!("[MftEncoder] AVEncMPVGOPSize unsupported: {:?}", r);
-        }
+    if set_gop_size(encoder_mft, fps) {
+        applied.push("GOPSize=fps(~1s)");
     }
 
     log::info!(
         "[MftEncoder] low-latency config applied: [{}]",
         applied.join(", ")
     );
-}
-
-/// Set the encoder's mean bitrate (bits/sec) live via `ICodecAPI`
-/// `CODECAPI_AVEncCommonMeanBitRate` — no flush, no output-type reset, no forced
-/// keyframe (Req 3.1). Best-effort: logs and returns on failure.
-#[cfg(feature = "native-screen-share")]
-unsafe fn set_mean_bitrate(encoder_mft: &IMFTransform, bitrate_bps: u32) {
-    use windows::Win32::Media::MediaFoundation::{CODECAPI_AVEncCommonMeanBitRate, ICodecAPI};
-    let codec_api: ICodecAPI = match encoder_mft.cast() {
-        Ok(c) => c,
-        Err(e) => {
-            log::warn!("[MftEncoder] set_bitrate: encoder has no ICodecAPI ({e})");
-            return;
-        }
-    };
-    let val = variant_u32(bitrate_bps);
-    match codec_api.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &val) {
-        Ok(()) => log::info!("[MftEncoder] live bitrate set to {} bps", bitrate_bps),
-        Err(e) => log::warn!("[MftEncoder] live bitrate set to {bitrate_bps} failed: {e}"),
-    }
 }
 
 /// Force the encoder to emit a keyframe (IDR) on the next frame via `ICodecAPI`
@@ -2040,239 +2003,21 @@ unsafe fn force_keyframe(encoder_mft: &IMFTransform) {
     }
 }
 
-fn process_input_frame(
-    encoder_mft: &IMFTransform,
-    vp: &mut Option<VideoProcessor>,
-    completion_signal: &mut GpuCompletionSignal,
-    d3d: &D3dDevice,
-    frame: CapturedFrame,
-    pts: i64,
-    duration_hns: i64,
-    stats: &NativeShareStats,
-) -> WinResult<()> {
-    unsafe {
-        let sample: IMFSample = MFCreateSample()?;
-        sample.SetSampleTime(pts)?;
-        sample.SetSampleDuration(duration_hns)?;
-
-        match vp.as_mut() {
-            Some(vp) => {
-                // ── GPU path: single fused blit BGRA→NV12 + downscale, read
-                //    directly from the WGC texture into a pooled NV12 slot ──
-                let fused_start = Instant::now();
-
-                // Acquire the NV12 destination slot from the rotating ring, or
-                // fall back to the single retained texture if the ring is not
-                // available (first-frame-before-ring / alloc failure — Req 3.4).
-                let slot_idx = match vp.nv12_ring.as_mut() {
-                    Some(ring) => ring.acquire_rotating(),
-                    None => None,
-                };
-
-                // Resolve the destination output view + texture as owned COM
-                // clones (cheap AddRef on refcounted interfaces). Cloning frees
-                // the borrow on `vp` so the `&mut self` `convert_into` below
-                // (which may lazily allocate the normalize texture) does not
-                // conflict with these still being referenced after the call.
-                let (output_view, nv12_tex): (ID3D11VideoProcessorOutputView, ID3D11Texture2D) =
-                    match slot_idx.and_then(|i| vp.nv12_ring.as_ref().map(|r| (i, r))) {
-                        Some((i, ring)) => {
-                            let slot = ring
-                                .ring
-                                .get(i)
-                                .expect("just-acquired NV12 slot must exist");
-                            (slot.output_view.clone(), slot.texture.clone())
-                        }
-                        None => (vp.fallback_view.clone(), vp.fallback_tex.clone()),
-                    };
-
-                // 1. Fused convert + downscale into the NV12 destination — a
-                //    single VideoProcessorBlt, no intermediate BGRA copy
-                //    (Req 3.1, 3.2).
-                //
-                //    ── Immediate_Context critical section START (Req 4.2) ──
-                //    `convert_into` records the VideoProcessorBlt on the shared
-                //    Immediate_Context; `context.End(query)` below closes out
-                //    that single frame's GPU command recording. This window is
-                //    the *only* per-frame use of the shared context on the
-                //    encoder thread, and the capture thread records nothing on
-                //    it in steady state — so contention is bounded to exactly
-                //    this blit-recording span.
-                vp.convert_into(&frame.texture, &output_view, d3d)
-                    .map_err(|e| {
-                        log::warn!("[MftEncoder] VP convert_into failed: {e}");
-                        e
-                    })?;
-
-                // 2. Enqueue the GPU-completion signal — NOT a per-frame Flush
-                //    (Req 1.1). This is the last command recorded for this
-                //    frame, so it ends the bounded critical section.
-                //    On the fence path: ctx4.Signal(&fence, value) is called,
-                //    which enqueues a GPU-side fence update after all preceding
-                //    work. On the query path: ctx.End(query) marks the endpoint.
-                //    ── Immediate_Context critical section END (Req 4.2) ──
-                completion_signal.signal(&d3d.context);
-
-                // 3. Block until the GPU has passed the completion point.  On
-                //    the fence path the encoder thread genuinely sleeps via
-                //    WaitForSingleObject — zero CPU spin regardless of GPU time.
-                //    On the query path, adaptive backoff is used (unchanged).
-                //    The wait is *outside* the bounded recording critical section:
-                //    it holds no D3D11 context lock, so the capture thread is
-                //    free to use the context while we wait.
-                //    The WGC source must not be released until the GPU finishes
-                //    reading it — releasing early could let the 2-buffer WGC pool
-                //    recycle the buffer and the compositor overwrite it mid-blit.
-                if completion_signal.is_active() && !completion_signal.wait(&d3d.context) {
-                    stats.encode_errors.fetch_add(1, Ordering::Relaxed);
-                    log::warn!(
-                        "[MftEncoder] GPU completion signal timed out (path={}); dropping frame",
-                        completion_signal.path_name()
-                    );
-                    return Ok(());
-                }
-
-                // 4. The completion query has signalled, so the GPU has finished
-                //    reading the WGC source. Release the WGC frame promptly now
-                //    that the blit is done so the 2-buffer WGC pool can recycle
-                //    the buffer (Req 3.5, 3.7). Dropping the CapturedFrame sets
-                //    its release token and frees the retained
-                //    Direct3D11CaptureFrame.
-                drop(frame);
-
-                // The fused GPU operation (blit + completion) is now done.
-                // Record its duration so the residual Immediate_Context
-                // contention is observable: this span covers the bounded
-                // command-recording critical section plus the completion wait,
-                // i.e. how long this frame occupied / waited on the shared
-                // context. A rising value surfaces contention (Req 4.3, 9.1).
-                stats.record_fused_gpu_ns(fused_start.elapsed().as_nanos() as u64);
-
-                // 5. Wrap the pooled NV12 slot as an MF buffer and submit it.
-                let buffer: IMFMediaBuffer =
-                    MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, &nv12_tex, 0, false).map_err(
-                        |e| {
-                            log::warn!("[MftEncoder] MFCreateDXGISurfaceBuffer failed: {e}");
-                            e
-                        },
-                    )?;
-                sample.AddBuffer(&buffer)?;
-
-                let submit_start = Instant::now();
-                encoder_mft.ProcessInput(0, &sample, 0).map_err(|e| {
-                    log::warn!("[MftEncoder] encoder ProcessInput failed: {e}");
-                    e
-                })?;
-                stats.record_encode_submit_ns(submit_start.elapsed().as_nanos() as u64);
-
-                // 7. The NV12 slot stays InUse until the ring rotation releases
-                //    it on a future acquire (Req 3.9); the MFT has consumed it.
-                log::trace!("[MftEncoder] ProcessInput ok pts={pts}");
-                stats.captured_frames.fetch_add(1, Ordering::Relaxed);
-                Ok(())
-            }
-            None => {
-                // ── CPU fallback: readback BGRA, convert, upload via memory buffer ──
-                let bgra = d3d.read_texture_bgra(&frame.texture, frame.width, frame.height)?;
-                let nv12 = bgra_to_nv12(&bgra, frame.width, frame.height);
-                // The WGC texture has been read back; release the frame so the
-                // pool can recycle the buffer.
-                drop(frame);
-                let buffer = MFCreateMemoryBuffer(nv12.len() as u32)?;
-                let mut ptr = std::ptr::null_mut::<u8>();
-                buffer.Lock(&mut ptr, None, None)?;
-                std::ptr::copy_nonoverlapping(nv12.as_ptr(), ptr, nv12.len());
-                buffer.Unlock()?;
-                buffer.SetCurrentLength(nv12.len() as u32)?;
-                sample.AddBuffer(&buffer)?;
-
-                let submit_start = Instant::now();
-                encoder_mft.ProcessInput(0, &sample, 0).map_err(|e| {
-                    log::warn!("[MftEncoder] encoder ProcessInput failed: {e}");
-                    e
-                })?;
-                stats.record_encode_submit_ns(submit_start.elapsed().as_nanos() as u64);
-                log::trace!("[MftEncoder] ProcessInput ok pts={pts}");
-                stats.captured_frames.fetch_add(1, Ordering::Relaxed);
-                Ok(())
-            }
-        }
-    }
-}
-
-fn drain_output_loop(
-    encoder_mft: &IMFTransform,
-    provides_samples: bool,
-    output_tx: &mpsc::SyncSender<Vec<u8>>,
-    stats: &NativeShareStats,
-) {
-    loop {
-        let out_sample: Option<IMFSample> = if provides_samples {
-            None
-        } else {
-            unsafe {
-                match (|| -> WinResult<IMFSample> {
-                    let s = MFCreateSample()?;
-                    let b = MFCreateMemoryBuffer(4 * 1024 * 1024)?;
-                    s.AddBuffer(&b)?;
-                    Ok(s)
-                })() {
-                    Ok(s) => Some(s),
-                    Err(e) => {
-                        log::warn!("[MftEncoder] Alloc output sample error: {e}");
-                        return;
-                    }
-                }
-            }
-        };
-
-        let mut status_flags = 0u32;
-        let mut buffers = [MFT_OUTPUT_DATA_BUFFER {
-            dwStreamID: 0,
-            pSample: std::mem::ManuallyDrop::new(out_sample),
-            dwStatus: 0,
-            pEvents: std::mem::ManuallyDrop::new(None),
-        }];
-
-        let result = unsafe { encoder_mft.ProcessOutput(0, &mut buffers, &mut status_flags) };
-
-        match result {
-            Err(e) if e.code().0 == 0xC00D6D72u32 as i32 => break, // NEED_MORE_INPUT
-            Err(e) => {
-                log::warn!("[MftEncoder] ProcessOutput error: {e}");
-                break;
-            }
-            Ok(()) => {}
-        }
-
-        if let Some(sample) = (&*buffers[0].pSample).as_ref() {
-            match extract_sample_bytes(sample) {
-                Ok(raw) if !raw.is_empty() => {
-                    let annexb = ensure_annexb(&raw);
-                    log::debug!(
-                        "[MftEncoder] encoded {} bytes → annexb {} bytes",
-                        raw.len(),
-                        annexb.len()
-                    );
-                    stats.encoded_frames.fetch_add(1, Ordering::Relaxed);
-                    let _ = output_tx.try_send(annexb);
-                }
-                Ok(_) => {}
-                Err(e) => log::warn!("[MftEncoder] Extract sample error: {e}"),
-            }
-        }
-
-        // SAFETY: Explicitly release COM refs held in ManuallyDrop fields.
-        // Without this every ProcessOutput call leaks one IMFSample and one
-        // IMFCollection (pEvents), directly causing the observed 2 GB memory growth.
-        unsafe {
-            std::mem::ManuallyDrop::drop(&mut buffers[0].pSample);
-            std::mem::ManuallyDrop::drop(&mut buffers[0].pEvents);
-        }
-
-        // MFT_OUTPUT_DATA_BUFFER_INCOMPLETE = 0x00A → more output waiting
-        if buffers[0].dwStatus & 0x00A == 0 {
-            break;
+/// Set a ~1 s GOP (`fps` frames) via `CODECAPI_AVEncMPVGOPSize`. Called at init
+/// and again after every fps change so the keyframe interval follows the frame
+/// rate. Best-effort; returns whether the encoder accepted it.
+#[cfg(feature = "native-screen-share")]
+unsafe fn set_gop_size(encoder_mft: &IMFTransform, fps: u32) -> bool {
+    use windows::Win32::Media::MediaFoundation::{CODECAPI_AVEncMPVGOPSize, ICodecAPI};
+    let Ok(codec_api) = encoder_mft.cast::<ICodecAPI>() else {
+        return false;
+    };
+    let val = variant_u32(fps.max(1));
+    match codec_api.SetValue(&CODECAPI_AVEncMPVGOPSize, &val) {
+        Ok(()) => true,
+        Err(e) => {
+            log::info!("[MftEncoder] AVEncMPVGOPSize unsupported: {e}");
+            false
         }
     }
 }

@@ -1168,8 +1168,6 @@ pub fn run() {
             #[cfg(feature = "native-screen-share")]
             native_share::handle_preview_loopback_answer,
             #[cfg(feature = "native-screen-share")]
-            native_share::handle_preview_loopback_ice_candidate,
-            #[cfg(feature = "native-screen-share")]
             native_share::stop_preview_loopback,
             get_hardware_acceleration,
             restart_app,

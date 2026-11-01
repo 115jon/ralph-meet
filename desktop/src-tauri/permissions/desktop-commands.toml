@@ -109,16 +109,6 @@ description = "Denies passing SDP answers to the preview loopback PC."
 commands.deny = ["handle_preview_loopback_answer"]
 
 [[permission]]
-identifier = "allow-handle-preview-loopback-ice-candidate"
-description = "Allows the frontend to forward ICE candidates to the preview loopback PC."
-commands.allow = ["handle_preview_loopback_ice_candidate"]
-
-[[permission]]
-identifier = "deny-handle-preview-loopback-ice-candidate"
-description = "Denies forwarding ICE candidates to the preview loopback PC."
-commands.deny = ["handle_preview_loopback_ice_candidate"]
-
-[[permission]]
 identifier = "allow-stop-preview-loopback"
 description = "Allows the frontend to stop the preview loopback connection."
 commands.allow = ["stop_preview_loopback"]

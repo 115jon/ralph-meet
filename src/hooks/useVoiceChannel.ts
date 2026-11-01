@@ -1,4 +1,5 @@
 import { GridItem } from "@/components/voice/types";
+import { toast } from "@/components/ui/toast";
 import {
   createCameraBackgroundEffect,
   getCameraBackgroundEffectKey,
@@ -76,6 +77,10 @@ import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { markVoice } from "@/lib/voice/latency-marks";
 import { prefetchSocketTickets } from "@/lib/voice/socket-ticket-client";
 import { getVoiceActivityThreshold } from "@/lib/voice/vad";
+import {
+  parseNativeShareEndedPayload,
+  resolveNativeShareEndedAction,
+} from "@/lib/voice/native-share-ended";
 import {
   getSoundboardServerKey,
   stopAutomaticJoinSoundboardPlaybacksByOwner,
@@ -4666,8 +4671,9 @@ export function useVoiceChannel({
             browserVideoConstraints,
             desktopMandatoryConstraints,
           });
+          const skipNative = !!effectiveOptions?.skipNative;
           let hardwareEncoderProbe: unknown = null;
-          if (selectedDesktopSource) {
+          if (selectedDesktopSource && !skipNative) {
             const capturePolicy = getCapturePolicy();
             logScreenShare("Discord-style capture summary", {
               sourceId:
@@ -4705,6 +4711,7 @@ export function useVoiceChannel({
           }
           if (
             selectedDesktopSource &&
+            !skipNative &&
             effectiveOptions?.sourceKind !== "device" &&
             effectiveOptions?.sourceId &&
             sfuRef.current &&
@@ -5054,15 +5061,16 @@ export function useVoiceChannel({
     ],
   );
 
-  // ── Auto-stop when the shared source goes away (desktop native share) ──────
-  // The backend emits `native-screen-share-ended` when the captured window is
-  // closed or its process exits (the source no longer exists, so neither the
-  // hook nor WGC can capture it). Production-correct behavior is to stop the
-  // share — like Discord — instead of leaving it stuck in an "unavailable" /
-  // hanging state. We tear the local share down exactly as an explicit stop
-  // would (drop tracks, clear UI, play the stop sound) by invoking the stop
-  // path. A ref holds the latest `toggleScreenShare` so the listener is set up
-  // once and never re-subscribes on every render.
+  // ── Native share ended itself (desktop) ─────────────────────────────────────
+  // The backend emits `native-screen-share-ended` when a native share ends on
+  // its own:
+  //   * `source-closed` — the captured window closed / its process exited. Stop
+  //     the share like an explicit stop (drop tracks, clear UI, stop sound).
+  //   * `connection-failed` — the hardware stream's connection died mid-share.
+  //     Restart the same source through CEF capture (quality and audio kept)
+  //     unless the hook-exclusive policy forbids WGC/CEF capture, then stop.
+  // A ref holds the latest `toggleScreenShare` so the listener is set up once
+  // and never re-subscribes on every render.
   const toggleScreenShareRef = useRef(toggleScreenShare);
   useEffect(() => {
     toggleScreenShareRef.current = toggleScreenShare;
@@ -5080,14 +5088,28 @@ export function useVoiceChannel({
       try {
         const { listen } = await import("@tauri-apps/api/event");
         const dispose = await listen("native-screen-share-ended", (event) => {
-          // Only act if we still think we're sharing — avoids a double-stop if
-          // the user already stopped, or a late event after teardown.
-          if (!isScreenSharingRef.current) return;
-          vcLog.info("Native screen share ended by source close; stopping", {
-            payload: event.payload,
+          const payload = parseNativeShareEndedPayload(event.payload);
+          const action = resolveNativeShareEndedAction(payload, {
+            isSharing: isScreenSharingRef.current,
+            wgcCaptureAllowed: isWgcCaptureAllowed(),
           });
-          // Invoke the no-arg stop path (drops tracks, clears state, stop sound).
-          void toggleScreenShareRef.current?.();
+          vcLog.info("Native screen share ended by the backend", {
+            payload,
+            action,
+          });
+          if (action === "fallback-cef") {
+            toast.info("Screen share switched to standard capture", {
+              id: "native-share-fallback",
+              description: "The hardware stream lost its connection.",
+            });
+            void toggleScreenShareRef.current?.({
+              changeSource: true,
+              skipNative: true,
+            });
+          } else if (action === "stop") {
+            // The no-arg stop path drops tracks, clears state, plays the sound.
+            void toggleScreenShareRef.current?.();
+          }
         });
         if (cancelled) dispose();
         else unlisten = dispose;

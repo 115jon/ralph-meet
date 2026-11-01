@@ -1,7 +1,7 @@
 /// Windows Graphics Capture (WGC) based screen capture.
 /// Produces `ID3D11Texture2D` frames in BGRA format — no CPU readback.
 use std::result::Result as StdResult;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use windows::core::{Result as WinResult, *};
@@ -21,7 +21,7 @@ use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemIntero
 
 use crate::d3d_device::D3dDevice;
 use crate::native_share::NativeShareStats;
-use crate::ring_buffer::{RingBuffer, RingBufferError};
+use crate::wmf_encoder::FrameSender;
 
 // Hook-origin frame adapter inputs (Req 1.3, 5.3, 7.1, 7.5). `SharedSurface`
 // compiles under `native-screen-share` (it is the host-side zero-copy opener's
@@ -93,8 +93,11 @@ pub enum FrameOrigin {
     /// underlying `Direct3D11CaptureFramePool` buffer checked out so the WGC
     /// texture the frame borrows is not recycled/overwritten before the encoder
     /// reads it (no torn/stale frames — Req 1.2, 1.5). Dropping it releases the
-    /// buffer back to the 2-buffer pool.
-    Wgc(Direct3D11CaptureFrame),
+    /// buffer back to the 2-buffer pool and the in-flight slot.
+    Wgc {
+        _frame: Direct3D11CaptureFrame,
+        _in_flight: InFlightGuard,
+    },
     /// A hook-origin frame. Holding the [`HookSurfaceGuard`] keeps the opened
     /// shared surface alive for the encoder read; dropping it releases the keyed
     /// mutex and frees the surface (Req 7.5). Gated behind `game-capture-hook`.
@@ -108,14 +111,15 @@ pub enum FrameOrigin {
 /// freshly-created per-frame copy texture. Instead it **borrows** a texture and
 /// carries an `Arc<AtomicBool>` release token plus an [`origin`](Self::origin)
 /// retention token that keeps the borrowed texture's backing resource alive
-/// until the encoder is done. For WGC frames the texture is a pre-allocated
-/// [`TextureRingBuffer`] / WGC pool buffer (no per-frame `CreateTexture2D`,
-/// `CopySubresourceRegion`, or `Flush`); for hook frames it is a shared D3D11
-/// surface opened on the `Shared_D3D_Device`. When the encoder has finished
-/// reading the texture it sets the token (or the token is set on drop), which
-/// returns the ring slot to the pool (WGC) so it can be reused. This enforces
-/// "do not overwrite a held entry" (Req 2.4), the drop-on-exhaustion contract
-/// (Req 2.7), and retain-at-most-one for the hook path (Req 7.5).
+/// until the encoder is done. For WGC frames the texture is the WGC pool
+/// buffer itself (no per-frame `CreateTexture2D`, `CopySubresourceRegion`, or
+/// `Flush`); for hook frames it is a shared D3D11 surface opened on the
+/// `Shared_D3D_Device`. Dropping the frame (the encoder does so right after
+/// its fused blit) returns the pool buffer (WGC) or sets the release token the
+/// hook thread waits on (retain-at-most-one, Req 7.5).
+///
+/// `width`/`height` are the frame's *content* size, which can be smaller than
+/// the texture while a WGC source is mid-resize.
 pub struct CapturedFrame {
     /// The texture read directly by the encoder's fused blit — a WGC pool
     /// buffer or an opened hook shared surface, depending on [`origin`](Self::origin).
@@ -123,8 +127,9 @@ pub struct CapturedFrame {
     pub width: u32,
     pub height: u32,
     pub pts_hns: i64,
-    /// Release token for this frame's ring slot. Set to `true` once the
-    /// encoder has finished reading the texture so the slot can be reused.
+    /// Release token. Set when the frame is dropped (after the encoder's fused
+    /// blit); the hook capture thread waits on it before opening the next
+    /// shared surface.
     pub release: Arc<AtomicBool>,
     /// What this frame must keep alive while the encoder reads it — a WGC pool
     /// frame or a hook shared-surface guard. Generalized from the prior
@@ -139,12 +144,10 @@ unsafe impl Send for CapturedFrame {}
 
 impl Drop for CapturedFrame {
     fn drop(&mut self) {
-        // Guarantee the ring slot is returned to the pool even if the encoder
-        // never explicitly released it (e.g. the frame was dropped on the
-        // floor). Idempotent: the ring only re-acquires a slot whose token is
-        // set, and setting an already-set token is harmless. The retained
-        // `origin` is dropped alongside, releasing the WGC pool buffer or the
-        // hook surface + keyed mutex (Req 1.2, 1.5, 7.5).
+        // Signal release on every drop path (encoded, coalesced, or dropped on
+        // a full queue). The retained `origin` is dropped alongside, releasing
+        // the WGC pool buffer or the hook surface + keyed mutex (Req 1.2, 1.5,
+        // 7.5).
         self.release.store(true, Ordering::Release);
     }
 }
@@ -396,152 +399,80 @@ pub fn stop_release_meets_deadline(elapsed: Duration) -> bool {
     elapsed <= STOP_RELEASE_DEADLINE
 }
 
-/// Fixed-size (2 or 3) pool of reusable BGRA capture textures.
+/// Number of buffers in the WGC `Direct3D11CaptureFramePool`.
+const POOL_BUFFERS: i32 = 2;
+
+/// Counts WGC frames handed downstream and not yet released.
 ///
-/// Wraps the GPU-independent [`RingBuffer`] state machine around real
-/// `ID3D11Texture2D` resources allocated once at session start (Req 2.1). Each
-/// slot carries a shared release token (`Arc<AtomicBool>`): the slot is handed
-/// downstream alongside a [`CapturedFrame`], and once the consumer sets the
-/// token the slot becomes eligible for re-acquisition. Acquiring a slot first
-/// reaps any slots whose tokens have been set, so a released slot is reused
-/// instead of allocating a new texture (Req 2.2, 2.3).
-///
-/// Per the design's reconciliation of Req 2 and Req 3, in the steady-state WGC
-/// path the encoder reads the retained WGC texture **directly** (no
-/// intermediate BGRA copy), so the BGRA ring degenerates to slot accounting:
-/// it bounds how many frames are in flight, enforces "do not overwrite a held
-/// entry" (Req 2.4), and drives drop-on-exhaustion (Req 2.7). The pre-allocated
-/// textures remain the landing-texture reserve required by Req 2.1 for sources
-/// that cannot be read directly.
-struct TextureRingBuffer {
-    ring: RingBuffer<RingTexture>,
+/// This replaces the old BGRA `TextureRingBuffer`, which pre-allocated three
+/// full-resolution BGRA textures that were never read (the encoder reads the
+/// WGC pool texture directly) and only served as slot accounting. The pool
+/// itself bounds how many frames can be checked out; this counter keeps the
+/// drop-on-exhaustion accounting (Req 2.7) without the dead GPU memory.
+struct InFlight {
+    count: AtomicUsize,
+    limit: usize,
 }
 
-// SAFETY: the ring's `ID3D11Texture2D` handles are only ever touched on the
-// single WGC capture thread (inside the `FrameArrived` callback). The struct is
-// kept behind a `Mutex` when shared with that callback.
-unsafe impl Send for TextureRingBuffer {}
+/// Decrements the [`InFlight`] count when the frame that carries it drops.
+pub struct InFlightGuard(Arc<InFlight>);
 
-/// One BGRA texture slot plus its shared release token.
-struct RingTexture {
-    /// Pre-allocated landing-texture reserve (Req 2.1). Unused in the
-    /// steady-state direct-read path, where the encoder reads the WGC texture
-    /// directly; retained so the ring can hold a full capture frame if a
-    /// future source requires an intermediate copy.
-    #[allow(dead_code)]
-    texture: ID3D11Texture2D,
-    /// Shared with the [`CapturedFrame`] handed downstream. `true` once the
-    /// consumer has finished reading, meaning the slot may be re-acquired.
-    release: Arc<AtomicBool>,
-}
-
-impl TextureRingBuffer {
-    /// Allocate `count` (2 or 3) BGRA textures sized for the capture resolution.
-    ///
-    /// Returns `Err` if any `CreateTexture2D` fails so session startup can be
-    /// aborted before any frame is processed (Req 2.8).
-    fn new(d3d: &D3dDevice, width: u32, height: u32, count: usize) -> StdResult<Self, String> {
-        let payloads = Self::allocate_textures(d3d, width, height, count)?;
-        let ring =
-            RingBuffer::new(payloads, width, height).map_err(|e: RingBufferError| e.to_string())?;
-        Ok(Self { ring })
-    }
-
-    /// Build `count` BGRA textures sized to `(width, height)`. Any allocation
-    /// failure short-circuits with `Err` (Req 2.8).
-    fn allocate_textures(
-        d3d: &D3dDevice,
-        width: u32,
-        height: u32,
-        count: usize,
-    ) -> StdResult<Vec<RingTexture>, String> {
-        let desc = bgra_capture_desc(width, height);
-        let mut textures = Vec::with_capacity(count);
-        for _ in 0..count {
-            let mut tex = None;
-            unsafe {
-                d3d.device
-                    .CreateTexture2D(&desc, None, Some(&mut tex))
-                    .map_err(|e| format!("CreateTexture2D (ring slot): {e}"))?;
-            }
-            textures.push(RingTexture {
-                texture: tex.unwrap(),
-                release: Arc::new(AtomicBool::new(false)),
-            });
-        }
-        Ok(textures)
-    }
-
-    /// Reap slots whose release token has been set, marking them `Free` so they
-    /// can be acquired again. Called before every acquire so a consumed slot is
-    /// reused instead of dropping the frame while a free buffer exists.
-    fn reap_released(&mut self) {
-        let capacity = self.ring.capacity();
-        for slot in 0..capacity {
-            if self.ring.is_in_use(slot) {
-                let released = self
-                    .ring
-                    .get(slot)
-                    .map(|entry| entry.release.load(Ordering::Acquire))
-                    .unwrap_or(false);
-                if released {
-                    self.ring.release(slot);
-                }
-            }
-        }
-    }
-
-    /// Acquire the next free slot for an incoming frame, returning a fresh
-    /// release token wired to that slot. Returns `None` on exhaustion (every
-    /// slot still held downstream — Req 2.7); on exhaustion the underlying ring
-    /// leaves all in-use slots untouched and the caller increments
-    /// `dropped_frames`.
-    fn acquire(&mut self) -> Option<Arc<AtomicBool>> {
-        self.reap_released();
-        let slot = self.ring.acquire()?;
-        let entry = self.ring.get_mut(slot)?;
-        // Reset the token for this fresh hand-off and share it with the frame.
-        let release = Arc::new(AtomicBool::new(false));
-        entry.release = Arc::clone(&release);
-        Some(release)
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        self.0.count.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
-/// BGRA texture descriptor used for ring-buffer capture slots. Mirrors the
-/// previous per-frame copy texture: shader-resource + render-target bind flags
-/// so the encoder's video processor can read it as an input view.
-fn bgra_capture_desc(width: u32, height: u32) -> D3D11_TEXTURE2D_DESC {
-    D3D11_TEXTURE2D_DESC {
-        Width: width,
-        Height: height,
-        MipLevels: 1,
-        ArraySize: 1,
-        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
-        Usage: D3D11_USAGE_DEFAULT,
-        BindFlags: (D3D11_BIND_SHADER_RESOURCE.0 | D3D11_BIND_RENDER_TARGET.0) as u32,
-        CPUAccessFlags: 0,
-        MiscFlags: 0,
+impl InFlight {
+    fn new(limit: usize) -> Arc<Self> {
+        Arc::new(Self {
+            count: AtomicUsize::new(0),
+            limit,
+        })
+    }
+
+    fn try_acquire(self: &Arc<Self>) -> Option<InFlightGuard> {
+        self.count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < self.limit).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| InFlightGuard(Arc::clone(self)))
     }
 }
 
-/// Active WGC session handle. Drop to stop capture.
+/// The WinRT Direct3D device the frame pool was created on. WinRT devices from
+/// `CreateDirect3D11DeviceFromDXGIDevice` are agile, so it may be used from the
+/// free-threaded `FrameArrived` callback to `Recreate` the pool.
+struct AgileDevice(windows::Graphics::DirectX::Direct3D11::IDirect3DDevice);
+// SAFETY: see the type docs — the underlying object is agile.
+unsafe impl Send for AgileDevice {}
+unsafe impl Sync for AgileDevice {}
+
+/// Active WGC session handle. Dropping it unregisters the callbacks and closes
+/// the session and frame pool, which stops capture immediately.
 pub struct WgcCapture {
-    _session: GraphicsCaptureSession,
-    _pool: Direct3D11CaptureFramePool,
-    _frame_gate: Arc<AtomicBool>,
+    item: GraphicsCaptureItem,
+    session: GraphicsCaptureSession,
+    pool: Direct3D11CaptureFramePool,
+    frame_arrived_token: i64,
+    closed_token: Option<i64>,
+    frame_gate: Arc<AtomicBool>,
 }
 
 unsafe impl Send for WgcCapture {}
 
 impl Drop for WgcCapture {
     fn drop(&mut self) {
+        let _ = self.pool.RemoveFrameArrived(self.frame_arrived_token);
+        if let Some(token) = self.closed_token {
+            let _ = self.item.RemoveClosed(token);
+        }
+        let _ = self.session.Close();
+        let _ = self.pool.Close();
         log::info!(
-            "[WgcCapture] session dropped frame_gate_final={}",
-            self._frame_gate.load(Ordering::Relaxed)
+            "[WgcCapture] session closed frame_gate_final={}",
+            self.frame_gate.load(Ordering::Relaxed)
         );
     }
 }
@@ -577,7 +508,7 @@ pub fn capture_item_for_monitor_idx(idx: usize) -> WinResult<GraphicsCaptureItem
     };
 
     unsafe {
-        EnumDisplayMonitors(None, None, Some(cb), LPARAM(&mut state as *mut _ as isize));
+        let _ = EnumDisplayMonitors(None, None, Some(cb), LPARAM(&mut state as *mut _ as isize));
     }
 
     let hmon = state
@@ -768,33 +699,32 @@ unsafe fn read_first_frame_bgra(
 
 // ── Start capture ─────────────────────────────────────────────────────────
 
-/// Number of reusable BGRA capture textures in the [`TextureRingBuffer`].
-/// Requirements 2.1 / 3.3 mandate "exactly 2 or 3"; 3 gives a little
-/// pipelining headroom over the WGC `Direct3D11CaptureFramePool`'s 2 buffers.
-const RING_SLOTS: usize = 3;
+/// Called once when the capture item closes (window destroyed, monitor
+/// removed). Runs on a WinRT thread; must not block.
+pub type ItemClosedCallback = Arc<dyn Fn() + Send + Sync>;
 
-/// Start WGC capture. Frames delivered through `frame_tx` (non-blocking try_send).
+/// Start WGC capture. Frames are handed to `frames` without blocking; a full
+/// encoder queue drops the frame (released immediately) and counts it.
 ///
-/// At session start a [`TextureRingBuffer`] of [`RING_SLOTS`] BGRA textures is
-/// allocated at the capture resolution; if any `CreateTexture2D` fails the
-/// session aborts before any frame is processed (Req 2.8). The `FrameArrived`
-/// callback no longer copies, allocates, or flushes per frame (Req 1.1, 2.3):
-/// it acquires a ring slot, hands the WGC texture downstream behind a release
-/// token, and drops + counts the frame when every slot is still held (Req 2.7).
+/// The frame pool follows the source: when a frame's `ContentSize` differs
+/// from the pool size the pool is `Recreate`d at the new size, and every
+/// [`CapturedFrame`] carries the content size so the encoder scales the real
+/// content (never the stale remainder of a larger texture). The encoder
+/// debounces those size changes before rebuilding its output.
+///
+/// `on_closed` fires when the capture item closes.
 pub fn start_wgc_capture(
     item: GraphicsCaptureItem,
     d3d: &Arc<D3dDevice>,
-    encode_width: u32,
-    encode_height: u32,
-    frame_tx: mpsc::SyncSender<CapturedFrame>,
+    frames: FrameSender,
     stats: Arc<NativeShareStats>,
     frame_gate: Arc<AtomicBool>,
+    on_closed: Option<ItemClosedCallback>,
 ) -> StdResult<WgcCapture, String> {
     // Wrap D3D11 device as WinRT IDirect3DDevice.
     let winrt_device = unsafe {
         let dxgi: IDXGIDevice = d3d.device.cast().map_err(|e| e.to_string())?;
         let inspectable = CreateDirect3D11DeviceFromDXGIDevice(&dxgi).map_err(|e| e.to_string())?;
-        // Cast the IInspectable to the WinRT IDirect3DDevice interface.
         let device: windows::Graphics::DirectX::Direct3D11::IDirect3DDevice =
             inspectable.cast().map_err(|e| e.to_string())?;
         device
@@ -802,17 +732,15 @@ pub fn start_wgc_capture(
 
     let size = item.Size().map_err(|e| e.to_string())?;
     log::info!(
-        "[WgcCapture] starting session native={}x{} encode={}x{} frame_gate_initial={}",
+        "[WgcCapture] starting session native={}x{} frame_gate_initial={}",
         size.Width,
         size.Height,
-        encode_width,
-        encode_height,
         frame_gate.load(Ordering::Relaxed),
     );
     let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
         &winrt_device,
         DirectXPixelFormat::B8G8R8A8UIntNormalized,
-        2,
+        POOL_BUFFERS,
         size,
     )
     .map_err(|e| e.to_string())?;
@@ -822,120 +750,143 @@ pub fn start_wgc_capture(
         .map_err(|e| e.to_string())?;
 
     // Suppress the yellow highlight border (Win11 22H2+ only; silently skipped on Win10).
-    // In windows-rs 0.61, IGraphicsCaptureSession3 methods are projected directly onto
-    // GraphicsCaptureSession — the runtime cast happens inside the method.
     let _ = session.SetIsBorderRequired(false);
 
-    // Pre-allocate the BGRA Texture_Ring_Buffer at the capture resolution
-    // (Req 2.1). Allocation failure aborts startup before any frame is
-    // processed (Req 2.8).
-    let ring = Arc::new(Mutex::new(TextureRingBuffer::new(
-        d3d,
-        encode_width,
-        encode_height,
-        RING_SLOTS,
-    )?));
-
+    let in_flight = InFlight::new(POOL_BUFFERS as usize);
+    let pool_size = Arc::new(Mutex::new(size));
+    let device = Arc::new(AgileDevice(winrt_device));
     let callback_frame_gate = Arc::clone(&frame_gate);
     let first_frame_logged = Arc::new(AtomicBool::new(false));
     let gate_closed_logged = Arc::new(AtomicBool::new(false));
-    let callback_first_frame_logged = Arc::clone(&first_frame_logged);
-    let callback_gate_closed_logged = Arc::clone(&gate_closed_logged);
 
-    match pool.FrameArrived(
-        &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(move |pool_ref, _| {
-            if !callback_frame_gate.load(Ordering::Acquire) {
-                if !callback_gate_closed_logged.swap(true, Ordering::Relaxed) {
-                    log::info!("[WgcCapture] frame gate closed; ignoring subsequent WGC frames");
-                }
-                return Ok(());
-            }
-            // pool_ref is &Option<Direct3D11CaptureFramePool>
-            let pool_inner = match pool_ref.as_ref() {
-                Some(p) => p,
-                None => return Ok(()),
-            };
-            let frame = match pool_inner.TryGetNextFrame() {
-                Ok(f) => f,
-                Err(_) => return Ok(()),
-            };
-
-            let surface = frame.Surface()?;
-
-            // QI IDirect3DSurface → IDirect3DDxgiInterfaceAccess → ID3D11Texture2D.
-            // This is the WGC-provided texture; the encoder's fused blit reads it
-            // directly — no per-frame CreateTexture2D, no CopySubresourceRegion,
-            // no per-frame Flush (Req 1.1, 2.3, 3.2).
-            let access: IDirect3DDxgiInterfaceAccess = surface.cast()?;
-            let texture: ID3D11Texture2D = unsafe { access.GetInterface()? };
-
-            let mut desc = D3D11_TEXTURE2D_DESC::default();
-            unsafe { texture.GetDesc(&mut desc) };
-            let frame_width = desc.Width;
-            let frame_height = desc.Height;
-
-            let crop_width = frame_width.min(encode_width);
-            let crop_height = frame_height.min(encode_height);
-
-            if !callback_first_frame_logged.swap(true, Ordering::Relaxed) {
-                log::info!(
-                    "[WgcCapture] first frame arrived native={}x{} crop={}x{}",
-                    frame_width,
-                    frame_height,
-                    crop_width,
-                    crop_height,
-                );
-            }
-
-            // Acquire a ring slot instead of allocating a texture (Req 2.2).
-            // The slot reuses a buffer already released downstream; on
-            // exhaustion (every slot still held by the encoder) drop the
-            // frame, count it, and leave in-use slots untouched (Req 2.7).
-            let release = match ring.lock() {
-                Ok(mut ring) => match ring.acquire() {
-                    Some(token) => token,
-                    None => {
-                        stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
-                        return Ok(());
+    let frame_arrived_token = pool
+        .FrameArrived(&TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(
+            move |pool_ref, _| {
+                if !callback_frame_gate.load(Ordering::Acquire) {
+                    if !gate_closed_logged.swap(true, Ordering::Relaxed) {
+                        log::info!("[WgcCapture] frame gate closed; ignoring subsequent WGC frames");
                     }
-                },
-                Err(_) => return Ok(()),
-            };
+                    return Ok(());
+                }
+                let Some(pool_inner) = pool_ref.as_ref() else {
+                    return Ok(());
+                };
+                let Ok(frame) = pool_inner.TryGetNextFrame() else {
+                    return Ok(());
+                };
 
-            let pts_hns = frame.SystemRelativeTime().map(|t| t.Duration).unwrap_or(0);
+                // The source changed shape: rebuild the pool at the new size so
+                // the next frames carry the whole window at native resolution.
+                // This frame still belongs to the old pool and stays valid.
+                let content = frame.ContentSize()?;
+                if content.Width > 0 && content.Height > 0 {
+                    if let Ok(mut current) = pool_size.lock() {
+                        if *current != content {
+                            match pool_inner.Recreate(
+                                &device.0,
+                                DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                                POOL_BUFFERS,
+                                content,
+                            ) {
+                                Ok(()) => {
+                                    log::info!(
+                                        "[WgcCapture] source resized {}x{} -> {}x{}; frame pool recreated",
+                                        current.Width,
+                                        current.Height,
+                                        content.Width,
+                                        content.Height
+                                    );
+                                    *current = content;
+                                }
+                                Err(e) => log::warn!("[WgcCapture] frame pool Recreate failed: {e}"),
+                            }
+                        }
+                    }
+                }
 
-            // Hand the WGC texture downstream. The frame retains the WGC
-            // capture frame so the texture stays valid until the encoder is
-            // done; setting `release` (or dropping the frame) returns the
-            // ring slot and recycles the WGC buffer. Prompt release after
-            // the fused blit and the ≤1-retained bound are wired in tasks
-            // 3.1 / 3.2.
-            let _ = frame_tx.try_send(CapturedFrame {
-                texture,
-                width: crop_width,
-                height: crop_height,
-                pts_hns,
-                release,
-                origin: FrameOrigin::Wgc(frame),
-            });
+                let surface = frame.Surface()?;
+                // QI IDirect3DSurface → IDirect3DDxgiInterfaceAccess → ID3D11Texture2D.
+                // The encoder's fused blit reads this texture directly — no
+                // per-frame CreateTexture2D, copy, or Flush (Req 1.1, 2.3, 3.2).
+                let access: IDirect3DDxgiInterfaceAccess = surface.cast()?;
+                let texture: ID3D11Texture2D = unsafe { access.GetInterface()? };
 
-            Ok(())
-        }),
-    ) {
-        Ok(_) => {}
-        Err(e) => return Err(e.to_string()),
-    }
+                let mut desc = D3D11_TEXTURE2D_DESC::default();
+                unsafe { texture.GetDesc(&mut desc) };
+                let width = (content.Width.max(1) as u32).min(desc.Width);
+                let height = (content.Height.max(1) as u32).min(desc.Height);
 
-    match session.StartCapture() {
-        Ok(_) => {}
-        Err(e) => return Err(e.to_string()),
-    }
+                if !first_frame_logged.swap(true, Ordering::Relaxed) {
+                    log::info!(
+                        "[WgcCapture] first frame arrived texture={}x{} content={}x{}",
+                        desc.Width,
+                        desc.Height,
+                        width,
+                        height,
+                    );
+                }
 
-    Ok(WgcCapture {
-        _session: session,
-        _pool: pool,
-        _frame_gate: frame_gate,
-    })
+                // Drop-on-exhaustion (Req 2.7): never hand out more frames than
+                // the pool has buffers.
+                let Some(guard) = in_flight.try_acquire() else {
+                    stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
+                    return Ok(());
+                };
+
+                let pts_hns = frame.SystemRelativeTime().map(|t| t.Duration).unwrap_or(0);
+                let sent = frames.try_send(CapturedFrame {
+                    texture,
+                    width,
+                    height,
+                    pts_hns,
+                    release: Arc::new(AtomicBool::new(false)),
+                    origin: FrameOrigin::Wgc {
+                        _frame: frame,
+                        _in_flight: guard,
+                    },
+                });
+                if !sent {
+                    stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(())
+            },
+        ))
+        .map_err(|e| e.to_string())?;
+
+    let closed_token = match on_closed {
+        Some(on_closed) => {
+            let fired = Arc::new(AtomicBool::new(false));
+            match item.Closed(
+                &TypedEventHandler::<GraphicsCaptureItem, IInspectable>::new(move |_, _| {
+                    if !fired.swap(true, Ordering::AcqRel) {
+                        log::info!("[WgcCapture] capture item closed");
+                        on_closed();
+                    }
+                    Ok(())
+                }),
+            ) {
+                Ok(token) => Some(token),
+                Err(e) => {
+                    log::warn!("[WgcCapture] could not subscribe to item Closed: {e}");
+                    None
+                }
+            }
+        }
+        None => None,
+    };
+
+    let capture = WgcCapture {
+        item,
+        session,
+        pool,
+        frame_arrived_token,
+        closed_token,
+        frame_gate,
+    };
+    // On failure `capture` drops here, unregistering both handlers and
+    // closing the session + pool.
+    capture.session.StartCapture().map_err(|e| e.to_string())?;
+    Ok(capture)
 }
 
 #[cfg(test)]
