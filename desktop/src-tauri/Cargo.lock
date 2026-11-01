@@ -4561,7 +4561,7 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
 name = "ralph-meet-desktop"
-version = "2.0.2"
+version = "3.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytemuck",
@@ -4586,7 +4586,6 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
- "tauri-plugin-window-state",
  "thiserror 2.0.18",
  "tokio",
  "wasapi",
@@ -6129,20 +6128,6 @@ dependencies = [
  "url",
  "windows-sys 0.60.2",
  "zip",
-]
-
-[[package]]
-name = "tauri-plugin-window-state"
-version = "2.4.1"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat/cef#352381c6c6a26cb568ee0c254664947a513ff442"
-dependencies = [
- "bitflags 2.11.0",
- "log",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
 ]
 
 [[package]]

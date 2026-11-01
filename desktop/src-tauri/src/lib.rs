@@ -68,6 +68,7 @@ mod thumbnail_toolbar;
 mod tray;
 mod window;
 mod window_icon;
+mod window_state;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
@@ -88,18 +89,6 @@ pub struct DesktopSettings {
 struct DesktopRuntimeSettings {
     #[serde(default = "default_hardware_acceleration")]
     hardware_acceleration: bool,
-}
-
-#[derive(Clone, serde::Deserialize)]
-struct PersistedWindowStateEntry {
-    width: u32,
-    height: u32,
-    x: i32,
-    y: i32,
-    #[serde(default)]
-    maximized: bool,
-    #[serde(default)]
-    fullscreen: bool,
 }
 
 fn default_hardware_acceleration() -> bool {
@@ -542,104 +531,6 @@ pub(crate) fn log_window_state_file<R: tauri::Runtime>(app: &tauri::AppHandle<R>
     }
 }
 
-fn read_persisted_window_state<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    label: &str,
-) -> Result<Option<PersistedWindowStateEntry>, String> {
-    let Some(current_path) = app
-        .path()
-        .app_config_dir()
-        .ok()
-        .map(|dir| dir.join(".window-state.json"))
-    else {
-        return Ok(None);
-    };
-
-    let mut candidate_paths = vec![current_path];
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(base) = std::env::var_os("APPDATA") {
-            candidate_paths.push(
-                std::path::PathBuf::from(base)
-                    .join(LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME)
-                    .join(".window-state.json"),
-            );
-        }
-    }
-
-    for path in candidate_paths {
-        let raw = match std::fs::read_to_string(&path) {
-            Ok(raw) => raw,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(err) => return Err(err.to_string()),
-        };
-
-        let states = serde_json::from_str::<
-            std::collections::HashMap<String, PersistedWindowStateEntry>,
-        >(&raw)
-        .map_err(|err| err.to_string())?;
-
-        if let Some(state) = states.get(label).cloned() {
-            return Ok(Some(state));
-        }
-    }
-
-    Ok(None)
-}
-
-pub(crate) fn restore_main_window_geometry_from_state<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    context: &str,
-) -> Result<(), String> {
-    let Some(state) = read_persisted_window_state(app, "main")? else {
-        log::info!("[WindowState][{context}] no saved main window state");
-        return Ok(());
-    };
-
-    let Some(window) = app.get_webview_window("main") else {
-        log::info!("[WindowState][{context}] main window missing");
-        return Ok(());
-    };
-
-    log::info!(
-        "[WindowState][{context}] restoring main x={} y={} width={} height={} maximized={} fullscreen={}",
-        state.x,
-        state.y,
-        state.width,
-        state.height,
-        state.maximized,
-        state.fullscreen
-    );
-
-    if !state.fullscreen {
-        window
-            .set_size(tauri::PhysicalSize::new(state.width, state.height))
-            .map_err(|err| err.to_string())?;
-        window
-            .set_position(tauri::PhysicalPosition::new(state.x, state.y))
-            .map_err(|err| err.to_string())?;
-    }
-
-    if state.maximized {
-        #[cfg(target_os = "windows")]
-        {
-            let raw_hwnd = window.hwnd().map_err(|err| err.to_string())?;
-            let hwnd = windows::Win32::Foundation::HWND(raw_hwnd.0 as _);
-            window::set_maximized_native(hwnd, true);
-        }
-        #[cfg(not(target_os = "windows"))]
-        window.maximize().map_err(|err| err.to_string())?;
-    }
-
-    if state.fullscreen {
-        window.set_fullscreen(true).map_err(|err| err.to_string())?;
-    }
-
-    log_window_snapshot(&window, &format!("{context}:after"));
-    Ok(())
-}
-
 pub(crate) fn log_window_snapshot<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
     context: &str,
@@ -718,15 +609,7 @@ fn spawn_app_exit_claimed<R: tauri::Runtime>(
 
     let app = app.clone();
     let _ = tauri::async_runtime::spawn(async move {
-        use tauri_plugin_window_state::AppHandleExt;
-
-        let flags = tauri_plugin_window_state::StateFlags::SIZE
-            | tauri_plugin_window_state::StateFlags::POSITION
-            | tauri_plugin_window_state::StateFlags::MAXIMIZED
-            | tauri_plugin_window_state::StateFlags::FULLSCREEN;
-        if let Err(err) = app.save_window_state(flags) {
-            log::error!("[DesktopRuntime][{context}] failed to save window state: {err}");
-        }
+        window_state::save_now(&app);
 
         #[cfg(feature = "native-screen-share")]
         {
@@ -1003,30 +886,16 @@ pub fn run() {
             // (with a 10s delay) and the user-facing toast UI. The Rust commands
             // (fetch_update / install_update) are available for the Settings page.
 
-            // Persist window size & position across restarts
-            // Persist window size & position across restarts (but NOT visibility)
-            #[cfg(desktop)]
-            app.handle()
-                .plugin(
-                    tauri_plugin_window_state::Builder::default()
-                        .with_state_flags(
-                            tauri_plugin_window_state::StateFlags::SIZE
-                                | tauri_plugin_window_state::StateFlags::POSITION
-                                | tauri_plugin_window_state::StateFlags::MAXIMIZED
-                                | tauri_plugin_window_state::StateFlags::FULLSCREEN
-                        )
-                        .build()
-                )?;
-
+            // Restore the main window's size, position and maximized state
+            // while it is still hidden. See window_state.rs for why this does
+            // not use tauri-plugin-window-state.
             #[cfg(desktop)]
             {
                 let handle = app.handle().clone();
-                log_window_state_file(&handle, "setup:after-window-state-plugin");
-                if let Err(err) = restore_main_window_geometry_from_state(&handle, "setup:manual-restore") {
-                    log::warn!("[WindowState][setup:manual-restore] failed: {err}");
-                }
-                log_window_snapshot_by_label(&handle, "main", "setup:after-window-state-plugin");
-                log_window_snapshot_by_label(&handle, "updater", "setup:after-window-state-plugin");
+                log_window_state_file(&handle, "setup:before-restore");
+                window_state::restore(&handle);
+                log_window_snapshot_by_label(&handle, "main", "setup:after-restore");
+                log_window_snapshot_by_label(&handle, "updater", "setup:after-restore");
                 spawn_window_state_diagnostics(&handle, "startup");
             }
 
@@ -1128,6 +997,9 @@ pub fn run() {
             if matches!(window.label(), "main" | "updater") {
                 match event {
                     tauri::WindowEvent::Moved(position) => {
+                        if window.label() == "main" {
+                            window_state::schedule_save(window.app_handle());
+                        }
                         log::info!(
                             "[WindowState][event:moved] label={} pos={},{}",
                             window.label(),
@@ -1136,6 +1008,9 @@ pub fn run() {
                         );
                     }
                     tauri::WindowEvent::Resized(size) => {
+                        if window.label() == "main" {
+                            window_state::schedule_save(window.app_handle());
+                        }
                         log::info!(
                             "[WindowState][event:resized] label={} size={}x{}",
                             window.label(),
@@ -1199,6 +1074,9 @@ pub fn run() {
                     "[Window][close-requested] label=main close_to_tray={}",
                     close_to_tray
                 );
+                // Save before hiding: a tray-hidden app usually ends by
+                // updater install or Windows shutdown, which skip exit hooks.
+                window_state::save_now(window.app_handle());
                 if !close_to_tray {
                     // User disabled minimize-to-tray — actually quit the app
                     api.prevent_close();
