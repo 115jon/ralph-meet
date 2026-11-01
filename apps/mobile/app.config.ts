@@ -42,6 +42,13 @@ const variant = VARIANTS[appVariant];
 const googleServicesFile =
   process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json";
 
+// Release versioning. The release workflow derives both from a `mobile-vX.Y.Z`
+// tag: RALPH_APP_VERSION=X.Y.Z and RALPH_VERSION_CODE=X*10000+Y*100+Z, which
+// rises with every semver bump while minor and patch stay below 100. Local
+// builds fall back to the defaults.
+const appVersion = process.env.RALPH_APP_VERSION ?? "0.1.0";
+const versionCode = Number.parseInt(process.env.RALPH_VERSION_CODE ?? "1", 10);
+
 const MICROPHONE_USAGE = "Ralph Meet uses the microphone in voice channels.";
 
 // Mirrors the web app's VITE_API_BASE_URL, VITE_KOVA_AUTH_URL and
@@ -59,7 +66,7 @@ const kovaPublishableKey =
 const config: ExpoConfig = {
   name: variant.name,
   slug: "ralph-meet",
-  version: "0.1.0",
+  version: appVersion,
   scheme: variant.scheme,
   platforms: ["android", "ios"],
   orientation: "portrait",
@@ -69,6 +76,7 @@ const config: ExpoConfig = {
   // they have no config keys.
   android: {
     package: variant.package,
+    versionCode,
     googleServicesFile,
     predictiveBackGestureEnabled: true,
     // Voice: the microphone and call audio routing. The background call's
@@ -119,9 +127,22 @@ const config: ExpoConfig = {
         dark: { image: "./assets/icon.png", backgroundColor: "#000000" },
       },
     ],
-    ["expo-build-properties", { android: { minSdkVersion: 24 } }],
+    [
+      "expo-build-properties",
+      {
+        android: {
+          minSdkVersion: 24,
+          // Release builds run R8. WebRTC reaches its classes from native
+          // code (JNI), and libwebrtc references an optional Dav1d decoder
+          // that the Android build does not ship.
+          extraProguardRules:
+            "-keep class org.webrtc.** { *; }\n-dontwarn org.webrtc.Dav1dDecoder$Natives",
+        },
+      },
+    ],
     "./plugins/withAndroidGradleHeap.cjs",
     "./plugins/withAndroidPredictiveBackCompat.cjs",
+    "./plugins/withReleaseSigning.cjs",
   ],
   experiments: { typedRoutes: true },
   extra: { apiBaseUrl, kovaAuthUrl, kovaPublishableKey, appVariant },
