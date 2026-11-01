@@ -21,13 +21,14 @@ import { Avatar, Icon, Led, Text } from "@/ui";
 
 import { authorName } from "./authors";
 import { LONG_PRESS_MS, MessageLongPress } from "./long-press";
-import { CustomEmoji } from "./markdown/CustomEmoji";
 import { Markdown } from "./markdown/Markdown";
 import { mentionsViewer } from "./markdown/mentions-viewer";
 import { parseMessage } from "./markdown/parse";
 import { messageMedia } from "./media/classify";
 import { MessageMedia } from "./media/MessageMedia";
 import { discardSend, retrySend, toggleReaction } from "./mutations";
+import { EmojiGlyph } from "./picker/EmojiGlyph";
+import { useReactionDetails } from "./reaction-details";
 import type { Reaction, ReplyPreview } from "./schema";
 import type { ChatMessage } from "./store";
 import { formatTime } from "./time";
@@ -307,7 +308,10 @@ function ReplyQuote({ reply }: { reply: ReplyPreview }) {
   );
 }
 
-/** Count chips; the user's own reaction sits on the accent tint. */
+/**
+ * Count chips; the user's own reaction sits on the accent tint. Tap toggles
+ * yours; long-press shows who reacted.
+ */
 function Reactions({
   message,
   reactions,
@@ -316,6 +320,7 @@ function Reactions({
   reactions: readonly Reaction[];
 }) {
   const theme = useTheme();
+  const showDetails = useReactionDetails();
   return (
     <View
       style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 }}
@@ -331,6 +336,16 @@ function Reactions({
             tapHaptic();
             void toggleReaction(message, reaction.emoji);
           }}
+          onLongPress={
+            showDetails
+              ? () => {
+                  tapHaptic();
+                  showDetails(message, reaction.emoji);
+                }
+              : undefined
+          }
+          delayLongPress={LONG_PRESS_MS}
+          accessibilityHint="Long press to see who reacted"
           // 32 tall and 8 more above and below: a 48dp target. Neighbours
           // sit 6 apart, so 3 a side never overlaps.
           hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}
@@ -352,7 +367,7 @@ function Reactions({
                 : "transparent",
           })}
         >
-          <ReactionEmoji emoji={reaction.emoji} />
+          <EmojiGlyph value={reaction.emoji} size={16} animate />
           <Text
             variant="num"
             style={{
@@ -366,25 +381,6 @@ function Reactions({
       ))}
     </View>
   );
-}
-
-const REACTION_TEXT = { fontSize: 15, lineHeight: 20 } as const;
-
-/** Unicode as text; a server emoji, `<:name:id>`, as its image. */
-function ReactionEmoji({ emoji }: { emoji: string }) {
-  const theme = useTheme();
-  const custom = /^<a?:(\w+):([\w-]+)>$/.exec(emoji);
-  if (custom?.[1] && custom[2]) {
-    return (
-      <CustomEmoji
-        name={custom[1]}
-        id={custom[2]}
-        size={18}
-        fallbackStyle={{ ...REACTION_TEXT, color: theme.ink1 }}
-      />
-    );
-  }
-  return <Text style={REACTION_TEXT}>{emoji}</Text>;
 }
 
 /** "Not sent" with Retry and Delete, under a send that failed. */

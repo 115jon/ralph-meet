@@ -10,6 +10,12 @@ import {
   stopTyping,
 } from "./actions";
 import * as api from "./api";
+import {
+  createGifAttachment,
+  gifErrorText,
+  registerGifShare,
+  type Gif,
+} from "./picker/api";
 import type { Attachment, Message } from "./schema";
 import { pendingId, type ChatMessage } from "./store";
 
@@ -114,6 +120,36 @@ export function discardSend(message: ChatMessage): string {
   if (message.nonce) unsent.delete(message.nonce);
   removeMessage(message.id);
   return message.content ?? "";
+}
+
+/**
+ * Sends a GIF from the picker, as the web does: the server records the
+ * GIF's URL as an attachment, then it goes out as a message of its own (no
+ * text), replying when the composer had a reply set.
+ */
+export async function sendGif(
+  channelId: string,
+  gif: Gif,
+  replyTo?: Message,
+): Promise<void> {
+  try {
+    const uploaded = await createGifAttachment(channelId, gif);
+    sendMessage(channelId, {
+      content: "",
+      replyTo,
+      attachments: [
+        {
+          id: uploaded.id,
+          filename: uploaded.file_name,
+          content_type: uploaded.content_type,
+          url: uploaded.file_url,
+        },
+      ],
+    });
+    registerGifShare(gif);
+  } catch (error) {
+    showToast({ label: "Not sent", text: gifErrorText(error), led: "danger" });
+  }
 }
 
 // ── Edit and delete ────────────────────────────────────────────────────────

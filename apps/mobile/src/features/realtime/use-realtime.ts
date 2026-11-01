@@ -7,6 +7,8 @@ import { useSession } from "@/features/auth/session";
 import { clearTypingTimers } from "@/features/chat/actions";
 import { startChatEvents } from "@/features/chat/realtime";
 import { resetDrafts } from "@/features/chat/drafts";
+import { resetLibrary } from "@/features/chat/picker/library";
+import { resetRecents } from "@/features/chat/picker/recents";
 import { resetChatStore } from "@/features/chat/store";
 import { resetConversation } from "@/features/conversation/store";
 import { startDmEvents } from "@/features/dms/realtime";
@@ -67,5 +69,7 @@ export function useRealtime(): void {
     // What was open and half-typed stays with the account that signed out.
     resetConversation();
     resetDrafts();
+    resetRecents();
+    resetLibrary();
   }, [signedOut]);
 }
