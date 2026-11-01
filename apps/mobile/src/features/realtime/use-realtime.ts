@@ -13,9 +13,17 @@ import { resetChatStore } from "@/features/chat/store";
 import { resetConversation } from "@/features/conversation/store";
 import { startDmEvents } from "@/features/dms/realtime";
 import { resetDmsStore } from "@/features/dms/store";
+import { startFriendEvents } from "@/features/friends/realtime";
+import { resetFriendsStore } from "@/features/friends/store";
+import { startMemberEvents } from "@/features/members/realtime";
+import { resetMembersStore } from "@/features/members/store";
+import { resetLivePresence } from "@/features/presence/live";
 import { startPresenceEvents } from "@/features/presence/realtime";
+import { startProfileEvents } from "@/features/profile/realtime";
+import { resetProfiles } from "@/features/profile/store";
 import { startServerEvents } from "@/features/servers/realtime";
 import { resetServersStore } from "@/features/servers/store";
+import { resetShare } from "@/features/share/store";
 import { leaveCall, wakeCall } from "@/features/voice/actions";
 
 import { connectGateway, wakeGateway } from "./gateway";
@@ -23,7 +31,7 @@ import { connectGateway, wakeGateway } from "./gateway";
 /**
  * Runs the chat socket while signed in: connects once the profile (the
  * Identify user id) is known, drops it and everything cached (servers,
- * messages, DMs, activity, the call) on sign-out, and wakes it when the app returns to the front, the phone's
+ * messages, DMs, members, friends, activity, the call) on sign-out, and wakes it when the app returns to the front, the phone's
  * counterpart of the web's page-wake (visibility, online, pageshow).
  */
 export function useRealtime(): void {
@@ -38,6 +46,9 @@ export function useRealtime(): void {
     const stopDms = startDmEvents();
     const stopActivity = startActivityEvents();
     const stopPresence = startPresenceEvents();
+    const stopMembers = startMemberEvents();
+    const stopFriends = startFriendEvents();
+    const stopProfiles = startProfileEvents();
     const appState = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         wakeGateway();
@@ -50,6 +61,9 @@ export function useRealtime(): void {
       stopDms();
       stopActivity();
       stopPresence();
+      stopMembers();
+      stopFriends();
+      stopProfiles();
       appState.remove();
     };
   }, []);
@@ -65,11 +79,16 @@ export function useRealtime(): void {
     clearTypingTimers();
     resetChatStore();
     resetDmsStore();
+    resetMembersStore();
+    resetFriendsStore();
+    resetLivePresence();
+    resetProfiles();
     resetActivityStore();
     // What was open and half-typed stays with the account that signed out.
     resetConversation();
     resetDrafts();
     resetRecents();
     resetLibrary();
+    resetShare();
   }, [signedOut]);
 }

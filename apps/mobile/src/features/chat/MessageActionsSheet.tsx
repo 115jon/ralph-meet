@@ -1,6 +1,7 @@
 import {
   ArrowBendUpLeft,
   Copy,
+  LinkSimple,
   PencilSimple,
   SmileyWink,
   Trash,
@@ -9,6 +10,8 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
+import { messageLink } from "@/features/links/links";
+import { useChannelServer } from "@/features/servers/store";
 import { tapHaptic } from "@/lib/haptics";
 import { RADIUS, useTheme } from "@/theme";
 import { Button, Icon, Sheet, SheetRow, Text } from "@/ui";
@@ -119,6 +122,8 @@ function Actions({
   onMoreReactions: (message: ChatMessage) => void;
 }) {
   const myId = useSession((s) => s.user?.id);
+  // A DM's channel is in no server's tree: its link says @me.
+  const serverId = useChannelServer(message.channel_id)?.id ?? null;
   const recents = useRecents();
   const [confirming, setConfirming] = useState(false);
   const own = message.author_id === myId;
@@ -210,6 +215,16 @@ function Actions({
           onPress={() => {
             onClose();
             copyText(text);
+          }}
+        />
+      ) : null}
+      {canCopy && sent ? (
+        <SheetRow
+          icon={LinkSimple}
+          label="Copy link"
+          onPress={() => {
+            onClose();
+            copyText(messageLink(serverId, message.channel_id, message.id));
           }}
         />
       ) : null}

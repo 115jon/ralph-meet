@@ -1,6 +1,8 @@
 import type { Message } from "@/features/chat/schema";
+import { openConversation } from "@/features/conversation/store";
+import { showToast } from "@/ui";
 
-import { fetchDms, fetchLatestMessage } from "./api";
+import { fetchDms, fetchLatestMessage, postDm } from "./api";
 import { useDmsStore } from "./store";
 
 const { getState, setState } = useDmsStore;
@@ -28,6 +30,32 @@ export async function loadDms(): Promise<void> {
     );
   } catch {
     if (getState().dms.length === 0) setState({ status: "error" });
+  }
+}
+
+/**
+ * Opens the DM with `userId` on the chat page, creating it on the server
+ * first if there is none yet (POST /api/dms). False when it failed.
+ */
+export async function openDmWith(userId: string): Promise<boolean> {
+  const existing = getState().dms.find((dm) => dm.recipient.id === userId);
+  if (existing) {
+    openConversation({ kind: "dm", id: existing.id });
+    return true;
+  }
+  try {
+    const dm = await postDm(userId);
+    openConversation({ kind: "dm", id: dm.id });
+    // A new one arrives as DM_CHANNEL_CREATE too; this covers a slow socket.
+    void loadDms();
+    return true;
+  } catch {
+    showToast({
+      label: "Not opened",
+      text: "The conversation didn't open. Try again.",
+      led: "danger",
+    });
+    return false;
   }
 }
 

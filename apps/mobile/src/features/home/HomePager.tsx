@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   BackHandler,
   Keyboard,
@@ -24,6 +24,7 @@ import {
   showChat,
   showDrawer,
   useConversation,
+  useHasMembers,
   useHomePage,
   type HomePage,
 } from "@/features/conversation/store";
@@ -59,12 +60,15 @@ function dismissKeyboard(): void {
   Keyboard.dismiss();
 }
 
-function useBackOpensDrawer(): void {
+/** Back steps a page left: members to the chat, the chat to the drawer. */
+function useBackStepsLeft(): void {
   useFocusEffect(
     useCallback(() => {
       const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-        if (getHomePage() !== "chat") return false;
-        showDrawer();
+        const page = getHomePage();
+        if (page === "members") showChat();
+        else if (page === "chat") showDrawer();
+        else return false;
         return true;
       });
       return () => sub.remove();
@@ -72,20 +76,33 @@ function useBackOpensDrawer(): void {
   );
 }
 
+/** Where the chat rests for `page`: 0 covers the drawer. */
+function restOf(page: HomePage, width: number, drawerWidth: number): number {
+  "worklet";
+  if (page === "chat") return 0;
+  return page === "members" ? -width : drawerWidth;
+}
+
 /**
- * Home's two pages, Discord style: the drawer (rail, tree or DMs, your
- * panel) underneath, and the open conversation over it. From the chat, a
- * swipe right or the header's menu key slides the chat aside to a peek;
- * a swipe left, a tap on the peek or picking a conversation slides it back.
- * The chat stays mounted throughout. Android back from the chat opens the
- * drawer; back from the drawer leaves the app as usual.
+ * Home's three pages, Discord style: the drawer (rail, tree or DMs, your
+ * panel) underneath, the open conversation over it, and a channel's members
+ * to its right. From the chat, a swipe right or the header's menu key
+ * slides the chat aside to a peek; a swipe left, a tap on the peek or
+ * picking a conversation slides it back. The header's members key slides
+ * the chat out to the left with the members page following it in; a swipe
+ * right or back returns. There is no swipe left into members: a leftward
+ * drag on the chat is a message's swipe-to-reply, and Android's gesture
+ * navigation claims the right edge for back. The chat stays mounted
+ * throughout. Back steps a page left; from the drawer it leaves the app.
  */
 export function HomePager({
   drawer,
   chat,
+  members,
 }: {
   drawer: ReactNode;
   chat: ReactNode;
+  members: ReactNode;
 }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -93,29 +110,32 @@ export function HomePager({
   const page = useHomePage();
   const conversation = useConversation();
   const hasChat = conversation !== null;
+  const hasMembers = useHasMembers();
   const drawerWidth = Math.round(width * (1 - PEEK));
+  // Built on first open, then kept, so going back and forth is instant.
+  const [membersBuilt, setMembersBuilt] = useState(false);
+  if (page === "members" && !membersBuilt) setMembersBuilt(true);
 
-  const restFor = useCallback(
-    (next: HomePage) => (next === "chat" ? 0 : drawerWidth),
-    [drawerWidth],
-  );
-  /** The chat's offset from the left edge: 0 covers the drawer, drawerWidth peeks. */
-  const x = useSharedValue(restFor(page));
+  /**
+   * The chat's offset from the left edge: 0 covers the drawer, drawerWidth
+   * peeks at it, -width has slid out for the members page.
+   */
+  const x = useSharedValue(restOf(page, width, drawerWidth));
   /** Where x is headed, so a page set by the pan does not restart its settle. */
-  const target = useSharedValue(restFor(page));
+  const target = useSharedValue(restOf(page, width, drawerWidth));
   const dragFrom = useSharedValue(0);
 
-  // A page set from outside (menu key, back, a picked conversation, a link)
-  // slides there; one the pan already settled toward is left alone.
+  // A page set from outside (a header key, back, a picked conversation, a
+  // link) slides there; one the pan already settled toward is left alone.
   useEffect(() => {
-    const rest = restFor(page);
-    if (page === "drawer") Keyboard.dismiss();
+    const rest = restOf(page, width, drawerWidth);
+    if (page !== "chat") Keyboard.dismiss();
     if (target.get() === rest) return;
     target.set(rest);
     x.set(reducedMotion ? rest : withSpring(rest, SPRING));
-  }, [page, restFor, reducedMotion, target, x]);
+  }, [page, width, drawerWidth, reducedMotion, target, x]);
 
-  useBackOpensDrawer();
+  useBackStepsLeft();
 
   const settle = useCallback((next: HomePage) => {
     if (getHomePage() === next) return;
@@ -124,14 +144,16 @@ export function HomePager({
   }, []);
 
   const onChat = page === "chat";
+  const onMembers = page === "members";
+  // From the chat or the members page only a rightward drag moves (to the
+  // drawer, or back to the chat); from the drawer only a leftward one.
+  const rightward = page !== "drawer";
   const pan = usePanGesture({
     enabled: hasChat,
-    // From the chat only a rightward drag opens the drawer (a leftward one
-    // is a message's swipe-to-reply); from the drawer only leftward closes.
     // Both ends every time: the native side merges a new config into the
     // old one, so a one-sided offset would leave the other page's end set.
-    activeOffsetX: onChat ? [-FAR, SLOP_X] : [-SLOP_X, FAR],
-    failOffsetX: onChat ? [-SLOP_X, FAR] : [-FAR, SLOP_X],
+    activeOffsetX: rightward ? [-FAR, SLOP_X] : [-SLOP_X, FAR],
+    failOffsetX: rightward ? [-SLOP_X, FAR] : [-FAR, SLOP_X],
     failOffsetY: [-SLOP_Y, SLOP_Y],
     onActivate: () => {
       "worklet";
@@ -140,24 +162,37 @@ export function HomePager({
     },
     onUpdate: (event) => {
       "worklet";
+      // Members slides between itself and the chat, the drawer likewise.
+      const fromMembers = dragFrom.get() < -width / 2;
+      const low = fromMembers ? -width : 0;
+      const high = fromMembers ? 0 : drawerWidth;
       const next = dragFrom.get() + event.translationX;
-      x.set(Math.min(drawerWidth, Math.max(0, next)));
+      x.set(Math.min(high, Math.max(low, next)));
     },
     onDeactivate: (event) => {
       "worklet";
       const v = event.velocityX;
-      // A third of the way from where it started commits, or a flick.
-      const fromChat = dragFrom.get() < drawerWidth / 2;
+      const from = dragFrom.get();
       // The release's own translation: the last update can trail it.
-      const travelled = Math.abs(event.translationX) > drawerWidth * COMMIT;
-      const toDrawer =
-        v > FLING || (v > -FLING && (fromChat ? travelled : !travelled));
-      const rest = toDrawer ? drawerWidth : 0;
+      const moved = Math.abs(event.translationX);
+      let next: HomePage;
+      if (from < -width / 2) {
+        // A third of the way back to the chat commits, or a flick.
+        const back = v > FLING || (v > -FLING && moved > width * COMMIT);
+        next = back ? "chat" : "members";
+      } else {
+        const fromChat = from < drawerWidth / 2;
+        const travelled = moved > drawerWidth * COMMIT;
+        const toDrawer =
+          v > FLING || (v > -FLING && (fromChat ? travelled : !travelled));
+        next = toDrawer ? "drawer" : "chat";
+      }
+      const rest = restOf(next, width, drawerWidth);
       target.set(rest);
       x.set(
         reducedMotion ? rest : withSpring(rest, { ...SPRING, velocity: v }),
       );
-      scheduleOnRN(settle, toDrawer ? "drawer" : "chat");
+      scheduleOnRN(settle, next);
     },
   });
 
@@ -184,12 +219,17 @@ export function HomePager({
       },
     ],
   }));
+  const membersStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.get() + width }],
+  }));
 
   return (
     <GestureDetector gesture={pan}>
       <View style={{ flex: 1, backgroundColor: theme.ply0 }}>
         <Animated.View
-          importantForAccessibility={onChat ? "no-hide-descendants" : "auto"}
+          importantForAccessibility={
+            page === "drawer" ? "auto" : "no-hide-descendants"
+          }
           style={[
             {
               position: "absolute",
@@ -224,7 +264,7 @@ export function HomePager({
         >
           {chat}
           <Animated.View
-            pointerEvents={onChat ? "none" : "auto"}
+            pointerEvents={page === "drawer" ? "auto" : "none"}
             style={[
               {
                 position: "absolute",
@@ -240,12 +280,35 @@ export function HomePager({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Back to the conversation"
-              disabled={onChat || !hasChat}
+              disabled={page !== "drawer" || !hasChat}
               onPress={showChat}
               style={{ flex: 1 }}
             />
           </Animated.View>
         </Animated.View>
+        {hasMembers && membersBuilt ? (
+          <Animated.View
+            importantForAccessibility={
+              onMembers ? "auto" : "no-hide-descendants"
+            }
+            pointerEvents={onMembers ? "auto" : "none"}
+            style={[
+              {
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: 0,
+                width,
+                backgroundColor: theme.ply0,
+                borderLeftWidth: 1,
+                borderLeftColor: theme.line,
+              },
+              membersStyle,
+            ]}
+          >
+            {members}
+          </Animated.View>
+        ) : null}
       </View>
     </GestureDetector>
   );

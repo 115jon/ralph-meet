@@ -1,0 +1,29 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.INTERNET" />
+
+  <application>
+    <!--
+      Ralph's data-only pushes are drawn here, natively, so they arrive with
+      the app killed and never wait for JavaScript. The service extends
+      expo-notifications' own, which it replaces: only one service may take
+      MESSAGING_EVENT, and everything that is not a Ralph push (and token
+      rotation) is passed on to it unchanged.
+    -->
+    <service
+      android:name="expo.modules.notifications.service.ExpoFirebaseMessagingService"
+      tools:node="remove" />
+    <service
+      android:name=".RalphMessagingService"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+    </service>
+    <!-- Reply and Mark as read, also with the app killed. -->
+    <receiver
+      android:name=".NotificationActionReceiver"
+      android:exported="false" />
+  </application>
+</manifest>

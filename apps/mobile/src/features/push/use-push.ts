@@ -56,9 +56,9 @@ export function usePush(): void {
     Notifications.clearLastNotificationResponse();
     const target = pushTarget(response.notification);
     if (!target) return;
-    goToConversation({
-      kind: target.serverId ? "channel" : "dm",
-      id: target.channelId,
-    });
+    goToConversation(
+      { kind: target.serverId ? "channel" : "dm", id: target.channelId },
+      target.messageId,
+    );
   }, [token, response]);
 }
