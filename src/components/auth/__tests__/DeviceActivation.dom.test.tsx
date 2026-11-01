@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   denyDeviceRequest: vi.fn(),
   releaseDeviceRequest: vi.fn(),
   markAuthLogoutIntent: vi.fn(),
+  endKovaBrowserSession: vi.fn(async () => undefined),
   auth: { isLoaded: true, isSignedIn: true },
 }));
 
@@ -41,6 +42,10 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@/lib/desktop-auth", () => ({
   markAuthLogoutIntent: mocks.markAuthLogoutIntent,
+}));
+
+vi.mock("@/lib/kova-sign-out", () => ({
+  endKovaBrowserSession: mocks.endKovaBrowserSession,
 }));
 
 vi.mock("@/lib/kova-auth-config", () => ({
@@ -84,6 +89,8 @@ beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.signOut.mockClear();
   mocks.markAuthLogoutIntent.mockClear();
+  mocks.endKovaBrowserSession.mockReset();
+  mocks.endKovaBrowserSession.mockResolvedValue(undefined);
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -360,6 +367,43 @@ describe("DeviceActivation", () => {
       const [release] = mocks.releaseDeviceRequest.mock.invocationCallOrder;
       const [signOut] = mocks.signOut.mock.invocationCallOrder;
       expect(release).toBeLessThan(signOut!);
+    });
+
+    it("ends the auth-domain session before the SDK signs out, so /sign-in can't sign the same account back in", async () => {
+      // The SDK clears its token before it signs the auth-domain cookie out,
+      // and in between mints a new token for the same account from that
+      // cookie. Ending the cookie session first leaves nothing to mint from.
+      let finished = false;
+      mocks.endKovaBrowserSession.mockImplementationOnce(async () => {
+        await Promise.resolve();
+        finished = true;
+      });
+      mocks.signOut.mockImplementationOnce(async () => {
+        expect(finished).toBe(true);
+      });
+      await clickNotYou();
+      expect(mocks.endKovaBrowserSession).toHaveBeenCalledTimes(1);
+      const [release] = mocks.releaseDeviceRequest.mock.invocationCallOrder;
+      const [endSession] = mocks.endKovaBrowserSession.mock.invocationCallOrder;
+      const [signOut] = mocks.signOut.mock.invocationCallOrder;
+      // Release still uses the current session, so it goes first.
+      expect(release).toBeLessThan(endSession!);
+      expect(endSession).toBeLessThan(signOut!);
+      expect(mocks.signOut).toHaveBeenCalledWith(SIGN_IN_BACK_HERE);
+    });
+
+    it("ends the auth-domain session on a failed release too", async () => {
+      mocks.releaseDeviceRequest.mockResolvedValue({
+        ok: false,
+        error: "network_error",
+        status: 0,
+        message: "x",
+      });
+      await clickNotYou();
+      expect(mocks.endKovaBrowserSession).toHaveBeenCalledTimes(1);
+      expect(mocks.signOut).toHaveBeenCalledWith(
+        "/activate?code=ABCD-EFGH&release=failed",
+      );
     });
 
     it("signs out straight to sign-in with an encoded return to this code", async () => {
