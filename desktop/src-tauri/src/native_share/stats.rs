@@ -17,6 +17,9 @@ pub struct NativeShareStats {
     pub audio_samples_written: AtomicU64,
     pub write_errors: AtomicU64,
     pub dropped_frames: AtomicU64,
+    /// WGC frames skipped by the pacer because they arrived faster than the
+    /// share's frame rate. Not losses: the share asked for fewer frames.
+    pub paced_frames: AtomicU64,
 
     // ── Per-frame timing (Req 9.1, 9.2) ──────────────────────────────────
     // Stored as nanoseconds. Written by the encoder worker (task 3.1) on each
@@ -639,6 +642,7 @@ pub(crate) fn reset_native_share_stats(stats: &NativeShareStats) {
     stats.audio_samples_written.store(0, Ordering::Relaxed);
     stats.write_errors.store(0, Ordering::Relaxed);
     stats.dropped_frames.store(0, Ordering::Relaxed);
+    stats.paced_frames.store(0, Ordering::Relaxed);
     stats.last_fused_gpu_ns.store(0, Ordering::Relaxed);
     stats.last_encode_submit_ns.store(0, Ordering::Relaxed);
     stats.fused_gpu_ns_ewma.store(0, Ordering::Relaxed);

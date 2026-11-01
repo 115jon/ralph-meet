@@ -731,6 +731,19 @@ fn attempt_hook_injection(
         return prep;
     }
 
+    // A Vulkan game is hooked through the implicit layer, which attaches only
+    // at vkCreateInstance. Without a graphics-hook module already in the game
+    // there is nothing to drive; do not inject a DLL into it for nothing.
+    if backend == GraphicsApiBackend::Vulkan
+        && !crate::game_capture::vulkan_layer::process_has_hook_module(target_pid)
+    {
+        log::info!(
+            "[NativeShare] Vulkan target pid {target_pid} has no capture layer loaded (the layer              is registered only during hook shares, so a game started before the share has              none); skipping injection and using WGC (backend_disabled)"
+        );
+        prep.missing_offsets = true;
+        return prep;
+    }
+
     // 5. Resolve the hook vtable offsets for ALL backends for the TARGET
     //    bitness by running the bundled get-graphics-offsets<bits>.exe (OBS
     //    load-graphics-offsets.c). The injected DLL cannot install its Present
@@ -1520,6 +1533,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
             frame_tx,
             Arc::clone(&stats),
             Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            Arc::clone(&frame_interval_ns),
             Some(on_closed),
         )
     }) {
@@ -1564,6 +1578,9 @@ pub(crate) struct CaptureSelection {
     pub(crate) hook: Option<crate::game_capture::dx11::GameCaptureHook>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     pub(crate) helper: Option<std::process::Child>,
+    /// Keeps the Vulkan capture layer registered while this hook share runs.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub(crate) vulkan_layer: Option<crate::game_capture::vulkan_layer::LayerLease>,
 }
 
 impl CaptureSelection {
@@ -1787,6 +1804,9 @@ pub(crate) fn select_capture<R: tauri::Runtime>(
         hook,
         #[cfg(all(feature = "game-capture-hook", windows))]
         helper: prep.helper,
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        vulkan_layer: (capture_mode == CaptureMode::Hook)
+            .then(crate::game_capture::vulkan_layer::LayerLease::acquire),
     }
 }
 
