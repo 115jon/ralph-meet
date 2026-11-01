@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { openProfile } from "@/features/profile/store";
+import { takeStagedShare, useStagedShare } from "@/features/share/store";
 import { tapHaptic } from "@/lib/haptics";
 import { useTheme } from "@/theme";
 
@@ -158,6 +159,16 @@ export function ChatView({
   }, []);
   // "Mention" from a profile or the members page lands here.
   useEffect(() => registerComposerInsert(insert), [insert]);
+  // A share from another app, sent here from the "Send to…" picker: files
+  // to the attach chips, text to the field, nothing sent yet.
+  const staged = useStagedShare(channelId);
+  const { add: addFiles } = attach;
+  useEffect(() => {
+    if (!staged) return;
+    takeStagedShare(channelId);
+    if (staged.files.length > 0) addFiles(staged.files);
+    if (staged.text) insert(staged.text);
+  }, [staged, channelId, addFiles, insert]);
   const sendGif = useCallback(
     (gif: Parameters<ComposerHandle["sendGif"]>[0]) => {
       composer.current?.sendGif(gif);

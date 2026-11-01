@@ -366,6 +366,7 @@ CREATE TABLE IF NOT EXISTS push_tokens (
     token TEXT NOT NULL UNIQUE,          -- FCM registration token
     platform TEXT NOT NULL,              -- 'android' | 'ios'
     app_variant TEXT,                    -- 'development' | 'preview' | 'production'
+    push_format TEXT,                    -- NULL = legacy notification push | 'native' = data-only, app renders
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

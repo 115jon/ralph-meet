@@ -1,6 +1,7 @@
 import { memo, type ReactNode, useState } from "react";
-import { Linking, Text as RNText, type TextStyle, View } from "react-native";
+import { Text as RNText, type TextStyle, View } from "react-native";
 
+import { openLink } from "@/features/links/links";
 import { FONT, type Theme, useTheme } from "@/theme";
 import { Text } from "@/ui";
 
@@ -48,10 +49,6 @@ function face({ bold, italic }: Marks): string {
 
 // Masked links can carry any scheme; only web and mail open.
 const OPENABLE = /^(https?:|mailto:)/i;
-
-function openLink(url: string): void {
-  Linking.openURL(url).catch(() => undefined);
-}
 
 /** Accent ink, no underline at rest: the web's link. */
 function linkStyle(marks: Marks, theme: Theme): TextStyle {

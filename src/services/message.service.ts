@@ -1524,6 +1524,9 @@ export async function generateMessageNotifications(
             type === "dm" ? null : (channelInfo?.channel_name ?? null),
           serverName: type === "dm" ? null : (channelInfo?.server_name ?? null),
           content: snippet,
+          senderId: opts.authorId,
+          senderAvatarUrl: opts.authorAvatarUrl ?? null,
+          sentAt: now,
         }
       : undefined;
 

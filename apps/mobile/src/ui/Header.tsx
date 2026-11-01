@@ -1,9 +1,10 @@
-import { ArrowLeft } from "phosphor-react-native";
+import { ArrowLeft, CaretDown } from "phosphor-react-native";
 import type { ReactNode } from "react";
 import { Pressable, View } from "react-native";
 
 import { RADIUS, useTheme } from "@/theme";
 
+import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { Text } from "./Text";
 
@@ -18,10 +19,18 @@ interface HeaderProps {
   onBack?: () => void;
   /** One screen-wide action after the title, e.g. Activity's Mark all read. */
   action?: ReactNode;
+  /** The title opens a menu (the server's): a caret follows it. */
+  onTitle?: () => void;
 }
 
 /** 48px screen header: title in Bricolage, then a seam or the brand rule. */
-export function Header({ title, rule = "line", onBack, action }: HeaderProps) {
+export function Header({
+  title,
+  rule = "line",
+  onBack,
+  action,
+  onTitle,
+}: HeaderProps) {
   const theme = useTheme();
   return (
     <View>
@@ -40,14 +49,44 @@ export function Header({ title, rule = "line", onBack, action }: HeaderProps) {
         {onBack ? (
           <IconButton icon={ArrowLeft} label="Back" onPress={onBack} />
         ) : null}
-        <Text
-          variant="title"
-          numberOfLines={1}
-          accessibilityRole="header"
-          style={{ flex: 1 }}
-        >
-          {title}
-        </Text>
+        {onTitle ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${title}, menu`}
+            onPress={onTitle}
+            hitSlop={4}
+            style={({ pressed }) => ({
+              flex: 1,
+              minHeight: 40,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              marginLeft: -8,
+              paddingHorizontal: 8,
+              borderRadius: RADIUS,
+              backgroundColor: pressed ? theme.tint2 : "transparent",
+            })}
+          >
+            <Text
+              variant="title"
+              numberOfLines={1}
+              accessibilityRole="header"
+              style={{ flexShrink: 1 }}
+            >
+              {title}
+            </Text>
+            <Icon icon={CaretDown} size={16} color={theme.ink2} />
+          </Pressable>
+        ) : (
+          <Text
+            variant="title"
+            numberOfLines={1}
+            accessibilityRole="header"
+            style={{ flex: 1 }}
+          >
+            {title}
+          </Text>
+        )}
         {action}
       </View>
       {rule === "brand" ? (

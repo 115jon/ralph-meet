@@ -111,6 +111,8 @@ export type Message = typeof MessageSchema.Type;
 export const MessagePageSchema = Schema.Struct({
   messages: Schema.Array(MessageSchema),
   hasMoreBefore: Schema.optional(Schema.Boolean),
+  /** Pages after a jump (`around`) or `after`: newer messages remain. */
+  hasMoreAfter: Schema.optional(Schema.Boolean),
 });
 
 /** MESSAGE_UPDATE: the fields an edit changes. */
