@@ -94,3 +94,15 @@ initial direct-signing candidate.
 CEF redistribution notices, archive identity, build flags, and the exact payload
 hash must accompany each release. The runtime remains included unsigned unless
 its provenance and signing scope are separately accepted by SignPath Foundation.
+
+## LZMA SDK (C#) — installer payload compression, public domain
+
+The installer payload (`payload.rmpk`) is LZMA-compressed. The C# LZMA
+encoder/decoder is vendored unmodified from the **LZMA SDK 26.05** by Igor
+Pavlov (`CS/7zip/{Common,Compress/LZ,Compress/LZMA,Compress/RangeCoder}` and
+`CS/7zip/ICoder.cs`, from <https://www.7-zip.org/sdk.html>) in
+`desktop/packaging/Shared/Lzma/`. It is compiled into both the installer
+(decoder) and `desktop/packaging/PayloadPacker` (encoder). The LZMA SDK is
+placed in the **public domain** by its author; no license obligations apply, and
+this entry records provenance. The container format that wraps it is documented
+in [`docs/desktop/packaging.md`](../docs/desktop/packaging.md).

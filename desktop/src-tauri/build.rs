@@ -18,6 +18,7 @@ use packaging_guard::{evaluate_packaging_guard, REQUIRED_MATERIALS};
 fn main() {
     println!("cargo:rerun-if-changed=../../.env.local");
     enforce_obs_capture_component_packaging();
+    enforce_manifest_ships_required_materials();
     place_owned_capture_artifacts_next_to_binary();
     sync_cef_runtime_from_env();
     tauri_build::try_build(build_attributes()).expect("failed to run tauri-build")
@@ -308,6 +309,76 @@ fn place_one_artifact(src: &std::path::Path, dest: &std::path::Path, name: &str,
     }
 }
 
+/// The payload manifest shared with `desktop/scripts/stage-payload.ps1`
+/// (relative to `CARGO_MANIFEST_DIR`). It is the single list of what the
+/// installer ships; see docs/desktop/packaging.md.
+const PAYLOAD_MANIFEST: &str = "../packaging/payload-manifest.json";
+
+fn payload_manifest_entries() -> Vec<serde_json::Value> {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .expect("CARGO_MANIFEST_DIR is always set by Cargo for build scripts");
+    let path = std::path::Path::new(&manifest_dir).join(PAYLOAD_MANIFEST);
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("cannot read payload manifest {}: {err}", path.display()));
+    let manifest: serde_json::Value = serde_json::from_str(&text)
+        .unwrap_or_else(|err| panic!("invalid payload manifest {}: {err}", path.display()));
+    manifest["entries"]
+        .as_array()
+        .unwrap_or_else(|| panic!("payload manifest {} has no `entries`", path.display()))
+        .clone()
+}
+
+/// Destination inside the installed app (`to` defaults to `from`).
+fn payload_destination(entry: &serde_json::Value) -> &str {
+    entry["to"]
+        .as_str()
+        .or_else(|| entry["from"].as_str())
+        .unwrap_or_else(|| panic!("payload manifest entry without `from`: {entry}"))
+}
+
+/// With `game-capture-hook`, every packaging-guard material (binaries and the
+/// GPLv2 documents) must also be shipped under `obs-capture/` by the payload
+/// manifest. The guard above checks the files exist; this checks they are
+/// actually installed, which is the GPL obligation.
+fn enforce_manifest_ships_required_materials() {
+    println!("cargo:rerun-if-changed={PAYLOAD_MANIFEST}");
+    if std::env::var_os("CARGO_FEATURE_GAME_CAPTURE_HOOK").is_none() {
+        return;
+    }
+
+    let entries = payload_manifest_entries();
+    let shipped: Vec<&str> = entries
+        .iter()
+        .filter(|entry| entry["type"] == "file")
+        .filter_map(|entry| payload_destination(entry).strip_prefix("obs-capture/"))
+        .collect();
+    let missing: Vec<&str> = REQUIRED_MATERIALS
+        .iter()
+        .map(|material| material.name)
+        .filter(|name| !shipped.contains(name))
+        .collect();
+
+    if !missing.is_empty() {
+        panic!(
+            "
+payload manifest ({PAYLOAD_MANIFEST}) does not ship required Owned_Capture_Component material(s) under obs-capture/: {}
+The GPLv2 license text, attribution and source offer must be installed next to the binaries. Add the missing entries to the manifest.
+",
+            missing.join(", ")
+        );
+    }
+}
+
+/// CEF runtime entries from the payload manifest: (relative path, is_directory).
+#[cfg(all(windows, feature = "cef"))]
+fn cef_manifest_entries() -> Vec<(String, bool)> {
+    payload_manifest_entries()
+        .iter()
+        .filter(|entry| entry["source"] == "cef")
+        .map(|entry| (payload_destination(entry).to_owned(), entry["type"] == "directory"))
+        .collect()
+}
+
 #[cfg(all(windows, feature = "cef"))]
 fn sync_cef_runtime_from_env() {
     use std::{env, fs, path::PathBuf};
@@ -332,9 +403,13 @@ fn sync_cef_runtime_from_env() {
         return;
     };
 
-    for entry in CEF_RUNTIME_FILES {
-        let src = source.join(entry);
-        let dest = profile_dir.join(entry);
+    for (entry, is_directory) in cef_manifest_entries() {
+        let src = source.join(&entry);
+        let dest = profile_dir.join(&entry);
+        if is_directory {
+            copy_dir_files(&src, &dest);
+            continue;
+        }
         if let Some(parent) = dest.parent() {
             let _ = fs::create_dir_all(parent);
         }
@@ -350,45 +425,26 @@ fn sync_cef_runtime_from_env() {
         }
     }
 
-    let source_locales = source.join("locales");
-    let dest_locales = profile_dir.join("locales");
-    if source_locales.is_dir() {
-        let _ = fs::create_dir_all(&dest_locales);
-        if let Ok(entries) = fs::read_dir(source_locales) {
-            for entry in entries.flatten() {
-                let src = entry.path();
-                if src.is_file() {
-                    let dest = dest_locales.join(entry.file_name());
-                    let _ = fs::copy(src, dest);
-                }
-            }
-        }
-    }
-
     println!("cargo:rerun-if-env-changed=CEF_PATH");
     println!("cargo:warning=Synced CEF runtime from {}", source.display());
 }
 
+/// Copy the files directly inside `src` (e.g. CEF `locales/`) into `dest`.
+#[cfg(all(windows, feature = "cef"))]
+fn copy_dir_files(src: &std::path::Path, dest: &std::path::Path) {
+    if !src.is_dir() {
+        return;
+    }
+    let _ = std::fs::create_dir_all(dest);
+    if let Ok(entries) = std::fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let _ = std::fs::copy(path, dest.join(entry.file_name()));
+            }
+        }
+    }
+}
+
 #[cfg(not(all(windows, feature = "cef")))]
 fn sync_cef_runtime_from_env() {}
-
-#[cfg(all(windows, feature = "cef"))]
-const CEF_RUNTIME_FILES: &[&str] = &[
-    "bootstrap.exe",
-    "bootstrapc.exe",
-    "chrome_100_percent.pak",
-    "chrome_200_percent.pak",
-    "chrome_elf.dll",
-    "d3dcompiler_47.dll",
-    "dxcompiler.dll",
-    "dxil.dll",
-    "icudtl.dat",
-    "libcef.dll",
-    "libEGL.dll",
-    "libGLESv2.dll",
-    "resources.pak",
-    "v8_context_snapshot.bin",
-    "vk_swiftshader.dll",
-    "vk_swiftshader_icd.json",
-    "vulkan-1.dll",
-];
