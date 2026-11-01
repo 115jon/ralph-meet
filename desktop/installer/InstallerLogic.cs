@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -308,14 +307,13 @@ namespace Installer
         private static void ExtractPayload(string installDir)
         {
             Assembly assembly = Assembly.GetExecutingAssembly();
-            string resourceName = assembly.GetManifestResourceNames().FirstOrDefault(name => name.EndsWith("payload.zip", StringComparison.OrdinalIgnoreCase));
+            string resourceName = assembly.GetManifestResourceNames().FirstOrDefault(name => name.EndsWith("payload.rmpk", StringComparison.OrdinalIgnoreCase));
             if (resourceName == null)
             {
-                throw new InvalidOperationException("Embedded payload.zip not found. Rebuild the installer after packaging the desktop payload.");
+                throw new InvalidOperationException("Embedded payload.rmpk not found. Rebuild the installer after packaging the desktop payload.");
             }
 
-            string installRoot = EnsureTrailingSeparator(Path.GetFullPath(installDir));
-            InstallerLogger.Info("Extracting payload resource " + resourceName + " into " + installRoot);
+            InstallerLogger.Info("Extracting payload resource " + resourceName + " into " + installDir);
             using (Stream stream = assembly.GetManifestResourceStream(resourceName))
             {
                 if (stream == null)
@@ -323,61 +321,13 @@ namespace Installer
                     throw new InvalidOperationException("Embedded installer payload could not be opened.");
                 }
 
-                using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read))
-                {
-                    InstallerLogger.Info("Payload entry count: " + archive.Entries.Count);
-                    foreach (ZipArchiveEntry entry in archive.Entries)
-                    {
-                        string destinationPath = Path.GetFullPath(Path.Combine(installRoot, entry.FullName));
-                        if (!destinationPath.StartsWith(installRoot, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        if (string.IsNullOrEmpty(entry.Name))
-                        {
-                            Directory.CreateDirectory(destinationPath);
-                            continue;
-                        }
-
-                        string destinationDirectory = Path.GetDirectoryName(destinationPath);
-                        if (string.IsNullOrEmpty(destinationDirectory))
-                        {
-                            throw new InvalidOperationException("Installer payload contains an invalid file path.");
-                        }
-
-                        Directory.CreateDirectory(destinationDirectory);
-                        const int maxAttempts = 5;
-                        for (int attempt = 1; attempt <= maxAttempts; attempt++)
-                        {
-                            try
-                            {
-                                entry.ExtractToFile(destinationPath, true);
-                                break;
-                            }
-                            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-                            {
-                                InstallerLogger.Warn(
-                                    "Failed to extract " + entry.FullName + " to " + destinationPath +
-                                    " (attempt " + attempt + "/" + maxAttempts + "): " + ex.Message);
-
-                                if (attempt == maxAttempts)
-                                {
-                                    InstallerLogger.Error(
-                                        "Payload extraction permanently failed for " + destinationPath,
-                                        ex);
-                                    LogKnownLockDiagnostics(
-                                        InstallRootLayout.FromExecutablePath(GetCurrentProcessPath()),
-                                        "Payload extraction failure for " + destinationPath,
-                                        destinationPath);
-                                    throw;
-                                }
-
-                                Thread.Sleep(1000);
-                            }
-                        }
-                    }
-                }
+                PayloadExtractor.Extract(
+                    stream,
+                    installDir,
+                    onPermanentFailure: destinationPath => LogKnownLockDiagnostics(
+                        InstallRootLayout.FromExecutablePath(GetCurrentProcessPath()),
+                        "Payload extraction failure for " + destinationPath,
+                        destinationPath));
             }
 
             InstallerLogger.Info("Payload extraction finished.");

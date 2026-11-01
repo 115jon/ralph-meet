@@ -101,6 +101,9 @@ desktop/installer.tests/obj/
 desktop/installer/*.user
 desktop/installer/*.suo
 desktop/installer/Assets/payload.zip
+desktop/installer/Assets/payload.rmpk
+desktop/packaging/**/bin/
+desktop/packaging/**/obj/
 
 # Isolated Cargo target dir used by test/check runs at the repo root
 # (CARGO_TARGET_DIR=target-test) so a running desktop app holding a lock on the
