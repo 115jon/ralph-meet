@@ -66,7 +66,7 @@ describe("PickerSurface (desktop)", () => {
       "rounded-[2px]",
       "shadow-float",
       "z-50",
-      "max-h-[min(600px,calc(100dvh-24px))]",
+      "max-h-[min(600px,calc(100dvh-var(--app-chrome-top,0px)-24px))]",
       "w-80",
     );
     // Non-modal by default: no scrim.

@@ -12,6 +12,23 @@ or locally built release payloads to the repository.
 - Explain changes to installer behavior, native code, release workflows, or
   bundled third-party components in the pull request description.
 
+## Writing the pull request
+
+- Title: a conventional commit in plain language, such as
+  `fix(voice): rejoining no longer leaves one-way audio`.
+- Body: follow `.github/pull_request_template.md` (Problem, Change,
+  Verification). Write it as a record for reviewers, not a message to the
+  person who asked for the work: no "you can…", "let me know", questions,
+  progress narration, or sign-offs. Anything meant for that person goes in
+  the conversation, not the PR.
+- Verification lists the checks actually run and what they showed, and names
+  what was not checked. UI changes need before/after screenshots; motion or
+  timing needs a short recording. Upload evidence to the PR; never commit
+  PR-only assets.
+- No AI attribution: no `Co-Authored-By` trailers, "Generated with" footers,
+  or model and harness credits in commits or PRs.
+- One request is one PR unless a split is asked for.
+
 ## Review expectations
 
 One pull request should contain one logical change. Changes to installer

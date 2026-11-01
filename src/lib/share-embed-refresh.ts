@@ -3,7 +3,7 @@ import {
   resolveInstagramVideoMetadata,
 } from "@/lib/instagram-video-resolver";
 import {
-  fetchTikTokProxyMetadata,
+  fetchTikTokProxyLookup,
   lookupInstagramOEmbed,
 } from "@/lib/share-preview-proxy";
 import { isUnavailableSocialStatus } from "@/lib/social-embed-availability";
@@ -68,6 +68,9 @@ function makeTombstone(embed: EmbedInfo, fresh?: EmbedInfo): EmbedInfo {
     referencedTweet: undefined,
     rawTitle: undefined,
     rawDescription: undefined,
+    restricted: undefined,
+    checkedAt: fresh?.checkedAt ?? new Date().toISOString(),
+    author: fresh?.author ?? embed.author,
     provider: fresh?.provider ?? embed.provider,
     footer: fresh?.footer ?? embed.footer,
   };
@@ -264,9 +267,15 @@ export async function hydrateSocialEmbeds(
       }
 
       if (isTikTokEmbed(embed)) {
-        const resolved = await fetchTikTokProxyMetadata(embed.url).catch(
+        const lookup = await fetchTikTokProxyLookup(embed.url).catch(
           () => null,
         );
+        const resolved = lookup?.metadata ?? null;
+        if (lookup?.unavailable) {
+          const result = await extractAndProcessEmbedsWithStatus(embed.url);
+          const fresh = result.embeds[0];
+          return makeTombstone(embed, fresh?.unavailable ? fresh : undefined);
+        }
         if (
           !resolved ||
           (!resolved.videoUrl &&
@@ -274,9 +283,18 @@ export async function hydrateSocialEmbeds(
             !resolved.media?.length &&
             !resolved.title)
         ) {
-          const result = await extractAndProcessEmbedsWithStatus(embed.url);
-          if (result.embeds[0]?.unavailable) {
-            return makeTombstone(embed, result.embeds[0]);
+          // A tombstone written before the chain could tell a gated or
+          // unreachable post from a deleted one: rebuild it, skipping the
+          // URL cache that may still hold the old verdict.
+          if (embed.unavailable && !embed.checkedAt && !lookup?.transient) {
+            const result = await extractAndProcessEmbedsWithStatus(embed.url, {
+              bypassCache: true,
+            });
+            const fresh = result.embeds[0];
+            if (fresh?.unavailable) return makeTombstone(embed, fresh);
+            if (fresh && !result.hadFailures) {
+              return { ...fresh, id: embed.id, url: embed.url };
+            }
           }
           return embed;
         }
@@ -351,8 +369,15 @@ export async function hydrateSocialEmbeds(
         const nextTitle = resolved.title ?? embed.rawTitle ?? undefined;
         const nextDescription =
           resolved.title ?? embed.rawDescription ?? undefined;
+        const nextRestricted =
+          lookup?.restricted === true &&
+          !resolved.videoUrl &&
+          !resolvedMedia?.some((entry) => entry.type === "video")
+            ? true
+            : undefined;
 
         if (
+          nextRestricted === embed.restricted &&
           nextVideo === embed.video &&
           nextThumbnail === embed.thumbnail &&
           nextTitle === embed.rawTitle &&
@@ -370,11 +395,18 @@ export async function hydrateSocialEmbeds(
         return {
           ...embed,
           unavailable: undefined,
+          checkedAt: undefined,
+          restricted: nextRestricted,
           rawTitle: nextTitle,
           rawDescription: nextDescription,
           thumbnail: nextThumbnail,
           media: resolvedMedia,
-          video: nextVideo,
+          // TikTok's player shows "Video currently unavailable" for a gated
+          // post, so a restricted card links out instead.
+          video:
+            nextRestricted && nextVideo?.kind === "player"
+              ? undefined
+              : nextVideo,
           author: nextAuthor,
           metrics: nextMetrics,
           timestamp: nextTimestamp,

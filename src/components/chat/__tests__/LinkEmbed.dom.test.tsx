@@ -242,12 +242,11 @@ describe("LinkEmbed DOM rendering", () => {
     render(<LinkEmbed embed={makeUnavailableEmbed()} />);
 
     expect(
-      screen.getByText("This post is no longer available"),
+      screen.getByText("This post was deleted or made private."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View original" })).toHaveAttribute(
-      "href",
-      "https://x.com/example/status/deleted",
-    );
+    expect(
+      screen.getByRole("link", { name: "x.com/example/status/deleted" }),
+    ).toHaveAttribute("href", "https://x.com/example/status/deleted");
     expect(
       screen.queryByRole("img", { name: /media/i }),
     ).not.toBeInTheDocument();
@@ -1615,7 +1614,7 @@ describe("LinkEmbed DOM rendering", () => {
         }
 
         return Response.json(
-          { error: "Could not resolve TikTok media" },
+          { error: "This TikTok is no longer available", unavailable: true },
           { status: 404 },
         );
       }) as unknown as typeof fetch,
@@ -1658,7 +1657,9 @@ describe("LinkEmbed DOM rendering", () => {
         container.querySelector('[data-testid="tiktok-unavailable"]'),
       ).not.toBeNull();
     });
-    expect(container.innerHTML).toContain("/tiktok-unavailable.webp");
+    expect(container.textContent).toContain(
+      "This post was deleted or made private.",
+    );
     expect(container.innerHTML).not.toContain("stale-");
     expect(container.querySelector("iframe")).toBeNull();
     expect(container.querySelector("video.rm-custom-video")).toBeNull();

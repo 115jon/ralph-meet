@@ -135,9 +135,7 @@ describe("GET /api/tiktok-video", () => {
 
     expect(first.status).toBe(404);
     await expect(first.json()).resolves.toMatchObject({ unavailable: true });
-    expect(first.headers.get("Cache-Control")).toBe(
-      `private, max-age=${TIKTOK_GONE_TTL}`,
-    );
+    expect(first.headers.get("Cache-Control")).toBe("private, max-age=600");
     expect(second.status).toBe(404);
     expect(hoisted.lookupMock).toHaveBeenCalledTimes(1);
     expect(hoisted.store.get(tiktokGoneCacheKey(POST_URL))?.ttl).toBe(

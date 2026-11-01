@@ -196,6 +196,7 @@ describe("useSoundSettingsStore", () => {
       streamWatcherActivity: true,
       messageReceived: true,
       calls: true,
+      customSounds: false,
       soundVolume: 40,
       soundboardVolume: 100,
       voiceJoinSoundboard: { "*": { enabled: true, sound: null } },

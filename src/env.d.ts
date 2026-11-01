@@ -27,6 +27,13 @@ declare global {
     INSTAGRAM_RUR?: string;
     /** Secret: the FCM service-account JSON. Unset, push is a no-op. */
     FCM_SERVICE_ACCOUNT?: string;
+    /**
+     * Secret: HMAC key shared with the house egress proxy. Unset (local dev,
+     * Worker Previews), TikTok lookups go direct only.
+     */
+    EGRESS_PROXY_SECRET?: string;
+    /** Egress proxy base URL; defaults to https://egress.115jon.com. */
+    EGRESS_PROXY_URL?: string;
   }
 
   namespace Cloudflare {

@@ -32,36 +32,6 @@ if ($NoHook -and $Wgc) {
     exit 1
 }
 
-function Sync-CefPayload {
-    param(
-        [Parameter(Mandatory = $true)] [string]$SourceDir,
-        [Parameter(Mandatory = $true)] [string]$TargetDir
-    )
-
-    $cefFiles = @(
-        "libcef.dll", "chrome_elf.dll", "icudtl.dat",
-        "v8_context_snapshot.bin", "chrome_100_percent.pak",
-        "chrome_200_percent.pak", "resources.pak",
-        "d3dcompiler_47.dll", "dxil.dll", "dxcompiler.dll",
-        "libEGL.dll", "libGLESv2.dll", "vk_swiftshader.dll",
-        "vk_swiftshader_icd.json", "vulkan-1.dll",
-        "bootstrap.exe", "bootstrapc.exe"
-    )
-
-    New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
-    foreach ($file in $cefFiles) {
-        Copy-Item -LiteralPath (Join-Path $SourceDir $file) `
-                  -Destination  (Join-Path $TargetDir $file) -Force
-    }
-
-    $srcLocales = Join-Path $SourceDir "locales"
-    $dstLocales = Join-Path $TargetDir "locales"
-    New-Item -ItemType Directory -Force -Path $dstLocales | Out-Null
-    Get-ChildItem -Path $srcLocales -File | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dstLocales $_.Name) -Force
-    }
-}
-
 # ── Paths ─────────────────────────────────────────────────────────────────────
 $scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $desktopDir = $scriptDir | Split-Path -Parent
@@ -146,33 +116,11 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $releaseDir  = Join-Path $srcTauri "target\release"
 $pdbPath     = Join-Path $releaseDir "ralph_meet_desktop.pdb"
 
-Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $releaseDir
 
 # ── 3. Package the custom bootstrapper and install it ────────────────────────
-Write-Host "==> Staging files for Custom WPF Bootstrapper..." -ForegroundColor Yellow
-$stageDir = Join-Path $srcTauri "target\release\installer_stage"
-if (Test-Path $stageDir) { Remove-Item -Path $stageDir -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
-
-Copy-Item -LiteralPath (Join-Path $releaseDir "ralph-meet-desktop.exe") -Destination (Join-Path $stageDir "RalphMeet.exe") -Force
-Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $stageDir
-
-$srcObsCapture = Join-Path $releaseDir "obs-capture"
-if (Test-Path $srcObsCapture) {
-    Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
-}
-
-$installerAssetsDir = Join-Path $desktopDir "installer\Assets"
-New-Item -ItemType Directory -Force -Path $installerAssetsDir | Out-Null
-$payloadZip = Join-Path $installerAssetsDir "payload.zip"
-if (Test-Path $payloadZip) { Remove-Item -Path $payloadZip -Force }
-
-Write-Host "==> Zipping payload to $payloadZip ..." -ForegroundColor Yellow
-if (Get-Command 7z -ErrorAction SilentlyContinue) {
-    & 7z a -tzip -mx=9 $payloadZip "$stageDir\*" | Out-Null
-} else {
-    Compress-Archive -Path "$stageDir\*" -DestinationPath $payloadZip -Force
-}
+# What ships is defined once in packaging\payload-manifest.json.
+Write-Host "==> Staging and packing payload..." -ForegroundColor Yellow
+& (Join-Path $scriptDir "stage-payload.ps1") -CefDir $env:CEF_PATH -ReleaseDir $releaseDir -Dotnet "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe"
 
 $conf = Get-Content -LiteralPath (Join-Path $srcTauri "tauri.conf.json") -Raw | ConvertFrom-Json
 $productName = $conf.productName

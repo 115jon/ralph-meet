@@ -151,13 +151,36 @@ const FALLBACK_INNERTUBE_ATTEMPTS = [
   IOS_INNERTUBE_ATTEMPT,
 ] as const;
 
+// Order measured from Cloudflare's egress (2026-11):
+// - IOS answers with direct audio-only URLs, but without a PO token many of
+//   them refuse any byte past the first MiB (see resolvePlayableYouTubeAudio).
+// - ANDROID only has a direct URL for the muxed 360p file (itag 18), and that
+//   one plays to the end every time.
+// - ANDROID_VR is bot-walled for most videos; its itag 18 always answers 403
+//   and its audio-only URLs stop at the first MiB like IOS's.
+// - WEB and TV formats carry n/sig challenges, and the solver cannot run on
+//   Workers (no `new Function`), so they go last.
 const PLAYBACK_INNERTUBE_ATTEMPTS = [
+  IOS_INNERTUBE_ATTEMPT,
+  ANDROID_INNERTUBE_ATTEMPT,
   ANDROID_VR_INNERTUBE_ATTEMPT,
   WEB_SAFARI_INNERTUBE_ATTEMPT,
   TV_INNERTUBE_ATTEMPT,
-  ANDROID_INNERTUBE_ATTEMPT,
-  IOS_INNERTUBE_ATTEMPT,
 ] as const;
+
+/** One Innertube player call; a blocked client can hang for ~10 s before a 403. */
+const PLAYER_ATTEMPT_TIMEOUT_MS = 5_000;
+
+/**
+ * Every client got YouTube's "confirm you're not a bot" wall (or a 429). It
+ * depends on the egress IP, so a later attempt from another one may work.
+ */
+export class YouTubeBotCheckError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "YouTubeBotCheckError";
+  }
+}
 
 interface PreparedFormatCandidate {
   url: string;
@@ -525,18 +548,22 @@ function scoreFormat(
 ) {
   let score = 0;
 
-  if (preferredContainer && format.container === preferredContainer) {
-    score += 120;
-  }
-
   if (preferredKind === "audio") {
     if (!format.hasAudio) return -1;
-    score += format.hasVideo ? 40 : 140;
-    score += Math.floor((format.bitrate ?? 0) / 1000);
-    score += format.audioSampleRate
-      ? Math.floor(format.audioSampleRate / 1000)
-      : 0;
+    // Audio-only always wins: the muxed 360p file is several times the bytes
+    // (its video bitrate used to outscore itag 140), and ANDROID_VR's muxed
+    // URL answers 403. Within a kind the container the client asked for
+    // (it checked canPlayType) beats bitrate, and bitrate settles the rest.
+    score += format.hasVideo ? 0 : 1000;
+    if (preferredContainer && format.container === preferredContainer) {
+      score += 400;
+    }
+    score += Math.min(320, Math.floor((format.bitrate ?? 0) / 1000));
     return score;
+  }
+
+  if (preferredContainer && format.container === preferredContainer) {
+    score += 120;
   }
 
   if (preferredKind === "muxed") {
@@ -563,20 +590,27 @@ function scoreFormat(
   return score;
 }
 
+/** Formats that fit `preferredKind`, best first. */
+export function rankFormats(
+  formats: YouTubeResolvedFormat[],
+  preferredKind: PreferredPlaybackKind,
+  preferredContainer?: "mp4" | "webm",
+) {
+  return formats
+    .flatMap((format) => {
+      const score = scoreFormat(format, preferredKind, preferredContainer);
+      return score >= 0 ? [{ format, score }] : [];
+    })
+    .sort((left, right) => right.score - left.score)
+    .map((entry) => entry.format);
+}
+
 export function pickPreferredFormat(
   formats: YouTubeResolvedFormat[],
   preferredKind: PreferredPlaybackKind,
   preferredContainer?: "mp4" | "webm",
 ) {
-  return (
-    [...formats]
-      .map((format) => ({
-        format,
-        score: scoreFormat(format, preferredKind, preferredContainer),
-      }))
-      .filter((entry) => entry.score >= 0)
-      .sort((left, right) => right.score - left.score)[0]?.format ?? null
-  );
+  return rankFormats(formats, preferredKind, preferredContainer)[0] ?? null;
 }
 
 function sanitizeInnertubeContext(ytcfg: Record<string, unknown>) {
@@ -807,6 +841,7 @@ async function fetchPlayerResponseFromInnertube(
   cookieHeader: string | null,
   options?: {
     includeFallbacks?: boolean;
+    excludeClients?: ReadonlyArray<string>;
   },
 ): Promise<{
   payload: Record<string, unknown> | null;
@@ -839,6 +874,11 @@ async function fetchPlayerResponseFromInnertube(
 
   if (options?.includeFallbacks !== false) {
     for (const attempt of PLAYBACK_INNERTUBE_ATTEMPTS) {
+      if (
+        options?.excludeClients?.includes(attempt.context.client.clientName)
+      ) {
+        continue;
+      }
       attempts.push({
         ...attempt,
         clientVersion: attempt.context.client.clientVersion,
@@ -848,6 +888,9 @@ async function fetchPlayerResponseFromInnertube(
   }
 
   let lastSuccessfulPayload: Record<string, unknown> | null = null;
+  // Formats that only work after solving challenges: kept in case no client
+  // offers direct URLs.
+  let challengedPayload: Record<string, unknown> | null = null;
   const diagnostics: InnertubePlayerAttemptDiagnostic[] = [];
 
   for (const attempt of attempts) {
@@ -896,6 +939,7 @@ async function fetchPlayerResponseFromInnertube(
           method: "POST",
           headers,
           body: JSON.stringify(body),
+          signal: AbortSignal.timeout(PLAYER_ATTEMPT_TIMEOUT_MS),
         },
       );
 
@@ -919,12 +963,13 @@ async function fetchPlayerResponseFromInnertube(
         formatCount,
       });
 
-      if (formatCount > 0) {
+      if (hasDirectFormats(payload)) {
         return {
           payload,
           diagnostics,
         };
       }
+      if (formatCount > 0) challengedPayload ??= payload;
     } catch {
       diagnostics.push({
         client: attempt.name,
@@ -936,7 +981,7 @@ async function fetchPlayerResponseFromInnertube(
   }
 
   return {
-    payload: lastSuccessfulPayload,
+    payload: challengedPayload ?? lastSuccessfulPayload,
     diagnostics,
   };
 }
@@ -986,6 +1031,31 @@ function resolveVideoMeta(playerResponse: Record<string, unknown>) {
 
 function hasPlayableFormats(playerResponse: Record<string, unknown>) {
   return getStreamFormats(playerResponse).length > 0;
+}
+
+/** A plain URL with no signature or n challenge: usable without the solver. */
+function isDirectFormat(format: Record<string, unknown>) {
+  const url = toStringValue(format.url);
+  if (!url || format.signatureCipher) return false;
+  try {
+    return !new URL(url).searchParams.has("n");
+  } catch {
+    return false;
+  }
+}
+
+function hasDirectFormats(playerResponse: Record<string, unknown>) {
+  return getStreamFormats(playerResponse).some(isDirectFormat);
+}
+
+function isBotWalled(diagnostics: InnertubePlayerAttemptDiagnostic[]) {
+  return (
+    diagnostics.some(
+      (diagnostic) =>
+        diagnostic.httpStatus === 429 ||
+        /not a bot/i.test(diagnostic.playability ?? ""),
+    ) && diagnostics.every((diagnostic) => diagnostic.formatCount === 0)
+  );
 }
 
 function describePlayabilityStatus(
@@ -1196,10 +1266,19 @@ export async function resolveYouTubePlayback(
     videoId,
     {},
     null,
+    { excludeClients: options.excludeClients },
   ).catch(() => null);
   if (fallbackInnertubeResult) {
     playerResponse = fallbackInnertubeResult.payload;
     innertubeDiagnostics = fallbackInnertubeResult.diagnostics;
+  }
+
+  // The web page and watch page come from the same walled address: asking
+  // them as well only adds requests while YouTube is refusing this IP.
+  if (isBotWalled(innertubeDiagnostics)) {
+    throw new YouTubeBotCheckError(
+      `YouTube asked to confirm this is not a bot | Innertube attempts: ${summarizeInnertubeDiagnostics(innertubeDiagnostics)}`,
+    );
   }
 
   if (!playerResponse || !hasPlayableFormats(playerResponse)) {
@@ -1290,9 +1369,16 @@ export async function resolveYouTubePlayback(
     );
   }
 
-  const candidates = getStreamFormats(playerResponse)
+  const preparedCandidates = getStreamFormats(playerResponse)
     .map((format) => prepareFormatCandidate(format))
     .filter((format): format is PreparedFormatCandidate => !!format);
+  // Skip the solver whenever a direct URL exists: it needs `new Function`,
+  // which Workers refuse, and a solved URL is no better.
+  const directCandidates = preparedCandidates.filter(
+    (candidate) => !candidate.sigChallenge && !candidate.nChallenge,
+  );
+  const candidates =
+    directCandidates.length > 0 ? directCandidates : preparedCandidates;
 
   if (candidates.length === 0) {
     const playabilityDescription =
@@ -1408,4 +1494,91 @@ export async function resolveYouTubePlayback(
       source: solverBundle.source,
     },
   };
+}
+
+const STREAM_PROBE_TIMEOUT_MS = 5_000;
+/**
+ * Formats probed per client. The cut-off is per client (no PO token), so when
+ * the best format of a client is cut off its others are too (measured
+ * 2026-11 on 9 tracks): the next client is the better second try.
+ */
+const STREAM_PROBE_MAX_FORMATS = 1;
+/** Clients tried before giving up: IOS, then ANDROID's muxed file, then one more. */
+const PLAYABLE_AUDIO_MAX_ROUNDS = 3;
+
+/**
+ * True when `format` serves its last bytes. Without a PO token, YouTube cuts
+ * many IOS and ANDROID_VR URLs off past the first MiB: they answer 206 for
+ * the start (so they look fine) and 403 for any later range, so playback dies
+ * a minute in. Two bytes at the end tell the two apart.
+ */
+async function servesWholeStream(format: YouTubeResolvedFormat) {
+  const length = format.contentLength;
+  const range =
+    length && length > 2
+      ? `bytes=${length - 2}-${length - 1}`
+      : "bytes=1048576-1048577";
+  try {
+    const response = await fetch(format.url, {
+      headers: { Range: range, "User-Agent": YOUTUBE_USER_AGENT },
+      signal: AbortSignal.timeout(STREAM_PROBE_TIMEOUT_MS),
+    });
+    await response.body?.cancel().catch(() => {});
+    // 416: the file is shorter than the fallback offset, so it is all there.
+    return [200, 206, 416].includes(response.status);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * An audio stream that plays to the end: the best direct format whose tail
+ * answers, trying the next client when every format of one is cut off.
+ * Audio-only when YouTube allows it, else ANDROID's muxed 360p file.
+ */
+export async function resolvePlayableYouTubeAudio(
+  videoId: string,
+  preferredContainer: "mp4" | "webm",
+): Promise<YouTubeResolvedFormat> {
+  const excludeClients: string[] = [];
+  const refused: string[] = [];
+
+  for (let round = 0; round < PLAYABLE_AUDIO_MAX_ROUNDS; round++) {
+    let resolved: YouTubeResolveResponse;
+    try {
+      resolved = await resolveYouTubePlayback(videoId, {
+        preferredKind: "audio",
+        preferredContainer,
+        includeFormats: true,
+        excludeClients,
+      });
+    } catch (error) {
+      // Only the first round speaks for YouTube's mood: after that, the
+      // problem is the cut-off streams, not a wall worth waiting out.
+      if (round === 0) throw error;
+      break;
+    }
+    const ranked = rankFormats(
+      resolved.formats,
+      "audio",
+      preferredContainer,
+    ).slice(0, STREAM_PROBE_MAX_FORMATS);
+
+    for (const format of ranked) {
+      if (await servesWholeStream(format)) return format;
+      refused.push(
+        `${new URL(format.url).searchParams.get("c")}:${format.itag}`,
+      );
+    }
+
+    const client = ranked[0]
+      ? new URL(ranked[0].url).searchParams.get("c")
+      : null;
+    if (!client || excludeClients.includes(client)) break;
+    excludeClients.push(client);
+  }
+
+  throw new Error(
+    `No YouTube audio stream served past its first bytes (${refused.join(", ") || "no formats"})`,
+  );
 }

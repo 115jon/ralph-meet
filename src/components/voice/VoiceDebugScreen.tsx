@@ -197,7 +197,7 @@ export function VoiceDebugScreen({
 
   if (!data) {
     return (
-      <div className="fixed inset-0 z-100 flex flex-col items-center justify-center gap-4 bg-ply-0 text-ink-1">
+      <div className="fixed inset-below-chrome z-100 flex flex-col items-center justify-center gap-4 bg-ply-0 text-ink-1">
         <Spinner className="size-6 text-accent-ink" />
         <p className="silkscreen text-ink-3" role="status">
           Gathering RTC metrics…
@@ -213,7 +213,7 @@ export function VoiceDebugScreen({
   const overview = <SessionOverview data={data} />;
 
   return (
-    <div className="fixed inset-0 z-100 flex flex-col overflow-hidden bg-ply-0 pb-[var(--safe-area-bottom,0px)] text-ui-sm text-ink-1">
+    <div className="fixed inset-below-chrome z-100 flex flex-col overflow-hidden bg-ply-0 pb-[var(--safe-area-bottom,0px)] text-ui-sm text-ink-1">
       {/* Top bar. Full-screen overlay: it clears the notch / status bar. */}
       <header className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-line bg-ply-1 px-3 pt-[calc(var(--safe-area-top,0px)+0.5rem)] pb-2 sm:px-5">
         <p className="silkscreen flex min-w-0 items-baseline gap-1.5 text-ink-3">

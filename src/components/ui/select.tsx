@@ -4,6 +4,7 @@ import * as React from "react";
 import { Icon } from "@/components/ui/icon";
 import { Select as SelectPrimitive } from "radix-ui";
 
+import { collisionPaddingBelowChrome } from "@/lib/app-chrome";
 import { cn } from "@/lib/utils";
 
 function Select({
@@ -68,6 +69,7 @@ function SelectContent({
         position={position}
         align={align}
         sideOffset={position === "popper" ? sideOffset : undefined}
+        collisionPadding={collisionPaddingBelowChrome(10)}
         {...props}
       >
         <SelectScrollUpButton />

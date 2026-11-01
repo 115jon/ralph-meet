@@ -39,6 +39,7 @@ import type { Message, Reaction } from "@/lib/types";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { hasLegacyTombstone, requestEmbedHeal } from "@/lib/embed-heal";
 import { COMPOSER_RESTORE_EVENT, useFailedSend } from "@/stores/chat-actions";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
@@ -421,8 +422,19 @@ const MessageItem = memo(
       markChannelUnread,
       setProfileUser,
       removeEmbeds,
+      refreshMessageEmbeds,
       createMessageShare,
     } = useChatActions();
+    const needsEmbedHeal =
+      !previewOnly &&
+      Boolean(message.channel_id) &&
+      hasLegacyTombstone(message.embeds);
+    useEffect(() => {
+      // A tombstone stored by the old TikTok resolver: ask the server once
+      // per session to re-check it (see lib/embed-heal).
+      if (!needsEmbedHeal || !message.channel_id) return;
+      requestEmbedHeal(message.channel_id, message.id, refreshMessageEmbeds);
+    }, [message.channel_id, message.id, needsEmbedHeal, refreshMessageEmbeds]);
     const activeServerId = useChatStore((state) => state.activeServerId);
     const viewerUsername = useChatStore((state) => state.user?.username);
     const roleColor = useChatStore((state) =>

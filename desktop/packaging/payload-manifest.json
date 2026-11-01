@@ -1,0 +1,92 @@
+{
+  "$comment": "What the Windows installer ships. Read by desktop/scripts/stage-payload.ps1 (staging + packing) and desktop/src-tauri/build.rs (CEF sync). `to` defaults to `from`. See docs/desktop/packaging.md.",
+  "version": 1,
+  "sources": {
+    "cef": "CEF runtime directory (CEF_PATH)",
+    "release": "cargo release output (desktop/src-tauri/target/release)",
+    "resources": "desktop/src-tauri/resources"
+  },
+  "entries": [
+    {
+      "type": "file",
+      "source": "release",
+      "from": "ralph-meet-desktop.exe",
+      "to": "RalphMeet.exe"
+    },
+
+    { "type": "file", "source": "cef", "from": "libcef.dll" },
+    { "type": "file", "source": "cef", "from": "chrome_elf.dll" },
+    { "type": "file", "source": "cef", "from": "icudtl.dat" },
+    { "type": "file", "source": "cef", "from": "v8_context_snapshot.bin" },
+    { "type": "file", "source": "cef", "from": "chrome_100_percent.pak" },
+    { "type": "file", "source": "cef", "from": "chrome_200_percent.pak" },
+    { "type": "file", "source": "cef", "from": "resources.pak" },
+    { "type": "file", "source": "cef", "from": "d3dcompiler_47.dll" },
+    { "type": "file", "source": "cef", "from": "dxil.dll" },
+    { "type": "file", "source": "cef", "from": "dxcompiler.dll" },
+    { "type": "file", "source": "cef", "from": "libEGL.dll" },
+    { "type": "file", "source": "cef", "from": "libGLESv2.dll" },
+    { "type": "file", "source": "cef", "from": "vk_swiftshader.dll" },
+    { "type": "file", "source": "cef", "from": "vk_swiftshader_icd.json" },
+    { "type": "file", "source": "cef", "from": "vulkan-1.dll" },
+    { "type": "file", "source": "cef", "from": "bootstrap.exe" },
+    { "type": "file", "source": "cef", "from": "bootstrapc.exe" },
+    { "type": "directory", "source": "cef", "from": "locales" },
+
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/graphics-hook64.dll"
+    },
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/graphics-hook32.dll"
+    },
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/inject-helper64.exe"
+    },
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/inject-helper32.exe"
+    },
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/get-graphics-offsets64.exe"
+    },
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/get-graphics-offsets32.exe"
+    },
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/obs-vulkan64.json"
+    },
+    {
+      "type": "file",
+      "source": "release",
+      "from": "obs-capture/obs-vulkan32.json"
+    },
+    {
+      "type": "file",
+      "source": "resources",
+      "from": "obs-capture/LICENSE-GPLv2.txt"
+    },
+    {
+      "type": "file",
+      "source": "resources",
+      "from": "obs-capture/ATTRIBUTION.md"
+    },
+    {
+      "type": "file",
+      "source": "resources",
+      "from": "obs-capture/SOURCE-OFFER.md"
+    }
+  ]
+}

@@ -15,7 +15,7 @@ const log = clog("proxy-media");
 const ALLOWED_HOSTS = new Set([
   "video.twimg.com",
   "pbs.twimg.com",
-  "vxtwitter.com",
+  // vxtwitter.com is not listed: only its /tvid/ video paths are (below).
   "tenor.com",
   "lh3.googleusercontent.com",
 ]);

@@ -27,7 +27,8 @@
  *   embed-direct    direct PNG, GIF and an MP4 the server could not size
  *   embed-x-video   recorded X video, plus one stored without sizes
  *   embed-states    TikTok loading, TikTok deleted after it was stored,
- *                   stored tombstones (TikTok, X)
+ *                   stored tombstones (TikTok, X), age-restricted TikTok,
+ *                   a failed TikTok lookup
  *   embed-spotify   recorded Spotify album + track
  */
 import type { EmbedInfo, EmbedMedia } from "@/lib/types";
@@ -50,6 +51,10 @@ import {
   recordedYouTubeVideo,
   tiktokAwaitingHydration,
   tiktokDeletedSinceStored,
+  tiktokGoneWithAuthor,
+  tiktokLookupFailed,
+  tiktokReportedAsStored,
+  tiktokRestricted,
   xVideoWithoutSize,
 } from "./embed-fixture-payloads";
 
@@ -85,6 +90,11 @@ function installEmbedStubs() {
           : input.url;
     if (/\/api\/(tiktok|instagram)-video\b/.test(url)) {
       const target = decodeURIComponent(url);
+      // The reported link (2026-11-01) resolves for real, through the dev
+      // server's provider chain.
+      if (target.includes("ZTy59e3EJ")) {
+        return originalFetch(input, init);
+      }
       if (target.includes("loading.fixture")) {
         return new Promise<Response>(() => {});
       }
@@ -522,6 +532,10 @@ const SURFACES: Record<string, Array<[string, EmbedInfo]>> = {
     ["TikTok loading", tiktokAwaitingHydration],
     ["TikTok deleted after it was stored", tiktokDeletedSinceStored],
     ["TikTok tombstone (recorded)", recordedTikTokGone],
+    ["TikTok tombstone with author", tiktokGoneWithAuthor],
+    ["TikTok age-restricted, nothing playable", tiktokRestricted],
+    ["Reported link as stored, hydrated live", tiktokReportedAsStored],
+    ["TikTok lookup failed (transient)", tiktokLookupFailed],
     ["X tombstone (recorded)", recordedXGone],
     ["Instagram reel, thumbnail only (recorded)", recordedInstagramReel],
   ],

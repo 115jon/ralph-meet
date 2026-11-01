@@ -69,6 +69,8 @@ export interface YouTubeResolveOptions {
   preferredKind?: PreferredPlaybackKind;
   preferredContainer?: "mp4" | "webm";
   includeFormats?: boolean;
+  /** Innertube client names (`IOS`, `ANDROID`: a stream URL's `c=`) to skip. */
+  excludeClients?: ReadonlyArray<string>;
 }
 
 export interface YouTubeResolveResponse {

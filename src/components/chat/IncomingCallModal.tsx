@@ -122,7 +122,7 @@ export function IncomingCallModal() {
             event.preventDefault();
             acceptRef.current?.focus();
           }}
-          className="pointer-events-none fixed inset-0 z-100 flex items-start justify-end bg-transparent px-4 pt-[max(1rem,var(--safe-area-top,0px))] pb-[max(1rem,var(--safe-area-bottom,0px))] transition-opacity duration-(--dur-3) data-[state=closed]:opacity-0"
+          className="pointer-events-none fixed inset-below-chrome z-100 flex items-start justify-end bg-transparent px-4 pt-[max(1rem,var(--safe-area-top,0px))] pb-[max(1rem,var(--safe-area-bottom,0px))] transition-opacity duration-(--dur-3) data-[state=closed]:opacity-0"
         >
           <div
             data-state={dialogOpen ? "open" : "closed"}

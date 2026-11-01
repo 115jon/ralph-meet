@@ -668,7 +668,7 @@ function HowToPlayModal({
       <ResponsiveDialogContent
         aria-modal="true"
         className="gap-4"
-        dialogClassName="max-h-[min(640px,calc(100dvh-2rem))] overflow-y-auto md:max-w-md"
+        dialogClassName="max-h-[min(640px,calc(100dvh-var(--app-chrome-top,0px)-2rem))] overflow-y-auto md:max-w-md"
       >
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>How to play</ResponsiveDialogTitle>
@@ -1558,7 +1558,7 @@ function WordleActivityStageContent({
             event.preventDefault();
             hintsTriggerRef.current?.focus();
           }}
-          dialogClassName="max-h-[min(640px,calc(100dvh-2rem))] overflow-y-auto md:max-w-md"
+          dialogClassName="max-h-[min(640px,calc(100dvh-var(--app-chrome-top,0px)-2rem))] overflow-y-auto md:max-w-md"
         >
           <ResponsiveDialogHeader>
             <ResponsiveDialogTitle>Hints</ResponsiveDialogTitle>

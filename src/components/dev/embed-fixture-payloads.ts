@@ -158,6 +158,70 @@ export const recordedTikTokGone: EmbedInfo = {
   fields: [],
 };
 
+/**
+ * A tombstone from the provider chain: TikTok's page said the post does not
+ * exist, and the author was still known from the link.
+ */
+export const tiktokGoneWithAuthor: EmbedInfo = {
+  ...recordedTikTokGone,
+  id: "embed_gone_author",
+  url: "https://www.tiktok.com/@scout2015/video/6718335390845095999",
+  checkedAt: "2026-11-01T05:21:15.000Z",
+  author: { name: "scout2015", url: "https://www.tiktok.com/@scout2015" },
+};
+
+/**
+ * The reported post (2026-11-01) as stored when tikwm is unreachable: alive
+ * but age-gated, so TikTok's player cannot play it logged out.
+ */
+export const tiktokRestricted: EmbedInfo = {
+  id: "embed_restricted",
+  url: "https://www.tiktok.com/@ugnewwave/video/7691175039722425630",
+  type: "video",
+  rawTitle: "TikTok · @ugnewwave",
+  restricted: true,
+  author: { name: "ugnewwave", url: "https://www.tiktok.com/@ugnewwave" },
+  provider: { name: "TikTok", url: "https://www.tiktok.com" },
+  color: "#FF0050",
+  audio: { title: "nothing left" },
+  footer: { text: "TikTok" },
+  fields: [],
+};
+
+/**
+ * The reported message's embed as production stored it on 2026-11-01:
+ * oEmbed's bare player and nothing else (no author, no caption). The card
+ * hydrates it through /api/tiktok-video, which the fixture lets through.
+ */
+export const tiktokReportedAsStored: EmbedInfo = {
+  id: "embed_reported",
+  url: "https://www.tiktok.com/t/ZTy59e3EJ/",
+  type: "video",
+  rawTitle: "TikTok · Unknown",
+  provider: { name: "TikTok", url: "https://www.tiktok.com" },
+  color: "#FF0050",
+  video: {
+    url: "https://www.tiktok.com/player/v1/7691175039722425630",
+    width: 325,
+    height: 738,
+    kind: "player",
+  },
+  footer: { text: "TikTok" },
+  fields: [],
+};
+
+/** A short link nothing could resolve (no player id): the lookup failed. */
+export const tiktokLookupFailed: EmbedInfo = {
+  id: "embed_failed",
+  url: "https://vm.tiktok.com/ZMfailfix/",
+  type: "video",
+  rawTitle: "TikTok",
+  provider: { name: "TikTok", url: "https://www.tiktok.com" },
+  color: "#FF0050",
+  footer: { text: "TikTok" },
+  fields: [],
+};
+
 export const recordedXGone: EmbedInfo = {
   id: "embed_t1dtmv",
   url: "https://x.com/NASA/status/1801349146546057624",

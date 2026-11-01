@@ -278,7 +278,7 @@ describe("link cards", () => {
 });
 
 describe("unavailable posts", () => {
-  it("shows the unavailable art and provider wording for a stored tombstone", () => {
+  it("shows the compact unavailable status with provider wording and the source link", () => {
     render(
       <LinkEmbed
         embed={{
@@ -293,14 +293,16 @@ describe("unavailable posts", () => {
     );
 
     const card = screen.getByTestId("embed-unavailable");
+    // No placeholder art and no empty author line.
+    expect(card.querySelector("img")).toBeNull();
+    expect(card.textContent).not.toMatch(/@\s*$|@(?![\w.])/);
+    expect(screen.getByText("Unavailable")).toBeTruthy();
     expect(
-      card.querySelector('img[src="/tiktok-unavailable.webp"]'),
-    ).not.toBeNull();
-    expect(screen.getByText("This TikTok is no longer available")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "View original" })).toHaveAttribute(
-      "href",
-      "https://www.tiktok.com/@gone/video/1",
-    );
+      screen.getByText("This post was deleted or made private."),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "tiktok.com/@gone/video/1" }),
+    ).toHaveAttribute("href", "https://www.tiktok.com/@gone/video/1");
   });
 
   it("turns an Instagram post the server reports gone into the unavailable card", async () => {
@@ -430,5 +432,121 @@ describe("x single image", () => {
     });
     expect(getXSingleImageBoxStyle(2000, 1000)?.width).toBe("min(100%, 520px)");
     expect(getXSingleImageBoxStyle(undefined, 100)).toBeUndefined();
+  });
+});
+
+describe("TikTok card states", () => {
+  const restricted: EmbedInfo = {
+    id: "restricted",
+    url: "https://www.tiktok.com/t/ZTy59e3EJ/",
+    type: "video",
+    restricted: true,
+    author: { name: "ugnewwave", url: "https://www.tiktok.com/@ugnewwave" },
+    provider: { name: "TikTok", url: "https://www.tiktok.com" },
+    fields: [],
+  };
+
+  const unresolved: EmbedInfo = {
+    id: "unresolved",
+    url: "https://vm.tiktok.com/ZMfailfix/",
+    type: "video",
+    provider: { name: "TikTok", url: "https://www.tiktok.com" },
+    fields: [],
+  };
+
+  it("links an age-gated post out instead of loading TikTok's player, which cannot play it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("busy", { status: 503 })),
+    );
+
+    const { container } = render(<LinkEmbed embed={restricted} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Restricted")).toBeTruthy();
+    });
+    expect(
+      screen.getByText("TikTok only shows this post to signed-in viewers."),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "ugnewwave" })).toHaveAttribute(
+      "href",
+      "https://www.tiktok.com/@ugnewwave",
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("offers Try again only for a transient failure, and it asks once more", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("busy", { status: 503, headers: { "Retry-After": "60" } }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          videoUrl: null,
+          coverUrl: "https://p16-sign.tiktokcdn-us.com/cover.jpeg",
+          canonicalUrl: "https://www.tiktok.com/@someone/video/123",
+          title: "back again",
+          authorName: "someone",
+          authorHandle: "someone",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LinkEmbed embed={unresolved} />);
+
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByText("Didn't load")).toBeTruthy();
+    fireEvent.click(retry);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Didn't load")).toBeNull();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows no Try again when the server says nothing more will come", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: "Could not resolve TikTok media", transient: false },
+          { status: 502, headers: { "Retry-After": "300" } },
+        ),
+      ),
+    );
+
+    render(<LinkEmbed embed={unresolved} />);
+
+    await screen.findByText("Didn't load");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("asks the server once for the same link across cards and remounts while it is failing", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("busy", { status: 503, headers: { "Retry-After": "60" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = render(
+      <>
+        <LinkEmbed embed={unresolved} />
+        <LinkEmbed embed={{ ...unresolved, id: "unresolved-2" }} />
+      </>,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByText("Didn't load")).toHaveLength(2);
+    });
+    first.unmount();
+    // Scrolled back into view (the list is virtualised) several times.
+    for (let mount = 0; mount < 5; mount += 1) {
+      const again = render(<LinkEmbed embed={unresolved} />);
+      expect(screen.getByText("Didn't load")).toBeTruthy();
+      again.unmount();
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

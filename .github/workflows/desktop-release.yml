@@ -90,6 +90,7 @@ jobs:
               'desktop/src-tauri/Cargo.lock',
               'desktop/src-tauri/Cargo.toml',
               'desktop/src-tauri/build.rs',
+              'desktop/packaging/payload-manifest.json',
               'desktop/src-tauri/tauri.conf.json',
               'desktop/src-tauri/tauri.deployed.conf.json',
               'desktop/src-tauri/src/**/*.rs',
@@ -122,6 +123,11 @@ jobs:
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 8.0.x
+
+      # Run before the payload is packed so the installer under test builds
+      # without the embedded ~150 MB resource.
+      - name: Test C# installer
+        run: dotnet test desktop/installer.tests --nologo
 
       # ── Install dependencies ─────────────────────────────────────────
       # We only need dependencies for the desktop app.
@@ -184,41 +190,6 @@ jobs:
         if: steps.cache-cargo-tauri.outputs.cache-hit != 'true'
         run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --rev ${{ steps.tauri-cli.outputs.rev }}
 
-      - name: Sync CEF payload to target release directory
-        run: |
-          $TargetDir = "desktop/src-tauri/target/release"
-          New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
-
-          # Copy CEF files
-          $cefFiles = @(
-              "libcef.dll",
-              "chrome_elf.dll",
-              "icudtl.dat",
-              "v8_context_snapshot.bin",
-              "chrome_100_percent.pak",
-              "chrome_200_percent.pak",
-              "resources.pak",
-              "d3dcompiler_47.dll",
-              "dxil.dll",
-              "dxcompiler.dll",
-              "libEGL.dll",
-              "libGLESv2.dll",
-              "vk_swiftshader.dll",
-              "vk_swiftshader_icd.json",
-              "vulkan-1.dll",
-              "bootstrap.exe",
-              "bootstrapc.exe"
-          )
-
-          foreach ($file in $cefFiles) {
-              Copy-Item -Path "D:\cef\$file" -Destination "$TargetDir\$file" -Force
-          }
-
-          # Copy locales
-          $dstLocales = "$TargetDir\locales"
-          New-Item -ItemType Directory -Force -Path $dstLocales | Out-Null
-          Copy-Item -Path "D:\cef\locales\*" -Destination $dstLocales -Force -Recurse
-
       # ── Build & Release ─────────────────────────────────────────────
       - name: Build Tauri app binary
         shell: pwsh
@@ -233,72 +204,14 @@ jobs:
           path: desktop/src-tauri/target
           key: ${{ steps.restore-desktop-target.outputs.cache-primary-key }}
 
-      - name: Build Tauri app payload
+      # What ships is defined once in desktop/packaging/payload-manifest.json.
+      # The script fails on any missing file, stages the payload, and packs it
+      # into desktop/installer/Assets/payload.rmpk (see docs/desktop/packaging.md).
+      # CEF files come straight from the CEF directory, so the old copy of them
+      # into target/release is not needed here (build.rs still syncs it for dev runs).
+      - name: Stage and pack payload
         shell: pwsh
-        run: |
-          $ReleaseDir = "desktop/src-tauri/target/release"
-          $PayloadZip = "desktop/installer/Assets/payload.zip"
-
-          if (-not (Test-Path -LiteralPath $ReleaseDir)) {
-            throw "Release directory not found: $ReleaseDir"
-          }
-
-          if (Test-Path -LiteralPath $PayloadZip) {
-            Remove-Item -LiteralPath $PayloadZip -Force
-          }
-
-          $stageDir = Join-Path $env:TEMP "RalphMeetStage"
-          if (Test-Path $stageDir) { Remove-Item -Path $stageDir -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
-
-          # Copy only the built executable renamed to RalphMeet.exe
-          Copy-Item -LiteralPath (Join-Path $ReleaseDir "ralph-meet-desktop.exe") -Destination (Join-Path $stageDir "RalphMeet.exe") -Force
-
-          # Copy CEF DLLs and assets
-          $cefFiles = @(
-              "libcef.dll",
-              "chrome_elf.dll",
-              "icudtl.dat",
-              "v8_context_snapshot.bin",
-              "chrome_100_percent.pak",
-              "chrome_200_percent.pak",
-              "resources.pak",
-              "d3dcompiler_47.dll",
-              "dxil.dll",
-              "dxcompiler.dll",
-              "libEGL.dll",
-              "libGLESv2.dll",
-              "vk_swiftshader.dll",
-              "vk_swiftshader_icd.json",
-              "vulkan-1.dll",
-              "bootstrap.exe",
-              "bootstrapc.exe"
-          )
-          foreach ($file in $cefFiles) {
-              Copy-Item -LiteralPath (Join-Path $ReleaseDir $file) -Destination (Join-Path $stageDir $file) -Force
-          }
-
-          # Copy locales directory
-          $srcLocales = Join-Path $ReleaseDir "locales"
-          $dstLocales = Join-Path $stageDir "locales"
-          New-Item -ItemType Directory -Force -Path $dstLocales | Out-Null
-          Get-ChildItem -Path $srcLocales -File | ForEach-Object {
-              Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dstLocales $_.Name) -Force
-          }
-
-          # Copy obs-capture directory if present
-          $srcObsCapture = Join-Path $ReleaseDir "obs-capture"
-          if (Test-Path $srcObsCapture) {
-              Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
-          }
-
-          if (Get-Command 7z -ErrorAction SilentlyContinue) {
-              & 7z a -tzip -mx=9 $PayloadZip "$stageDir\*" | Out-Null
-          } else {
-              Compress-Archive -Path "$stageDir\*" -DestinationPath $PayloadZip -Force
-          }
-
-          Remove-Item -Path $stageDir -Recurse -Force
+        run: ./desktop/scripts/stage-payload.ps1 -CefDir $env:CEF_PATH
 
       - name: Build C# installer
         shell: pwsh
@@ -309,6 +222,14 @@ jobs:
           $ProductName = $TauriConf.productName
           $InstallerDisplayName = $TauriConf.app.windows[0].title
           dotnet build desktop/installer/installer.csproj -c Release -p:Version=$Version -p:InformationalVersion=$Version -p:Company="$Publisher" -p:Product="$InstallerDisplayName Setup"
+
+          # The csproj embeds the payload only if it exists; never ship an installer without it.
+          $setupSize = (Get-Item "desktop/installer/bin/Release/net48/RalphMeetSetup.exe").Length
+          $payloadSize = (Get-Item "desktop/installer/Assets/payload.rmpk").Length
+          if ($setupSize -lt $payloadSize) {
+            throw "RalphMeetSetup.exe ($setupSize bytes) is smaller than its payload ($payloadSize bytes): the payload was not embedded."
+          }
+          Write-Host "==> RalphMeetSetup.exe: $([math]::Round($setupSize / 1MB, 1)) MB (payload $([math]::Round($payloadSize / 1MB, 1)) MB)"
 
       - name: Create draft release, sign installer, and upload metadata
         shell: pwsh
@@ -355,7 +276,7 @@ jobs:
           $TagName = $env:RELEASE_TAG
           $Repo = "${{ github.repository }}"
           $Url = "https://github.com/$Repo/releases/download/$TagName/RalphMeetSetup.exe"
-          $PubDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+          $PubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
           $Metadata = @{
               version = $Version
@@ -371,8 +292,11 @@ jobs:
           $Metadata | ConvertTo-Json -Depth 5 | Set-Content -Path "desktop/installer/bin/Release/net48/latest.json" -NoNewline
           Write-Host "==> Generated latest.json with version $Version and signature successfully!"
 
-          # 4. Upload artifacts to the release
+          # 3. Refuse to publish an updater manifest that would strand existing installs
           $LatestJsonPath = "desktop/installer/bin/Release/net48/latest.json"
+          ./desktop/scripts/validate-latest-json.ps1 -LatestJson $LatestJsonPath -TauriConf "desktop/src-tauri/tauri.conf.json" -Tag $TagName -Repo $Repo
+
+          # 4. Upload artifacts to the release
           gh release upload $env:RELEASE_TAG $SetupRenamePath --clobber -R ${{ github.repository }}
           gh release upload $env:RELEASE_TAG $LatestJsonPath --clobber -R ${{ github.repository }}
 

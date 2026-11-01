@@ -9,6 +9,7 @@ import {
 } from "@/lib/persisted-guard";
 import { useMounted } from "@/hooks/useMounted";
 import { describeApiError } from "@/lib/api-errors";
+import { readAppChromeTop } from "@/lib/app-chrome";
 import {
   Tooltip,
   TooltipContent,
@@ -1083,9 +1084,10 @@ export default function SoundboardPicker({
       );
 
       // The picker recipe caps at 600; Listen Together is a wider workbench.
+      const chromeTop = readAppChromeTop();
       const MAX_HEIGHT = Math.min(
         compact ? 560 : activeView === "listenTogether" ? 820 : 600,
-        window.innerHeight - 24,
+        window.innerHeight - 24 - chromeTop,
       );
 
       const style: React.CSSProperties = {
@@ -1102,8 +1104,8 @@ export default function SoundboardPicker({
           left = Math.max(12, window.innerWidth - pickerWidth - 12);
         }
         const top = Math.min(
-          Math.max(12, rect.top),
-          Math.max(12, window.innerHeight - MAX_HEIGHT - 12),
+          Math.max(12 + chromeTop, rect.top),
+          Math.max(12 + chromeTop, window.innerHeight - MAX_HEIGHT - 12),
         );
         setDynamicStyle({ ...style, left, top });
         return;
@@ -1124,7 +1126,10 @@ export default function SoundboardPicker({
         }
       } else {
         style.bottom = window.innerHeight - rect.top + 8;
-        style.maxHeight = Math.min(MAX_HEIGHT, Math.max(100, rect.top - 16));
+        style.maxHeight = Math.min(
+          MAX_HEIGHT,
+          Math.max(100, rect.top - 16 - chromeTop),
+        );
       }
 
       setDynamicStyle(style);
@@ -1596,7 +1601,7 @@ export default function SoundboardPicker({
   const pickerPositionClasses = compact
     ? ""
     : selectionMode
-      ? "inset-0 m-auto h-[min(600px,calc(100dvh-24px))]"
+      ? "inset-below-chrome m-auto h-[min(600px,calc(100dvh-var(--app-chrome-top,0px)-24px))]"
       : !markerRef
         ? placementClasses
         : "";
@@ -1704,7 +1709,7 @@ export default function SoundboardPicker({
           }}
           className={cn(
             activeView === "listenTogether"
-              ? "h-[min(820px,calc(100dvh-24px))] max-h-[min(820px,calc(100dvh-24px))] w-[min(980px,calc(100vw-24px))]"
+              ? "h-[min(820px,calc(100dvh-var(--app-chrome-top,0px)-24px))] max-h-[min(820px,calc(100dvh-var(--app-chrome-top,0px)-24px))] w-[min(980px,calc(100vw-24px))]"
               : PICKER_WIDTH_CLASS,
             pickerPositionClasses,
           )}

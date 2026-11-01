@@ -9,17 +9,17 @@
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <Company>115jon</Company>
     <Product>Ralph Meet Setup</Product>
-    <Version>3.3.0</Version>
+    <Version>3.5.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="Assets\icon.ico"/>
-    <EmbeddedResource Include="Assets\payload.zip" Condition="Exists('Assets\payload.zip')"/>
+    <EmbeddedResource Include="Assets\payload.rmpk" Condition="Exists('Assets\payload.rmpk')"/>
+    <!-- LZMA SDK + RMPK container, shared with the payload packer (see docs/desktop/packaging.md). -->
+    <Compile Include="..\packaging\Shared\**\*.cs" LinkBase="Shared"/>
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="System.IO.Compression"/>
-    <Reference Include="System.IO.Compression.FileSystem"/>
     <Reference Include="System.Runtime.Serialization"/>
     <Reference Include="Microsoft.CSharp"/>
   </ItemGroup>

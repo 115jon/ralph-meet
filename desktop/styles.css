@@ -5,8 +5,10 @@
 @source "../src";
 @source "./";
 
-/* Height of the window chrome below. Overlays that cover the window
-   (the settings workbench) start under it, since it stays on top of them. */
+/* Height of the window chrome below. Overlays that cover the window start
+   under it (inset-below-chrome, h-below-chrome in src/styles.css), since it
+   stays on top of them. Elements in DOM fullscreen (a video) are drawn in the
+   top layer over the bar, so those are left at inset-0. */
 :root {
   --app-chrome-top: 32px;
 }
