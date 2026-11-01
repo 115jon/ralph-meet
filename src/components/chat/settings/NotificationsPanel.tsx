@@ -137,7 +137,7 @@ export default function NotificationsPanel() {
               type="button"
               variant="secondary"
               aria-label="Play test notification sound"
-              onClick={() => playNotification()}
+              onClick={() => playNotification({ bypassToggles: true })}
             >
               <Icon name="play" size="sm" />
               Play
