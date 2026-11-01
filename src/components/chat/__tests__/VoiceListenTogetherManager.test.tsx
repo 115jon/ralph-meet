@@ -103,9 +103,20 @@ function makeSfu() {
   };
 }
 
+/** The HEAD the manager sends after a media error; 200 = the route is fine. */
+const streamProbe = vi.fn(
+  async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    new Response(null, { status: 200 }),
+);
+
 describe("VoiceListenTogetherManager", () => {
   beforeEach(() => {
     vi.stubGlobal("Audio", MockAudio as unknown as typeof Audio);
+    streamProbe.mockClear();
+    streamProbe.mockImplementation(
+      async () => new Response(null, { status: 200 }),
+    );
+    vi.stubGlobal("fetch", streamProbe);
     MockAudio.instances = [];
     MockAudio.playPromises = [];
     useListenTogetherStore.setState({
@@ -1212,14 +1223,85 @@ describe("VoiceListenTogetherManager", () => {
       ).toBe("PLAYBACK_RETRYING"),
     );
 
+    await waitFor(() => expect(musicAudio.src).toContain("format=webm"));
     musicAudio.error = { code: 4 };
     act(() => musicAudio.dispatchEvent(new Event("error")));
     await waitFor(() =>
       expect(useListenTogetherStore.getState().rooms["room-1"]?.error).toEqual({
         code: "PLAYBACK_SRC_NOT_SUPPORTED",
         message:
-          "Playback failed after trying multiple supported audio formats.",
+          "This device can't play the audio formats YouTube offers for this track.",
       }),
+    );
+    expect(streamProbe).toHaveBeenCalledWith(
+      expect.stringContaining("/api/listen-together/stream?"),
+      expect.objectContaining({ method: "HEAD" }),
+    );
+  });
+
+  it("waits out YouTube's bot wall and reloads the same format", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      streamProbe.mockImplementation(
+        async () =>
+          new Response(null, { status: 503, headers: { "Retry-After": "5" } }),
+      );
+      const sfu = makeSfu();
+      render(
+        <VoiceListenTogetherManager
+          sfu={sfu as never}
+          roomSlug="room-1"
+          voiceSessionId="voice-session-1"
+        />,
+      );
+      const musicAudio = await waitFor(() => {
+        const audio = MockAudio.instances[0];
+        expect(audio?.src).toContain("format=mp4");
+        return audio!;
+      });
+
+      musicAudio.error = { code: 4 };
+      act(() => musicAudio.dispatchEvent(new Event("error")));
+      await waitFor(() =>
+        expect(
+          useListenTogetherStore.getState().rooms["room-1"]?.error?.message,
+        ).toContain("Retrying in 5s"),
+      );
+      expect(musicAudio.removeAttribute).toHaveBeenCalledWith("src");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      await waitFor(() => expect(musicAudio.src).toContain("format=mp4"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks to rejoin voice when the stream route refuses the session", async () => {
+    streamProbe.mockImplementation(
+      async () => new Response(null, { status: 403 }),
+    );
+    const sfu = makeSfu();
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+    const musicAudio = await waitFor(() => {
+      const audio = MockAudio.instances[0];
+      expect(audio).toBeDefined();
+      return audio;
+    });
+
+    musicAudio.error = { code: 4 };
+    act(() => musicAudio.dispatchEvent(new Event("error")));
+    await waitFor(() =>
+      expect(
+        useListenTogetherStore.getState().rooms["room-1"]?.error?.code,
+      ).toBe("PLAYBACK_SESSION"),
     );
   });
 

@@ -17,17 +17,28 @@ import {
   type ListenTogetherMusicTrack,
   type ListenTogetherTrack,
 } from "@/lib/listen-together";
+import { upstreamGuard } from "@/lib/upstream-guard";
 import {
   browseYouTubePlaylistCatalog,
+  resolvePlayableYouTubeAudio,
   resolveYouTubePlayback,
   searchYouTubeCatalog,
+  YouTubeBotCheckError,
 } from "@/lib/ytdlp/youtube";
 
 const log = clog("listen-together");
 
 let spotifyClientPromise: Promise<SpotifyClient> | null = null;
 
-const LISTEN_TOGETHER_STREAM_CACHE_TTL_SECONDS = 120;
+// Stream URLs live ~6 h and play from any address, so one resolve can serve
+// every listener and range request for a while. A URL that stops working is
+// replaced by the stream route's forced refresh.
+const LISTEN_TOGETHER_STREAM_CACHE_TTL_SECONDS = 30 * 60;
+/** Stop handing out a URL this long before its `expire`. */
+const LISTEN_TOGETHER_STREAM_EXPIRY_MARGIN_SECONDS = 5 * 60;
+/** The circuit for YouTube's player API, opened by its bot wall. */
+export const YOUTUBE_PLAYER_CIRCUIT = "youtube-player";
+const YOUTUBE_BOT_CHECK_BACKOFF_SECONDS = 20;
 const LISTEN_TOGETHER_TRACK_CACHE_TTL_SECONDS = 86_400;
 const SPOTIFY_TRACK_RESOLVE_CONCURRENCY = 5;
 
@@ -137,7 +148,10 @@ function getAudioStreamCacheTtl(expiresAt: number | null | undefined) {
   const remainingSeconds = Math.floor((expiresAt - Date.now()) / 1000);
   return Math.max(
     15,
-    Math.min(LISTEN_TOGETHER_STREAM_CACHE_TTL_SECONDS, remainingSeconds - 30),
+    Math.min(
+      LISTEN_TOGETHER_STREAM_CACHE_TTL_SECONDS,
+      remainingSeconds - LISTEN_TOGETHER_STREAM_EXPIRY_MARGIN_SECONDS,
+    ),
   );
 }
 
@@ -1093,31 +1107,41 @@ export async function resolveListenTogetherAudioStream(
     }
   }
 
+  // Throws UpstreamBlockedError while YouTube is walling this isolate off:
+  // every listener's range request would otherwise run the whole client list.
+  upstreamGuard.assertClosed(YOUTUBE_PLAYER_CIRCUIT);
+
   const resolution = (async () => {
     try {
-      const resolved = await resolveYouTubePlayback(videoId, {
-        preferredKind: "audio",
-        preferredContainer: preferredFormat,
-        includeFormats: true,
-      });
-
-      if (resolved.selectedFormat?.url) {
-        const response: ListenTogetherResolvedAudioStream = {
-          url: resolved.selectedFormat.url,
-          itag: resolved.selectedFormat.itag,
-          mimeType: resolved.selectedFormat.mimeType,
-          contentLength: resolved.selectedFormat.contentLength,
-          expiresAt: resolved.selectedFormat.expiresAt,
-        };
-        const ttlSeconds = getAudioStreamCacheTtl(
-          resolved.selectedFormat.expiresAt,
-        );
-        setLocalCachedAudioStream(cacheKey, response, ttlSeconds);
-        cacheSet(cacheKey, response, ttlSeconds).catch(() => {});
-        return response;
-      }
+      const format = await resolvePlayableYouTubeAudio(
+        videoId,
+        preferredFormat,
+      );
+      const response: ListenTogetherResolvedAudioStream = {
+        url: format.url,
+        itag: format.itag,
+        mimeType: format.mimeType,
+        contentLength: format.contentLength,
+        expiresAt: format.expiresAt,
+      };
+      const ttlSeconds = getAudioStreamCacheTtl(format.expiresAt);
+      setLocalCachedAudioStream(cacheKey, response, ttlSeconds);
+      cacheSet(cacheKey, response, ttlSeconds).catch(() => {});
+      upstreamGuard.recordSuccess(YOUTUBE_PLAYER_CIRCUIT);
+      return response;
     } catch (error) {
-      log.warn("yt-dlp-backed YouTube audio resolution failed", error);
+      log.warn("yt-dlp-backed YouTube audio resolution failed", {
+        videoId,
+        preferredFormat,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      if (error instanceof YouTubeBotCheckError) {
+        upstreamGuard.trip(
+          YOUTUBE_PLAYER_CIRCUIT,
+          YOUTUBE_BOT_CHECK_BACKOFF_SECONDS,
+        );
+        throw error;
+      }
     }
 
     throw new Error("Could not resolve a playable direct audio stream");
