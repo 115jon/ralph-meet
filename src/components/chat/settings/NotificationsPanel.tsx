@@ -10,6 +10,7 @@ import {
 import { useUser } from "@kova/react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
+import { CustomSoundsCard } from "./CustomSoundsCard";
 import { RangeControl, SettingsCard, SettingsRow } from "./primitives";
 
 type SoundToggleKey = keyof Pick<
@@ -145,6 +146,11 @@ export default function NotificationsPanel() {
           )}
         </SettingsRow>
       </SettingsCard>
+
+      <CustomSoundsCard
+        settingsUserId={settingsUserId}
+        soundSettings={soundSettings}
+      />
     </>
   );
 }
