@@ -352,6 +352,15 @@ export const DesktopScreenPickerModal: React.FC<
     dispatch({ type: "SET_PREVIEW_LOADING", payload: false });
   }, [isOpen]);
 
+  // A thumbnail batch can still be awaiting the native side when the picker
+  // unmounts; invalidate it so it never dispatches into an unmounted tree.
+  useEffect(
+    () => () => {
+      thumbnailBatchTokenRef.current += 1;
+    },
+    [],
+  );
+
   const requestThumbnail = useCallback(
     async (sourceId: string) => {
       if (state.thumbnails[sourceId]) return;
@@ -411,6 +420,7 @@ export const DesktopScreenPickerModal: React.FC<
         ) {
           dispatch({ type: "SET_PREVIEW_LOADING", payload: false });
         }
+        if (thumbnailBatchTokenRef.current !== batchToken) return;
         await new Promise((resolve) => window.setTimeout(resolve, 120));
         return worker();
       };
