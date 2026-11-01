@@ -30,6 +30,8 @@ export const OEmbedResponse = looseStruct({
   thumbnail_width: lenientNumber,
   thumbnail_height: lenientNumber,
   html: lenientString,
+  /** TikTok: the post id its player iframe plays. */
+  embed_product_id: lenientString,
 });
 export type OEmbedResponse = typeof OEmbedResponse.Type;
 

@@ -9,6 +9,7 @@ import { looseStruct } from "@/lib/schema";
 import {
   lenient,
   lenientArray,
+  lenientBoolean,
   lenientCount,
   lenientNumber,
   lenientStrings,
@@ -136,10 +137,137 @@ export const TikTokPlayerApiResponse = looseStruct({
 });
 export type TikTokPlayerApiResponse = typeof TikTokPlayerApiResponse.Type;
 
+// ── Web page (`__UNIVERSAL_DATA_FOR_REHYDRATION__`) ─────────────────────────
+
+const PageImage = looseStruct({
+  imageURL: lenient(looseStruct({ urlList: lenientStrings })),
+  imageWidth: lenientCount,
+  imageHeight: lenientCount,
+});
+
+export const TikTokPageItem = looseStruct({
+  id: lenientId,
+  desc: lenientText,
+  /** Unix seconds as a string; "0" when TikTok withholds the item. */
+  createTime: tolerant(Schema.String, readIsoTimestamp),
+  video: lenient(
+    looseStruct({
+      cover: lenientText,
+      originCover: lenientText,
+      dynamicCover: lenientText,
+      duration: lenientCount,
+      width: lenientCount,
+      height: lenientCount,
+    }),
+  ),
+  author: lenient(
+    looseStruct({
+      uniqueId: lenientText,
+      nickname: lenientText,
+      avatarLarger: lenientText,
+      avatarMedium: lenientText,
+      avatarThumb: lenientText,
+      verified: lenientBoolean,
+    }),
+  ),
+  stats: lenient(
+    looseStruct({
+      diggCount: lenientCount,
+      commentCount: lenientCount,
+      playCount: lenientCount,
+      shareCount: lenientCount,
+    }),
+  ),
+  music: lenient(
+    looseStruct({
+      title: lenientText,
+      authorName: lenientText,
+      coverLarge: lenientText,
+      coverMedium: lenientText,
+    }),
+  ),
+  imagePost: lenient(looseStruct({ images: lenientArray(PageImage) })),
+  /** Age/sensitivity gate: logged-out visitors get an empty item. */
+  isContentClassified: lenientBoolean,
+  privateItem: lenientBoolean,
+  secret: lenientBoolean,
+  takeDown: lenientCount,
+});
+export type TikTokPageItem = typeof TikTokPageItem.Type;
+
+/**
+ * The `webapp.video-detail` scope of a post page. A live post has
+ * `statusCode: 0` and an `itemStruct`; a deleted one has `statusCode: 10204`
+ * ("item doesn't exist") and no item; an age-gated one has `statusCode: 0`
+ * and an item stripped to its id with `isContentClassified: true`.
+ */
+export const TikTokPageVideoDetail = looseStruct({
+  statusCode: lenientNumber,
+  statusMsg: lenientText,
+  itemInfo: lenient(looseStruct({ itemStruct: lenient(TikTokPageItem) })),
+  shareMeta: lenient(looseStruct({ title: lenientText, desc: lenientText })),
+});
+export type TikTokPageVideoDetail = typeof TikTokPageVideoDetail.Type;
+
+const decodePageVideoDetail = Schema.decodeUnknownOption(TikTokPageVideoDetail);
+
+const REHYDRATION_SCRIPT =
+  /<script[^>]*\bid="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/;
+
+/**
+ * The post's `webapp.video-detail` scope from a page's rehydration script,
+ * or `undefined` when the page has none (a bot wall, a captcha, a redesign).
+ */
+export function readTikTokPageVideoDetail(
+  html: string,
+): TikTokPageVideoDetail | undefined {
+  const script = html.match(REHYDRATION_SCRIPT)?.[1];
+  if (!script) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(script);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const scope = (parsed as Record<string, unknown>).__DEFAULT_SCOPE__;
+  if (!scope || typeof scope !== "object") return undefined;
+  const detail = (scope as Record<string, unknown>)["webapp.video-detail"];
+  return Option.getOrUndefined(decodePageVideoDetail(detail));
+}
+
+/** Page status codes that mean the post itself is gone or hidden for good. */
+const TIKTOK_PAGE_GONE_STATUS = new Set([
+  10204, // item doesn't exist
+  10216, // item is private
+  10222, // account is private
+]);
+
+export function isTikTokPageGone(
+  detail: TikTokPageVideoDetail | undefined,
+): boolean {
+  if (!detail) return false;
+  if (
+    detail.statusCode !== undefined &&
+    TIKTOK_PAGE_GONE_STATUS.has(detail.statusCode)
+  ) {
+    return true;
+  }
+  return (
+    detail.statusCode !== undefined &&
+    detail.statusCode !== 0 &&
+    /doesn'?t exist|not exist|deleted|removed|private/i.test(
+      detail.statusMsg ?? "",
+    )
+  );
+}
+
 // ── tikwm proxy API ─────────────────────────────────────────────────────────
 
 function readIsoTimestamp(value: unknown): string | undefined {
   const seconds = readCount(value);
+  // 0 is TikTok's "withheld" placeholder, not 1970.
+  if (seconds === 0) return undefined;
   const date =
     seconds !== undefined
       ? new Date(seconds * 1000)
@@ -190,6 +318,7 @@ export type TikwmData = typeof TikwmData.Type;
 /** `code: 0` carries `data`; any other code is tikwm's "parsing failed". */
 export const TikwmResponse = looseStruct({
   code: lenientNumber,
+  msg: lenientText,
   data: lenient(TikwmData),
 });
 export type TikwmResponse = typeof TikwmResponse.Type;

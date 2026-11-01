@@ -1,4 +1,3 @@
-import { getBotUserAgent } from "@/lib/platform";
 import { createFileRoute } from "@tanstack/react-router";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { fetchTikTokProxyLookup } from "@/lib/share-preview-proxy";
@@ -17,9 +16,16 @@ const TIKTOK_VIDEO_TTL = 50 * 60;
 const TIKTOK_VIDEO_CACHE_CONTROL = "private, max-age=2700";
 const TIKTOK_SIGNATURE_SAFETY_SECONDS = 5 * 60;
 const TIKTOK_BROWSER_CACHE_MAX_SECONDS = 45 * 60;
-/** A post TikTok confirmed gone: remember it so every view is not a lookup. */
-export const TIKTOK_GONE_TTL = 10 * 60;
-const TIKTOK_GONE_CACHE_CONTROL = `private, max-age=${TIKTOK_GONE_TTL}`;
+/**
+ * A post TikTok's own page reports deleted or private. That verdict is
+ * reliable, so KV keeps it for hours; browsers re-ask after 10 minutes.
+ */
+export const TIKTOK_GONE_TTL = 6 * 60 * 60;
+const TIKTOK_GONE_CACHE_CONTROL = "private, max-age=600";
+/** Nothing usable although the sources answered: try again in a while. */
+const TIKTOK_EMPTY_RETRY_AFTER = 300;
+/** An upstream was down or backing off. */
+const TIKTOK_TRANSIENT_RETRY_AFTER = 60;
 
 export interface TikTokVideoResult {
   videoUrl: string | null;
@@ -37,6 +43,8 @@ export interface TikTokVideoResult {
   viewCount?: number | null;
   shareCount?: number | null;
   timestamp?: string | null;
+  /** Alive, but TikTok hides it from logged-out viewers; its player cannot play it. */
+  restricted?: boolean;
 }
 
 export function canonicalizeTikTokLookupUrl(rawUrl: string): string | null {
@@ -60,39 +68,6 @@ export function isTikTokShortLookupUrl(rawUrl: string): boolean {
   }
 }
 
-export function buildTikTokMetadataLookupUrls(
-  initialLookupUrl: string,
-  resolvedLookupUrl?: string | null,
-): string[] {
-  const urls = [initialLookupUrl];
-
-  if (resolvedLookupUrl && resolvedLookupUrl !== initialLookupUrl) {
-    urls.push(resolvedLookupUrl);
-  }
-
-  return urls;
-}
-
-async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
-  if (!isTikTokShortLookupUrl(rawUrl)) return rawUrl;
-
-  try {
-    const response = await fetch(rawUrl, {
-      method: "HEAD",
-      redirect: "follow",
-      headers: {
-        Accept: "text/html,*/*;q=0.8",
-        "User-Agent": getBotUserAgent(),
-      },
-    });
-
-    const resolved = canonicalizeTikTokLookupUrl(response.url);
-    return resolved ?? rawUrl;
-  } catch {
-    return rawUrl;
-  }
-}
-
 export function hasTikTokVideoResultContent(
   result?: TikTokVideoResult | null,
 ): result is TikTokVideoResult {
@@ -102,7 +77,8 @@ export function hasTikTokVideoResultContent(
       result.media?.length ||
       result.coverUrl ||
       result.audio ||
-      result.title)
+      result.title ||
+      result.restricted)
   );
 }
 
@@ -180,12 +156,14 @@ export function tiktokVideoKvTtl(
   );
 }
 
+// v2: v1 "gone" entries came from a resolver that mistook age-gated posts
+// and failed scrapes for deleted ones.
 export function tiktokVideoCacheKey(lookupUrl: string): string {
-  return `v1:tiktok-video:${lookupUrl}`;
+  return `v2:tiktok-video:${lookupUrl}`;
 }
 
 export function tiktokGoneCacheKey(lookupUrl: string): string {
-  return `v1:tiktok-video:gone:${lookupUrl}`;
+  return `v2:tiktok-video:gone:${lookupUrl}`;
 }
 
 function goneResponse(): Response {
@@ -230,7 +208,6 @@ export const GET = async ({ request }: any) => {
   }
 
   try {
-    // Hits for the URL as given skip the short-link HEAD round trip.
     const initialCached = await cacheGet<TikTokVideoResult>(
       tiktokVideoCacheKey(initialLookupUrl),
     );
@@ -246,49 +223,16 @@ export const GET = async ({ request }: any) => {
       return goneResponse();
     }
 
-    const resolvedLookupUrl = canonicalizeTikTokLookupUrl(
-      await resolveTikTokLookupUrl(initialLookupUrl),
-    );
-    if (!resolvedLookupUrl) {
-      return Response.json(
-        { error: "Only TikTok URLs are supported" },
-        { status: 400 },
-      );
-    }
-    const lookupUrls = buildTikTokMetadataLookupUrls(
-      initialLookupUrl,
-      resolvedLookupUrl,
-    );
+    // The provider chain resolves short links (cached), coalesces identical
+    // concurrent lookups and backs off upstreams that refuse us.
+    const lookup = await fetchTikTokProxyLookup(initialLookupUrl);
+    const canonicalUrl =
+      lookup.metadata?.canonicalUrl ?? lookup.baseline?.canonicalUrl ?? null;
+    const cacheLookupUrls = new Set<string>([initialLookupUrl]);
+    if (canonicalUrl) cacheLookupUrls.add(canonicalUrl);
 
-    if (resolvedLookupUrl !== initialLookupUrl) {
-      const cached = await cacheGet<TikTokVideoResult>(
-        tiktokVideoCacheKey(resolvedLookupUrl),
-      );
-      if (
-        hasTikTokVideoResultContent(cached) &&
-        isTikTokVideoResultFresh(cached)
-      ) {
-        return Response.json(cached, {
-          headers: { "Cache-Control": tiktokVideoCacheControl(cached) },
-        });
-      }
-    }
-
-    let meta = null;
-    let unavailable = false;
-    let transient = false;
-    for (const lookupUrl of lookupUrls) {
-      const lookup = await fetchTikTokProxyLookup(lookupUrl);
-      if (lookup.metadata) {
-        meta = lookup.metadata;
-        break;
-      }
-      unavailable ||= lookup.unavailable;
-      transient ||= lookup.transient;
-    }
-
-    if (!meta && unavailable) {
-      for (const lookupUrl of lookupUrls) {
+    if (lookup.unavailable) {
+      for (const lookupUrl of cacheLookupUrls) {
         cacheSet(tiktokGoneCacheKey(lookupUrl), true, TIKTOK_GONE_TTL).catch(
           () => {},
         );
@@ -296,14 +240,16 @@ export const GET = async ({ request }: any) => {
       return goneResponse();
     }
 
+    const meta = lookup.metadata;
+    const author = meta ?? lookup.baseline;
     const result: TikTokVideoResult = {
       videoUrl: meta?.videoUrl ?? null,
       coverUrl: meta?.coverUrl ?? null,
-      canonicalUrl: meta?.canonicalUrl ?? null,
-      postType: meta?.postType ?? null,
+      canonicalUrl,
+      postType: meta?.postType ?? lookup.baseline?.postType ?? null,
       title: meta?.title ?? null,
-      authorName: meta?.authorName ?? null,
-      authorHandle: meta?.authorHandle ?? null,
+      authorName: author?.authorName ?? null,
+      authorHandle: author?.authorHandle ?? null,
       authorAvatarUrl: meta?.authorAvatarUrl ?? null,
       media: meta?.media,
       audio: meta?.audio ?? null,
@@ -312,26 +258,30 @@ export const GET = async ({ request }: any) => {
       viewCount: meta?.viewCount ?? null,
       shareCount: meta?.shareCount ?? null,
       timestamp: meta?.timestamp ?? null,
+      restricted: lookup.restricted === true ? true : undefined,
     };
 
     if (!hasTikTokVideoResultContent(result)) {
       // Not confirmed gone: an upstream was down or returned nothing. The
-      // client keeps the stored embed (or the player iframe) and may retry.
+      // client keeps the stored embed (or the player iframe) and honours
+      // Retry-After instead of asking again on every mount.
+      const retryAfter = lookup.transient
+        ? TIKTOK_TRANSIENT_RETRY_AFTER
+        : TIKTOK_EMPTY_RETRY_AFTER;
       return Response.json(
-        { error: "Could not resolve TikTok media" },
         {
-          status: transient ? 503 : 502,
+          error: "Could not resolve TikTok media",
+          retryAfter,
+          transient: lookup.transient,
+        },
+        {
+          status: lookup.transient ? 503 : 502,
           headers: {
             "Cache-Control": "no-store",
-            ...(transient ? { "Retry-After": "60" } : {}),
+            "Retry-After": String(retryAfter),
           },
         },
       );
-    }
-
-    const cacheLookupUrls = new Set<string>(lookupUrls);
-    if (meta?.canonicalUrl) {
-      cacheLookupUrls.add(meta.canonicalUrl);
     }
 
     const kvTtl = tiktokVideoKvTtl(result);

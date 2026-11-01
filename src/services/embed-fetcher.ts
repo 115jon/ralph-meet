@@ -1,4 +1,4 @@
-import type { EmbedInfo } from "@/lib/types";
+import type { EmbedAuthor, EmbedInfo } from "@/lib/types";
 import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
 import { safeParseJson } from "@/lib/schema";
 import { Schema } from "effect";
@@ -20,6 +20,7 @@ import {
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { getBotUserAgent } from "@/lib/platform";
 import { singleFlight } from "@/lib/single-flight";
+import { upstreamGuard } from "@/lib/upstream-guard";
 import {
   parseHtmlMeta,
   readPositiveInt,
@@ -67,13 +68,15 @@ function nextEmbedId(url: string): string {
 function buildUnavailableEmbed(
   url: string,
   provider: { name: string; url: string },
-  options?: { color?: string; footerIcon?: string },
+  options?: { color?: string; footerIcon?: string; author?: EmbedAuthor },
 ): EmbedInfo {
   return {
     id: nextEmbedId(url),
     url,
     type: "rich",
     unavailable: true,
+    checkedAt: new Date().toISOString(),
+    author: options?.author,
     provider,
     footer: {
       text: provider.name,
@@ -247,7 +250,9 @@ export async function extractAndProcessEmbedsWithStatus(
 // (stale-on-error). Transient failures are never cached; permanent "no embed"
 // results are, briefly (negative cache).
 
-const EMBED_CACHE_VERSION = "v2";
+// v3: TikTok "unavailable" verdicts cached by v2 came from a resolver that
+// mistook gated posts and failed scrapes for deleted ones.
+const EMBED_CACHE_VERSION = "v3";
 const EMBED_CACHE_STALE_GRACE_SECONDS = 3 * 24 * 60 * 60;
 const EMBED_FRESH_SECONDS = 6 * 60 * 60;
 /** Signed media URLs and engagement counts go stale quickly. */
@@ -549,8 +554,7 @@ async function fetchYouTubeVideoDimensions(
     const watchUrl = buildYouTubeWatchUrl(videoId, sourceUrl);
     const res = await safeFetch(`${watchUrl}&pbj=1`, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+        "User-Agent": getBotUserAgent(),
         "x-youtube-client-name": "1",
         "x-youtube-client-version": "2.20260611.01.00",
       },
@@ -565,8 +569,7 @@ async function fetchYouTubeVideoDimensions(
 
     const htmlRes = await safeFetch(watchUrl, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+        "User-Agent": getBotUserAgent(),
       },
     });
     if (!htmlRes.ok) return null;
@@ -712,9 +715,13 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   for (const apiUrl of apis) {
     try {
       twitterLog.info(`Trying API: ${apiUrl}`);
-      const res = await safeFetch(apiUrl, {
-        headers: { "User-Agent": getBotUserAgent() },
-      });
+      // One circuit per mirror host: a mirror that rate limits us is skipped
+      // (and counts as transient) until it recovers.
+      const res = await upstreamGuard.fetch(
+        `x-mirror:${new URL(apiUrl).hostname}`,
+        apiUrl,
+        { headers: { "User-Agent": getBotUserAgent() } },
+      );
       twitterLog.info(
         `API response status: ${res.status}, content-type: ${res.headers.get("content-type")}`,
       );
@@ -724,8 +731,11 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
         ? await readJsonCapped(res, Schema.Unknown).catch(() => null)
         : null;
 
+      // 404/410 or a body that says so. A bare 403 is a mirror's bot wall,
+      // not a deleted tweet (a protected one says "private" in the body).
       if (
-        isUnavailableSocialStatus(res.status) ||
+        res.status === 404 ||
+        res.status === 410 ||
         isTwitterUnavailablePayload(data)
       ) {
         sawUnavailable = true;
@@ -1125,9 +1135,15 @@ function mergeTweetMetadata(baseTweet: any, incomingTweet: any): any {
   if (!baseTweet) return incomingTweet;
   if (!incomingTweet) return baseTweet;
 
+  // The first mirror's values win: a later mirror can lag (vxtwitter
+  // reports 0 likes/replies for a fresh tweet fxtwitter already counts), so
+  // it only fills fields the first one left empty.
+  const scalars = { ...incomingTweet };
+  for (const [key, value] of Object.entries(baseTweet)) {
+    if (value !== undefined && value !== null) scalars[key] = value;
+  }
   const mergedTweet = {
-    ...baseTweet,
-    ...incomingTweet,
+    ...scalars,
     text: baseTweet.text ?? incomingTweet.text,
     full_text: baseTweet.full_text ?? incomingTweet.full_text,
     description: baseTweet.description ?? incomingTweet.description,
@@ -1782,58 +1798,100 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   };
 }
 
+const TIKTOK_PROVIDER = { name: "TikTok", url: "https://www.tiktok.com" };
+const TIKTOK_COLOR = "#FF0050";
+
+function readTikTokHandleFromUrl(
+  rawUrl: string | undefined,
+): string | undefined {
+  if (!rawUrl) return undefined;
+  try {
+    const handle = new URL(rawUrl).pathname.match(/^\/@([^/]+)/)?.[1];
+    return handle ? decodeURIComponent(handle) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A TikTok embed from the provider chain (`fetchTikTokProxyLookup`) plus the
+ * official oEmbed. oEmbed now answers 200 with a bare player iframe for any
+ * numeric id, live or not, and has stopped sending title, author and
+ * thumbnail, so it only contributes the player id (and those fields if it
+ * ever sends them again). Only the chain's positive "gone" tombstones a post.
+ */
 async function fetchTikTokDataRefreshed(
   url: string,
 ): Promise<EmbedInfo | null> {
   const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
   const [oembedResult, proxyResult] = await Promise.allSettled([
-    safeFetch(oembedUrl),
+    upstreamGuard.fetch("tiktok-oembed", oembedUrl, {
+      headers: { Accept: "application/json", "User-Agent": getBotUserAgent() },
+    }),
     fetchTikTokProxyLookup(url),
   ]);
 
   const res = oembedResult.status === "fulfilled" ? oembedResult.value : null;
-  const proxyLookup =
-    proxyResult.status === "fulfilled" ? proxyResult.value : null;
-  const proxyData = proxyLookup?.metadata ?? null;
-  // oEmbed keeps answering 200 with a generic player for a deleted post, so
-  // TikTok's player API ("nil_core_data") is the signal that counts.
-  if (proxyLookup?.unavailable && !proxyData) {
-    return buildUnavailableEmbed(
-      url,
-      { name: "TikTok", url: "https://www.tiktok.com" },
-      { color: "#FF0050" },
-    );
-  }
-  if (!res?.ok && !proxyData) {
-    if (res && isUnavailableSocialStatus(res.status)) {
-      return buildUnavailableEmbed(
-        url,
-        { name: "TikTok", url: "https://www.tiktok.com" },
-        { color: "#FF0050" },
-      );
-    }
-    const oembedTransient = !res || isTransientStatus(res.status);
-    if (oembedTransient && (proxyLookup?.transient ?? true)) {
-      throw new TransientEmbedError("TikTok metadata unavailable", res?.status);
-    }
-    return null;
-  }
+  const lookup = proxyResult.status === "fulfilled" ? proxyResult.value : null;
+  const proxyData = lookup?.metadata ?? null;
+  const baseline = lookup?.baseline;
+  const data =
+    (res?.ok
+      ? await readJsonCapped(res, OEmbedResponse).catch(() => undefined)
+      : undefined) ?? {};
 
-  const data = (res?.ok ? await readJsonCapped(res, OEmbedResponse) : {}) ?? {};
-  const videoIdMatch =
-    data.html?.match(/data-video-id="([^"]+)"/) ||
-    url.match(/(?:video|photo|player\/v1)\/(\d+)/) ||
-    proxyData?.id;
-  const videoId = Array.isArray(videoIdMatch)
-    ? videoIdMatch[1]
-    : (videoIdMatch ?? null);
-  const caption = proxyData?.title || data.title;
-  const authorName = data.author_name || proxyData?.authorName || "Unknown";
+  const authorHandle =
+    proxyData?.authorHandle ??
+    baseline?.authorHandle ??
+    readTikTokHandleFromUrl(data.author_url);
   const authorUrl =
     data.author_url ||
-    (proxyData?.authorHandle
-      ? `https://www.tiktok.com/@${proxyData.authorHandle}`
-      : undefined);
+    (authorHandle ? `https://www.tiktok.com/@${authorHandle}` : undefined);
+  const authorName =
+    data.author_name || proxyData?.authorName || baseline?.authorName;
+
+  if (lookup?.unavailable) {
+    return buildUnavailableEmbed(url, TIKTOK_PROVIDER, {
+      color: TIKTOK_COLOR,
+      author: authorName ? { name: authorName, url: authorUrl } : undefined,
+    });
+  }
+
+  const videoId =
+    data.embed_product_id ||
+    data.html?.match(/player\/v1\/(\d+)/)?.[1] ||
+    data.html?.match(/data-video-id="([^"]+)"/)?.[1] ||
+    proxyData?.id ||
+    baseline?.id ||
+    url.match(/(?:video|photo|player\/v1)\/(\d+)/)?.[1] ||
+    null;
+
+  // oEmbed answers 200 for any well-formed post id, so a 404/410, or a 400
+  // for a URL that carries an id, is TikTok saying this post is gone. A 403
+  // is a bot wall and says nothing about the post.
+  const urlItemId = url.match(/\/(?:video|photo)\/(\d+)/)?.[1];
+  if (
+    !proxyData &&
+    !lookup?.restricted &&
+    res &&
+    (res.status === 404 ||
+      res.status === 410 ||
+      (res.status === 400 && urlItemId))
+  ) {
+    return buildUnavailableEmbed(url, TIKTOK_PROVIDER, {
+      color: TIKTOK_COLOR,
+      author: authorName ? { name: authorName, url: authorUrl } : undefined,
+    });
+  }
+
+  if (!proxyData && !res?.ok) {
+    const oembedTransient = !res || isTransientStatus(res.status);
+    if (oembedTransient && (lookup?.transient ?? true)) {
+      throw new TransientEmbedError("TikTok metadata unavailable", res?.status);
+    }
+  }
+
+  const caption = proxyData?.title || data.title || undefined;
   const firstVideo = proxyData?.media?.find((entry) => entry.type === "video");
   const firstMedia = proxyData?.media?.[0];
   const metrics =
@@ -1846,7 +1904,10 @@ async function fetchTikTokDataRefreshed(
           views: proxyData?.viewCount,
         }
       : undefined;
-  const postType = proxyData?.postType === "slideshow" ? "slideshow" : "video";
+  const postType =
+    (proxyData?.postType ?? baseline?.postType) === "slideshow"
+      ? "slideshow"
+      : "video";
   const slideshowThumbnailUrl = firstVideo?.thumbnailUrl;
   const thumbnailUrl =
     postType === "slideshow"
@@ -1855,34 +1916,48 @@ async function fetchTikTokDataRefreshed(
         data.thumbnail_url ||
         firstVideo?.thumbnailUrl ||
         firstMedia?.url;
+  const hasDirectVideo = Boolean(proxyData?.videoUrl || firstVideo);
+  // TikTok's own player cannot play a gated post for anyone logged out.
+  const restricted = lookup?.restricted === true && !hasDirectVideo;
 
-  if (!videoId && !proxyData?.media?.length && !thumbnailUrl && !caption) {
+  if (
+    !videoId &&
+    !proxyData?.media?.length &&
+    !thumbnailUrl &&
+    !caption &&
+    !authorHandle
+  ) {
     return null;
   }
 
+  const label = postType === "slideshow" ? "TikTok slideshow" : "TikTok";
   return {
     id: nextEmbedId(url),
     url,
     type: postType === "slideshow" ? "rich" : "video",
     rawTitle:
       caption ||
-      `${postType === "slideshow" ? "TikTok slideshow" : "TikTok"} · ${authorName}`,
-    rawDescription: caption || undefined,
-    author:
-      data.author_name || proxyData?.authorName
-        ? {
-            name: authorName,
-            url: authorUrl,
-            iconURL: proxyData?.authorAvatarUrl,
-          }
-        : undefined,
+      (authorHandle
+        ? `${label} · @${authorHandle}`
+        : authorName
+          ? `${label} · ${authorName}`
+          : label),
+    rawDescription: caption,
+    restricted: restricted || undefined,
+    author: authorName
+      ? {
+          name: authorName,
+          url: authorUrl,
+          iconURL: proxyData?.authorAvatarUrl,
+        }
+      : undefined,
     provider: {
       name: "TikTok",
-      url: data.provider_url || "https://www.tiktok.com",
+      url: data.provider_url || TIKTOK_PROVIDER.url,
     },
-    color: "#FF0050",
+    color: TIKTOK_COLOR,
     video:
-      videoId && postType !== "slideshow"
+      videoId && postType !== "slideshow" && !restricted
         ? {
             url: `https://www.tiktok.com/player/v1/${videoId}`,
             width: firstVideo?.width ?? 325,
@@ -2147,6 +2222,12 @@ async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
   const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(canonicalUrl)}`;
   const res = await safeFetch(oembedUrl);
   if (!res.ok) {
+    // Spotify's oEmbed answers a dead spotify.link short link with a 504
+    // after about five seconds, every time: that is "no such link", not an
+    // outage worth retrying.
+    if (res.status === 504 && new URL(url).hostname === "spotify.link") {
+      return null;
+    }
     if (isTransientStatus(res.status)) {
       throw new TransientEmbedError("Spotify oEmbed unavailable", res.status);
     }

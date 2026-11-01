@@ -19,6 +19,8 @@ import {
   hydrationKey,
   loadEmbedHydration,
   peekEmbedHydration,
+  retryEmbedHydration,
+  type EmbedHydrationResult,
 } from "@/lib/embed-hydration-cache";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
@@ -41,13 +43,13 @@ import {
 } from "react";
 import { EmbedFrame } from "./EmbedFrame";
 import { EmbedDate, EmbedHeader, EmbedOpenButton } from "./embeds/EmbedChrome";
+import { EmbedStatus, type EmbedStatusKind } from "./embeds/EmbedStatus";
 import { MediaPlayButton } from "./embeds/MediaPlayButton";
 import {
   DIRECT_MEDIA_MAX_HEIGHT,
   DIRECT_MEDIA_MAX_WIDTH,
   EMBED_PORTRAIT_MAX_HEIGHT,
   type EmbedWidth,
-  SOCIAL_UNAVAILABLE_IMAGE,
   getDirectMediaBox,
   getSpotifyEmbedUrl,
   getSpotifyPlayerHeight,
@@ -578,6 +580,8 @@ type TikTokHydrationPayload = {
   viewCount?: number | null;
   shareCount?: number | null;
   timestamp?: string | null;
+  /** Alive, but TikTok only shows it to signed-in viewers. */
+  restricted?: boolean;
 };
 
 type TikTokPlayerState =
@@ -878,6 +882,7 @@ function hydrateTikTokEmbed(
     },
     timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
     audio: payload.audio ?? embed.audio ?? undefined,
+    restricted: payload.restricted ?? embed.restricted,
     footer: {
       text: "TikTok",
     },
@@ -1191,18 +1196,24 @@ const TikTokEmbed = memo(
       useState<TikTokHydrationPayload | null>(() =>
         cachedHydration?.status === "ok" ? cachedHydration.payload : null,
       );
-    const [player, setPlayer] = useState<TikTokPlayerState>(() =>
-      cachedHydration?.status === "missing"
-        ? { mode: "missing" }
-        : cachedHydration?.status === "ok"
-          ? { mode: "ready" }
-          : {
-              mode:
-                getTikTokRenderableMedia(embed).length === 0
-                  ? "loading"
-                  : "idle",
-            },
+    const [player, setPlayer] = useState<TikTokPlayerState>(() => {
+      const hasStoredMedia = getTikTokRenderableMedia(embed).length > 0;
+      if (cachedHydration?.status === "missing") return { mode: "missing" };
+      if (cachedHydration?.status === "ok") return { mode: "ready" };
+      // A remembered failure: render what is stored, do not ask again yet.
+      if (cachedHydration?.status === "error") {
+        return { mode: hasStoredMedia ? "error" : "iframe" };
+      }
+      return { mode: hasStoredMedia ? "idle" : "loading" };
+    });
+    const [hydrationError, setHydrationError] = useState<{
+      transient: boolean;
+    } | null>(() =>
+      cachedHydration?.status === "error"
+        ? { transient: cachedHydration.transient }
+        : null,
     );
+    const [retrying, setRetrying] = useState(false);
     const [activeIndex, setActiveIndex] = useState(0);
     const [measuredMediaDimensions, setMeasuredMediaDimensions] = useState<
       Record<string, MediaDimensions>
@@ -1312,6 +1323,10 @@ const TikTokEmbed = memo(
       !isMissing &&
       media.length > 0 &&
       (hasPersistentInlineMedia || player.mode !== "iframe");
+    // Age-gated with nothing playable: TikTok's own player would only say
+    // "Video currently unavailable", so the card links out instead.
+    const isRestricted =
+      !isMissing && displayEmbed.restricted === true && media.length === 0;
     const iframeUrl =
       displayEmbed.video?.kind === "player"
         ? withTikTokPlayerOptions(displayEmbed.video.url)
@@ -1323,6 +1338,49 @@ const TikTokEmbed = memo(
                 )
               : null;
           })();
+    const statusKind: EmbedStatusKind | null = isMissing
+      ? "gone"
+      : isRestricted
+        ? "restricted"
+        : hasRenderableMedia
+          ? null
+          : player.mode === "loading" && !displayEmbed.thumbnail?.url
+            ? "loading"
+            : (player.mode === "iframe" || player.mode === "ready") &&
+                !iframeUrl
+              ? "failed"
+              : null;
+
+    const tiktokHydrationUrl = apiUrl(
+      `/api/tiktok-video?videoUrl=${encodeURIComponent(embed.url)}`,
+    );
+    const applyHydration = useCallback(
+      (result: EmbedHydrationResult<TikTokHydrationPayload>) => {
+        if (result.status === "missing") {
+          setHydrationError(null);
+          setPlayer({ mode: "missing" });
+          return;
+        }
+        const payload = result.status === "ok" ? result.payload : null;
+        setHydrationError(
+          result.status === "error" ? { transient: result.transient } : null,
+        );
+        if (payload) setHydratedPayload(payload);
+        setPlayer(
+          payload &&
+            (payload.videoUrl ||
+              payload.media?.length ||
+              payload.coverUrl ||
+              payload.audio ||
+              payload.title)
+            ? { mode: "ready" }
+            : hasPersistentInlineMedia || hasDirectVideoMedia
+              ? { mode: "error" }
+              : { mode: "iframe" },
+        );
+      },
+      [hasDirectVideoMedia, hasPersistentInlineMedia],
+    );
 
     useEffect(() => {
       if (!embed.url || fetchedRef.current) return;
@@ -1339,40 +1397,33 @@ const TikTokEmbed = memo(
       // virtualised) reuses the answer instead of fetching again.
       void loadEmbedHydration<TikTokHydrationPayload>(
         tiktokHydrationKey,
-        apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(embed.url)}`),
+        tiktokHydrationUrl,
       ).then((result) => {
-        if (!isActive) return;
-        if (result.status === "missing") {
-          setPlayer({ mode: "missing" });
-          return;
-        }
-        const payload = result.status === "ok" ? result.payload : null;
-        if (payload) setHydratedPayload(payload);
-        setPlayer(
-          payload &&
-            (payload.videoUrl ||
-              payload.media?.length ||
-              payload.coverUrl ||
-              payload.audio ||
-              payload.title)
-            ? { mode: "ready" }
-            : hasPersistentInlineMedia || hasDirectVideoMedia
-              ? { mode: "error" }
-              : { mode: "iframe" },
-        );
+        if (isActive) applyHydration(result);
       });
 
       return () => {
         isActive = false;
       };
     }, [
+      applyHydration,
       cachedHydration,
       embed.url,
-      hasDirectVideoMedia,
-      hasPersistentInlineMedia,
       hydrationSignature,
       tiktokHydrationKey,
+      tiktokHydrationUrl,
     ]);
+
+    const handleRetry = useCallback(() => {
+      setRetrying(true);
+      void retryEmbedHydration<TikTokHydrationPayload>(
+        tiktokHydrationKey,
+        tiktokHydrationUrl,
+      ).then((result) => {
+        setRetrying(false);
+        applyHydration(result);
+      });
+    }, [applyHydration, tiktokHydrationKey, tiktokHydrationUrl]);
 
     const handleVideoError = useCallback(() => {
       setPlayer(hasDirectVideoMedia ? { mode: "error" } : { mode: "iframe" });
@@ -1683,21 +1734,23 @@ const TikTokEmbed = memo(
             openLabel="Open in TikTok"
           />
 
-          <SocialAuthorRow
-            name={displayEmbed.author?.name}
-            url={displayEmbed.author?.url}
-            avatarSrc={
-              !isMissing && displayEmbed.author?.iconURL
-                ? getAuthAssetUrl(
-                    buildProxyMediaPath(
-                      displayEmbed.author.iconURL,
-                      displayEmbed.url,
-                    ),
-                  )
-                : null
-            }
-            keyPrefix={`${embed.id}-tiktok-author`}
-          />
+          {statusKind ? null : (
+            <SocialAuthorRow
+              name={displayEmbed.author?.name}
+              url={displayEmbed.author?.url}
+              avatarSrc={
+                !isMissing && displayEmbed.author?.iconURL
+                  ? getAuthAssetUrl(
+                      buildProxyMediaPath(
+                        displayEmbed.author.iconURL,
+                        displayEmbed.url,
+                      ),
+                    )
+                  : null
+              }
+              keyPrefix={`${embed.id}-tiktok-author`}
+            />
+          )}
 
           {hasRenderableMedia ? (
             <>
@@ -1868,31 +1921,30 @@ const TikTokEmbed = memo(
                   />
                 )}
             </>
+          ) : statusKind ? (
+            <EmbedStatus
+              kind={statusKind}
+              provider="TikTok"
+              url={displayEmbed.url}
+              author={{
+                name: displayEmbed.author?.name,
+                handle:
+                  extractTikTokAuthorHandle(displayEmbed.author) ?? undefined,
+                url: displayEmbed.author?.url,
+              }}
+              transient={hydrationError?.transient}
+              onRetry={handleRetry}
+              retrying={retrying}
+              testId={isMissing ? "tiktok-unavailable" : undefined}
+            />
           ) : (
             <div
-              className={cn(
-                "relative overflow-hidden rounded-md",
-                isMissing ? "bg-tint-1" : "bg-black",
-              )}
+              className="relative overflow-hidden rounded-md bg-black"
               style={{
                 aspectRatio: "9/16",
                 maxHeight: EMBED_PORTRAIT_MAX_HEIGHT,
               }}
             >
-              {isMissing ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-                  <img
-                    src={SOCIAL_UNAVAILABLE_IMAGE}
-                    alt=""
-                    data-testid="tiktok-unavailable"
-                    className="size-36 rounded-xl"
-                    draggable={false}
-                  />
-                  <p className="text-ui-sm font-medium text-ink-2">
-                    This TikTok is no longer available
-                  </p>
-                </div>
-              ) : null}
               {(player.mode === "iframe" || player.mode === "ready") &&
                 iframeUrl && (
                   <iframe
@@ -4629,14 +4681,26 @@ function EmbedCardText({ embed }: { embed: EmbedInfo }) {
   );
 }
 
-function getUnavailableMessage(embed: EmbedInfo): string {
-  const provider = embed.provider?.name?.toLowerCase();
-  if (provider === "tiktok") return "This TikTok is no longer available";
-  if (provider === "youtube") return "This video is no longer available";
-  return "This post is no longer available";
+/** `@handle` from a profile URL (`/@name` on TikTok, `/name` on X and Instagram). */
+function getAuthorHandleFromUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const segment = new URL(url).pathname.split("/").filter(Boolean)[0];
+    if (!segment) return undefined;
+    const handle = segment.replace(/^@/, "");
+    return /^[\w.]+$/.test(handle) ? handle : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
+/**
+ * A stored tombstone (the server confirmed the post is gone) and the gone
+ * state of an Instagram card: the shared compact status, with the author
+ * when the server still knew it.
+ */
 const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  const provider = embed.provider?.name || "Link";
   return (
     <BaseEmbed embed={embed} width="compact" bare>
       <EmbedHeader
@@ -4649,36 +4713,24 @@ const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           ) : undefined
         }
         color={embed.color}
+        openHref={embed.url}
+        openLabel={`Open in ${provider}`}
       />
-      <div className="flex items-center gap-3" data-testid="embed-unavailable">
-        <img
-          src={SOCIAL_UNAVAILABLE_IMAGE}
-          alt=""
-          className="size-16 shrink-0 rounded-md"
-          draggable={false}
-        />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          {embed.author?.name ? (
-            <div className="truncate text-ui-sm font-semibold text-ink-1">
-              <EmbedInlineText
-                text={embed.author.name}
-                keyPrefix={`${embed.id}-unavailable-author`}
-              />
-            </div>
-          ) : null}
-          <p className="text-ui-sm text-ink-2">
-            {getUnavailableMessage(embed)}
-          </p>
-          <a
-            href={embed.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-fit text-ui-sm font-medium text-accent-ink underline-offset-3 pointer-fine:hover:underline"
-          >
-            View original
-          </a>
-        </div>
-      </div>
+      <EmbedStatus
+        kind="gone"
+        provider={provider}
+        url={embed.url}
+        author={
+          embed.author?.name
+            ? {
+                name: embed.author.name,
+                handle: getAuthorHandleFromUrl(embed.author.url),
+                url: embed.author.url,
+              }
+            : null
+        }
+        testId="embed-unavailable"
+      />
     </BaseEmbed>
   );
 });

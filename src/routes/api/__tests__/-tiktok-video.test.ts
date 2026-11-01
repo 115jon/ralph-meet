@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildTikTokMetadataLookupUrls,
   canonicalizeTikTokLookupUrl,
   hasTikTokVideoResultContent,
   isTikTokShortLookupUrl,
@@ -34,27 +33,6 @@ describe("tiktok video route helpers", () => {
         "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
       ),
     ).toBe(false);
-  });
-
-  it("prefers the original short lookup url before the resolved canonical url", () => {
-    expect(
-      buildTikTokMetadataLookupUrls(
-        "https://www.tiktok.com/t/ZTS2w6uEa/",
-        "https://www.tiktok.com/@_qubo_/video/7656308942951271693",
-      ),
-    ).toEqual([
-      "https://www.tiktok.com/t/ZTS2w6uEa/",
-      "https://www.tiktok.com/@_qubo_/video/7656308942951271693",
-    ]);
-  });
-
-  it("deduplicates lookup urls when the resolved url matches the input", () => {
-    expect(
-      buildTikTokMetadataLookupUrls(
-        "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
-        "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
-      ),
-    ).toEqual(["https://www.tiktok.com/@dj.giggle/photo/7656952653510888717"]);
   });
 
   it("rejects unsupported TikTok lookup URLs", () => {

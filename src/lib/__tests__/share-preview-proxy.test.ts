@@ -84,6 +84,13 @@ describe("share preview proxy", () => {
         return new Response("not found", { status: 404 });
       }
 
+      // The player API gave no item, so the chain asks the post page next.
+      if (url === "https://www.tiktok.com/@johnny/video/123") {
+        return new Response("<html></html>", {
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+
       if (url.startsWith("https://www.tikwm.com/api/?url=")) {
         return new Response("forbidden", {
           status: 403,
@@ -119,7 +126,7 @@ describe("share preview proxy", () => {
       authorName: "Johnny",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("proxies fetchable images with safe headers", async () => {
