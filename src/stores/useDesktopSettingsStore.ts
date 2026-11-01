@@ -1,9 +1,15 @@
 // ============================================================================
 // Desktop Settings Store — Zustand + persist
 //
-// OS-level preferences for the desktop app (Tauri).
-// Controls autostart, close-to-tray, and start-minimized behavior.
-// Persisted to localStorage and synced to the Rust backend on change.
+// OS-level preferences for the desktop app (Tauri): autostart, close-to-tray,
+// start-minimized, hardware acceleration, desktop notifications.
+//
+// On desktop, Rust owns and persists these (desktop-settings.json), so they
+// apply at launch before any webview loads. This store mirrors them: it
+// hydrates from `get_desktop_settings` and sends changes with one
+// `set_desktop_settings`. localStorage keeps a copy for first paint and for
+// the web build, and is the source of the one-time migration to Rust.
+// See docs/desktop/window-shell.md.
 // ============================================================================
 
 import { isDesktop } from "@/lib/platform";
@@ -27,16 +33,22 @@ export interface DesktopSettings {
   desktopNotifications: boolean;
 }
 
-interface DesktopSettingsState extends DesktopSettings {
-  /** Update one or more settings and sync to the Rust backend */
-  updateSettings: (updates: Partial<DesktopSettings>) => void;
-  /** Sync all current settings to the Rust backend (call on app startup) */
-  syncToBackend: () => Promise<void>;
+/** What `get_desktop_settings` returns. */
+export interface DesktopSettingsSnapshot {
+  settings: DesktopSettings;
+  /** False until Rust has written its settings file once. */
+  persisted: boolean;
 }
 
-type SyncDesktopSettingsOptions = {
-  includeHardwareAcceleration?: boolean;
-};
+interface DesktopSettingsState extends DesktopSettings {
+  /** Change settings; Rust persists them. Failures are logged and reverted. */
+  updateSettings: (updates: Partial<DesktopSettings>) => void;
+  /**
+   * Change settings and wait until Rust has persisted them. On failure the
+   * store reverts the changed keys and the promise rejects.
+   */
+  saveSettings: (updates: Partial<DesktopSettings>) => Promise<void>;
+}
 
 const defaults: DesktopSettings = {
   openOnStartup: false,
@@ -46,14 +58,25 @@ const defaults: DesktopSettings = {
   desktopNotifications: true,
 };
 
-/** What localStorage may hold: each flag is a boolean or falls back to its default. */
-const readPersistedDesktopSettings = readObject<Partial<DesktopSettings>>({
+/** What localStorage or Rust may hold: each flag is a boolean or is dropped. */
+const readDesktopSettings = readObject<Partial<DesktopSettings>>({
   openOnStartup: readBoolean,
   startMinimized: readBoolean,
   closeToTray: readBoolean,
   hardwareAcceleration: readBoolean,
   desktopNotifications: readBoolean,
 });
+
+const settingKeys = Object.keys(defaults) as Array<keyof DesktopSettings>;
+
+function pickSettings(
+  source: DesktopSettings,
+  keys: Array<keyof DesktopSettings>,
+): Partial<DesktopSettings> {
+  const picked: Partial<DesktopSettings> = {};
+  for (const key of keys) picked[key] = source[key];
+  return picked;
+}
 
 /**
  * Detect the user's OS name for the settings tab label.
@@ -68,40 +91,12 @@ export function getOSName(): string {
   return "Desktop";
 }
 
-function isWindowsDesktop(): boolean {
-  if (!isDesktop() || typeof navigator === "undefined") return false;
-  return navigator.userAgent.includes("Win");
-}
-
-/**
- * Dynamically import the Tauri autostart plugin (only available on desktop).
- * Returns null on web to avoid import errors.
- */
-async function getAutostart() {
-  if (!isDesktop()) return null;
-  try {
-    return await import("@tauri-apps/plugin-autostart");
-  } catch {
-    log.warn("autostart plugin not available");
-    return null;
-  }
-}
-
-/**
- * Invoke a Tauri command. Returns silently on web.
- */
-async function tauriInvoke<T = unknown>(
-  cmd: string,
-  args: Record<string, unknown> = {},
-) {
-  if (!isDesktop()) return undefined;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<T>(cmd, args);
-  } catch (e) {
-    log.warn(`Failed to invoke ${cmd}:`, e);
-    return undefined;
-  }
+async function invokeRust<T>(
+  cmd: "get_desktop_settings" | "set_desktop_settings",
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>(cmd, args);
 }
 
 export const useDesktopSettingsStore = create<DesktopSettingsState>()(
@@ -110,20 +105,30 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
       ...defaults,
 
       updateSettings: (updates) => {
-        set(updates);
-        // Fire-and-forget sync to Rust backend
-        const state = { ...get(), ...updates };
-        syncSettingsToRust(state, {
-          includeHardwareAcceleration: Object.prototype.hasOwnProperty.call(
-            updates,
-            "hardwareAcceleration",
-          ),
-        });
+        void get()
+          .saveSettings(updates)
+          .catch((error: unknown) =>
+            log.warn("Failed to save desktop settings:", error),
+          );
       },
 
-      syncToBackend: async () => {
-        const state = get();
-        await syncSettingsToRust(state);
+      saveSettings: async (updates) => {
+        const keys = settingKeys.filter((key) =>
+          Object.prototype.hasOwnProperty.call(updates, key),
+        );
+        const previous = pickSettings(get(), keys);
+        set(updates);
+        if (!isDesktop() || keys.length === 0) return;
+
+        try {
+          const saved = await invokeRust<unknown>("set_desktop_settings", {
+            patch: pickSettings({ ...get(), ...updates }, keys),
+          });
+          set(readDesktopSettings(saved) ?? {});
+        } catch (error) {
+          set(previous);
+          throw error;
+        }
       },
     }),
     {
@@ -131,58 +136,54 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
       version: 1,
       merge: (persistedState, currentState) => ({
         ...currentState,
-        ...readPersistedDesktopSettings(persistedState),
+        ...readDesktopSettings(persistedState),
       }),
     },
   ),
 );
 
+let hydration: Promise<void> | null = null;
+
 /**
- * Push all settings to the Rust backend.
- * This ensures the Rust close-interceptor and other native
- * event handlers are aware of the current preferences.
+ * Load the settings Rust persisted into the store. The first time Rust has
+ * no settings file yet, hand it the values localStorage kept, once.
+ * Hardware acceleration stays Rust's: it is what this launch's CEF used.
+ * Safe to call more than once; later calls share the first result.
  */
-async function syncSettingsToRust(
-  settings: DesktopSettings,
-  options: SyncDesktopSettingsOptions = {},
-) {
-  if (!isDesktop()) return;
-
-  if (isWindowsDesktop()) {
-    await tauriInvoke("set_open_on_startup", {
-      enabled: settings.openOnStartup,
-    });
-  } else {
-    // Sync autostart
-    const autostart = await getAutostart();
-    if (autostart) {
-      try {
-        const currentlyEnabled = await autostart.isEnabled();
-        if (settings.openOnStartup && !currentlyEnabled) {
-          await autostart.enable();
-        } else if (!settings.openOnStartup && currentlyEnabled) {
-          await autostart.disable();
-        }
-      } catch (e) {
-        log.warn("autostart sync failed:", e);
-      }
-    }
-  }
-
-  // Sync close-to-tray preference to Rust AtomicBool
-  await tauriInvoke("set_close_to_tray", { enabled: settings.closeToTray });
-
-  // Sync start-minimized preference to Rust AtomicBool
-  await tauriInvoke("set_start_minimized", {
-    enabled: settings.startMinimized,
+export function hydrateDesktopSettings(): Promise<void> {
+  if (!isDesktop()) return Promise.resolve();
+  hydration ??= runHydration().catch((error: unknown) => {
+    log.warn("Failed to load desktop settings:", error);
+    hydration = null;
   });
-
-  if (options.includeHardwareAcceleration) {
-    // Persist renderer acceleration preference only during the explicit restart flow.
-    await tauriInvoke("set_hardware_acceleration", {
-      enabled: settings.hardwareAcceleration,
-    });
-  }
+  return hydration;
 }
 
-export { syncSettingsToRust };
+async function runHydration() {
+  const snapshot = await invokeRust<DesktopSettingsSnapshot>(
+    "get_desktop_settings",
+  );
+  if (snapshot.persisted) {
+    useDesktopSettingsStore.setState(
+      readDesktopSettings(snapshot.settings) ?? {},
+    );
+    return;
+  }
+
+  const state = useDesktopSettingsStore.getState();
+  log.info("Migrating desktop settings from localStorage to the desktop app");
+  const saved = await invokeRust<unknown>("set_desktop_settings", {
+    patch: pickSettings(state, [
+      "openOnStartup",
+      "startMinimized",
+      "closeToTray",
+      "desktopNotifications",
+    ]),
+  });
+  useDesktopSettingsStore.setState(readDesktopSettings(saved) ?? {});
+}
+
+/** Test-only: forget the shared hydration so a test can run it again. */
+export function resetDesktopSettingsHydrationForTests() {
+  hydration = null;
+}

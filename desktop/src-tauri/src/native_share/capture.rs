@@ -716,6 +716,20 @@ fn attempt_hook_injection(
         );
         return prep;
     }
+    // The executable blocklist never names the game itself, so also screen its
+    // install tree for anti-cheat markers. Injecting there only times out (the
+    // anti-cheat refuses the unsigned hook DLL) and risks the user's account.
+    if let Some(marker) =
+        crate::game_capture::blocklist::anti_cheat_marker_near(std::path::Path::new(&target_exe))
+    {
+        prep.safety = SafetyDecision::Deny(FallbackReason::Blocklisted);
+        log::info!(
+            "[NativeShare] safety gate denied injection for {target_exe} (pid {target_pid}): \
+             blocklisted (anti-cheat install marker {})",
+            marker.display()
+        );
+        return prep;
+    }
 
     // 5. Resolve the hook vtable offsets for ALL backends for the TARGET
     //    bitness by running the bundled get-graphics-offsets<bits>.exe (OBS
@@ -1342,7 +1356,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
                          delivered; falling back",
                         first_frame_timeout.as_millis()
                     );
-                    break HookLoopOutcome::FallbackToWgc(FallbackReason::HookStoppedMidSession);
+                    break HookLoopOutcome::FallbackToWgc(FallbackReason::HookNoFirstFrame);
                 }
                 std::thread::sleep(IDLE_POLL);
             }
@@ -1388,14 +1402,24 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
     };
 
     if wgc_preroll.is_some() && !promoted_from_wgc_preroll {
+        // The WGC pre-roll stays the active capture; record why the hook lost
+        // so stats and the streaming panel show `WGC · <reason>`, not `none`.
+        stats.set_fallback_reason(reason);
         log::info!(
-            "[NativeShare] hook probe ended before promotion after {}ms (reason={}, target_pid={}, backend={}, frames_received={}, frames_forwarded={}); leaving WGC pre-roll active",
-            hook_loop_started_at.elapsed().as_millis(),
+            "[NativeShare] capture_mode=wgc reason={} — hook probe ended before promotion after {}ms (target_pid={}, backend={}, frames_received={}, frames_forwarded={}); leaving WGC pre-roll active",
             reason.as_str(),
+            hook_loop_started_at.elapsed().as_millis(),
             hook_pid,
             hook_backend.as_str(),
             frames_received,
             frames_forwarded,
+        );
+        let _ = app.emit(
+            "native-screen-share-status",
+            format!(
+                "hook-unavailable: zero-copy game-capture hook unavailable ({}); continuing screen share on WGC",
+                reason.as_str()
+            ),
         );
         return;
     }

@@ -489,6 +489,7 @@ const FALLBACK_REASON_CROSS_ADAPTER: u8 = 10;
 const FALLBACK_REASON_INTEROP_FAILED: u8 = 11;
 const FALLBACK_REASON_TARGET_EXITED: u8 = 12;
 const FALLBACK_REASON_HOOK_STOPPED_MID_SESSION: u8 = 13;
+const FALLBACK_REASON_HOOK_NO_FIRST_FRAME: u8 = 14;
 
 /// Map a [`FallbackReason`] to the `u8` discriminant kept in the atomic.
 fn fallback_reason_to_u8(reason: FallbackReason) -> u8 {
@@ -507,6 +508,7 @@ fn fallback_reason_to_u8(reason: FallbackReason) -> u8 {
         FallbackReason::InteropFailed => FALLBACK_REASON_INTEROP_FAILED,
         FallbackReason::TargetExited => FALLBACK_REASON_TARGET_EXITED,
         FallbackReason::HookStoppedMidSession => FALLBACK_REASON_HOOK_STOPPED_MID_SESSION,
+        FallbackReason::HookNoFirstFrame => FALLBACK_REASON_HOOK_NO_FIRST_FRAME,
     }
 }
 
@@ -528,6 +530,7 @@ fn fallback_reason_from_u8(value: u8) -> FallbackReason {
         FALLBACK_REASON_INTEROP_FAILED => FallbackReason::InteropFailed,
         FALLBACK_REASON_TARGET_EXITED => FallbackReason::TargetExited,
         FALLBACK_REASON_HOOK_STOPPED_MID_SESSION => FallbackReason::HookStoppedMidSession,
+        FALLBACK_REASON_HOOK_NO_FIRST_FRAME => FallbackReason::HookNoFirstFrame,
         _ => FallbackReason::None,
     }
 }
@@ -930,6 +933,7 @@ mod stats_snapshot_tests {
             FallbackReason::InteropFailed,
             FallbackReason::TargetExited,
             FallbackReason::HookStoppedMidSession,
+            FallbackReason::HookNoFirstFrame,
         ] {
             assert_eq!(
                 fallback_reason_from_u8(fallback_reason_to_u8(reason)),

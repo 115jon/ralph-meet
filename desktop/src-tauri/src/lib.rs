@@ -4,6 +4,8 @@
 //   screen_capture  — xcap-based window/monitor enumeration + thumbnails
 //   window          — Win32 DWM dark title bar + tray transparency hack
 //   tray            — System tray icon, menu, and event handlers
+//   main_window     — Main window visibility, tray state, deep-link routing
+//   desktop_settings — Persisted desktop preferences (get/set commands)
 //   permissions     — WebView2 media permission auto-granting (non-CEF only)
 //
 // Native-share feature layers (Req 12.2, 12.5):
@@ -57,9 +59,11 @@ pub mod native_share;
 // (Req 12.2, 12.5).
 #[cfg(desktop)]
 mod app_updates;
+mod desktop_settings;
 #[cfg(feature = "native-screen-share")]
 pub mod game_capture;
 mod hardware_encoder;
+mod main_window;
 mod media_devices;
 mod occlusion;
 mod permissions;
@@ -71,31 +75,26 @@ mod window_icon;
 mod window_state;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::Emitter;
-use tauri::Listener;
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
-/// Shared desktop preferences that the frontend can modify.
-/// These are checked by the Rust event handlers (e.g. close interceptor).
-pub struct DesktopSettings {
-    pub close_to_tray: AtomicBool,
-    pub start_minimized: AtomicBool,
+/// Shutdown progress shared by the exit paths (tray quit, close, restart).
+pub struct ShutdownState {
     pub shutdown_started: AtomicBool,
     pub exit_requested: AtomicBool,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
-struct DesktopRuntimeSettings {
-    #[serde(default = "default_hardware_acceleration")]
-    hardware_acceleration: bool,
-}
-
-fn default_hardware_acceleration() -> bool {
-    true
+pub(crate) fn shutdown_in_progress<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    app.state::<ShutdownState>()
+        .shutdown_started
+        .load(Ordering::Acquire)
 }
 
 const APP_DATA_DIRECTORY_NAME: &str = "RalphMeet";
+/// Marks a launch by the OS autostart entry (the HKCU `Run` value, or the
+/// autostart plugin elsewhere). Only such launches honor "start minimized".
+/// Relaunches (restart helper, installer) never pass it.
+pub(crate) const AUTOSTART_ARG: &str = "--autostart";
 const LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME: &str = "dev.jontitor.ralph-meet";
 #[cfg(target_os = "windows")]
 const WINDOWS_RESTART_HELPER_ARG: &str = "--ralph-restart-helper";
@@ -113,33 +112,10 @@ const WINDOWS_ROOT_STUB_FILE_NAME: &str = "RalphMeet.exe";
 #[cfg(target_os = "windows")]
 const WINDOWS_APP_USER_MODEL_ID: &str = "site.115jon.ralphmeet";
 
-impl Default for DesktopRuntimeSettings {
-    fn default() -> Self {
-        Self {
-            hardware_acceleration: true,
-        }
-    }
-}
-
 #[cfg(target_os = "windows")]
-fn windows_app_data_root() -> Option<std::path::PathBuf> {
+pub(crate) fn windows_app_data_root() -> Option<std::path::PathBuf> {
     std::env::var_os("APPDATA")
         .map(|base| std::path::PathBuf::from(base).join(APP_DATA_DIRECTORY_NAME))
-}
-
-#[cfg(target_os = "windows")]
-fn legacy_windows_runtime_settings_paths() -> Vec<std::path::PathBuf> {
-    let mut paths = Vec::new();
-
-    if let Some(base) = std::env::var_os("LOCALAPPDATA") {
-        paths.push(
-            std::path::PathBuf::from(base)
-                .join(LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME)
-                .join("runtime-settings.json"),
-        );
-    }
-
-    paths
 }
 
 #[cfg(target_os = "windows")]
@@ -239,8 +215,22 @@ fn build_windows_startup_command_for_executable(
     command
 }
 
+/// Arguments of the autostart (`Run`) command. The legacy `Update.exe`
+/// launcher keeps `--processStart` only: it does not forward extra arguments,
+/// so start minimized does not apply there.
 #[cfg(target_os = "windows")]
 fn windows_startup_arguments(is_update_launcher: bool) -> &'static [&'static str] {
+    if is_update_launcher {
+        &["--processStart", "RalphMeet.exe"]
+    } else {
+        &[AUTOSTART_ARG]
+    }
+}
+
+/// Arguments of a relaunch (restart helper). Never `--autostart`: a restart
+/// must come back visible.
+#[cfg(target_os = "windows")]
+fn windows_relaunch_arguments(is_update_launcher: bool) -> &'static [&'static str] {
     if is_update_launcher {
         &["--processStart", "RalphMeet.exe"]
     } else {
@@ -249,7 +239,7 @@ fn windows_startup_arguments(is_update_launcher: bool) -> &'static [&'static str
 }
 
 #[cfg(target_os = "windows")]
-fn build_windows_startup_command() -> Result<String, String> {
+pub(crate) fn build_windows_startup_command() -> Result<String, String> {
     let (executable, is_update_launcher) = resolve_windows_startup_executable()?;
     Ok(build_windows_startup_command_for_executable(
         &executable,
@@ -319,7 +309,7 @@ fn wait_for_windows_process_exit(parent_pid: u32) -> Result<(), String> {
 fn launch_windows_restart_target() -> Result<(), String> {
     let (executable, is_update_launcher) = resolve_windows_startup_executable()?;
     std::process::Command::new(&executable)
-        .args(windows_startup_arguments(is_update_launcher))
+        .args(windows_relaunch_arguments(is_update_launcher))
         .spawn()
         .map_err(|err| format!("failed to launch {}: {err}", executable.display()))?;
     Ok(())
@@ -354,77 +344,6 @@ fn maybe_run_windows_restart_helper() -> Result<bool, String> {
 
     launch_windows_restart_target()?;
     Ok(true)
-}
-
-#[cfg(target_os = "windows")]
-fn set_windows_run_key_value(value_name: &str, command: Option<&str>) -> Result<(), String> {
-    use windows::core::{HSTRING, PCWSTR};
-    use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
-    use windows::Win32::System::Registry::{
-        RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
-        KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
-    };
-
-    const RUN_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-    let subkey = HSTRING::from(RUN_SUBKEY);
-    let mut key = HKEY::default();
-    let open = unsafe {
-        RegCreateKeyExW(
-            HKEY_CURRENT_USER,
-            PCWSTR(subkey.as_ptr()),
-            Some(0),
-            PCWSTR::null(),
-            REG_OPTION_NON_VOLATILE,
-            KEY_SET_VALUE,
-            None,
-            &mut key,
-            None,
-        )
-    };
-    if open != ERROR_SUCCESS {
-        return Err(format!("RegCreateKeyExW failed: {}", open.0));
-    }
-
-    let value_name = HSTRING::from(value_name);
-    let result = match command {
-        Some(command) => {
-            let encoded: Vec<u16> = command.encode_utf16().chain(std::iter::once(0)).collect();
-            let bytes = unsafe {
-                std::slice::from_raw_parts(
-                    encoded.as_ptr() as *const u8,
-                    encoded.len() * std::mem::size_of::<u16>(),
-                )
-            };
-            unsafe {
-                RegSetValueExW(
-                    key,
-                    PCWSTR(value_name.as_ptr()),
-                    Some(0),
-                    REG_SZ,
-                    Some(bytes),
-                )
-            }
-        }
-        None => unsafe { RegDeleteValueW(key, PCWSTR(value_name.as_ptr())) },
-    };
-
-    unsafe {
-        let _ = RegCloseKey(key);
-    }
-
-    if result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND {
-        Ok(())
-    } else {
-        Err(format!(
-            "{} failed: {}",
-            if command.is_some() {
-                "RegSetValueExW"
-            } else {
-                "RegDeleteValueW"
-            },
-            result.0
-        ))
-    }
 }
 
 #[cfg(target_os = "windows")]
@@ -491,132 +410,8 @@ fn migrate_legacy_windows_app_data() -> Result<(), String> {
     Ok(())
 }
 
-fn runtime_settings_path() -> Option<std::path::PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        windows_app_data_root().map(|base| base.join("runtime-settings.json"))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::env::var_os("HOME").map(|base| {
-            std::path::PathBuf::from(base)
-                .join(".config")
-                .join(APP_DATA_DIRECTORY_NAME)
-                .join("runtime-settings.json")
-        })
-    }
-}
-
-fn read_runtime_settings() -> DesktopRuntimeSettings {
-    let mut candidate_paths = Vec::new();
-    if let Some(path) = runtime_settings_path() {
-        candidate_paths.push(path);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        candidate_paths.extend(legacy_windows_runtime_settings_paths());
-    }
-
-    for path in candidate_paths {
-        let Ok(raw) = std::fs::read_to_string(path) else {
-            continue;
-        };
-
-        if let Ok(settings) = serde_json::from_str(&raw) {
-            return settings;
-        }
-    }
-
-    DesktopRuntimeSettings::default()
-}
-
-fn write_runtime_settings(settings: &DesktopRuntimeSettings) -> Result<(), String> {
-    let path =
-        runtime_settings_path().ok_or_else(|| "runtime settings path unavailable".to_string())?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-    let raw = serde_json::to_string_pretty(settings).map_err(|err| err.to_string())?;
-    std::fs::write(path, raw).map_err(|err| err.to_string())
-}
-
-pub(crate) fn log_window_state_file<R: tauri::Runtime>(app: &tauri::AppHandle<R>, context: &str) {
-    let Some(path) = app
-        .path()
-        .app_config_dir()
-        .ok()
-        .map(|dir| dir.join(".window-state.json"))
-    else {
-        log::warn!("[WindowState][{context}] app_config_dir unavailable");
-        return;
-    };
-
-    match std::fs::read_to_string(&path) {
-        Ok(raw) => {
-            let compact = raw.replace('\r', "").replace('\n', " ");
-            log::info!(
-                "[WindowState][{context}] file={} contents={}",
-                path.display(),
-                compact
-            );
-        }
-        Err(err) => {
-            log::info!(
-                "[WindowState][{context}] file={} unreadable={}",
-                path.display(),
-                err
-            );
-        }
-    }
-}
-
-pub(crate) fn log_window_snapshot<R: tauri::Runtime>(
-    window: &tauri::WebviewWindow<R>,
-    context: &str,
-) {
-    let position = window
-        .outer_position()
-        .map(|pos| format!("{},{}", pos.x, pos.y))
-        .unwrap_or_else(|err| format!("err:{err}"));
-    let size = window
-        .outer_size()
-        .map(|size| format!("{}x{}", size.width, size.height))
-        .unwrap_or_else(|err| format!("err:{err}"));
-    let visible = window
-        .is_visible()
-        .map(|value| value.to_string())
-        .unwrap_or_else(|err| format!("err:{err}"));
-    let maximized = window
-        .is_maximized()
-        .map(|value| value.to_string())
-        .unwrap_or_else(|err| format!("err:{err}"));
-
-    log::info!(
-        "[WindowState][{context}] label={} visible={} maximized={} pos={} size={}",
-        window.label(),
-        visible,
-        maximized,
-        position,
-        size
-    );
-}
-
-fn log_window_snapshot_by_label<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    label: &str,
-    context: &str,
-) {
-    if let Some(window) = app.get_webview_window(label) {
-        log_window_snapshot(&window, context);
-    } else {
-        log::info!("[WindowState][{context}] label={} missing", label);
-    }
-}
-
 fn claim_shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>, context: &'static str) -> bool {
-    let settings = app.state::<DesktopSettings>();
+    let settings = app.state::<ShutdownState>();
     if settings.shutdown_started.swap(true, Ordering::AcqRel) {
         log::debug!("[DesktopRuntime][{context}] shutdown already in progress");
         false
@@ -635,7 +430,7 @@ fn spawn_app_exit_claimed<R: tauri::Runtime>(
         .name("RalphExitWatchdog".into())
         .spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(5));
-            let settings = watchdog_app.state::<DesktopSettings>();
+            let settings = watchdog_app.state::<ShutdownState>();
             if !settings.exit_requested.swap(true, Ordering::AcqRel) {
                 log::warn!(
                     "[DesktopRuntime][{context}] shutdown exceeded 5 seconds; forcing application termination"
@@ -664,7 +459,7 @@ fn spawn_app_exit_claimed<R: tauri::Runtime>(
             );
         }
 
-        let settings = app.state::<DesktopSettings>();
+        let settings = app.state::<ShutdownState>();
         if !settings.exit_requested.swap(true, Ordering::AcqRel) {
             if restart {
                 app.request_restart();
@@ -685,41 +480,13 @@ pub(crate) fn spawn_app_exit<R: tauri::Runtime>(
     }
 }
 
-fn spawn_window_state_diagnostics<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    reason: &'static str,
-) {
-    let handle = app.clone();
-    let _ = std::thread::Builder::new()
-        .name("RalphWindowStateDiag".into())
-        .spawn(move || {
-            let checkpoints = [
-                (0u64, "immediate"),
-                (250, "250ms"),
-                (1000, "1s"),
-                (3000, "3s"),
-            ];
-            let mut last_delay = 0u64;
-            for (delay_ms, label) in checkpoints {
-                if delay_ms > last_delay {
-                    std::thread::sleep(std::time::Duration::from_millis(delay_ms - last_delay));
-                }
-                let context = format!("{reason}:{label}");
-                log_window_state_file(&handle, &context);
-                log_window_snapshot_by_label(&handle, "main", &context);
-                log_window_snapshot_by_label(&handle, "updater", &context);
-                last_delay = delay_ms;
-            }
-        });
-}
-
 // ── Runtime type: CEF (Chromium) or Wry (native webview) ────────────────
 // When the `cef` feature is enabled, the app uses a full Chromium engine.
 // This gives us native getDisplayMedia, consistent WebRTC, and full DevTools.
 #[cfg(feature = "cef")]
-type TauriRuntime = tauri::Cef;
+pub(crate) type TauriRuntime = tauri::Cef;
 #[cfg(not(feature = "cef"))]
-type TauriRuntime = tauri::Wry;
+pub(crate) type TauriRuntime = tauri::Wry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[cfg_attr(feature = "cef", tauri::cef_entry_point)]
@@ -741,13 +508,19 @@ pub fn run() {
     // Install the rustls ring crypto provider before anything touches TLS.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
+    // Read before any window or webview exists: CEF needs hardware
+    // acceleration, the launch needs start minimized and close to tray.
+    let desktop_settings = desktop_settings::DesktopSettingsStore::load();
+    #[cfg(feature = "cef")]
+    let hardware_acceleration = desktop_settings.settings().hardware_acceleration;
+
     let mut builder = tauri::Builder::<TauriRuntime>::default()
-        .manage(DesktopSettings {
-            close_to_tray: AtomicBool::new(false),
-            start_minimized: AtomicBool::new(false),
+        .manage(ShutdownState {
             shutdown_started: AtomicBool::new(false),
             exit_requested: AtomicBool::new(false),
         })
+        .manage(desktop_settings)
+        .manage(main_window::MainWindowState::from_env())
         .plugin(
             tauri_plugin_log::Builder::default()
                 .clear_targets()
@@ -785,7 +558,6 @@ pub fn run() {
     // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!
     #[cfg(feature = "cef")]
     {
-        let runtime_settings = read_runtime_settings();
         let mut chromium_args = vec![
             (
                 "--disable-background-networking".to_string(),
@@ -859,7 +631,7 @@ pub fn run() {
                 ),
             ),
         ];
-        if !runtime_settings.hardware_acceleration {
+        if !hardware_acceleration {
             chromium_args.push(("--disable-gpu".to_string(), None::<String>));
         }
         #[cfg(debug_assertions)]
@@ -877,20 +649,10 @@ pub fn run() {
     // This causes DevTools to instantly close.
     let is_cef_child = std::env::args().any(|arg| arg.starts_with("--type="));
     if !is_cef_child {
+        // A second launch (shortcut, `ralphmeet://` link) reveals this
+        // instance's window and routes its link.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // When a second instance launches (e.g. from a deep link),
-            // forward the URL to the existing instance's webview
-            log::info!("Single instance callback, argv: {:?}", argv);
-            for arg in &argv {
-                if arg.starts_with("ralphmeet://") {
-                    log::info!("Deep link from second instance: {}", arg);
-                    let _ = app.emit("deep-link", arg.as_str());
-                }
-            }
-            // Focus the main window
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = tauri::WebviewWindow::set_focus(&window);
-            }
+            main_window::on_second_instance(app, &argv);
         }));
     }
 
@@ -898,7 +660,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec![AUTOSTART_ARG]),
         ))
         .setup(|app| {
             #[cfg(target_os = "windows")]
@@ -912,10 +674,17 @@ pub fn run() {
                     log_dir.join("desktop.log").display()
                 );
             }
+            // Loaded before the log plugin existed; log it here.
+            let settings_store = app.state::<desktop_settings::DesktopSettingsStore>();
+            let settings = settings_store.snapshot();
             log::info!(
-                "[DesktopRuntime] hardware_acceleration={}",
-                read_runtime_settings().hardware_acceleration
+                "[DesktopRuntime] desktop settings persisted={} {:?} autostart_launch={}",
+                settings.persisted,
+                settings.settings,
+                main_window::launched_by_autostart(std::env::args())
             );
+            // Run values written before `--autostart` existed lack the flag.
+            settings_store.repair_autostart_entry();
 
             // Initialize the updater plugin
             #[cfg(desktop)]
@@ -935,14 +704,7 @@ pub fn run() {
             // while it is still hidden. See window_state.rs for why this does
             // not use tauri-plugin-window-state.
             #[cfg(desktop)]
-            {
-                let handle = app.handle().clone();
-                log_window_state_file(&handle, "setup:before-restore");
-                window_state::restore(&handle);
-                log_window_snapshot_by_label(&handle, "main", "setup:after-restore");
-                log_window_snapshot_by_label(&handle, "updater", "setup:after-restore");
-                spawn_window_state_diagnostics(&handle, "startup");
-            }
+            window_state::restore(app.handle());
 
             // ── System tray ─────────────────────────────────────────────
             #[cfg(desktop)]
@@ -989,15 +751,10 @@ pub fn run() {
                 }
             }
 
-            // Listen for deep link events (ralphmeet://invite/<code>) and
-            // forward them to the webview as a custom event. Sign-in uses a
-            // device code, not a deep link.
-            let handle = app.handle().clone();
-            app.listen("deep-link://new-url", move |event| {
-                log::info!("Deep link received: {:?}", event.payload());
-                // Forward to all webviews — the frontend handles invite codes
-                let _ = handle.emit("deep-link", event.payload());
-            });
+            // Route ralphmeet://invite/<code> links (plugin events and the
+            // cold-start command line) through the main window owner. Sign-in
+            // uses a device code, not a deep link.
+            main_window::setup(app);
 
             // Auto-grant microphone + camera permissions in WebView2
             // (CEF has its own built-in PermissionHandler that auto-approves these)
@@ -1044,7 +801,7 @@ pub fn run() {
         // ── Minimize to tray on close ────────────────────────────────────
         // CEF runtime limitations: hide() kills msg loop, minimize() crashes GPU
         // at 0x80000003, and set_skip_taskbar() is unimplemented.
-        // See window::make_window_invisible() for the full explanation.
+        // See main_window.rs and window::make_window_invisible().
         .on_window_event(|window, event| {
             if matches!(window.label(), "main" | "updater") {
                 match event {
@@ -1087,62 +844,25 @@ pub fn run() {
                 }
             }
 
-            if window.label() == "updater" {
-                if matches!(event, tauri::WindowEvent::Destroyed)
-                    && !window
-                        .app_handle()
-                        .state::<DesktopSettings>()
-                        .shutdown_started
-                        .load(Ordering::Acquire)
+            // The updater closed without handing off: run the launch handoff
+            // now. It does nothing if the handoff already ran.
+            if window.label() == "updater"
+                && matches!(event, tauri::WindowEvent::Destroyed)
+                && !shutdown_in_progress(window.app_handle())
+            {
+                if let Err(err) =
+                    main_window::complete_launch(window.app_handle(), "updater:destroyed-fallback")
                 {
-                    if let Some(main) = window.app_handle().get_webview_window("main") {
-                        if let Ok(false) = main.is_visible() {
-                            log::info!("[WindowState][updater:destroyed-fallback] showing main after updater closed");
-                            let _ = main.show();
-                            let _ = main.set_focus();
-                            log_window_snapshot(&main, "updater:destroyed-fallback:after");
-                        }
-                    }
+                    log::warn!("[Window][updater:destroyed-fallback] {err}");
                 }
             }
 
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Only intercept close on the main window — let DevTools and
                 // other secondary windows close normally.
-                if window.label() != "main" {
-                    return;
+                if window.label() == "main" {
+                    main_window::on_close_requested(window, api);
                 }
-
-                // Check if user wants close-to-tray behavior
-                #[cfg(target_os = "windows")]
-                let close_to_tray = window
-                    .state::<DesktopSettings>()
-                    .close_to_tray
-                    .load(Ordering::Relaxed);
-                #[cfg(not(target_os = "windows"))]
-                let close_to_tray = false;
-
-                log::warn!(
-                    "[Window][close-requested] label=main close_to_tray={}",
-                    close_to_tray
-                );
-                // Save before hiding: a tray-hidden app usually ends by
-                // updater install or Windows shutdown, which skip exit hooks.
-                window_state::save_now(window.app_handle());
-                if !close_to_tray {
-                    // User disabled minimize-to-tray — actually quit the app
-                    api.prevent_close();
-                    spawn_app_exit(&window.app_handle(), "main-close:quit", false);
-                    return;
-                }
-
-                api.prevent_close();
-                #[cfg(target_os = "windows")]
-                if let Ok(hwnd) = window.hwnd() {
-                    let hw = windows::Win32::Foundation::HWND(hwnd.0 as _);
-                    window::make_window_invisible(hw);
-                }
-                log::info!("[Window] Close intercepted → became transparent (tray hack)");
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -1169,13 +889,11 @@ pub fn run() {
             native_share::handle_preview_loopback_answer,
             #[cfg(feature = "native-screen-share")]
             native_share::stop_preview_loopback,
-            get_hardware_acceleration,
             restart_app,
-            set_open_on_startup,
-            set_hardware_acceleration,
-            set_close_to_tray,
-            set_start_minimized,
-            show_main_window,
+            desktop_settings::get_desktop_settings,
+            desktop_settings::set_desktop_settings,
+            main_window::launch_main_window,
+            main_window::take_pending_deep_links,
             close_updater_window,
             thumbnail_toolbar::sync_taskbar_thumbnail_toolbar,
             window::set_title_bar_dark_mode,
@@ -1195,48 +913,7 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-// ── Desktop settings commands ───────────────────────────────────────────
-
-/// Syncs the "close to tray" preference from the frontend into Rust state.
-/// When disabled, the close button actually quits the app instead of hiding.
-#[tauri::command]
-fn set_close_to_tray(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
-    state.close_to_tray.store(enabled, Ordering::Relaxed);
-    log::info!("[Settings] close_to_tray = {}", enabled);
-}
-
-/// Syncs the "start minimized" preference from the frontend into Rust state.
-/// Currently read-only on the Rust side — the frontend handles the actual
-/// minimization by calling make_window_invisible after startup.
-#[tauri::command]
-fn set_start_minimized(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
-    state.start_minimized.store(enabled, Ordering::Relaxed);
-    log::info!("[Settings] start_minimized = {}", enabled);
-}
-
-/// Shows the already-created main window without enumerating windows through
-/// the CEF window plugin. This is used during updater handoff, where the main
-/// window is intentionally created hidden.
-#[tauri::command]
-fn show_main_window(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
-    if app
-        .state::<DesktopSettings>()
-        .shutdown_started
-        .load(Ordering::Acquire)
-    {
-        return Err("application shutdown is already in progress".to_string());
-    }
-
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window is unavailable".to_string())?;
-
-    window.show().map_err(|error| error.to_string())?;
-    if let Err(error) = window.set_focus() {
-        log::warn!("[Window] main window shown but focus failed: {error}");
-    }
-    Ok(())
-}
+// ── Commands ────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn close_updater_window(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
@@ -1244,37 +921,6 @@ fn close_updater_window(app: tauri::AppHandle<TauriRuntime>) -> Result<(), Strin
         window.close().map_err(|error| error.to_string())?;
     }
     Ok(())
-}
-
-#[tauri::command]
-fn set_open_on_startup(enabled: bool) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        let command = if enabled {
-            Some(build_windows_startup_command()?)
-        } else {
-            None
-        };
-
-        set_windows_run_key_value("RalphMeet", command.as_deref())?;
-        if let Some(command) = command {
-            log::info!("[Settings] open_on_startup = true command={command}");
-        } else {
-            log::info!("[Settings] open_on_startup = false");
-        }
-        return Ok(());
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = enabled;
-        Ok(())
-    }
-}
-
-#[tauri::command]
-fn get_hardware_acceleration() -> bool {
-    read_runtime_settings().hardware_acceleration
 }
 
 #[tauri::command]
@@ -1288,7 +934,7 @@ fn restart_app(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
         let helper_pid = match spawn_windows_restart_helper(parent_pid) {
             Ok(pid) => pid,
             Err(error) => {
-                app.state::<DesktopSettings>()
+                app.state::<ShutdownState>()
                     .shutdown_started
                     .store(true, Ordering::Release);
                 spawn_app_exit_claimed(&app, "restart-helper-failed", false);
@@ -1313,24 +959,12 @@ fn restart_app(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
-fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
-    let mut settings = read_runtime_settings();
-    settings.hardware_acceleration = enabled;
-    write_runtime_settings(&settings)?;
-    log::info!(
-        "[Settings] hardware_acceleration = {} (pending restart)",
-        enabled
-    );
-    Ok(())
-}
-
 #[cfg(all(test, target_os = "windows"))]
 mod windows_startup_registration_tests {
     use super::{
         build_windows_startup_command_for_executable, parse_windows_restart_helper_parent_pid,
-        versioned_windows_install_root_from_exe_path, windows_root_launcher,
-        WINDOWS_APP_USER_MODEL_ID,
+        versioned_windows_install_root_from_exe_path, windows_relaunch_arguments,
+        windows_root_launcher, WINDOWS_APP_USER_MODEL_ID,
     };
     use std::path::Path;
 
@@ -1354,7 +988,7 @@ mod windows_startup_registration_tests {
         assert!(!is_update_launcher);
         assert_eq!(
             build_windows_startup_command_for_executable(&launcher, is_update_launcher),
-            format!("\"{}\"", root.join("RalphMeet.exe").display())
+            format!("\"{}\" --autostart", root.join("RalphMeet.exe").display())
         );
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1399,15 +1033,34 @@ mod windows_startup_registration_tests {
     }
 
     #[test]
-    fn startup_command_falls_back_to_current_executable_without_launcher_args() {
+    fn startup_command_marks_the_stub_launch_as_autostart() {
         let command = build_windows_startup_command_for_executable(
             Path::new(r"C:\Users\jon\AppData\Local\RalphMeet\RalphMeet.exe"),
             false,
         );
         assert_eq!(
             command,
-            "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\RalphMeet.exe\""
+            "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\RalphMeet.exe\" --autostart"
         );
+    }
+
+    #[test]
+    fn relaunch_never_passes_autostart() {
+        assert!(windows_relaunch_arguments(false).is_empty());
+        assert_eq!(
+            windows_relaunch_arguments(true),
+            ["--processStart", "RalphMeet.exe"]
+        );
+    }
+
+    #[test]
+    fn restart_helper_parser_ignores_autostart() {
+        let parent_pid = parse_windows_restart_helper_parent_pid([
+            "RalphMeet.exe".to_string(),
+            "--autostart".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(parent_pid, None);
     }
 
     #[test]
