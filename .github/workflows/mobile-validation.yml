@@ -1,0 +1,70 @@
+name: Mobile Validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-validation.yml"
+      - ".github/actions/setup-pnpm/**"
+      - "apps/mobile/**"
+      # Shared protocol and realtime packages the app bundles.
+      - "packages/**"
+      # app.config.ts reads the deployment defaults from here.
+      - "src/lib/site-defaults.ts"
+      - "patches/**"
+      - ".oxfmtrc.json"
+      - "oxlint.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/mobile-validation.yml"
+      - "apps/mobile/**"
+      - "packages/**"
+      - "src/lib/site-defaults.ts"
+      - "patches/**"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  mobile:
+    name: mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup pnpm workspace
+        # The same install and pnpm store cache as ci.yml: oxlint and oxfmt are
+        # root devDependencies, so the root package is installed too.
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Typecheck
+        run: pnpm --filter @ralph/mobile typecheck
+
+      - name: Lint
+        run: pnpm exec oxlint apps/mobile
+
+      - name: Check formatting
+        run: pnpm exec oxfmt --check apps/mobile
+
+      - name: Export the Android bundle
+        # Metro bundles the whole app (JS and assets) without a native build,
+        # catching resolution and transform errors that typecheck misses.
+        working-directory: apps/mobile
+        env:
+          APP_VARIANT: preview
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+        run: pnpm exec expo export --platform android --output-dir "$RUNNER_TEMP/mobile-export"

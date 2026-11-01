@@ -57,6 +57,7 @@ internal class TelecomCall(
   private var endpoints: List<CallEndpointCompat> = emptyList()
   private var current: CallEndpointCompat? = null
   private var defaultRouteChosen = false
+  private var speakerFirst = true
   private var ended = false
 
   override val state: RouteState
@@ -67,7 +68,8 @@ internal class TelecomCall(
       )
 
   /** Throws when the device has no Telecom (some tablets, old builds). */
-  fun start(displayName: String) {
+  fun start(displayName: String, speakerFirst: Boolean) {
+    this.speakerFirst = speakerFirst
     callsManager.registerAppWithTelecom(CallsManager.CAPABILITY_BASELINE)
     val attributes =
       CallAttributesCompat(
@@ -160,11 +162,13 @@ internal class TelecomCall(
 
   /**
    * Voice channels are speaker-first, like the web app on a laptop, unless a
-   * headset is plugged in or paired: then Telecom has already picked it.
+   * headset is plugged in or paired (then Telecom has already picked it) or
+   * the user prefers the earpiece, where Telecom starts an audio call anyway.
    */
   private suspend fun chooseDefaultRoute() {
     if (defaultRouteChosen || endpoints.isEmpty()) return
     defaultRouteChosen = true
+    if (!speakerFirst) return
     val headset =
       endpoints.any {
         it.type == CallEndpointCompat.TYPE_BLUETOOTH || it.type == CallEndpointCompat.TYPE_WIRED_HEADSET

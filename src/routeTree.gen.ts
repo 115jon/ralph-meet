@@ -34,6 +34,7 @@ import { Route as ApiGifsRouteImport } from './routes/api/gifs'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiEmojisRouteImport } from './routes/api/emojis'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
+import { Route as ApiPushTokensRouteImport } from './routes/api/push-tokens'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
 import { Route as ApiCameraBackgroundsRouteImport } from './routes/api/camera-backgrounds'
 import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
@@ -227,6 +228,11 @@ const ApiEmojisRoute = ApiEmojisRouteImport.update({
 const ApiDmsRoute = ApiDmsRouteImport.update({
   id: '/api/dms',
   path: '/api/dms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPushTokensRoute = ApiPushTokensRouteImport.update({
+  id: '/api/push-tokens',
+  path: '/api/push-tokens',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCheckUsernameRoute = ApiCheckUsernameRouteImport.update({
@@ -603,6 +609,7 @@ export interface FileRoutesByFullPath {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
+  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
@@ -699,6 +706,7 @@ export interface FileRoutesByTo {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
+  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
@@ -796,6 +804,7 @@ export interface FileRoutesById {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
+  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
@@ -894,6 +903,7 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
+    | '/api/push-tokens'
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
@@ -990,6 +1000,7 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
+    | '/api/push-tokens'
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
@@ -1086,6 +1097,7 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
+    | '/api/push-tokens'
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
@@ -1183,6 +1195,7 @@ export interface RootRouteChildren {
   ApiCameraBackgroundsRoute: typeof ApiCameraBackgroundsRouteWithChildren
   ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
   ApiDmsRoute: typeof ApiDmsRoute
+  ApiPushTokensRoute: typeof ApiPushTokensRoute
   ApiEmojisRoute: typeof ApiEmojisRouteWithChildren
   ApiFriendsRoute: typeof ApiFriendsRoute
   ApiGifsRoute: typeof ApiGifsRoute
@@ -1404,6 +1417,13 @@ declare module '@tanstack/react-router' {
       path: '/api/dms'
       fullPath: '/api/dms'
       preLoaderRoute: typeof ApiDmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/push-tokens': {
+      id: '/api/push-tokens'
+      path: '/api/push-tokens'
+      fullPath: '/api/push-tokens'
+      preLoaderRoute: typeof ApiPushTokensRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/check-username': {
@@ -2138,6 +2158,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCameraBackgroundsRoute: ApiCameraBackgroundsRouteWithChildren,
   ApiCheckUsernameRoute: ApiCheckUsernameRoute,
   ApiDmsRoute: ApiDmsRoute,
+  ApiPushTokensRoute: ApiPushTokensRoute,
   ApiEmojisRoute: ApiEmojisRouteWithChildren,
   ApiFriendsRoute: ApiFriendsRoute,
   ApiGifsRoute: ApiGifsRoute,

@@ -104,18 +104,18 @@ internal object CallController {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val telecom = TelecomCall(context, scope, telecomEvents(context))
       try {
-        telecom.start(call.channelName)
+        telecom.start(call.channelName, call.speakerFirst)
         return telecom
       } catch (error: Exception) {
         // UnsupportedOperationException or SecurityException: no Telecom here.
         Log.w(TAG, "Telecom unavailable; routing audio directly", error)
       }
     }
-    return legacyAudio(context)
+    return legacyAudio(context, call.speakerFirst)
   }
 
-  private fun legacyAudio(context: Context): AudioRouter =
-    LegacyAudioRouter(context) { emitRoutes() }.also { it.start() }
+  private fun legacyAudio(context: Context, speakerFirst: Boolean): AudioRouter =
+    LegacyAudioRouter(context, speakerFirst) { emitRoutes() }.also { it.start() }
 
   private fun telecomEvents(context: Context) =
     object : TelecomCall.Events {
@@ -138,8 +138,8 @@ internal object CallController {
       override fun onFailed(error: Throwable) {
         // Telecom refused the call (e.g. busy with a cellular call that
         // cannot be held). Keep the voice channel and route audio directly.
-        if (info == null) return
-        router = legacyAudio(context)
+        val current = info ?: return
+        router = legacyAudio(context, current.speakerFirst)
       }
     }
 

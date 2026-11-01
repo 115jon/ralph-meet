@@ -25,6 +25,8 @@ class CallOptions : Record {
   @Field val deafened: Boolean = false
 
   @Field val openUrl: String? = null
+
+  @Field val speakerFirst: Boolean = true
 }
 
 class RalphCallModule : Module() {
@@ -113,5 +115,6 @@ private fun CallOptions.toInfo() =
     muted = muted,
     deafened = deafened,
     openUrl = openUrl,
+    speakerFirst = speakerFirst,
     startedAt = System.currentTimeMillis(),
   )

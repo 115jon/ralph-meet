@@ -2,6 +2,7 @@ import * as Linking from "expo-linking";
 import { AppRegistry, PermissionsAndroid, Platform } from "react-native";
 import { create } from "zustand";
 
+import { useCallPreferences } from "@/features/preferences/call-preferences";
 import { useServersStore } from "@/features/servers/store";
 import { type ActiveCall, useVoiceStore } from "@/features/voice/store";
 
@@ -56,6 +57,7 @@ function optionsFor(call: ActiveCall): RalphCall.CallOptions {
     muted: call.muted,
     deafened: call.deafened,
     openUrl: Linking.createURL("/call"),
+    speakerFirst: useCallPreferences.getState().audioRoute === "speaker",
   };
 }
 
