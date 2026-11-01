@@ -104,6 +104,11 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-web-browser",
     "expo-image",
+    // Chat GIFs and videos play inline only, never in the background or PiP.
+    [
+      "expo-video",
+      { supportsBackgroundPlayback: false, supportsPictureInPicture: false },
+    ],
     // Message pushes post on the `messages` channel the app creates at launch.
     ["expo-notifications", { defaultChannel: "messages" }],
     // The composer picks from the system photo picker only: drop the camera

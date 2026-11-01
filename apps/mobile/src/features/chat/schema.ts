@@ -20,6 +20,9 @@ const AttachmentSchema = Schema.Struct({
   content_type: OptionalText,
   /** API-relative (`/api/attachments/...`) or an absolute external URL. */
   url: Schema.optional(Schema.String),
+  /** A GIF sent as a video (the picker's mp4s): loops silently. */
+  isGif: Schema.optional(Schema.Boolean),
+  thumbnailUrl: OptionalText,
 });
 export type Attachment = typeof AttachmentSchema.Type;
 
@@ -35,8 +38,22 @@ const EmbedMediaSchema = Schema.Struct({
   width: OptionalNumber,
   height: OptionalNumber,
   thumbnailUrl: Schema.optional(Schema.String),
+  contentType: Schema.optional(Schema.String),
   isGif: Schema.optional(Schema.Boolean),
+  durationSeconds: OptionalNumber,
 });
+
+const EmbedVideoSchema = Schema.Struct({
+  url: Schema.String,
+  width: OptionalNumber,
+  height: OptionalNumber,
+  /** "direct": a playable file. "player": an iframe page, opened instead. */
+  kind: Schema.optional(Schema.String),
+  contentType: Schema.optional(Schema.String),
+  durationSeconds: OptionalNumber,
+});
+
+const EmbedNameSchema = Schema.Struct({ name: Schema.optional(Schema.String) });
 
 /** Link previews (src/lib/types.ts EmbedInfo), the parts the app draws. */
 const EmbedSchema = Schema.Struct({
@@ -46,8 +63,13 @@ const EmbedSchema = Schema.Struct({
   direct: Schema.optional(Schema.Boolean),
   rawTitle: Schema.optional(Schema.String),
   rawDescription: Schema.optional(Schema.String),
+  provider: Schema.optional(EmbedNameSchema),
+  author: Schema.optional(EmbedNameSchema),
+  /** "thumbnail": a small picture beside the text; else large under it. */
+  imageLayout: Schema.optional(Schema.String),
   thumbnail: Schema.optional(EmbedImageSchema),
   media: Schema.optional(Schema.Array(EmbedMediaSchema)),
+  video: Schema.optional(EmbedVideoSchema),
 });
 export type Embed = typeof EmbedSchema.Type;
 

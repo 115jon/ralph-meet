@@ -1,3 +1,4 @@
+import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import {
   FlatList,
@@ -12,7 +13,7 @@ import { loadLatest, loadOlder } from "./actions";
 import { DayDivider, MessageRow } from "./MessageRow";
 import { buildRows, type ChatRow } from "./rows";
 import { useChannelMessages, type ChatMessage } from "./store";
-import { setVisibleMessages } from "./visibility";
+import { setChatCovered, setVisibleMessages } from "./visibility";
 
 const keyOf = (row: ChatRow) => row.key;
 
@@ -103,7 +104,9 @@ export function MessageList({
       ),
     [onLongPress],
   );
-  // Nothing plays once the list is gone.
+  // Nothing plays under another screen, or once the list is gone.
+  const focused = useIsFocused();
+  useEffect(() => setChatCovered(!focused), [focused]);
   useEffect(() => () => setVisibleMessages([]), []);
   const messages = state?.messages;
   const rows = useMemo(() => (messages ? buildRows(messages) : []), [messages]);

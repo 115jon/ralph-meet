@@ -8,9 +8,9 @@ import { Avatar, Led, Text } from "@/ui";
 
 import { authorName } from "./authors";
 import { mentionsUser, parseContent } from "./content";
-import { messageMedia } from "./media";
+import { messageMedia } from "./media/classify";
 import { MessageBody } from "./MessageBody";
-import { MessageMedia } from "./MessageMedia";
+import { MessageMedia } from "./media/MessageMedia";
 import { discardSend, retrySend, toggleReaction } from "./mutations";
 import type { Reaction, ReplyPreview } from "./schema";
 import type { ChatMessage } from "./store";
