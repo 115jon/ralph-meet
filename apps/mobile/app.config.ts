@@ -71,6 +71,13 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-secure-store",
     "expo-web-browser",
+    "expo-image",
+    // The composer picks from the system photo picker only: drop the
+    // camera and microphone permissions the library would add.
+    [
+      "expo-image-picker",
+      { cameraPermission: false, microphonePermission: false },
+    ],
     [
       "expo-splash-screen",
       {

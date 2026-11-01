@@ -7,12 +7,15 @@ import { Text } from "./Text";
 interface ButtonProps {
   label: string;
   onPress: () => void;
-  variant?: "primary" | "ghost";
+  /** One primary per view; danger confirms a destructive step. */
+  variant?: "primary" | "ghost" | "danger";
 }
 
 export function Button({ label, onPress, variant = "primary" }: ButtonProps) {
   const theme = useTheme();
   const primary = variant === "primary";
+  const danger = variant === "danger";
+  const filled = primary || danger;
   return (
     <Pressable
       accessibilityRole="button"
@@ -25,17 +28,25 @@ export function Button({ label, onPress, variant = "primary" }: ButtonProps) {
         justifyContent: "center",
         backgroundColor: primary
           ? theme.primaryFill
-          : pressed
-            ? theme.tint2
-            : "transparent",
-        borderWidth: primary ? 0 : 1,
+          : danger
+            ? theme.dangerFill
+            : pressed
+              ? theme.tint2
+              : "transparent",
+        borderWidth: filled ? 0 : 1,
         borderColor: theme.lineStrong,
-        opacity: primary && pressed ? 0.88 : 1,
+        opacity: filled && pressed ? 0.88 : 1,
       })}
     >
       <Text
         variant="control"
-        style={{ color: primary ? theme.onPrimary : theme.ink1 }}
+        style={{
+          color: primary
+            ? theme.onPrimary
+            : danger
+              ? theme.onDanger
+              : theme.ink1,
+        }}
       >
         {label}
       </Text>

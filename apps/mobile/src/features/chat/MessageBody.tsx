@@ -13,8 +13,11 @@ function openLink(url: string): void {
 /** Message prose in Geist: mentions on the accent tint, links tappable. */
 export const MessageBody = memo(function MessageBody({
   parts,
+  edited = false,
 }: {
   parts: readonly ContentPart[];
+  /** Appends a quiet "(edited)" after the text. */
+  edited?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -58,6 +61,11 @@ export const MessageBody = memo(function MessageBody({
             );
         }
       })}
+      {edited ? (
+        <Text tone="ink3" style={{ fontSize: 11 }}>
+          {" (edited)"}
+        </Text>
+      ) : null}
     </Text>
   );
 });

@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useSession } from "@/features/auth/session";
 import { useCurrentUser } from "@/features/auth/use-current-user";
+import { ImageViewer } from "@/features/media/ImageViewer";
 import { useRealtime } from "@/features/realtime/use-realtime";
 import { FONT_ASSETS, ThemeProvider, useTheme } from "@/theme";
 import { ToastHost } from "@/ui";
@@ -31,11 +32,13 @@ function ThemedStack() {
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="channel/[id]" />
+          <Stack.Screen name="dm/[id]" />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="sign-in" />
         </Stack.Protected>
       </Stack>
+      <ImageViewer />
       <ToastHost />
     </>
   );
