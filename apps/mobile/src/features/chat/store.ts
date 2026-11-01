@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import type { LoadStatus } from "@/features/servers/store";
 
-import type { Author, Message } from "./schema";
+import type { Message } from "./schema";
 
 /** An optimistic row's state until the server's copy replaces it. */
 export type SendState = "sending" | "failed";
@@ -16,23 +16,42 @@ export interface ChannelMessages {
   /** Older messages remain on the server. */
   readonly hasMore: boolean;
   readonly loadingOlder: boolean;
+  /**
+   * A jump loaded a page from the past: newer messages remain, so live ones
+   * are not appended (that would leave a hole) until the list reaches the
+   * present again.
+   */
+  readonly hasNewer?: boolean;
+  readonly loadingNewer?: boolean;
 }
 
+/** A message to scroll to and flash once its conversation is on screen. */
+export interface JumpRequest {
+  readonly channelId: string;
+  readonly messageId: string;
+  /** Tells two jumps to the same message apart. */
+  readonly seq: number;
+  /** Scrolled to: the row is lit until the jump clears. */
+  readonly landed?: boolean;
+}
+
+/** channelId → its cached history. */
+export type ChannelCache = Readonly<Record<string, ChannelMessages>>;
+
 interface ChatState {
-  readonly channels: Readonly<Record<string, ChannelMessages>>;
+  readonly channels: ChannelCache;
   /** The channel on screen; its new messages are marked read. */
   readonly openChannelId: string | null;
   /** channelId → ids of the people typing there now. */
   readonly typing: Readonly<Record<string, readonly string[]>>;
-  /** serverId → its members, for @mention suggestions and typing names. */
-  readonly members: Readonly<Record<string, readonly Author[]>>;
+  readonly jump: JumpRequest | null;
 }
 
 const INITIAL: ChatState = {
   channels: {},
   openChannelId: null,
   typing: {},
-  members: {},
+  jump: null,
 };
 
 /** State only; the actions that change it live in ./actions and ./mutations. */
@@ -43,20 +62,18 @@ export function resetChatStore(): void {
 }
 
 const NOBODY: readonly string[] = [];
-const NO_MEMBERS: readonly Author[] = [];
 
 export function useChannelMessages(channelId: string): ChannelMessages | null {
   return useChatStore((s) => s.channels[channelId] ?? null);
 }
 
-export function useTypingIds(channelId: string): readonly string[] {
-  return useChatStore((s) => s.typing[channelId] ?? NOBODY);
+/** The pending jump into `channelId`, if any. */
+export function useJump(channelId: string): JumpRequest | null {
+  return useChatStore((s) => (s.jump?.channelId === channelId ? s.jump : null));
 }
 
-export function useMembers(serverId: string | null): readonly Author[] {
-  return useChatStore((s) =>
-    serverId ? (s.members[serverId] ?? NO_MEMBERS) : NO_MEMBERS,
-  );
+export function useTypingIds(channelId: string): readonly string[] {
+  return useChatStore((s) => s.typing[channelId] ?? NOBODY);
 }
 
 /** The optimistic row's id for a send, so the echo can find and replace it. */

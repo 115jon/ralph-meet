@@ -1,0 +1,36 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.jontitor.ralphnotify'
+version = '0.0.0'
+
+android {
+  namespace 'expo.modules.ralphnotify'
+  defaultConfig {
+    versionCode 1
+    versionName '0.0.0'
+  }
+}
+
+// expo-notifications ships precompiled (its local Maven repo, which Expo's
+// autolinking adds); compile against the installed version.
+def expoNotificationsVersion = new groovy.json.JsonSlurper().parse(
+  new File(
+    ["node", "--print", "require.resolve('expo-notifications/package.json')"]
+      .execute(null, projectDir)
+      .text
+      .trim()
+  )
+).version
+
+dependencies {
+  // RalphMessagingService extends expo-notifications' FCM service, so token
+  // rotation and any non-Ralph push keep working exactly as before. The app
+  // links the library itself; this module only compiles against it.
+  compileOnly "host.exp.exponent:expo.modules.notifications:${expoNotificationsVersion}"
+  // The version expo-notifications 58 builds against.
+  implementation 'com.google.firebase:firebase-messaging:25.0.1'
+  implementation 'androidx.core:core-ktx:1.17.0'
+}

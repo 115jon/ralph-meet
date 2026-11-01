@@ -3,6 +3,7 @@ import { Pressable, View } from "react-native";
 
 import { useUnreadInChannel } from "@/features/activity/store";
 import { useSession } from "@/features/auth/session";
+import { useIsCurrentConversation } from "@/features/conversation/store";
 import { authorName } from "@/features/chat/authors";
 import type { Message } from "@/features/chat/schema";
 import { formatListTime, parseTimestamp } from "@/features/chat/time";
@@ -41,6 +42,7 @@ export const DmRow = memo(function DmRow({
   const unread = useIsUnread(dm.id);
   const count = useUnreadInChannel(dm.id);
   const lastAt = useServersStore((s) => s.lastMessageAt[dm.id]);
+  const selected = useIsCurrentConversation(dm.id);
   const name = authorName(dm.recipient);
   const stamp = preview?.created_at ?? lastAt;
   const line = previewText(
@@ -53,14 +55,15 @@ export const DmRow = memo(function DmRow({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${name}${unread ? ", unread" : ""}: ${line}`}
+      accessibilityState={{ selected }}
       onPress={() => onOpen(dm)}
       style={({ pressed }) => ({
-        height: 64,
+        minHeight: 64,
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
         paddingHorizontal: 16,
-        backgroundColor: pressed ? theme.tint2 : "transparent",
+        backgroundColor: pressed || selected ? theme.tint2 : "transparent",
       })}
     >
       {unread ? (

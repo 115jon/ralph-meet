@@ -5,9 +5,13 @@ import { Pressable, View } from "react-native";
 import { RADIUS, useTheme } from "@/theme";
 import { Icon, Text } from "@/ui";
 
+import { LONG_PRESS_MS, useMessageLongPress } from "../long-press";
 import type { Size } from "./box";
 
-/** The hairline tile every picture and video sits in. */
+/**
+ * The hairline tile every picture and video sits in. It takes the touch, so
+ * a long-press here opens the message's actions, as on the rest of the row.
+ */
 export function MediaFrame({
   box,
   label,
@@ -21,12 +25,15 @@ export function MediaFrame({
   children: ReactNode;
 }) {
   const theme = useTheme();
+  const onLongPress = useMessageLongPress();
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : "image"}
       accessibilityLabel={label}
-      disabled={!onPress}
+      disabled={!onPress && !onLongPress}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={LONG_PRESS_MS}
       style={{
         marginTop: 6,
         width: box.width,

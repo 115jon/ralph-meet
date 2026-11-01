@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phosphor ChatCircleDots (fill): the status-bar glyph for message notifications. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="256"
+  android:viewportHeight="256">
+  <path
+    android:fillColor="#FFFFFFFF"
+    android:pathData="M128 24a104 104 0 0 0-91.82 152.88l-11.35 34.05a16 16 0 0 0 20.24 20.24l34.05-11.35A104 104 0 1 0 128 24M84 140a12 12 0 1 1 12-12 12 12 0 0 1-12 12m44 0a12 12 0 1 1 12-12 12 12 0 0 1-12 12m44 0a12 12 0 1 1 12-12 12 12 0 0 1-12 12" />
+</vector>
