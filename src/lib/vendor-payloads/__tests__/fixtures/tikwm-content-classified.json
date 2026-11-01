@@ -1,0 +1,59 @@
+{
+  "code": 0,
+  "msg": "success",
+  "processed_time": 0.4884,
+  "data": {
+    "id": "7691175039722425630",
+    "region": "US",
+    "title": "😭💔 #blowthisup #fyp #dirtbike #viral ",
+    "content_desc": [],
+    "cover": "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/owAGpQeIBAewqjeUbQFSGWAEfcQMLTR0GluRi8~tplv-tiktokx-cropcenter-q:300:400:q70.jpeg?dr=REDACTED&refresh_token=REDACTED&x-expires=REDACTED&x-signature=REDACTED&t=REDACTED&ps=REDACTED&shp=REDACTED&shcp=REDACTED&idc=REDACTED&sc=REDACTED&biz_tag=tt_video&s=REDACTED",
+    "ai_dynamic_cover": "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/oEU8RIf4qIVlEhEyiBvFsqpEIJDBtJArRAfRwu~tplv-tiktokx-origin.image?dr=REDACTED&refresh_token=REDACTED&x-expires=REDACTED&x-signature=REDACTED&t=REDACTED&ps=REDACTED&shp=REDACTED&shcp=REDACTED&idc=REDACTED&biz_tag=tt_video&s=REDACTED&sc=REDACTED",
+    "origin_cover": "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/oUAEBwU8ItqIfBnMyyDIrIRbVviREpFAmjJEfu~tplv-tiktokx-shrink-aq:360:360:q75.webp?dr=REDACTED&refresh_token=REDACTED&x-expires=REDACTED&x-signature=REDACTED&t=REDACTED&ps=REDACTED&shp=REDACTED&shcp=REDACTED&idc=REDACTED&biz_tag=tt_video&s=REDACTED&sc=REDACTED",
+    "duration": 11,
+    "play": "https://v16m.tiktokcdn-us.com/00000000000000000000000000000000/00000000/video/tos/useast8/tos-useast8-ve-0068c003-tx2/oAcw8AWhRUg5TIIqOeLeQFAcpiEfSeQbGFGlRj/?a=REDACTED&bti=REDACTED&&bt=REDACTED&ft=REDACTED&mime_type=video_mp4&rc=REDACTED&vvpl=REDACTED&l=REDACTED&btag=REDACTED",
+    "wmplay": "https://v16m.tiktokcdn-us.com/00000000000000000000000000000000/00000000/video/tos/useast8/tos-useast8-pve-0068-tx2/ooIEuvQitFrfABV0JqyRR0ACpEIFfEUDE8ixKX/?a=REDACTED&bti=REDACTED&&bt=REDACTED&ft=REDACTED&mime_type=video_mp4&rc=REDACTED&vvpl=REDACTED&l=REDACTED&btag=REDACTED",
+    "size": 3132771,
+    "wm_size": 2958312,
+    "music": "https://v16-ies-music.tiktokcdn-us.com/00000000000000000000000000000000/00000000/video/tos/alisg/tos-alisg-ve-2774/okZzs8HHIiJZutgAoF1WNBmABM8WovnfwBPiss/?a=REDACTED&bti=REDACTED&&bt=REDACTED&ft=REDACTED&mime_type=audio_mp4&rc=REDACTED&vvpl=REDACTED&l=REDACTED&btag=REDACTED&shp=REDACTED&shcp=REDACTED",
+    "music_info": {
+      "id": "7640620034185185297",
+      "title": "nothing left",
+      "play": "https://v16-ies-music.tiktokcdn-us.com/00000000000000000000000000000000/00000000/video/tos/alisg/tos-alisg-ve-2774/okZzs8HHIiJZutgAoF1WNBmABM8WovnfwBPiss/?a=REDACTED&bti=REDACTED&&bt=REDACTED&ft=REDACTED&mime_type=audio_mp4&rc=REDACTED&vvpl=REDACTED&l=REDACTED&btag=REDACTED&shp=REDACTED&shcp=REDACTED",
+      "cover": "https://p16-common.tiktokcdn-us.com/tos-alisg-v-2774/ooRjbzIUEAa8AixBAYGWgARiAxagGBExgWPAr~tplv-tiktokx-cropcenter:720:720.jpeg?dr=REDACTED&t=REDACTED&ps=REDACTED&shp=REDACTED&shcp=REDACTED&idc=REDACTED",
+      "author": "awaitedfate",
+      "original": false,
+      "duration": 60,
+      "album": "nothing left",
+      "create_time": 1778971003
+    },
+    "play_count": 123951,
+    "digg_count": 15914,
+    "comment_count": 424,
+    "share_count": 7190,
+    "download_count": 92,
+    "collect_count": 2201,
+    "create_time": 1790741247,
+    "anchors": null,
+    "anchors_extras": "",
+    "is_ad": false,
+    "commerce_info": {
+      "adv_promotable": false,
+      "auction_ad_invited": false,
+      "branded_content_type": 0,
+      "is_diversion_ad": 0,
+      "organic_log_extra": "{\"req_id\":\"20261101052154FCA923C58A5A0BD125AD\"}",
+      "with_comment_filter_words": false
+    },
+    "commercial_video_info": "",
+    "item_comment_settings": 0,
+    "mentioned_users": "",
+    "author": {
+      "id": "7645197349530354702",
+      "unique_id": "ugnewwave",
+      "nickname": "ugnewwave",
+      "avatar": "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-avt-0068-tx2/4026bb16475e000b119b7fea8a6dac41~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?dr=REDACTED&refresh_token=REDACTED&x-expires=REDACTED&x-signature=REDACTED&t=REDACTED&ps=REDACTED&shp=REDACTED&shcp=REDACTED&idc=REDACTED&sc=REDACTED&s=REDACTED"
+    },
+    "is_nff_or_nr": true
+  }
+}

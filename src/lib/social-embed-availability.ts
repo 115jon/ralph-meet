@@ -1,5 +1,10 @@
+/**
+ * An HTTP status that means the post itself is gone. 403 is not one: Meta
+ * and the X mirrors answer a rate-limited or walled caller with 403, and
+ * treating that as "deleted" stored tombstones for live posts.
+ */
 export function isUnavailableSocialStatus(status: number): boolean {
-  return status === 404 || status === 403 || status === 410;
+  return status === 404 || status === 410;
 }
 
 export function isTwitterUnavailablePayload(data: unknown): boolean {

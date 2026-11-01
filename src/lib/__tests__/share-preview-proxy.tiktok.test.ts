@@ -241,34 +241,6 @@ describe("fetchTikTokProxyMetadata", () => {
     expect(result?.media?.[0]?.durationSeconds).toBe(51);
   });
 
-  it("reports a post the player api calls nil_core_data as unavailable", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = input.toString();
-        if (url.includes("/player/api/v1/items")) {
-          return Response.json({
-            extra: { fatal_item_ids: [] },
-            results: [
-              {
-                code: "nil_core_data",
-                id_str: "7644940658603592973",
-              },
-            ],
-            status_code: 0,
-          });
-        }
-        throw new Error(`tikwm should not be asked: ${url}`);
-      }) as unknown as typeof fetch,
-    );
-
-    await expect(
-      fetchTikTokProxyLookup(
-        "https://www.tiktok.com/@irlquandale/video/7644940658603592973",
-      ),
-    ).resolves.toEqual({ metadata: null, unavailable: true, transient: false });
-  });
-
   it("flags a player api outage as transient rather than unavailable", async () => {
     vi.stubGlobal(
       "fetch",
@@ -285,7 +257,11 @@ describe("fetchTikTokProxyMetadata", () => {
       fetchTikTokProxyLookup(
         "https://www.tiktok.com/@someone/video/7644940658603592973",
       ),
-    ).resolves.toEqual({ metadata: null, unavailable: false, transient: true });
+    ).resolves.toMatchObject({
+      metadata: null,
+      unavailable: false,
+      transient: true,
+    });
   });
 
   it("prefers the uncropped TikTok origin cover for video posters", async () => {
@@ -448,7 +424,7 @@ describe("TikTok payload drift", () => {
           }),
       });
 
-      await expect(fetchTikTokProxyLookup(POST_URL)).resolves.toEqual({
+      await expect(fetchTikTokProxyLookup(POST_URL)).resolves.toMatchObject({
         metadata: null,
         unavailable: false,
         transient: false,

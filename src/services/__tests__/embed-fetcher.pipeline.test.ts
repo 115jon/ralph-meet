@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TIKTOK_FIXTURES } from "@/lib/vendor-payloads/__tests__/fixtures/tiktok";
 import {
   gifHeader,
   mp4Header,
@@ -443,6 +444,64 @@ describe("providers", () => {
     });
   });
 
+  it("keeps the first X mirror's counts when a lagging mirror reports zeros", async () => {
+    stubFetch((url) => {
+      if (url.startsWith("https://api.fxtwitter.com/2/status/")) {
+        return Response.json({
+          status: {
+            text: "launch day",
+            author: { name: "NASA", screen_name: "NASA" },
+            likes: 1766,
+            replies: 164,
+            reposts: 300,
+          },
+        });
+      }
+      if (url.startsWith("https://api.vxtwitter.com")) {
+        return Response.json({
+          text: "launch day",
+          user_name: "NASA",
+          likes: 0,
+          replies: 0,
+          retweets: 0,
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const { embeds } = await extractAndProcessEmbedsWithStatus(
+      "https://x.com/NASA/status/2116256206922616862",
+    );
+
+    expect(embeds[0]?.metrics).toMatchObject({ likes: 1766, replies: 164 });
+  });
+
+  it("does not tombstone a tweet when the mirrors only answer 403", async () => {
+    stubFetch((url) => {
+      if (url.includes("fxtwitter.com") || url.includes("vxtwitter.com")) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const { embeds } = await extractAndProcessEmbedsWithStatus(
+      "https://x.com/NASA/status/2116256206922616862",
+    );
+
+    expect(embeds.some((embed) => embed.unavailable)).toBe(false);
+  });
+
+  it("gives up on a dead spotify.link instead of retrying its 504 forever", async () => {
+    stubFetch(() => new Response("timeout", { status: 504 }));
+
+    const result = await extractAndProcessEmbedsWithStatus(
+      "https://spotify.link/doesNotExist1",
+    );
+
+    expect(result.hadFailures).toBe(false);
+    expect(result.embeds).toHaveLength(0);
+  });
+
   it("retries YouTube when oEmbed is rate limited", async () => {
     stubFetch(() => new Response("slow down", { status: 429 }));
 
@@ -453,7 +512,7 @@ describe("providers", () => {
     expect(hadFailures).toBe(true);
   });
 
-  it("tombstones a deleted TikTok from the player API even though oEmbed says 200", async () => {
+  it("tombstones a TikTok its page reports deleted, although oEmbed says 200", async () => {
     stubFetch((url) => {
       if (url.startsWith("https://www.tiktok.com/oembed")) {
         return Response.json({
@@ -472,6 +531,11 @@ describe("providers", () => {
           ],
           status_code: 0,
         });
+      }
+      if (
+        url === "https://www.tiktok.com/@irlquandale/video/7644940658603592973"
+      ) {
+        return html(TIKTOK_FIXTURES.pageGone);
       }
       return new Response("unexpected", { status: 500 });
     });

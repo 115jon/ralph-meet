@@ -5,6 +5,13 @@ import {
   hydrateSocialEmbeds,
 } from "../share-embed-refresh";
 import type { MessageShare } from "@/services/message-share.service";
+import {
+  CLASSIFIED_URL,
+  GONE_URL,
+  TIKTOK_FIXTURES,
+  htmlResponse as tiktokHtml,
+  jsonResponse as tiktokJson,
+} from "@/lib/vendor-payloads/__tests__/fixtures/tiktok";
 
 const workerEnv = env as unknown as Record<string, unknown>;
 
@@ -841,6 +848,72 @@ describe("hydrateInstagramEmbedsForShare", () => {
     expect(embed.unavailable).toBe(true);
     expect(embed.media).toBeUndefined();
     expect(embed.id).toBe("embed-x-deleted");
+  });
+
+  it("heals a legacy TikTok tombstone of a post that is only age-gated", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.includes("/player/api/v1/items")) {
+          return tiktokJson(TIKTOK_FIXTURES.playerNilCoreData);
+        }
+        if (url.includes("tikwm.com/api/")) {
+          return tiktokJson(TIKTOK_FIXTURES.tikwmContentClassified);
+        }
+        if (url.startsWith(CLASSIFIED_URL)) {
+          return tiktokHtml(TIKTOK_FIXTURES.pageContentClassified);
+        }
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+
+    const [embed] = await hydrateSocialEmbeds([
+      {
+        id: "embed-tt-legacy",
+        url: CLASSIFIED_URL,
+        type: "rich",
+        unavailable: true,
+        provider: { name: "TikTok", url: "https://www.tiktok.com" },
+        fields: [],
+      },
+    ]);
+
+    expect(embed.unavailable).toBeUndefined();
+    expect(embed.id).toBe("embed-tt-legacy");
+    expect(embed.author).toMatchObject({ name: "ugnewwave" });
+    expect(embed.video).toMatchObject({ kind: "direct" });
+  });
+
+  it("re-tombstones a legacy TikTok tombstone the page confirms gone, stamping checkedAt", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.includes("/player/api/v1/items")) {
+          return tiktokJson(TIKTOK_FIXTURES.playerNilCoreData);
+        }
+        if (url.startsWith(GONE_URL)) {
+          return tiktokHtml(TIKTOK_FIXTURES.pageGone);
+        }
+        return tiktokJson(TIKTOK_FIXTURES.oembed);
+      }) as unknown as typeof fetch,
+    );
+
+    const [embed] = await hydrateSocialEmbeds([
+      {
+        id: "embed-tt-gone",
+        url: GONE_URL,
+        type: "rich",
+        unavailable: true,
+        provider: { name: "TikTok", url: "https://www.tiktok.com" },
+        fields: [],
+      },
+    ]);
+
+    expect(embed.unavailable).toBe(true);
+    expect(embed.checkedAt).toEqual(expect.any(String));
+    expect(embed.author).toMatchObject({ name: "scout2015" });
   });
 
   it("keeps stored X media when embed providers fail transiently", async () => {

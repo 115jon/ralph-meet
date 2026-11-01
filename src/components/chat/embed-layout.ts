@@ -31,9 +31,6 @@ export type EmbedWidth = keyof typeof EMBED_WIDTH;
  */
 export const EMBED_PORTRAIT_MAX_HEIGHT = 560;
 
-/** Shown in place of a post that no longer exists (public/). */
-export const SOCIAL_UNAVAILABLE_IMAGE = "/tiktok-unavailable.webp";
-
 /**
  * `open.spotify.com/intl-de/album/x?si=1` -> `open.spotify.com/embed/album/x`.
  * The locale segment used to end up inside the embed path and 404.

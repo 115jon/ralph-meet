@@ -98,6 +98,10 @@ describe("proxy media helpers", () => {
       expect(isAllowedMediaUrl(new URL("https://vxtwitter.com/tvid/123"))).toBe(
         true,
       );
+      // Before, the host was also in ALLOWED_HOSTS, so any page proxied.
+      expect(
+        isAllowedMediaUrl(new URL("https://vxtwitter.com/NASA/status/1")),
+      ).toBe(false);
     });
 
     it("allows tiktok domains", () => {
@@ -454,6 +458,11 @@ describe("proxy media helpers", () => {
           });
         }
 
+        // The player API gave no item, so the chain reads the post page.
+        if (url.startsWith("https://www.tiktok.com/@")) {
+          return new Response("not found", { status: 404 });
+        }
+
         throw new Error(`Unexpected fetch: ${url}`);
       });
 
@@ -469,7 +478,7 @@ describe("proxy media helpers", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toBe("image/jpeg");
       await expect(response.text()).resolves.toBe("image-bytes");
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
     it("still streams the TikTok image when refresh resolves to the same url", async () => {
@@ -495,6 +504,11 @@ describe("proxy media helpers", () => {
           });
         }
 
+        // The player API gave no item, so the chain reads the post page.
+        if (url.startsWith("https://www.tiktok.com/@")) {
+          return new Response("not found", { status: 404 });
+        }
+
         throw new Error(`Unexpected fetch: ${url}`);
       });
 
@@ -510,7 +524,7 @@ describe("proxy media helpers", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toBe("image/jpeg");
       await expect(response.text()).resolves.toBe("image-bytes");
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
     it("falls back to another refreshed TikTok image when the first refreshed image still 403s", async () => {
@@ -701,6 +715,11 @@ describe("proxy media helpers", () => {
           });
         }
 
+        // The player API gave no item, so the chain reads the post page.
+        if (url.startsWith("https://www.tiktok.com/@")) {
+          return new Response("not found", { status: 404 });
+        }
+
         throw new Error(`Unexpected fetch: ${url}`);
       });
 
@@ -717,7 +736,7 @@ describe("proxy media helpers", () => {
       expect(response.headers.get("Content-Type")).toBe("video/mp4");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       await expect(response.text()).resolves.toBe("video-bytes");
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
     it("uses an upstream GET for TikTok video HEAD requests so signed assets still resolve", async () => {

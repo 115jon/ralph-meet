@@ -297,6 +297,18 @@ export interface EmbedInfo {
   type: "video" | "rich" | "link" | "image";
   unavailable?: boolean;
   /**
+   * When the server confirmed `unavailable` with a positive "gone" answer
+   * (ISO time). Tombstones without it were written by older resolvers that
+   * could mistake a failed scrape for a deleted post, and are re-checked.
+   */
+  checkedAt?: string;
+  /**
+   * The post exists but its platform hides it from logged-out viewers (an
+   * age or sensitivity gate) and no playable media could be fetched, so the
+   * card links out instead of showing a player that cannot play it.
+   */
+  restricted?: boolean;
+  /**
    * The link points straight at an image, GIF or video file; render the
    * media bare (no card). Set by the server's direct-media detection.
    */
