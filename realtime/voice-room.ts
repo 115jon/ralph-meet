@@ -2016,6 +2016,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       roomLog.info(
         `Reaping participant=${query.participantId}: no longer joined in the MeetingRoom`,
       );
+      // Record the verdict first: a client that reconnects this voice socket
+      // is then refused (AdmissionRejected) instead of re-admitted by a
+      // standing grant and reaped again at the next alarm.
+      this.voiceJoinGrants.revoke(query, now);
       await this.handleLeave(ws, true);
     }
   }

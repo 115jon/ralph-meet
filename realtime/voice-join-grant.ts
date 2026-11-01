@@ -228,6 +228,23 @@ export class VoiceJoinGrantStore {
     return typeof row?.updated_at === "number" ? row.updated_at : null;
   }
 
+  /**
+   * Revokes locally after the MeetingRoom said the participant is not joined.
+   * The stored sequence is kept, so a later push (a new grant) still applies.
+   */
+  revoke(query: VoiceJoinGrantQuery, now = Date.now()): void {
+    this.sql.exec(
+      `INSERT INTO voice_join_grants (participant_id, subject, granted, seq, updated_at)
+       VALUES (?, ?, 0, 0, ?)
+       ON CONFLICT(participant_id) DO UPDATE SET
+         granted = 0,
+         updated_at = excluded.updated_at`,
+      query.participantId,
+      query.subject,
+      now,
+    );
+  }
+
   /** Marks a standing grant as confirmed now; never changes its verdict. */
   touch(participantId: string, now = Date.now()): void {
     this.sql.exec(

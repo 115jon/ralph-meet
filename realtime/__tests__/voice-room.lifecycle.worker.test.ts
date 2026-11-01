@@ -3031,6 +3031,24 @@ describe("VoiceRoom lifecycle", () => {
 
       await expect(closed).resolves.toMatchObject({ code: 1000 });
       expect(await participantRowCount(roomName, ghostId)).toBe(0);
+
+      // Its client reconnecting the voice socket is refused, not re-admitted
+      // by the old grant and reaped again at the next alarm.
+      const again = await openVoiceSocket(roomName, "ghost-user");
+      const refused = nextMessageWithOpcode(again, 18);
+      again.send(
+        JSON.stringify({
+          op: 100,
+          d: {
+            participant_id: ghostId,
+            voice_token: await issueVoiceToken(ghostId, roomName, "ghost-user"),
+          },
+        }),
+      );
+      await expect(refused).resolves.toMatchObject({
+        d: { code: 4008, message: "Voice channel join required" },
+      });
+      expect(await participantRowCount(roomName, ghostId)).toBe(0);
     });
 
     it("forgets the participant on the server socket once it disconnects", async () => {

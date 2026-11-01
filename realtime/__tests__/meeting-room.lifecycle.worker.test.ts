@@ -4219,6 +4219,23 @@ describe("MeetingRoom voice-channel membership across one user's sessions", () =
     second.close();
   });
 
+  it("removes the member when the live session leaves while another is held for resume", async () => {
+    const userId = "leave-with-held-user";
+    const { roomName, channelId, first, firstReady, second } =
+      await twoSessionsInChannel(userId);
+
+    first.close();
+    await waitForResumableSession(roomName, firstReady.participant_id);
+    // The user leaves on the device still connected: that is their leave.
+    const ack = nextMessageWithOpcode(second, 6);
+    second.send(JSON.stringify({ op: 34, d: { channel_id: channelId } }));
+    second.send(HEARTBEAT_FRAME);
+    await ack;
+
+    expect(await memberState(roomName, channelId, userId)).toBeNull();
+    second.close();
+  });
+
   it("drops the member when the voice session's grace lapses, whatever chat sessions are live", async () => {
     const userId = "chat-and-voice-user";
     const roomName = crypto.randomUUID();

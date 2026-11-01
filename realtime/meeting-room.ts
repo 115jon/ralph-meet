@@ -1826,39 +1826,21 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   /**
-   * Whether a session of `userId` other than `exceptSessionId` is in
-   * `channelId`: a live one, or (unless liveOnly) one held for resume within
-   * the grace period.
+   * Whether a live session of `userId` other than `exceptSessionId` is in
+   * `channelId`. Sessions held for resume do not count: a leave from a live
+   * device is the user's leave, and a held device that resumes is put back
+   * in the channel by handleResume (markVoiceMemberConnected).
    */
   private hasOtherVoiceChannelSession(
     userId: string,
     channelId: string,
     exceptSessionId: string,
-    { liveOnly = false }: { liveOnly?: boolean } = {},
   ): boolean {
     for (const session of this.sessions.values()) {
       if (
         session.id !== exceptSessionId &&
         session.user_id === userId &&
         session.voice_channel_id === channelId
-      ) {
-        return true;
-      }
-    }
-    if (liveOnly) return false;
-    const now = Date.now();
-    for (const [id, resumable] of this.resumableSessions) {
-      if (id === exceptSessionId) continue;
-      const disconnectedAt = this.resumableSessionExpiry.get(id);
-      if (
-        disconnectedAt === undefined ||
-        now - disconnectedAt >= RESUME_GRACE_PERIOD_MS
-      ) {
-        continue;
-      }
-      if (
-        resumable.user_id === userId &&
-        resumable.voice_channel_id === channelId
       ) {
         return true;
       }
@@ -1941,7 +1923,6 @@ export class MeetingRoom extends DurableObject<Env> {
         session.user_id,
         session.voice_channel_id,
         session.id,
-        { liveOnly: true },
       )
     ) {
       return;
@@ -4303,8 +4284,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private removeFromVoiceChannel(session: WsAttachment) {
     const channelId = session.voice_channel_id;
     if (!channelId || !session.user_id) return;
-    // Members are one entry per user: it stays while another of the user's
-    // sessions is still in the channel (a second device, a held resume).
+    // Members are one entry per user: it stays while another live session of
+    // the user (a second device) is still in the channel.
     if (
       this.hasOtherVoiceChannelSession(session.user_id, channelId, session.id)
     ) {
