@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
       (command: string, args?: Record<string, unknown>) => Promise<unknown>
     >(),
   updateSettings: vi.fn<(updates: Record<string, unknown>) => void>(),
+  saveSettings: vi.fn<(updates: Record<string, unknown>) => Promise<void>>(),
 }));
 
 vi.mock("@/lib/platform", () => ({
@@ -40,7 +41,7 @@ vi.mock("@/stores/useDesktopSettingsStore", () => {
     hardwareAcceleration: true,
     desktopNotifications: true,
     updateSettings: mocks.updateSettings,
-    syncToBackend: vi.fn(),
+    saveSettings: mocks.saveSettings,
   };
   return {
     useDesktopSettingsStore: <T,>(selector?: (s: typeof state) => T) =>
@@ -68,13 +69,8 @@ import { SettingsContext } from "@/components/chat/settings/primitives";
 
 describe("DesktopPanel hardware acceleration restart", () => {
   it("routes hardware acceleration confirmation through the desktop restart command", async () => {
-    mocks.invoke.mockImplementation(async (command) => {
-      if (command === "get_hardware_acceleration") {
-        return true;
-      }
-
-      return undefined;
-    });
+    mocks.saveSettings.mockResolvedValue();
+    mocks.invoke.mockResolvedValue(undefined);
 
     render(
       <SettingsContext.Provider
@@ -97,22 +93,16 @@ describe("DesktopPanel hardware acceleration restart", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Restart now" }));
 
     await waitFor(() => {
-      expect(mocks.invoke).toHaveBeenCalledWith("set_hardware_acceleration", {
-        enabled: false,
+      expect(mocks.saveSettings).toHaveBeenCalledWith({
+        hardwareAcceleration: false,
       });
       expect(mocks.invoke).toHaveBeenCalledWith("restart_app");
     });
   });
 
   it("keeps the confirm open with the reason when the change fails", async () => {
-    mocks.updateSettings.mockClear();
-    mocks.invoke.mockImplementation(async (command) => {
-      if (command === "get_hardware_acceleration") return true;
-      if (command === "set_hardware_acceleration") {
-        throw new Error("ipc: command not found");
-      }
-      return undefined;
-    });
+    mocks.invoke.mockClear();
+    mocks.saveSettings.mockRejectedValue(new Error("ipc: command not found"));
 
     render(
       <SettingsContext.Provider
@@ -139,8 +129,6 @@ describe("DesktopPanel hardware acceleration restart", () => {
     );
     expect(screen.getByRole("button", { name: "Restart now" })).toBeVisible();
     expect(screen.queryByText(/ipc: command not found/)).toBeNull();
-    expect(mocks.updateSettings).toHaveBeenLastCalledWith({
-      hardwareAcceleration: true,
-    });
+    expect(mocks.invoke).not.toHaveBeenCalledWith("restart_app");
   });
 });

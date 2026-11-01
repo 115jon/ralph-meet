@@ -119,24 +119,44 @@ description = "Denies stopping the preview loopback connection."
 commands.deny = ["stop_preview_loopback"]
 
 [[permission]]
-identifier = "allow-get-hardware-acceleration"
-description = "Allows the frontend to read the desktop renderer hardware acceleration preference."
-commands.allow = ["get_hardware_acceleration"]
+identifier = "allow-get-desktop-settings"
+description = "Allows the frontend to read the persisted desktop settings."
+commands.allow = ["get_desktop_settings"]
 
 [[permission]]
-identifier = "deny-get-hardware-acceleration"
-description = "Denies reading the desktop renderer hardware acceleration preference."
-commands.deny = ["get_hardware_acceleration"]
+identifier = "deny-get-desktop-settings"
+description = "Denies reading the persisted desktop settings."
+commands.deny = ["get_desktop_settings"]
 
 [[permission]]
-identifier = "allow-set-hardware-acceleration"
-description = "Allows the frontend to update the desktop renderer hardware acceleration preference."
-commands.allow = ["set_hardware_acceleration"]
+identifier = "allow-set-desktop-settings"
+description = "Allows the frontend to change and persist desktop settings."
+commands.allow = ["set_desktop_settings"]
 
 [[permission]]
-identifier = "deny-set-hardware-acceleration"
-description = "Denies updating the desktop renderer hardware acceleration preference."
-commands.deny = ["set_hardware_acceleration"]
+identifier = "deny-set-desktop-settings"
+description = "Denies changing desktop settings."
+commands.deny = ["set_desktop_settings"]
+
+[[permission]]
+identifier = "allow-launch-main-window"
+description = "Allows the updater to hand off to the main window, which shows it or starts it in the tray."
+commands.allow = ["launch_main_window"]
+
+[[permission]]
+identifier = "deny-launch-main-window"
+description = "Denies updater handoff to the main window."
+commands.deny = ["launch_main_window"]
+
+[[permission]]
+identifier = "allow-take-pending-deep-links"
+description = "Allows the frontend deep-link listener to collect links that arrived before it was ready."
+commands.allow = ["take_pending_deep_links"]
+
+[[permission]]
+identifier = "deny-take-pending-deep-links"
+description = "Denies collecting pending deep links."
+commands.deny = ["take_pending_deep_links"]
 
 [[permission]]
 identifier = "allow-restart-app"
@@ -147,21 +167,6 @@ commands.allow = ["restart_app"]
 identifier = "deny-restart-app"
 description = "Denies backend-managed desktop restarts."
 commands.deny = ["restart_app"]
-
-[[permission]]
-identifier = "allow-set-close-to-tray"
-description = "Allows the frontend to sync the close-to-tray desktop preference."
-commands.allow = ["set_close_to_tray"]
-
-[[permission]]
-identifier = "deny-set-close-to-tray"
-description = "Denies syncing the close-to-tray desktop preference."
-commands.deny = ["set_close_to_tray"]
-
-[[permission]]
-identifier = "allow-set-start-minimized"
-description = "Allows the frontend to sync the start-minimized desktop preference."
-commands.allow = ["set_start_minimized"]
 
 [[permission]]
 identifier = "allow-start-window-resize"
@@ -202,31 +207,6 @@ commands.allow = ["set_maximized_main_window"]
 identifier = "deny-set-maximized-main-window"
 description = "Denies toggling native maximize and restore."
 commands.deny = ["set_maximized_main_window"]
-
-[[permission]]
-identifier = "deny-set-start-minimized"
-description = "Denies syncing the start-minimized desktop preference."
-commands.deny = ["set_start_minimized"]
-
-[[permission]]
-identifier = "allow-set-open-on-startup"
-description = "Allows the frontend to update the desktop open-on-startup preference."
-commands.allow = ["set_open_on_startup"]
-
-[[permission]]
-identifier = "deny-set-open-on-startup"
-description = "Denies updating the desktop open-on-startup preference."
-commands.deny = ["set_open_on_startup"]
-
-[[permission]]
-identifier = "allow-show-main-window"
-description = "Allows the updater to hand off visibility to the existing main window."
-commands.allow = ["show_main_window"]
-
-[[permission]]
-identifier = "deny-show-main-window"
-description = "Denies updater handoff to the main window."
-commands.deny = ["show_main_window"]
 
 [[permission]]
 identifier = "allow-close-updater-window"
