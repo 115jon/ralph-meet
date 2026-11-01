@@ -319,6 +319,9 @@ pub enum FallbackReason {
     TargetExited,
     /// The hook stopped producing frames mid-session (Req 8.3).
     HookStoppedMidSession,
+    /// Injection was reported, but the hook never delivered a first frame
+    /// before the initial watchdog (typically an anti-cheat refusing the DLL).
+    HookNoFirstFrame,
 }
 
 impl FallbackReason {
@@ -339,6 +342,7 @@ impl FallbackReason {
             FallbackReason::InteropFailed => "interop_failed",
             FallbackReason::TargetExited => "target_exited",
             FallbackReason::HookStoppedMidSession => "hook_stopped_mid_session",
+            FallbackReason::HookNoFirstFrame => "hook_no_first_frame",
         }
     }
 }
@@ -818,6 +822,10 @@ mod tests {
         assert_eq!(
             FallbackReason::HookStoppedMidSession.as_str(),
             "hook_stopped_mid_session"
+        );
+        assert_eq!(
+            FallbackReason::HookNoFirstFrame.as_str(),
+            "hook_no_first_frame"
         );
     }
 
