@@ -64,6 +64,19 @@ export interface AudioRoute {
 
 export type CallAction = "mute" | "unmute" | "hangup";
 
+/** What the PiP window holds: its shape, and the Mute action's state. */
+export interface PipParams {
+  readonly aspectWidth: number;
+  readonly aspectHeight: number;
+  readonly muted: boolean;
+}
+
+export interface SoundEnd {
+  readonly id: string;
+  /** Set when the clip could not be played. */
+  readonly error: string | null;
+}
+
 type RalphCallEvents = {
   onAction: (event: { action: CallAction }) => void;
   onAudioRoutesChanged: (event: { routes: AudioRoute[] }) => void;
@@ -71,6 +84,8 @@ type RalphCallEvents = {
   onIncomingCall: (event: IncomingCall) => void;
   onIncomingCallEnded: (event: IncomingCallEnd) => void;
   onIncomingCallAnswered: (event: IncomingCall) => void;
+  onPipModeChanged: (event: { active: boolean }) => void;
+  onSoundEnded: (event: SoundEnd) => void;
 };
 
 interface RalphCallNative {
@@ -89,6 +104,18 @@ interface RalphCallNative {
   setRingback(on: boolean): Promise<void>;
   canUseFullScreenIntent(): Promise<boolean>;
   openFullScreenIntentSettings(): Promise<void>;
+  setPip(params: PipParams | null): Promise<void>;
+  enterPip(): Promise<boolean>;
+  closePip(): Promise<void>;
+  isInPip(): boolean;
+  setRotationUnlocked(unlocked: boolean): Promise<void>;
+  playSound(
+    id: string,
+    uri: string,
+    headers: Readonly<Record<string, string>> | null,
+    volume: number,
+  ): Promise<void>;
+  stopSound(id: string): Promise<void>;
   addListener<E extends keyof RalphCallEvents>(
     event: E,
     listener: RalphCallEvents[E],
@@ -190,6 +217,71 @@ export function canUseFullScreenIntent(): Promise<boolean> {
 /** Opens the system page where the user allows it. */
 export function openFullScreenIntentSettings(): Promise<void> {
   return native?.openFullScreenIntentSettings() ?? Promise.resolve();
+}
+
+// ── Picture-in-picture and rotation ─────────────────────────────────────
+
+/**
+ * Arms picture-in-picture: leaving the app (home, a gesture) shrinks it into
+ * the system's PiP window with Mute and Leave. Null disarms it.
+ */
+export function setPip(params: PipParams | null): Promise<void> {
+  return native?.setPip(params) ?? Promise.resolve();
+}
+
+/** Enters PiP now (when armed and supported). */
+export function enterPip(): Promise<boolean> {
+  return native?.enterPip() ?? Promise.resolve(false);
+}
+
+/** Closes the PiP window, as its own close key does; the call goes on. */
+export function closePip(): Promise<void> {
+  return native?.closePip() ?? Promise.resolve();
+}
+
+export function isInPip(): boolean {
+  return native?.isInPip() ?? false;
+}
+
+export function onPipModeChanged(
+  listener: (active: boolean) => void,
+): EventSubscription {
+  return (
+    native?.addListener("onPipModeChanged", (event) =>
+      listener(event.active),
+    ) ?? NO_SUBSCRIPTION
+  );
+}
+
+/** The call screen may rotate with the phone; false puts portrait back. */
+export function setRotationUnlocked(unlocked: boolean): Promise<void> {
+  return native?.setRotationUnlocked(unlocked) ?? Promise.resolve();
+}
+
+// ── Call sounds ─────────────────────────────────────────────────────────
+
+/**
+ * Plays a short clip on the call's audio route (a file:// or https URL),
+ * replacing any clip with the same id. `volume` is 0..1.
+ */
+export function playSound(
+  id: string,
+  uri: string,
+  headers: Readonly<Record<string, string>> | null,
+  volume: number,
+): Promise<void> {
+  return native?.playSound(id, uri, headers, volume) ?? Promise.resolve();
+}
+
+export function stopSound(id: string): Promise<void> {
+  return native?.stopSound(id) ?? Promise.resolve();
+}
+
+/** A clip ended, was stopped or failed. */
+export function onSoundEnded(
+  listener: (end: SoundEnd) => void,
+): EventSubscription {
+  return native?.addListener("onSoundEnded", listener) ?? NO_SUBSCRIPTION;
 }
 
 export function onIncomingCall(

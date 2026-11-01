@@ -31,6 +31,7 @@ import {
   SPEAKING_MICROPHONE,
   type RepublishRequest,
   type TrackInfo,
+  type VoiceAppEvent,
   type VoiceState,
 } from "./protocol";
 import { isPullableVideo, RemoteVideo } from "./remote-video";
@@ -115,6 +116,12 @@ export interface SessionIdentity {
   readonly avatarUrl: string | null;
 }
 
+/** A voice track's source: their microphone, or their shared screen's audio. */
+export type AudioSource = "voice" | "stream";
+
+/** What the voice room said no to (a soundboard event it did not accept). */
+const APP_EVENT_REJECTED = "Soundboard event was rejected";
+
 export interface SessionEnd {
   readonly reason: "left" | "failed";
   readonly message?: string;
@@ -129,6 +136,15 @@ export interface SessionOptions {
   readonly deafened: boolean;
   /** The microphone level (0..1) that counts as speaking, read live. */
   readonly speakingLevel: () => number;
+  /**
+   * The gain (0..2, 0 silences) one participant's voice or share audio plays
+   * at, read whenever a track arrives and on refreshAudioGains().
+   */
+  readonly audioGain: (participantId: string, source: AudioSource) => number;
+  /** A voice-session app event (the soundboard), ours echoed back too. */
+  readonly onAppEvent: (event: VoiceAppEvent) => void;
+  /** The voice room refused an app event we sent. */
+  readonly onAppEventRejected: () => void;
   readonly onEnd: (end: SessionEnd) => void;
 }
 
@@ -155,11 +171,26 @@ function mergeParticipant(
       state.avatar_url !== undefined
         ? state.avatar_url
         : (previous?.avatarUrl ?? null),
+    username: state.username ?? previous?.username ?? null,
     muted: state.self_mute ?? previous?.muted ?? false,
     deafened: state.self_deaf ?? previous?.deafened ?? false,
     camera: state.self_video ?? previous?.camera ?? false,
     sharing: state.self_stream ?? previous?.sharing ?? false,
   };
+}
+
+/** react-native-webrtc's per-track gain (0..10; libwebrtc saturates above 1). */
+function setTrackGain(track: MediaStreamTrack, gain: number): void {
+  const native = track as MediaStreamTrack & {
+    _setVolume?: (volume: number) => void;
+  };
+  native._setVolume?.(gain);
+}
+
+interface RemoteAudio {
+  readonly track: MediaStreamTrack;
+  readonly participantId: string;
+  readonly source: AudioSource;
 }
 
 /** Audio publications, always pulled (video goes through RemoteVideo). */
@@ -178,6 +209,7 @@ export class VoiceSession {
   private cameraFacing: CameraFacing = "front";
   private screen: MediaStream | null = null;
   private readonly onEnd: (end: SessionEnd) => void;
+  private readonly audioGain: SessionOptions["audioGain"];
   private readonly room: RoomSocket;
   private readonly voice: VoiceSocket;
 
@@ -190,8 +222,8 @@ export class VoiceSession {
   /** Our earlier participant ids this call: never pulled (their tracks linger). */
   private readonly previousParticipantIds = new Set<string>();
   private readonly deferredRemoteTracks = new Map<string, TrackInfo>();
-  /** Pulled audio by alias, to mute for deafen. */
-  private readonly remoteAudio = new Map<string, MediaStreamTrack>();
+  /** Pulled audio by alias: deafen and each person's gain apply here. */
+  private readonly remoteAudio = new Map<string, RemoteAudio>();
   private readonly lastRepublishRequestAt = new Map<string, number>();
   private readonly video = new RemoteVideo(() => this.media);
 
@@ -216,6 +248,7 @@ export class VoiceSession {
     this.identity = options.identity;
     this.microphone = options.microphone;
     this.onEnd = options.onEnd;
+    this.audioGain = options.audioGain;
     this.muted = options.muted || options.deafened;
     this.deafened = options.deafened;
     this.mutedBeforeDeafen = options.muted;
@@ -270,7 +303,13 @@ export class VoiceSession {
         this.onClientDisconnect(participantId),
       stopTracks: (trackNames, tracks) => this.onStopTracks(trackNames, tracks),
       republishRequest: (request) => this.onRepublishRequest(request),
-      error: (code, message) => this.onVoiceError(code, message),
+      appEvent: (event) => {
+        if (!this.ended) options.onAppEvent(event);
+      },
+      error: (code, message) => {
+        if (message === APP_EVENT_REJECTED) options.onAppEventRejected();
+        else this.onVoiceError(code, message);
+      },
       disconnected: (giveUp) => {
         this.voiceReady = false;
         this.refreshStatus();
@@ -308,6 +347,21 @@ export class VoiceSession {
   setWatchingVideo(watching: boolean): void {
     if (this.ended) return;
     this.video.setWatching(watching);
+  }
+
+  /** Re-reads every pulled track's gain (a person's volume or mute changed). */
+  refreshAudioGains(): void {
+    for (const audio of this.remoteAudio.values()) this.applyGain(audio);
+  }
+
+  /**
+   * Sends a voice-session app event (VoiceAppEvent), e.g. soundboard.play.
+   * Queued until the voice socket is ready; the room echoes it to everyone,
+   * us included.
+   */
+  sendAppEvent(d: Readonly<Record<string, unknown>>): void {
+    if (this.ended) return;
+    this.voice.send({ op: GatewayOp.VoiceAppEvent, d });
   }
 
   /** As the web's setIsMuted: unmuting while deafened undeafens too. */
@@ -479,11 +533,20 @@ export class VoiceSession {
         if (track.kind !== "audio") return;
         if (action === "add") {
           // Remote audio plays through WebRTC's own audio device; deafen
-          // silences it by disabling the track.
-          track.enabled = !this.deafened;
-          this.remoteAudio.set(trackInfo.track_name, track);
+          // silences it by disabling the track, a person's volume by gain.
+          const audio: RemoteAudio = {
+            track,
+            participantId: trackInfo.participant_id,
+            source: trackInfo.track_name.startsWith(`${SCREEN_PREFIX}-`)
+              ? "stream"
+              : "voice",
+          };
+          this.remoteAudio.set(trackInfo.track_name, audio);
+          this.applyGain(audio);
           log.info("Remote audio", trackInfo.track_name);
-        } else if (this.remoteAudio.get(trackInfo.track_name) === track) {
+        } else if (
+          this.remoteAudio.get(trackInfo.track_name)?.track === track
+        ) {
           this.remoteAudio.delete(trackInfo.track_name);
         }
       },
@@ -610,6 +673,7 @@ export class VoiceSession {
       deafened: this.deafened,
       camera: this.camera !== null,
       sharing: this.screen !== null,
+      username: this.identity.username,
     };
     this.replaceParticipants(participants, self);
     // The room starts us muted; tell it (and the channel) where we are.
@@ -891,6 +955,13 @@ export class VoiceSession {
 
   // ── Local state ──────────────────────────────────────────────────────────
 
+  /** Deafen silences everyone; otherwise their gain, where 0 also disables. */
+  private applyGain(audio: RemoteAudio): void {
+    const gain = this.audioGain(audio.participantId, audio.source);
+    audio.track.enabled = !this.deafened && gain > 0;
+    if (gain > 0) setTrackGain(audio.track, gain);
+  }
+
   private applyMicrophoneGate(): void {
     for (const track of this.microphone.getAudioTracks()) {
       track.enabled = !this.muted;
@@ -902,7 +973,7 @@ export class VoiceSession {
     this.muted = muted;
     this.deafened = deafened;
     this.applyMicrophoneGate();
-    for (const track of this.remoteAudio.values()) track.enabled = !deafened;
+    for (const audio of this.remoteAudio.values()) this.applyGain(audio);
     updateCall((call) => {
       const self = call.selfId ? call.participants[call.selfId] : undefined;
       return {

@@ -121,9 +121,11 @@ const config: ExpoConfig = {
     "expo-web-browser",
     "expo-image",
     // Chat GIFs and videos play inline only, never in the background or PiP.
+    // The activity supports PiP for the call screen's video (ralph-call's
+    // CallPip arms it only while a camera or a share is on screen).
     [
       "expo-video",
-      { supportsBackgroundPlayback: false, supportsPictureInPicture: false },
+      { supportsBackgroundPlayback: false, supportsPictureInPicture: true },
     ],
     // Message pushes are drawn by modules/ralph-notify on its own channels
     // (Direct messages, Mentions and replies, Other), calls by

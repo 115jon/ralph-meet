@@ -67,8 +67,13 @@ function LockScreenRow() {
 
 /** 02 Calls: how you sound and where calls play, on this device. */
 export function CallsPanel() {
-  const { speakingThresholdDb, joinMuted, audioRoute, skipCallConfirm } =
-    useCallPreferences();
+  const {
+    speakingThresholdDb,
+    joinMuted,
+    audioRoute,
+    skipCallConfirm,
+    joinLeaveTones,
+  } = useCallPreferences();
   return (
     <View style={{ gap: 24 }}>
       <Section
@@ -105,6 +110,12 @@ export function CallsPanel() {
           description="Your microphone starts off when you join a voice channel."
           value={joinMuted}
           onValueChange={(value) => setCallPreference("joinMuted", value)}
+        />
+        <ToggleRow
+          label="Join and leave tones"
+          description="A short tone when someone joins or leaves your call."
+          value={joinLeaveTones}
+          onValueChange={(value) => setCallPreference("joinLeaveTones", value)}
         />
       </Section>
       <Section

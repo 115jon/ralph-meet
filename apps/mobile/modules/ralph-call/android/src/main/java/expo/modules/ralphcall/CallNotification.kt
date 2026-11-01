@@ -99,7 +99,8 @@ internal object CallNotification {
 
   fun actionOf(intent: Intent?): String? = intent?.getStringExtra(EXTRA_ACTION)
 
-  private fun actionIntent(context: Context, action: String): PendingIntent {
+  /** Also the PiP window's Mute and Leave (CallPip). */
+  fun actionIntent(context: Context, action: String): PendingIntent {
     val intent =
       Intent(context, CallActionReceiver::class.java)
         .setAction("${context.packageName}.call.$action")

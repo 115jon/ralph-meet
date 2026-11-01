@@ -19,6 +19,7 @@ import {
   type RepublishRequest,
   type RoomServerMessage,
   type TrackInfo,
+  type VoiceAppEvent,
   type VoiceServerMessage,
   type VoiceState,
 } from "./protocol";
@@ -239,6 +240,7 @@ export interface VoiceSocketHandlers {
     tracks?: readonly TrackInfo[],
   ): void;
   republishRequest(request: RepublishRequest): void;
+  appEvent(event: VoiceAppEvent): void;
   error(code: number, message: string): void;
   disconnected(giveUp: SocketGiveUp | null): void;
 }
@@ -389,6 +391,9 @@ export class VoiceSocket {
         return;
       case GatewayOp.RepublishRequest:
         this.handlers.republishRequest(message.d);
+        return;
+      case GatewayOp.VoiceAppEvent:
+        this.handlers.appEvent(message.d);
         return;
       case GatewayOp.Error:
         this.handlers.error(message.d.code, message.d.message);

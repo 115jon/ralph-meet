@@ -20,19 +20,16 @@ reopened.
 
 ## In progress
 
-- [ ] **DM calls with ringing** (mockup `calls.html` 01–02, all A): call key + confirm in the DM header, "Calling…" region inside the DM, ringing
-      screen over the lock screen + heads-up CallStyle + in-app sheet,
-      Answer/Decline from the notification, missed-call row and notification.
-      Server: ring push for backgrounded phones, accept/decline endpoints,
-      call outcome messages.
+- [ ] Nothing in flight.
 
 ## Next
 
-- [ ] **Call screen upgrades** (mockup `calls.html` 03–04, all A): per-user
-      volume sheet (0–200%, mute for me, mute their soundboard), chat drawer
-      over the call, soundboard sheet, join/leave tones toggle, pinch zoom on
-      screen shares, picture-in-picture for video/share only, full-bleed
-      landscape for shares.
+- [ ] Call screen follow-ups (deferred from the upgrades): swipe up on the
+      filmstrip to open the chat drawer; the keyboard dropping a staged share
+      into the filmstrip; soundboard favorites (add/remove) and MyInstants
+      search; "Mute and deafen sounds" and "People in this call" in the call
+      settings sheet; the web's "only hear a share's audio while it is
+      focused" rule (the phone plays share audio at its stream volume).
 
 ## Later (from the audit)
 
@@ -53,6 +50,10 @@ reopened.
 
 ## Needs a real phone or a second person
 
+- [ ] Per-user volume and Mute for me on someone else's voice (0–200%,
+      react-native-webrtc track gain; above 100% saturates), hearing another
+      person's soundboard clip, join/leave tones from someone else joining.
+
 - [ ] Two-person voice: hearing each other, speaking LEDs, deafen.
 - [ ] Bluetooth and earpiece routing.
 - [ ] Receiving camera and screen share.
@@ -67,5 +68,18 @@ reopened.
   (v0.2.0).
 - Markdown, swipe pager + gestures, emoji/GIF pickers, members/profile/
   friends, in-app links/invites/share-to-app, native notifications (v0.3.0).
+- Call screen upgrades (mockup `calls.html` 03–04, all A): long-press a
+  tile for the person sheet (volume 0–200% with stream volume, mute for me,
+  mute their soundboard, profile, Message; your own tile: mic and camera),
+  chat drawer over the call, soundboard sheet (favorites, server clips,
+  defaults; plays for everyone, long-press previews), call settings with
+  join/leave tones (also in Settings › Calls) and mute all soundboards,
+  pinch/double-tap zoom on a staged video with readout, minimap and Fit,
+  picture-in-picture with Mute and Leave while video is on screen only,
+  call-screen-only rotation with a full-bleed landscape stage.
 - Fixes: with no conversation open the drawer fills the screen (no empty chat
   peek, no swipe to it); a conversation that disappears closes cleanly.
+- DM calls with ringing (mockup `calls.html` 01–02, all A): call key +
+  confirm, Calling region in the DM, native ringing over the lock screen,
+  heads-up and in-app sheet, Answer/Decline from the notification, missed
+  calls, call records (#131).

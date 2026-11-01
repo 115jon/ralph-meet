@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -75,10 +75,18 @@ function IndexTabs({
   );
 }
 
-/** Studio settings, opened from the panel's gear or the profile sheet. */
+function isTab(value: string | undefined): value is TabId {
+  return TABS.some((tab) => tab.id === value);
+}
+
+/**
+ * Studio settings, opened from the panel's gear or the profile sheet (and on
+ * 02 Calls from a call's settings, with `tab=calls`).
+ */
 export default function SettingsScreen() {
   const router = useRouter();
-  const [tab, setTab] = useState<TabId>("you");
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<TabId>(isTab(params.tab) ? params.tab : "you");
   return (
     <Screen>
       <Header title="Settings" onBack={() => router.back()} />

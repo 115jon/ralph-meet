@@ -31,6 +31,10 @@ interface FaderProps {
   step?: number;
   /** Called once the drag ends (or per screen-reader step), not per frame. */
   onCommit: (value: number) => void;
+  /** Each new value while dragging, for a live preview (e.g. a volume). */
+  onChange?: (value: number) => void;
+  /** Values marked with a tick under the track, e.g. 100%. */
+  ticks?: readonly number[];
   /** The readout beside the fader, e.g. "-29 dB". */
   format: (value: number) => string;
   accessibilityLabel: string;
@@ -52,13 +56,19 @@ export function Fader({
   max,
   step = 1,
   onCommit,
+  onChange,
+  ticks,
   format,
   accessibilityLabel,
 }: FaderProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const [draft, setDraft] = useState<number | null>(null);
+  const [draft, setDraftState] = useState<number | null>(null);
   const shown = draft ?? value;
+  const setDraft = (next: number | null) => {
+    setDraftState(next);
+    if (next !== null && next !== draft) onChange?.(next);
+  };
 
   const valueAt = (x: number) => {
     const usable = Math.max(1, width - CAP_WIDTH);
@@ -157,6 +167,26 @@ export function Fader({
               </Svg>
             ) : null}
           </View>
+          {width > 0
+            ? ticks?.map((tick) => (
+                <View
+                  key={tick}
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    left:
+                      ((tick - min) / (max - min)) * (width - CAP_WIDTH) +
+                      CAP_WIDTH / 2 -
+                      1,
+                    top: (TOUCH_HEIGHT + TRACK) / 2 + 2,
+                    width: 2,
+                    height: 6,
+                    borderRadius: 1,
+                    backgroundColor: theme.lineStrong,
+                  }}
+                />
+              ))
+            : null}
           <View
             pointerEvents="none"
             style={{
