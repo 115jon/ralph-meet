@@ -22,7 +22,7 @@
 //! `Capture_Thread` records **no** per-frame commands on `context` (no
 //! per-frame `Flush`, `CreateTexture2D`, or `CopySubresourceRegion`), and the
 //! `Encoder_Thread` holds the context only across the fused `VideoProcessorBlt`
-//! + its `context.End(query)` — see `VideoProcessor::convert_into` and
+//! plus its `context.End(query)` — see `VideoProcessor::convert_into` and
 //! `process_input_frame` in `wmf_encoder.rs`. The duration of that fused GPU
 //! operation is recorded into `NativeShareStats` so the residual contention on
 //! this serialization point can be observed (Requirements 4.3, 9.1).
@@ -48,9 +48,7 @@ use windows::core::{Result as WinResult, *};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, LUID};
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D11::*;
-use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC,
-};
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::*;
 use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
@@ -128,6 +126,28 @@ pub struct D3dDevice {
     pub context: ID3D11DeviceContext,
     pub dxgi_manager: IMFDXGIDeviceManager,
     pub reset_token: u32,
+    /// Balances the `MFStartup` in [`D3dDevice::new`]. Declared last so it
+    /// drops after `dxgi_manager` (fields drop in declaration order).
+    _media_foundation: MediaFoundationRef,
+}
+
+/// One `MFStartup` reference, released with `MFShutdown` on drop. Media
+/// Foundation reference-counts startup/shutdown, so each device holds its own.
+struct MediaFoundationRef;
+
+impl MediaFoundationRef {
+    fn start() -> WinResult<Self> {
+        unsafe { MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET)? };
+        Ok(Self)
+    }
+}
+
+impl Drop for MediaFoundationRef {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = MFShutdown();
+        }
+    }
 }
 
 unsafe impl Send for D3dDevice {}
@@ -137,7 +157,7 @@ impl D3dDevice {
     pub fn new() -> WinResult<Arc<Self>> {
         unsafe {
             // Media Foundation must be initialised before MFCreateDXGIDeviceManager.
-            let _ = MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET);
+            let media_foundation = MediaFoundationRef::start()?;
 
             let mut device: Option<ID3D11Device> = None;
             let mut context: Option<ID3D11DeviceContext> = None;
@@ -160,7 +180,7 @@ impl D3dDevice {
 
             // Multithread-protect the device context (required for MF + D3D11 interop).
             if let Ok(mt) = device.cast::<ID3D11Multithread>() {
-                mt.SetMultithreadProtected(true);
+                let _ = mt.SetMultithreadProtected(true);
             }
 
             // Lower our encode device's GPU scheduling priority so the game's
@@ -188,6 +208,7 @@ impl D3dDevice {
                 context,
                 dxgi_manager,
                 reset_token,
+                _media_foundation: media_foundation,
             }))
         }
     }
@@ -328,56 +349,6 @@ impl D3dDevice {
             let mut tex = None;
             self.device.CreateTexture2D(&desc, None, Some(&mut tex))?;
             Ok(tex.unwrap())
-        }
-    }
-
-    /// Copy a BGRA texture into a CPU-readable staging texture and return the
-    /// raw bytes. Used as a fallback when the video processor path is not
-    /// available. (Still GPU-side copy, then one CPU readback per frame.)
-    pub fn read_texture_bgra(
-        &self,
-        src: &ID3D11Texture2D,
-        width: u32,
-        height: u32,
-    ) -> WinResult<Vec<u8>> {
-        unsafe {
-            let desc = D3D11_TEXTURE2D_DESC {
-                Width: width,
-                Height: height,
-                MipLevels: 1,
-                ArraySize: 1,
-                Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
-                Usage: D3D11_USAGE_STAGING,
-                BindFlags: 0,
-                CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
-                MiscFlags: 0,
-            };
-            let mut staging = None;
-            self.device
-                .CreateTexture2D(&desc, None, Some(&mut staging))?;
-            let staging = staging.unwrap();
-
-            self.context.CopyResource(&staging, src);
-
-            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-            self.context
-                .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))?;
-
-            let row_pitch = mapped.RowPitch as usize;
-            let row_bytes = width as usize * 4;
-            let mut out = Vec::with_capacity(row_bytes * height as usize);
-            let ptr = mapped.pData as *const u8;
-            for row in 0..height as usize {
-                let src_slice = std::slice::from_raw_parts(ptr.add(row * row_pitch), row_bytes);
-                out.extend_from_slice(src_slice);
-            }
-
-            self.context.Unmap(&staging, 0);
-            Ok(out)
         }
     }
 }

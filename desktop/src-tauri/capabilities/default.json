@@ -40,7 +40,6 @@
     "allow-get-native-screen-share-stats",
     "allow-start-preview-loopback",
     "allow-handle-preview-loopback-answer",
-    "allow-handle-preview-loopback-ice-candidate",
     "allow-stop-preview-loopback",
     "allow-get-hardware-acceleration",
     "allow-show-main-window",

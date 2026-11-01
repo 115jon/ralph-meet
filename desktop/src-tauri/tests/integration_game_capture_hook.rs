@@ -72,7 +72,6 @@
 
 #![cfg(all(feature = "game-capture-hook", windows))]
 
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -456,10 +455,10 @@ fn dx11_hook_frames_feed_the_encoder() {
     let bitrate = 6_000_000u32;
 
     let stats = Arc::new(NativeShareStats::default());
-    let (output_tx, output_rx) = mpsc::sync_channel::<Vec<u8>>(8);
+    let (output_tx, mut output_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
 
     // Build the real encoder worker (selects a vendor-neutral encoder, Req 3.5).
-    // src dims are reported as the encode dims here; the real session uses the
+    // src dims are reported as the encode box here; the real session uses the
     // capture dims, but the smoke test only needs a live encoder to accept frames.
     let mut encoder = match MftEncoderWorker::new(
         VideoCodec::H264,
@@ -490,13 +489,14 @@ fn dx11_hook_frames_feed_the_encoder() {
     // Pump hook frames into the encoder, retain-at-most-one (Req 7.5) enforced by
     // pulling the next frame only after the prior one's release token fires.
     let mut hook = GameCaptureHook::new(d3d, channel, GraphicsApiBackend::Dx11, target_pid);
+    let frames = encoder.frame_sender();
     let mut fed = 0u32;
     let deadline = Instant::now() + FIRST_FRAME_TIMEOUT;
     while fed < 30 && Instant::now() < deadline {
         match hook.next_captured_frame(encode_w, encode_h) {
             Ok(Some(frame)) => {
                 let release = Arc::clone(&frame.release);
-                if encoder.try_send_frame(frame) {
+                if frames.try_send(frame) {
                     fed += 1;
                     // Wait briefly for the encoder to consume + release the frame
                     // so at most one surface is in flight (Req 7.5).
@@ -523,7 +523,10 @@ fn dx11_hook_frames_feed_the_encoder() {
 
     // Drain any encoded output the worker produced; non-empty output confirms the
     // captured frames were actually encoded.
-    let encoded = output_rx.try_iter().count();
+    let mut encoded = 0usize;
+    while output_rx.try_recv().is_ok() {
+        encoded += 1;
+    }
     eprintln!(
         "[integration_game_capture_hook] OK: fed {fed} hook frames to the encoder, drained \
          {encoded} encoded buffers (encoder backend {})",
