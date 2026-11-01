@@ -545,6 +545,9 @@ describe("message postprocessing", () => {
       channelName: "general",
       serverName: "server",
       content: "hello @mentioned",
+      senderId: "author-1",
+      senderAvatarUrl: null,
+      sentAt: expect.any(String),
     });
     expect(duplicate[0]?.push).toBeUndefined();
   });

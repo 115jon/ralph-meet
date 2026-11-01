@@ -1,11 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { waitUntil } from "cloudflare:workers";
+
 import {
   apiSuccess,
   broadcastToUser,
   getDB,
+  getEnv,
   requireAuth,
 } from "@/lib/api-helpers";
+import { fcmSenderFor } from "@/server/fcm";
+import {
+  hasNotificationsSinceLastRead,
+  sendReadPushes,
+} from "@/services/push.service";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { safeParse } from "@/lib/schema";
 import { Schema } from "effect";
@@ -26,8 +34,26 @@ const PUT = async ({ params }: any) => {
   if (accessResult instanceof Response) return accessResult;
 
   const db = getDB();
+  // Before the mark moves: does this read clear anything on other devices?
+  const clearsNotifications = await hasNotificationsSinceLastRead(
+    db,
+    userId,
+    channelId,
+  );
   const result = await markChannelAsRead(db, userId, channelId);
   await broadcastToUser(userId, "READ_STATE_UPDATE", result);
+
+  if (clearsNotifications) {
+    const push = sendReadPushes(
+      db,
+      fcmSenderFor(getEnv().FCM_SERVICE_ACCOUNT),
+      userId,
+      channelId,
+      result.last_read_at,
+    );
+    if (typeof waitUntil === "function") waitUntil(push);
+    else await push;
+  }
 
   return apiSuccess(result);
 };

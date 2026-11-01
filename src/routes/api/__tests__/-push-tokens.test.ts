@@ -38,6 +38,7 @@ describe("POST /api/push-tokens", () => {
         token: " fcm-token ",
         platform: "android",
         app_variant: "development",
+        push_format: "native",
       }),
     });
 
@@ -48,9 +49,36 @@ describe("POST /api/push-tokens", () => {
       "fcm-token",
       "android",
       "development",
+      "native",
       expect.any(String),
       expect.any(String),
     ]);
+  });
+
+  it("stores NULL push_format when an old client omits it", async () => {
+    const db = createMockD1();
+    const routes = pushTokenRoutes(
+      testServices({ auth: memoryAuth(SESSIONS), db }),
+    );
+
+    await routes.POST({
+      request: call("POST", { token: "t", platform: "ios" }),
+    });
+    const refused = await routes.POST({
+      request: call("POST", { token: "t", platform: "ios", push_format: "x" }),
+    });
+
+    db.assertCalledWith("INSERT INTO push_tokens", [
+      expect.any(String),
+      "user-1",
+      "t",
+      "ios",
+      null,
+      null,
+      expect.any(String),
+      expect.any(String),
+    ]);
+    expect(refused.status).toBe(400);
   });
 
   it("refuses an unknown platform and an empty token", async () => {
