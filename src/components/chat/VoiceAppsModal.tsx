@@ -153,7 +153,7 @@ export function VoiceAppsModal({
       open={isOpen}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      <ResponsiveDialogContent dialogClassName="max-h-[min(560px,calc(100dvh-2rem))] overflow-y-auto md:max-w-md">
+      <ResponsiveDialogContent dialogClassName="max-h-[min(560px,calc(100dvh-var(--app-chrome-top,0px)-2rem))] overflow-y-auto md:max-w-md">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Activities</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>

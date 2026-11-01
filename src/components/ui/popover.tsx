@@ -39,6 +39,7 @@ import {
 import { MENU_PANEL } from "@/components/ui/menu";
 import { useDialogBackButton } from "@/hooks/useBackButton";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { collisionPaddingBelowChrome } from "@/lib/app-chrome";
 import { cn } from "@/lib/utils";
 
 const preventDefault = (event: Event) => event.preventDefault();
@@ -246,7 +247,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
           align={align}
           sideOffset={sideOffset}
           alignOffset={alignOffset}
-          collisionPadding={collisionPadding}
+          collisionPadding={collisionPaddingBelowChrome(collisionPadding)}
           anchor={anchor}
           className={cn(
             context?.overModal ? "z-70" : stacked ? "z-60" : "z-50",

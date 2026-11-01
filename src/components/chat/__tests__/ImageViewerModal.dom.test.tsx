@@ -146,6 +146,18 @@ describe("ImageViewerModal drag navigation", () => {
     );
   });
 
+  it("starts the viewer under the desktop title bar, not at the window top", () => {
+    render(<ImageViewerModal />);
+
+    // The surface is the scrim and holds the top toolbar; --app-chrome-top is
+    // the desktop title bar's height (0 on the web).
+    const surface = screen
+      .getByTestId("image-viewer-stage")
+      .closest('[data-slot="dialog-surface"]');
+    expect(surface).toHaveClass("fixed", "inset-below-chrome");
+    expect(surface).not.toHaveClass("inset-0");
+  });
+
   it("opens the media context menu for the current remote image", async () => {
     render(<ImageViewerModal />);
 

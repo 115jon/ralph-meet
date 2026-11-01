@@ -335,6 +335,19 @@
 }
 
 /* ---------- Utilities ---------- */
+/* Window chrome. The desktop app draws a title bar (--app-chrome-top, set in
+   desktop/styles.css) that stays on top of every overlay; the web has none, so
+   each of these falls back to 0 and is a no-op there. A full-window overlay
+   uses inset-below-chrome instead of inset-0 and caps its height with
+   h-below-chrome (or calc(100dvh - var(--app-chrome-top,0px) - n)), so
+   nothing sits under the bar. */
+@utility inset-below-chrome {
+  inset: var(--app-chrome-top, 0px) 0 0 0;
+}
+@utility h-below-chrome {
+  height: calc(100dvh - var(--app-chrome-top, 0px));
+}
+
 @utility scrollbar-none {
   scrollbar-width: none;
   -ms-overflow-style: none;

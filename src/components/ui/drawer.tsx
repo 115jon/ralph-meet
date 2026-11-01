@@ -363,10 +363,10 @@ function DrawerHandle({ className }: { className?: string }) {
 
 const SIDE_CLASSES: Record<DrawerDirection, string> = {
   bottom:
-    "inset-x-0 bottom-0 max-h-[calc(100dvh-24px)] rounded-t-2xl border-t pb-[max(16px,var(--safe-area-bottom,0px))]",
-  top: "inset-x-0 top-0 max-h-[calc(100dvh-24px)] rounded-b-2xl border-b pt-[var(--safe-area-top,0px)]",
-  left: "inset-y-0 left-0 h-full w-full border-r",
-  right: "inset-y-0 right-0 h-full w-full border-l",
+    "inset-x-0 bottom-0 max-h-[calc(100dvh-var(--app-chrome-top,0px)-24px)] rounded-t-2xl border-t pb-[max(16px,var(--safe-area-bottom,0px))]",
+  top: "inset-x-0 top-[var(--app-chrome-top,0px)] max-h-[calc(100dvh-var(--app-chrome-top,0px)-24px)] rounded-b-2xl border-b pt-[var(--safe-area-top,0px)]",
+  left: "top-[var(--app-chrome-top,0px)] bottom-0 left-0 w-full border-r",
+  right: "top-[var(--app-chrome-top,0px)] right-0 bottom-0 w-full border-l",
 };
 
 type DrawerContentProps = Omit<

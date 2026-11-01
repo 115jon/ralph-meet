@@ -71,6 +71,24 @@ describe("dialog positioning regression guard", () => {
     ).toBeVisible();
   });
 
+  it("centres dialogs in the space under the desktop title bar", () => {
+    render(
+      <DesktopScreenPickerModal
+        isOpen
+        onClose={() => {}}
+        onStart={() => {}}
+        availableQualities={["720p30"]}
+      />,
+    );
+    const surface = document.querySelector('[data-slot="dialog-content"]');
+    expect(surface?.className).toContain(
+      "top-[calc(50%+var(--app-chrome-top,0px)/2)]",
+    );
+    expect(surface?.className).toContain(
+      "h-[min(640px,calc(100dvh-var(--app-chrome-top,0px)-32px))]",
+    );
+  });
+
   it("uses the shared responsive dialog for the desktop picker", () => {
     render(
       <DesktopScreenPickerModal

@@ -36,9 +36,9 @@ type SheetSide = "top" | "right" | "bottom" | "left";
 
 const SIDE_CLASSES: Record<SheetSide, string> = {
   right:
-    "inset-y-0 right-0 h-full w-[360px] max-w-full border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
-  left: "inset-y-0 left-0 h-full w-[360px] max-w-full border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
-  top: "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+    "top-[var(--app-chrome-top,0px)] right-0 bottom-0 w-[360px] max-w-full border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+  left: "top-[var(--app-chrome-top,0px)] bottom-0 left-0 w-[360px] max-w-full border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+  top: "inset-x-0 top-[var(--app-chrome-top,0px)] h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
   bottom:
     "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
 };

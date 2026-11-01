@@ -4,6 +4,7 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import * as React from "react";
 
 import { lastInputWasKeyboard } from "@/components/ui/dialog-stack";
+import { collisionPaddingBelowChrome } from "@/lib/app-chrome";
 import { cn } from "@/lib/utils";
 
 /** App-wide tooltip timing (talk-tree-spec §7, overlays issue 11). */
@@ -73,6 +74,7 @@ const TooltipContent = React.memo(function TooltipContent({
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}
+        collisionPadding={collisionPaddingBelowChrome()}
         className={cn(
           "z-80 flex min-h-7 w-fit max-w-[240px] origin-(--radix-tooltip-content-transform-origin) items-center gap-2 rounded-[2px] bg-ink-1 px-2 py-1 text-ui-xs font-medium text-ply-0 text-balance pointer-events-none forced-colors:border forced-colors:border-[CanvasText]",
           // A key inside the tooltip is its own translucent cap.

@@ -10,7 +10,7 @@
  * is scrolled to the top.
  *
  * Desktop: an anchored float in the menu recipe (`MENU_PANEL`: ply-3, line,
- * shadow-float, radius 10), capped at `min(600px, 100dvh - 24px)`. The
+ * shadow-float, radius 10), capped at `min(600px, 100dvh - --app-chrome-top - 24px)`. The
  * surface owns its z-index (modal layer 50, or the stacked layer 60 when
  * opened from a dialog). Callers pass only position and width. Outside
  * presses close it through the Dialog's own dismiss handling (non-modal by
@@ -49,7 +49,7 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
 /** The desktop panel recipe. */
 const PICKER_PANEL = cn(
   MENU_PANEL,
-  "fixed z-50 m-0 flex max-h-[min(600px,calc(100dvh-24px))] flex-col overflow-hidden p-0 outline-none",
+  "fixed z-50 m-0 flex max-h-[min(600px,calc(100dvh-var(--app-chrome-top,0px)-24px))] flex-col overflow-hidden p-0 outline-none",
 );
 /** Pointer open: fade + scale from the trigger; exit at ~0.7x. */
 const PRESENCE_POINTER =

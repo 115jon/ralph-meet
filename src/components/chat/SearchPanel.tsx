@@ -1015,7 +1015,7 @@ function SearchPanelBody({
       aria-labelledby={titleId}
       className={cn(
         "flex min-h-0 flex-col bg-ply-0",
-        "max-md:fixed max-md:inset-0 max-md:z-50",
+        "max-md:fixed max-md:inset-below-chrome max-md:z-50",
         "max-md:transition-[opacity,transform] max-md:duration-(--dur-3) max-md:ease-out max-md:starting:translate-y-2 max-md:starting:opacity-0",
         "md:h-full md:w-[380px] md:shrink-0 md:border-l md:border-line",
       )}

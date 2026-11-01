@@ -213,7 +213,7 @@ export default function MobileProfileSheet({
       <DrawerContent
         aria-label={`${displayName}'s profile`}
         showHandle={false}
-        className="h-dvh max-h-none overflow-hidden rounded-t-2xl border-0 bg-transparent pb-0"
+        className="h-below-chrome max-h-none overflow-hidden rounded-t-2xl border-0 bg-transparent pb-0"
       >
         <ProfileCard
           size="sheet"

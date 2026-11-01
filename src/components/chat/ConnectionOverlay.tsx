@@ -121,7 +121,7 @@ export function ConnectionOverlay({
           onReload={() => window.location.reload()}
           focusAction
           className={cn(
-            "fixed inset-0 z-100",
+            "fixed inset-below-chrome z-100",
             state.fadeOut && "rm-loading-exit",
           )}
         />
