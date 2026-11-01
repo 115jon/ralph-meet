@@ -10,6 +10,7 @@ import { create } from "zustand";
 import { Button } from "@/components/ui/button";
 import { LedLabel, type LedState } from "@/components/ui/led";
 import { Num } from "@/components/ui/num";
+import { useAppSessionState } from "@/lib/app-session-recovery";
 import { signInFromHere } from "@/lib/sign-in-here";
 import { connectionStatus } from "@/lib/voice/connection-status-label";
 import { cn } from "@/lib/utils";
@@ -439,6 +440,10 @@ function useChatLinkIssue(
   const connected = useChatStore((s) => s.connected);
   const reconnectAttempt = useChatStore((s) => s.reconnectAttempt);
   const failure = useChatStore((s) => s.gatewayFailure);
+  // Kova has no session to mint a new token from. The gateway may never
+  // have got as far as a refused ticket (it stops when the user id goes),
+  // so this, not only the gateway's own "auth" failure, means signed out.
+  const sessionSignedOut = useAppSessionState() === "signed-out";
   const wake = useChatStore((s) => s.gateway.wake);
   // Ready was seen before this mounted (connectStep stays 3 across a
   // disconnect): coming back to /chat is a reconnect, so the strip owns it.
@@ -467,7 +472,8 @@ function useChatLinkIssue(
     return () => clearTimeout(id);
   }, [state.back]);
 
-  const signedOut = !connected && hasConnected && failure === "auth";
+  const signedOut =
+    !connected && hasConnected && (failure === "auth" || sessionSignedOut);
   const showing = !connected && hasConnected && state.visible;
   const failed = reconnectAttempt > FAILED_AFTER_ATTEMPTS;
   const back = connected && state.back;

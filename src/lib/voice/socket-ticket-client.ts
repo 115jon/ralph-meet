@@ -1,3 +1,4 @@
+import { recoverAppSession } from "@/lib/app-session-recovery";
 import {
   getDesktopToken,
   getStoredKovaAuthSessionToken,
@@ -41,22 +42,41 @@ export type SocketTicketBundle = {
   protocols: string[];
 };
 
-async function requestSocketTicket(
+function postSocketTicket(
   request: SocketTicketRequest,
-): Promise<SocketTicketResponse> {
-  const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
+  token: string | null,
+): Promise<Response> {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (isTauri() && KOVA_AUTH_PUBLISHABLE_KEY) {
     headers.set("X-Publishable-Key", KOVA_AUTH_PUBLISHABLE_KEY);
   }
-
-  const response = await fetch(`${getApiBaseUrl()}/api/voice/socket-ticket`, {
+  return fetch(`${getApiBaseUrl()}/api/voice/socket-ticket`, {
     method: "POST",
     credentials: "include",
     headers,
     body: JSON.stringify(request),
   });
+}
+
+/**
+ * One ticket. A 401 asks Kova for a fresh app token (shared with every other
+ * refused call, see app-session-recovery) and tries once more with it, so a
+ * token revoked server-side costs the socket one round trip, not its
+ * "signed out" state. A 401 that survives that is the caller's to count.
+ */
+async function requestSocketTicket(
+  request: SocketTicketRequest,
+): Promise<SocketTicketResponse> {
+  const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
+  let response = await postSocketTicket(request, token);
+
+  if (response.status === 401) {
+    const freshToken = await recoverAppSession(token);
+    if (freshToken && freshToken !== token) {
+      response = await postSocketTicket(request, freshToken);
+    }
+  }
 
   if (!response.ok) {
     throw new SocketTicketError(response.status);
