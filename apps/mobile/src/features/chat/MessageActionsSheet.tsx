@@ -268,7 +268,12 @@ export function MessageActionsSheet({
   onMoreReactions,
 }: MessageActionsSheetProps) {
   return (
-    <Sheet visible={message !== null} onClose={onClose} label="Message actions">
+    <Sheet
+      visible={message !== null}
+      onClose={onClose}
+      label="Message actions"
+      expandable
+    >
       {message ? (
         <Actions
           key={message.id}

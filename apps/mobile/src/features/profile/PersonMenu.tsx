@@ -100,6 +100,7 @@ export function PersonMenu({
         visible={person !== null}
         onClose={onClose}
         label={person ? `${person.name} actions` : "Actions"}
+        expandable
       >
         {person ? (
           <View>

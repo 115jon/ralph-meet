@@ -1,7 +1,6 @@
 import { X } from "phosphor-react-native";
 import { useEffect, useState } from "react";
-import { Keyboard, Pressable, useWindowDimensions, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, useWindowDimensions, View } from "react-native";
 
 import { RADIUS, useTheme } from "@/theme";
 import { Icon, Sheet, Text } from "@/ui";
@@ -11,26 +10,6 @@ import type { ChatMessage } from "../store";
 import { EmojiGrid } from "./EmojiGrid";
 import { loadCreations } from "./library";
 import { PickerSearch } from "./PickerSearch";
-
-/** The mockup's 560 tall sheet, less on a short screen. */
-const MAX_HEIGHT = 560;
-const SCREEN_SHARE = 0.78;
-
-/** Tracks the keyboard's height inside a Modal, where the window never resizes. */
-function useKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const show = Keyboard.addListener("keyboardDidShow", (event) =>
-      setHeight(event.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener("keyboardDidHide", () => setHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
-}
 
 function Body({
   message,
@@ -42,23 +21,14 @@ function Body({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { width, height: screen } = useWindowDimensions();
-  const keyboard = useKeyboardHeight();
+  const { width } = useWindowDimensions();
   const [query, setQuery] = useState("");
-  // With the keyboard up the sheet shrinks to stay on screen.
-  const height = Math.min(
-    MAX_HEIGHT,
-    Math.round(screen * SCREEN_SHARE),
-    screen - keyboard - insets.top - 40,
-  );
-
   useEffect(() => {
     void loadCreations();
   }, []);
 
   return (
-    <View style={{ height }}>
+    <View style={{ flex: 1 }}>
       <View
         style={{
           flexDirection: "row",
@@ -138,7 +108,13 @@ export function ReactPicker({
   onClose: () => void;
 }) {
   return (
-    <Sheet visible={message !== null} onClose={onClose} label="Add a reaction">
+    <Sheet
+      visible={message !== null}
+      onClose={onClose}
+      label="Add a reaction"
+      expandable
+      fill
+    >
       {message ? (
         <Body
           key={message.id}

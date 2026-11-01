@@ -13,17 +13,18 @@ import {
 } from "phosphor-react-native";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
-  FlatList,
   Pressable,
   View,
+  type FlatList as RNFlatList,
   type ListRenderItem,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import { FlatList } from "react-native-gesture-handler";
 
 import { tapHaptic } from "@/lib/haptics";
 import { RADIUS, useTheme } from "@/theme";
-import { Icon, Text } from "@/ui";
+import { Icon, Text, useSheetScroll } from "@/ui";
 
 import type { Creation } from "./api";
 import { EmojiGlyph } from "./EmojiGlyph";
@@ -421,7 +422,9 @@ export function EmojiGrid({
   }
   const creations = useCreations();
   const tone = useSkinTone();
-  const list = useRef<FlatList<GridRow>>(null);
+  const list = useRef<RNFlatList<GridRow>>(null);
+  // In the react picker the grid hands its top edge to the sheet.
+  const sheetScroll = useSheetScroll();
   const [toning, setToning] = useState<EmojiCell | null>(null);
   const searching = query.trim().length > 0;
 
@@ -467,12 +470,15 @@ export function EmojiGrid({
     }),
     [layout],
   );
+  const sheetOnScroll = sheetScroll.onScroll;
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      sheetOnScroll?.(event);
+      if (searching) return;
       const next = sectionAt(layout, event.nativeEvent.contentOffset.y);
       setActive((current) => (current === next ? current : next));
     },
-    [layout],
+    [layout, searching, sheetOnScroll],
   );
   const jump = useCallback(
     (section: string) => {
@@ -492,8 +498,11 @@ export function EmojiGrid({
         renderItem={renderItem}
         keyExtractor={(row) => row.key}
         getItemLayout={getItemLayout}
-        onScroll={searching ? undefined : onScroll}
-        scrollEventThrottle={32}
+        simultaneousWith={sheetScroll.simultaneousWith}
+        scrollEnabled={sheetScroll.scrollEnabled}
+        overScrollMode={sheetScroll.overScrollMode}
+        onScroll={onScroll}
+        scrollEventThrottle={sheetScroll.scrollEventThrottle ?? 32}
         // A tap on an emoji lands while the search keyboard is up.
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="none"

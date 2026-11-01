@@ -56,7 +56,12 @@ interface ServerSheetProps {
 export function ServerSheet({ server, onClose }: ServerSheetProps) {
   const [inviting, setInviting] = useState(false);
   return (
-    <Sheet visible={server !== null} onClose={onClose} label="Server menu">
+    <Sheet
+      visible={server !== null}
+      onClose={onClose}
+      label="Server menu"
+      expandable
+    >
       {server ? (
         <>
           <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
