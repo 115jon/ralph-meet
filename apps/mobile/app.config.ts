@@ -110,9 +110,21 @@ const config: ExpoConfig = {
     ],
     // Message pushes post on the `messages` channel the app creates at launch.
     ["expo-notifications", { defaultChannel: "messages" }],
-    // The composer picks from the system photo picker only. Camera and
-    // microphone are voice's: set, not false, since false would block the
-    // permission for the whole app.
+    // The attach tray's recent-media grid reads photos and videos only
+    // (READ_MEDIA_IMAGES / READ_MEDIA_VIDEO, plus Android 14's
+    // READ_MEDIA_VISUAL_USER_SELECTED for "Select photos"); it never writes.
+    [
+      "expo-media-library",
+      {
+        photosPermission:
+          "Ralph Meet shows your recent photos and videos so you can attach them.",
+        savePhotosPermission: false,
+        granularPermissions: ["photo", "video"],
+      },
+    ],
+    // The tray's camera tile and Photos key (the system photo picker). Camera
+    // and microphone are also voice's: set, not false, since false would
+    // block the permission for the whole app.
     [
       "expo-image-picker",
       {
