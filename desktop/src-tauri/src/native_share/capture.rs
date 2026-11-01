@@ -738,7 +738,9 @@ fn attempt_hook_injection(
         && !crate::game_capture::vulkan_layer::process_has_hook_module(target_pid)
     {
         log::info!(
-            "[NativeShare] Vulkan target pid {target_pid} has no capture layer loaded (the layer              is registered only during hook shares, so a game started before the share has              none); skipping injection and using WGC (backend_disabled)"
+            "[NativeShare] Vulkan target pid {target_pid} has no capture layer loaded (the layer \
+             is registered only during hook shares, so a game started before the share has \
+             none); skipping injection and using WGC (backend_disabled)"
         );
         prep.missing_offsets = true;
         return prep;
