@@ -1,36 +1,451 @@
 // ============================================================================
 // Sound Effects Engine — Web Audio API
 //
-// All sounds are synthesised on-the-fly using oscillators and noise buffers.
-// This avoids bundling audio files and works identically in the browser,
-// CEF (desktop Tauri), and any ServiceWorker-free environment.
+// Every UI sound goes through `SoundEngine.play`, the single gate: the master
+// switch and the sound's category toggle, the volume setting, a per-group rate
+// limit and voice cap. The volume setting is one gain stage. Built-in sounds
+// go from it straight to the speakers, so at 100% they are the same signal
+// they always were; imported custom files also pass a peak limiter.
+//
+// The built-in sounds are the oscillator recipes in `sound-synth.ts`. With the
+// experimental custom-sounds setting on, files imported on this device
+// (`custom-sounds.ts`) are decoded once into AudioBuffers and play instead;
+// any sound without one keeps its built-in version. Rings loop a buffer on the
+// AudioContext clock, so background-tab timer throttling can't stutter them.
 // ============================================================================
 
-let _ctx: AudioContext | null = null;
-let _interactionCallback: (() => void) | null = null;
+import { isLoopSound, SOUND_SPECS, type SoundId } from "@/lib/sound-catalog";
+import { playSynth, renderSynthLoop } from "@/lib/sound-synth";
+import {
+  createIdbCustomSoundStorage,
+  type CustomSoundStorage,
+} from "@/lib/custom-sounds";
+import {
+  useSoundSettingsStore,
+  type SoundSettings,
+} from "@/stores/useSoundSettingsStore";
 
-function ctx(): AudioContext {
-  if (!_ctx || _ctx.state === "closed") {
-    _ctx = new AudioContext();
+export type { SoundId } from "@/lib/sound-catalog";
+
+type LoopId = "ring" | "outgoingRing";
+
+export interface SoundEngineOptions {
+  getSettings: (userId?: string) => SoundSettings;
+  /** Imported files to decode once the AudioContext exists. */
+  loadCustomSounds?: () => Promise<Array<{ id: SoundId; bytes: ArrayBuffer }>>;
+  createContext?: () => AudioContext;
+  /** Milliseconds, for the rate limit. */
+  now?: () => number;
+  /** Renders one cycle of a built-in ring for looping. */
+  renderLoop?: (
+    id: LoopId,
+    period: number,
+    sampleRate: number,
+  ) => Promise<AudioBuffer>;
+}
+
+export interface PlayOptions {
+  /** Settings owner when it isn't the store's current user (room guests). */
+  userId?: string;
+  /** Skip the on/off toggles but keep the volume (settings "Play" buttons). */
+  bypassToggles?: boolean;
+  /**
+   * Which version to play. "auto" (default) follows the custom-sounds
+   * setting; previews pick one explicitly. A missing custom file always
+   * falls back to the built-in sound.
+   */
+  source?: "auto" | "builtin" | "custom";
+  /** Play a ring's cycle once instead of looping (previews). */
+  once?: boolean;
+}
+
+/** A ring buffer, where its loop ends, and which output stage it takes. */
+interface Loop {
+  buffer: AudioBuffer;
+  end: number;
+  custom: boolean;
+}
+
+interface Voice {
+  gain: GainNode;
+  source: AudioScheduledSourceNode | null;
+  endsAt: number;
+}
+
+/** Fade applied when a voice is stolen or a ring stops (seconds). */
+const RELEASE = 0.06;
+
+/** Longest built-in one-shot including its tail (notification). */
+const SYNTH_LENGTH = 0.6;
+
+/**
+ * A fresh DynamicsCompressor attenuates audio for its first ~100 ms (measured
+ * in Chromium: -11 dB on a sound at t=0, 0 dB from 0.1 s). Custom files start
+ * no earlier than this on a new context.
+ */
+const LIMITER_WARMUP = 0.12;
+
+/**
+ * Peak limiter for custom files, which can be mastered at any level. The
+ * built-in sounds peak near -18 dBFS and skip it. Measured in Chromium with
+ * the trim below: a 0 dBFS file comes out at -1.8 dBFS, a +6 dB pile-up at
+ * -1.3, and anything under the threshold at unity.
+ */
+export const LIMITER = {
+  threshold: -2,
+  knee: 0,
+  ratio: 20,
+  attack: 0.003,
+  release: 0.1,
+} as const;
+
+/**
+ * Web Audio's compressor applies automatic makeup gain of
+ * (1 / fullRangeGain)^0.6, which would lift every file by about 1.1 dB. A
+ * trim after it cancels that, so audio below the threshold passes at unity.
+ */
+export function limiterMakeupTrim(): number {
+  const fullRangeDb = LIMITER.threshold - LIMITER.threshold / LIMITER.ratio;
+  return Math.pow(10, (0.6 * fullRangeDb) / 20);
+}
+
+/** Perceptual taper for the 0-100 volume setting; 100 is unity gain. */
+export function volumeToGain(volume: number): number {
+  if (!Number.isFinite(volume)) return 1;
+  const v = Math.max(0, Math.min(100, volume)) / 100;
+  return v * v;
+}
+
+function defaultCreateContext(): AudioContext {
+  return new AudioContext({ latencyHint: "interactive" });
+}
+
+export class SoundEngine {
+  private ctx: AudioContext | null = null;
+  /** Volume stage for built-in sounds, straight to the speakers. */
+  private master: GainNode | null = null;
+  /** Volume stage for custom files, through the limiter. */
+  private limited: GainNode | null = null;
+  private readonly custom = new Map<SoundId, AudioBuffer>();
+  /** Ids set or cleared since the stored files started loading. */
+  private readonly customTouched = new Set<SoundId>();
+  private customLoad: Promise<void> = Promise.resolve();
+  private readonly builtinLoops = new Map<
+    LoopId,
+    Promise<AudioBuffer | null>
+  >();
+  private readonly lastStart = new Map<string, number>();
+  private readonly voices = new Map<string, Voice[]>();
+  private readonly loops = new Map<LoopId, Voice>();
+  /** Rings waiting for their buffer, by start token. */
+  private readonly pendingLoops = new Map<LoopId, number>();
+  private loopToken = 0;
+  private interactionCallback: (() => void) | null = null;
+  private readonly opts: Required<SoundEngineOptions>;
+
+  constructor(options: SoundEngineOptions) {
+    this.opts = {
+      createContext: defaultCreateContext,
+      now: () => Date.now(),
+      loadCustomSounds: async () => [],
+      renderLoop: renderSynthLoop,
+      ...options,
+    };
   }
-  // Resume suspended context (autoplay policy)
-  if (_ctx.state === "suspended") {
-    _ctx.resume().catch(() => {});
-    // Notify UI that interaction is needed
-    if (_interactionCallback) _interactionCallback();
+
+  onInteractionNeeded(cb: (() => void) | null) {
+    this.interactionCallback = cb;
   }
-  return _ctx;
+
+  isSuspended(): boolean {
+    return this.ctx?.state === "suspended";
+  }
+
+  /** Resume after a user gesture. */
+  resume(): Promise<void> {
+    const a = this.context(false);
+    if (!a) return Promise.resolve();
+    return a.resume();
+  }
+
+  /** Resolves once the stored custom files have been decoded (or failed). */
+  customSoundsReady(): Promise<void> {
+    this.context(false);
+    return this.customLoad;
+  }
+
+  /** Decode an audio file with this engine's context. */
+  decode(bytes: ArrayBuffer): Promise<AudioBuffer> {
+    const a = this.context(false);
+    if (!a) return Promise.reject(new Error("Web Audio unavailable"));
+    return a.decodeAudioData(bytes.slice(0));
+  }
+
+  /** Use (or, with null, stop using) an imported file for `id`. */
+  async setCustomSound(id: SoundId, bytes: ArrayBuffer | null): Promise<void> {
+    this.customTouched.add(id);
+    if (!bytes) {
+      this.custom.delete(id);
+      return;
+    }
+    this.custom.set(id, await this.decode(bytes));
+  }
+
+  clearCustomSounds() {
+    for (const id of this.custom.keys()) this.customTouched.add(id);
+    this.custom.clear();
+  }
+
+  hasCustomSound(id: SoundId): boolean {
+    return this.custom.has(id);
+  }
+
+  /**
+   * Play a sound if its settings allow it. Returns whether it started (or, for
+   * rings, is now ringing).
+   */
+  play(id: SoundId, options: PlayOptions = {}): boolean {
+    const spec = SOUND_SPECS[id];
+    const settings = this.opts.getSettings(options.userId);
+    if (
+      !options.bypassToggles &&
+      !(settings.soundsEnabled && settings[spec.category])
+    ) {
+      return false;
+    }
+    const volume = volumeToGain(settings.soundVolume);
+    if (volume <= 0) return false;
+    const custom =
+      options.source === "custom" ||
+      ((options.source ?? "auto") === "auto" && settings.customSounds);
+
+    if (isLoopSound(id) && !options.once) {
+      return this.ring(id, volume, custom);
+    }
+
+    const group = options.once ? `preview:${spec.group}` : spec.group;
+    const now = this.opts.now();
+    const last = this.lastStart.get(group);
+    if (last !== undefined && now - last < spec.minIntervalMs) return false;
+
+    const a = this.context(true);
+    if (!a || !this.master) return false;
+    this.lastStart.set(group, now);
+    this.setMasterGain(volume);
+
+    const pool = (this.voices.get(group) ?? []).filter(
+      (v) => v.endsAt > a.currentTime,
+    );
+    while (pool.length >= spec.maxVoices) {
+      const oldest = pool.shift();
+      if (oldest) this.release(oldest, a.currentTime);
+    }
+    pool.push(this.startVoice(a, id, custom));
+    this.voices.set(group, pool);
+    return true;
+  }
+
+  /** Stop a ring with a short fade. Never gated. */
+  stop(id: LoopId) {
+    this.pendingLoops.delete(id);
+    const voice = this.loops.get(id);
+    if (!voice || !this.ctx) return;
+    this.loops.delete(id);
+    this.release(voice, this.ctx.currentTime);
+  }
+
+  isRinging(id: LoopId): boolean {
+    return this.loops.has(id) || this.pendingLoops.has(id);
+  }
+
+  /** Apply a volume change to sounds already playing (rings). */
+  syncVolume(userId?: string) {
+    if (!this.master) return;
+    this.setMasterGain(volumeToGain(this.opts.getSettings(userId).soundVolume));
+  }
+
+  // ── internals ────────────────────────────────────────────────────────────
+
+  private context(notify: boolean): AudioContext | null {
+    if (!this.ctx || this.ctx.state === "closed") {
+      try {
+        this.ctx = this.opts.createContext();
+      } catch {
+        return null;
+      }
+      const limiter = this.ctx.createDynamicsCompressor();
+      limiter.threshold.value = LIMITER.threshold;
+      limiter.knee.value = LIMITER.knee;
+      limiter.ratio.value = LIMITER.ratio;
+      limiter.attack.value = LIMITER.attack;
+      limiter.release.value = LIMITER.release;
+      const trim = this.ctx.createGain();
+      trim.gain.value = limiterMakeupTrim();
+      limiter.connect(trim).connect(this.ctx.destination);
+      this.limited = this.ctx.createGain();
+      this.limited.connect(limiter);
+      this.master = this.ctx.createGain();
+      this.master.connect(this.ctx.destination);
+      this.custom.clear();
+      this.customTouched.clear();
+      this.builtinLoops.clear();
+      this.voices.clear();
+      this.loops.clear();
+      this.customLoad = this.loadCustom(this.ctx);
+    }
+    if (this.ctx.state === "suspended") {
+      this.ctx.resume().catch(() => {});
+      if (notify) this.interactionCallback?.();
+    }
+    return this.ctx;
+  }
+
+  private async loadCustom(a: AudioContext): Promise<void> {
+    let stored: Array<{ id: SoundId; bytes: ArrayBuffer }>;
+    try {
+      stored = await this.opts.loadCustomSounds();
+    } catch {
+      return;
+    }
+    await Promise.all(
+      stored.map(async ({ id, bytes }) => {
+        try {
+          const buffer = await a.decodeAudioData(bytes.slice(0));
+          if (!this.customTouched.has(id)) this.custom.set(id, buffer);
+        } catch {
+          // Undecodable here: the built-in sound plays instead.
+        }
+      }),
+    );
+  }
+
+  private setMasterGain(volume: number) {
+    if (!this.ctx) return;
+    for (const stage of [this.master, this.limited]) {
+      if (!stage) continue;
+      stage.gain.cancelScheduledValues(this.ctx.currentTime);
+      stage.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.01);
+    }
+  }
+
+  private startVoice(a: AudioContext, id: SoundId, custom: boolean): Voice {
+    const gain = a.createGain();
+    const buffer = custom ? this.custom.get(id) : undefined;
+    if (!buffer) {
+      const when = a.currentTime;
+      gain.connect(this.master as GainNode);
+      playSynth(id, a, gain, when);
+      return { gain, source: null, endsAt: when + SYNTH_LENGTH };
+    }
+    const when = Math.max(a.currentTime, LIMITER_WARMUP);
+    gain.connect(this.limited as GainNode);
+    const source = a.createBufferSource();
+    source.buffer = buffer;
+    source.connect(gain);
+    source.start(when);
+    source.onended = () => gain.disconnect();
+    return { gain, source, endsAt: when + buffer.duration };
+  }
+
+  private ring(id: LoopId, volume: number, custom: boolean): boolean {
+    if (this.isRinging(id)) return true;
+    const a = this.context(true);
+    if (!a) return false;
+    this.setMasterGain(volume);
+    const token = ++this.loopToken;
+    this.pendingLoops.set(id, token);
+    void this.loopBuffer(a, id, custom).then((loop) => {
+      if (this.pendingLoops.get(id) !== token || this.ctx !== a) return;
+      this.pendingLoops.delete(id);
+      if (loop) this.startLoop(a, id, loop);
+    });
+    return true;
+  }
+
+  private async loopBuffer(
+    a: AudioContext,
+    id: LoopId,
+    custom: boolean,
+  ): Promise<Loop | null> {
+    if (custom) {
+      await this.customLoad;
+      const file = this.custom.get(id);
+      // A custom ring loops the whole file.
+      if (file) return { buffer: file, end: file.duration, custom: true };
+    }
+    const period = SOUND_SPECS[id].loopSeconds ?? 0;
+    let render = this.builtinLoops.get(id);
+    if (!render) {
+      render = this.opts.renderLoop(id, period, a.sampleRate).catch(() => null);
+      this.builtinLoops.set(id, render);
+    }
+    const buffer = await render;
+    return buffer ? { buffer, end: period, custom: false } : null;
+  }
+
+  private startLoop(a: AudioContext, id: LoopId, loop: Loop) {
+    const stage = loop.custom ? this.limited : this.master;
+    if (!stage) return;
+    const gain = a.createGain();
+    gain.connect(stage);
+    const source = a.createBufferSource();
+    source.buffer = loop.buffer;
+    source.loop = true;
+    source.loopStart = 0;
+    source.loopEnd = Math.min(loop.end, loop.buffer.duration);
+    source.connect(gain);
+    source.start(
+      loop.custom ? Math.max(a.currentTime, LIMITER_WARMUP) : a.currentTime,
+    );
+    source.onended = () => gain.disconnect();
+    this.loops.set(id, { gain, source, endsAt: Number.POSITIVE_INFINITY });
+  }
+
+  private release(voice: Voice, at: number) {
+    const param = voice.gain.gain;
+    param.cancelScheduledValues(at);
+    param.setValueAtTime(param.value, at);
+    param.linearRampToValueAtTime(0, at + RELEASE);
+    voice.source?.stop(at + RELEASE + 0.01);
+    voice.endsAt = at;
+  }
+}
+
+// ── App singleton ───────────────────────────────────────────────────────────
+
+let storage: CustomSoundStorage | null = null;
+
+/** This device's imported custom-sound files (IndexedDB). */
+export function customSoundStorage(): CustomSoundStorage {
+  storage ??= createIdbCustomSoundStorage();
+  return storage;
+}
+
+const engine = new SoundEngine({
+  getSettings: (userId) => useSoundSettingsStore.getState().getSettings(userId),
+  loadCustomSounds: () => customSoundStorage().list(),
+});
+
+useSoundSettingsStore.subscribe(() => engine.syncVolume());
+
+/** The app's sound engine (settings import and previews use it directly). */
+export function soundEngine(): SoundEngine {
+  return engine;
+}
+
+/** Play any UI sound through the settings gate. */
+export function playSound(id: SoundId, options?: PlayOptions): boolean {
+  return engine.play(id, options);
 }
 
 /** Check if the sound AudioContext is suspended (needs user interaction) */
 export function isSoundContextSuspended(): boolean {
-  return !!_ctx && _ctx.state === "suspended";
+  return engine.isSuspended();
 }
 
 /** Resume the sound AudioContext after a user gesture */
 export function resumeSoundContext(): Promise<void> {
-  if (!_ctx) _ctx = new AudioContext();
-  return _ctx.resume();
+  return engine.resume();
 }
 
 /**
@@ -38,277 +453,71 @@ export function resumeSoundContext(): Promise<void> {
  * is suspended. Use this to show an "Interaction Required" popup.
  */
 export function onSoundInteractionNeeded(cb: (() => void) | null) {
-  _interactionCallback = cb;
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Create a gain node that fades out over `duration` seconds */
-function _fadeOut(
-  a: AudioContext,
-  startGain: number,
-  duration: number,
-): GainNode {
-  const g = a.createGain();
-  g.gain.setValueAtTime(startGain, a.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + duration);
-  return g;
-}
-
-/** Play a tone burst: freq (Hz), duration (s), volume 0-1, type */
-function tone(
-  freq: number,
-  duration: number,
-  volume = 0.15,
-  type: OscillatorType = "sine",
-  delay = 0,
-) {
-  const a = ctx();
-  const osc = a.createOscillator();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, a.currentTime + delay);
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(0, a.currentTime + delay);
-  // Quick attack
-  g.gain.linearRampToValueAtTime(volume, a.currentTime + delay + 0.01);
-  // Smooth decay
-  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + delay + duration);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(a.currentTime + delay);
-  osc.stop(a.currentTime + delay + duration + 0.05);
-}
-
-/** Play two tones in sequence (ascending = join-like, descending = leave-like) */
-function twoTone(f1: number, f2: number, dur = 0.1, gap = 0.08, volume = 0.12) {
-  tone(f1, dur, volume, "sine", 0);
-  tone(f2, dur, volume, "sine", dur + gap);
-}
-
-/** Short click/pop for mute/unmute */
-function clickPop(freq: number, volume = 0.1) {
-  const a = ctx();
-  const osc = a.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(freq, a.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(freq * 0.5, a.currentTime + 0.06);
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(volume, a.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.06);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(a.currentTime);
-  osc.stop(a.currentTime + 0.08);
-}
-
-/** Soft chime for notifications (richer timbre using harmonics) */
-function chime(baseFreq: number, duration = 0.4, volume = 0.08) {
-  const a = ctx();
-  const now = a.currentTime;
-
-  // Fundamental
-  const osc1 = a.createOscillator();
-  osc1.type = "sine";
-  osc1.frequency.value = baseFreq;
-
-  // Octave harmonic (soft)
-  const osc2 = a.createOscillator();
-  osc2.type = "sine";
-  osc2.frequency.value = baseFreq * 2;
-
-  // Fifth harmonic (very soft)
-  const osc3 = a.createOscillator();
-  osc3.type = "sine";
-  osc3.frequency.value = baseFreq * 1.5;
-
-  const master = a.createGain();
-  master.gain.setValueAtTime(volume, now);
-  master.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-  const g1 = a.createGain();
-  g1.gain.value = 1.0;
-  const g2 = a.createGain();
-  g2.gain.value = 0.3;
-  const g3 = a.createGain();
-  g3.gain.value = 0.15;
-
-  osc1.connect(g1).connect(master);
-  osc2.connect(g2).connect(master);
-  osc3.connect(g3).connect(master);
-  master.connect(a.destination);
-
-  osc1.start(now);
-  osc2.start(now);
-  osc3.start(now);
-  osc1.stop(now + duration + 0.05);
-  osc2.stop(now + duration + 0.05);
-  osc3.stop(now + duration + 0.05);
+  engine.onInteractionNeeded(cb);
 }
 
 // ── Public Sound Effects ────────────────────────────────────────────────────
+// Each is gated by its settings toggle; callers don't check settings.
 
-/** Discord-style ascending two-tone: someone joined voice */
-export function playVoiceJoin() {
-  twoTone(880, 1175, 0.08, 0.06, 0.12);
-}
+/** Someone joined the voice channel you're in */
+export const playVoiceJoin = (o?: PlayOptions) =>
+  void playSound("voiceJoin", o);
+/** Someone left the voice channel you're in */
+export const playVoiceLeave = (o?: PlayOptions) =>
+  void playSound("voiceLeave", o);
+/** Microphone muted */
+export const playMute = (o?: PlayOptions) => void playSound("mute", o);
+/** Microphone unmuted */
+export const playUnmute = (o?: PlayOptions) => void playSound("unmute", o);
+/** Deafened */
+export const playDeafen = (o?: PlayOptions) => void playSound("deafen", o);
+/** Undeafened */
+export const playUndeafen = (o?: PlayOptions) => void playSound("undeafen", o);
+/** New notification (mention, reply, DM) */
+export const playNotification = (o?: PlayOptions) =>
+  void playSound("notification", o);
+/** New message in the current channel */
+export const playMessageReceived = (o?: PlayOptions) =>
+  void playSound("message", o);
+/** You connected to voice */
+export const playConnected = (o?: PlayOptions) => void playSound("connect", o);
+/** You disconnected from voice */
+export const playDisconnect = (o?: PlayOptions) =>
+  void playSound("disconnect", o);
+/** Screen share started */
+export const playScreenShareStart = (o?: PlayOptions) =>
+  void playSound("screenShareStart", o);
+/** Screen share stopped */
+export const playScreenShareStop = (o?: PlayOptions) =>
+  void playSound("screenShareStop", o);
+/** A viewer started watching your stream */
+export const playStreamWatcherStart = (o?: PlayOptions) =>
+  void playSound("streamWatcherStart", o);
+/** A viewer stopped watching your stream */
+export const playStreamWatcherStop = (o?: PlayOptions) =>
+  void playSound("streamWatcherStop", o);
+/** Call connected */
+export const playCallConnect = (o?: PlayOptions) =>
+  void playSound("callConnect", o);
+/** Call ended */
+export const playCallEnd = (o?: PlayOptions) => void playSound("callEnd", o);
 
-/** Discord-style descending two-tone: someone left voice */
-export function playVoiceLeave() {
-  twoTone(1175, 880, 0.08, 0.06, 0.12);
-}
+// ── Rings ───────────────────────────────────────────────────────────────────
 
-/** Short pop — microphone muted */
-export function playMute() {
-  clickPop(400, 0.12);
-}
-
-/** Short pop (higher) — microphone unmuted */
-export function playUnmute() {
-  clickPop(600, 0.12);
-}
-
-/** Lower pop — deafened */
-export function playDeafen() {
-  clickPop(300, 0.14);
-}
-
-/** Higher pop — undeafened */
-export function playUndeafen() {
-  clickPop(700, 0.12);
-}
-
-/** Soft chime — new notification (mention, reply, DM) */
-export function playNotification() {
-  chime(1047, 0.35, 0.1); // C6
-  setTimeout(() => chime(1319, 0.3, 0.07), 120); // E6
-}
-
-/** Subtle knock — new message in current channel */
-export function playMessageReceived() {
-  const a = ctx();
-  const now = a.currentTime;
-  const osc = a.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(800, now);
-  osc.frequency.exponentialRampToValueAtTime(600, now + 0.05);
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(0.06, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(now);
-  osc.stop(now + 0.1);
-}
-
-/** Warm disconnect tone — you disconnected from voice */
-export function playDisconnect() {
-  const a = ctx();
-  const now = a.currentTime;
-
-  const osc = a.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(523, now); // C5
-  osc.frequency.exponentialRampToValueAtTime(330, now + 0.2); // E4
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(0.12, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(now);
-  osc.stop(now + 0.3);
-}
-
-/** Three-tone connection chime — you connected to voice */
-export function playConnected() {
-  tone(523, 0.1, 0.1, "sine", 0); // C5
-  tone(659, 0.1, 0.1, "sine", 0.1); // E5
-  tone(784, 0.15, 0.1, "sine", 0.2); // G5
-}
-
-/** Incoming call ring — repeated chime pattern */
-let ringInterval: ReturnType<typeof setInterval> | null = null;
-
+/** Incoming call ring; loops until playRingStop. */
 export function playRingStart() {
-  playRingStop();
-  const ringOnce = () => {
-    chime(880, 0.2, 0.08);
-    setTimeout(() => chime(1047, 0.2, 0.08), 200);
-    setTimeout(() => chime(880, 0.2, 0.06), 400);
-  };
-  ringOnce();
-  ringInterval = setInterval(ringOnce, 2500);
+  playSound("ring");
 }
 
 export function playRingStop() {
-  if (ringInterval) {
-    clearInterval(ringInterval);
-    ringInterval = null;
-  }
+  engine.stop("ring");
 }
 
-/** Screen share started */
-export function playScreenShareStart() {
-  tone(660, 0.08, 0.08, "sine", 0);
-  tone(880, 0.12, 0.08, "sine", 0.1);
-}
-
-/** Screen share stopped */
-export function playScreenShareStop() {
-  tone(880, 0.08, 0.08, "sine", 0);
-  tone(660, 0.12, 0.08, "sine", 0.1);
-}
-
-/** Distinct shimmer when a viewer starts watching your stream */
-export function playStreamWatcherStart() {
-  tone(740, 0.07, 0.07, "triangle", 0);
-  tone(988, 0.09, 0.06, "sine", 0.06);
-  tone(1245, 0.12, 0.05, "triangle", 0.14);
-}
-
-/** Distinct glide when a viewer stops watching your stream */
-export function playStreamWatcherStop() {
-  tone(1245, 0.08, 0.06, "triangle", 0);
-  tone(880, 0.08, 0.05, "sine", 0.07);
-  tone(659, 0.12, 0.05, "triangle", 0.14);
-}
-
-// ── Call Sound Effects ──────────────────────────────────────────────────────
-
-/** Outgoing ring — caller hears this while waiting for callee to pick up
- *  Repeating double-beep pattern like a phone line */
-let outgoingRingInterval: ReturnType<typeof setInterval> | null = null;
-
+/** Outgoing ring the caller hears while waiting; loops until stopped. */
 export function playOutgoingRingStart() {
-  playOutgoingRingStop();
-  const ringOnce = () => {
-    // Double-beep: boop-boop ... pause
-    tone(440, 0.3, 0.06, "sine", 0);
-    tone(440, 0.3, 0.06, "sine", 0.5);
-  };
-  ringOnce();
-  outgoingRingInterval = setInterval(ringOnce, 3000);
+  playSound("outgoingRing");
 }
 
 export function playOutgoingRingStop() {
-  if (outgoingRingInterval) {
-    clearInterval(outgoingRingInterval);
-    outgoingRingInterval = null;
-  }
-}
-
-/** Call connected — short ascending 3-tone chime */
-export function playCallConnect() {
-  tone(523, 0.08, 0.1, "sine", 0); // C5
-  tone(659, 0.08, 0.1, "sine", 0.09); // E5
-  tone(880, 0.15, 0.1, "sine", 0.18); // A5
-}
-
-/** Call ended — warm descending two-tone */
-export function playCallEnd() {
-  tone(660, 0.12, 0.1, "sine", 0);
-  tone(440, 0.18, 0.1, "sine", 0.14);
+  engine.stop("outgoingRing");
 }

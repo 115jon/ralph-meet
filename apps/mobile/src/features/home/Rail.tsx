@@ -6,6 +6,7 @@ import { useServerMentionCount } from "@/features/activity/store";
 import { useUnreadDmCount } from "@/features/dms/store";
 import { usePlateClearance } from "@/features/panel/metrics";
 import type { Server } from "@/features/servers/schema";
+import { serverInitials } from "@/features/servers/initials";
 import {
   useServerHasUnread,
   useServerList,
@@ -19,16 +20,6 @@ import { showDms, showServer, useHomePane } from "./pane";
 
 const RAIL_WIDTH = 68;
 const TILE = 48;
-
-/** "Ralph HQ" → "RH", "valorant" → "VA". */
-function serverInitials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const letters =
-    words.length > 1
-      ? `${words[0]?.[0] ?? ""}${words[1]?.[0] ?? ""}`
-      : name.trim().slice(0, 2);
-  return letters.toUpperCase();
-}
 
 type Pill = "selected" | "unread" | "none";
 

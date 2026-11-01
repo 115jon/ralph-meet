@@ -1,0 +1,1651 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`built-in sound recipes > callConnect keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          523,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.1,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.08,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.13,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          659,
+          0.09,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.09,
+          ],
+          [
+            "linear",
+            0.1,
+            0.1,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.17,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.09,
+    "stop": 0.22,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          880,
+          0.18,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.18,
+          ],
+          [
+            "linear",
+            0.1,
+            0.19,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.33,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.18,
+    "stop": 0.38,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > callEnd keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          660,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.1,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.12,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.17,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          440,
+          0.14,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.14,
+          ],
+          [
+            "linear",
+            0.1,
+            0.15,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.32,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.14,
+    "stop": 0.37,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > connect keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          523,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.1,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.1,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.15,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          659,
+          0.1,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.1,
+          ],
+          [
+            "linear",
+            0.1,
+            0.11,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.2,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.1,
+    "stop": 0.25,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          784,
+          0.2,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.2,
+          ],
+          [
+            "linear",
+            0.1,
+            0.21,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.35,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.2,
+    "stop": 0.4,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > deafen keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          300,
+          0,
+        ],
+        [
+          "exponential",
+          150,
+          0.06,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0.14,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.06,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.08,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > disconnect keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          523,
+          0,
+        ],
+        [
+          "exponential",
+          330,
+          0.2,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0.12,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.25,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.3,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > message keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          800,
+          0,
+        ],
+        [
+          "exponential",
+          600,
+          0.05,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0.06,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.08,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.1,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > mute keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          400,
+          0,
+        ],
+        [
+          "exponential",
+          200,
+          0.06,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0.12,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.06,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.08,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > notification keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [],
+      "value": 1047,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 1,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.1,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.35,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.4,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 2094,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.3,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.1,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.35,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.4,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1570.5,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.15,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.1,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.35,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.4,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1319,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 1,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.07,
+            0.12,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.42,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.12,
+    "stop": 0.47,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 2638,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.3,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.07,
+            0.12,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.42,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.12,
+    "stop": 0.47,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1978.5,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.15,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.07,
+            0.12,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.42,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.12,
+    "stop": 0.47,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > outgoingRing keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          440,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.06,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.3,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.35,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          440,
+          0.5,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.5,
+          ],
+          [
+            "linear",
+            0.06,
+            0.51,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.8,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.5,
+    "stop": 0.85,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > ring keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [],
+      "value": 880,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 1,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.08,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.2,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.25,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1760,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.3,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.08,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.2,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.25,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1320,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.15,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.08,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.2,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.25,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1047,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 1,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.08,
+            0.2,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.4,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.2,
+    "stop": 0.45,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 2094,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.3,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.08,
+            0.2,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.4,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.2,
+    "stop": 0.45,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1570.5,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.15,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.08,
+            0.2,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.4,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.2,
+    "stop": 0.45,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 880,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 1,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.06,
+            0.4,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.6,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.4,
+    "stop": 0.65,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1760,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.3,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.06,
+            0.4,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.6,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.4,
+    "stop": 0.65,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [],
+      "value": 1320,
+    },
+    "gains": [
+      {
+        "events": [],
+        "value": 0.15,
+      },
+      {
+        "events": [
+          [
+            "set",
+            0.06,
+            0.4,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.6,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.4,
+    "stop": 0.65,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > screenShareStart keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          660,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.08,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.08,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.13,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          880,
+          0.1,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.1,
+          ],
+          [
+            "linear",
+            0.08,
+            0.11,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.22,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.1,
+    "stop": 0.27,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > screenShareStop keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          880,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.08,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.08,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.13,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          660,
+          0.1,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.1,
+          ],
+          [
+            "linear",
+            0.08,
+            0.11,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.22,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.1,
+    "stop": 0.27,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > streamWatcherStart keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          740,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.07,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.07,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.12,
+    "type": "triangle",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          988,
+          0.06,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.06,
+          ],
+          [
+            "linear",
+            0.06,
+            0.07,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.15,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.06,
+    "stop": 0.2,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          1245,
+          0.14,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.14,
+          ],
+          [
+            "linear",
+            0.05,
+            0.15,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.26,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.14,
+    "stop": 0.31,
+    "type": "triangle",
+  },
+]
+`;
+
+exports[`built-in sound recipes > streamWatcherStop keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          1245,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.06,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.08,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.13,
+    "type": "triangle",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          880,
+          0.07,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.07,
+          ],
+          [
+            "linear",
+            0.05,
+            0.08,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.15,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.07,
+    "stop": 0.2,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          659,
+          0.14,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.14,
+          ],
+          [
+            "linear",
+            0.05,
+            0.15,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.26,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.14,
+    "stop": 0.31,
+    "type": "triangle",
+  },
+]
+`;
+
+exports[`built-in sound recipes > undeafen keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          700,
+          0,
+        ],
+        [
+          "exponential",
+          350,
+          0.06,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0.12,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.06,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.08,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > unmute keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          600,
+          0,
+        ],
+        [
+          "exponential",
+          300,
+          0.06,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0.12,
+            0,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.06,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.08,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > voiceJoin keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          880,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.12,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.08,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.13,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          1175,
+          0.14,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.14,
+          ],
+          [
+            "linear",
+            0.12,
+            0.15,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.22,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.14,
+    "stop": 0.27,
+    "type": "sine",
+  },
+]
+`;
+
+exports[`built-in sound recipes > voiceLeave keeps its oscillators and envelopes 1`] = `
+[
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          1175,
+          0,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0,
+          ],
+          [
+            "linear",
+            0.12,
+            0.01,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.08,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0,
+    "stop": 0.13,
+    "type": "sine",
+  },
+  {
+    "frequency": {
+      "events": [
+        [
+          "set",
+          880,
+          0.14,
+        ],
+      ],
+      "value": 440,
+    },
+    "gains": [
+      {
+        "events": [
+          [
+            "set",
+            0,
+            0.14,
+          ],
+          [
+            "linear",
+            0.12,
+            0.15,
+          ],
+          [
+            "exponential",
+            0.001,
+            0.22,
+          ],
+        ],
+        "value": 1,
+      },
+    ],
+    "start": 0.14,
+    "stop": 0.27,
+    "type": "sine",
+  },
+]
+`;

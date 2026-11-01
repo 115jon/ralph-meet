@@ -631,6 +631,31 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
           },
         ],
       },
+      {
+        id: "custom-sounds",
+        title: "Custom sounds (experimental)",
+        desc: "Replace any sound with an audio file of your own. Files stay on this device and are never uploaded.",
+        rows: [
+          {
+            id: "custom-sounds-enabled",
+            label: "Use custom sounds",
+            desc: "Plays your files instead of the built-in sounds. A sound without a file keeps the built-in one.",
+            keywords: ["custom", "sound pack", "import", "audio file"],
+          },
+          {
+            id: "custom-sounds-import",
+            label: "Import several files",
+            desc: "Each file's name picks its sound, such as voice-join.mp3 or ring.ogg. Up to 1 MB and 5 seconds per file; rings up to 15 seconds.",
+            keywords: ["bulk", "import", "upload", "sound pack", "files"],
+          },
+          {
+            id: "custom-sounds-reset",
+            label: "Reset all custom sounds",
+            desc: "Deletes every imported file from this device and goes back to the built-in sounds.",
+            keywords: ["reset", "delete", "built-in", "default"],
+          },
+        ],
+      },
     ],
   },
   {

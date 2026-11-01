@@ -60,7 +60,6 @@ import type {
 import type { ChatRestActions } from "./chat-actions";
 import { useCallStore } from "./useCallStore";
 import { useDesktopSettingsStore } from "./useDesktopSettingsStore";
-import { isSoundEnabled } from "./useSoundSettingsStore";
 
 const chatLog = clog("ChatGW");
 
@@ -420,7 +419,7 @@ export function createChatGateway(
             callState.endCall("disconnected");
             playRingStop();
             playOutgoingRingStop();
-            if (isSoundEnabled("calls")) playCallEnd();
+            playCallEnd();
           }
         } else {
           dispatch({ type: "USER_ONLINE", userId: d.data.user_id });
@@ -690,10 +689,7 @@ export function createChatGateway(
         const myId = get().user?.id ?? appUserId;
 
         // Ignore state replays while we are rebuilding after a normal gateway reconnect.
-        if (
-          isSoundEnabled("voiceJoinLeave") &&
-          !areReconnectSoundsSuppressed()
-        ) {
+        if (!areReconnectSoundsSuppressed()) {
           const sound = getVoiceChannelPresenceSound(
             prevMembers,
             nextMembers,
@@ -721,12 +717,7 @@ export function createChatGateway(
         dispatch({ type: "ADD_NOTIFICATION", notification: notif });
 
         // Play notification sound
-        if (
-          isSoundEnabled("notifications") &&
-          !areReconnectSoundsSuppressed()
-        ) {
-          playNotification();
-        }
+        if (!areReconnectSoundsSuppressed()) playNotification();
 
         void syncDesktopState();
 
@@ -797,7 +788,7 @@ export function createChatGateway(
         const sortedIds = [currentUser?.id || "", caller_id].sort();
         const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
 
-        if (isSoundEnabled("calls")) playRingStart();
+        playRingStart();
         callState.setIncomingCall({
           callId: call_id,
           remoteUser: {
@@ -864,7 +855,7 @@ export function createChatGateway(
           channelId: channel_id,
           voiceRoomId,
         });
-        if (isSoundEnabled("calls")) playOutgoingRingStart();
+        playOutgoingRingStart();
 
         // Navigate caller to the DM channel (replaces the old OutgoingCallModal overlay)
         const state = get();
@@ -890,7 +881,7 @@ export function createChatGateway(
         // If the ringing stopped because it was accepted, we transition the Ringing state to Active!
         // This ensures the duration timer starts running and the remoteUser is preserved for the lobby UI.
         if (reason === "accepted") {
-          if (isSoundEnabled("calls")) playCallConnect();
+          playCallConnect();
           callState.acceptCall();
         } else if (
           callState.status === "ringing_outgoing" &&
@@ -907,7 +898,6 @@ export function createChatGateway(
 
           if (
             wasActive &&
-            isSoundEnabled("calls") &&
             reason !== "busy" &&
             reason !== "unavailable" &&
             reason !== "invalid" &&

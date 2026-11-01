@@ -119,11 +119,11 @@ import {
   playStreamWatcherStop,
   playUndeafen,
   playUnmute,
+  playVoiceJoin,
 } from "@/lib/sounds";
 import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
 import {
@@ -1956,13 +1956,7 @@ export function useVoiceChannel({
         onJoined?.();
 
         // Play connected sound (skip for calls — gateway plays CALL_CONNECT instead)
-        if (
-          !wasAlreadyJoined &&
-          !isCall &&
-          useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect
-        ) {
-          playConnected();
-        }
+        if (!wasAlreadyJoined && !isCall) playConnected();
         void playAutomaticSoundboardTrigger(
           "join",
           automaticSoundboardSessionId,
@@ -1983,12 +1977,8 @@ export function useVoiceChannel({
     onSfu("participant-joined", ({ participant }) => {
       upsertParticipant(participant);
 
-      if (
-        mode === "room" &&
-        !areReconnectSoundsSuppressed() &&
-        useSoundSettingsStore.getState().getSettings()?.voiceJoinLeave
-      ) {
-        import("@/lib/sounds").then((m) => m.playVoiceJoin());
+      if (mode === "room" && !areReconnectSoundsSuppressed()) {
+        playVoiceJoin();
       }
     });
 
@@ -2186,14 +2176,10 @@ export function useVoiceChannel({
         nextWatcherIds,
         localWatcherUserId,
       );
-      if (
-        activitySound &&
-        !areReconnectSoundsSuppressed() &&
-        useSoundSettingsStore.getState().getSettings(settingsUserId)
-          ?.streamWatcherActivity
-      ) {
-        if (activitySound === "start") playStreamWatcherStart();
-        else playStreamWatcherStop();
+      if (activitySound && !areReconnectSoundsSuppressed()) {
+        const options = { userId: settingsUserId };
+        if (activitySound === "start") playStreamWatcherStart(options);
+        else playStreamWatcherStop(options);
       }
     });
 
@@ -4137,12 +4123,7 @@ export function useVoiceChannel({
           joined: wasJoined,
         });
         // Play disconnect sound before cleanup (skip for calls — gateway plays call-end sound)
-        if (
-          !isCall &&
-          useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect
-        ) {
-          playDisconnect();
-        }
+        if (!isCall) playDisconnect();
         cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
         const expectedGeneration = getAutomaticSoundboardSessionGeneration(
           automaticSoundboardSessionId,
@@ -4267,12 +4248,7 @@ export function useVoiceChannel({
       joined: wasJoined,
     });
     // Play disconnect sound (skip for calls — gateway plays call-end sound)
-    if (
-      !isCall &&
-      useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect
-    ) {
-      playDisconnect();
-    }
+    if (!isCall) playDisconnect();
     void playAutomaticSoundboardTrigger(
       "leave",
       automaticSoundboardSessionId,
@@ -4344,22 +4320,14 @@ export function useVoiceChannel({
   ]);
 
   const toggleMic = useCallback(() => {
-    // Play mute/unmute click
-    const soundSettings = useSoundSettingsStore.getState().getSettings();
-    if (soundSettings?.soundsEnabled && soundSettings?.muteDeafen) {
-      if (!settingsMuted) playMute();
-      else playUnmute();
-    }
+    if (!settingsMuted) playMute();
+    else playUnmute();
     setIsMuted(!settingsMuted);
   }, [settingsMuted, setIsMuted]);
 
   const toggleDeafen = useCallback(() => {
-    // Play deafen/undeafen click
-    const soundSettings = useSoundSettingsStore.getState().getSettings();
-    if (soundSettings?.soundsEnabled && soundSettings?.muteDeafen) {
-      if (!settingsDeafened) playDeafen();
-      else playUndeafen();
-    }
+    if (!settingsDeafened) playDeafen();
+    else playUndeafen();
     setIsDeafened(!settingsDeafened);
   }, [settingsDeafened, setIsDeafened]);
 
@@ -4555,10 +4523,7 @@ export function useVoiceChannel({
           audio: false,
         });
         voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
-        // Play screen share stop sound
-        if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
-          playScreenShareStop();
-        }
+        playScreenShareStop();
       } else {
         try {
           const targetQuality = options?.quality || currentScreenQuality;
@@ -4853,9 +4818,7 @@ export function useVoiceChannel({
                   sourceIcon: effectiveOptions?.sourceIcon ?? null,
                 } satisfies ScreenShareSourceState,
               });
-              if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
-                playScreenShareStart();
-              }
+              playScreenShareStart();
               return;
             } catch (error) {
               const wgcCaptureAllowed = isWgcCaptureAllowed();
@@ -5076,10 +5039,7 @@ export function useVoiceChannel({
             myIdRef.current,
           );
 
-          // Play screen share start sound
-          if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
-            playScreenShareStart();
-          }
+          playScreenShareStart();
         } catch (err) {
           screenLog.error("Screen share failed:", err);
         }

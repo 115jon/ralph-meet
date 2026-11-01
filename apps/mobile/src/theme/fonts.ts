@@ -2,8 +2,11 @@ import { BricolageGrotesque_600SemiBold } from "@expo-google-fonts/bricolage-gro
 import { BricolageGrotesque_700Bold } from "@expo-google-fonts/bricolage-grotesque/700Bold";
 import { BricolageGrotesque_800ExtraBold } from "@expo-google-fonts/bricolage-grotesque/800ExtraBold";
 import { Geist_400Regular } from "@expo-google-fonts/geist/400Regular";
+import { Geist_400Regular_Italic } from "@expo-google-fonts/geist/400Regular_Italic";
 import { Geist_500Medium } from "@expo-google-fonts/geist/500Medium";
 import { Geist_600SemiBold } from "@expo-google-fonts/geist/600SemiBold";
+import { Geist_600SemiBold_Italic } from "@expo-google-fonts/geist/600SemiBold_Italic";
+import { GeistMono_400Regular } from "@expo-google-fonts/geist-mono/400Regular";
 import { MartianMono_500Medium } from "@expo-google-fonts/martian-mono/500Medium";
 import { MartianMono_600SemiBold } from "@expo-google-fonts/martian-mono/600SemiBold";
 
@@ -13,13 +16,19 @@ export const FONT_ASSETS = {
   BricolageGrotesque_700Bold,
   BricolageGrotesque_800ExtraBold,
   Geist_400Regular,
+  Geist_400Regular_Italic,
   Geist_500Medium,
   Geist_600SemiBold,
+  Geist_600SemiBold_Italic,
+  GeistMono_400Regular,
   MartianMono_500Medium,
   MartianMono_600SemiBold,
 };
 
-/** Bricolage: titles, names, control labels. Martian: silkscreen and numbers. Geist: prose. */
+/**
+ * Bricolage: titles, names, control labels. Martian: silkscreen and numbers.
+ * Geist: prose. Geist Mono: inline code and code blocks only.
+ */
 export const FONT = {
   control: "BricolageGrotesque_600SemiBold",
   name: "BricolageGrotesque_700Bold",
@@ -28,6 +37,10 @@ export const FONT = {
   row: "Geist_500Medium",
   /** Unread rows. */
   rowStrong: "Geist_600SemiBold",
+  /** Markdown *italic*, and **bold** italic. */
+  bodyItalic: "Geist_400Regular_Italic",
+  rowStrongItalic: "Geist_600SemiBold_Italic",
+  code: "GeistMono_400Regular",
   silk: "MartianMono_500Medium",
   silkStrong: "MartianMono_600SemiBold",
 } as const;

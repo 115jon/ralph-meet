@@ -1,30 +1,28 @@
-import type * as ClipboardModule from "expo-clipboard";
 import {
   ArrowBendUpLeft,
   Copy,
+  LinkSimple,
   PencilSimple,
+  SmileyWink,
   Trash,
 } from "phosphor-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
-import { hasNativeModule } from "@/lib/native";
+import { messageLink } from "@/features/links/links";
+import { useChannelServer } from "@/features/servers/store";
+import { tapHaptic } from "@/lib/haptics";
 import { RADIUS, useTheme } from "@/theme";
-import { Button, Sheet, SheetRow, showToast, Text } from "@/ui";
+import { Button, Icon, Sheet, SheetRow, Text } from "@/ui";
 
+import { canCopy, copyText } from "./clipboard";
 import { deleteMessage, toggleReaction } from "./mutations";
+import { emojiLabel } from "./picker/emoji-data";
+import { EmojiGlyph } from "./picker/EmojiGlyph";
+import { quickReactions } from "./picker/recent-list";
+import { rememberEmoji, useRecents } from "./picker/recents";
 import type { ChatMessage } from "./store";
-
-// expo-clipboard when the build links it; "Copy text" hides otherwise.
-const Clipboard: typeof ClipboardModule | null = hasNativeModule(
-  "ExpoClipboard",
-)
-  ? (require("expo-clipboard") as typeof ClipboardModule)
-  : null;
-
-/** The quick set from the mockup; reactions already on the message follow. */
-const QUICK_REACTIONS = ["🔥", "😂", "💀", "👍", "🫡"] as const;
 
 export type ComposerIntent =
   | { readonly kind: "reply"; readonly message: ChatMessage }
@@ -34,6 +32,8 @@ interface MessageActionsSheetProps {
   message: ChatMessage | null;
   onClose: () => void;
   onCompose: (intent: ComposerIntent) => void;
+  /** The quick row's "more" key: the full picker in react mode. */
+  onMoreReactions: (message: ChatMessage) => void;
 }
 
 function ReactionKey({
@@ -46,14 +46,15 @@ function ReactionKey({
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const label = emojiLabel(emoji);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={mine ? `Remove ${emoji}` : `React with ${emoji}`}
+      accessibilityLabel={mine ? `Remove ${label}` : `React with ${label}`}
       accessibilityState={{ selected: mine }}
       onPress={onPress}
       style={({ pressed }) => ({
-        width: 52,
+        flex: 1,
         height: 48,
         borderRadius: RADIUS,
         alignItems: "center",
@@ -64,11 +65,48 @@ function ReactionKey({
           ? theme.accentTint
           : pressed
             ? theme.tint3
-            : theme.tint2,
+            : theme.ply4,
       })}
     >
-      <Text style={{ fontSize: 22, lineHeight: 28 }}>{emoji}</Text>
+      <EmojiGlyph value={emoji} size={24} />
     </Pressable>
+  );
+}
+
+/** The sixth key: every emoji, in the picker's react mode. */
+function MoreKey({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="More reactions"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        height: 48,
+        borderRadius: RADIUS,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 2,
+        borderColor: theme.lineStrong,
+        backgroundColor: pressed ? theme.tint2 : "transparent",
+      })}
+    >
+      <Icon icon={SmileyWink} size={22} />
+    </Pressable>
+  );
+}
+
+function Seam() {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        height: 1,
+        marginVertical: 4,
+        backgroundColor: theme.lineStrong,
+      }}
+    />
   );
 }
 
@@ -76,22 +114,22 @@ function Actions({
   message,
   onClose,
   onCompose,
+  onMoreReactions,
 }: {
   message: ChatMessage;
   onClose: () => void;
   onCompose: (intent: ComposerIntent) => void;
+  onMoreReactions: (message: ChatMessage) => void;
 }) {
   const myId = useSession((s) => s.user?.id);
+  // A DM's channel is in no server's tree: its link says @me.
+  const serverId = useChannelServer(message.channel_id)?.id ?? null;
+  const recents = useRecents();
   const [confirming, setConfirming] = useState(false);
   const own = message.author_id === myId;
   const sent = !message.send;
   const text = message.content?.trim() ?? "";
-  const emojis = [
-    ...new Set([
-      ...QUICK_REACTIONS,
-      ...(message.reactions ?? []).map((reaction) => reaction.emoji),
-    ]),
-  ];
+  const emojis = quickReactions(recents);
   const mine = new Set(
     (message.reactions ?? [])
       .filter((reaction) => reaction.me)
@@ -129,13 +167,12 @@ function Actions({
   return (
     <>
       {sent ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            gap: 8,
-            paddingHorizontal: 20,
-            paddingTop: 6,
+        <View
+          style={{
+            flexDirection: "row",
+            gap: 6,
+            paddingHorizontal: 12,
+            paddingTop: 4,
             paddingBottom: 12,
           }}
         >
@@ -145,13 +182,22 @@ function Actions({
               emoji={emoji}
               mine={mine.has(emoji)}
               onPress={() => {
+                tapHaptic();
                 onClose();
+                if (!mine.has(emoji)) rememberEmoji(emoji);
                 void toggleReaction(message, emoji);
               }}
             />
           ))}
-        </ScrollView>
+          <MoreKey
+            onPress={() => {
+              onClose();
+              onMoreReactions(message);
+            }}
+          />
+        </View>
       ) : null}
+      {sent ? <Seam /> : null}
       {sent ? (
         <SheetRow
           icon={ArrowBendUpLeft}
@@ -162,15 +208,23 @@ function Actions({
           }}
         />
       ) : null}
-      {Clipboard && text ? (
+      {canCopy && text ? (
         <SheetRow
           icon={Copy}
           label="Copy text"
           onPress={() => {
             onClose();
-            void Clipboard.setStringAsync(text).then(() =>
-              showToast({ label: "Clipboard", text: "Copied", led: "talk" }),
-            );
+            copyText(text);
+          }}
+        />
+      ) : null}
+      {canCopy && sent ? (
+        <SheetRow
+          icon={LinkSimple}
+          label="Copy link"
+          onPress={() => {
+            onClose();
+            copyText(messageLink(serverId, message.channel_id, message.id));
           }}
         />
       ) : null}
@@ -203,11 +257,15 @@ function Actions({
   );
 }
 
-/** Long-press on a message: quick reactions, then the rows it allows. */
+/**
+ * Long-press on a message: the quick row (your five most recent reactions
+ * and a key for all of them), then the rows it allows.
+ */
 export function MessageActionsSheet({
   message,
   onClose,
   onCompose,
+  onMoreReactions,
 }: MessageActionsSheetProps) {
   return (
     <Sheet visible={message !== null} onClose={onClose} label="Message actions">
@@ -217,6 +275,7 @@ export function MessageActionsSheet({
           message={message}
           onClose={onClose}
           onCompose={onCompose}
+          onMoreReactions={onMoreReactions}
         />
       ) : null}
     </Sheet>
