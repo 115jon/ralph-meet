@@ -94,6 +94,68 @@ describe("GifPickerModal recent queries rendering", () => {
     ).toBeTruthy();
   });
 
+  it("centres the expanded picker in the space under the desktop title bar", () => {
+    render(
+      <GifPickerModal
+        open
+        initialExpanded
+        onClose={() => {}}
+        onSelect={async () => {}}
+        skipAuth
+      />,
+    );
+    const surface = screen.getByRole("dialog", { name: "GIF picker" });
+    expect(surface.className).toContain(
+      "top-[calc(50%+var(--app-chrome-top,0px)/2)]",
+    );
+    expect(surface.className).toContain(
+      "h-[min(780px,calc(100dvh-var(--app-chrome-top,0px)-48px))]",
+    );
+  });
+
+  it("caps the anchored picker below the desktop title bar", async () => {
+    const marker = document.createElement("button");
+    marker.getBoundingClientRect = () =>
+      ({ top: 300, bottom: 330, left: 200, right: 240 }) as DOMRect;
+    document.body.appendChild(marker);
+    const markerRef = { current: marker };
+    const chrome = document.documentElement.style;
+
+    const picker = () => (
+      <GifPickerModal
+        open
+        markerRef={markerRef}
+        onClose={() => {}}
+        onSelect={async () => {}}
+        skipAuth
+      />
+    );
+
+    // Web: 16px under the anchor's top edge, as before.
+    const { unmount } = render(picker());
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "GIF picker" })).toHaveStyle({
+        maxHeight: "284px",
+      }),
+    );
+    unmount();
+
+    // Desktop: the picker grows upward from the anchor, so its top edge (and
+    // the search field) must stop at the title bar, not at the window top.
+    chrome.setProperty("--app-chrome-top", "32px");
+    try {
+      render(picker());
+      await waitFor(() =>
+        expect(screen.getByRole("dialog", { name: "GIF picker" })).toHaveStyle({
+          maxHeight: "252px",
+        }),
+      );
+    } finally {
+      chrome.removeProperty("--app-chrome-top");
+      marker.remove();
+    }
+  });
+
   it("raises the whole picker to the stacked layer when opened from a dialog", () => {
     render(
       <GifPickerModal

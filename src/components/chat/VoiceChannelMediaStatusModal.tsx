@@ -348,7 +348,7 @@ export default function VoiceChannelMediaStatusModal({
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
     >
-      <ResponsiveDialogContent dialogClassName="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+      <ResponsiveDialogContent dialogClassName="max-h-[calc(100dvh-var(--app-chrome-top,0px)-2rem)] overflow-y-auto">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Channel vibe</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>

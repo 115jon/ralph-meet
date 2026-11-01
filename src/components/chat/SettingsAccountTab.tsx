@@ -607,7 +607,7 @@ function DisplayNameStyleDialog({
         <DialogSurface
           showCloseButton={false}
           className={cn(
-            "fixed inset-0 z-50 flex flex-col overflow-hidden pt-[var(--safe-area-top,0px)] data-stacked:z-60 md:inset-auto md:left-1/2 md:top-[max(48px,12vh)] md:max-h-[min(720px,calc(100dvh-max(48px,12vh)-24px))] md:w-[min(880px,calc(100vw-32px))] md:-translate-x-1/2 md:pt-0",
+            "fixed inset-below-chrome z-50 flex flex-col overflow-hidden pt-[var(--safe-area-top,0px)] data-stacked:z-60 md:inset-auto md:left-1/2 md:top-[max(48px,12vh)] md:max-h-[min(720px,calc(100dvh-max(48px,12vh)-24px))] md:w-[min(880px,calc(100vw-32px))] md:-translate-x-1/2 md:pt-0",
             DIALOG_SURFACE,
             "max-md:rounded-none max-md:border-0",
           )}

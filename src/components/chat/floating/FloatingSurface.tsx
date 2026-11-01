@@ -31,6 +31,7 @@ import { PRESS } from "@/components/ui/interaction";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useMounted } from "@/hooks/useMounted";
+import { readAppChromeTop } from "@/lib/app-chrome";
 import { cn } from "@/lib/utils";
 import {
   type CSSProperties,
@@ -209,7 +210,10 @@ function positionFor(
     layout.avoid,
     { left: columnLeft, right: columnLeft + size.width },
     layout.viewport,
-    { top: layout.safe.top + BASE_TOP, bottom: layout.safe.bottom + edge },
+    {
+      top: layout.safe.top + readAppChromeTop() + BASE_TOP,
+      bottom: layout.safe.bottom + edge,
+    },
   );
   return cornerPosition(
     corner,
@@ -453,7 +457,11 @@ export function FloatingSurface({
     if (state.samples.length > 12) state.samples.shift();
     const next = {
       x: rubberBand(state.origin.x + dx, 0, view.width - state.size.width),
-      y: rubberBand(state.origin.y + dy, 0, view.height - state.size.height),
+      y: rubberBand(
+        state.origin.y + dy,
+        readAppChromeTop(),
+        view.height - state.size.height,
+      ),
     };
     state.current = next;
     writeTransform(next);

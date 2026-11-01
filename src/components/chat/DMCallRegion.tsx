@@ -513,7 +513,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         isExpanded
           ? // Expanded call: a full-screen surface, padded for the notch and
             // the home indicator (3.6). The dock panel pads the bottom.
-            "fixed inset-0 z-50 pt-[var(--safe-area-top,0px)] pr-[var(--safe-area-right,0px)] pl-[var(--safe-area-left,0px)]"
+            "fixed inset-below-chrome z-50 pt-[var(--safe-area-top,0px)] pr-[var(--safe-area-right,0px)] pl-[var(--safe-area-left,0px)]"
           : isChatHidden
             ? "absolute inset-0 z-30"
             : "relative border-b border-line",

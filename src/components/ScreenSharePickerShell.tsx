@@ -59,13 +59,14 @@ export interface ScreenSharePickerShellProps {
 const SIZE_CLASSES = {
   picker: {
     dialog:
-      "flex h-[min(640px,calc(100dvh-32px))] flex-col overflow-hidden md:max-w-[min(860px,calc(100%-2rem))]",
-    drawer: "h-[calc(100dvh-24px)] px-0 pt-1 pb-0",
+      "flex h-[min(640px,calc(100dvh-var(--app-chrome-top,0px)-32px))] flex-col overflow-hidden md:max-w-[min(860px,calc(100%-2rem))]",
+    drawer: "h-[calc(100dvh-var(--app-chrome-top,0px)-24px)] px-0 pt-1 pb-0",
   },
   compact: {
     dialog:
-      "flex max-h-[calc(100dvh-32px)] flex-col overflow-hidden md:max-w-lg",
-    drawer: "max-h-[calc(100dvh-24px)] px-0 pt-1 pb-0",
+      "flex max-h-[calc(100dvh-var(--app-chrome-top,0px)-32px)] flex-col overflow-hidden md:max-w-lg",
+    drawer:
+      "max-h-[calc(100dvh-var(--app-chrome-top,0px)-24px)] px-0 pt-1 pb-0",
   },
 } as const;
 

@@ -271,7 +271,7 @@ export default function CommandMenu() {
             event.preventDefault();
             inputRef.current?.focus();
           }}
-          className="fixed inset-x-0 top-[max(12dvh,calc(var(--safe-area-top,0px)+8px))] z-50 mx-auto w-full max-w-[560px] px-3 outline-none max-md:top-[calc(var(--safe-area-top,0px)+8px)] max-md:px-2"
+          className="fixed inset-x-0 top-[max(12dvh,calc(var(--safe-area-top,0px)+var(--app-chrome-top,0px)+8px))] z-50 mx-auto w-full max-w-[560px] px-3 outline-none max-md:top-[calc(var(--safe-area-top,0px)+var(--app-chrome-top,0px)+8px)] max-md:px-2"
         >
           <Command
             label="Quick switcher"

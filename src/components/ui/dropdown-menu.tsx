@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/menu";
 import { FLOATING_LAYER_ATTR } from "@/components/ui/popover";
 import { useDialogBackButton } from "@/hooks/useBackButton";
+import { collisionPaddingBelowChrome } from "@/lib/app-chrome";
 import { cn } from "@/lib/utils";
 
 const preventDefault = (event: Event) => event.preventDefault();
@@ -255,7 +256,7 @@ function MenuPanel({
         // with the trigger row (panel padding 4 + border 1).
         sideOffset={sideOffset ?? (isSubmenu ? 2 : 6)}
         alignOffset={alignOffset ?? (isSubmenu ? -5 : 0)}
-        collisionPadding={8}
+        collisionPadding={collisionPaddingBelowChrome()}
         anchor={anchor}
         className={cn(
           context?.overModal ? "z-70" : stacked ? "z-60" : "z-50",

@@ -135,7 +135,9 @@ describe("stream dialogs on a phone", () => {
       />,
     );
     await waitFor(() => drawer());
-    expect(drawer().className).toContain("h-[calc(100dvh-24px)]");
+    expect(drawer().className).toContain(
+      "h-[calc(100dvh-var(--app-chrome-top,0px)-24px)]",
+    );
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent)).toEqual([
