@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.5.1](https://github.com/115jon/ralph-meet/compare/v3.5.0...v3.5.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 keep overlays below the title bar ([258dbcd](https://github.com/115jon/ralph-meet/commit/258dbcdbec14de9c574e21950e315d35947ecf8b))
+* **desktop:** keep overlays below the title bar ([e45a265](https://github.com/115jon/ralph-meet/commit/e45a2655437d2b89bcec3a5e3a4d763893ea0819))
+
+
+### Performance Improvements
+
+* **installer:** ⚡️ pack the desktop payload with lzma from one manifest ([2c5dd32](https://github.com/115jon/ralph-meet/commit/2c5dd32adc1cd4a914e95cccc0474ee4286177b8))
+* **installer:** pack the desktop payload with lzma from one manifest ([e5e55e7](https://github.com/115jon/ralph-meet/commit/e5e55e7ef199aa9a5330d37d2f7dea053fd69968))
+
 ## [3.5.0](https://github.com/115jon/ralph-meet/compare/v3.4.0...v3.5.0) (2026-11-01)
 
 
