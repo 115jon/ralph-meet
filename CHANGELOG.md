@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.5.0](https://github.com/115jon/ralph-meet/compare/v3.4.0...v3.5.0) (2026-11-01)
+
+
+### Features
+
+* **embeds:** ✨ route tikwm and blocked tiktok calls via egress proxy ([d0a06f9](https://github.com/115jon/ralph-meet/commit/d0a06f9b338a67ae11071087f0d336f0ef062a33))
+* **embeds:** route tikwm and blocked tiktok calls via the egress proxy ([0eeb8fe](https://github.com/115jon/ralph-meet/commit/0eeb8fe8817ae4f090b94467b9937fa385b76c25))
+
+
+### Bug Fixes
+
+* **embeds:** 🐛 resolve age-gated tiktoks and stop hammering providers ([6479a02](https://github.com/115jon/ralph-meet/commit/6479a0289a3d319bb597d7e96eeab4a611b24522))
+* **embeds:** resolve age-gated tiktoks, stop hammering providers, theme the error states ([f1b80e1](https://github.com/115jon/ralph-meet/commit/f1b80e192f2bdd5a31e53967df0de5c19c3beb5a))
+
 ## [3.4.0](https://github.com/115jon/ralph-meet/compare/v3.3.0...v3.4.0) (2026-11-01)
 
 
