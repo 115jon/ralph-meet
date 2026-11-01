@@ -9,7 +9,7 @@ import {
   type SessionDescriptionPayload,
   type TrackInfo,
 } from "@/lib/types";
-import { GatewayOp } from "@/lib/gateway-protocol";
+import { GatewayCloseCode, GatewayOp } from "@/lib/gateway-protocol";
 import { markVoice } from "@/lib/voice/latency-marks";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
@@ -142,6 +142,9 @@ export class VoiceGateway extends BaseGateway<
 
   public updateVoiceToken(token: string) {
     this.voiceToken = token;
+    // An identify the voice room refused (expired token) is sent again with
+    // the fresh token on the socket that is already open.
+    this.maybeSendIdentify();
   }
 
   public disconnect() {
@@ -205,6 +208,18 @@ export class VoiceGateway extends BaseGateway<
 
       case GatewayOp.Error: {
         const err = msg.d;
+        if (
+          err.code === GatewayCloseCode.AuthenticationFailed &&
+          this.identifySent &&
+          !this.socket.isReady
+        ) {
+          // The voice room refused our identify (an expired token) and keeps
+          // the socket open: allow one more identify, sent when the refreshed
+          // token arrives (updateVoiceToken), instead of staying unidentified.
+          this.identifySent = false;
+          this.identifiedParticipantId = null;
+          this.identifiedVoiceToken = null;
+        }
         this.emit("error", {
           message: err.message,
           code: err.code,
