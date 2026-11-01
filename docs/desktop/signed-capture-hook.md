@@ -14,7 +14,8 @@ fork provides. It builds on [native-share.md](native-share.md) and [packaging.md
   648-byte `hook_info`, same `inject-helper` argv, same `get-graphics-offsets` output. Our host already speaks it,
   and already has fallbacks for everything the stock DLL does not publish. The host needs a "stock profile":
   the `CaptureHook_` prefix instead of `RalphCaptureHook_`, a longer first-frame window, and reuse of a hook that is
-  already loaded. The DLL needs no change. It must not be changed: any byte change voids the signature.
+  already loaded. The only hard incompatibility is the hard-coded `RalphCaptureHook_` vs `CaptureHook_` object-name
+  prefix. The DLL needs no change. It must not be changed: any byte change voids the signature.
 - **Building from source was not required to get frames.** The repo first shipped prebuilt, unmodified OBS
   binaries (see `resources/obs-capture/fork/README.md`, "replaces the prior model"). The fork exists for quality:
   present-accurate frame delivery, zero-copy encoder input, clean unload, a fix for DX11 games that also load
@@ -27,8 +28,9 @@ fork provides. It builds on [native-share.md](native-share.md) and [packaging.md
 - **Performance: modest gain over WGC, and less than our fork.** The hook saves roughly one compositor frame of
   latency, works with legacy exclusive fullscreen, and does not depend on DWM. The stock DLL gives no new-frame
   signal, so delivery is paced on a timer, and it costs one extra full-frame GPU copy per frame on our device
-  (no `BIND_RENDER_TARGET`). For 720p30–1080p60 shares, WGC is adequate. On joi2 it captured Fortnite at a
-  steady 30 fps with no drops.
+  (no `BIND_RENDER_TARGET`). For 720p30–1080p60 shares, WGC is adequate. On joi2 it captured Fortnite with no
+  drops, though at about 49 fps against a negotiated 30, because nothing paces WGC (see
+  [Performance](#performance)).
 - **Recommendation:** keep the fork for unprotected games. Add the OBS-signed hook as a second, separate flavor
   used **only** for anti-cheat-protected targets, **opt-in**, bundled as a pinned and verified copy. Never inject
   the self-built DLL into a protected game. WGC stays the default for protected games until a title is verified.
@@ -48,7 +50,9 @@ no first frame within 1500ms of Initialize - hook never delivered; falling back
 
 The fork DLL writes `graphics-hook-<pid>.log` from `DllMain`, before anything else. There is a log for pid 28420,
 which is consistent with `inject-helper` loading the DLL into itself to resolve the hook procedure for
-`SetWindowsHookEx`. That log ends with "keepalive released before Initialize". There is **no log for pid 30220**,
+`SetWindowsHookEx` (in safe mode `inject_library_safe_obf` calls `LoadLibraryW(dll)` in the helper to get
+`dummy_debug_proc`, `shared/obs-inject-library/inject-library.c`, so `DllMain` runs once in the helper). That log ends
+with "keepalive released before Initialize". There is **no log for pid 30220**,
 so the DLL never loaded into Fortnite. "Success" only meant that the helper process started. The installed
 `graphics-hook64.dll` and `inject-helper64.exe` are `NotSigned` (`Get-AuthenticodeSignature`, file version
 1.8.7.0). Easy Anti-Cheat blocking an unsigned module is the expected outcome. PR #129 now detects the EAC folder and
@@ -86,6 +90,20 @@ The `graphics-hook-info.h` diffs between these tags are formatting only. 33.0.1 
 `0b87f533b` / `4652daf74` (null derefs) and `dfe615146` (segfault in `data.free()`). The rest is formatting.
 OBS's host only refuses a DLL whose `hook_ver_major` is greater than its own (`game-capture.c`).
 
+Checked directly, beyond the tag diffs above:
+
+- The `hook_info` struct and names in `graphics-hook-info.h` are byte-identical (ignoring formatting) from OBS 27.0.0
+  through 33.0.1, with only `HOOK_VER_PATCH` moving. The header was compared at 27.0.0, 28.0.0, 32.1.2 and 33.0.1; the
+  releases in between are inferred, not each diffed. The ABI has been stable for about five years.
+- `diff -r` of the vendored fork against `obs-studio@32.1.2` (`fb4d98b`): `inject-helper/`, `get-graphics-offsets/` and
+  `shared/obs-inject-library/` are identical, so our own helpers already behave as OBS's. All fork changes are in
+  `graphics-hook/` (about 850 changed lines, 380 in `graphics-hook.c`) and `graphics-hook-info.h`.
+- The official 32.1.2 `graphics-hook64.dll` exports `OBS_Negotiate` and `dummy_debug_proc`, and its UTF-16 strings are
+  exactly the stock names (`CaptureHook_HookInfo%lu`, `CaptureHook_Texture_%llu_%u`, `graphics_hook_dup_mutex`, …).
+- The official `get-graphics-offsets64.exe`, run on this machine, prints the INI layout our parser takes. Its
+  DXGI/D3D9 offsets match what our helper resolved on joi2 (`present=0x19000 resize=0x36c30 release=0x335a0
+present1=0x194a0 d3d9.present=0x61c40`).
+
 What our host must change to drive the stock files unmodified:
 
 1. **Namespace per flavor.** `PRIVATE_NS` becomes a per-session profile: `RalphCaptureHook_` for the fork,
@@ -94,8 +112,10 @@ What our host must change to drive the stock files unmodified:
    initializing. A second share of the same game must not inject again. It opens `CaptureHook_Restart<pid>` and
    signals it, as `game-capture.c` does (`attempt_existing_hook`). The same path lets us read from a hook that OBS
    already placed.
-3. **First-frame window.** With `wgc_preroll`, allow about 5 s for the stock profile (the 4 s re-attempt plus
-   margin). The viewer already sees WGC frames, so a longer probe costs nothing visible.
+3. **First-frame window.** With `wgc_preroll`, allow at least 6 s for the stock profile (the 4 s re-attempt plus
+   hooking and the first present). The viewer already sees WGC frames, so a longer probe costs nothing visible.
+   The stock hook commits to D3D9 when it installs, then re-runs `attempt_hook` every 4 s (`capture_loop`,
+   `n % 100`), so a DX11/12 game that also loads `d3d9.dll` can take 4–5 s to deliver its first frame.
 4. **Capabilities, not assumptions.** Treat `frame_count`, `hooked_api` and the unload words as optional (already
    true for the first two). Skip the unload wait for the stock profile.
 5. **Version gate.** Before injecting: the PE `FileVersion` must be `1.8.x.0`. After load: `hook_ver_major == 1`.
@@ -120,6 +140,10 @@ OBS signs the hook DLLs in a separate CI step with a dedicated key, `game-captur
 (`.github/actions/windows-signing/action.yaml`, "Sign Game Capture with RSA cert"). Everything else is signed with
 the release key. The hook certificate is managed apart from the rest of OBS.
 
+The hook binaries are byte-identical across patch releases (zip CRCs: 32.1.0 = 32.1.2, and the hook source did not
+change between those tags) and change at each minor (32.2.2 and 33.0.1 differ from 32.1.x and from each other).
+Any vendor allowlist that keys on hash or version therefore moves with OBS minors.
+
 33.0.1 SHA-256: `graphics-hook64.dll c37f4412…5021c2`, `graphics-hook32.dll 91da13c2…282d85`. The full values belong in
 the lock file (below).
 
@@ -135,6 +159,10 @@ What is documented:
   manually switch"), BattlEye ✅ through 31.0, Vanguard ❌ 31.0 / ✅ 31.1+, FACEIT ❌ 31.0 / ✅ 31.1+, VAC CS2 🟡
   (`-allow_third_party_software`), ACE, miHoYo, EA AC ✅. Vendors "specifically exempt the current certificate".
   The allowlisting is by certificate, at least for some vendors.
+- The allowlist has been build-specific at times: an OBS 19.0.3 hotfix that changed the game-capture files was
+  blocked until the anti-cheat updated, and downgrading to 19.0.2 fixed it
+  ([OBS forum, "Black Screen - 19.0.3"](https://obsproject.com/forum/threads/black-screen-19-0-3.70638)). Assume
+  signer plus a known hash or version, and expect a lag after each OBS minor.
 - OBS forum posts report a hook update dropping out of an allowlist. A moderator declined to sign a third-party
   build because it would undermine trust between OBS and the anti-cheat vendors. A modified hook would need its own
   signature and its own vendor allowlisting.
@@ -146,7 +174,13 @@ What is documented:
 What is not documented anywhere found: whether any vendor accepts the OBS-signed DLL when a process other than
 `obs64.exe` injects it, and whether the vendor inspects the injector. No vendor statement covers third-party apps.
 Discord, for comparison, ships its own `DiscordHook64.dll` signed by Discord Inc. (seen on this machine), which
-suggests it negotiated its own allowlisting.
+suggests it negotiated its own allowlisting. A third-party Rust host that drives OBS's signed hook,
+[hzqst/obs-rs](https://github.com/hzqst/obs-rs), claims to be "whitelisted by all anti-cheats". That claim is
+unverified, and the 19.0.3 incident above shows it is not universally true.
+
+Whether Fortnite loads the OBS-signed hook when we inject it is therefore **unknown**. The alt run of this research
+asserted that "OBS's signed hook does load in Fortnite", but that is a statement about `obs64.exe` as the host, not
+evidence for our host. It is not relied on here.
 
 **Account risk, stated plainly.** Loading a non-allowlisted module into a protected game can get the game refused
 or the player kicked ("untrusted module"). An account flag cannot be ruled out. With the OBS-signed DLL the module
@@ -154,8 +188,10 @@ is one the vendor exempts for OBS, but the use is not one the vendor has blessed
 default-on for protected games. Testing belongs on accounts the user is willing to lose.
 
 **An existing risk to fix regardless.** The app registers its unsigned DLL as a global implicit Vulkan layer
-(`vulkan_layer.rs`, HKCU). Every Vulkan process loads it at `vkCreateInstance`, including protected games with a
-Vulkan renderer. The registrations also pile up: joi2 has entries for app-3.3.0, 3.5.0, 3.5.1 and 3.7.0, and this
+(`vulkan_layer.rs`, HKCU). The registration happens at app start (`lib.rs`, `vulkan_layer::ensure_registered`, "register at startup — before
+any Vulkan game launches"), not when a share begins. So from the moment the app runs, every Vulkan process loads our
+unsigned DLL at `vkCreateInstance`, including protected games with a Vulkan renderer, whether or not anything is
+being shared. The registrations also pile up: joi2 has entries for app-3.3.0, 3.5.0, 3.5.1 and 3.7.0, and this
 development machine has about 50 (every past `app-*` folder plus `target/debug|release|profiling`). Most point at
 folders that no longer exist.
 
@@ -190,10 +226,27 @@ folders that no longer exist.
 | anti-cheat                  | blocked (unsigned)                                                   | per vendor and certificate generation                                                           | not affected                                                                                                   |
 | leaves the game on stop     | yes                                                                  | no, stays loaded until the game exits                                                           | n/a                                                                                                            |
 
-Measured: on joi2 the WGC path delivered Fortnite 2560×1440 → 1280×720 @30 with `captured == encoded`, 0 drops for
-20 s. The encoder counters during that pre-roll showed `gpu_us=476` (fused VP blt, EWMA), `gpu_max_us=3640`,
-`enc_us=132`. No log on either machine contains a successful hook session, so there is no hook-vs-WGC measurement.
-The table's latency and pacing claims follow from the pipelines and are not measured. Phase 0 measures them.
+Measured, from the joi2 log of the Fortnite attempt (2560×1440 → 1280×720, negotiated 30 fps):
+
+- The WGC pre-roll had `captured == encoded` and 0 drops over the window. That is true, and it says only that nothing
+  was lost between capture and encode. It does not say the rate was 30.
+- The `captured` counter went 45 → 971 over 18.8 s, about **49 fps**. A 30 fps share over the same time would be
+  about 560 frames. So WGC delivered and the encoder encoded about 1.6× the negotiated rate, which spreads the
+  bitrate thinner and spends GPU on frames the receiver may not need.
+- Cause, by inspection: `wgc_capture.rs` does not set `MinUpdateInterval` (no occurrence in `desktop/src-tauri/src`),
+  and nothing paces the WGC callback to the share's fps. WGC's default cadence is throttled to roughly 50–60 fps
+  ([robmikh/Win32CaptureSample#82](https://github.com/robmikh/Win32CaptureSample/issues/82)), which fits 49. The
+  hook paths do cap at `frame_interval`.
+- Encoder counters during that pre-roll: `gpu_us=476` (fused VP blt, EWMA), `gpu_max_us=3640`, `enc_us=132`. The
+  pipeline after capture is not the bottleneck.
+
+The 49 fps figure comes from one log on one machine; it was not re-measured for this document. No log on either machine
+contains a successful hook session, so there is no hook-vs-WGC measurement. The table's latency and pacing claims
+follow from the pipelines and are not measured. Phase 0b measures them.
+
+Independent WGC follow-up, not part of the hook design: set `MinUpdateInterval` to `1/fps` on Windows 11 24H2+
+(build 26100+), or pace in the frame callback, so a 30 fps share stops encoding about 49 fps. Pacing also makes any
+later hook-vs-WGC comparison fair.
 
 Verdict: the stock hook is worth having only where WGC is the alternative and the game allows it. That means
 protected titles, legacy fullscreen, and latency-sensitive viewers. It is not a replacement for the fork on
@@ -212,16 +265,20 @@ changes.
 
 Evaluated before any injection. The first match wins.
 
-| Target                                                                                   | Hook                                                      | Notes                                                                |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
-| monitor source, AppContainer process, `compatibility.json` "cannot be captured"          | none → WGC                                                | the host has no AppContainer object namespace today                  |
-| CS2 / VAC titles without the untrusted launch flag                                       | none → WGC                                                | VAC blocks injection                                                 |
-| protected (PR #129 markers, plus the configured blocklist) and the user has not opted in | none → WGC, reason `blocklisted`                          | default                                                              |
-| protected and opted in, vendor/generation not marked ❌ in the bundled policy table      | `ObsSigned`, safe inject                                  | never `Own`                                                          |
-| stock `CaptureHook_` objects already in the target (OBS or another host)                 | attach to the resident hook (stock profile, no injection) | phase 3, experimental                                                |
-| unprotected                                                                              | `Own`                                                     | best pacing and zero-copy. `ObsSigned` if the fork files are missing |
+| Target                                                                                      | Hook                                                                                | Notes                                                                            |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| monitor source, AppContainer process, `compatibility.json` "cannot be captured"             | none → WGC                                                                          | the host has no AppContainer object namespace today                              |
+| CS2 / VAC titles without the untrusted launch flag                                          | none → WGC                                                                          | VAC blocks injection                                                             |
+| protected (PR #129 markers, plus the configured blocklist) and the user has not opted in    | none → WGC, reason `blocklisted`                                                    | default                                                                          |
+| protected and opted in, vendor/generation not marked ❌ in the bundled policy table         | `ObsSigned`, safe inject                                                            | never `Own`                                                                      |
+| unprotected, and OBS or another stock host already has `CaptureHook_` objects in the target | `Own`                                                                               | `RalphCaptureHook_` names do not collide, so the fork coexists with OBS          |
+| protected, and OBS or another stock host already has `CaptureHook_` objects in the target   | none → WGC by default; attach to the resident hook only behind an experimental flag | phase 3. Never inject `ObsSigned` over it: two hosts would drive one `hook_info` |
+| unprotected                                                                                 | `Own`                                                                               | best pacing and zero-copy. `ObsSigned` if the fork files are missing             |
 
 Under the hook-exclusive policy the WGC outcomes become "unavailable", as today.
+
+At most one injection attempt per protected target per app session. A block is remembered per exe and app version, so
+the host never retry-loops against an anti-cheat driver.
 
 The opt-in is a desktop setting ("Use the OBS-signed capture hook in anti-cheat protected games"). Its
 description states the account risk in one sentence. It is off by default. A curated per-title list
@@ -302,9 +359,10 @@ New `FallbackReason` values, alongside #129's `hook_no_first_frame`:
 - Account action in protected games (above). Mitigation: opt-in, per-title verification, never the unsigned DLL.
 - Vendor or OBS reaction to third-party use of the OBS hook: allowlists could narrow. Mitigation: talk to the OBS
   Project first, keep the use narrow.
-- Sharing `CaptureHook_` objects: if OBS captures the same game, both hosts drive one hook, and either can stop it
-  (`Stop` event) or change `frame_interval`. Mitigation: treat an external stop as `hook_stopped_mid_session` and
-  stay on WGC. Do not fight it with restart.
+- Sharing `CaptureHook_` objects: the stock profile has no coexistence with OBS capturing the same game. Both hosts
+  would drive one hook, and either can stop it (`Stop` event) or change `frame_interval`. Mitigation: the selection
+  policy above (never inject `ObsSigned` over a resident OBS hook), and treat an external stop as
+  `hook_stopped_mid_session` and stay on WGC. Do not fight it with restart.
 - The stock DLL stays loaded until the game exits, so updates must not try to delete it (handled by the shared
   folder).
 - Worse pacing than the fork on the signed path (timer delivery, extra copy).
@@ -314,13 +372,14 @@ New `FallbackReason` values, alongside #129's `hook_no_first_frame`:
 
 ## Phases and effort
 
-| Phase                 | Work                                                                                                                                                                                                                                                                                                                                               | Estimate |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| 0. Evidence           | Throwaway host build with the stock profile against OBS 33.0.1 files: unprotected DX11/DX12/Vulkan game, then one protected title on an account the user accepts to risk (user's decision). PresentMon for present mode and frame time with and without WGC. `NativeShareDiag` for all three modes. Glass-to-glass latency with an on-screen timer | 1–2 days |
-| 1. Host stock profile | flavor/profile in `obs_ipc.rs`/`inject.rs`, attach-to-resident, first-frame window, version gate, `hook_not_loaded` detection                                                                                                                                                                                                                      | 3–5 days |
-| 2. Artifacts          | lock file, CI fetch/verify, payload manifest entries, shared runtime folder, Vulkan layer cleanup and single registration, source mirror, THIRD_PARTY_LICENSES                                                                                                                                                                                     | 3–4 days |
-| 3. Policy and UI      | selection matrix, opt-in setting (Rust-owned settings), status fields, panel copy, experimental attach-to-OBS                                                                                                                                                                                                                                      | 2–3 days |
-| 4. Optional           | SRV shader converter (drops the extra copy for both flavors), propose a present counter in `reserved[]` upstream to OBS, per-title verified list, old-generation set if testing demands it                                                                                                                                                         | open     |
+| Phase                 | Work                                                                                                                                                                                                                                                                                                                                                                                                           | Estimate  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 0a. Safety now        | No new capability. Register the Vulkan layer only while a share is active (or point it at the signed copy once phase 2 lands), and remove stale per-version `ImplicitLayers` values at app start and in the installer/updater. Anti-cheat titles stay on WGC (#129)                                                                                                                                            | 0.5–1 day |
+| 0b. Evidence          | Throwaway host build with the stock profile against OBS 33.0.1 files: unprotected DX11/DX12/Vulkan game, then one protected title on an account the user accepts to risk (user's decision). PresentMon for present mode and frame time with and without WGC. `NativeShareDiag` for all three modes. Glass-to-glass latency with an on-screen timer                                                             | 1–2 days  |
+| 1. Host stock profile | flavor/profile in `obs_ipc.rs`/`inject.rs`, attach-to-resident, first-frame window, version gate, `hook_not_loaded` detection                                                                                                                                                                                                                                                                                  | 3–5 days  |
+| 2. Artifacts          | lock file, CI fetch/verify, payload manifest entries, shared runtime folder, Vulkan layer cleanup and single registration, source mirror, THIRD_PARTY_LICENSES                                                                                                                                                                                                                                                 | 3–4 days  |
+| 3. Policy and UI      | selection matrix, opt-in setting (Rust-owned settings), status fields, panel copy, experimental attach-to-OBS                                                                                                                                                                                                                                                                                                  | 2–3 days  |
+| 4. Optional           | SRV shader converter (drops the extra copy for both flavors), propose a present counter in `reserved[]` upstream to OBS, per-title verified list, old-generation set if testing demands it, and the long-term clean path: sign the fork under our own identity and ask EAC and BattlEye to allowlist it (`CODE_SIGNING_POLICY.md` excludes modified upstream artifacts today and would need a scope expansion) | open      |
 
 Order relative to the desktop plan: after #129 merges, and independent of C4 (web desktop-host interface). Phase 2
 touches the payload manifest from #112 and the installer, so it goes through the same packaging review.
@@ -333,7 +392,14 @@ touches the payload manifest from #112 and the installer, so it goes through the
 - OBS forum, [anti-cheat compatibility hooking](https://obsproject.com/forum/threads/obs-0-62b-test-1.13284/page-2) (`SetWindowsHookEx`).
 - OBS forum, [Forum resource and IP policy](https://obsproject.com/forum/threads/forum-resource-and-ip-policy.178569/) (naming and logo).
 - OBS forum, [I was able to capture VALORANT gameplay with 31.0.3](https://obsproject.com/forum/threads/i-was-able-to-capture-valorant-gameplay-with-the-latest-obs-31-0-3.185315) (Vanguard and the 31.0 certificate).
-- `obsproject/obs-studio` at tags `30.2.3`, `31.1.2`, `32.1.2` (`fb4d98b`) and `33.0.1` (`65c320b`):
+- OBS forum, [Black Screen - 19.0.3](https://obsproject.com/forum/threads/black-screen-19-0-3.70638) (a build-specific anti-cheat allowlist).
+- [hzqst/obs-rs](https://github.com/hzqst/obs-rs) (a third-party host for OBS's signed hook; its allowlist claim is unverified).
+- Microsoft Learn, [`GraphicsCaptureSession.MinUpdateInterval`](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.graphicscapturesession.minupdateinterval) (26100+), and
+  WGC cadence report [robmikh/Win32CaptureSample#82](https://github.com/robmikh/Win32CaptureSample/issues/82).
+- Release assets `OBS-Studio-{32.1.0,32.1.2,32.2.2}-Windows-x64.zip`: zip central-directory CRCs for the
+  patch/minor identity of the hook binaries.
+- `obsproject/obs-studio` at tags `27.0.0`, `28.0.0` (header only), `30.2.3`, `31.1.2`, `32.1.2` (`fb4d98b`) and `33.0.1` (`65c320b`),
+  plus `shared/obs-inject-library/inject-library.c`:
   `shared/obs-hook-config/*`, `plugins/win-capture/{game-capture.c,game-capture-file-init.c,graphics-hook/*,inject-helper/*,get-graphics-offsets/*,data/compatibility.json}`,
   `.github/actions/windows-signing/*`.
 - GitHub release assets `OBS-Studio-33.0.1-Windows-x64.zip` and `OBS-Studio-30.2.3-Windows.zip` (signatures and hashes above).
