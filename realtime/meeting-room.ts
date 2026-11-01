@@ -286,6 +286,11 @@ const REST_ANSWER_STATUS = {
   not_found: 404,
 } as const;
 const RESUME_GRACE_PERIOD_MS = 120_000; // 2 min — keep session resumable after disconnect
+/** How long a replaced voice session id answers Resume with SessionReplaced. */
+const REPLACED_VOICE_SESSION_TTL_MS = 60 * 60 * 1000;
+const REPLACED_VOICE_SESSIONS_STORAGE_KEY = "replacedVoiceSessions";
+/** Close reason (with CloseCode.SessionReplaced) when voice moves device. */
+const VOICE_SESSION_REPLACED_REASON = "Voice moved to another device";
 const MAX_GATEWAY_FRAME_BYTES = 1_000_000;
 const MAX_REPLAY_BUFFER_BYTES = 256_000;
 const MAX_REPLAY_PERSIST_WRITES = 32;
@@ -324,6 +329,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private profileRequestCoordinator = new ProfileRequestCoordinator();
   private profileIdentities: Map<string, ProfileIdentity> = new Map();
   private resumableSessions: Map<string, WsAttachment> = new Map();
+  /** Voice sessions another device took over: participantId -> replaced at. */
+  private replacedVoiceSessions: Map<string, number> = new Map();
   /** Non-standby Identify calls in flight: participantId -> admitted subject. */
   private identifyingVoiceJoins = new Map<string, string>();
   private readonly nextVoiceJoinGrantSeq = createVoiceJoinGrantSequence();
@@ -527,6 +534,17 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
 
+      const storedReplaced = (await this.ctx.storage.get(
+        REPLACED_VOICE_SESSIONS_STORAGE_KEY,
+      )) as Record<string, unknown> | undefined;
+      if (storedReplaced) {
+        for (const [id, replacedAt] of Object.entries(storedReplaced)) {
+          if (typeof replacedAt === "number") {
+            this.replacedVoiceSessions.set(id, replacedAt);
+          }
+        }
+      }
+
       // Restore resumable session expiry map
       const storedExpiry = (await this.ctx.storage.get(
         "resumableSessionExpiry",
@@ -594,16 +612,10 @@ export class MeetingRoom extends DurableObject<Env> {
         await this.restoreSessionSubscriptions(ws, session);
       }
 
-      for (const [, session] of this.sessions) {
-        if (session.user_id) {
-          for (const [channelId, members] of this.voiceChannelMembers) {
-            if (members.has(session.user_id)) {
-              session.voice_channel_id = channelId;
-              break;
-            }
-          }
-        }
-      }
+      // Each session's voice_channel_id comes back with its attachment. It is
+      // not derived from the members: they are one entry per user, and every
+      // other session of that user (a chat tab, a phone not in voice) would
+      // then count as in the channel and keep a departed device's entry.
 
       // Reconcile: remove voice members that have no live session
       this.reconcileVoiceMembers();
@@ -1210,6 +1222,9 @@ export class MeetingRoom extends DurableObject<Env> {
         this.persistResumableSessions();
         this.persistResumableSessionExpiry();
       }
+      if (this.pruneReplacedVoiceSessions(now)) {
+        this.persistReplacedVoiceSessions();
+      }
 
       // Pending calls use durable deadlines so a hibernated room still stops
       // ringing and removes the call from storage.
@@ -1810,6 +1825,47 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Whether a session of `userId` other than `exceptSessionId` is in
+   * `channelId`: a live one, or (unless liveOnly) one held for resume within
+   * the grace period.
+   */
+  private hasOtherVoiceChannelSession(
+    userId: string,
+    channelId: string,
+    exceptSessionId: string,
+    { liveOnly = false }: { liveOnly?: boolean } = {},
+  ): boolean {
+    for (const session of this.sessions.values()) {
+      if (
+        session.id !== exceptSessionId &&
+        session.user_id === userId &&
+        session.voice_channel_id === channelId
+      ) {
+        return true;
+      }
+    }
+    if (liveOnly) return false;
+    const now = Date.now();
+    for (const [id, resumable] of this.resumableSessions) {
+      if (id === exceptSessionId) continue;
+      const disconnectedAt = this.resumableSessionExpiry.get(id);
+      if (
+        disconnectedAt === undefined ||
+        now - disconnectedAt >= RESUME_GRACE_PERIOD_MS
+      ) {
+        continue;
+      }
+      if (
+        resumable.user_id === userId &&
+        resumable.voice_channel_id === channelId
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private ensureVoiceChannelMembers(channelId: string, startedAt = Date.now()) {
     let members = this.voiceChannelMembers.get(channelId);
     if (!members) {
@@ -1879,6 +1935,17 @@ export class MeetingRoom extends DurableObject<Env> {
     excludeWs?: WebSocket,
   ) {
     if (!session.voice_channel_id || !session.user_id) return;
+    // The user is still connected through another session in the channel.
+    if (
+      this.hasOtherVoiceChannelSession(
+        session.user_id,
+        session.voice_channel_id,
+        session.id,
+        { liveOnly: true },
+      )
+    ) {
+      return;
+    }
 
     const members = this.ensureVoiceChannelMembers(session.voice_channel_id);
     const existing = members.get(session.user_id);
@@ -1926,24 +1993,32 @@ export class MeetingRoom extends DurableObject<Env> {
     );
   }
 
-  /** Remove voice channel members that don't have a live or resumable session */
+  /**
+   * Remove voice channel members that no session is in: a member stays while
+   * a live session of the user, or one held for resume within grace, has
+   * that voice_channel_id. Any session of the user is not enough: their chat
+   * tab or a phone that never joined would keep a departed device's entry.
+   */
   private reconcileVoiceMembers() {
     const now = Date.now();
-    // Build a set of user_ids that have active sessions OR resumable sessions
-    // (pending reconnect within grace period). This prevents premature cleanup
-    // of voice members who are just reconnecting their WebSocket.
-    const activeUserIds = new Set<string>();
+    const membership = (userId: string, channelId: string) =>
+      `${userId}\n${channelId}`;
+    const activeMemberships = new Set<string>();
     for (const [, session] of this.sessions) {
-      if (session.user_id) {
-        activeUserIds.add(session.user_id);
+      if (session.user_id && session.voice_channel_id) {
+        activeMemberships.add(
+          membership(session.user_id, session.voice_channel_id),
+        );
       }
     }
     // Also include resumable sessions (disconnected but within grace period)
     for (const [sessionId, disconnectedAt] of this.resumableSessionExpiry) {
       if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) continue;
       const resumable = this.resumableSessions.get(sessionId);
-      if (resumable?.user_id) {
-        activeUserIds.add(resumable.user_id);
+      if (resumable?.user_id && resumable.voice_channel_id) {
+        activeMemberships.add(
+          membership(resumable.user_id, resumable.voice_channel_id),
+        );
       }
     }
 
@@ -1951,7 +2026,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const changedChannelIds = new Set<string>();
     for (const [channelId, members] of this.voiceChannelMembers) {
       for (const [userId] of members) {
-        if (!activeUserIds.has(userId)) {
+        if (!activeMemberships.has(membership(userId, channelId))) {
           members.delete(userId);
           changed = true;
           changedChannelIds.add(channelId);
@@ -2198,6 +2273,7 @@ export class MeetingRoom extends DurableObject<Env> {
     participantId: string,
     subject: string | undefined,
     granted: boolean,
+    replaced = false,
   ): void {
     const namespace = this.env.VOICE_ROOM;
     if (!namespace || !subject || !this.grantsVoiceJoins) return;
@@ -2206,6 +2282,7 @@ export class MeetingRoom extends DurableObject<Env> {
       subject,
       granted,
       seq: this.nextVoiceJoinGrantSeq(),
+      replaced,
     });
     const push = namespace
       .get(namespace.idFromName(this.roomSlug))
@@ -2228,9 +2305,131 @@ export class MeetingRoom extends DurableObject<Env> {
     this.ctx.waitUntil(push);
   }
 
-  private revokeVoiceJoin(session: WsAttachment): void {
+  private revokeVoiceJoin(session: WsAttachment, replaced = false): void {
     if (session.standby) return;
-    this.pushVoiceJoinGrant(session.id, session.admission?.subject, false);
+    this.pushVoiceJoinGrant(
+      session.id,
+      session.admission?.subject,
+      false,
+      replaced,
+    );
+  }
+
+  // ── One voice session per user ─────────────────────────────────────────
+
+  /**
+   * One voice session per user per room: the user's newest join (an Identify
+   * or a standby promotion) ends their other sessions here, live or held for
+   * resume. Each live one hears SessionReplaced and is closed with it, so its
+   * client stops instead of reconnecting; its grant is revoked as replaced,
+   * so the VoiceRoom closes its voice socket the same way; the room hears it
+   * leave. A replaced id is remembered: resuming it answers SessionReplaced,
+   * so a device that was offline during the takeover cannot claim it back.
+   */
+  private replaceOtherVoiceSessions(
+    ws: WebSocket,
+    session: WsAttachment,
+  ): void {
+    const userId = session.user_id;
+    if (
+      !userId ||
+      session.standby ||
+      !this.grantsVoiceJoins ||
+      session.admission?.accessMode !== "authenticated"
+    ) {
+      return;
+    }
+    let remembered = false;
+    for (const [otherWs, other] of [...this.sessions]) {
+      if (
+        otherWs === ws ||
+        other.id === session.id ||
+        other.user_id !== userId ||
+        other.standby
+      ) {
+        continue;
+      }
+      meetingLog.info(
+        `Voice moved to another device: ${other.id} replaced by ${session.id}`,
+      );
+      this.rememberReplacedVoiceSession(other.id);
+      remembered = true;
+      this.sendTo(otherWs, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.SessionReplaced,
+          message: VOICE_SESSION_REPLACED_REASON,
+        },
+      });
+      // handleLeave does all its work before it returns.
+      void this.handleLeave(otherWs, true, false, true);
+      try {
+        otherWs.close(CloseCode.SessionReplaced, VOICE_SESSION_REPLACED_REASON);
+      } catch {
+        /* already closed */
+      }
+    }
+    for (const [id, resumable] of [...this.resumableSessions]) {
+      if (
+        id === session.id ||
+        resumable.user_id !== userId ||
+        resumable.standby
+      ) {
+        continue;
+      }
+      meetingLog.info(
+        `Voice moved to another device: held session ${id} replaced by ${session.id}`,
+      );
+      this.rememberReplacedVoiceSession(id);
+      remembered = true;
+      if (resumable.voice_channel_id) this.removeFromVoiceChannel(resumable);
+      this.revokeVoiceJoin(resumable, true);
+      this.resumableSessions.delete(id);
+      this.replayBuffers.delete(id);
+      this.replayPersistWrites.delete(id);
+      this.resumableSessionExpiry.delete(id);
+      this.persistResumableSessions();
+      this.persistResumableSessionExpiry();
+      this.broadcast({
+        op: Op.VoiceStateUpdate,
+        d: {
+          participant: this.buildVoiceState(resumable),
+          action: "leave",
+        },
+      });
+    }
+    if (remembered) this.persistReplacedVoiceSessions();
+  }
+
+  private rememberReplacedVoiceSession(participantId: string): void {
+    const now = Date.now();
+    this.pruneReplacedVoiceSessions(now);
+    this.replacedVoiceSessions.set(participantId, now);
+  }
+
+  private isReplacedVoiceSession(participantId: string): boolean {
+    const replacedAt = this.replacedVoiceSessions.get(participantId);
+    return (
+      replacedAt !== undefined &&
+      Date.now() - replacedAt < REPLACED_VOICE_SESSION_TTL_MS
+    );
+  }
+
+  private pruneReplacedVoiceSessions(now: number): boolean {
+    let changed = false;
+    for (const [id, replacedAt] of this.replacedVoiceSessions) {
+      if (now - replacedAt < REPLACED_VOICE_SESSION_TTL_MS) continue;
+      this.replacedVoiceSessions.delete(id);
+      changed = true;
+    }
+    return changed;
+  }
+
+  private persistReplacedVoiceSessions(): void {
+    this.markDirty(
+      REPLACED_VOICE_SESSIONS_STORAGE_KEY,
+      Object.fromEntries(this.replacedVoiceSessions),
+    );
   }
 
   // ── Voice token generation ─────────────────────────────────────────────
@@ -2588,13 +2787,6 @@ export class MeetingRoom extends DurableObject<Env> {
         await this.updateProfileIdentity(admittedUserId, identity);
       }
 
-      // Build roster
-      const participants: VoiceState[] = [];
-      for (const [, data] of this.sessions) {
-        if (data.standby) continue;
-        participants.push(this.buildVoiceState(data));
-      }
-
       const attachment: WsAttachment = {
         admission,
         id: participantId,
@@ -2622,6 +2814,16 @@ export class MeetingRoom extends DurableObject<Env> {
       };
 
       this.persist(ws, attachment);
+
+      // This join takes over the user's voice sessions on other devices.
+      this.replaceOtherVoiceSessions(ws, attachment);
+
+      // Build roster
+      const participants: VoiceState[] = [];
+      for (const [otherWs, data] of this.sessions) {
+        if (otherWs === ws || data.standby) continue;
+        participants.push(this.buildVoiceState(data));
+      }
 
       // Op 2: Ready — includes voice_token for Voice Gateway connection
       this.sendTo(ws, {
@@ -2753,6 +2955,20 @@ export class MeetingRoom extends DurableObject<Env> {
   private async handleResume(ws: WebSocket, d: MainClientPayload<Op.Resume>) {
     const oldAttachment = this.resumableSessions.get(d.session_id);
     const admission = this.getSessionAdmission(ws);
+    if (!oldAttachment && this.isReplacedVoiceSession(d.session_id)) {
+      // The user joined from another device meanwhile: stop, never rejoin.
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.SessionReplaced,
+          message: VOICE_SESSION_REPLACED_REASON,
+        },
+      });
+      try {
+        ws.close(CloseCode.SessionReplaced, VOICE_SESSION_REPLACED_REASON);
+      } catch {}
+      return;
+    }
     if (!oldAttachment) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -3013,6 +3229,7 @@ export class MeetingRoom extends DurableObject<Env> {
         if (d.self_deaf !== undefined) session.self_deaf = d.self_deaf;
         this.persist(ws, session);
         this.pushVoiceJoinGrant(session.id, session.admission?.subject, true);
+        this.replaceOtherVoiceSessions(ws, session);
         this.broadcast(
           {
             op: Op.VoiceStateUpdate,
@@ -3219,6 +3436,7 @@ export class MeetingRoom extends DurableObject<Env> {
     ws: WebSocket,
     intentional: boolean = false,
     closeSocket: boolean = true,
+    replaced: boolean = false,
   ) {
     const session = this.getSession(ws);
     if (!session) return;
@@ -3297,7 +3515,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // Ensure the alarm keeps running to prune expired resumable sessions
       this.ctx.waitUntil(this.scheduleAlarm());
     } else {
-      this.revokeVoiceJoin(session);
+      this.revokeVoiceJoin(session, replaced);
       this.resumableSessions.delete(participantId);
       this.replayBuffers.delete(participantId);
       this.replayPersistWrites.delete(participantId);
@@ -3953,6 +4171,18 @@ export class MeetingRoom extends DurableObject<Env> {
         }
         this.ctx.waitUntil(this.broadcastVoiceChannelState(d.channel_id));
         this.persistVoiceChannelMembers();
+      } else {
+        // The session is in the channel but its entry is gone (another
+        // device's leave or a reconcile removed it): this join restores it.
+        this.markVoiceMemberConnected(
+          d.channel_id,
+          session,
+          this.normalizeVoiceChannelStartedAt(d.started_at),
+        );
+        this.persist(ws, session);
+        this.ctx.waitUntil(
+          this.broadcastVoiceChannelState(d.channel_id, undefined, true),
+        );
       }
       return;
     }
@@ -4073,6 +4303,16 @@ export class MeetingRoom extends DurableObject<Env> {
   private removeFromVoiceChannel(session: WsAttachment) {
     const channelId = session.voice_channel_id;
     if (!channelId || !session.user_id) return;
+    // Members are one entry per user: it stays while another of the user's
+    // sessions is still in the channel (a second device, a held resume).
+    if (
+      this.hasOtherVoiceChannelSession(session.user_id, channelId, session.id)
+    ) {
+      log.info(
+        `${session.name} left voice channel ${channelId} on one device; another is still in`,
+      );
+      return;
+    }
 
     const members = this.voiceChannelMembers.get(channelId);
     if (members) {

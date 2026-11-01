@@ -51,7 +51,10 @@ async function createAdmissionHeaders(
   );
 }
 
-async function createVoiceAdmissionHeaders(roomName: string) {
+async function createVoiceAdmissionHeaders(
+  roomName: string,
+  subject = "user-test",
+) {
   const ticket = await issueSocketTicket(
     {
       accessMode: "authenticated",
@@ -59,7 +62,7 @@ async function createVoiceAdmissionHeaders(roomName: string) {
       expiresAt: Date.now() + 60_000,
       nonce: crypto.randomUUID(),
       roomSlug: roomName,
-      subject: "user-test",
+      subject,
     },
     env.CALLS_APP_SECRET,
   );
@@ -93,6 +96,29 @@ async function openMeetingSocket(
   expect(response.status).toBe(101);
   expect(response.webSocket).not.toBeNull();
 
+  const socket = response.webSocket;
+  if (!socket) {
+    throw new Error("Expected WebSocket upgrade response");
+  }
+
+  socket.accept();
+  await nextMessageWithOpcode(socket, 8);
+  return socket;
+}
+
+// The global gateway allows several chat sessions per user; channel rooms
+// allow only one non-standby session per user (see replaceOtherVoiceSessions).
+async function openGlobalSocket(
+  roomName: string = crypto.randomUUID(),
+  subject = "user-test",
+  nonce: string = crypto.randomUUID(),
+): Promise<WebSocket> {
+  const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+  const response = await room.fetch("https://internal/api/gateway?v=1", {
+    headers: await createAdmissionHeaders(roomName, "global", subject, nonce),
+  });
+
+  expect(response.status).toBe(101);
   const socket = response.webSocket;
   if (!socket) {
     throw new Error("Expected WebSocket upgrade response");
@@ -782,18 +808,13 @@ describe("MeetingRoom lifecycle", () => {
       .run();
 
     const roomName = crypto.randomUUID();
-    const fresh = await openMeetingSocket(roomName, userId);
+    // `fresh` is a second session of the user that is not in voice. A member
+    // stays connected while another session of the user is in its channel, so
+    // only the stale session can put it into reconnecting.
+    const fresh = await openGlobalSocket(roomName, userId);
     await identifyMeetingSocket(fresh);
-    const freshJoin = nextDispatchEvent(fresh, "VOICE_CHANNEL_STATE_UPDATE");
-    fresh.send(
-      JSON.stringify({
-        op: 33,
-        d: { channel_id: channelId, self_mute: true },
-      }),
-    );
-    await freshJoin;
 
-    const stale = await openMeetingSocket(roomName, userId);
+    const stale = await openGlobalSocket(roomName, userId);
     const staleReady = await identifyMeetingSocket(stale);
     const staleJoin = nextDispatchEvent(fresh, "VOICE_CHANNEL_STATE_UPDATE");
     stale.send(
@@ -877,7 +898,7 @@ describe("MeetingRoom lifecycle", () => {
     stale.close();
     await staleDisconnect;
 
-    const resumed = await openMeetingSocket(roomName, userId);
+    const resumed = await openGlobalSocket(roomName, userId);
     const resumedSidebar = nextDispatchEventMatching(
       resumed,
       "VOICE_CHANNEL_STATE_UPDATE",
@@ -1018,7 +1039,7 @@ describe("MeetingRoom lifecycle", () => {
       .run();
 
     const roomName = crypto.randomUUID();
-    const first = await openMeetingSocket(roomName, userId);
+    const first = await openGlobalSocket(roomName, userId);
     await identifyMeetingSocket(first);
     const firstJoin = nextDispatchEventMatching(
       first,
@@ -1035,7 +1056,7 @@ describe("MeetingRoom lifecycle", () => {
     );
     await expect(firstJoin).resolves.toBeDefined();
 
-    const stale = await openMeetingSocket(roomName, userId);
+    const stale = await openGlobalSocket(roomName, userId);
     await identifyMeetingSocket(stale);
     const secondJoin = nextDispatchEventMatching(
       stale,
@@ -1102,7 +1123,7 @@ describe("MeetingRoom lifecycle", () => {
         ).data?.members?.some((member) => member.name === "New Display") ===
           true,
     );
-    const fresh = await openMeetingSocket(roomName, userId);
+    const fresh = await openGlobalSocket(roomName, userId);
     await identifyMeetingSocket(fresh);
 
     await expect(firstReconciled).resolves.toMatchObject({
@@ -1191,19 +1212,19 @@ describe("MeetingRoom lifecycle", () => {
 
     const roomName = crypto.randomUUID();
     const first = await Promise.race([
-      openMeetingSocket(roomName, userId),
+      openGlobalSocket(roomName, userId),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("first socket timed out")), 1_000),
       ),
     ]);
     await identifyMeetingSocket(first);
 
-    const stale = await openMeetingSocket(roomName, userId);
+    const stale = await openGlobalSocket(roomName, userId);
     const staleReady = await identifyMeetingSocket(stale);
     stale.close();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    const second = await openMeetingSocket(roomName, userId);
+    const second = await openGlobalSocket(roomName, userId);
     await identifyMeetingSocket(second);
 
     await env.DB.prepare(
@@ -1229,7 +1250,7 @@ describe("MeetingRoom lifecycle", () => {
       (message) => (message.d as { name?: string }).name === "New Display",
     );
 
-    const identifyRefresh = await openMeetingSocket(roomName, userId);
+    const identifyRefresh = await openGlobalSocket(roomName, userId);
     await identifyMeetingSocket(identifyRefresh);
 
     await expect(firstProfile).resolves.toMatchObject({
@@ -1249,7 +1270,7 @@ describe("MeetingRoom lifecycle", () => {
       },
     });
 
-    const resumed = await openMeetingSocket(roomName, userId);
+    const resumed = await openGlobalSocket(roomName, userId);
     const resumedResponse = nextMessageWithOpcode(resumed, 9);
     resumed.send(
       JSON.stringify({
@@ -2717,9 +2738,9 @@ describe("MeetingRoom lifecycle", () => {
       .bind(serverId, "user-duplicate", roleId)
       .run();
 
-    const first = await openMeetingSocket(roomName, "user-duplicate");
+    const first = await openGlobalSocket(roomName, "user-duplicate");
     await identifyMeetingSocket(first);
-    const second = await openMeetingSocket(roomName, "user-duplicate");
+    const second = await openGlobalSocket(roomName, "user-duplicate");
     await identifyMeetingSocket(second);
 
     const firstSubscription = nextJsonMessage(first);
@@ -3310,7 +3331,7 @@ describe("MeetingRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openMeetingSocket(roomName);
     await identifyMeetingSocket(socket);
-    const observer = await openMeetingSocket(roomName);
+    const observer = await openMeetingSocket(roomName, "observer-user");
     await identifyMeetingSocket(observer);
     const response = nextMessageWithOpcodeWithin(socket, 18);
 
@@ -3441,7 +3462,10 @@ describe("MeetingRoom lifecycle", () => {
     const intentionalRoom = crypto.randomUUID();
     const intentional = await openMeetingSocket(intentionalRoom);
     await identifyMeetingSocket(intentional);
-    const intentionalObserver = await openMeetingSocket(intentionalRoom);
+    const intentionalObserver = await openMeetingSocket(
+      intentionalRoom,
+      "observer-user",
+    );
     await identifyMeetingSocket(intentionalObserver);
     intentional.send(JSON.stringify({ op: 11, d: {} }));
     expect(await nextMessageWithOpcode(intentionalObserver, 15)).toMatchObject({
@@ -3452,7 +3476,7 @@ describe("MeetingRoom lifecycle", () => {
     const abruptRoom = crypto.randomUUID();
     const abrupt = await openMeetingSocket(abruptRoom);
     await identifyMeetingSocket(abrupt);
-    const abruptObserver = await openMeetingSocket(abruptRoom);
+    const abruptObserver = await openMeetingSocket(abruptRoom, "observer-user");
     await identifyMeetingSocket(abruptObserver);
     abrupt.close();
     expect(await hasMessageWithOpcode(abruptObserver, 15)).toBe(false);
@@ -3588,7 +3612,7 @@ describe("MeetingRoom gateway protocol edge", () => {
     const roomName = crypto.randomUUID();
     const sender = await openMeetingSocket(roomName);
     const ready = await identifyMeetingSocket(sender);
-    const observer = await openMeetingSocket(roomName);
+    const observer = await openMeetingSocket(roomName, "observer-user");
     await identifyMeetingSocket(observer);
 
     const update = nextMessageWithOpcodeMatching(
@@ -3647,10 +3671,13 @@ describe("MeetingRoom user_id rename compatibility", () => {
     const socket = await openMeetingSocket(roomName, "live-user");
     await identifyMeetingSocket(socket, { name: "Live" });
     const now = Date.now();
+    // Attachments persist voice_channel_id, and a member survives a restart
+    // only while a session of its user is in that channel.
     const legacyAttachment = (id: string, userId: string) => ({
       id,
       name: userId,
       clerk_user_id: userId,
+      voice_channel_id: "vc-legacy",
       self_mute: true,
       self_deaf: false,
       self_stream: false,
@@ -3679,7 +3706,11 @@ describe("MeetingRoom user_id rename compatibility", () => {
         const { user_id: liveUserId, ...attachment } =
           ws.deserializeAttachment() as Record<string, unknown>;
         expect(liveUserId).toBe("live-user");
-        ws.serializeAttachment({ ...attachment, clerk_user_id: liveUserId });
+        ws.serializeAttachment({
+          ...attachment,
+          clerk_user_id: liveUserId,
+          voice_channel_id: "vc-legacy",
+        });
         await state.storage.put({
           resumableSessions: {
             "snapshot-session": {
@@ -3805,5 +3836,514 @@ describe("MeetingRoom user_id rename compatibility", () => {
     );
 
     socket.close();
+  });
+});
+
+/** Resolves with the close code the client socket receives from the room. */
+function closeOf(socket: WebSocket) {
+  return new Promise<{ code: number; reason: string }>((resolve) => {
+    socket.addEventListener(
+      "close",
+      (event) => resolve({ code: event.code, reason: event.reason }),
+      { once: true },
+    );
+  });
+}
+
+/**
+ * A heartbeat that carries a payload is not auto-answered by the runtime, so
+ * its ack proves the room handled every frame sent before it.
+ */
+async function settled(socket: WebSocket) {
+  const ack = nextMessageWithOpcode(socket, 6);
+  socket.send(JSON.stringify({ op: 3, d: { settle: true } }));
+  await ack;
+}
+
+async function openVoiceRoomSocket(roomName: string, subject: string) {
+  const voiceRoom = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+  const response = await voiceRoom.fetch(
+    `https://internal/api/channels/${roomName}/voice?v=1`,
+    { headers: await createVoiceAdmissionHeaders(roomName, subject) },
+  );
+  expect(response.status).toBe(101);
+  const voiceSocket = response.webSocket;
+  if (!voiceSocket) throw new Error("Expected VoiceRoom WebSocket");
+  voiceSocket.accept();
+  await nextMessageWithOpcode(voiceSocket, 8);
+  return voiceSocket;
+}
+
+async function identifyVoiceRoomSocket(
+  voiceSocket: WebSocket,
+  ready: { participant_id: string; voice_token: string },
+) {
+  const voiceReady = nextMessageWithOpcode(voiceSocket, 101);
+  voiceSocket.send(
+    JSON.stringify({
+      op: 100,
+      d: {
+        participant_id: ready.participant_id,
+        voice_token: ready.voice_token,
+      },
+    }),
+  );
+  expect((await voiceReady).d).toMatchObject({
+    participant_id: ready.participant_id,
+  });
+}
+
+describe("MeetingRoom one voice session per user", () => {
+  const participantIds = (ready: { participants: Array<{ id?: unknown }> }) =>
+    ready.participants.map((participant) => participant.id);
+  const hasResumableSession = (roomName: string, sessionId: string) =>
+    runInDurableObject(meetingRoom(roomName), (instance) =>
+      (
+        instance as unknown as {
+          resumableSessions: Map<string, unknown>;
+        }
+      ).resumableSessions.has(sessionId),
+    );
+
+  it("ends the user's other session when a newer one identifies", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "takeover-user";
+    const first = await openMeetingSocket(roomName, userId);
+    const firstReady = await identifyMeetingSocket(first, { name: "Phone" });
+    const observer = await openMeetingSocket(roomName, "takeover-observer");
+    const observerReady = await identifyMeetingSocket(observer, {
+      name: "Observer",
+    });
+
+    const firstError = nextMessageWithOpcode(first, 18);
+    const firstClosed = closeOf(first);
+    const observerSawLeave = nextMessageWithOpcodeMatching(
+      observer,
+      15,
+      (message) => {
+        const d = message.d as {
+          action?: string;
+          participant?: { id?: string };
+        };
+        return (
+          d.action === "leave" &&
+          d.participant?.id === firstReady.participant_id
+        );
+      },
+    );
+
+    const second = await openMeetingSocket(roomName, userId);
+    const secondReady = await identifyMeetingSocket(second, { name: "Laptop" });
+
+    await expect(firstError).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4010, message: "Voice moved to another device" },
+    });
+    await expect(firstClosed).resolves.toMatchObject({ code: 4010 });
+    await expect(observerSawLeave).resolves.toMatchObject({
+      d: { action: "leave" },
+    });
+    expect(participantIds(secondReady)).not.toContain(
+      firstReady.participant_id,
+    );
+    expect(participantIds(secondReady)).toContain(observerReady.participant_id);
+    // The replaced session is gone for good, not held for resume.
+    expect(await hasResumableSession(roomName, firstReady.participant_id)).toBe(
+      false,
+    );
+
+    observer.close();
+    second.close();
+  });
+
+  it("closes the replaced session's VoiceRoom socket the same way", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "takeover-voice-user";
+    const first = await openMeetingSocket(roomName, userId);
+    const firstReady = await identifyMeetingSocket(first);
+    const firstVoice = await openVoiceRoomSocket(roomName, userId);
+    await identifyVoiceRoomSocket(firstVoice, firstReady);
+
+    const voiceError = nextMessageWithOpcode(firstVoice, 18);
+    const voiceClosed = closeOf(firstVoice);
+    const second = await openMeetingSocket(roomName, userId);
+    await identifyMeetingSocket(second);
+
+    await vi.waitFor(
+      async () => {
+        await expect(voiceError).resolves.toMatchObject({
+          op: 18,
+          d: { code: 4010, message: "Voice moved to another device" },
+        });
+        await expect(voiceClosed).resolves.toMatchObject({ code: 4010 });
+      },
+      { timeout: 5_000, interval: 10 },
+    );
+
+    second.close();
+  });
+
+  it("answers a Resume of a held, replaced session with SessionReplaced", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "held-takeover-user";
+    const first = await openMeetingSocket(roomName, userId);
+    const firstReady = await identifyMeetingSocket(first);
+    first.close();
+    await waitForResumableSession(roomName, firstReady.participant_id);
+
+    const second = await openMeetingSocket(roomName, userId);
+    await identifyMeetingSocket(second);
+    expect(await hasResumableSession(roomName, firstReady.participant_id)).toBe(
+      false,
+    );
+
+    // The device that was offline during the takeover tries to claim it back.
+    const stale = await openMeetingSocket(roomName, userId);
+    const staleError = nextMessageWithOpcode(stale, 18);
+    const staleClosed = closeOf(stale);
+    stale.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: firstReady.participant_id, seq_ack: 0 },
+      }),
+    );
+
+    await expect(staleError).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4010 },
+    });
+    await expect(staleClosed).resolves.toMatchObject({ code: 4010 });
+
+    second.close();
+  });
+
+  it("leaves the live session alone for a standby identify until it is promoted", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "standby-takeover-user";
+    const first = await openMeetingSocket(roomName, userId);
+    const firstReady = await identifyMeetingSocket(first);
+    const firstMessages: Array<{ op: number; d: unknown }> = [];
+    first.addEventListener("message", (event) => {
+      firstMessages.push(JSON.parse(event.data as string));
+    });
+    let firstClosedEarly = false;
+    first.addEventListener("close", () => {
+      firstClosedEarly = true;
+    });
+
+    const standby = await openMeetingSocket(roomName, userId);
+    const standbyReady = nextMessageWithOpcode(standby, 2);
+    standby.send(
+      JSON.stringify({ op: 0, d: { name: "Warming", standby: true } }),
+    );
+    await standbyReady;
+
+    await settled(first);
+    expect(firstMessages.filter((message) => message.op === 18)).toEqual([]);
+    expect(firstClosedEarly).toBe(false);
+    const liveIds = await runInDurableObject(
+      meetingRoom(roomName),
+      (instance) =>
+        [
+          ...(
+            instance as unknown as {
+              sessions: Map<unknown, { id: string }>;
+            }
+          ).sessions.values(),
+        ].map((session) => session.id),
+    );
+    expect(liveIds).toContain(firstReady.participant_id);
+
+    const firstError = nextMessageWithOpcode(first, 18);
+    const firstClosed = closeOf(first);
+    standby.send(
+      JSON.stringify({
+        op: 15,
+        d: { promote_standby: true, self_mute: false, self_deaf: false },
+      }),
+    );
+
+    await expect(firstError).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4010 },
+    });
+    await expect(firstClosed).resolves.toMatchObject({ code: 4010 });
+
+    standby.close();
+  });
+
+  it("never replaces a different user's session", async () => {
+    const roomName = crypto.randomUUID();
+    const first = await openMeetingSocket(roomName, "peer-one");
+    const firstReady = await identifyMeetingSocket(first);
+    const firstMessages: Array<{ op: number; d: unknown }> = [];
+    first.addEventListener("message", (event) => {
+      firstMessages.push(JSON.parse(event.data as string));
+    });
+    let firstClosed = false;
+    first.addEventListener("close", () => {
+      firstClosed = true;
+    });
+
+    const second = await openMeetingSocket(roomName, "peer-two");
+    const secondReady = await identifyMeetingSocket(second);
+
+    await settled(first);
+    expect(firstMessages.filter((message) => message.op === 18)).toEqual([]);
+    expect(firstClosed).toBe(false);
+    expect(participantIds(secondReady)).toContain(firstReady.participant_id);
+
+    first.close();
+    second.close();
+  });
+});
+
+describe("MeetingRoom voice-channel membership across one user's sessions", () => {
+  async function seedDmVoiceChannel(userIds: string[]) {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS dm_recipients (channel_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    const channelId = `multi-session-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, NULL, 'dm')",
+    )
+      .bind(channelId)
+      .run();
+    for (const userId of userIds) {
+      await env.DB.prepare(
+        "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?)",
+      )
+        .bind(channelId, userId)
+        .run();
+    }
+    return channelId;
+  }
+
+  /** The member's connection state, or null when it is not a member. */
+  const memberState = (roomName: string, channelId: string, userId: string) =>
+    runInDurableObject(meetingRoom(roomName), (instance) => {
+      const live = instance as unknown as {
+        voiceChannelMembers: Map<
+          string,
+          Map<string, { connection_state?: string }>
+        >;
+      };
+      const member = live.voiceChannelMembers.get(channelId)?.get(userId);
+      return member ? (member.connection_state ?? "unknown") : null;
+    });
+  /** The voice channel a live session is in, or null. */
+  const sessionChannel = (roomName: string, sessionId: string) =>
+    runInDurableObject(meetingRoom(roomName), (instance) => {
+      const live = instance as unknown as {
+        sessions: Map<unknown, { id: string; voice_channel_id?: string }>;
+      };
+      for (const session of live.sessions.values()) {
+        if (session.id === sessionId) return session.voice_channel_id ?? null;
+      }
+      return "no such session";
+    });
+
+  async function joinVoiceChannel(
+    roomName: string,
+    socket: WebSocket,
+    sessionId: string,
+    channelId: string,
+  ) {
+    socket.send(
+      JSON.stringify({ op: 33, d: { channel_id: channelId, self_mute: true } }),
+    );
+    await vi.waitFor(
+      async () => {
+        expect(await sessionChannel(roomName, sessionId)).toBe(channelId);
+      },
+      { timeout: 5_000, interval: 5 },
+    );
+  }
+
+  /** Two sessions of one user in the same channel. */
+  async function twoSessionsInChannel(userId: string) {
+    const roomName = crypto.randomUUID();
+    const channelId = await seedDmVoiceChannel([userId, "multi-observer"]);
+    const first = await openGlobalSocket(roomName, userId);
+    const firstReady = await identifyMeetingSocket(first);
+    const second = await openGlobalSocket(roomName, userId);
+    const secondReady = await identifyMeetingSocket(second);
+    await joinVoiceChannel(
+      roomName,
+      first,
+      firstReady.participant_id,
+      channelId,
+    );
+    await joinVoiceChannel(
+      roomName,
+      second,
+      secondReady.participant_id,
+      channelId,
+    );
+    return { roomName, channelId, first, firstReady, second, secondReady };
+  }
+
+  it("keeps the member until the user's last session leaves the channel", async () => {
+    const userId = "multi-leave-user";
+    const { roomName, channelId, first, firstReady, second } =
+      await twoSessionsInChannel(userId);
+
+    first.send(JSON.stringify({ op: 34, d: { channel_id: channelId } }));
+    await settled(first);
+    expect(
+      await sessionChannel(roomName, firstReady.participant_id),
+    ).toBeNull();
+    expect(await memberState(roomName, channelId, userId)).toBe("connected");
+
+    second.send(JSON.stringify({ op: 34, d: { channel_id: channelId } }));
+    await settled(second);
+    expect(await memberState(roomName, channelId, userId)).toBeNull();
+
+    first.close();
+    second.close();
+  });
+
+  it("keeps the member connected when one of two sessions drops abruptly", async () => {
+    const userId = "multi-drop-user";
+    const { roomName, channelId, first, firstReady, second } =
+      await twoSessionsInChannel(userId);
+
+    first.close();
+    await waitForResumableSession(roomName, firstReady.participant_id);
+
+    expect(await memberState(roomName, channelId, userId)).toBe("connected");
+
+    second.close();
+  });
+
+  it("drops the member when the voice session's grace lapses, whatever chat sessions are live", async () => {
+    const userId = "chat-and-voice-user";
+    const roomName = crypto.randomUUID();
+    const channelId = await seedDmVoiceChannel([userId, "multi-observer"]);
+    const chat = await openGlobalSocket(roomName, userId);
+    const chatReady = await identifyMeetingSocket(chat);
+    const voice = await openGlobalSocket(roomName, userId);
+    const voiceReady = await identifyMeetingSocket(voice);
+    await joinVoiceChannel(
+      roomName,
+      voice,
+      voiceReady.participant_id,
+      channelId,
+    );
+    expect(await sessionChannel(roomName, chatReady.participant_id)).toBeNull();
+
+    voice.close();
+    await waitForResumableSession(roomName, voiceReady.participant_id);
+    expect(await memberState(roomName, channelId, userId)).toBe("reconnecting");
+
+    const room = meetingRoom(roomName);
+    await runInDurableObject(room, (instance) => {
+      (
+        instance as unknown as {
+          resumableSessionExpiry: Map<string, number>;
+        }
+      ).resumableSessionExpiry.set(
+        voiceReady.participant_id,
+        Date.now() - 121_000,
+      );
+    });
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+
+    expect(await memberState(roomName, channelId, userId)).toBeNull();
+    // The chat session is still live; it just is not what keeps the member.
+    expect(await sessionChannel(roomName, chatReady.participant_id)).toBeNull();
+
+    chat.close();
+  });
+
+  it("restores a missing member when the same session re-sends the join", async () => {
+    const userId = "restore-member-user";
+    const roomName = crypto.randomUUID();
+    const channelId = await seedDmVoiceChannel([userId, "multi-observer"]);
+    const socket = await openGlobalSocket(roomName, userId);
+    const ready = await identifyMeetingSocket(socket);
+    await joinVoiceChannel(roomName, socket, ready.participant_id, channelId);
+    expect(await memberState(roomName, channelId, userId)).toBe("connected");
+
+    await runInDurableObject(meetingRoom(roomName), (instance) => {
+      (
+        instance as unknown as {
+          voiceChannelMembers: Map<string, Map<string, unknown>>;
+        }
+      ).voiceChannelMembers
+        .get(channelId)
+        ?.delete(userId);
+    });
+    expect(await memberState(roomName, channelId, userId)).toBeNull();
+
+    socket.send(
+      JSON.stringify({ op: 33, d: { channel_id: channelId, self_mute: true } }),
+    );
+    await vi.waitFor(
+      async () => {
+        expect(await memberState(roomName, channelId, userId)).toBe(
+          "connected",
+        );
+      },
+      { timeout: 5_000, interval: 5 },
+    );
+
+    socket.close();
+  });
+});
+
+describe("VoiceRoom reaper confirms a joined participant", () => {
+  it("keeps a participant the MeetingRoom still reports as joined", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "reaper-survivor";
+    const meetingSocket = await openMeetingSocket(roomName, userId);
+    const ready = await identifyMeetingSocket(meetingSocket);
+    const voiceSocket = await openVoiceRoomSocket(roomName, userId);
+    await identifyVoiceRoomSocket(voiceSocket, ready);
+    const voiceRoom = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+
+    // Age the grant past the recheck window so the next alarm must ask the
+    // MeetingRoom about it.
+    const staleAt = Date.now() - 10 * 60_000;
+    await runInDurableObject(voiceRoom, (_instance, state) => {
+      state.storage.sql.exec(
+        "UPDATE voice_join_grants SET updated_at = ? WHERE participant_id = ?",
+        staleAt,
+        ready.participant_id,
+      );
+    });
+    let voiceClosed = false;
+    voiceSocket.addEventListener("close", () => {
+      voiceClosed = true;
+    });
+
+    expect(await runDurableObjectAlarm(voiceRoom)).toBe(true);
+
+    const { rows, confirmedAt } = await runInDurableObject(
+      voiceRoom,
+      (_instance, state) => ({
+        rows: [
+          ...state.storage.sql.exec(
+            "SELECT id FROM participants WHERE id = ?",
+            ready.participant_id,
+          ),
+        ].length,
+        confirmedAt: state.storage.sql
+          .exec(
+            "SELECT updated_at FROM voice_join_grants WHERE participant_id = ?",
+            ready.participant_id,
+          )
+          .one().updated_at as number,
+      }),
+    );
+    expect(rows).toBe(1);
+    expect(confirmedAt).toBeGreaterThan(staleAt + 5 * 60_000);
+    expect(voiceClosed).toBe(false);
+
+    meetingSocket.close();
+    voiceSocket.close();
   });
 });

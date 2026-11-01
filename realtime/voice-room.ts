@@ -142,6 +142,14 @@ interface ServerMsg {
   d: unknown;
 }
 
+interface VoiceSocketClose {
+  code: number;
+  reason: string;
+}
+
+/** Close reason (with CloseCode.SessionReplaced) when voice moves device. */
+const VOICE_SESSION_REPLACED_REASON = "Voice moved to another device";
+
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   admission?: {
@@ -190,6 +198,8 @@ const VOICE_WS_RATE_LIMITS: Record<number, number> = {
  * reports it. Each one costs everyone pulling the track a short gap.
  */
 const REPUBLISH_REQUEST_INTERVAL_MS = 3_000;
+/** How long a join grant stands before the alarm re-checks it (see reapParticipantsWithoutJoin). */
+const VOICE_JOIN_GRANT_RECHECK_MS = 60_000;
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
@@ -207,6 +217,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private readonly voiceJoinGrantWaiters = new VoiceJoinGrantWaiters();
   private readonly identifyingSockets = new Set<WebSocket>();
   private voiceJoinGrantWaitMs = VOICE_JOIN_GRANT_WAIT_MS;
+  private voiceJoinGrantRecheckMs = VOICE_JOIN_GRANT_RECHECK_MS;
 
   constructor(ctx: DurableObjectState<unknown>, env: Env) {
     super(ctx, env);
@@ -504,7 +515,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       if (applied) {
         this.voiceJoinGrantWaiters.notify(update.participantId);
         if (!update.granted) {
-          await this.disconnectParticipantImmediately(update.participantId);
+          await this.disconnectParticipantImmediately(
+            update.participantId,
+            update.replaced === true,
+          );
         }
       }
       return Response.json({ applied });
@@ -774,6 +788,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           await this.disconnectParticipant(pid);
         }
       }
+
+      await this.reapParticipantsWithoutJoin(now);
 
       // Prune pending reconnects whose grace period expired
       this.advanceListenTogetherIfNeeded(now);
@@ -1700,10 +1716,30 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   private async disconnectParticipantImmediately(
     participantId: string,
+    replaced = false,
   ): Promise<boolean> {
     const ws = this.getWsByParticipant(participantId);
     if (ws) {
-      await this.handleLeave(ws, true);
+      if (replaced) {
+        // The user's voice moved to another device: tell this one to stop
+        // (no reconnect) before its tracks go.
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: {
+            code: CloseCode.SessionReplaced,
+            message: VOICE_SESSION_REPLACED_REASON,
+          },
+        });
+      }
+      await this.handleLeave(
+        ws,
+        replaced
+          ? {
+              code: CloseCode.SessionReplaced,
+              reason: VOICE_SESSION_REPLACED_REASON,
+            }
+          : true,
+      );
       return true;
     }
 
@@ -1934,8 +1970,62 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private async confirmVoiceJoinGrant(
     query: VoiceJoinGrantQuery,
   ): Promise<boolean> {
+    return (await this.checkVoiceJoinGrant(query)) === true;
+  }
+
+  /**
+   * Heartbeats keep a voice socket alive on their own, so a participant whose
+   * MeetingRoom session ended while the revocation push was lost (a failed
+   * fetch, a restart in between) would stay in the room with its tracks.
+   * Each alarm re-checks, with the MeetingRoom, every identified participant
+   * whose grant has not been confirmed for voiceJoinGrantRecheckMs, and
+   * disconnects those it no longer reports as joined. A failed check keeps
+   * the participant; the next alarm asks again.
+   */
+  private async reapParticipantsWithoutJoin(now: number): Promise<void> {
+    const due: Array<{ ws: WebSocket; query: VoiceJoinGrantQuery }> = [];
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.getVoiceAttachment(ws);
+      const participantId = attachment?.participant_id;
+      const subject = attachment?.admission?.subject;
+      if (!participantId || !subject) continue;
+      if (!this.isCurrentAuthenticatedVoiceSocket(ws)) continue;
+      const confirmedAt = this.voiceJoinGrants.updatedAt(participantId);
+      if (
+        confirmedAt !== null &&
+        now - confirmedAt < this.voiceJoinGrantRecheckMs
+      ) {
+        continue;
+      }
+      due.push({ ws, query: { participantId, subject } });
+    }
+    if (due.length === 0) return;
+
+    const verdicts = await Promise.all(
+      due.map(({ query }) => this.checkVoiceJoinGrant(query)),
+    );
+    for (const [index, { ws, query }] of due.entries()) {
+      const verdict = verdicts[index];
+      if (verdict === null) continue;
+      if (verdict) {
+        this.voiceJoinGrants.recordConfirmed(query, now);
+        this.voiceJoinGrants.touch(query.participantId, now);
+        continue;
+      }
+      if (this.getParticipantId(ws) !== query.participantId) continue;
+      roomLog.info(
+        `Reaping participant=${query.participantId}: no longer joined in the MeetingRoom`,
+      );
+      await this.handleLeave(ws, true);
+    }
+  }
+
+  /** The MeetingRoom's answer: true, false, or null when it could not say. */
+  private async checkVoiceJoinGrant(
+    query: VoiceJoinGrantQuery,
+  ): Promise<boolean | null> {
     const namespace = this.env.MEETING_ROOM;
-    if (!namespace || !this.roomSlug) return false;
+    if (!namespace || !this.roomSlug) return null;
     try {
       const response = await namespace
         .get(namespace.idFromName(this.roomSlug))
@@ -1944,12 +2034,15 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           headers: { "Content-Type": "application/json" },
           body: serializeVoiceJoinGrantQuery(query),
         });
-      if (!response.ok) return false;
+      if (!response.ok) {
+        await response.body?.cancel();
+        return null;
+      }
       const body = (await response.json()) as { granted?: unknown };
-      return body.granted === true;
+      return typeof body.granted === "boolean" ? body.granted : null;
     } catch (error) {
       roomLog.warn("Voice join grant check failed", error);
-      return false;
+      return null;
     }
   }
 
@@ -2092,9 +2185,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       roomLog.info(
         `Evicting duplicate session for participant=${otherAtt.participant_id}`,
       );
-      try {
-        otherWs.close(1000, "Replaced by new connection");
-      } catch {}
+      this.closeVoiceSocket(otherWs, {
+        code: 1000,
+        reason: "Replaced by new connection",
+      });
     }
 
     ws.serializeAttachment(attachment);
@@ -3316,7 +3410,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
    * Client should use full session teardown + recreate instead.
    * This handler now returns an error instructing the client to reset.
    */
-  private async handleLeave(ws: WebSocket, closeSocket = true): Promise<void> {
+  private async handleLeave(
+    ws: WebSocket,
+    closeSocket: boolean | VoiceSocketClose = true,
+  ): Promise<void> {
     const attachment = this.getVoiceAttachment(ws);
     const participantId = attachment?.participant_id;
     if (!participantId) return;
@@ -3340,22 +3437,40 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     await this.disconnectParticipant(
       participantId,
       closeSocket ? ws : undefined,
+      typeof closeSocket === "object" ? closeSocket : undefined,
     );
   }
 
   private async disconnectParticipant(
     participantId: string,
     ws?: WebSocket,
+    close: VoiceSocketClose = { code: 1000, reason: "Left voice" },
   ): Promise<void> {
     roomLog.info("Participant " + participantId + " disconnecting");
     await this.purgeParticipantState(participantId, ws);
 
-    if (ws) {
-      try {
-        ws.close(1000, "Left voice");
-      } catch {
-        // The voice socket may already be closed.
-      }
+    if (ws) this.closeVoiceSocket(ws, close);
+  }
+
+  /**
+   * Closes a voice socket this room is done with. The attachment forgets the
+   * participant first: a socket whose peer is gone can linger in
+   * getWebSockets() while its close times out, and after a restart it must
+   * not count as a live participant (identifiedVoiceParticipantIds).
+   */
+  private closeVoiceSocket(ws: WebSocket, close: VoiceSocketClose): void {
+    const attachment = this.getVoiceAttachment(ws);
+    try {
+      ws.serializeAttachment(
+        attachment?.admission ? { admission: attachment.admission } : null,
+      );
+    } catch {
+      // The socket is already gone.
+    }
+    try {
+      ws.close(close.code, close.reason);
+    } catch {
+      // The voice socket may already be closed.
     }
   }
 
