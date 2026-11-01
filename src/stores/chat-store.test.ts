@@ -584,7 +584,7 @@ describe("chatStore logic equivalence", () => {
       useChatStore.setState(stateWith({}));
       const members = [
         {
-          clerk_user_id: "u1",
+          user_id: "u1",
           name: "alice",
           self_mute: false,
           self_deaf: false,
@@ -609,7 +609,7 @@ describe("chatStore logic equivalence", () => {
           voiceChannelStates: {
             "vc-1": [
               {
-                clerk_user_id: "u1",
+                user_id: "u1",
                 name: "alice",
                 self_mute: false,
                 self_deaf: false,
@@ -651,7 +651,7 @@ describe("chatStore logic equivalence", () => {
         channelId: "vc-1",
         members: [
           {
-            clerk_user_id: "u1",
+            user_id: "u1",
             name: "alice",
             self_mute: false,
             self_deaf: false,
@@ -674,7 +674,7 @@ describe("chatStore logic equivalence", () => {
           voiceChannelStates: {
             "vc-1": [
               {
-                clerk_user_id: "u1",
+                user_id: "u1",
                 name: "alice",
                 self_mute: false,
                 self_deaf: false,

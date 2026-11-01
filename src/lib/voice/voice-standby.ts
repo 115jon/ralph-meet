@@ -293,11 +293,11 @@ export function resetVoiceStandbyForTests(): void {
 }
 
 function isOccupiedBySomeoneElse(
-  members: readonly { clerk_user_id?: string; connected?: boolean }[],
+  members: readonly { user_id?: string; connected?: boolean }[],
   userId: string,
 ): boolean {
   return members.some(
-    (member) => member.clerk_user_id !== userId && member.connected !== false,
+    (member) => member.user_id !== userId && member.connected !== false,
   );
 }
 
@@ -359,8 +359,7 @@ export function useOccupiedVoiceStandby(input: {
   }[];
   voiceChannelStates: Record<
     string,
-    | readonly Pick<VoiceChannelMember, "clerk_user_id" | "connected">[]
-    | undefined
+    readonly Pick<VoiceChannelMember, "user_id" | "connected">[] | undefined
   >;
   user: User | null | undefined;
 }): void {

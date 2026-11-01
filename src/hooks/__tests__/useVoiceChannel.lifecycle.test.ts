@@ -520,7 +520,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
   it("merges legacy full updates over cached optional profile fields", () => {
     const cached: VoiceState = {
       id: "remote",
-      clerk_user_id: "user-remote",
+      user_id: "user-remote",
       name: "Cached Name",
       username: "cached-user",
       display_name: "Cached Display",
@@ -535,7 +535,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     };
     const legacyUpdate: VoiceState = {
       id: cached.id,
-      clerk_user_id: cached.clerk_user_id,
+      user_id: cached.user_id,
       name: "Legacy Name",
       self_mute: true,
       self_deaf: false,
@@ -546,7 +546,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     };
     const delta: VoiceStateDelta = {
       id: cached.id,
-      clerk_user_id: cached.clerk_user_id,
+      user_id: cached.user_id,
       self_mute: true,
       self_deaf: false,
       self_stream: false,
@@ -568,7 +568,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     chatState.voiceChannelStates = {
       channel: [
         {
-          clerk_user_id: "other-user",
+          user_id: "other-user",
           name: "Other",
           connected: true,
         },
@@ -633,7 +633,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     chatState.voiceChannelStates = {
       channel: [
         {
-          clerk_user_id: "other-user",
+          user_id: "other-user",
           name: "Other",
           connected: true,
         },
@@ -829,7 +829,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
 
     const participant = {
       id: "remote",
-      clerk_user_id: "user-remote",
+      user_id: "user-remote",
       name: "Cached Name",
       username: "cached-user",
       display_name: "Cached Display",
@@ -853,7 +853,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       sfu.emit("voice-state-update", {
         participant: {
           id: participant.id,
-          clerk_user_id: participant.clerk_user_id,
+          user_id: participant.user_id,
           self_mute: true,
           self_deaf: participant.self_deaf,
           self_stream: participant.self_stream,
@@ -2169,7 +2169,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
 
     const remote = {
       id: "remote-uuid",
-      clerk_user_id: "user-remote",
+      user_id: "user-remote",
       name: "Remote",
       self_mute: false,
       self_deaf: false,
@@ -2186,7 +2186,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       });
       sfu.emit("speaking", { participantId: remote.id, speaking: 1 });
     });
-    expect(hook.result.current.speakingUsers[remote.clerk_user_id]).toBe(true);
+    expect(hook.result.current.speakingUsers[remote.user_id]).toBe(true);
 
     await act(async () => {
       sfu.emit("speaking", {
@@ -2195,9 +2195,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       });
       sfu.emit("speaking", { participantId: remote.id, speaking: 0 });
     });
-    expect(hook.result.current.speakingUsers[remote.clerk_user_id]).toBe(
-      undefined,
-    );
+    expect(hook.result.current.speakingUsers[remote.user_id]).toBe(undefined);
 
     hook.unmount();
   });

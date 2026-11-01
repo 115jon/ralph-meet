@@ -1450,7 +1450,7 @@ export function useVoiceChannel({
       const finalVolume = isPeerSilenced ? 0 : settings.volume / 100;
       const member = (
         channelId ? (voiceChannelStates[channelId] ?? []) : []
-      ).find((entry) => entry.clerk_user_id === appUserId);
+      ).find((entry) => entry.user_id === appUserId);
       const decision = `${member?.self_mute ?? ""}:${member?.self_deaf ?? ""}:${member?.connection_state ?? ""}:${finalVolume}`;
       if (volumeDecisionLogRef.current.get(appUserId) !== decision) {
         volumeDecisionLogRef.current.set(appUserId, decision);
@@ -1598,7 +1598,7 @@ export function useVoiceChannel({
       const isStillInChannel =
         isCall ||
         mode === "room" ||
-        vcMembers.some((m: any) => m.clerk_user_id === appUserId);
+        vcMembers.some((m: any) => m.user_id === appUserId);
       if (!isStillInChannel) continue;
 
       hasRemoteSubs = true;
@@ -1714,7 +1714,7 @@ export function useVoiceChannel({
     const rememberParticipant = (participant: VoiceState) => {
       participantsRef.current.set(participant.id, participant);
       const participantUserId =
-        mode === "room" ? participant.id : participant.clerk_user_id;
+        mode === "room" ? participant.id : participant.user_id;
       if (participantUserId) {
         uuidToUserIdRef.current.set(participant.id, participantUserId);
         sfu.setUserMapping(participant.id, participantUserId);
@@ -2209,7 +2209,7 @@ export function useVoiceChannel({
       }) => {
         const p = participantsRef.current.get(participantId);
         const profileUserId =
-          p?.clerk_user_id ?? uuidToUserIdRef.current.get(participantId);
+          p?.user_id ?? uuidToUserIdRef.current.get(participantId);
         if (p) {
           const updated = {
             ...p,
@@ -2391,7 +2391,7 @@ export function useVoiceChannel({
               const peerSetting =
                 currentSettingsRef.current.peerSettings[appUserId];
               const member = voiceChannelMembersRef.current.find(
-                (entry) => entry.clerk_user_id === appUserId,
+                (entry) => entry.user_id === appUserId,
               );
               const finalVolume =
                 currentSettingsRef.current.isDeafened ||
@@ -2925,8 +2925,7 @@ export function useVoiceChannel({
     !!channelId &&
     !!serverId &&
     (voiceChannelStates[channelId] ?? []).some(
-      (member) =>
-        member.clerk_user_id !== user?.id && member.connected !== false,
+      (member) => member.user_id !== user?.id && member.connected !== false,
     );
   const standbyProfileRef = useRef({
     avatarDisplay: chatUserAvatarDisplay,
@@ -5496,10 +5495,10 @@ export function useVoiceChannel({
     // All Voice Channels (and DM calls): derive from gateway member list first
     // This ensures presence is visible immediately even before the SFU connects
     vcMembers.forEach((m) => {
-      if (m.clerk_user_id === user?.id) return;
+      if (m.user_id === user?.id) return;
       // find their SFU participant info if they have joined the SFU
       const pId = Array.from(uuidToUserIdRef.current.entries()).find(
-        ([, cId]) => cId === m.clerk_user_id,
+        ([, cId]) => cId === m.user_id,
       )?.[0];
       const p = pId ? participantsRef.current.get(pId) : null;
       // Gateway presence is canonical once available; SFU data is only a
@@ -5512,7 +5511,7 @@ export function useVoiceChannel({
         avatar_display: m.avatar_display ?? null,
       });
       remotes.push({
-        appUserId: m.clerk_user_id,
+        appUserId: m.user_id,
         name: identity.name,
         avatar: identity.avatarUrl ?? undefined,
         avatarDisplay: identity.avatarDisplay,

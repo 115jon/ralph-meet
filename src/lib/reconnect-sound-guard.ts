@@ -28,22 +28,20 @@ export function getVoiceChannelPresenceSound(
   if (!myUserId) return null;
 
   const iAmInChannel = nextMembers.some(
-    (member) => member.clerk_user_id === myUserId,
+    (member) => member.user_id === myUserId,
   );
   if (!iAmInChannel) return null;
 
-  const prevIds = new Set(prevMembers.map((member) => member.clerk_user_id));
-  const nextIds = new Set(nextMembers.map((member) => member.clerk_user_id));
+  const prevIds = new Set(prevMembers.map((member) => member.user_id));
+  const nextIds = new Set(nextMembers.map((member) => member.user_id));
 
   const someoneJoined = nextMembers.some(
-    (member) =>
-      member.clerk_user_id !== myUserId && !prevIds.has(member.clerk_user_id),
+    (member) => member.user_id !== myUserId && !prevIds.has(member.user_id),
   );
   if (someoneJoined) return "join";
 
   const someoneLeft = prevMembers.some(
-    (member) =>
-      member.clerk_user_id !== myUserId && !nextIds.has(member.clerk_user_id),
+    (member) => member.user_id !== myUserId && !nextIds.has(member.user_id),
   );
   if (someoneLeft) return "leave";
 

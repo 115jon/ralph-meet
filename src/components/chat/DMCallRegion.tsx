@@ -172,9 +172,9 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     s.dmChannels.find((c) => c.id === channelId),
   ) as any;
   const remoteMember = voiceMembers.find(
-    (m: any) => m.clerk_user_id !== currentUser?.id,
+    (m: any) => m.user_id !== currentUser?.id,
   );
-  const otherUserId = dmChannel?.recipient?.id || remoteMember?.clerk_user_id;
+  const otherUserId = dmChannel?.recipient?.id || remoteMember?.user_id;
 
   const isActive = voiceMembers.length > 0;
   const isRingingOutgoing =
@@ -265,11 +265,11 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       if (store.status === "idle") {
         // Reconstruct remote user from the voice channel member list
         const remoteMember = voiceMembers.find(
-          (m: any) => m.clerk_user_id !== currentUser?.id,
+          (m: any) => m.user_id !== currentUser?.id,
         );
         const remoteInfo = remoteMember
           ? {
-              id: remoteMember.clerk_user_id,
+              id: remoteMember.user_id,
               username: remoteMember.username ?? remoteMember.name ?? "User",
               display_name:
                 remoteMember.display_name ??
@@ -357,7 +357,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     };
   } else if (!computedRemoteUser && otherUserId) {
     // Try to guess from voice members if remoteUser isn't in useCallStore anymore
-    const member = voiceMembers.find((m) => m.clerk_user_id === otherUserId);
+    const member = voiceMembers.find((m) => m.user_id === otherUserId);
     computedRemoteUser = {
       id: otherUserId,
       username: member?.username || member?.name || "User",
@@ -372,7 +372,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
   // Find if remote user is actually sitting in the voice channel natively right now
   const isRemoteUserInLobby = voiceMembers.some(
-    (m) => m.clerk_user_id === computedRemoteUser?.id,
+    (m) => m.user_id === computedRemoteUser?.id,
   );
   const fakeHasConnected = hasConnected || isRemoteUserInLobby;
 
@@ -423,7 +423,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       // Show ourselves (caller always, callee with pulse)
       if (currentUser) {
         const meMember = voiceMembers.find(
-          (m: any) => m.clerk_user_id === currentUser.id,
+          (m: any) => m.user_id === currentUser.id,
         );
         const meInVoice = !!meMember;
         const shouldShowMe = isRingingOutgoing ? true : meInVoice;
@@ -445,7 +445,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       }
       if (remoteUser) {
         const remoteMember = voiceMembers.find(
-          (m: any) => m.clerk_user_id === remoteUser.id,
+          (m: any) => m.user_id === remoteUser.id,
         );
         lobbyParticipants.push({
           id: remoteUser.id,
@@ -466,9 +466,9 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       // This handles page reload, re-joining, or viewing an ongoing call.
       // We show everyone currently in the voice channel EXCEPT ourselves.
       for (const m of voiceMembers) {
-        if (m.clerk_user_id === currentUser?.id) continue; // don't show ourselves in lobby
+        if (m.user_id === currentUser?.id) continue; // don't show ourselves in lobby
         lobbyParticipants.push({
-          id: m.clerk_user_id,
+          id: m.user_id,
           name: getDisplayName(
             {
               display_name: m.display_name,

@@ -11,8 +11,9 @@
 //
 // Validation uses `Schema.is` guards built when the decoder is made, so a
 // frame costs one property walk and no copy; handlers get the parsed object
-// itself, extra keys included. Encoding is plain JSON.stringify at the call
-// sites: the wire format is unchanged.
+// itself, extra keys included, unless the rule has a `normalize` step (wire
+// compatibility rewrites, e.g. normalizeUserIdField in user-id.ts). Encoding
+// is plain JSON.stringify at the call sites: the wire format is unchanged.
 //
 // Schema only. Clients load this file, so do not add Effect runtime modules.
 
@@ -86,6 +87,12 @@ interface PayloadRule<S extends Schema.Top = Schema.Top> {
   readonly schema: S;
   /** The Error frame `message` (server) or log line (client) on failure. */
   readonly invalid: string;
+  /**
+   * Rewrites an accepted `d` before the handler sees it, for wire
+   * compatibility (old field names). Must not throw; may return `d` itself.
+   */
+  // Method syntax: a rule for one schema must fit PayloadRule<Schema.Top>.
+  normalize?(d: S["Type"]): S["Type"];
 }
 
 /**
@@ -122,6 +129,7 @@ const UNKNOWN_OP = { ok: false, reason: "unknown-op" } as const;
 interface CompiledRule {
   readonly is: (value: unknown) => boolean;
   readonly invalid: string;
+  readonly normalize?: PayloadRule["normalize"];
 }
 
 /**
@@ -135,7 +143,11 @@ export function compilePayloadDecoder<const R extends PayloadRules>(
   for (const [op, rule] of Object.entries(rules)) {
     compiled.set(
       Number(op),
-      rule && { is: Schema.is(rule.schema), invalid: rule.invalid },
+      rule && {
+        is: Schema.is(rule.schema),
+        invalid: rule.invalid,
+        normalize: rule.normalize,
+      },
     );
   }
 
@@ -147,6 +159,10 @@ export function compilePayloadDecoder<const R extends PayloadRules>(
     }
     // The guard for this opcode accepted `d` (or the opcode has no payload),
     // which is what DecodedMessage<R> states for it.
+    if (rule?.normalize) {
+      const message = { op: frame.op, d: rule.normalize(frame.d) };
+      return { ok: true, message: message as DecodedMessage<R> };
+    }
     return { ok: true, message: frame as DecodedMessage<R> };
   };
 }

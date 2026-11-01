@@ -357,7 +357,7 @@ export default function ChatPage() {
 
       const voiceParticipant = voiceState.channelId
         ? (voiceChannelStates[voiceState.channelId] ?? []).find(
-            (member) => member.clerk_user_id === targetUserId,
+            (member) => member.user_id === targetUserId,
           )
         : null;
       if (voiceParticipant) {

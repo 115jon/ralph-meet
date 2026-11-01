@@ -512,7 +512,7 @@ function useLeavingRows<T>(
   return useMemo(() => mergeLeavingRows(current, keyOf), [current, keyOf]);
 }
 
-const occupantKey = (member: VoiceChannelMember) => member.clerk_user_id;
+const occupantKey = (member: VoiceChannelMember) => member.user_id;
 
 const SortableChannelItem = memo(function SortableChannelItem({
   channel,
@@ -566,7 +566,7 @@ const SortableChannelItem = memo(function SortableChannelItem({
   const occupantRows = useLeavingRows(vcMembers, occupantKey);
   const occupied = isVoice && vcMembers.length > 0;
   const currentVoiceMember =
-    vcMembers.find((member) => member.clerk_user_id === currentUserId) ?? null;
+    vcMembers.find((member) => member.user_id === currentUserId) ?? null;
   const youAreHere = Boolean(
     isVoice &&
     currentVoiceMember &&
@@ -766,17 +766,17 @@ const SortableChannelItem = memo(function SortableChannelItem({
           >
             {occupantRows.map(({ item: m, leaving }) => (
               <VoiceOccupantLeaf
-                key={m.clerk_user_id}
+                key={m.user_id}
                 member={m}
                 leaving={leaving}
                 channelId={channel.id}
-                isCurrentUser={m.clerk_user_id === currentUserId}
+                isCurrentUser={m.user_id === currentUserId}
                 isCurrentClientVoiceConnected={
                   localVoiceConnected && localVoiceChannelId === channel.id
                 }
                 streamThumbnailUrl={
                   streamPreviewChannelId === channel.id
-                    ? (streamThumbnails[m.clerk_user_id] ??
+                    ? (streamThumbnails[m.user_id] ??
                       m.stream_preview_url ??
                       null)
                     : (m.stream_preview_url ?? null)
@@ -1751,9 +1751,9 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
   onPopoverUser,
   onWatchStream,
 }: VoiceOccupantLeafProps) {
-  const speakingAttr = useSpeakingAttr(member.clerk_user_id);
+  const speakingAttr = useSpeakingAttr(member.user_id);
   const activity = useActivityStore((state) => {
-    const presence = state.activeByUser[member.clerk_user_id];
+    const presence = state.activeByUser[member.user_id];
     return presence?.channelId === channelId ? presence : undefined;
   });
   const isReconnecting =
@@ -1761,7 +1761,7 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
     (isCurrentUser && !isCurrentClientVoiceConnected);
   const isMutedByCurrentUser = useVoiceSettingsStore((state) => {
     const settings = state.getSettings();
-    return settings.peerSettings[member.clerk_user_id]?.muted ?? false;
+    return settings.peerSettings[member.user_id]?.muted ?? false;
   });
   const shouldShowStreamState = shouldShowVoiceMemberStreamState(member, {
     isCurrentUser,
@@ -1777,9 +1777,9 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
     if (Object.prototype.hasOwnProperty.call(member, "avatar_url")) {
       return member.avatar_url ?? null;
     }
-    const m = s.members.find((m) => m.user.id === member.clerk_user_id);
+    const m = s.members.find((m) => m.user.id === member.user_id);
     if (m?.user.avatar_url) return m.user.avatar_url;
-    const r = s.relationships.find((r) => r.user.id === member.clerk_user_id);
+    const r = s.relationships.find((r) => r.user.id === member.user_id);
     if (r?.user.avatar_url) return r.user.avatar_url;
     return null;
   });
@@ -1787,9 +1787,9 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
     if (Object.prototype.hasOwnProperty.call(member, "avatar_display")) {
       return member.avatar_display ?? null;
     }
-    const m = s.members.find((m) => m.user.id === member.clerk_user_id);
+    const m = s.members.find((m) => m.user.id === member.user_id);
     if (m?.user.avatar_display) return m.user.avatar_display;
-    const r = s.relationships.find((r) => r.user.id === member.clerk_user_id);
+    const r = s.relationships.find((r) => r.user.id === member.user_id);
     if (r?.user.avatar_display) return r.user.avatar_display;
     return null;
   });
@@ -1797,12 +1797,12 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
     if (Object.prototype.hasOwnProperty.call(member, "display_name_style")) {
       return member.display_name_style ?? null;
     }
-    const m = s.members.find((m) => m.user.id === member.clerk_user_id);
+    const m = s.members.find((m) => m.user.id === member.user_id);
     if (m?.user.display_name_style) return m.user.display_name_style;
-    const r = s.relationships.find((r) => r.user.id === member.clerk_user_id);
+    const r = s.relationships.find((r) => r.user.id === member.user_id);
     if (r?.user.display_name_style) return r.user.display_name_style;
     const dm = s.dmChannels.find(
-      (channel) => channel.recipient?.id === member.clerk_user_id,
+      (channel) => channel.recipient?.id === member.user_id,
     );
     return dm?.recipient?.display_name_style ?? null;
   });
@@ -1820,14 +1820,14 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
 
   const userInfo = useMemo(
     () => ({
-      id: member.clerk_user_id,
+      id: member.user_id,
       username: resolvedIdentity.username,
       display_name: resolvedIdentity.displayName,
       avatar_url: resolvedIdentity.avatarUrl,
       avatar_display: resolvedAvatarDisplay,
     }),
     [
-      member.clerk_user_id,
+      member.user_id,
       resolvedIdentity.username,
       resolvedIdentity.displayName,
       resolvedIdentity.avatarUrl,
@@ -2035,7 +2035,7 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
               onWatchStream
                 ? () => {
                     closeStreamPreview();
-                    onWatchStream(channelId, member.clerk_user_id);
+                    onWatchStream(channelId, member.user_id);
                   }
                 : undefined
             }
@@ -2183,7 +2183,7 @@ const ChannelCategoryGroup = memo(function ChannelCategoryGroup({
           const vcMembers =
             voiceChannelStates[channel.id] ?? EMPTY_VOICE_MEMBERS;
           const isConnectedVoice =
-            isVoice && vcMembers.some((m) => m.clerk_user_id === currentUserId);
+            isVoice && vcMembers.some((m) => m.user_id === currentUserId);
           const unread =
             !isActive && isUnread(channel.id, readStates, lastMessageAt);
 

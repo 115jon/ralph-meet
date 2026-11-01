@@ -57,6 +57,7 @@ import {
   decodeVoiceGatewayClientFrame,
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
+  LEGACY_CLERK_USER_ID_COMPAT,
   parseGatewayFrame,
   RETIRED_BROWSER_SFU_OPS,
   type VoiceClientPayload,
@@ -104,6 +105,13 @@ interface Env {
 // Opcodes, codes and payload schemas: src/lib/gateway-protocol.
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
+
+/**
+ * A participant's user id: `user_id`, or `clerk_user_id` in a row only
+ * pre-rename code wrote (see migrateParticipantsUserIdColumns).
+ * TODO(user-id-rename phase 2): plain `user_id`.
+ */
+const PARTICIPANT_USER_ID_SQL = "COALESCE(user_id, clerk_user_id)";
 
 interface VoiceSql {
   exec<T extends Record<string, unknown>>(
@@ -237,10 +245,46 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     });
   }
 
+  /**
+   * participants has the user id twice: `user_id`, and `clerk_user_id`, its
+   * pre-rename name, which the previous Worker version reads and writes. The
+   * room writes both (while LEGACY_CLERK_USER_ID_COMPAT is on) and reads
+   * PARTICIPANT_USER_ID_SQL, so a rollback, and the roll-forward after it,
+   * both find every row's user.
+   *
+   * Runs on every start, before anything else touches the table: adds a
+   * missing column (a pre-rename room has no `user_id`), then copies
+   * `clerk_user_id` into `user_id` wherever they differ. Only pre-rename code
+   * makes them differ (rows it inserted, or upserted during a rollback); this
+   * code writes both, so a second start changes nothing.
+   *
+   * TODO(user-id-rename phase 2): drop `clerk_user_id` in a later migration
+   * (see docs/user-id-rename.md), with this method and the dual write.
+   */
+  private migrateParticipantsUserIdColumns() {
+    const columns = new Set<string>();
+    for (const row of this.sql.exec<{ name: string }>(
+      "PRAGMA table_info(participants)",
+    )) {
+      columns.add(row.name);
+    }
+    if (!columns.has("user_id")) {
+      this.sql.exec("ALTER TABLE participants ADD COLUMN user_id TEXT");
+    }
+    if (!columns.has("clerk_user_id")) {
+      this.sql.exec("ALTER TABLE participants ADD COLUMN clerk_user_id TEXT");
+    }
+    this.sql.exec(
+      `UPDATE participants SET user_id = clerk_user_id
+       WHERE clerk_user_id IS NOT NULL AND user_id IS NOT clerk_user_id`,
+    );
+  }
+
   private initSchema() {
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS participants (
         id TEXT PRIMARY KEY,
+        user_id TEXT,
         clerk_user_id TEXT,
         native_screen_session_id TEXT,
         last_heartbeat INTEGER DEFAULT 0,
@@ -248,6 +292,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         connection_id TEXT
       );
     `);
+    this.migrateParticipantsUserIdColumns();
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS soundboard_legacy_playback_owners (
         playback_id TEXT PRIMARY KEY,
@@ -1750,12 +1795,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private getUserIdForParticipant(participantId: string): string | null {
     const rows = [
       ...this.sql.exec(
-        "SELECT clerk_user_id FROM participants WHERE id = ?",
+        `SELECT ${PARTICIPANT_USER_ID_SQL} AS user_id FROM participants WHERE id = ?`,
         participantId,
       ),
     ];
     if (rows.length === 0) return null;
-    const userId = rows[0].clerk_user_id as string | null;
+    const userId = rows[0].user_id as string | null;
     return userId || participantId;
   }
 
@@ -1764,7 +1809,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       ...this.sql.exec(
         `SELECT p.id
        FROM participants p
-       WHERE (p.clerk_user_id = ? OR p.id = ?)
+       WHERE (COALESCE(p.user_id, p.clerk_user_id) = ? OR p.id = ?)
          AND EXISTS (
            SELECT 1
            FROM tracks t
@@ -2055,15 +2100,18 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     ws.serializeAttachment(attachment);
 
     this.sql.exec(
-      `INSERT INTO participants (id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id)
-       VALUES (?, ?, NULL, ?, 0, ?)
+      `INSERT INTO participants (id, user_id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id)
+       VALUES (?, ?, ?, NULL, ?, 0, ?)
        ON CONFLICT(id) DO UPDATE SET
+         user_id = excluded.user_id,
          clerk_user_id = excluded.clerk_user_id,
          native_screen_session_id = NULL,
          last_heartbeat = excluded.last_heartbeat,
          connection_id = excluded.connection_id`,
       d.participant_id,
       userId ?? null,
+      // TODO(user-id-rename phase 2): stop writing clerk_user_id.
+      LEGACY_CLERK_USER_ID_COMPAT ? (userId ?? null) : null,
       Date.now(),
       connectionId,
     );
@@ -3104,16 +3152,16 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         return;
       }
 
-      // Look up the sender's clerk_user_id so clients can filter per-card
+      // Look up the sender's user_id so clients can filter per-card
       let userId: string | null = null;
       try {
         const pRows = [
-          ...this.sql.exec<{ clerk_user_id: string }>(
-            "SELECT clerk_user_id FROM participants WHERE id = ?",
+          ...this.sql.exec<{ user_id: string }>(
+            `SELECT ${PARTICIPANT_USER_ID_SQL} AS user_id FROM participants WHERE id = ?`,
             pid,
           ),
         ];
-        userId = pRows.length > 0 ? (pRows[0].clerk_user_id ?? null) : null;
+        userId = pRows.length > 0 ? (pRows[0].user_id ?? null) : null;
       } catch {
         // non-fatal — overlay will fall back to showing on all cards
       }
@@ -3709,10 +3757,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private getLegacySoundboardPlaybackOwners(playbackId: string): Set<string> {
     const candidateOwners = new Set<string>();
     for (const row of this.sql.exec(
-      "SELECT id, clerk_user_id FROM participants",
+      `SELECT id, ${PARTICIPANT_USER_ID_SQL} AS user_id FROM participants`,
     )) {
       const participantId = row.id as string;
-      const ownerId = (row.clerk_user_id as string | null) || participantId;
+      const ownerId = (row.user_id as string | null) || participantId;
       const ownerPrefix = `s-${ownerId}-`;
       if (playbackId.slice(0, ownerPrefix.length) === ownerPrefix)
         candidateOwners.add(ownerId);

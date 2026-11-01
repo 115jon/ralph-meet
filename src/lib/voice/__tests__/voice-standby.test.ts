@@ -339,7 +339,7 @@ describe("voice standby", () => {
   });
 
   it("does not drop a warm session when the active channel moves to the front", async () => {
-    const member = { clerk_user_id: "other", connected: true };
+    const member = { user_id: "other", connected: true };
     const input = {
       serverId: "server",
       joinedChannelId: null as string | null,
@@ -368,7 +368,7 @@ describe("voice standby", () => {
   });
 
   describe("page activity", () => {
-    const member = { clerk_user_id: "other", connected: true };
+    const member = { user_id: "other", connected: true };
     const input = {
       serverId: "server",
       joinedChannelId: null as string | null,

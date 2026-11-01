@@ -159,9 +159,9 @@ export const VoiceChannelRow = memo(function VoiceChannelRow({
       </RowShell>
       {members.map((member, index) => (
         <OccupantRow
-          key={member.clerk_user_id}
+          key={member.user_id}
           member={member}
-          isMe={member.clerk_user_id === myId}
+          isMe={member.user_id === myId}
           last={index === members.length - 1}
           branchContinues={!last}
         />
