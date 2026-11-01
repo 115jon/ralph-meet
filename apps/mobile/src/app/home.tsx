@@ -10,6 +10,7 @@ import {
 import { DmsPane } from "@/features/home/DmsPane";
 import { HomePager } from "@/features/home/HomePager";
 import { useHomePane } from "@/features/home/pane";
+import { MembersPage } from "@/features/members/MembersPage";
 import { Rail } from "@/features/home/Rail";
 import { ServerPane } from "@/features/home/ServerPane";
 import { YourPanel } from "@/features/panel/YourPanel";
@@ -40,7 +41,8 @@ function HomeDrawer() {
 }
 
 /**
- * Home: the drawer and the open conversation as two pages of one pager.
+ * Home: the drawer, the open conversation and a channel's members as the
+ * pages of one pager.
  * The call, Activity and Settings open over it as stack screens.
  */
 export default function HomeScreen() {
@@ -51,5 +53,11 @@ export default function HomeScreen() {
     if (restored) revealConversation(restored);
   }, []);
 
-  return <HomePager drawer={<HomeDrawer />} chat={<ConversationPage />} />;
+  return (
+    <HomePager
+      drawer={<HomeDrawer />}
+      chat={<ConversationPage />}
+      members={<MembersPage />}
+    />
+  );
 }

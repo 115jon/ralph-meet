@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import type { LoadStatus } from "@/features/servers/store";
 
-import type { Author, Message } from "./schema";
+import type { Message } from "./schema";
 
 /** An optimistic row's state until the server's copy replaces it. */
 export type SendState = "sending" | "failed";
@@ -27,15 +27,12 @@ interface ChatState {
   readonly openChannelId: string | null;
   /** channelId → ids of the people typing there now. */
   readonly typing: Readonly<Record<string, readonly string[]>>;
-  /** serverId → its members, for @mention suggestions and typing names. */
-  readonly members: Readonly<Record<string, readonly Author[]>>;
 }
 
 const INITIAL: ChatState = {
   channels: {},
   openChannelId: null,
   typing: {},
-  members: {},
 };
 
 /** State only; the actions that change it live in ./actions and ./mutations. */
@@ -46,7 +43,6 @@ export function resetChatStore(): void {
 }
 
 const NOBODY: readonly string[] = [];
-const NO_MEMBERS: readonly Author[] = [];
 
 export function useChannelMessages(channelId: string): ChannelMessages | null {
   return useChatStore((s) => s.channels[channelId] ?? null);
@@ -54,12 +50,6 @@ export function useChannelMessages(channelId: string): ChannelMessages | null {
 
 export function useTypingIds(channelId: string): readonly string[] {
   return useChatStore((s) => s.typing[channelId] ?? NOBODY);
-}
-
-export function useMembers(serverId: string | null): readonly Author[] {
-  return useChatStore((s) =>
-    serverId ? (s.members[serverId] ?? NO_MEMBERS) : NO_MEMBERS,
-  );
 }
 
 /** The optimistic row's id for a send, so the echo can find and replace it. */

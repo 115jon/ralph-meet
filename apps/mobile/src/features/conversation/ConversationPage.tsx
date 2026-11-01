@@ -3,12 +3,14 @@ import { useEffect, useMemo } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { loadMembers } from "@/features/chat/actions";
 import { authorName } from "@/features/chat/authors";
 import { ChatView } from "@/features/chat/ChatView";
-import { useMembers } from "@/features/chat/store";
 import { loadDms } from "@/features/dms/actions";
 import { useDm } from "@/features/dms/store";
+import { FriendsPage } from "@/features/friends/FriendsPage";
+import { loadMembers } from "@/features/members/actions";
+import { useMemberAuthors } from "@/features/members/store";
+import { openProfile } from "@/features/profile/store";
 import { useChannel, useChannelServer } from "@/features/servers/store";
 import { mediaUrl } from "@/lib/api";
 import { useTheme } from "@/theme";
@@ -16,6 +18,7 @@ import { EmptyState } from "@/ui";
 
 import {
   showDrawer,
+  toggleMembers,
   useConversation,
   useHomePage,
   type Conversation,
@@ -33,7 +36,7 @@ function ChannelChat({ id, hint }: { id: string; hint?: string }) {
   const channel = useChannel(id);
   const server = useChannelServer(id);
   const serverId = server?.id ?? null;
-  const members = useMembers(serverId);
+  const members = useMemberAuthors(serverId);
   const name = channel?.name ?? hint ?? "channel";
   const attended = useAttended();
 
@@ -51,6 +54,7 @@ function ChannelChat({ id, hint }: { id: string; hint?: string }) {
       people={members}
       attended={attended}
       onOpenDrawer={showDrawer}
+      onMembers={toggleMembers}
     />
   );
 }
@@ -81,6 +85,10 @@ function DmChat({ id }: { id: string }) {
       people={people}
       attended={attended}
       onOpenDrawer={showDrawer}
+      // A DM's "members" are the two of you: its header opens the profile.
+      onTitle={
+        recipient ? () => openProfile(recipient.id, recipient) : undefined
+      }
     />
   );
 }
@@ -117,13 +125,20 @@ function conversationKey(conversation: Conversation): string {
 export function ConversationPage() {
   const conversation = useConversation();
   if (!conversation) return <NoConversation />;
-  return conversation.kind === "channel" ? (
-    <ChannelChat
-      key={conversationKey(conversation)}
-      id={conversation.id}
-      hint={conversation.name}
-    />
-  ) : (
-    <DmChat key={conversationKey(conversation)} id={conversation.id} />
-  );
+  switch (conversation.kind) {
+    case "channel":
+      return (
+        <ChannelChat
+          key={conversationKey(conversation)}
+          id={conversation.id}
+          hint={conversation.name}
+        />
+      );
+    case "dm":
+      return (
+        <DmChat key={conversationKey(conversation)} id={conversation.id} />
+      );
+    case "friends":
+      return <FriendsPage />;
+  }
 }

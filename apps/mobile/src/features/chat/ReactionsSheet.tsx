@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
+import { openProfile } from "@/features/profile/store";
 import { mediaUrl } from "@/lib/api";
 import { tapHaptic } from "@/lib/haptics";
 import { RADIUS, useTheme } from "@/theme";
@@ -87,26 +88,31 @@ function PersonRow({
   userId,
   mine,
   onRemove,
+  onOpen,
 }: {
   person: Author | undefined;
   userId: string;
   mine: boolean;
   onRemove: () => void;
+  /** Opens their profile. */
+  onOpen: () => void;
 }) {
   const theme = useTheme();
   const name = person ? authorName(person) : "Unknown member";
   return (
-    <View
-      accessible={!mine}
-      accessibilityLabel={name}
-      style={{
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${name}'s profile`}
+      onPress={onOpen}
+      style={({ pressed }) => ({
         minHeight: 52,
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
         paddingVertical: 6,
         paddingHorizontal: 16,
-      }}
+        backgroundColor: pressed ? theme.tint2 : "transparent",
+      })}
     >
       <Avatar name={name} size={32} uri={mediaUrl(person?.avatar_url)} />
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -143,7 +149,7 @@ function PersonRow({
           </Text>
         </Pressable>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -228,6 +234,11 @@ function Details({
             onRemove={() => {
               tapHaptic();
               void toggleReaction(message, selected.emoji);
+            }}
+            onOpen={() => {
+              // The profile opens over the app, not over this sheet.
+              onClose();
+              openProfile(userId, people.get(userId));
             }}
           />
         ))}

@@ -14,6 +14,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { useSession } from "@/features/auth/session";
+import { openProfile } from "@/features/profile/store";
 import { mediaUrl } from "@/lib/api";
 import { tapHaptic } from "@/lib/haptics";
 import { FONT, RADIUS, useTheme } from "@/theme";
@@ -132,6 +133,10 @@ export const MessageRow = memo(function MessageRow({
     [onLongPress, message],
   );
   const reply = useCallback(() => onReply(message), [onReply, message]);
+  const showAuthor = useCallback(
+    () => openProfile(message.author_id, message.author),
+    [message.author_id, message.author],
+  );
   const swipe = useSwipeToReply(!message.send, reply);
 
   return (
@@ -193,11 +198,23 @@ export const MessageRow = memo(function MessageRow({
                 {grouped ? (
                   <View style={{ width: AVATAR }} />
                 ) : (
-                  <Avatar
-                    name={name}
-                    size={AVATAR}
-                    uri={mediaUrl(message.author?.avatar_url)}
-                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${name}'s profile`}
+                    onPress={showAuthor}
+                    onLongPress={openActions}
+                    delayLongPress={LONG_PRESS_MS}
+                    style={({ pressed }) => ({
+                      alignSelf: "flex-start",
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Avatar
+                      name={name}
+                      size={AVATAR}
+                      uri={mediaUrl(message.author?.avatar_url)}
+                    />
+                  </Pressable>
                 )}
                 <View
                   style={{
@@ -217,6 +234,9 @@ export const MessageRow = memo(function MessageRow({
                       <Text
                         variant="name"
                         numberOfLines={1}
+                        accessibilityRole="button"
+                        onPress={showAuthor}
+                        onLongPress={openActions}
                         style={{ flexShrink: 1 }}
                       >
                         {name}

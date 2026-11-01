@@ -148,8 +148,3 @@ export const UploadSchema = Schema.Struct({
   file_name: Schema.String,
   content_type: Schema.String,
 });
-
-/** GET /api/servers/:id/members: who can be @mentioned. */
-export const MemberListSchema = Schema.Array(
-  Schema.Struct({ user: AuthorSchema }),
-);

@@ -7,7 +7,7 @@ import { Text } from "@/ui";
 import { useMessageLongPress } from "../long-press";
 import type { Block, Inline } from "./ast";
 import { CodeBlock } from "./CodeBlock";
-import { useMemberNames } from "./context";
+import { useMemberNames, useMentionPress } from "./context";
 import { CustomEmoji } from "./CustomEmoji";
 
 /** The web's `1.35em` emoji on 15px prose. */
@@ -28,6 +28,8 @@ interface Marks {
 interface Env {
   readonly theme: Theme;
   readonly members: ReadonlySet<string>;
+  /** A known person's mention opens their profile. */
+  readonly onMention: ((username: string) => boolean) | undefined;
   /** A link or spoiler takes the touch; its long-press opens the message's actions. */
   readonly onLongPress: (() => void) | undefined;
 }
@@ -177,9 +179,14 @@ function renderInline(
       );
     case "mention": {
       const member = env.members.has(node.username.toLowerCase());
+      const { onMention } = env;
+      const pressable = member && !hidden && onMention !== undefined;
       return (
         <RNText
           key={key}
+          accessibilityRole={pressable ? "button" : undefined}
+          onPress={pressable ? () => onMention(node.username) : undefined}
+          onLongPress={pressable ? env.onLongPress : undefined}
           style={{
             fontFamily: FONT.row,
             color: hidden ? theme.ink3 : member ? theme.accentInk : theme.ink2,
@@ -276,8 +283,9 @@ export const Markdown = memo(function Markdown({
 }) {
   const theme = useTheme();
   const members = useMemberNames();
+  const onMention = useMentionPress();
   const onLongPress = useMessageLongPress();
-  const env: Env = { theme, members, onLongPress };
+  const env: Env = { theme, members, onMention, onLongPress };
   const last = blocks.at(-1);
   const editedInline = edited && last !== undefined && last.kind !== "code";
   const nodes = blocks.map((block, index) =>

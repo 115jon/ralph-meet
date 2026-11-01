@@ -1,9 +1,9 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import Animated, { Easing, LinearTransition } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ProfileSheet } from "@/features/presence/ProfileSheet";
+import { openSelfProfile } from "@/features/profile/store";
 import { RADIUS, useTheme } from "@/theme";
 
 import { CallRow } from "./CallRow";
@@ -24,9 +24,6 @@ export function YourPanel() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const call = useCallRow();
-  const [profileOpen, setProfileOpen] = useState(false);
-  const openProfile = useCallback(() => setProfileOpen(true), []);
-  const closeProfile = useCallback(() => setProfileOpen(false), []);
   const onLayout = useCallback(
     (event: LayoutChangeEvent) =>
       setPlateHeight(Math.ceil(event.nativeEvent.layout.height)),
@@ -34,32 +31,29 @@ export function YourPanel() {
   );
 
   return (
-    <>
-      <Animated.View
-        layout={GROW}
-        onLayout={onLayout}
-        style={{
-          position: "absolute",
-          left: PLATE_INSET_X,
-          right: PLATE_INSET_X,
-          bottom: insets.bottom + PLATE_BOTTOM_GAP,
-          borderRadius: RADIUS,
-          backgroundColor: theme.ply3,
-          borderWidth: 1,
-          borderColor: theme.lineStrong,
-          borderTopWidth: 2,
-          borderTopColor: theme.ink1,
-          shadowColor: theme.shadow,
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 1,
-          shadowRadius: 12,
-          elevation: 12,
-        }}
-      >
-        {call ? <CallRow call={call} /> : null}
-        <MeRow onOpenProfile={openProfile} />
-      </Animated.View>
-      <ProfileSheet visible={profileOpen} onClose={closeProfile} />
-    </>
+    <Animated.View
+      layout={GROW}
+      onLayout={onLayout}
+      style={{
+        position: "absolute",
+        left: PLATE_INSET_X,
+        right: PLATE_INSET_X,
+        bottom: insets.bottom + PLATE_BOTTOM_GAP,
+        borderRadius: RADIUS,
+        backgroundColor: theme.ply3,
+        borderWidth: 1,
+        borderColor: theme.lineStrong,
+        borderTopWidth: 2,
+        borderTopColor: theme.ink1,
+        shadowColor: theme.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 1,
+        shadowRadius: 12,
+        elevation: 12,
+      }}
+    >
+      {call ? <CallRow call={call} /> : null}
+      <MeRow onOpenProfile={openSelfProfile} />
+    </Animated.View>
   );
 }

@@ -2,7 +2,7 @@ import { markChannelRead as readChannelActivity } from "@/features/activity/acti
 import { subscribeChannel } from "@/features/realtime/gateway";
 import { markRead } from "@/features/servers/actions";
 
-import { fetchMembers, fetchMessages } from "./api";
+import { fetchMessages } from "./api";
 import { evictChannels, trimChannel } from "./cache";
 import type { Message, Reaction } from "./schema";
 import {
@@ -105,19 +105,6 @@ export async function loadOlder(channelId: string): Promise<void> {
   } catch {
     // Scrolling to the top again retries.
     patchChannel(channelId, (c) => c && { ...c, loadingOlder: false });
-  }
-}
-
-/** The members of `serverId`, fetched once per session for suggestions. */
-export async function loadMembers(serverId: string): Promise<void> {
-  if (getState().members[serverId]) return;
-  try {
-    const list = await fetchMembers(serverId);
-    setState((s) => ({
-      members: { ...s.members, [serverId]: list.map((member) => member.user) },
-    }));
-  } catch {
-    // Suggestions are a nicety; typing a name by hand still mentions.
   }
 }
 

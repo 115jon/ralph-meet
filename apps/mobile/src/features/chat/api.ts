@@ -5,7 +5,6 @@ import { apiFetch, apiJson, ApiError } from "@/lib/api";
 import { config } from "@/lib/config";
 
 import {
-  MemberListSchema,
   MessagePageSchema,
   MessageSchema,
   UploadSchema,
@@ -183,12 +182,4 @@ export function uploadAttachment(
     form.append("file", file as unknown as Blob);
     xhr.send(form);
   });
-}
-
-/** GET /api/servers/:id/members */
-export function fetchMembers(serverId: string) {
-  return apiJson(
-    `/api/servers/${encodeURIComponent(serverId)}/members`,
-    MemberListSchema,
-  );
 }

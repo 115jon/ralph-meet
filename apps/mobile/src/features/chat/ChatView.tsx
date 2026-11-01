@@ -4,6 +4,7 @@ import { View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { openProfile } from "@/features/profile/store";
 import { tapHaptic } from "@/lib/haptics";
 import { useTheme } from "@/theme";
 
@@ -12,11 +13,12 @@ import { AttachTray } from "./attach/AttachTray";
 import { useAttach } from "./attach/useAttach";
 import { ChatHeader } from "./ChatHeader";
 import { Composer, type ComposerHandle } from "./Composer";
+import { registerComposerInsert } from "./composer-bus";
 import {
   MessageActionsSheet,
   type ComposerIntent,
 } from "./MessageActionsSheet";
-import { MembersContext } from "./markdown/context";
+import { MembersContext, MentionPress } from "./markdown/context";
 import { MessageList } from "./MessageList";
 import { toggleReaction } from "./mutations";
 import { PickerPanel } from "./picker/PickerPanel";
@@ -51,6 +53,10 @@ export interface ChatViewProps {
   attended: boolean;
   /** The header's menu key: slides the chat aside to the drawer. */
   onOpenDrawer: () => void;
+  /** A channel's members key. */
+  onMembers?: () => void;
+  /** A DM's header opens the other person's profile. */
+  onTitle?: () => void;
 }
 
 /**
@@ -70,6 +76,8 @@ export function ChatView({
   people,
   attended,
   onOpenDrawer,
+  onMembers,
+  onTitle,
 }: ChatViewProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -102,9 +110,23 @@ export function ChatView({
       Math.max(keyboard.height.value, lift.value, bottomInset) + COMPOSER_GAP,
   }));
 
-  const memberNames = useMemo(
-    () => new Set(people.map((person) => person.username.toLowerCase())),
+  const peopleByName = useMemo(
+    () =>
+      new Map(people.map((person) => [person.username.toLowerCase(), person])),
     [people],
+  );
+  const memberNames = useMemo(
+    () => new Set(peopleByName.keys()),
+    [peopleByName],
+  );
+  const openMention = useCallback(
+    (username: string) => {
+      const person = peopleByName.get(username.toLowerCase());
+      if (!person) return false;
+      openProfile(person.id, person);
+      return true;
+    },
+    [peopleByName],
   );
   const closeSheet = useCallback(() => setSelected(null), []);
   const openActions = useCallback((message: ChatMessage) => {
@@ -134,6 +156,8 @@ export function ChatView({
   const insert = useCallback((value: string) => {
     composer.current?.insert(value);
   }, []);
+  // "Mention" from a profile or the members page lands here.
+  useEffect(() => registerComposerInsert(insert), [insert]);
   const sendGif = useCallback(
     (gif: Parameters<ComposerHandle["sendGif"]>[0]) => {
       composer.current?.sendGif(gif);
@@ -149,19 +173,23 @@ export function ChatView({
         subtitle={subtitle}
         avatar={avatar}
         onMenu={onOpenDrawer}
+        onMembers={onMembers}
+        onTitle={onTitle}
       />
       <Animated.View style={[{ flex: 1 }, bodyStyle]}>
         <MembersContext value={memberNames}>
-          <ReactionDetails value={showReactions}>
-            <MessageList
-              channelId={channelId}
-              title={title}
-              intro={intro}
-              attended={attended}
-              onLongPress={openActions}
-              onReply={reply}
-            />
-          </ReactionDetails>
+          <MentionPress value={openMention}>
+            <ReactionDetails value={showReactions}>
+              <MessageList
+                channelId={channelId}
+                title={title}
+                intro={intro}
+                attended={attended}
+                onLongPress={openActions}
+                onReply={reply}
+              />
+            </ReactionDetails>
+          </MentionPress>
         </MembersContext>
         <TypingLine channelId={channelId} people={people} />
         <Composer
