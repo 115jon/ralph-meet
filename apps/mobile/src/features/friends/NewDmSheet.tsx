@@ -1,14 +1,7 @@
 import { X } from "phosphor-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  FlatList,
-  Keyboard,
-  Pressable,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Keyboard, Pressable, TextInput, View } from "react-native";
+import { FlatList } from "react-native-gesture-handler";
 
 import { useSession } from "@/features/auth/session";
 import { openDmWith } from "@/features/dms/actions";
@@ -19,7 +12,7 @@ import { presenceLedOf, usePresence } from "@/features/presence/live";
 import { useServersStore } from "@/features/servers/store";
 import { mediaUrl } from "@/lib/api";
 import { FONT, RADIUS, useTheme } from "@/theme";
-import { Avatar, Icon, Sheet, Text } from "@/ui";
+import { Avatar, Icon, Sheet, Text, useSheetScroll } from "@/ui";
 
 import { loadFriends } from "./actions";
 import { personName } from "./filters";
@@ -115,8 +108,7 @@ function PersonRow({
 
 function Body({ onClose }: { onClose: () => void }) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { height: screen } = useWindowDimensions();
+  const sheetScroll = useSheetScroll();
   const myId = useSession((s) => s.user?.id);
   const relationships = useFriendsStore((s) => s.relationships);
   const dms = useDmsStore((s) => s.dms);
@@ -202,7 +194,7 @@ function Body({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <View style={{ height: Math.round(screen * 0.82) - insets.top }}>
+    <View style={{ flex: 1 }}>
       <View
         style={{
           flexDirection: "row",
@@ -295,6 +287,7 @@ function Body({ onClose }: { onClose: () => void }) {
           renderItem={renderItem}
           keyboardShouldPersistTaps="handled"
           style={{ marginTop: 4 }}
+          {...sheetScroll}
         />
       )}
     </View>
@@ -313,7 +306,13 @@ export function NewDmSheet({
   onClose: () => void;
 }) {
   return (
-    <Sheet visible={visible} onClose={onClose} label="New message">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      label="New message"
+      expandable
+      fill
+    >
       {visible ? <Body onClose={onClose} /> : null}
     </Sheet>
   );

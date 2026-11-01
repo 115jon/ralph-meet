@@ -79,6 +79,8 @@ reopened.
   call-screen-only rotation with a full-bleed landscape stage.
 - Fixes: with no conversation open the drawer fills the screen (no empty chat
   peek, no swipe to it); a conversation that disappears closes cleanly.
+  Sheets drag: down to close (the scrim fades with it), long ones up to
+  full height, the list handing its top edge to the sheet.
 - DM calls with ringing (mockup `calls.html` 01–02, all A): call key +
   confirm, Calling region in the DM, native ringing over the lock screen,
   heads-up and in-app sheet, Answer/Decline from the notification, missed

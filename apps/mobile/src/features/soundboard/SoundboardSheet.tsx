@@ -1,6 +1,6 @@
 import { Waveform, X } from "phosphor-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
 import { PickerSearch } from "@/features/chat/picker/PickerSearch";
@@ -9,7 +9,7 @@ import { sendVoiceAppEvent } from "@/features/voice/actions";
 import { SheetTitle } from "@/features/voice/CallSheetRows";
 import { tapHaptic } from "@/lib/haptics";
 import { RADIUS, useTheme } from "@/theme";
-import { Icon, IconButton, Led, Sheet, Text } from "@/ui";
+import { Icon, IconButton, Led, Sheet, SheetScrollView, Text } from "@/ui";
 
 import {
   DEFAULT_PLAYABLE,
@@ -196,7 +196,6 @@ export function SoundboardSheet({
   onClose,
   serverId,
 }: SoundboardSheetProps) {
-  const { height } = useWindowDimensions();
   const userId = useSession((s) => s.user?.id ?? null);
   const serverName = useServersStore(
     (s) => s.servers.find((server) => server.id === serverId)?.name ?? null,
@@ -230,7 +229,13 @@ export function SoundboardSheet({
     0;
 
   return (
-    <Sheet visible={visible} onClose={onClose} label="Soundboard">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      label="Soundboard"
+      expandable
+      fill
+    >
       <SheetTitle
         title="Soundboard"
         trailing={<IconButton icon={X} label="Close" onPress={onClose} />}
@@ -249,10 +254,9 @@ export function SoundboardSheet({
           height={40}
         />
       </View>
-      <ScrollView
-        style={{ maxHeight: height * 0.55 }}
+      <SheetScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{ gap: 14, paddingBottom: 8 }}
-        keyboardShouldPersistTaps="handled"
       >
         <Section title="Favorites" sounds={sections.favorites} onPlay={play} />
         {serverKey !== DM_CALL_SERVER_KEY ? (
@@ -278,7 +282,7 @@ export function SoundboardSheet({
             No sounds match &ldquo;{query.trim()}&rdquo;.
           </Text>
         ) : null}
-      </ScrollView>
+      </SheetScrollView>
     </Sheet>
   );
 }

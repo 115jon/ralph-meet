@@ -1,6 +1,6 @@
 import { X } from "phosphor-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
 import { openProfile } from "@/features/profile/store";
@@ -165,7 +165,6 @@ function Details({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { height: screen } = useWindowDimensions();
   const myId = useSession((s) => s.user?.id);
   const reactions = message.reactions ?? [];
   const [chosen, setChosen] = useState(initial);
@@ -178,7 +177,7 @@ function Details({
   const others = Math.max(0, selected.count - users.length);
 
   return (
-    <View style={{ maxHeight: Math.round(screen * 0.6) }}>
+    <View>
       <View
         style={{
           flexDirection: "row",
@@ -224,7 +223,7 @@ function Details({
           ))}
         </ScrollView>
       </View>
-      <ScrollView contentContainerStyle={{ paddingVertical: 4 }}>
+      <View style={{ paddingVertical: 4 }}>
         {users.map((userId) => (
           <PersonRow
             key={userId}
@@ -251,7 +250,7 @@ function Details({
             and {others} {others === 1 ? "other" : "others"}
           </Text>
         ) : null}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -280,7 +279,7 @@ export function ReactionsSheet({
     if (target && !open) onClose();
   }, [target, open, onClose]);
   return (
-    <Sheet visible={open} onClose={onClose} label="Reactions">
+    <Sheet visible={open} onClose={onClose} label="Reactions" expandable>
       {open && message && target ? (
         <Details
           key={target.messageId}

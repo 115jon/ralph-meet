@@ -1,14 +1,7 @@
 import { useRouter } from "expo-router";
 import { Check, GearSix } from "phosphor-react-native";
 import { type ReactNode, useState } from "react";
-import {
-  Keyboard,
-  Pressable,
-  ScrollView,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Keyboard, Pressable, TextInput, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
 import { mediaUrl } from "@/lib/api";
@@ -257,14 +250,9 @@ interface ProfileSheetProps {
 /** Opened from the panel's avatar: who you are, your status, settings. */
 export function ProfileSheet({ visible, onClose }: ProfileSheetProps) {
   const router = useRouter();
-  const { height } = useWindowDimensions();
   return (
     <Sheet visible={visible} onClose={onClose} label="Profile and status">
-      <ScrollView
-        style={{ maxHeight: height * 0.85 }}
-        contentContainerStyle={{ gap: 20, paddingBottom: 4 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={{ gap: 20, paddingBottom: 4 }}>
         <Identity />
         <StatusPicker />
         <CustomStatusField />
@@ -276,7 +264,7 @@ export function ProfileSheet({ visible, onClose }: ProfileSheetProps) {
             router.push("/settings");
           }}
         />
-      </ScrollView>
+      </View>
     </Sheet>
   );
 }

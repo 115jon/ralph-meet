@@ -64,6 +64,7 @@ export function PersonSheet({
       visible={open}
       onClose={onClose}
       label={participant ? participant.name : "Person"}
+      expandable
     >
       {participant ? (
         self ? (

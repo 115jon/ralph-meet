@@ -36,7 +36,7 @@ export function CallSettingsSheet({
   const tones = useCallPreferences((s) => s.joinLeaveTones);
   const muteAll = useSoundboardStore((s) => s.muteAll);
   return (
-    <Sheet visible={visible} onClose={onClose} label="Call settings">
+    <Sheet visible={visible} onClose={onClose} label="Call settings" expandable>
       <SheetTitle
         title="Call settings"
         trailing={<IconButton icon={X} label="Close" onPress={onClose} />}
