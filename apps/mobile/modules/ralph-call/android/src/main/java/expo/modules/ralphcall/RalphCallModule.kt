@@ -1,7 +1,12 @@
 package expo.modules.ralphcall
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
@@ -30,6 +35,22 @@ class CallOptions : Record {
   @Field val speakerFirst: Boolean = true
 
   @Field val sharing: Boolean = false
+
+  @Field val answeredCallId: String? = null
+}
+
+class IncomingCallRecord : Record {
+  @Field val callId: String = ""
+
+  @Field val channelId: String = ""
+
+  @Field val callerId: String = ""
+
+  @Field val callerName: String = ""
+
+  @Field val callerAvatar: String? = null
+
+  @Field val ringSeconds: Int = IncomingCall.DEFAULT_RING_SECONDS
 }
 
 class RalphCallModule : Module() {
@@ -51,17 +72,45 @@ class RalphCallModule : Module() {
       }
     }
 
+  private val incomingListener =
+    object : IncomingCalls.Listener {
+      override fun onIncomingCall(call: IncomingCall) = sendEvent("onIncomingCall", call.toMap())
+
+      override fun onIncomingCallEnded(
+        callId: String,
+        reason: String,
+      ) = sendEvent("onIncomingCallEnded", mapOf("callId" to callId, "reason" to reason))
+
+      override fun onIncomingCallAnswered(call: IncomingCall) = sendEvent("onIncomingCallAnswered", call.toMap())
+    }
+
   override fun definition() =
     ModuleDefinition {
       Name("RalphCall")
 
-      Events("onAction", "onAudioRoutesChanged", "onCallEndedBySystem")
+      Events(
+        "onAction",
+        "onAudioRoutesChanged",
+        "onCallEndedBySystem",
+        "onIncomingCall",
+        "onIncomingCallEnded",
+        "onIncomingCallAnswered",
+      )
 
-      OnCreate { CallController.listener = listener }
+      OnCreate {
+        CallController.listener = listener
+        IncomingCalls.listener = incomingListener
+        appContext.reactContext?.let {
+          IncomingCallNotification.ensureChannels(it)
+          LockScreenCall.register(it)
+        }
+        appContext.currentActivity?.let { LockScreenCall.track(it) }
+      }
 
       // The JS that owned the call is gone (reload, teardown): end it.
       OnDestroy {
         if (CallController.listener === listener) CallController.listener = null
+        if (IncomingCalls.listener === incomingListener) IncomingCalls.listener = null
         stopKeepAlive()
         appContext.reactContext?.let { CallController.end(it) }
       }
@@ -96,6 +145,51 @@ class RalphCallModule : Module() {
       AsyncFunction("stopScreenShare") {
         CallController.stopScreenShare()
       }.runOnQueue(Queues.MAIN)
+
+      // ── Incoming DM calls ──────────────────────────────────────────
+
+      AsyncFunction("ringIncoming") { call: IncomingCallRecord ->
+        IncomingCalls.ring(context, call.toCall())
+      }
+
+      AsyncFunction("stopIncoming") { callId: String, reason: String ->
+        IncomingCalls.stop(context, callId, reason)
+      }
+
+      AsyncFunction("answerIncoming") { callId: String ->
+        IncomingCalls.answer(context, callId, fromApp = true)
+      }
+
+      AsyncFunction("declineIncoming") { callId: String ->
+        IncomingCalls.decline(context, callId)
+      }
+
+      AsyncFunction("takeAnsweredCall") { promise: Promise ->
+        promise.resolve(IncomingCalls.takeAnswered()?.toMap())
+      }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("setRingback") { on: Boolean ->
+        Ringer.setRingback(on)
+      }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("canUseFullScreenIntent") {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+          context.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() ?: false
+        } else {
+          true
+        }
+      }
+
+      AsyncFunction("openFullScreenIntentSettings") {
+        val intent =
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}"))
+          } else {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+              .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+          }
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      }
 
       // Only acts while startScreenShare() armed it; see onProjectionConsent.
       OnActivityResult { _, payload ->
@@ -133,5 +227,16 @@ private fun CallOptions.toInfo() =
     openUrl = openUrl,
     speakerFirst = speakerFirst,
     sharing = sharing,
+    answeredCallId = answeredCallId,
     startedAt = System.currentTimeMillis(),
+  )
+
+private fun IncomingCallRecord.toCall() =
+  IncomingCall(
+    callId = callId,
+    channelId = channelId,
+    callerId = callerId,
+    callerName = callerName.ifBlank { "Someone" },
+    callerAvatar = callerAvatar?.takeIf { it.isNotEmpty() },
+    ringSeconds = ringSeconds,
   )

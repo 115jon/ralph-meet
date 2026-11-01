@@ -1,5 +1,12 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -58,6 +65,11 @@ export interface ChatViewProps {
   onMembers?: () => void;
   /** A DM's header opens the other person's profile. */
   onTitle?: () => void;
+  /** A DM's phone key. */
+  onCall?: () => void;
+  callDisabled?: boolean;
+  /** Under the header, above the history: a DM's call region. */
+  banner?: ReactNode;
 }
 
 /**
@@ -79,6 +91,9 @@ export function ChatView({
   onOpenDrawer,
   onMembers,
   onTitle,
+  onCall,
+  callDisabled,
+  banner,
 }: ChatViewProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -186,7 +201,10 @@ export function ChatView({
         onMenu={onOpenDrawer}
         onMembers={onMembers}
         onTitle={onTitle}
+        onCall={onCall}
+        callDisabled={callDisabled}
       />
+      {banner}
       <Animated.View style={[{ flex: 1 }, bodyStyle]}>
         <MembersContext value={memberNames}>
           <MentionPress value={openMention}>

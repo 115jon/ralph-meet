@@ -24,6 +24,7 @@ import { Route as ApiTiktokVideoRouteImport } from './routes/api/tiktok-video'
 import { Route as ApiSessionsRouteImport } from './routes/api/sessions'
 import { Route as ApiServersRouteImport } from './routes/api/servers'
 import { Route as ApiReadStatesRouteImport } from './routes/api/read-states'
+import { Route as ApiPushTokensRouteImport } from './routes/api/push-tokens'
 import { Route as ApiProxyMediaRouteImport } from './routes/api/proxy-media'
 import { Route as ApiPresenceRouteImport } from './routes/api/presence'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
@@ -34,7 +35,6 @@ import { Route as ApiGifsRouteImport } from './routes/api/gifs'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiEmojisRouteImport } from './routes/api/emojis'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
-import { Route as ApiPushTokensRouteImport } from './routes/api/push-tokens'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
 import { Route as ApiCameraBackgroundsRouteImport } from './routes/api/camera-backgrounds'
 import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
@@ -94,6 +94,8 @@ import { Route as ApiChannelsIdPinsRouteImport } from './routes/api/channels/$id
 import { Route as ApiChannelsIdPermissionsRouteImport } from './routes/api/channels/$id/permissions'
 import { Route as ApiChannelsIdMessagesRouteImport } from './routes/api/channels/$id/messages'
 import { Route as ApiChannelsIdMediaRouteImport } from './routes/api/channels/$id/media'
+import { Route as ApiCallsIdDeclineRouteImport } from './routes/api/calls/$id/decline'
+import { Route as ApiCallsIdAcceptRouteImport } from './routes/api/calls/$id/accept'
 import { Route as ApiSharedMessagesTokenMediaSplatRouteImport } from './routes/api/shared-messages/$token/media/$'
 import { Route as ApiServersIdRolesRoleIdRouteImport } from './routes/api/servers/$id/roles/$roleId'
 import { Route as ApiServersIdMembersUserIdRouteImport } from './routes/api/servers/$id/members/$userId'
@@ -180,6 +182,11 @@ const ApiReadStatesRoute = ApiReadStatesRouteImport.update({
   path: '/api/read-states',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPushTokensRoute = ApiPushTokensRouteImport.update({
+  id: '/api/push-tokens',
+  path: '/api/push-tokens',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProxyMediaRoute = ApiProxyMediaRouteImport.update({
   id: '/api/proxy-media',
   path: '/api/proxy-media',
@@ -228,11 +235,6 @@ const ApiEmojisRoute = ApiEmojisRouteImport.update({
 const ApiDmsRoute = ApiDmsRouteImport.update({
   id: '/api/dms',
   path: '/api/dms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPushTokensRoute = ApiPushTokensRouteImport.update({
-  id: '/api/push-tokens',
-  path: '/api/push-tokens',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCheckUsernameRoute = ApiCheckUsernameRouteImport.update({
@@ -538,6 +540,16 @@ const ApiChannelsIdMediaRoute = ApiChannelsIdMediaRouteImport.update({
   path: '/media',
   getParentRoute: () => ApiChannelsIdRoute,
 } as any)
+const ApiCallsIdDeclineRoute = ApiCallsIdDeclineRouteImport.update({
+  id: '/api/calls/$id/decline',
+  path: '/api/calls/$id/decline',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCallsIdAcceptRoute = ApiCallsIdAcceptRouteImport.update({
+  id: '/api/calls/$id/accept',
+  path: '/api/calls/$id/accept',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSharedMessagesTokenMediaSplatRoute =
   ApiSharedMessagesTokenMediaSplatRouteImport.update({
     id: '/media/$',
@@ -609,7 +621,6 @@ export interface FileRoutesByFullPath {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
-  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
@@ -619,6 +630,7 @@ export interface FileRoutesByFullPath {
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
   '/api/proxy-media': typeof ApiProxyMediaRoute
+  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
@@ -653,6 +665,8 @@ export interface FileRoutesByFullPath {
   '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
+  '/api/calls/$id/accept': typeof ApiCallsIdAcceptRoute
+  '/api/calls/$id/decline': typeof ApiCallsIdDeclineRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
@@ -706,7 +720,6 @@ export interface FileRoutesByTo {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
-  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
@@ -716,6 +729,7 @@ export interface FileRoutesByTo {
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
   '/api/proxy-media': typeof ApiProxyMediaRoute
+  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
@@ -750,6 +764,8 @@ export interface FileRoutesByTo {
   '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares': typeof ApiSharesIndexRoute
+  '/api/calls/$id/accept': typeof ApiCallsIdAcceptRoute
+  '/api/calls/$id/decline': typeof ApiCallsIdDeclineRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
@@ -804,7 +820,6 @@ export interface FileRoutesById {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
-  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
@@ -814,6 +829,7 @@ export interface FileRoutesById {
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
   '/api/proxy-media': typeof ApiProxyMediaRoute
+  '/api/push-tokens': typeof ApiPushTokensRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
@@ -848,6 +864,8 @@ export interface FileRoutesById {
   '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
+  '/api/calls/$id/accept': typeof ApiCallsIdAcceptRoute
+  '/api/calls/$id/decline': typeof ApiCallsIdDeclineRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
@@ -903,7 +921,6 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
-    | '/api/push-tokens'
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
@@ -913,6 +930,7 @@ export interface FileRouteTypes {
     | '/api/oembed'
     | '/api/presence'
     | '/api/proxy-media'
+    | '/api/push-tokens'
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
@@ -947,6 +965,8 @@ export interface FileRouteTypes {
     | '/api/voice/socket-ticket'
     | '/api/wordle/today'
     | '/api/shares/'
+    | '/api/calls/$id/accept'
+    | '/api/calls/$id/decline'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
@@ -1000,7 +1020,6 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
-    | '/api/push-tokens'
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
@@ -1010,6 +1029,7 @@ export interface FileRouteTypes {
     | '/api/oembed'
     | '/api/presence'
     | '/api/proxy-media'
+    | '/api/push-tokens'
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
@@ -1044,6 +1064,8 @@ export interface FileRouteTypes {
     | '/api/voice/socket-ticket'
     | '/api/wordle/today'
     | '/api/shares'
+    | '/api/calls/$id/accept'
+    | '/api/calls/$id/decline'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
@@ -1097,7 +1119,6 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
-    | '/api/push-tokens'
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
@@ -1107,6 +1128,7 @@ export interface FileRouteTypes {
     | '/api/oembed'
     | '/api/presence'
     | '/api/proxy-media'
+    | '/api/push-tokens'
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
@@ -1141,6 +1163,8 @@ export interface FileRouteTypes {
     | '/api/voice/socket-ticket'
     | '/api/wordle/today'
     | '/api/shares/'
+    | '/api/calls/$id/accept'
+    | '/api/calls/$id/decline'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
@@ -1195,7 +1219,6 @@ export interface RootRouteChildren {
   ApiCameraBackgroundsRoute: typeof ApiCameraBackgroundsRouteWithChildren
   ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
   ApiDmsRoute: typeof ApiDmsRoute
-  ApiPushTokensRoute: typeof ApiPushTokensRoute
   ApiEmojisRoute: typeof ApiEmojisRouteWithChildren
   ApiFriendsRoute: typeof ApiFriendsRoute
   ApiGifsRoute: typeof ApiGifsRoute
@@ -1205,6 +1228,7 @@ export interface RootRouteChildren {
   ApiOembedRoute: typeof ApiOembedRoute
   ApiPresenceRoute: typeof ApiPresenceRoute
   ApiProxyMediaRoute: typeof ApiProxyMediaRoute
+  ApiPushTokensRoute: typeof ApiPushTokensRoute
   ApiReadStatesRoute: typeof ApiReadStatesRoute
   ApiServersRoute: typeof ApiServersRouteWithChildren
   ApiSessionsRoute: typeof ApiSessionsRoute
@@ -1235,6 +1259,8 @@ export interface RootRouteChildren {
   ApiVoiceSocketTicketRoute: typeof ApiVoiceSocketTicketRoute
   ApiWordleTodayRoute: typeof ApiWordleTodayRoute
   ApiSharesIndexRoute: typeof ApiSharesIndexRoute
+  ApiCallsIdAcceptRoute: typeof ApiCallsIdAcceptRoute
+  ApiCallsIdDeclineRoute: typeof ApiCallsIdDeclineRoute
   ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
   ApiMessagesIdShareRoute: typeof ApiMessagesIdShareRoute
   ApiSoundboardUploadsIdRoute: typeof ApiSoundboardUploadsIdRoute
@@ -1349,6 +1375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiReadStatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/push-tokens': {
+      id: '/api/push-tokens'
+      path: '/api/push-tokens'
+      fullPath: '/api/push-tokens'
+      preLoaderRoute: typeof ApiPushTokensRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/proxy-media': {
       id: '/api/proxy-media'
       path: '/api/proxy-media'
@@ -1417,13 +1450,6 @@ declare module '@tanstack/react-router' {
       path: '/api/dms'
       fullPath: '/api/dms'
       preLoaderRoute: typeof ApiDmsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/push-tokens': {
-      id: '/api/push-tokens'
-      path: '/api/push-tokens'
-      fullPath: '/api/push-tokens'
-      preLoaderRoute: typeof ApiPushTokensRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/check-username': {
@@ -1839,6 +1865,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChannelsIdMediaRouteImport
       parentRoute: typeof ApiChannelsIdRoute
     }
+    '/api/calls/$id/decline': {
+      id: '/api/calls/$id/decline'
+      path: '/api/calls/$id/decline'
+      fullPath: '/api/calls/$id/decline'
+      preLoaderRoute: typeof ApiCallsIdDeclineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/calls/$id/accept': {
+      id: '/api/calls/$id/accept'
+      path: '/api/calls/$id/accept'
+      fullPath: '/api/calls/$id/accept'
+      preLoaderRoute: typeof ApiCallsIdAcceptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/shared-messages/$token/media/$': {
       id: '/api/shared-messages/$token/media/$'
       path: '/media/$'
@@ -2158,7 +2198,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCameraBackgroundsRoute: ApiCameraBackgroundsRouteWithChildren,
   ApiCheckUsernameRoute: ApiCheckUsernameRoute,
   ApiDmsRoute: ApiDmsRoute,
-  ApiPushTokensRoute: ApiPushTokensRoute,
   ApiEmojisRoute: ApiEmojisRouteWithChildren,
   ApiFriendsRoute: ApiFriendsRoute,
   ApiGifsRoute: ApiGifsRoute,
@@ -2168,6 +2207,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOembedRoute: ApiOembedRoute,
   ApiPresenceRoute: ApiPresenceRoute,
   ApiProxyMediaRoute: ApiProxyMediaRoute,
+  ApiPushTokensRoute: ApiPushTokensRoute,
   ApiReadStatesRoute: ApiReadStatesRoute,
   ApiServersRoute: ApiServersRouteWithChildren,
   ApiSessionsRoute: ApiSessionsRoute,
@@ -2198,6 +2238,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiVoiceSocketTicketRoute: ApiVoiceSocketTicketRoute,
   ApiWordleTodayRoute: ApiWordleTodayRoute,
   ApiSharesIndexRoute: ApiSharesIndexRoute,
+  ApiCallsIdAcceptRoute: ApiCallsIdAcceptRoute,
+  ApiCallsIdDeclineRoute: ApiCallsIdDeclineRoute,
   ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
   ApiMessagesIdShareRoute: ApiMessagesIdShareRoute,
   ApiSoundboardUploadsIdRoute: ApiSoundboardUploadsIdRoute,
@@ -2207,13 +2249,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

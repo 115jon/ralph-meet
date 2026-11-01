@@ -18,6 +18,7 @@ import type { BroadcastDescriptor } from "./server.service";
 import { clog } from "@/lib/console-logger";
 import { extractAndProcessEmbedsWithStatus } from "./embed-fetcher";
 import type { MessagePush } from "./push.service";
+import { callRecordFields } from "./call.service";
 
 const messageHistoryLog = clog("message-history");
 
@@ -196,6 +197,8 @@ export function formatMessageRow(
     })),
     embeds: row.embeds ? parseStoredEmbeds(row.embeds) : undefined,
     reply_count: (row.reply_count as number) ?? 0,
+    // A DM call record: `type: "call"` and its outcome.
+    ...callRecordFields(row),
   };
 }
 

@@ -21,4 +21,9 @@ dependencies {
   // 1.0.1 is the newest stable (1.1.0 is still a release candidate).
   implementation 'androidx.core:core-telecom:1.0.1'
   implementation 'androidx.core:core-ktx:1.17.0'
+  // The signed-in session and its API calls, shared with the message
+  // notifications: an incoming call's Answer and Decline use them with the
+  // app killed. ralph-notify hands call pushes over as a broadcast, so it
+  // does not depend on this module.
+  implementation project(':ralph-notify')
 }

@@ -1,8 +1,14 @@
 import { useIsFocused } from "expo-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { startDmCall, takeCallBack } from "@/features/calls/actions";
+import { CallConfirmSheet } from "@/features/calls/CallConfirmSheet";
+import { DmCallRegion } from "@/features/calls/DmCallRegion";
+import { useCallsStore, type CallPeer } from "@/features/calls/store";
+import { useCallPreferences } from "@/features/preferences/call-preferences";
+import { useVoiceStore } from "@/features/voice/store";
 import { authorName } from "@/features/chat/authors";
 import { ChatView } from "@/features/chat/ChatView";
 import { loadDms } from "@/features/dms/actions";
@@ -72,24 +78,71 @@ function DmChat({ id }: { id: string }) {
     if (!dm) void loadDms();
   }, [dm]);
 
+  const peer: CallPeer | null = useMemo(
+    () =>
+      recipient
+        ? {
+            id: recipient.id,
+            name,
+            avatarUrl: recipient.avatar_url ?? null,
+          }
+        : null,
+    [recipient, name],
+  );
+  const [confirming, setConfirming] = useState(false);
+  const inThisCall = useVoiceStore((s) => s.call?.channelId === id);
+  const otherCall = useVoiceStore((s) =>
+    s.call && s.call.channelId !== id ? s.call.channelName : null,
+  );
+  const ringingHere = useCallsStore((s) => s.outgoing?.channelId === id);
+  const askCall = () => {
+    if (!peer) return;
+    // In another call it always asks: the call would drop that one.
+    if (useCallPreferences.getState().skipCallConfirm && !otherCall) {
+      startDmCall(id, peer);
+    } else {
+      setConfirming(true);
+    }
+  };
+  // A missed call's "Call back" (row or notification) asks here too.
+  const callBack = useCallsStore((s) => s.callBack === id);
+  const closeConfirm = () => {
+    setConfirming(false);
+    takeCallBack(id);
+  };
+
   return (
-    <ChatView
-      channelId={id}
-      title={name}
-      subtitle={recipient ? `@${recipient.username}` : "Direct message"}
-      avatar={
-        recipient ? { name, uri: mediaUrl(recipient.avatar_url) } : undefined
-      }
-      placeholder={`Message ${name}`}
-      intro={`This is the start of your conversation with ${name}.`}
-      people={people}
-      attended={attended}
-      onOpenDrawer={showDrawer}
-      // A DM's "members" are the two of you: its header opens the profile.
-      onTitle={
-        recipient ? () => openProfile(recipient.id, recipient) : undefined
-      }
-    />
+    <>
+      <ChatView
+        channelId={id}
+        title={name}
+        subtitle={recipient ? `@${recipient.username}` : "Direct message"}
+        avatar={
+          recipient ? { name, uri: mediaUrl(recipient.avatar_url) } : undefined
+        }
+        placeholder={`Message ${name}`}
+        intro={`This is the start of your conversation with ${name}.`}
+        people={people}
+        attended={attended}
+        onOpenDrawer={showDrawer}
+        // A DM's "members" are the two of you: its header opens the profile.
+        onTitle={
+          recipient ? () => openProfile(recipient.id, recipient) : undefined
+        }
+        onCall={peer ? askCall : undefined}
+        callDisabled={inThisCall || ringingHere}
+        banner={peer ? <DmCallRegion channelId={id} peer={peer} /> : null}
+      />
+      <CallConfirmSheet
+        peer={confirming || callBack ? peer : null}
+        leaving={otherCall}
+        onCancel={closeConfirm}
+        onCall={() => {
+          closeConfirm();
+          if (peer) startDmCall(id, peer);
+        }}
+      />
+    </>
   );
 }
 

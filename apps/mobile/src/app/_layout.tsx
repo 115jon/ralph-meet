@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useSession } from "@/features/auth/session";
+import { CallsHost } from "@/features/calls/CallsHost";
 import { useCurrentUser } from "@/features/auth/use-current-user";
 import { ImageViewer } from "@/features/media/ImageViewer";
 import { ProfileHost } from "@/features/profile/ProfileHost";
@@ -64,6 +65,7 @@ function ThemedStack() {
         </Stack.Protected>
       </Stack>
       {signedIn ? <ProfileHost /> : null}
+      {signedIn ? <CallsHost /> : null}
       <ImageViewer />
       <ToastHost />
     </>

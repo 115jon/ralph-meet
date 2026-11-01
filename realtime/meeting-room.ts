@@ -21,6 +21,7 @@ import {
   GatewayOp as Op,
   parseGatewayFrame,
   withLegacyClerkUserId,
+  type CallRecord,
   type MainClientPayload,
 } from "../src/lib/gateway-protocol";
 import { clog } from "../src/lib/console-logger";
@@ -64,6 +65,16 @@ import {
 } from "../src/lib/background-tasks";
 import { recordR2CleanupFailure } from "../src/services/r2-cleanup.service";
 import {
+  callRingTokens,
+  insertCallRecord,
+  isMissedRingStop,
+  planCallRing,
+  sendCallRingPushes,
+  sendCallRingStopPushes,
+  type CallRingStopReason,
+} from "../src/services/call.service";
+import { fcmSenderFor } from "../src/server/fcm";
+import {
   fetchMessageAttachmentKeys,
   type MessagePostprocessingTask,
 } from "../src/services/message.service";
@@ -73,9 +84,13 @@ import {
   normalizeStoredResumableSession,
   normalizeStoredVoiceChannelMembers,
   normalizeStoredWsAttachment,
+  ACTIVE_CALLS_STORAGE_KEY,
   PENDING_CALLS_STORAGE_KEY,
+  restoreActiveCalls,
   restorePendingCalls,
+  serializeActiveCalls,
   serializePendingCalls,
+  type StoredActiveCall,
   SPATIAL_AUDIO_STORAGE_PREFIX,
   type StoredPendingCall,
   type StoredSpatialAudioState,
@@ -97,6 +112,8 @@ interface Env {
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   DEBUG?: string;
   VOICE_ROOM?: DurableObjectNamespace;
+  /** Service-account JSON for FCM; unset = no call ring pushes. */
+  FCM_SERVICE_ACCOUNT?: string;
 }
 
 // Opcodes, codes and payload schemas: src/lib/gateway-protocol.
@@ -262,6 +279,12 @@ const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
 const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 6;
 const PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie detection fires first
 const CALL_RING_TIMEOUT_MS = 30_000; // auto-cancel after 30s
+/** POST /call-accept and /call-decline answers. */
+const REST_ANSWER_STATUS = {
+  ok: 200,
+  not_callee: 403,
+  not_found: 404,
+} as const;
 const RESUME_GRACE_PERIOD_MS = 120_000; // 2 min — keep session resumable after disconnect
 const MAX_GATEWAY_FRAME_BYTES = 1_000_000;
 const MAX_REPLAY_BUFFER_BYTES = 256_000;
@@ -324,6 +347,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private pendingCalls: Map<string, PendingCall> = new Map();
   /** Recently accepted calls (callId), acts as a TTL cache to prevent Op 33/Op 37 race conditions */
   private acceptedCalls: Set<string> = new Set();
+  /** Answered DM calls by channel id, until the channel empties (call records). */
+  private activeCalls: Map<string, StoredActiveCall> = new Map();
   /** Voice channel started timestamps: channelId → epoch ms when first member joined */
   private voiceChannelStartedAt: Map<string, number> = new Map();
   /** Shared spatial audio layouts: room/channel id -> state */
@@ -537,6 +562,14 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       } catch (error) {
         log.error("Failed to restore pending calls", error);
+      }
+
+      try {
+        this.activeCalls = restoreActiveCalls(
+          await this.ctx.storage.get<unknown>(ACTIVE_CALLS_STORAGE_KEY),
+        );
+      } catch (error) {
+        log.error("Failed to restore active calls", error);
       }
 
       // Restore valid spatial layouts from per-room storage keys.
@@ -780,6 +813,35 @@ export class MeetingRoom extends DurableObject<Env> {
           { status: 500 },
         );
       }
+    }
+
+    // POST /api/calls/:id/accept|decline (src/server/routes/calls.ts): the
+    // callee answers or declines a ring without a socket, e.g. from a phone
+    // notification. The worker has checked who is asking.
+    if (
+      (url.pathname === "/call-accept" || url.pathname === "/call-decline") &&
+      request.method === "POST"
+    ) {
+      const body: unknown = await request.json().catch(() => null);
+      const callId =
+        this.isPlainObject(body) && typeof body.call_id === "string"
+          ? body.call_id
+          : "";
+      const userId =
+        this.isPlainObject(body) && typeof body.user_id === "string"
+          ? body.user_id
+          : "";
+      if (!callId || !userId) {
+        return Response.json({ error: "invalid" }, { status: 400 });
+      }
+      const result =
+        url.pathname === "/call-accept"
+          ? this.acceptCallFromRest(callId, userId)
+          : this.declineCallFromRest(callId, userId);
+      this.flushDirtyStorage();
+      return Response.json(result === "ok" ? { ok: true } : { error: result }, {
+        status: REST_ANSWER_STATUS[result],
+      });
     }
 
     if (url.pathname === "/disconnect-session" && request.method === "POST") {
@@ -1517,6 +1579,7 @@ export class MeetingRoom extends DurableObject<Env> {
     };
     this.broadcastToUser(pending.callerId, timeoutMessage);
     this.broadcastToUser(pending.calleeId, timeoutMessage);
+    this.settleRing(pending, "timeout");
     log.info(
       `Call ${pending.callId} ring timed out (caller stays in voice channel)`,
     );
@@ -1902,6 +1965,7 @@ export class MeetingRoom extends DurableObject<Env> {
         this.deleteVoiceChannelStorage(channelId);
         this.voiceChannelStartedAt.delete(channelId);
         this.persistVoiceChannelStartedAt();
+        this.finishActiveCall(channelId);
         changed = true;
         changedChannelIds.add(channelId);
       }
@@ -3209,7 +3273,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Clean up calls — cancel pending or end active
     if (session.user_id && !session.standby) {
-      this.cleanupCallsForUser(session.user_id, "disconnected");
+      this.cleanupCallsForUser(session.user_id, "disconnected", ws);
     }
 
     // Clean up channel and server subscriptions
@@ -3972,6 +4036,7 @@ export class MeetingRoom extends DurableObject<Env> {
       };
       this.broadcastToUser(pending.callerId, evt);
       this.broadcastToUser(pending.calleeId, evt);
+      this.settleRing(pending, "accepted");
     }
 
     log.info(`${session.name} joined voice channel ${d.channel_id}`);
@@ -4052,7 +4117,9 @@ export class MeetingRoom extends DurableObject<Env> {
         };
         this.broadcastToUser(abandonedPendingCall.callerId, endMsg);
         this.broadcastToUser(abandonedPendingCall.calleeId, endMsg);
+        this.settleRing(abandonedPendingCall, "abandoned");
       }
+      this.finishActiveCall(channelId);
     }
 
     // Persist to storage for hibernation resilience
@@ -4882,13 +4949,50 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
       }
     }
+
+    // Phones ring over FCM too, so a callee with no live socket (every
+    // backgrounded phone) is still reachable.
+    const fcm = fcmSenderFor(this.env.FCM_SERVICE_ACCOUNT);
+    const ringTokens = fcm
+      ? await callRingTokens(this.env.DB, calleeId).catch((error) => {
+          log.error("Call ring tokens lookup failed:", error);
+          return [];
+        })
+      : [];
+    const plan = planCallRing({
+      online: calleeOnline,
+      pushDevices: ringTokens.length,
+    });
+    if (!plan.ring) {
+      unavailable();
+      return;
+    }
     if (!calleeOnline) {
+      const callee = await this.env.DB.prepare(
+        "SELECT username, display_name, avatar_url FROM users WHERE id = ?",
+      )
+        .bind(calleeId)
+        .first<{
+          username: string | null;
+          display_name: string | null;
+          avatar_url: string | null;
+        }>()
+        .catch(() => null);
+      calleeUsername = callee?.username ?? undefined;
+      calleeName = callee?.display_name ?? callee?.username ?? undefined;
+      calleeDisplayName = callee?.display_name ?? calleeName;
+      calleeAvatar = callee?.avatar_url ?? null;
+    }
+
+    // A caller who is in another call's ring (or had one between the awaits
+    // above) cannot start a second one.
+    if (
+      this.findPendingCallForUser(callerId) ||
+      this.pendingCalls.has(calleeId)
+    ) {
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: {
-          event: "CALL_RING_STOP",
-          data: { call_id: null, reason: "unavailable" },
-        },
+        d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "busy" } },
       });
       return;
     }
@@ -4920,6 +5024,7 @@ export class MeetingRoom extends DurableObject<Env> {
       calleeUsername,
       calleeDisplayName,
       calleeAvatar,
+      pushed: plan.push,
     };
     const pendingCall: PendingCall = {
       ...pendingCallData,
@@ -4944,6 +5049,26 @@ export class MeetingRoom extends DurableObject<Env> {
         },
       },
     });
+
+    if (plan.push) {
+      this.ctx.waitUntil(
+        sendCallRingPushes(this.env.DB, fcm, ringTokens, {
+          callId,
+          channelId: d.channel_id,
+          callerId,
+          callerName: getDisplayName(
+            {
+              display_name: session.display_name,
+              username: session.username,
+              name: session.name,
+            },
+            session.name,
+          ),
+          callerAvatarUrl: session.avatar_url ?? null,
+          expiresAt: pendingCallData.expiresAt,
+        }),
+      );
+    }
 
     // Add caller directly to the DM voice channel to establish the "Lobby"
     if (session.voice_channel_id) {
@@ -5041,6 +5166,7 @@ export class MeetingRoom extends DurableObject<Env> {
       },
     });
 
+    this.settleRing(pending, "accepted");
     log.info(`Call accepted: ${pending.callId}`);
   }
 
@@ -5077,6 +5203,7 @@ export class MeetingRoom extends DurableObject<Env> {
       },
     });
 
+    this.settleRing(pending, "declined");
     log.info(`Call declined: ${pending.callId}`);
   }
 
@@ -5122,6 +5249,7 @@ export class MeetingRoom extends DurableObject<Env> {
           data: { call_id: pending.callId, reason: "cancelled" },
         },
       });
+      this.settleRing(pending, "cancelled");
       log.info(`Call cancelled by caller: ${pending.callId}`);
     }
   }
@@ -5138,15 +5266,28 @@ export class MeetingRoom extends DurableObject<Env> {
     return null;
   }
 
-  /** Clean up all calls for a user (called on disconnect/leave) */
-  private cleanupCallsForUser(userId: string, reason: string) {
+  /**
+   * Clean up all calls for a user (called on disconnect/leave). `closing` is
+   * the socket going away, which no longer counts as the user's.
+   */
+  private cleanupCallsForUser(
+    userId: string,
+    reason: CallRingStopReason,
+    closing?: WebSocket,
+  ) {
     log.info(
       `cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`,
     );
 
-    // Clean up pending calls (as callee)
+    // Clean up pending calls (as callee). The ring goes on while the callee
+    // has another live session or their phones were rung: a phone's socket
+    // closing as the app goes behind is no reason to stop ringing it.
     const pendingAsCallee = this.pendingCalls.get(userId);
-    if (pendingAsCallee) {
+    if (
+      pendingAsCallee &&
+      !pendingAsCallee.pushed &&
+      !this.hasLiveSession(userId, closing)
+    ) {
       log.info(
         `Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`,
       );
@@ -5160,6 +5301,7 @@ export class MeetingRoom extends DurableObject<Env> {
           data: { call_id: pendingAsCallee.callId, reason },
         },
       });
+      this.settleRing(pendingAsCallee, reason);
     }
 
     // Clean up pending calls (as caller)
@@ -5176,12 +5318,206 @@ export class MeetingRoom extends DurableObject<Env> {
             data: { call_id: call.callId, reason },
           },
         });
+        this.settleRing(call, reason);
       }
     }
 
     // Active calls purely live in voice channel presence now, and `handleLeave`
     // natively removes users from `voiceChannelMembers`. We don't need any more manually teardown logic!
     log.info(`cleanupCallsForUser done.`);
+  }
+
+  /** A live, non-standby gateway session of `userId` other than `except`. */
+  private hasLiveSession(userId: string, except?: WebSocket): boolean {
+    for (const [ws, session] of this.sessions) {
+      if (ws !== except && session.user_id === userId && !session.standby) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private findPendingCallById(callId: string): PendingCall | null {
+    for (const call of this.pendingCalls.values()) {
+      if (call.callId === callId) return call;
+    }
+    return null;
+  }
+
+  /** What a ring push and its stop say about the call. */
+  private ringOf(call: StoredPendingCall) {
+    return {
+      callId: call.callId,
+      channelId: call.channelId,
+      callerId: call.callerId,
+      callerName: call.callerDisplayName ?? call.callerName,
+      callerAvatarUrl: call.callerAvatar ?? null,
+    };
+  }
+
+  /**
+   * After a ring ended for `reason` (the call is out of pendingCalls): stop
+   * the callee's phones ringing and save what happened. An answered call
+   * becomes active; its record is written when its channel empties.
+   */
+  private settleRing(call: StoredPendingCall, reason: CallRingStopReason) {
+    if (call.pushed) {
+      this.ctx.waitUntil(
+        sendCallRingStopPushes(
+          this.env.DB,
+          fcmSenderFor(this.env.FCM_SERVICE_ACCOUNT),
+          call.calleeId,
+          this.ringOf(call),
+          reason,
+        ),
+      );
+    }
+    if (reason === "accepted") {
+      this.startActiveCall(call);
+      return;
+    }
+    this.ctx.waitUntil(
+      this.recordCall(call.channelId, {
+        call_id: call.callId,
+        outcome: isMissedRingStop(reason) ? "missed" : "declined",
+        caller_id: call.callerId,
+        callee_id: call.calleeId,
+      }),
+    );
+  }
+
+  private startActiveCall(call: StoredPendingCall) {
+    const previous = this.activeCalls.get(call.channelId);
+    if (previous && previous.callId !== call.callId) {
+      this.finishActiveCall(call.channelId);
+    }
+    this.activeCalls.set(call.channelId, {
+      callId: call.callId,
+      callerId: call.callerId,
+      calleeId: call.calleeId,
+      channelId: call.channelId,
+      acceptedAt: Date.now(),
+    });
+    this.persistActiveCalls();
+  }
+
+  /** The answered call's channel emptied: save it as ended, with its length. */
+  private finishActiveCall(channelId: string) {
+    const call = this.activeCalls.get(channelId);
+    if (!call) return;
+    this.activeCalls.delete(channelId);
+    this.persistActiveCalls();
+    this.ctx.waitUntil(
+      this.recordCall(channelId, {
+        call_id: call.callId,
+        outcome: "ended",
+        caller_id: call.callerId,
+        callee_id: call.calleeId,
+        duration_s: Math.max(
+          0,
+          Math.round((Date.now() - call.acceptedAt) / 1000),
+        ),
+      }),
+    );
+  }
+
+  private persistActiveCalls() {
+    const serialized = serializeActiveCalls(this.activeCalls);
+    const empty = this.activeCalls.size === 0;
+    this.scheduleDurableStateWrite(
+      () =>
+        empty
+          ? this.ctx.storage.delete(ACTIVE_CALLS_STORAGE_KEY)
+          : this.ctx.storage.put(ACTIVE_CALLS_STORAGE_KEY, serialized),
+      "active calls",
+    );
+  }
+
+  /** Saves a call record in the DM and shows it to both people. */
+  private async recordCall(channelId: string, record: CallRecord) {
+    try {
+      const message = await insertCallRecord(
+        this.env.DB,
+        channelId,
+        crypto.randomUUID(),
+        record,
+      );
+      const dispatch = {
+        op: Op.Dispatch,
+        d: { event: "MESSAGE_CREATE", data: message },
+      };
+      this.broadcastToUser(record.caller_id, dispatch);
+      this.broadcastToUser(record.callee_id, dispatch);
+      this.flushDirtyStorage();
+    } catch (error) {
+      log.error("Failed to save the call record:", error);
+    }
+  }
+
+  /** POST /api/calls/:id/accept: the callee answered without a socket. */
+  private acceptCallFromRest(
+    callId: string,
+    userId: string,
+  ): "ok" | "not_callee" | "not_found" {
+    const pending = this.findPendingCallById(callId);
+    if (!pending) {
+      // Answered already (the phone's notification, then the app): fine
+      // for the callee, so the app can go on and join.
+      for (const active of this.activeCalls.values()) {
+        if (active.callId === callId) {
+          return active.calleeId === userId ? "ok" : "not_callee";
+        }
+      }
+      return "not_found";
+    }
+    if (pending.calleeId !== userId) return "not_callee";
+
+    this.acceptedCalls.add(callId);
+    setTimeout(() => this.acceptedCalls.delete(callId), 10000);
+    clearTimeout(pending.timeout);
+    this.pendingCalls.delete(pending.calleeId);
+    this.persistPendingCalls();
+
+    // The callee joins the DM's voice channel from the app, like any join.
+    const evt = {
+      op: Op.Dispatch,
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: callId, reason: "accepted" },
+      },
+    };
+    this.broadcastToUser(pending.callerId, evt);
+    this.broadcastToUser(pending.calleeId, evt);
+    this.settleRing(pending, "accepted");
+    log.info(`Call accepted over REST: ${callId}`);
+    return "ok";
+  }
+
+  /** POST /api/calls/:id/decline: the callee declined without a socket. */
+  private declineCallFromRest(
+    callId: string,
+    userId: string,
+  ): "ok" | "not_callee" | "not_found" {
+    const pending = this.findPendingCallById(callId);
+    if (!pending) return "not_found";
+    if (pending.calleeId !== userId) return "not_callee";
+
+    clearTimeout(pending.timeout);
+    this.pendingCalls.delete(pending.calleeId);
+    this.persistPendingCalls();
+
+    const evt = {
+      op: Op.Dispatch,
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: callId, reason: "declined" },
+      },
+    };
+    this.broadcastToUser(pending.callerId, evt);
+    this.broadcastToUser(pending.calleeId, evt);
+    this.settleRing(pending, "declined");
+    log.info(`Call declined over REST: ${callId}`);
+    return "ok";
   }
 
   /** Add a user to voiceChannelMembers for a call (reuses voice channel infra) */

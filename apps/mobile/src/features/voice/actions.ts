@@ -21,9 +21,9 @@ import {
 import { showToast } from "@/ui";
 
 import type { CameraFacing } from "./local-media";
-import { voiceRoomSlug } from "./protocol";
+import { dmCallRoomSlug, voiceRoomSlug } from "./protocol";
 import type { VoiceSession } from "./session";
-import { NO_LOCAL_MEDIA, useVoiceStore } from "./store";
+import { type DmCall, NO_LOCAL_MEDIA, useVoiceStore } from "./store";
 
 // Starting and ending calls. The WebRTC engine (react-native-webrtc,
 // PartyTracks) is imported on the first join, so the app starts without it.
@@ -45,9 +45,13 @@ let resumeCamera: CameraFacing | null = null;
 let appStateSubscription: NativeEventSubscription | null = null;
 
 export interface JoinTarget {
+  /** Empty for a DM call. */
   readonly serverId: string;
   readonly channelId: string;
+  /** The voice channel, or the other person in a DM call. */
   readonly channelName: string;
+  /** A DM call: its room is `dm-call-<a>-<b>`, not a server voice room. */
+  readonly dm?: DmCall;
 }
 
 async function microphoneAllowed(): Promise<boolean> {
@@ -80,6 +84,7 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
       serverId: target.serverId,
       channelId: target.channelId,
       channelName: target.channelName,
+      dm: target.dm,
       status: "joining",
       muted: joinMuted,
       deafened: false,
@@ -123,7 +128,9 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     target: {
       serverId: target.serverId,
       channelId: target.channelId,
-      roomSlug: voiceRoomSlug(target.serverId, target.channelId),
+      roomSlug: target.dm
+        ? dmCallRoomSlug(user.id, target.dm.peerId)
+        : voiceRoomSlug(target.serverId, target.channelId),
     },
     identity: {
       userId: user.id,

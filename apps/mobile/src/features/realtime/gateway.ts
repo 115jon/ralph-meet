@@ -177,6 +177,28 @@ export function sendVoiceStateUpdate(
   send({ op: GatewayOp.VoiceStateUpdate, d });
 }
 
+// DM calls, as the web's sendCallInitiate and sendCallEnd. Answering and
+// declining go over REST (features/calls/api.ts), which also works from a
+// notification with no socket.
+
+/** Op 36: rings `targetUserId` in the DM `channelId`. */
+export function sendCallInitiate(
+  targetUserId: string,
+  channelId: string,
+): boolean {
+  if (!socket.isReady) return false;
+  socket.sendJson({
+    op: GatewayOp.CallInitiate,
+    d: { target_user_id: targetUserId, channel_id: channelId },
+  });
+  return true;
+}
+
+/** Op 39: cancels our outgoing ring `callId`. */
+export function sendCallEnd(callId: string): void {
+  send({ op: GatewayOp.CallEnd, d: { call_id: callId } });
+}
+
 /** Message events for the open channel; one at a time, like the web. */
 export function subscribeChannel(id: string | null): void {
   if (id === channelId) return;

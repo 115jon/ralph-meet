@@ -4,6 +4,8 @@ import { AppState } from "react-native";
 import { startActivityEvents } from "@/features/activity/realtime";
 import { resetActivityStore } from "@/features/activity/store";
 import { useSession } from "@/features/auth/session";
+import { startCallEvents } from "@/features/calls/actions";
+import { resetCallsStore } from "@/features/calls/store";
 import { clearTypingTimers } from "@/features/chat/actions";
 import { startChatEvents } from "@/features/chat/realtime";
 import { resetDrafts } from "@/features/chat/drafts";
@@ -49,6 +51,7 @@ export function useRealtime(): void {
     const stopMembers = startMemberEvents();
     const stopFriends = startFriendEvents();
     const stopProfiles = startProfileEvents();
+    const stopCalls = startCallEvents();
     const appState = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         wakeGateway();
@@ -64,6 +67,7 @@ export function useRealtime(): void {
       stopMembers();
       stopFriends();
       stopProfiles();
+      stopCalls();
       appState.remove();
     };
   }, []);
@@ -75,6 +79,7 @@ export function useRealtime(): void {
   useEffect(() => {
     if (!signedOut) return;
     leaveCall();
+    resetCallsStore();
     resetServersStore();
     clearTypingTimers();
     resetChatStore();

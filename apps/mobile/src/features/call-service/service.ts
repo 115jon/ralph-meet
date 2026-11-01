@@ -53,7 +53,8 @@ function optionsFor(call: ActiveCall): RalphCall.CallOptions {
     .servers.find((s) => s.id === call.serverId);
   return {
     channelName: call.channelName,
-    serverName: server?.name ?? "",
+    serverName: call.dm ? "Voice call" : (server?.name ?? ""),
+    answeredCallId: call.dm?.answeredCallId,
     muted: call.muted,
     deafened: call.deafened,
     openUrl: Linking.createURL("/call"),

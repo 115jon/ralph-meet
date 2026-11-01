@@ -94,6 +94,8 @@ function restOf(page: HomePage, width: number, drawerWidth: number): number {
  * drag on the chat is a message's swipe-to-reply, and Android's gesture
  * navigation claims the right edge for back. The chat stays mounted
  * throughout. Back steps a page left; from the drawer it leaves the app.
+ * With no conversation open the drawer fills the screen and the rest is out
+ * of reach.
  */
 export function HomePager({
   drawer,
@@ -111,7 +113,9 @@ export function HomePager({
   const conversation = useConversation();
   const hasChat = conversation !== null;
   const hasMembers = useHasMembers();
-  const drawerWidth = Math.round(width * (1 - PEEK));
+  // With no conversation there is nothing to peek at: the drawer is the
+  // whole screen and the chat rests fully off to the right.
+  const drawerWidth = hasChat ? Math.round(width * (1 - PEEK)) : width;
   // Built on first open, then kept, so going back and forth is instant.
   const [membersBuilt, setMembersBuilt] = useState(false);
   if (page === "members" && !membersBuilt) setMembersBuilt(true);

@@ -29,7 +29,11 @@ export function buildMessageRows(
     if (index > 0 && !showDayDivider) {
       const prev = messages[index - 1];
       if (prev) {
-        const hasSameAuthor = prev.author_id === message.author_id;
+        // A call record is a system row: it never joins a group either way.
+        const hasSameAuthor =
+          prev.author_id === message.author_id &&
+          prev.type !== "call" &&
+          message.type !== "call";
         const hasNoReply = !message.reply_to_id;
         if (hasSameAuthor && hasNoReply) {
           const prevTime = new Date(prev.created_at).getTime();

@@ -12,9 +12,10 @@ import org.json.JSONObject
 /**
  * The few API calls notifications make without JavaScript, on the caller's
  * (background) thread. Bearer auth like the app's apiFetch; never logs the
- * token or message text.
+ * token or message text. Public for modules/ralph-call, whose call
+ * notifications answer and decline the same way.
  */
-internal object RalphApi {
+object RalphApi {
   private const val TAG = "RalphNotify"
   private const val TIMEOUT_MS = 10_000
   private const val AVATAR_TIMEOUT_MS = 5_000
@@ -36,6 +37,9 @@ internal object RalphApi {
   /** PUT /api/channels/:id/read-state. */
   fun markRead(session: Session, channelId: String): Int =
     request(session, "PUT", "/api/channels/${Uri.encode(channelId)}/read-state", "{}")
+
+  /** POST `path` with a JSON `body`. The HTTP status, or -1 offline. */
+  fun post(session: Session, path: String, body: String = "{}"): Int = request(session, "POST", path, body)
 
   private fun request(session: Session, method: String, path: String, body: String): Int {
     val connection = URL(session.apiBaseUrl + path).openConnection() as HttpURLConnection

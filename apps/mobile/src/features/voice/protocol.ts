@@ -221,3 +221,9 @@ export const SPEAKING_MICROPHONE = 1;
 export function voiceRoomSlug(serverId: string, channelId: string): string {
   return `voice-${serverId}-${channelId}`;
 }
+
+/** A DM call's room: both user ids, sorted, as the server names it. */
+export function dmCallRoomSlug(userId: string, peerId: string): string {
+  const [a, b] = [userId, peerId].sort();
+  return `dm-call-${a}-${b}`;
+}

@@ -1,10 +1,10 @@
-import { List, UsersThree } from "phosphor-react-native";
+import { List, Phone, UsersThree } from "phosphor-react-native";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useGatewayStatus } from "@/features/realtime/gateway";
 import { RADIUS, useTheme } from "@/theme";
-import { Avatar, IconButton, Led, Text } from "@/ui";
+import { Avatar, Icon, IconButton, Led, Text } from "@/ui";
 
 interface ChatHeaderProps {
   /** "#general", or the other person's name in a DM. */
@@ -19,6 +19,42 @@ interface ChatHeaderProps {
   onMembers?: () => void;
   /** A DM's avatar and name open the other person's profile. */
   onTitle?: () => void;
+  /** A 1:1 DM's phone key: starts a call. */
+  onCall?: () => void;
+  /** Already in this DM's call: the phone key rests at 45%. */
+  callDisabled?: boolean;
+}
+
+/** The DM header's phone key: its glyph fills while pressed. */
+function CallKey({
+  onPress,
+  disabled,
+}: {
+  onPress: () => void;
+  disabled: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Start a voice call"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => ({
+        width: 40,
+        height: 40,
+        borderRadius: RADIUS,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: pressed ? theme.tint2 : "transparent",
+        opacity: disabled ? 0.45 : 1,
+      })}
+    >
+      {({ pressed }) => <Icon icon={Phone} active={pressed} size={22} />}
+    </Pressable>
+  );
 }
 
 /**
@@ -32,6 +68,8 @@ export function ChatHeader({
   onMenu,
   onMembers,
   onTitle,
+  onCall,
+  callDisabled = false,
 }: ChatHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -53,7 +91,7 @@ export function ChatHeader({
           alignItems: "center",
           gap: 4,
           paddingLeft: 4,
-          paddingRight: onMembers ? 4 : 16,
+          paddingRight: onMembers || onCall ? 4 : 16,
         }}
       >
         <IconButton
@@ -113,6 +151,7 @@ export function ChatHeader({
             </View>
           </View>
         </Pressable>
+        {onCall ? <CallKey onPress={onCall} disabled={callDisabled} /> : null}
         {onMembers ? (
           <IconButton icon={UsersThree} label="Members" onPress={onMembers} />
         ) : null}
