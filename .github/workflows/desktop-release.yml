@@ -124,6 +124,11 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # Run before the payload is packed so the installer under test builds
+      # without the embedded ~150 MB resource.
+      - name: Test C# installer
+        run: dotnet test desktop/installer.tests --nologo
+
       # ── Install dependencies ─────────────────────────────────────────
       # We only need dependencies for the desktop app.
       # Filtering the installation avoids downloading huge unrelated packages like workerd / wrangler.
@@ -271,7 +276,7 @@ jobs:
           $TagName = $env:RELEASE_TAG
           $Repo = "${{ github.repository }}"
           $Url = "https://github.com/$Repo/releases/download/$TagName/RalphMeetSetup.exe"
-          $PubDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+          $PubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
           $Metadata = @{
               version = $Version
@@ -287,8 +292,11 @@ jobs:
           $Metadata | ConvertTo-Json -Depth 5 | Set-Content -Path "desktop/installer/bin/Release/net48/latest.json" -NoNewline
           Write-Host "==> Generated latest.json with version $Version and signature successfully!"
 
-          # 4. Upload artifacts to the release
+          # 3. Refuse to publish an updater manifest that would strand existing installs
           $LatestJsonPath = "desktop/installer/bin/Release/net48/latest.json"
+          ./desktop/scripts/validate-latest-json.ps1 -LatestJson $LatestJsonPath -TauriConf "desktop/src-tauri/tauri.conf.json" -Tag $TagName -Repo $Repo
+
+          # 4. Upload artifacts to the release
           gh release upload $env:RELEASE_TAG $SetupRenamePath --clobber -R ${{ github.repository }}
           gh release upload $env:RELEASE_TAG $LatestJsonPath --clobber -R ${{ github.repository }}
 

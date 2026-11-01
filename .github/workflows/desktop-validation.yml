@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/desktop-validation.yml"
+      - ".github/workflows/desktop-release.yml"
       - ".github/actions/setup-pnpm/**"
       - ".gitmodules"
       - "desktop/**"
@@ -24,8 +25,13 @@ on:
       - main
     paths:
       - ".github/workflows/desktop-validation.yml"
+      - ".github/workflows/desktop-release.yml"
       - ".gitmodules"
       - "desktop/src-tauri/**"
+      - "desktop/installer/**"
+      - "desktop/installer.tests/**"
+      - "desktop/packaging/**"
+      - "desktop/scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -60,6 +66,8 @@ jobs:
               - '.github/workflows/desktop-validation.yml'
               - '.gitmodules'
               - 'desktop/src-tauri/**'
+              # build.rs and the packaging tests read the payload manifest.
+              - 'desktop/packaging/payload-manifest.json'
 
   desktop:
     name: desktop
@@ -131,10 +139,71 @@ jobs:
           # writes one.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      # The game-capture-hook feature makes build.rs require the OBS capture
+      # binaries (they are not committed). Build them exactly like the release
+      # workflow so this job checks the feature set that actually ships.
+      - name: Restore OBS capture binaries cache
+        if: ${{ needs.changes.outputs.rust == 'true' }}
+        id: obs-capture-cache
+        # actions/cache v4.3.0
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            desktop/src-tauri/resources/obs-capture/*.dll
+            desktop/src-tauri/resources/obs-capture/*.exe
+          key: obs-capture-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/resources/obs-capture/fork/**', 'desktop/scripts/build-capture-fork.ps1') }}
+
+      - name: Build OBS game capture binaries from source
+        if: ${{ needs.changes.outputs.rust == 'true' && steps.obs-capture-cache.outputs.cache-hit != 'true' }}
+        shell: pwsh
+        run: ./desktop/scripts/build-capture-fork.ps1 -Arch both -Config Release -FetchDetours
+
+      - name: Save OBS capture binaries cache
+        if: ${{ needs.changes.outputs.rust == 'true' && steps.obs-capture-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' }}
+        # actions/cache v4.3.0
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            desktop/src-tauri/resources/obs-capture/*.dll
+            desktop/src-tauri/resources/obs-capture/*.exe
+          key: ${{ steps.obs-capture-cache.outputs.cache-primary-key }}
+
       - name: Check desktop Rust crate
         if: ${{ needs.changes.outputs.rust == 'true' }}
+        env:
+          RALPH_GAME_CAPTURE_HOOK: "1"
+          RALPH_CAPTURE_POLICY: "wgc-enabled"
         # The existing desktop lockfile predates the current manifest and is
         # intentionally not enforced by the Desktop Release job.
         # Match that established release behavior instead of making lockfile
         # repair part of this validation workflow.
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+        # With game-capture-hook, build.rs also fails if the payload manifest
+        # stops shipping any required obs-capture material (GPLv2 documents).
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features cef,native-screen-share,game-capture-hook
+
+  # Installer, payload format, and packaging scripts. Windows only (WPF, net48),
+  # and independent of the Rust job: it needs no CEF, cargo build, or pnpm.
+  installer:
+    name: installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup .NET
+        # actions/setup-dotnet v4.3.1
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test C# installer
+        run: dotnet test desktop/installer.tests --nologo
+
+      # Stages synthetic inputs through desktop/packaging/payload-manifest.json,
+      # packs them with PayloadPacker, decodes and compares, and checks that a
+      # missing manifest file fails staging.
+      - name: Test payload pipeline
+        shell: pwsh
+        run: ./desktop/scripts/test-payload-pipeline.ps1
