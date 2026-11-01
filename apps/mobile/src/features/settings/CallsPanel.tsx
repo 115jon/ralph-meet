@@ -1,19 +1,74 @@
-import { View } from "react-native";
+import { useEffect, useState } from "react";
+import { AppState, Pressable, View } from "react-native";
 
 import {
   setCallPreference,
   SPEAKING_THRESHOLD_DB,
   useCallPreferences,
 } from "@/features/preferences/call-preferences";
-import { Fader } from "@/ui";
+import { RADIUS, useTheme } from "@/theme";
+import { Fader, Led, Text } from "@/ui";
 
-import { ChoiceRow, Section, ToggleRow } from "./rows";
+import * as RalphCall from "../../../modules/ralph-call/src";
+import { ChoiceRow, Row, Section, ToggleRow } from "./rows";
 
 const formatDb = (value: number) => `${value} dB`;
 
+/** Whether calls may show over the lock screen; re-read on return from settings. */
+function useLockScreenCalls(): boolean | null {
+  const [allowed, setAllowed] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!RalphCall.isAvailable) return;
+    const read = () => void RalphCall.canUseFullScreenIntent().then(setAllowed);
+    read();
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") read();
+    });
+    return () => appState.remove();
+  }, []);
+  return allowed;
+}
+
+/** Ringing over the lock screen: on, or a key to the system page that allows it. */
+function LockScreenRow() {
+  const theme = useTheme();
+  const allowed = useLockScreenCalls();
+  if (allowed === null) return null;
+  return (
+    <Row
+      leading={<Led state={allowed ? "talk" : "idle"} />}
+      label="Ring on the lock screen"
+      description={
+        allowed
+          ? "A call wakes your phone and shows over the lock screen."
+          : "Off: calls only show as a notification. Allow full-screen notifications to turn it on."
+      }
+      trailing={
+        allowed ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Allow in system settings"
+            onPress={() => void RalphCall.openFullScreenIntentSettings()}
+            style={({ pressed }) => ({
+              height: 36,
+              paddingHorizontal: 12,
+              borderRadius: RADIUS,
+              justifyContent: "center",
+              backgroundColor: pressed ? theme.tint3 : theme.tint1,
+            })}
+          >
+            <Text variant="control">Allow</Text>
+          </Pressable>
+        )
+      }
+    />
+  );
+}
+
 /** 02 Calls: how you sound and where calls play, on this device. */
 export function CallsPanel() {
-  const { speakingThresholdDb, joinMuted, audioRoute } = useCallPreferences();
+  const { speakingThresholdDb, joinMuted, audioRoute, skipCallConfirm } =
+    useCallPreferences();
   return (
     <View style={{ gap: 24 }}>
       <Section
@@ -32,6 +87,17 @@ export function CallsPanel() {
             accessibilityLabel="Input sensitivity"
           />
         </View>
+      </Section>
+      <Section title="Direct calls">
+        <ToggleRow
+          label="Ask before calling"
+          description="Confirm before a call rings every device they're signed in on."
+          value={!skipCallConfirm}
+          onValueChange={(value) =>
+            setCallPreference("skipCallConfirm", !value)
+          }
+        />
+        <LockScreenRow />
       </Section>
       <Section title="Joining">
         <ToggleRow

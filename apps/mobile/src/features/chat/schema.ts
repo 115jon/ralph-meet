@@ -1,3 +1,4 @@
+import { CallRecordSchema } from "@ralph/protocol";
 import { Schema } from "effect";
 
 // Only what the chat shows; the server sends more and we ignore it. Shapes
@@ -105,6 +106,9 @@ export const MessageSchema = Schema.Struct({
   reactions: Schema.optional(Schema.Array(ReactionSchema)),
   /** Echoed back on the sender's own MESSAGE_CREATE and POST answer. */
   nonce: Schema.optional(Schema.String),
+  /** A system message; "call" is a DM call record with its outcome in `call`. */
+  type: OptionalText,
+  call: Schema.optional(CallRecordSchema),
 });
 export type Message = typeof MessageSchema.Type;
 

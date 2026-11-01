@@ -38,7 +38,8 @@ internal object MessageNotifier {
   // orphans what the user set on it.
   const val CHANNEL_DMS = "dms"
   const val CHANNEL_MENTIONS = "mentions"
-  const val CHANNEL_CALLS = "calls"
+  // Calls ring on modules/ralph-call's own channels (incoming_calls rings
+  // with the ringtone, which a channel cannot change once created).
   const val CHANNEL_OTHER = "other"
   /** Versions before 0.3 posted every push on one channel. */
   private const val LEGACY_CHANNEL = "messages"
@@ -70,11 +71,6 @@ internal object MessageNotifier {
           .Builder(CHANNEL_MENTIONS, NotificationManagerCompat.IMPORTANCE_HIGH)
           .setName("Mentions and replies")
           .setDescription("When someone mentions you or replies to you in a server")
-          .build(),
-        NotificationChannelCompat
-          .Builder(CHANNEL_CALLS, NotificationManagerCompat.IMPORTANCE_HIGH)
-          .setName("Calls")
-          .setDescription("Someone is calling you")
           .build(),
         NotificationChannelCompat
           .Builder(CHANNEL_OTHER, NotificationManagerCompat.IMPORTANCE_DEFAULT)

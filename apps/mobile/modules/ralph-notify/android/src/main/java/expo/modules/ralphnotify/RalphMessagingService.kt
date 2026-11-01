@@ -1,5 +1,6 @@
 package expo.modules.ralphnotify
 
+import android.content.Intent
 import com.google.firebase.messaging.RemoteMessage
 import expo.modules.notifications.service.ExpoFirebaseMessagingService
 
@@ -19,10 +20,26 @@ class RalphMessagingService : ExpoFirebaseMessagingService() {
       super.onMessageReceived(remoteMessage)
       return
     }
+    if (RalphPush.isCall(data)) {
+      forwardCall(data)
+      return
+    }
     when (val push = RalphPush.parse(data)) {
       is RalphPush.Message -> MessageNotifier.show(applicationContext, push)
       is RalphPush.Read -> MessageNotifier.cancel(applicationContext, push.channelId)
       null -> Unit
     }
+  }
+
+  /**
+   * A call ring (or its stop) belongs to modules/ralph-call, which owns the
+   * ringing screen and Telecom: handed over as a broadcast to this app only
+   * (a package-scoped intent reaches a manifest receiver from the
+   * background). Needs no JavaScript, so it rings with the app killed.
+   */
+  private fun forwardCall(data: Map<String, String>) {
+    val intent = Intent(RalphPush.ACTION_CALL_PUSH).setPackage(packageName)
+    for ((key, value) in data) intent.putExtra(key, value)
+    sendBroadcast(intent)
   }
 }

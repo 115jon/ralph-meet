@@ -69,6 +69,8 @@ internal object CallController {
     projecting = false
     router?.stop()
     router = null
+    // A call answered on the lock screen no longer keeps the app over it.
+    LockScreenCall.disarm()
     val app = context.applicationContext
     app.stopService(Intent(app, RalphCallService::class.java))
     CallNotification.cancel(app)
@@ -150,6 +152,15 @@ internal object CallController {
   }
 
   private fun startAudio(context: Context, call: CallInfo): AudioRouter {
+    // The DM call answered here is already a Telecom call (it rang as one):
+    // it carries on, so a car or headset sees one call from ring to end.
+    if (call.answeredCallId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      IncomingCalls.adoptTelecom(call.answeredCallId)?.let { answered ->
+        answered.events = telecomEvents(context)
+        emitRoutes()
+        return answered
+      }
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val telecom = TelecomCall(context, scope, telecomEvents(context))
       try {

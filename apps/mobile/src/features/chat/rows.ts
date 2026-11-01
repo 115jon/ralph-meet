@@ -1,3 +1,5 @@
+import type { CallRecord } from "@ralph/protocol";
+
 import type { ChatMessage } from "./store";
 import { dayKey, formatDay, parseTimestamp } from "./time";
 
@@ -14,6 +16,14 @@ export type ChatRow =
       readonly sentAt: Date;
       /** Same author as the message above it, so no avatar or name. */
       readonly grouped: boolean;
+    }
+  | {
+      /** A DM call record: a system row, never grouped with messages. */
+      readonly kind: "call";
+      readonly key: string;
+      readonly message: ChatMessage;
+      readonly call: CallRecord;
+      readonly sentAt: Date;
     }
   | { readonly kind: "day"; readonly key: string; readonly label: string }
   | { readonly kind: "unread"; readonly key: string };
@@ -76,8 +86,19 @@ export function buildRows(
       olderAt !== undefined &&
       sameDay &&
       older.author_id === message.author_id &&
+      !older.call &&
       sentAt.getTime() - olderAt.getTime() < GROUP_WINDOW_MS;
-    rows.push({ kind: "message", key: message.id, message, sentAt, grouped });
+    if (message.call) {
+      rows.push({
+        kind: "call",
+        key: message.id,
+        message,
+        call: message.call,
+        sentAt,
+      });
+    } else {
+      rows.push({ kind: "message", key: message.id, message, sentAt, grouped });
+    }
     if (i === firstUnread) rows.push({ kind: "unread", key: UNREAD_KEY });
     if (!sameDay) {
       rows.push({

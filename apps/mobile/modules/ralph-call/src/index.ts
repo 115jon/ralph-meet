@@ -2,8 +2,11 @@ import { type EventSubscription, requireOptionalNativeModule } from "expo";
 import { Platform } from "react-native";
 
 // The Android call: a foreground service with a CallStyle notification and a
-// self-managed Telecom call that owns audio routing. Elsewhere (iOS for now)
-// every function is a safe no-op.
+// self-managed Telecom call that owns audio routing, and incoming DM calls:
+// the ring (a full-screen screen on the lock screen, a CallStyle heads-up
+// over other apps, an event for the app's own sheet while it is in front),
+// the ringtone and the incoming Telecom call. Elsewhere (iOS for now) every
+// function is a safe no-op.
 
 export interface CallOptions {
   readonly channelName: string;
@@ -19,6 +22,29 @@ export interface CallOptions {
   readonly speakerFirst?: boolean;
   /** The screen is being shared; the notification says so. */
   readonly sharing?: boolean;
+  /**
+   * The DM call this is, answered on this phone: the ringing Telecom call
+   * carries on as this call (a car or headset sees one call throughout).
+   */
+  readonly answeredCallId?: string;
+}
+
+/** A DM call ringing this phone (the gateway's CALL_RING or a push). */
+export interface IncomingCall {
+  readonly callId: string;
+  readonly channelId: string;
+  readonly callerId: string;
+  readonly callerName: string;
+  /** As stored: may be an API-relative /api/... path. */
+  readonly callerAvatar: string | null;
+  /** How long it may ring; the server stops it sooner. */
+  readonly ringSeconds?: number;
+}
+
+export interface IncomingCallEnd {
+  readonly callId: string;
+  /** The gateway's CALL_RING_STOP reason, or "declined" / "answered" here. */
+  readonly reason: string;
 }
 
 export type AudioRouteType =
@@ -42,6 +68,9 @@ type RalphCallEvents = {
   onAction: (event: { action: CallAction }) => void;
   onAudioRoutesChanged: (event: { routes: AudioRoute[] }) => void;
   onCallEndedBySystem: (event: { reason: string }) => void;
+  onIncomingCall: (event: IncomingCall) => void;
+  onIncomingCallEnded: (event: IncomingCallEnd) => void;
+  onIncomingCallAnswered: (event: IncomingCall) => void;
 };
 
 interface RalphCallNative {
@@ -52,6 +81,14 @@ interface RalphCallNative {
   getAudioRoutes(): Promise<AudioRoute[]>;
   startScreenShare(): Promise<boolean>;
   stopScreenShare(): Promise<void>;
+  ringIncoming(call: IncomingCall): Promise<void>;
+  stopIncoming(callId: string, reason: string): Promise<void>;
+  answerIncoming(callId: string): Promise<void>;
+  declineIncoming(callId: string): Promise<void>;
+  takeAnsweredCall(): Promise<IncomingCall | null>;
+  setRingback(on: boolean): Promise<void>;
+  canUseFullScreenIntent(): Promise<boolean>;
+  openFullScreenIntentSettings(): Promise<void>;
   addListener<E extends keyof RalphCallEvents>(
     event: E,
     listener: RalphCallEvents[E],
@@ -104,6 +141,78 @@ export function startScreenShare(): Promise<boolean> {
 /** After the screen track stopped: drops the mediaProjection type. */
 export function stopScreenShare(): Promise<void> {
   return native?.stopScreenShare() ?? Promise.resolve();
+}
+
+// ── Incoming DM calls ───────────────────────────────────────────────────
+
+/**
+ * Rings this phone for `call`, once per call id (a push and the gateway
+ * may both deliver it). In front, the module only plays the ringtone and
+ * raises onIncomingCall for the app's sheet; otherwise it shows the call.
+ */
+export function ringIncoming(call: IncomingCall): Promise<void> {
+  return native?.ringIncoming(call) ?? Promise.resolve();
+}
+
+/** The ring stopped elsewhere (CALL_RING_STOP); a missed one leaves a notification. */
+export function stopIncoming(callId: string, reason: string): Promise<void> {
+  return native?.stopIncoming(callId, reason) ?? Promise.resolve();
+}
+
+/** Answered in the app: the ring stops; the app accepts and joins. */
+export function answerIncoming(callId: string): Promise<void> {
+  return native?.answerIncoming(callId) ?? Promise.resolve();
+}
+
+/** Declined in the app: the ring stops and the module tells the server. */
+export function declineIncoming(callId: string): Promise<void> {
+  return native?.declineIncoming(callId) ?? Promise.resolve();
+}
+
+/** A call answered from the notification or lock screen before JS ran. */
+export function takeAnsweredCall(): Promise<IncomingCall | null> {
+  return native?.takeAnsweredCall() ?? Promise.resolve(null);
+}
+
+/** The ringback tone the caller hears while the other phone rings. */
+export function setRingback(on: boolean): Promise<void> {
+  return native?.setRingback(on) ?? Promise.resolve();
+}
+
+/**
+ * Android 14+ lets an app show a call over the lock screen only once the
+ * user allows full-screen notifications; true below 14 and off Android.
+ */
+export function canUseFullScreenIntent(): Promise<boolean> {
+  return native?.canUseFullScreenIntent() ?? Promise.resolve(true);
+}
+
+/** Opens the system page where the user allows it. */
+export function openFullScreenIntentSettings(): Promise<void> {
+  return native?.openFullScreenIntentSettings() ?? Promise.resolve();
+}
+
+export function onIncomingCall(
+  listener: (call: IncomingCall) => void,
+): EventSubscription {
+  return native?.addListener("onIncomingCall", listener) ?? NO_SUBSCRIPTION;
+}
+
+export function onIncomingCallEnded(
+  listener: (end: IncomingCallEnd) => void,
+): EventSubscription {
+  return (
+    native?.addListener("onIncomingCallEnded", listener) ?? NO_SUBSCRIPTION
+  );
+}
+
+/** Answered outside the app (notification, lock screen, a headset). */
+export function onIncomingCallAnswered(
+  listener: (call: IncomingCall) => void,
+): EventSubscription {
+  return (
+    native?.addListener("onIncomingCallAnswered", listener) ?? NO_SUBSCRIPTION
+  );
 }
 
 export function onAction(

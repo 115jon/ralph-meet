@@ -126,8 +126,9 @@ const config: ExpoConfig = {
       { supportsBackgroundPlayback: false, supportsPictureInPicture: false },
     ],
     // Message pushes are drawn by modules/ralph-notify on its own channels
-    // (Direct messages, Mentions and replies, Calls, Other); anything FCM
-    // draws itself lands on Other.
+    // (Direct messages, Mentions and replies, Other), calls by
+    // modules/ralph-call (Incoming calls, Missed calls); anything FCM draws
+    // itself lands on Other.
     ["expo-notifications", { defaultChannel: "other" }],
     // Photos, videos, text and links shared from other apps open a "Send
     // to…" picker. Android only for now: iOS needs a share extension target.

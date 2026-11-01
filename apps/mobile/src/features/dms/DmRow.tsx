@@ -12,6 +12,8 @@ import { mediaUrl } from "@/lib/api";
 import { FONT, useTheme } from "@/theme";
 import { Avatar, CountChip, Text } from "@/ui";
 
+import { callPreview } from "@/features/calls/record";
+
 import { presenceLed } from "./presence";
 import type { DmChannel } from "./schema";
 import { useDmPreview } from "./store";
@@ -22,6 +24,7 @@ function previewText(
   fallback: string,
 ): string {
   if (!message) return fallback;
+  if (message.call) return callPreview(message.call, myId);
   const text =
     message.content?.trim() ||
     (message.attachments?.length ? "Sent an attachment" : "Sent a message");

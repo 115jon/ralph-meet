@@ -18,6 +18,14 @@
   <!-- Bluetooth headsets as call endpoints (runtime permission on Android 12+). -->
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+  <!--
+    An incoming call wakes the phone into the ringing screen over the lock
+    screen. Granted at install below Android 14; from 14 the user allows it
+    (Settings, "Full-screen notifications"), else the call is a heads-up.
+  -->
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <!-- The in-app ring's vibration (the notification's comes from its channel). -->
+  <uses-permission android:name="android.permission.VIBRATE" />
 
   <application>
     <service
@@ -27,5 +35,34 @@
     <receiver
       android:name=".CallActionReceiver"
       android:exported="false" />
+    <!-- Decline from the incoming call notification, with the app killed. -->
+    <receiver
+      android:name=".IncomingCallActionReceiver"
+      android:exported="false" />
+    <!--
+      call_ring and call_ring_stop pushes, handed over by ralph-notify's FCM
+      service as a broadcast scoped to this package.
+    -->
+    <receiver
+      android:name=".CallPushReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="dev.jontitor.ralph.CALL_PUSH" />
+      </intent-filter>
+    </receiver>
+    <!--
+      The ringing screen: over the lock screen, waking the display, in its
+      own task so finishing it never shows the app's task underneath.
+    -->
+    <activity
+      android:name=".IncomingCallActivity"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:launchMode="singleInstance"
+      android:taskAffinity="dev.jontitor.ralph.incoming_call"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:screenOrientation="portrait"
+      android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
   </application>
 </manifest>

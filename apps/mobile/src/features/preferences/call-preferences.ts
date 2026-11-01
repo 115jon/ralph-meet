@@ -18,6 +18,10 @@ export interface CallPreferences {
   readonly joinMuted: boolean;
   /** Where call audio starts when no headset is connected. */
   readonly audioRoute: AudioRoutePreference;
+  /** Start a DM call without the "Call them?" sheet (its "Don't ask again"). */
+  readonly skipCallConfirm: boolean;
+  /** The lock-screen permission was offered once (Android 14+). */
+  readonly fullScreenOffered: boolean;
 }
 
 /** The slider's range. -29 dB is the level the detector shipped with (0.035). */
@@ -27,12 +31,16 @@ const DEFAULTS: CallPreferences = {
   speakingThresholdDb: SPEAKING_THRESHOLD_DB.default,
   joinMuted: false,
   audioRoute: "speaker",
+  skipCallConfirm: false,
+  fullScreenOffered: false,
 };
 
 const StoredPreferences = Schema.Struct({
   speakingThresholdDb: Schema.optional(Schema.Finite),
   joinMuted: Schema.optional(Schema.Boolean),
   audioRoute: Schema.optional(Schema.Literals(["speaker", "earpiece"])),
+  skipCallConfirm: Schema.optional(Schema.Boolean),
+  fullScreenOffered: Schema.optional(Schema.Boolean),
 });
 const decodeStored = Schema.decodeUnknownOption(StoredPreferences);
 
@@ -55,13 +63,21 @@ function parse(raw: string | null): Partial<CallPreferences> {
   }
   const stored = Option.getOrUndefined(decodeStored(json));
   if (!stored) return {};
-  const { speakingThresholdDb, joinMuted, audioRoute } = stored;
+  const {
+    speakingThresholdDb,
+    joinMuted,
+    audioRoute,
+    skipCallConfirm,
+    fullScreenOffered,
+  } = stored;
   return {
     ...(speakingThresholdDb !== undefined && {
       speakingThresholdDb: clampThreshold(speakingThresholdDb),
     }),
     ...(joinMuted !== undefined && { joinMuted }),
     ...(audioRoute !== undefined && { audioRoute }),
+    ...(skipCallConfirm !== undefined && { skipCallConfirm }),
+    ...(fullScreenOffered !== undefined && { fullScreenOffered }),
   };
 }
 

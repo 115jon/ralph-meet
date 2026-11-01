@@ -31,14 +31,22 @@ private const val TAG = "RalphCall"
  * Telecom on API 34+ (platform call control) and a ConnectionService shim on
  * 26..33 are both handled inside core-telecom; below 26 there is no Telecom
  * for VoIP apps and [CallController] uses [LegacyAudioRouter].
+ *
+ * An incoming DM call is added while it rings (so a headset or car can
+ * answer it) and, once answered, carries on as the call: [CallController]
+ * adopts it and rebinds [events].
  */
 @RequiresApi(Build.VERSION_CODES.O)
 internal class TelecomCall(
   context: Context,
   private val scope: CoroutineScope,
-  private val events: Events,
+  @Volatile var events: Events,
+  private val incoming: Boolean = false,
 ) : AudioRouter {
   interface Events {
+    /** The system answered a ringing incoming call (a headset, a car). */
+    fun onSystemAnswer() = Unit
+
     fun onRoutesChanged()
 
     /** Telecom ended the call (another call, a car, a watch). */
@@ -59,6 +67,8 @@ internal class TelecomCall(
   private var defaultRouteChosen = false
   private var speakerFirst = true
   private var ended = false
+  /** Outgoing calls are active at once; an incoming one once answered. */
+  private var active = !incoming
 
   override val state: RouteState
     get() =
@@ -74,8 +84,13 @@ internal class TelecomCall(
     val attributes =
       CallAttributesCompat(
         displayName = displayName,
-        address = Uri.parse("ralphmeet:voice-channel"),
-        direction = CallAttributesCompat.DIRECTION_OUTGOING,
+        address = Uri.parse(if (incoming) "ralphmeet:dm-call" else "ralphmeet:voice-channel"),
+        direction =
+          if (incoming) {
+            CallAttributesCompat.DIRECTION_INCOMING
+          } else {
+            CallAttributesCompat.DIRECTION_OUTGOING
+          },
         callType = CallAttributesCompat.CALL_TYPE_AUDIO_CALL,
         // No hold: a voice channel cannot be parked, so Telecom ends it
         // instead when the user answers another call.
@@ -86,17 +101,26 @@ internal class TelecomCall(
         try {
           callsManager.addCall(
             attributes,
-            onAnswer = {},
+            onAnswer = {
+              // The system answered (Telecom already counts it active).
+              if (!active) {
+                active = true
+                events.onSystemAnswer()
+                chooseDefaultRoute()
+              }
+            },
             onDisconnect = { cause -> systemDisconnected(cause) },
             onSetActive = {},
             onSetInactive = {},
           ) {
             control.complete(this)
             // Each flow needs its own coroutine or only the first is collected.
-            launch {
-              val result = setActive()
-              if (result is CallControlResult.Error) {
-                Log.w(TAG, "Telecom did not set the call active: ${result.errorCode}")
+            if (!incoming) {
+              launch {
+                val result = setActive()
+                if (result is CallControlResult.Error) {
+                  Log.w(TAG, "Telecom did not set the call active: ${result.errorCode}")
+                }
               }
             }
             launch {
@@ -137,7 +161,24 @@ internal class TelecomCall(
     return true
   }
 
-  override fun stop() {
+  /** Answers the ringing incoming call from our own Answer. */
+  fun answer() {
+    if (active || ended) return
+    active = true
+    scope.launch {
+      val call = withTimeoutOrNull(5_000) { control.await() } ?: return@launch
+      val result = call.answer(CallAttributesCompat.CALL_TYPE_AUDIO_CALL)
+      if (result is CallControlResult.Error) {
+        Log.w(TAG, "Telecom did not answer the call: ${result.errorCode}")
+      }
+      chooseDefaultRoute()
+    }
+  }
+
+  override fun stop() = stop(DisconnectCause.LOCAL)
+
+  /** Ends the call; a ring also says why: REJECTED, MISSED or REMOTE (core-telecom takes no others). */
+  fun stop(cause: Int) {
     if (ended) return
     ended = true
     val running = job
@@ -146,7 +187,7 @@ internal class TelecomCall(
       // disconnected rather than left behind in Telecom.
       val call = withTimeoutOrNull(5_000) { control.await() }
       try {
-        call?.disconnect(DisconnectCause(DisconnectCause.LOCAL))
+        call?.disconnect(DisconnectCause(cause))
       } catch (error: Exception) {
         Log.w(TAG, "Telecom disconnect failed", error)
       }
@@ -166,7 +207,7 @@ internal class TelecomCall(
    * the user prefers the earpiece, where Telecom starts an audio call anyway.
    */
   private suspend fun chooseDefaultRoute() {
-    if (defaultRouteChosen || endpoints.isEmpty()) return
+    if (!active || defaultRouteChosen || endpoints.isEmpty()) return
     defaultRouteChosen = true
     if (!speakerFirst) return
     val headset =

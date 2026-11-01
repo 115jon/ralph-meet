@@ -26,6 +26,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useSession } from "@/features/auth/session";
+import { CallRecordRow } from "@/features/calls/CallRecordRow";
 import { useServersStore } from "@/features/servers/store";
 import { RADIUS, useTheme } from "@/theme";
 import { EmptyState, Icon, showToast, Skeleton, Text } from "@/ui";
@@ -351,6 +352,15 @@ export function MessageList({
     ({ item }) => {
       if (item.kind === "day") return <DayDivider label={item.label} />;
       if (item.kind === "unread") return <UnreadDivider />;
+      if (item.kind === "call") {
+        return (
+          <CallRecordRow
+            message={item.message}
+            call={item.call}
+            sentAt={item.sentAt}
+          />
+        );
+      }
       return (
         <MessageRow
           message={item.message}

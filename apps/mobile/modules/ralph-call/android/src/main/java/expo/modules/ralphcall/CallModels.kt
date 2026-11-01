@@ -12,6 +12,8 @@ internal data class CallInfo(
   val speakerFirst: Boolean,
   /** The screen is being shared; the notification says so. */
   val sharing: Boolean,
+  /** A DM call answered here: its ringing Telecom call carries on as this one. */
+  val answeredCallId: String?,
   val startedAt: Long,
 )
 

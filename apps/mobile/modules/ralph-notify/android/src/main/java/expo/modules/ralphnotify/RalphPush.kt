@@ -33,7 +33,13 @@ sealed interface RalphPush {
   companion object {
     const val FORMAT = "2"
 
+    /** The broadcast modules/ralph-call receives call pushes on. */
+    const val ACTION_CALL_PUSH = "dev.jontitor.ralph.CALL_PUSH"
+
     fun isRalph(data: Map<String, String>): Boolean = data["ralph"] == FORMAT
+
+    /** call_ring and call_ring_stop: not drawn here (see forwardCall). */
+    fun isCall(data: Map<String, String>): Boolean = data["kind"]?.startsWith("call_") == true
 
     fun parse(data: Map<String, String>): RalphPush? {
       if (!isRalph(data)) return null

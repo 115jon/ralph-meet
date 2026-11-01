@@ -43,10 +43,18 @@ export const NO_LOCAL_MEDIA: LocalMedia = {
   sharing: false,
 };
 
+/** What makes a call a DM call. */
+export interface DmCall {
+  readonly peerId: string;
+  /** The ring answered on this phone, when this call began as one. */
+  readonly answeredCallId?: string;
+}
+
 export interface ActiveCall {
   readonly serverId: string;
   readonly channelId: string;
   readonly channelName: string;
+  readonly dm?: DmCall;
   readonly status: CallStatus;
   readonly muted: boolean;
   readonly deafened: boolean;
@@ -78,6 +86,8 @@ export function updateCall(update: (call: ActiveCall) => ActiveCall): void {
 export interface CallSummary {
   readonly serverId: string;
   readonly channelId: string;
+  /** The other person, in a DM call. */
+  readonly peerId: string | null;
   readonly channelName: string;
   readonly status: CallStatus;
   readonly muted: boolean;
@@ -95,6 +105,7 @@ export function useCallSummary(): CallSummary | null {
         ? {
             serverId: s.call.serverId,
             channelId: s.call.channelId,
+            peerId: s.call.dm?.peerId ?? null,
             channelName: s.call.channelName,
             status: s.call.status,
             muted: s.call.muted,
