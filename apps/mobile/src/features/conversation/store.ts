@@ -89,6 +89,13 @@ export function openConversation(conversation: Conversation): void {
   }
 }
 
+/** Closes the open conversation: the drawer takes the whole screen. */
+export function closeConversation(): void {
+  if (!getState().current) return;
+  setState({ current: null, page: "drawer" });
+  writePersisted(STORAGE, null);
+}
+
 /** Opens the Friends page in the chat's slot. */
 export function openFriends(): void {
   openConversation({ kind: "friends", id: FRIENDS_ID });
@@ -131,8 +138,7 @@ export function setHomePage(page: HomePage): void {
 export function resetConversation(): void {
   stopReveal?.();
   stopReveal = null;
-  setState({ current: null, page: "drawer" });
-  writePersisted(STORAGE, null);
+  closeConversation();
 }
 
 export function useConversation(): Conversation | null {

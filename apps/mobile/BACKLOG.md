@@ -7,10 +7,6 @@ reopened.
 
 ## Bugs
 
-- [ ] **Empty chat peek clipped** — with no conversation open, the drawer
-      still leaves the 16% chat peek, so "Pick a conversation" shows cut off
-      at the right edge. With nothing open the drawer should be full width
-      (no peek, no swipe to an empty chat). Found on a phone, v0.3.0.
 - [ ] Underline / strikethrough sometimes don't draw on first mount (appears
       to be RN 0.88 text drawing; needs a minimal repro + upstream report).
 - [ ] Push tap from a killed app opened the wrong channel in the dev build
@@ -71,3 +67,5 @@ reopened.
   (v0.2.0).
 - Markdown, swipe pager + gestures, emoji/GIF pickers, members/profile/
   friends, in-app links/invites/share-to-app, native notifications (v0.3.0).
+- Fixes: with no conversation open the drawer fills the screen (no empty chat
+  peek, no swipe to it); a conversation that disappears closes cleanly.
