@@ -327,13 +327,16 @@ export type SettingsWorkbenchProps = {
  * The one workbench shell (overlays §3b "Workbench"), shared by Studio,
  * server/channel settings, the profile editor and the catalog picker:
  * min(1120, 100vw-32) x min(820, 100dvh-32), 2px corners, ply-0 body with a
- * line edge and shadow-3 (the nav column sits on ply-1).
+ * line edge and shadow-3 (the nav column sits on ply-1). It centres in the
+ * space under --app-chrome-top (the desktop app's 32px title bar, which
+ * stays on top of every overlay; 0 on the web), so its header and close
+ * button are never under the window chrome. The page scrolls inside it.
  * Presence: opacity + scale .98 -> 1 over 250ms, out 180ms; opacity only
  * when opened from the keyboard. Phones: a full-screen page.
  * Layout (flex-row / flex-col) is added by the caller.
  */
 export const WORKBENCH_SURFACE =
-  "fixed inset-0 m-0 flex h-full w-full min-h-0 items-stretch overflow-hidden bg-ply-0 p-0 text-ink-1 outline-none md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1120px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-line md:shadow-modal animate-in fade-in duration-(--dur-4) data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:duration-(--dur-4-exit) md:zoom-in-[0.98] md:data-[state=closed]:zoom-out-[0.98] data-keyboard:zoom-in-100 data-keyboard:md:zoom-in-100 data-keyboard:duration-100 data-stacked:z-60 [transition:transform_var(--dur-3)_var(--ease-out)] data-behind:[transform:translateY(-6px)_scale(0.985)] motion-reduce:data-behind:transform-none";
+  "fixed inset-x-0 top-[var(--app-chrome-top,0px)] bottom-0 m-0 flex w-full min-h-0 items-stretch overflow-hidden bg-ply-0 p-0 text-ink-1 outline-none md:inset-auto md:left-1/2 md:top-[calc(50%+var(--app-chrome-top,0px)/2)] md:h-[min(820px,calc(100dvh-var(--app-chrome-top,0px)-32px))] md:w-[min(1120px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-line md:shadow-modal animate-in fade-in duration-(--dur-4) data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:duration-(--dur-4-exit) md:zoom-in-[0.98] md:data-[state=closed]:zoom-out-[0.98] data-keyboard:zoom-in-100 data-keyboard:md:zoom-in-100 data-keyboard:duration-100 data-stacked:z-60 [transition:transform_var(--dur-3)_var(--ease-out)] data-behind:[transform:translateY(-6px)_scale(0.985)] motion-reduce:data-behind:transform-none";
 
 export function SettingsWorkbench({
   open,
