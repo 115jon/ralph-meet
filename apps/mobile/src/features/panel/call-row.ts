@@ -11,6 +11,7 @@ export interface CallRowState {
   led: LedState;
   muted: boolean;
   deafened: boolean;
+  camera: boolean;
 }
 
 const STATUS_LABEL: Record<CallSummary["status"], string> = {
@@ -44,5 +45,6 @@ export function useCallRow(): CallRowState | null {
     led: callLed(call),
     muted: call.muted,
     deafened: call.deafened,
+    camera: call.camera,
   };
 }

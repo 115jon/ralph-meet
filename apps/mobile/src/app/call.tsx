@@ -1,10 +1,11 @@
 import { useRouter } from "expo-router";
 import { CaretDown } from "phosphor-react-native";
 import { useCallback, useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { callLed, callStatusLabel } from "@/features/panel/call-row";
+import { stopScreenShare } from "@/features/voice/actions";
 import { CallDock } from "@/features/voice/CallDock";
 import { ParticipantTile } from "@/features/voice/ParticipantTile";
 import {
@@ -13,7 +14,7 @@ import {
   useCallTiles,
 } from "@/features/voice/store";
 import { useWatchCallVideo } from "@/features/voice/use-watch-video";
-import { useTheme } from "@/theme";
+import { RADIUS, useTheme } from "@/theme";
 import { IconButton, Led, Text } from "@/ui";
 
 /** Two tiles a row; an odd one out spans the first row. */
@@ -31,6 +32,53 @@ function rowsOf<T>(items: readonly T[]): T[][] {
 }
 
 const FILMSTRIP_HEIGHT = 96;
+
+/**
+ * While our screen is shared: a live LED, the plain fact, and Stop. Android
+ * adds its own status bar chip; this one is where the call is.
+ */
+function SharingBanner() {
+  const theme = useTheme();
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      style={{
+        marginHorizontal: 12,
+        marginTop: 4,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        paddingVertical: 6,
+        paddingLeft: 12,
+        paddingRight: 6,
+        borderRadius: RADIUS,
+        backgroundColor: theme.ply2,
+        borderWidth: 1,
+        borderColor: theme.line,
+      }}
+    >
+      <Led state="live" />
+      <Text variant="row" numberOfLines={1} style={{ flex: 1 }}>
+        You&apos;re sharing your screen
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Stop sharing your screen"
+        onPress={stopScreenShare}
+        style={({ pressed }) => ({
+          height: 36,
+          paddingHorizontal: 14,
+          borderRadius: RADIUS,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: pressed ? theme.tint3 : theme.tint1,
+        })}
+      >
+        <Text variant="control">Stop</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 interface StageProps {
   staged: CallTile;
@@ -143,6 +191,7 @@ export default function CallScreen() {
           </View>
         </View>
       </View>
+      {call.sharing ? <SharingBanner /> : null}
       {staged ? (
         <Stage
           staged={staged}
@@ -192,6 +241,8 @@ export default function CallScreen() {
       <CallDock
         muted={call.muted}
         deafened={call.deafened}
+        camera={call.camera}
+        sharing={call.sharing}
         bottomInset={insets.bottom}
       />
     </View>

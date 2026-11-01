@@ -17,6 +17,8 @@ export interface CallOptions {
    * is connected. Read when the call starts.
    */
   readonly speakerFirst?: boolean;
+  /** The screen is being shared; the notification says so. */
+  readonly sharing?: boolean;
 }
 
 export type AudioRouteType =
@@ -48,6 +50,8 @@ interface RalphCallNative {
   endCall(): Promise<void>;
   setAudioRoute(id: string): Promise<boolean>;
   getAudioRoutes(): Promise<AudioRoute[]>;
+  startScreenShare(): Promise<boolean>;
+  stopScreenShare(): Promise<void>;
   addListener<E extends keyof RalphCallEvents>(
     event: E,
     listener: RalphCallEvents[E],
@@ -85,6 +89,21 @@ export function setAudioRoute(id: string): Promise<boolean> {
 
 export function getAudioRoutes(): Promise<AudioRoute[]> {
   return native?.getAudioRoutes() ?? Promise.resolve([]);
+}
+
+/**
+ * Call right before getDisplayMedia(): the next activity result (the system's
+ * capture dialog) adds the mediaProjection type to the call's foreground
+ * service if the user accepts, before WebRTC takes the projection. False when
+ * no call service runs; then a capture must not be asked for.
+ */
+export function startScreenShare(): Promise<boolean> {
+  return native?.startScreenShare() ?? Promise.resolve(false);
+}
+
+/** After the screen track stopped: drops the mediaProjection type. */
+export function stopScreenShare(): Promise<void> {
+  return native?.stopScreenShare() ?? Promise.resolve();
 }
 
 export function onAction(

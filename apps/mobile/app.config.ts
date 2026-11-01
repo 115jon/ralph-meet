@@ -50,6 +50,7 @@ const appVersion = process.env.RALPH_APP_VERSION ?? "0.1.0";
 const versionCode = Number.parseInt(process.env.RALPH_VERSION_CODE ?? "1", 10);
 
 const MICROPHONE_USAGE = "Ralph Meet uses the microphone in voice channels.";
+const CAMERA_USAGE = "Ralph Meet uses the camera for video in voice channels.";
 
 // Mirrors the web app's VITE_API_BASE_URL, VITE_KOVA_AUTH_URL and
 // VITE_KOVA_AUTH_PUBLISHABLE_KEY. All defaults come from the web
@@ -79,21 +80,19 @@ const config: ExpoConfig = {
     versionCode,
     googleServicesFile,
     predictiveBackGestureEnabled: true,
-    // Voice: the microphone and call audio routing. The background call's
-    // foreground service, notification, Telecom and Bluetooth permissions come
-    // from modules/ralph-call's own AndroidManifest.xml.
+    // Voice: the microphone, the camera and call audio routing. The
+    // background call's foreground service (incl. screen sharing's
+    // mediaProjection type), notification, Telecom and Bluetooth permissions
+    // come from modules/ralph-call's own AndroidManifest.xml.
     permissions: [
       "android.permission.INTERNET",
       "android.permission.RECORD_AUDIO",
+      "android.permission.CAMERA",
       "android.permission.MODIFY_AUDIO_SETTINGS",
       "android.permission.POST_NOTIFICATIONS",
     ],
-    // The WebRTC plugin also asks for these; voice needs neither (no camera
-    // publishing yet, no overlay).
-    blockedPermissions: [
-      "android.permission.CAMERA",
-      "android.permission.SYSTEM_ALERT_WINDOW",
-    ],
+    // The WebRTC plugin also asks for an overlay; nothing draws over apps.
+    blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
     adaptiveIcon: {
       foregroundImage: "./assets/icon.png",
       backgroundColor: "#000000",
@@ -111,16 +110,22 @@ const config: ExpoConfig = {
     ],
     // Message pushes post on the `messages` channel the app creates at launch.
     ["expo-notifications", { defaultChannel: "messages" }],
-    // The composer picks from the system photo picker only: drop the camera
-    // permission the library would add. The microphone is voice's (set, not
-    // false: false would block RECORD_AUDIO for the whole app).
+    // The composer picks from the system photo picker only. Camera and
+    // microphone are voice's: set, not false, since false would block the
+    // permission for the whole app.
     [
       "expo-image-picker",
-      { cameraPermission: false, microphonePermission: MICROPHONE_USAGE },
+      {
+        cameraPermission: CAMERA_USAGE,
+        microphonePermission: MICROPHONE_USAGE,
+      },
     ],
     [
       "@config-plugins/react-native-webrtc",
-      { microphonePermission: MICROPHONE_USAGE },
+      {
+        cameraPermission: CAMERA_USAGE,
+        microphonePermission: MICROPHONE_USAGE,
+      },
     ],
     [
       "expo-splash-screen",
