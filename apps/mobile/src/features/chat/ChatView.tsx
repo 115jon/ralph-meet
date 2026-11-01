@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import Animated, {
   useAnimatedKeyboard,
@@ -18,6 +18,7 @@ import {
   MessageActionsSheet,
   type ComposerIntent,
 } from "./MessageActionsSheet";
+import { MembersContext } from "./markdown/context";
 import { MessageList } from "./MessageList";
 import type { Author } from "./schema";
 import type { ChatMessage } from "./store";
@@ -74,6 +75,10 @@ export function ChatView({
       Math.max(keyboard.height.value, lift.value, bottomInset) + COMPOSER_GAP,
   }));
 
+  const memberNames = useMemo(
+    () => new Set(people.map((person) => person.username.toLowerCase())),
+    [people],
+  );
   const closeSheet = useCallback(() => setSelected(null), []);
   const compose = useCallback((intent: ComposerIntent) => {
     composer.current?.compose(intent);
@@ -83,12 +88,14 @@ export function ChatView({
     <View style={{ flex: 1, backgroundColor: theme.ply0 }}>
       <ChatHeader title={title} subtitle={subtitle} avatar={avatar} />
       <Animated.View style={[{ flex: 1 }, bodyStyle]}>
-        <MessageList
-          channelId={channelId}
-          title={title}
-          intro={intro}
-          onLongPress={setSelected}
-        />
+        <MembersContext value={memberNames}>
+          <MessageList
+            channelId={channelId}
+            title={title}
+            intro={intro}
+            onLongPress={setSelected}
+          />
+        </MembersContext>
         <TypingLine channelId={channelId} people={people} />
         <Composer
           ref={composer}

@@ -7,12 +7,15 @@
     "start": "expo start --dev-client",
     "android": "expo prebuild --platform android && expo run:android",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {
     "@config-plugins/react-native-webrtc": "15.0.2",
+    "@emoji-mart/data": "^1.2.1",
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
     "@expo-google-fonts/geist": "^0.4.2",
+    "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo-google-fonts/martian-mono": "^0.4.2",
     "@expo/metro-runtime": "~58.0.14",
     "@expo/ui": "58.0.26",

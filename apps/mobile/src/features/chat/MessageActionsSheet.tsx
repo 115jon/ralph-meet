@@ -1,4 +1,3 @@
-import type * as ClipboardModule from "expo-clipboard";
 import {
   ArrowBendUpLeft,
   Copy,
@@ -9,19 +8,12 @@ import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
-import { hasNativeModule } from "@/lib/native";
 import { RADIUS, useTheme } from "@/theme";
-import { Button, Sheet, SheetRow, showToast, Text } from "@/ui";
+import { Button, Sheet, SheetRow, Text } from "@/ui";
 
+import { canCopy, copyText } from "./clipboard";
 import { deleteMessage, toggleReaction } from "./mutations";
 import type { ChatMessage } from "./store";
-
-// expo-clipboard when the build links it; "Copy text" hides otherwise.
-const Clipboard: typeof ClipboardModule | null = hasNativeModule(
-  "ExpoClipboard",
-)
-  ? (require("expo-clipboard") as typeof ClipboardModule)
-  : null;
 
 /** The quick set from the mockup; reactions already on the message follow. */
 const QUICK_REACTIONS = ["🔥", "😂", "💀", "👍", "🫡"] as const;
@@ -162,15 +154,13 @@ function Actions({
           }}
         />
       ) : null}
-      {Clipboard && text ? (
+      {canCopy && text ? (
         <SheetRow
           icon={Copy}
           label="Copy text"
           onPress={() => {
             onClose();
-            void Clipboard.setStringAsync(text).then(() =>
-              showToast({ label: "Clipboard", text: "Copied", led: "talk" }),
-            );
+            copyText(text);
           }}
         />
       ) : null}

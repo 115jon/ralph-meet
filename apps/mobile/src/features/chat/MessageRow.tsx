@@ -7,9 +7,11 @@ import { FONT, RADIUS, useTheme } from "@/theme";
 import { Avatar, Led, Text } from "@/ui";
 
 import { authorName } from "./authors";
-import { mentionsUser, parseContent } from "./content";
+import { CustomEmoji } from "./markdown/CustomEmoji";
+import { Markdown } from "./markdown/Markdown";
+import { mentionsViewer } from "./markdown/mentions-viewer";
+import { parseMessage } from "./markdown/parse";
 import { messageMedia } from "./media/classify";
-import { MessageBody } from "./MessageBody";
 import { MessageMedia } from "./media/MessageMedia";
 import { discardSend, retrySend, toggleReaction } from "./mutations";
 import type { Reaction, ReplyPreview } from "./schema";
@@ -36,14 +38,12 @@ export const MessageRow = memo(function MessageRow({
   const theme = useTheme();
   const username = useSession((s) => s.user?.username);
   const myId = useSession((s) => s.user?.id);
-  const parts = useMemo(
-    () => parseContent(message.content ?? ""),
-    [message.content],
+  const blocks = useMemo(
+    () => parseMessage(message.id, message.content ?? ""),
+    [message.id, message.content],
   );
   const media = useMemo(() => messageMedia(message), [message]);
-  const targetsMe =
-    message.author_id !== myId &&
-    (mentionsUser(parts, username) || message.reply_to?.author_id === myId);
+  const targetsMe = mentionsViewer(message, { id: myId, username });
   const name = authorName(message.author);
 
   return (
@@ -104,8 +104,8 @@ export const MessageRow = memo(function MessageRow({
               </Text>
             </View>
           )}
-          {parts.length > 0 ? (
-            <MessageBody parts={parts} edited={!!message.updated_at} />
+          {blocks.length > 0 ? (
+            <Markdown blocks={blocks} edited={!!message.updated_at} />
           ) : null}
           <MessageMedia media={media} messageId={message.id} />
           {message.reactions?.length ? (
@@ -118,11 +118,13 @@ export const MessageRow = memo(function MessageRow({
   );
 });
 
+const CUSTOM_EMOJI_TOKEN = /<a?:(\w+):[\w-]+>/g;
+
 /** The quoted header line of a reply: who and the first line of what. */
 function ReplyQuote({ reply }: { reply: ReplyPreview }) {
   const theme = useTheme();
   const text =
-    reply.content?.trim() ||
+    reply.content?.trim().replace(CUSTOM_EMOJI_TOKEN, ":$1:") ||
     (reply.attachment_count ? "Attachment" : "Original message");
   return (
     <View
@@ -193,7 +195,7 @@ function Reactions({
           key={reaction.emoji}
           accessibilityRole="button"
           accessibilityState={{ selected: reaction.me }}
-          accessibilityLabel={`${reaction.emoji}, ${reaction.count}${reaction.me ? ", yours" : ""}`}
+          accessibilityLabel={`${reaction.emoji.replace(CUSTOM_EMOJI_TOKEN, ":$1:")}, ${reaction.count}${reaction.me ? ", yours" : ""}`}
           disabled={!!message.send}
           onPress={() => void toggleReaction(message, reaction.emoji)}
           hitSlop={4}
@@ -215,9 +217,7 @@ function Reactions({
                 : "transparent",
           })}
         >
-          <Text style={{ fontSize: 15, lineHeight: 20 }}>
-            {emojiLabel(reaction.emoji)}
-          </Text>
+          <ReactionEmoji emoji={reaction.emoji} />
           <Text
             variant="num"
             style={{
@@ -233,10 +233,23 @@ function Reactions({
   );
 }
 
-/** Custom server emoji arrive as `<:name:id>`; print the name until they render. */
-function emojiLabel(emoji: string): string {
-  const custom = /^<a?:(\w+):[\w-]+>$/.exec(emoji);
-  return custom ? `:${custom[1]}:` : emoji;
+const REACTION_TEXT = { fontSize: 15, lineHeight: 20 } as const;
+
+/** Unicode as text; a server emoji, `<:name:id>`, as its image. */
+function ReactionEmoji({ emoji }: { emoji: string }) {
+  const theme = useTheme();
+  const custom = /^<a?:(\w+):([\w-]+)>$/.exec(emoji);
+  if (custom?.[1] && custom[2]) {
+    return (
+      <CustomEmoji
+        name={custom[1]}
+        id={custom[2]}
+        size={18}
+        fallbackStyle={{ ...REACTION_TEXT, color: theme.ink1 }}
+      />
+    );
+  }
+  return <Text style={REACTION_TEXT}>{emoji}</Text>;
 }
 
 /** "Not sent" with Retry and Delete, under a send that failed. */
