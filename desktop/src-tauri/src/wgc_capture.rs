@@ -470,16 +470,23 @@ impl WgcCapture {
     }
 }
 
-/// Ask WGC not to deliver frames faster than the share's frame rate.
+/// Ask WGC not to deliver frames much faster than the share's frame rate.
 /// `GraphicsCaptureSession.MinUpdateInterval` exists on Windows 11 24H2
 /// (build 26100) and later. Elsewhere the setter fails and the callback-side
 /// [`FramePacer`] does all of the pacing.
+///
+/// The floor is 3/4 of the frame interval, not the interval itself: DWM
+/// composes on vsync, so a floor of exactly 1/fps makes every frame that lands
+/// a little early wait for the next vsync (measured: 24.6 fps for a 30 fps
+/// share on a 60 Hz display). The pacer then holds the exact rate.
 fn apply_min_update_interval(session: &GraphicsCaptureSession, frame_interval_ns: u64) {
     // 0 means "no cap". TimeSpan is in 100 ns units.
-    let duration = (frame_interval_ns / 100) as i64;
+    let floor_ns = frame_interval_ns / 4 * 3;
+    let duration = (floor_ns / 100) as i64;
     match session.SetMinUpdateInterval(TimeSpan { Duration: duration }) {
         Ok(()) => log::info!(
-            "[WgcCapture] MinUpdateInterval set to {}us",
+            "[WgcCapture] MinUpdateInterval set to {}us (frame interval {}us)",
+            floor_ns / 1_000,
             frame_interval_ns / 1_000
         ),
         Err(e) => log::info!(
