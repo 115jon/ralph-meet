@@ -3,6 +3,7 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DeferredToaster } from "@/components/DeferredToaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAppSessionRecovery } from "@/hooks/useAppSessionRecovery";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import {
   DEBUG_DESKTOP_AUTH,
@@ -180,6 +181,8 @@ function RootComponent() {
 function KovaMeetTokenBridge() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   useKovaAuthTokenSync(getToken, isLoaded, isSignedIn);
+  // A stored token Kova no longer knows: mint a new one from the cookie.
+  useAppSessionRecovery();
   return null;
 }
 

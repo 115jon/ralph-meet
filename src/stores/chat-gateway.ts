@@ -1,3 +1,4 @@
+import { recheckAppSession } from "@/lib/app-session-recovery";
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import { clog } from "@/lib/console-logger";
 import { getDisplayName } from "@/lib/display-name";
@@ -107,6 +108,8 @@ export function createChatGateway(
   /** Identify was sent on the current socket. */
   let identified = false;
   let appUserId: string | null | undefined = null;
+  /** The last user id the gateway had (survives the id going null). */
+  let lastUserId: string | null = null;
   let gatewaySessionId: string | null = null;
   let lastReceivedSeq = 0;
   let resumeInFlight = false;
@@ -1037,6 +1040,9 @@ export function createChatGateway(
    * while the tab slept.
    */
   const wake = () => {
+    // A refused session (signed out, or Kova was unreachable when it was
+    // refused) is checked again first: it is what brings the user id back.
+    recheckAppSession();
     if (!appUserId) return;
     socket.wake();
   };
@@ -1060,10 +1066,31 @@ export function createChatGateway(
     if (!hasConnectedBefore) dispatch({ type: "SET_CONNECT_STEP", step: 0 });
   };
 
+  /**
+   * Losing the user id (the session was refused and is being recovered, or
+   * is gone) is not a different user: what is on screen is still theirs,
+   * and their next Ready is a reconnect that reloads it. Only another user
+   * id starts over.
+   */
+  const noteUser = (userId: string | null | undefined) => {
+    if (!userId) return;
+    if (lastUserId && userId !== lastUserId) {
+      hasConnectedBefore = false;
+      // A different user: nothing on screen is theirs, so the next connect
+      // is a cold load again.
+      dispatch({ type: "SET_CONNECT_STEP", step: 0 });
+      gatewaySessionId = null;
+      lastReceivedSeq = 0;
+      resumeInFlight = false;
+    }
+    lastUserId = userId;
+  };
+
   const initGateway = (userId: string | null | undefined) => {
     if (appUserId !== userId && socket.isActive) {
       disconnectGateway();
     }
+    noteUser(userId);
     appUserId = userId;
     // Connects unless already connecting or connected; a pending retry (or
     // the signed-out state) tries now.
@@ -1078,14 +1105,8 @@ export function createChatGateway(
         // A retry pending for the previous user is not wanted any more.
         socket.stop();
       }
-      hasConnectedBefore = false;
-      // A different user: nothing on screen is theirs, so the next connect
-      // is a cold load again.
-      dispatch({ type: "SET_CONNECT_STEP", step: 0 });
-      gatewaySessionId = null;
-      lastReceivedSeq = 0;
-      resumeInFlight = false;
     }
+    noteUser(userId);
     appUserId = userId;
     if (userId && !identified && socket.isOpen) {
       chatLog.info("Sending identify after the user id became available", {

@@ -1,9 +1,11 @@
 import {
-  clearDesktopAuthSession,
+  getAppSessionState,
+  recoverAppSession,
+} from "@/lib/app-session-recovery";
+import {
   getDesktopAuthHandoffToken,
   getDesktopToken,
   getStoredKovaAuthSessionToken,
-  refreshDesktopToken,
   waitForDesktopToken,
 } from "@/lib/desktop-auth";
 import { apiUrl, isTauri } from "@/lib/platform";
@@ -43,7 +45,6 @@ function createAuthRequiredError(): Error {
 }
 
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
-let inFlightDesktopTokenRefresh: Promise<string | null> | null = null;
 
 function createHttpResponseError(
   res: Response,
@@ -79,15 +80,21 @@ async function getInitialBearerToken(): Promise<string | null> {
   return waitForDesktopToken();
 }
 
-async function refreshDesktopTokenOnce(): Promise<string | null> {
-  if (!inFlightDesktopTokenRefresh) {
-    inFlightDesktopTokenRefresh = refreshDesktopToken({ force: true }).finally(
-      () => {
-        inFlightDesktopTokenRefresh = null;
-      },
-    );
+/**
+ * A 401 for `rejectedToken`: ask Kova for a fresh app token (one mint shared
+ * by every refused call, see app-session-recovery). The fresh token to retry
+ * with, or null. On desktop a session that is gone for good is the
+ * device-code sign-in's job, so it throws DESKTOP_AUTH_REQUIRED.
+ */
+async function recoverFrom401(
+  rejectedToken: string | null,
+): Promise<string | null> {
+  const freshToken = await recoverAppSession(rejectedToken);
+  if (freshToken && freshToken !== rejectedToken) return freshToken;
+  if (isTauri() && getAppSessionState() === "signed-out") {
+    throw createDesktopAuthRequiredError();
   }
-  return inFlightDesktopTokenRefresh;
+  return null;
 }
 
 function apiGetDedupeKey(url: string, opts?: ApiOptions) {
@@ -107,8 +114,8 @@ function apiGetDedupeKey(url: string, opts?: ApiOptions) {
  * Automatically prefixes relative paths with the API base URL
  * for cross-platform (web / Tauri desktop) compatibility.
  *
- * On desktop, if a request returns 401, it will automatically
- * refresh the desktop token and retry the request once.
+ * On a 401 it asks Kova for a fresh app session token from the still-valid
+ * auth-domain session and retries the request once (web and desktop).
  */
 interface ApiFetchInit extends RequestInit {
   skipAuth?: boolean;
@@ -132,9 +139,12 @@ async function apiFetch<T>(
     throw createAuthRequiredError();
   }
 
+  /** The bearer the last request carried. */
+  let sentToken: string | null = null;
   const doFetch = (token?: string | null) => {
     const authHeaders: Record<string, string> = {};
     const t = skipAuth ? null : (token ?? getClientBearerToken());
+    sentToken = t;
     if (t) {
       authHeaders["Authorization"] = `Bearer ${t}`;
     }
@@ -177,13 +187,13 @@ async function apiFetch<T>(
     durationMs: Date.now() - requestStartedAt,
   });
 
-  // 401 recovery: refresh the kova-auth token and retry once.
-  if (!skipAuth && res.status === 401 && isTauri()) {
-    log.warn("401 received; attempting token refresh", {
+  // 401 recovery: mint a fresh app token and retry once.
+  if (!skipAuth && res.status === 401) {
+    log.warn("401 received; attempting session recovery", {
       url: String(resolved),
     });
-    const freshToken = await refreshDesktopTokenOnce();
-    log.info("Token refresh finished", {
+    const freshToken = await recoverFrom401(sentToken);
+    log.info("Session recovery finished", {
       url: String(resolved),
       hasFreshToken: !!freshToken,
     });
@@ -205,9 +215,6 @@ async function apiFetch<T>(
         contentType: res.headers.get("content-type"),
         durationMs: Date.now() - requestStartedAt,
       });
-    } else {
-      clearDesktopAuthSession();
-      throw createDesktopAuthRequiredError();
     }
   }
 
@@ -396,9 +403,11 @@ export async function apiUpload<T>(
     throw createAuthRequiredError();
   }
 
+  let sentToken: string | null = null;
   const doFetch = (token?: string | null) => {
     const headers: Record<string, string> = { ...(opts?.headers ?? {}) };
     const t = token ?? getClientBearerToken();
+    sentToken = t;
     if (t) {
       headers["Authorization"] = `Bearer ${t}`;
     }
@@ -416,15 +425,10 @@ export async function apiUpload<T>(
 
   let res = await doFetch(initialToken);
 
-  // 401 recovery: refresh the kova-auth token and retry once.
-  if (res.status === 401 && isTauri()) {
-    const freshToken = await refreshDesktopTokenOnce();
-    if (freshToken) {
-      res = await doFetch(freshToken);
-    } else {
-      clearDesktopAuthSession();
-      throw createDesktopAuthRequiredError();
-    }
+  // 401 recovery: mint a fresh app token and retry once.
+  if (res.status === 401) {
+    const freshToken = await recoverFrom401(sentToken);
+    if (freshToken) res = await doFetch(freshToken);
   }
 
   let json: any;

@@ -212,6 +212,10 @@ export function clearDesktopAuthSession() {
  * token sync) is how listeners such as the chat page's auth gate learn of it.
  */
 function rememberKovaSessionToken(token: string) {
+  // A token Ralph or Kova refused stays out: the SDK keeps its own copy in
+  // memory and hands it back on every sync tick, which would otherwise put
+  // a dead token back in storage (or announce it over a freshly minted one).
+  if (isSessionTokenRejected(token)) return;
   const missing = isTauriRuntime()
     ? !getDesktopToken()
     : !getDesktopAuthHandoffToken();
@@ -242,6 +246,18 @@ export function markAuthLogoutIntent() {
   window.sessionStorage.setItem(LOGOUT_INTENT_KEY, String(Date.now()));
 }
 
+/** How long a sign-out keeps session recovery from minting a new token. */
+const LOGOUT_INTENT_MS = 60_000;
+
+/** A sign-out started in this tab within the last minute (not consumed). */
+export function hasRecentAuthLogoutIntent(): boolean {
+  if (typeof window === "undefined") return false;
+  const value = Number(window.sessionStorage.getItem(LOGOUT_INTENT_KEY));
+  return Number.isFinite(value) && value > 0
+    ? Date.now() - value < LOGOUT_INTENT_MS
+    : false;
+}
+
 export function consumeAuthLogoutIntent(): boolean {
   if (typeof window === "undefined") return false;
   const value = window.sessionStorage.getItem(LOGOUT_INTENT_KEY);
@@ -254,29 +270,28 @@ export function isDesktopAuthenticated(): boolean {
   return !!getDesktopAuthHandoffToken();
 }
 
-type TokenRefresher = () => Promise<string | null>;
-let tokenRefresher: TokenRefresher | null = null;
+// ── Rejected tokens ─────────────────────────────────────────────────────────
+// Tokens a Ralph API call (401) or Kova's get-session (null) refused in this
+// page's lifetime. Kova never hands a revoked token back out, so a refused
+// token is dead for good; see app-session-recovery.
 
-function registerTokenRefresher(fn: TokenRefresher) {
-  tokenRefresher = fn;
+const rejectedSessionTokens = new Set<string>();
+
+export function markSessionTokenRejected(token: string): void {
+  rejectedSessionTokens.add(token);
 }
 
-export async function refreshDesktopToken(
-  options: { force?: boolean } = {},
-): Promise<string | null> {
-  const existing = getDesktopAuthHandoffToken();
-  if (existing && !options.force) return existing;
-  if (!tokenRefresher) return null;
-  try {
-    const token = await tokenRefresher();
-    if (token) {
-      setDesktopAuthSession(token);
-      return token;
-    }
-  } catch {
-    // Auth not ready or session expired.
-  }
-  return null;
+export function isSessionTokenRejected(token: string): boolean {
+  return rejectedSessionTokens.has(token);
+}
+
+/** Kova vouched for the token again (it minted the same one back). */
+export function clearSessionTokenRejected(token: string): void {
+  rejectedSessionTokens.delete(token);
+}
+
+export function resetRejectedSessionTokensForTests(): void {
+  rejectedSessionTokens.clear();
 }
 
 export function useKovaAuthTokenSync(
@@ -311,11 +326,6 @@ export function useKovaAuthTokenSync(
       setTokenReady(!!getDesktopAuthHandoffToken());
     }
   }, [getToken, isLoaded, isSignedIn]);
-
-  useEffect(() => {
-    registerTokenRefresher(getToken);
-    return () => registerTokenRefresher(() => Promise.resolve(null));
-  }, [getToken]);
 
   useEffect(() => {
     const timeout = setTimeout(() => void sync(), 0);

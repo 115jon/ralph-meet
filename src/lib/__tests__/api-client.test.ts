@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/desktop-auth", () => ({
-  clearDesktopAuthSession: vi.fn(),
   getDesktopAuthHandoffToken: vi.fn(() => null),
   getDesktopToken: vi.fn(() => null),
   getStoredKovaAuthSessionToken: vi.fn(() => "test-token"),
-  refreshDesktopToken: vi.fn(),
   waitForDesktopToken: vi.fn(async () => "test-token"),
+}));
+
+// A 401 asks for a new token; here Kova has none to give.
+vi.mock("@/lib/app-session-recovery", () => ({
+  getAppSessionState: () => "signed-out",
+  recoverAppSession: vi.fn(async () => null),
 }));
 
 vi.mock("@/lib/platform", () => ({

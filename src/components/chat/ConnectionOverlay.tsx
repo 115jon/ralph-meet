@@ -5,6 +5,7 @@ import {
   type ColdStep,
 } from "@/components/chat/ColdLoad";
 import { LOADER_SETTLE_MS, useElapsed } from "@/components/ui/LoadingScreen";
+import { useAppSessionState } from "@/lib/app-session-recovery";
 import { signInFromHere } from "@/lib/sign-in-here";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -40,6 +41,7 @@ export function ConnectionOverlay({
   const connected = useChatStore((s) => s.connected);
   const connectStep = useChatStore((s) => s.connectStep);
   const failure = useChatStore((s) => s.gatewayFailure);
+  const sessionSignedOut = useAppSessionState() === "signed-out";
   const online = useOnline();
   const slow = useElapsed(LOADER_SETTLE_MS);
 
@@ -91,7 +93,7 @@ export function ConnectionOverlay({
   const covering = state.visible && !(state.hasConnected && !state.fadeOut);
   const step: ColdStep = state.fadeOut || ready ? 3 : connectStep;
   const error: ColdError =
-    failure === "auth"
+    failure === "auth" || sessionSignedOut
       ? "auth"
       : !online
         ? "offline"
