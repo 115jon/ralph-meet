@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { MicrophoneSlash, Microphone } from "phosphor-react-native";
 import { useEffect } from "react";
 import { Pressable, View } from "react-native";
@@ -12,15 +13,17 @@ import Animated, {
 import { RADIUS, useTheme } from "@/theme";
 import { Icon, Led, Text } from "@/ui";
 
-import { useCallSegmentActions, type CallSegmentState } from "./call-segment";
+import { toggleMute } from "@/features/voice/actions";
+
+import type { CallSegmentState } from "./call-segment";
 
 const ENTER_MS = 200;
 
-/** Leading segment of the bar while in a call: LED, channel, status, mute key. */
+/** Leading segment of the bar while in a call: LED, channel, status, mute key. Tapping it opens the call. */
 export function CallSegment({ call }: { call: CallSegmentState }) {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const { toggleMute } = useCallSegmentActions();
+  const router = useRouter();
   const progress = useSharedValue(reduceMotion ? 1 : 0);
 
   useEffect(() => {
@@ -50,13 +53,26 @@ export function CallSegment({ call }: { call: CallSegmentState }) {
         animated,
       ]}
     >
-      <View style={{ flex: 1, gap: 2 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${call.channel}, ${call.status}. Open the call`}
+        onPress={() => router.push("/call")}
+        style={{
+          flex: 1,
+          gap: 2,
+          alignSelf: "stretch",
+          justifyContent: "center",
+        }}
+      >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Led state="talk" />
+          <Led state={call.led} />
           <Text
             variant="silk"
             numberOfLines={1}
-            style={{ color: theme.talk, flexShrink: 1 }}
+            style={{
+              color: call.led === "talk" ? theme.talk : theme.ink2,
+              flexShrink: 1,
+            }}
           >
             {call.channel}
           </Text>
@@ -68,7 +84,7 @@ export function CallSegment({ call }: { call: CallSegmentState }) {
         >
           {call.status}
         </Text>
-      </View>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={call.muted ? "Unmute" : "Mute"}
