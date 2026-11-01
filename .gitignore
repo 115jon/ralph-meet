@@ -119,6 +119,8 @@ desktop/packaging/**/obj/
 
 # Analysis / handoff / audit notes that are not part of the shipped product.
 /docs/*
+# docs/desktop holds tracked desktop docs (packaging).
+!/docs/desktop/
 
 # Owned_Capture_Component — GPLv2 binaries (Forked_Hook_DLL + Owned_Injector)
 # built from OBS win-capture sources for the game-capture-hook feature. The
