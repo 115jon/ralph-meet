@@ -3,16 +3,13 @@
 // Creates the system tray icon with a right-click context menu
 // (Show / Quit) and left-click-to-show behavior.
 //
-// Uses the Win32 window helpers from `crate::window` for the CEF
-// transparency hack (make_window_invisible / restore_window_visibility).
+// Showing the window goes through `crate::main_window::reveal`, which owns
+// the CEF tray state (see main_window.rs).
 
 use std::{
-    sync::atomic::Ordering,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-
-use tauri::{AppHandle, Manager};
 
 // ── Runtime type (must match lib.rs) ────────────────────────────────────
 #[cfg(feature = "cef")]
@@ -33,51 +30,6 @@ fn allow_tray_activation(last_activation: &Mutex<Option<Instant>>) -> bool {
 
     *last_activation = Some(now);
     true
-}
-
-fn show_main_window(app: &AppHandle<TauriRuntime>, context: &str) {
-    if app
-        .state::<crate::DesktopSettings>()
-        .shutdown_started
-        .load(Ordering::Acquire)
-    {
-        log::debug!("[Window][{context}] ignored while shutdown is in progress");
-        return;
-    }
-
-    let Some(window) = app.get_webview_window("main") else {
-        log::warn!("[Window][{context}] main window missing");
-        return;
-    };
-
-    #[cfg(target_os = "windows")]
-    {
-        match window.hwnd() {
-            Ok(hwnd) => {
-                let hw = windows::Win32::Foundation::HWND(hwnd.0 as _);
-                let needs_cef_show = crate::window::restore_window_from_tray(hw);
-                if needs_cef_show {
-                    let _ = window.show();
-                }
-                log::debug!("[Window][{context}] restored main window through HWND");
-            }
-            Err(error) => {
-                log::warn!("[Window][{context}] failed to resolve native HWND: {error}");
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }
-        return;
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-        log::debug!("[Window][{context}] restored main window visibility and focus");
-    }
 }
 
 /// Build the system tray icon, menu, and event handlers.
@@ -102,7 +54,7 @@ pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::err
                 if !allow_tray_activation(&menu_activation) {
                     return;
                 }
-                show_main_window(app, "tray:show");
+                crate::main_window::reveal(app, "tray:show");
             }
             "quit" => {
                 crate::spawn_app_exit(app, "tray:quit", false);
@@ -121,7 +73,7 @@ pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::err
                     return;
                 }
                 let app = tray.app_handle();
-                show_main_window(&app, "tray:left-click");
+                crate::main_window::reveal(app, "tray:left-click");
             }
         })
         .build(app)?;

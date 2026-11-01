@@ -25,7 +25,7 @@ Everything the user or the shell starts goes through the root stub:
 | ------------------------------------- | ----------------------------------------------------------------- |
 | Start menu and desktop shortcuts      | `RalphMeet.exe`, working directory = install root                 |
 | `ralphmeet://` handler                | `"…\RalphMeet\RalphMeet.exe" "%1"`                                |
-| Open on startup (HKCU `Run`)          | `"…\RalphMeet\RalphMeet.exe"`                                     |
+| Open on startup (HKCU `Run`)          | `"…\RalphMeet\RalphMeet.exe" --autostart`                         |
 | In-app restart, after-update relaunch | the root stub                                                     |
 | Uninstall (Apps settings)             | `"…\RalphMeet\Update.exe" --uninstall`; `DisplayIcon` is the stub |
 
@@ -77,7 +77,9 @@ update that ships the stub moves them over:
 
 - Start menu and desktop shortcuts and the `ralphmeet://` handler are rewritten on every install.
 - The HKCU `Run` value `RalphMeet` is rewritten if it points into this install (`Update.exe` or an
-  `app-<version>\RalphMeet.exe`). The app rewrites it too whenever it syncs the open-on-startup setting.
+  `app-<version>\RalphMeet.exe`). The app writes it when the open-on-startup setting changes, and at
+  startup when the setting is on and the value differs from the current command (which adds `--autostart`); see
+  [window-shell.md](window-shell.md).
 - Taskbar pins in `%APPDATA%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar` that point into this
   install are retargeted to the stub and given the AppUserModelID. Other pins are not touched.
 - Uninstall removes the `Run` value if it belongs to this install, and the `ralphmeet://` handler if it is the
