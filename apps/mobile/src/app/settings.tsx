@@ -1,13 +1,12 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { useSession } from "@/features/auth/session";
 import { AppPanel } from "@/features/settings/AppPanel";
 import { CallsPanel } from "@/features/settings/CallsPanel";
 import { YouPanel } from "@/features/settings/YouPanel";
-import { mediaUrl } from "@/lib/api";
 import { FONT, useTheme } from "@/theme";
-import { Avatar, Header, Screen, Text } from "@/ui";
+import { Header, Screen, Text } from "@/ui";
 
 // The Studio settings on a phone: three index tabs, 01 You, 02 Calls, 03 App.
 
@@ -34,7 +33,7 @@ function IndexTabs({
   return (
     <View
       accessibilityRole="tablist"
-      style={{ flexDirection: "row", paddingHorizontal: 16 }}
+      style={{ flexDirection: "row", paddingHorizontal: 16, paddingTop: 8 }}
     >
       {TABS.map((tab) => {
         const selected = tab.id === active;
@@ -54,11 +53,17 @@ function IndexTabs({
               borderBottomColor: selected ? theme.ink1 : theme.line,
             }}
           >
-            <Text variant="silk" tone={selected ? "accent" : "ink3"}>
+            <Text
+              variant="silk"
+              tone={selected ? "accent" : "ink3"}
+              numberOfLines={1}
+            >
               {tab.number}
             </Text>
             <Text
               tone={selected ? "ink1" : "ink3"}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.3}
               style={{ fontFamily: FONT.name, fontSize: 17, lineHeight: 22 }}
             >
               {tab.label}
@@ -70,39 +75,13 @@ function IndexTabs({
   );
 }
 
-function ProfileHeader() {
-  const user = useSession((s) => s.user);
-  const name = user?.display_name ?? user?.username ?? "You";
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        padding: 16,
-      }}
-    >
-      <Avatar name={name} size={56} uri={mediaUrl(user?.avatar_url)} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="title" numberOfLines={1}>
-          {name}
-        </Text>
-        {user ? (
-          <Text variant="row" tone="ink3" numberOfLines={1}>
-            @{user.username}
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-export default function YouScreen() {
+/** Studio settings, opened from the panel's gear or the profile sheet. */
+export default function SettingsScreen() {
+  const router = useRouter();
   const [tab, setTab] = useState<TabId>("you");
   return (
     <Screen>
-      <Header title="You" />
-      <ProfileHeader />
+      <Header title="Settings" onBack={() => router.back()} />
       <IndexTabs active={tab} onChange={setTab} />
       <View style={{ paddingHorizontal: 4, paddingVertical: 20 }}>
         {tab === "you" ? <YouPanel /> : null}

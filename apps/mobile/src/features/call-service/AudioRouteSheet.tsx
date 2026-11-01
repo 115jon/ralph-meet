@@ -60,7 +60,7 @@ export function AudioRouteSheet({ visible, onClose }: AudioRouteSheetProps) {
   return (
     <Sheet visible={visible} onClose={onClose} label="Audio output">
       <View style={{ paddingHorizontal: 20, paddingBottom: 6 }}>
-        <Text variant="silk" tone="ink3">
+        <Text variant="silk" tone="ink3" numberOfLines={1}>
           Audio output
         </Text>
       </View>

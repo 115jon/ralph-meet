@@ -252,7 +252,7 @@ function FailedSend({ message }: { message: ChatMessage }) {
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Led state="danger" size={6} />
-        <Text variant="silk" tone="ink2">
+        <Text variant="silk" tone="ink2" numberOfLines={1}>
           Not sent
         </Text>
       </View>
@@ -304,7 +304,7 @@ export const DayDivider = memo(function DayDivider({
       }}
     >
       <View style={{ flex: 1, height: 1, backgroundColor: theme.line }} />
-      <Text variant="silk" tone="ink3">
+      <Text variant="silk" tone="ink3" numberOfLines={1}>
         {label}
       </Text>
       <View style={{ flex: 1, height: 1, backgroundColor: theme.line }} />

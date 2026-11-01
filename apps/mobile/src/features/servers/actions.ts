@@ -51,7 +51,7 @@ export async function refreshReadStates(): Promise<void> {
   }
 }
 
-/** Loads the server list, restores the last server and loads its tree. */
+/** Loads the server list, restores the last server and loads every tree, that one first. */
 export async function loadServers(): Promise<void> {
   if (getState().servers.length === 0) setState({ status: "loading" });
   try {
@@ -67,6 +67,12 @@ export async function loadServers(): Promise<void> {
     setState({ status: "ready", servers, selectedId });
     subscribeServers(servers.map((server) => server.id));
     if (selectedId) void loadTree(selectedId);
+    // The rest load behind it, so every rail tile can show its unread pill.
+    for (const server of servers) {
+      if (server.id !== selectedId && !getState().trees[server.id]) {
+        void loadTree(server.id);
+      }
+    }
     void refreshReadStates();
   } catch {
     setState({ status: "error" });

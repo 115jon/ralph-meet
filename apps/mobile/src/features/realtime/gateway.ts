@@ -163,6 +163,14 @@ export function sendVoiceChannelLeave(channelId: string): void {
   send({ op: GatewayOp.VoiceChannelLeave, d: { channel_id: channelId } });
 }
 
+/**
+ * Op 26 PresenceUpdate: sets the status on every live gateway session of
+ * this user, so the presence the room hands out matches the one just saved.
+ */
+export function sendPresenceUpdate(status: string): void {
+  send({ op: GatewayOp.PresenceUpdate, d: { status } });
+}
+
 export function sendVoiceStateUpdate(
   d: MainClientPayload<GatewayOp.VoiceStateUpdate>,
 ): void {

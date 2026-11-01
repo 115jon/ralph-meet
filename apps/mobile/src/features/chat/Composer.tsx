@@ -132,7 +132,7 @@ function IntentBar({
       }}
     >
       <Icon icon={icon} size={14} color={theme.ink3} />
-      <Text variant="silk" tone="ink3">
+      <Text variant="silk" tone="ink3" numberOfLines={1}>
         {label}
       </Text>
       <Text

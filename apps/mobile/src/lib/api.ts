@@ -84,6 +84,12 @@ const MeSchema = Schema.Struct({
   username: Schema.String,
   display_name: Schema.NullOr(Schema.String),
   avatar_url: Schema.NullOr(Schema.String),
+  // Optional so an older server never fails the whole profile.
+  banner_url: Schema.optional(Schema.NullOr(Schema.String)),
+  banner_content_type: Schema.optional(Schema.NullOr(Schema.String)),
+  /** "online", "idle", "dnd" or "offline" (shown as Invisible). */
+  status: Schema.optional(Schema.String),
+  custom_status: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type Me = typeof MeSchema.Type;
 

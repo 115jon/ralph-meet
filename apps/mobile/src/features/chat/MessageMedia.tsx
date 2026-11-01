@@ -218,7 +218,7 @@ function FileRow({ attachment }: { attachment: Attachment }) {
     >
       <Icon icon={icon} size={18} color={theme.ink2} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text variant="silk" tone="ink3">
+        <Text variant="silk" tone="ink3" numberOfLines={1}>
           {label}
         </Text>
         <Text variant="row" numberOfLines={1}>

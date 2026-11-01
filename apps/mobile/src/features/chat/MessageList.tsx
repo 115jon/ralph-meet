@@ -153,7 +153,7 @@ export function MessageList({
       ListFooterComponent={
         state.hasMore ? (
           <View style={{ paddingVertical: 16, alignItems: "center" }}>
-            <Text variant="silk" tone="inkOff">
+            <Text variant="silk" tone="inkOff" numberOfLines={1}>
               {state.loadingOlder ? "Loading older" : "Scroll for older"}
             </Text>
           </View>

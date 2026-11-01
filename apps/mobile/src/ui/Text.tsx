@@ -51,6 +51,19 @@ const VARIANTS: Record<TextVariant, TextStyle> = {
   },
 };
 
+/**
+ * Chrome (titles, silkscreen labels, numbers) stops growing at 1.3x system
+ * font scale so it cannot wrap or clip its 48px rows; prose and names keep
+ * scaling for whoever needs them larger.
+ */
+const CHROME_MAX_SCALE = 1.3;
+const MAX_SCALE: Partial<Record<TextVariant, number>> = {
+  display: CHROME_MAX_SCALE,
+  title: CHROME_MAX_SCALE,
+  silk: CHROME_MAX_SCALE,
+  num: CHROME_MAX_SCALE,
+};
+
 const TONES: Record<Tone, keyof Theme> = {
   ink1: "ink1",
   ink2: "ink2",
@@ -73,6 +86,7 @@ export function Text({
   const theme = useTheme();
   return (
     <RNText
+      maxFontSizeMultiplier={MAX_SCALE[variant]}
       {...props}
       style={[VARIANTS[variant], { color: theme[TONES[tone]] }, style]}
     />

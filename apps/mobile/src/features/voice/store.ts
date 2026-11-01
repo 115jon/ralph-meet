@@ -59,6 +59,7 @@ export function updateCall(update: (call: ActiveCall) => ActiveCall): void {
 // ── Selectors: narrow, so a tile re-renders only for its own participant ──
 
 export interface CallSummary {
+  readonly serverId: string;
   readonly channelId: string;
   readonly channelName: string;
   readonly status: CallStatus;
@@ -67,12 +68,13 @@ export interface CallSummary {
   readonly count: number;
 }
 
-/** What the app bar segment and the call header show, or null. */
+/** What the panel's call row and the call header show, or null. */
 export function useCallSummary(): CallSummary | null {
   return useVoiceStore(
     useShallow((s) =>
       s.call
         ? {
+            serverId: s.call.serverId,
             channelId: s.call.channelId,
             channelName: s.call.channelName,
             status: s.call.status,

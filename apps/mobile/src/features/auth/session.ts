@@ -15,6 +15,8 @@ interface SessionActions {
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (user: Me) => void;
+  /** Changes fields of the loaded profile; a no-op before it loads. */
+  patchUser: (patch: Partial<Me>) => void;
 }
 
 export const useSession = create<SessionState & SessionActions>((set, get) => ({
@@ -38,5 +40,10 @@ export const useSession = create<SessionState & SessionActions>((set, get) => ({
 
   setUser: (user) => {
     if (get().status === "signed-in") set({ user });
+  },
+
+  patchUser: (patch) => {
+    const { status, user } = get();
+    if (status === "signed-in" && user) set({ user: { ...user, ...patch } });
   },
 }));

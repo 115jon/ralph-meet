@@ -19,7 +19,7 @@ export function resetActivityStore(): void {
   useActivityStore.setState(INITIAL, true);
 }
 
-/** Mentions and replies count; DMs show on the DMs tab, as on the web. */
+/** Mentions and replies count; DMs show on the rail's DMs key, as on the web. */
 function counts(notification: Notification): boolean {
   return (
     !notification.is_read &&
@@ -29,6 +29,15 @@ function counts(notification: Notification): boolean {
 
 export function useUnreadActivityCount(): number {
   return useActivityStore((s) => s.notifications.filter(counts).length);
+}
+
+/** Unread mentions and replies in one server: its rail tile's count chip. */
+export function useServerMentionCount(serverId: string): number {
+  return useActivityStore(
+    (s) =>
+      s.notifications.filter((n) => n.server_id === serverId && counts(n))
+        .length,
+  );
 }
 
 /** Unread notifications of any kind in one conversation: the DM row chip. */

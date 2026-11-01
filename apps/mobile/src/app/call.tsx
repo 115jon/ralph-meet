@@ -4,11 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { callLed } from "@/features/app-bar/call-segment";
+import { callLed, callStatusLabel } from "@/features/panel/call-row";
 import { CallDock } from "@/features/voice/CallDock";
 import { ParticipantTile } from "@/features/voice/ParticipantTile";
 import {
-  type CallStatus,
   type CallTile,
   useCallSummary,
   useCallTiles,
@@ -16,12 +15,6 @@ import {
 import { useWatchCallVideo } from "@/features/voice/use-watch-video";
 import { useTheme } from "@/theme";
 import { IconButton, Led, Text } from "@/ui";
-
-const STATUS_LABEL: Record<CallStatus, string> = {
-  joining: "Joining",
-  connected: "Connected",
-  reconnecting: "Reconnecting",
-};
 
 /** Two tiles a row; an odd one out spans the first row. */
 function rowsOf<T>(items: readonly T[]): T[][] {
@@ -95,11 +88,11 @@ export default function CallScreen() {
   );
   useWatchCallVideo();
 
-  // Leaving (here or from the bar) or a failed join closes the screen.
+  // Leaving (here or from the panel) or a failed join closes the screen.
   useEffect(() => {
     if (inCall) return;
     if (router.canGoBack()) router.back();
-    else router.replace("/servers");
+    else router.replace("/home");
   }, [inCall, router]);
 
   if (!call) return null;
@@ -137,9 +130,10 @@ export default function CallScreen() {
             <Led state={led} />
             <Text
               variant="silk"
+              numberOfLines={1}
               style={{ color: led === "talk" ? theme.talk : theme.ink2 }}
             >
-              {STATUS_LABEL[call.status]}
+              {callStatusLabel(call)}
             </Text>
             {call.count > 0 ? (
               <Text variant="num" tone="ink3">
