@@ -92,12 +92,15 @@ export async function buildServiceAccountJwt(
 
 /** A message for one device: what `messages:send` takes, minus the token. */
 export interface FcmMessage {
-  readonly notification: { readonly title: string; readonly body: string };
+  /** Absent on data-only messages the app renders (or acts on) itself. */
+  readonly notification?: { readonly title: string; readonly body: string };
   /** FCM data values must be strings. */
   readonly data: Readonly<Record<string, string>>;
   readonly android: {
     readonly priority: "HIGH" | "NORMAL";
-    readonly notification: {
+    /** How long FCM holds the message for an offline device, e.g. "3600s". */
+    readonly ttl?: string;
+    readonly notification?: {
       readonly channel_id: string;
       readonly tag: string;
     };

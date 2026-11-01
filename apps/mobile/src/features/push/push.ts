@@ -6,17 +6,20 @@ import { useChatStore } from "@/features/chat/store";
 import { apiFetch } from "@/lib/api";
 import { config } from "@/lib/config";
 
-// Message pushes over FCM. The server sends a notification + data message
-// (src/services/push.service.ts) on the `messages` channel; Android shows it
-// while the app is in the background. In the foreground expo-notifications
-// asks the handler below, which hides it when that conversation is open.
+import * as RalphNotify from "../../../modules/ralph-notify/src";
 
-/** Matches MESSAGES_CHANNEL_ID on the server and the plugin's defaultChannel. */
-const MESSAGES_CHANNEL_ID = "messages";
+// Message pushes over FCM. A build with modules/ralph-notify registers its
+// token as `native`: the server then sends data-only pushes that the module
+// draws itself (MessagingStyle, Reply, Mark as read), with the app killed
+// too, on its own channels. Older builds get the server's system-drawn
+// notification + data push, which expo-notifications shows; in the
+// foreground it asks the handler below, which hides it when that
+// conversation is open.
 
 const PushTarget = Schema.Struct({
   channelId: Schema.String,
   serverId: Schema.optional(Schema.String),
+  messageId: Schema.optional(Schema.String),
 });
 export type PushTarget = typeof PushTarget.Type;
 const decodeTarget = Schema.decodeUnknownOption(PushTarget);
@@ -41,7 +44,7 @@ export function pushTarget(
   return null;
 }
 
-/** The handler and channel; call once at startup, before asking permission. */
+/** The foreground handler; call once at startup, before asking permission. */
 export function configurePush(): void {
   Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
@@ -57,13 +60,6 @@ export function configurePush(): void {
       };
     },
   });
-  if (Platform.OS === "android") {
-    void Notifications.setNotificationChannelAsync(MESSAGES_CHANNEL_ID, {
-      name: "Messages",
-      description: "Direct messages, mentions and replies",
-      importance: Notifications.AndroidImportance.DEFAULT,
-    }).catch(() => undefined);
-  }
 }
 
 /** Asks for POST_NOTIFICATIONS the first time only; true when granted. */
@@ -79,16 +75,27 @@ export async function ensurePushPermission(): Promise<boolean> {
 // The token this device last registered, so sign-out can unregister it.
 let registeredToken: string | null = null;
 
+interface PushTokenBody {
+  token: string;
+  platform: "android" | "ios";
+  app_variant: string;
+  /** Data-only pushes, drawn by modules/ralph-notify. */
+  push_format?: "native";
+}
+
 /** POST /api/push-tokens; re-owns the token to whoever is signed in. */
 export async function registerPushToken(token: string): Promise<void> {
+  const body: PushTokenBody = {
+    token,
+    platform: Platform.OS === "ios" ? "ios" : "android",
+    app_variant: config.appVariant,
+  };
+  // Only a build that can draw data-only pushes asks for them.
+  if (RalphNotify.isAvailable) body.push_format = "native";
   const response = await apiFetch("/api/push-tokens", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      token,
-      platform: Platform.OS === "ios" ? "ios" : "android",
-      app_variant: config.appVariant,
-    }),
+    body: JSON.stringify(body),
   });
   if (__DEV__) {
     console.info(`[push] register ${response.status}`);

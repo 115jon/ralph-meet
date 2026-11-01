@@ -14,6 +14,8 @@ interface CustomEmojiProps {
   size: number;
   /** Drawn but invisible, inside an unrevealed spoiler. */
   hidden?: boolean;
+  /** An animated one plays (the default); a picker grid holds it still. */
+  animate?: boolean;
   /** For the `:name:` fallback when the image cannot be fetched. */
   fallbackStyle?: TextStyle;
 }
@@ -27,6 +29,7 @@ export function CustomEmoji({
   id,
   size,
   hidden = false,
+  animate = true,
   fallbackStyle,
 }: CustomEmojiProps) {
   const [failed, setFailed] = useState(() => missing.has(id));
@@ -36,7 +39,7 @@ export function CustomEmoji({
       url={`/api/emojis/assets/${encodeURIComponent(id)}`}
       style={{ width: size, height: size, opacity: hidden ? 0 : 1 }}
       contentFit="contain"
-      animate={!hidden}
+      animate={animate && !hidden}
       accessibilityLabel={`:${name}:`}
       onError={() => {
         missing.add(id);

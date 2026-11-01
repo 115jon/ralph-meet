@@ -1,3 +1,4 @@
+import { markChannelRead as readChannelActivity } from "@/features/activity/actions";
 import { subscribeServers } from "@/features/realtime/gateway";
 
 import {
@@ -8,7 +9,7 @@ import {
 } from "./api";
 import { readLastServer, writeLastServer } from "./last-server";
 import type { VoiceMember } from "./schema";
-import { useServersStore, type ServerTree } from "./store";
+import { isUnread, useServersStore, type ServerTree } from "./store";
 
 const { getState, setState } = useServersStore;
 
@@ -92,6 +93,17 @@ export function markRead(channelId: string): void {
   const readAt = s.lastMessageAt[channelId] ?? new Date().toISOString();
   setState({ readAt: { ...s.readAt, [channelId]: readAt } });
   markChannelRead(channelId).catch(() => undefined);
+}
+
+/** Every unread channel in the server's tree, as the web's server menu does. */
+export function markServerRead(serverId: string): void {
+  const s = getState();
+  for (const channel of s.trees[serverId]?.channels ?? []) {
+    if (isUnread(s.lastMessageAt[channel.id], s.readAt[channel.id])) {
+      markRead(channel.id);
+    }
+    readChannelActivity(channel.id);
+  }
 }
 
 // ── Gateway events ─────────────────────────────────────────────────────────

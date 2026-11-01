@@ -58,6 +58,10 @@ const CAMERA_USAGE = "Ralph Meet uses the camera for video in voice channels.";
 // public by design.
 const apiBaseUrl =
   process.env.EXPO_PUBLIC_RALPH_API_URL ?? DEFAULT_PUBLIC_WEB_URL;
+// The public web app: invite and message links point here, and Android opens
+// them in the app (App Links, verified by the Worker's assetlinks.json).
+const webUrl = process.env.EXPO_PUBLIC_RALPH_WEB_URL ?? DEFAULT_PUBLIC_WEB_URL;
+const webHost = new URL(webUrl).host;
 const kovaAuthUrl =
   process.env.EXPO_PUBLIC_KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL;
 const kovaPublishableKey =
@@ -91,6 +95,19 @@ const config: ExpoConfig = {
       "android.permission.MODIFY_AUDIO_SETTINGS",
       "android.permission.POST_NOTIFICATIONS",
     ],
+    // Invite and message links on the web host open here once Android has
+    // verified /.well-known/assetlinks.json; the scheme stays the fallback.
+    intentFilters: [
+      {
+        action: "VIEW",
+        autoVerify: true,
+        category: ["BROWSABLE", "DEFAULT"],
+        data: [
+          { scheme: "https", host: webHost, pathPrefix: "/invite/" },
+          { scheme: "https", host: webHost, pathPrefix: "/chat/" },
+        ],
+      },
+    ],
     // The WebRTC plugin also asks for an overlay; nothing draws over apps.
     blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
     adaptiveIcon: {
@@ -108,8 +125,20 @@ const config: ExpoConfig = {
       "expo-video",
       { supportsBackgroundPlayback: false, supportsPictureInPicture: false },
     ],
-    // Message pushes post on the `messages` channel the app creates at launch.
-    ["expo-notifications", { defaultChannel: "messages" }],
+    // Message pushes are drawn by modules/ralph-notify on its own channels
+    // (Direct messages, Mentions and replies, Calls, Other); anything FCM
+    // draws itself lands on Other.
+    ["expo-notifications", { defaultChannel: "other" }],
+    // Photos, videos, text and links shared from other apps open a "Send
+    // to…" picker. Android only for now: iOS needs a share extension target.
+    [
+      "expo-share-intent",
+      {
+        androidIntentFilters: ["text/*", "image/*", "video/*"],
+        androidMultiIntentFilters: ["image/*", "video/*"],
+        disableIOS: true,
+      },
+    ],
     // The attach tray's recent-media grid reads photos and videos only
     // (READ_MEDIA_IMAGES / READ_MEDIA_VIDEO, plus Android 14's
     // READ_MEDIA_VISUAL_USER_SELECTED for "Select photos"); it never writes.
@@ -167,7 +196,13 @@ const config: ExpoConfig = {
     "./plugins/withReleaseSigning.cjs",
   ],
   experiments: { typedRoutes: true },
-  extra: { apiBaseUrl, kovaAuthUrl, kovaPublishableKey, appVariant },
+  extra: {
+    apiBaseUrl,
+    webUrl,
+    kovaAuthUrl,
+    kovaPublishableKey,
+    appVariant,
+  },
 };
 
 export default config;
