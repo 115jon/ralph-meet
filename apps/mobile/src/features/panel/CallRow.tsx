@@ -5,11 +5,18 @@ import {
   MicrophoneSlash,
   PhoneX,
   SpeakerSlash,
+  VideoCamera,
+  VideoCameraSlash,
 } from "phosphor-react-native";
 import { Pressable, View } from "react-native";
 import Animated, { Easing, FadeIn, FadeOut } from "react-native-reanimated";
 
-import { leaveCall, toggleDeafen, toggleMute } from "@/features/voice/actions";
+import {
+  leaveCall,
+  toggleCamera,
+  toggleDeafen,
+  toggleMute,
+} from "@/features/voice/actions";
 import { useTheme } from "@/theme";
 import { Led, Text } from "@/ui";
 
@@ -20,7 +27,8 @@ const ENTER_MS = 200;
 
 /**
  * The panel's call row, above you while in a call: LED and status, where
- * the call is, then Mute, Deafen and Leave. Tapping the text opens the call.
+ * the call is, then Mute, Deafen, Camera and Leave. Tapping the text opens
+ * the call.
  */
 export function CallRow({ call }: { call: CallRowState }) {
   const theme = useTheme();
@@ -90,6 +98,13 @@ export function CallRow({ call }: { call: CallRowState }) {
         tone={call.deafened ? "off" : "rest"}
         selected={call.deafened}
         onPress={toggleDeafen}
+      />
+      <PanelKey
+        icon={call.camera ? VideoCamera : VideoCameraSlash}
+        label={call.camera ? "Turn off camera" : "Turn on camera"}
+        tone={call.camera ? "live" : "rest"}
+        selected={call.camera}
+        onPress={() => void toggleCamera()}
       />
       <PanelKey
         icon={PhoneX}

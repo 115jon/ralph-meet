@@ -56,11 +56,12 @@ internal object CallNotification {
         call.muted -> "Muted"
         else -> null
       }
+    val sharing = if (call.sharing) "Sharing your screen" else null
     return NotificationCompat
       .Builder(context, CHANNEL_ID)
       .setSmallIcon(if (call.muted) R.drawable.ralph_call_mic_slash else R.drawable.ralph_call_mic)
       .setContentTitle(call.channelName)
-      .setContentText(listOfNotNull(call.serverName.ifBlank { null }, status).joinToString(" · "))
+      .setContentText(listOfNotNull(sharing, call.serverName.ifBlank { null }, status).joinToString(" · "))
       .setStyle(style)
       .addAction(mute)
       .setContentIntent(openIntent(context, call.openUrl))

@@ -1,4 +1,8 @@
+import { Schema } from "effect";
+
+import { useSession } from "@/features/auth/session";
 import { apiFetch, apiJson, ApiError } from "@/lib/api";
+import { config } from "@/lib/config";
 
 import {
   MemberListSchema,
@@ -111,17 +115,73 @@ export interface UploadFile {
   readonly type: string;
 }
 
+/** An upload stopped by its signal (the chip was removed). */
+export class UploadAborted extends Error {
+  constructor() {
+    super("Upload cancelled");
+    this.name = "UploadAborted";
+  }
+}
+
+export interface UploadOptions {
+  /** 0 to 1 as the body goes out. */
+  readonly onProgress?: (fraction: number) => void;
+  readonly signal?: AbortSignal;
+}
+
 /**
  * POST /api/channels/:id/messages/upload: stores one file, unattached until
- * a message names its id in `attachment_ids`.
+ * a message names its id in `attachment_ids`. XMLHttpRequest rather than
+ * fetch, which reports no upload progress. Rejects with ApiError on a
+ * non-2xx (413 too large, 403 no ATTACH_FILES, 429 rate limited) and with
+ * UploadAborted when `signal` fires.
  */
-export function uploadAttachment(channelId: string, file: UploadFile) {
-  const form = new FormData();
-  // React Native's FormData streams a { uri, name, type } part from disk.
-  form.append("file", file as unknown as Blob);
-  return apiJson(channelPath(channelId, "/messages/upload"), UploadSchema, {
-    method: "POST",
-    body: form,
+export function uploadAttachment(
+  channelId: string,
+  file: UploadFile,
+  { onProgress, signal }: UploadOptions = {},
+) {
+  const path = channelPath(channelId, "/messages/upload");
+  return new Promise<typeof UploadSchema.Type>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    signal?.addEventListener("abort", abort);
+    const done = () => signal?.removeEventListener("abort", abort);
+
+    xhr.open("POST", `${config.apiBaseUrl}${path}`);
+    const { token } = useSession.getState();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0)
+        onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      done();
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new ApiError(xhr.status, path));
+        return;
+      }
+      try {
+        resolve(
+          Schema.decodeUnknownSync(UploadSchema)(JSON.parse(xhr.responseText)),
+        );
+      } catch (error) {
+        reject(error);
+      }
+    };
+    xhr.onerror = () => {
+      done();
+      reject(new TypeError("Network request failed"));
+    };
+    xhr.onabort = () => {
+      done();
+      reject(new UploadAborted());
+    };
+
+    const form = new FormData();
+    // React Native's FormData streams a { uri, name, type } part from disk.
+    form.append("file", file as unknown as Blob);
+    xhr.send(form);
   });
 }
 

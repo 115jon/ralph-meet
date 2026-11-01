@@ -1,5 +1,6 @@
 package expo.modules.ralphcall
 
+import android.app.Activity
 import android.content.Context
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
@@ -27,6 +28,8 @@ class CallOptions : Record {
   @Field val openUrl: String? = null
 
   @Field val speakerFirst: Boolean = true
+
+  @Field val sharing: Boolean = false
 }
 
 class RalphCallModule : Module() {
@@ -85,6 +88,19 @@ class RalphCallModule : Module() {
       AsyncFunction("getAudioRoutes") { promise: Promise ->
         promise.resolve(CallController.routes.toMaps())
       }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("startScreenShare") {
+        CallController.startScreenShare()
+      }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("stopScreenShare") {
+        CallController.stopScreenShare()
+      }.runOnQueue(Queues.MAIN)
+
+      // Only acts while startScreenShare() armed it; see onProjectionConsent.
+      OnActivityResult { _, payload ->
+        CallController.onProjectionConsent(payload.resultCode == Activity.RESULT_OK)
+      }
     }
 
   /**
@@ -116,5 +132,6 @@ private fun CallOptions.toInfo() =
     deafened = deafened,
     openUrl = openUrl,
     speakerFirst = speakerFirst,
+    sharing = sharing,
     startedAt = System.currentTimeMillis(),
   )

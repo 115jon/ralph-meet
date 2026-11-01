@@ -204,6 +204,8 @@ export interface Theme {
   onTalk: string;
   talkTint: string;
   live: string;
+  /** Behind a live key (camera on, sharing), like talkTint. */
+  liveTint: string;
   dangerFill: string;
   onDanger: string;
   dangerInk: string;
@@ -251,6 +253,7 @@ function buildTheme(id: ThemeId): Theme {
     onTalk: s.onTalk,
     talkTint: mix(s.talk, 14),
     live: s.live,
+    liveTint: mix(s.live, 14),
     dangerFill: s.dangerFill,
     onDanger: s.onDanger,
     dangerInk: s.dangerInk,

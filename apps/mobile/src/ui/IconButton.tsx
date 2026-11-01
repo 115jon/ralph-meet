@@ -10,15 +10,26 @@ interface IconButtonProps {
   /** Required: an icon alone says nothing to a screen reader. */
   label: string;
   onPress: () => void;
+  /** Draws the glyph in its Fill weight (a key that is on). */
+  active?: boolean;
+  disabled?: boolean;
 }
 
 /** 40px square key holding one Phosphor glyph. */
-export function IconButton({ icon, label, onPress }: IconButtonProps) {
+export function IconButton({
+  icon,
+  label,
+  onPress,
+  active = false,
+  disabled = false,
+}: IconButtonProps) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       hitSlop={4}
       style={({ pressed }) => ({
@@ -30,7 +41,12 @@ export function IconButton({ icon, label, onPress }: IconButtonProps) {
         backgroundColor: pressed ? theme.tint2 : "transparent",
       })}
     >
-      <Icon icon={icon} size={22} />
+      <Icon
+        icon={icon}
+        active={active}
+        size={22}
+        color={disabled ? theme.inkOff : undefined}
+      />
     </Pressable>
   );
 }

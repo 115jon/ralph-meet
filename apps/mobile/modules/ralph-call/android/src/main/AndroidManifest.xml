@@ -4,11 +4,14 @@
     Android 14+ wants the generic FOREGROUND_SERVICE permission plus one per
     service type. microphone keeps capture alive in the background (it must be
     started while the app is visible); phoneCall marks it as the app's call,
-    which needs MANAGE_OWN_CALLS (merged in from core-telecom).
+    which needs MANAGE_OWN_CALLS (merged in from core-telecom). mediaProjection
+    is added only while the screen is shared: Android 10+ hands out a screen
+    capture only to an app whose foreground service carries that type.
   -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
   <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
   <!-- The ongoing call notification (runtime permission on Android 13+). -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -20,7 +23,7 @@
     <service
       android:name=".RalphCallService"
       android:exported="false"
-      android:foregroundServiceType="microphone|phoneCall" />
+      android:foregroundServiceType="microphone|phoneCall|mediaProjection" />
     <receiver
       android:name=".CallActionReceiver"
       android:exported="false" />

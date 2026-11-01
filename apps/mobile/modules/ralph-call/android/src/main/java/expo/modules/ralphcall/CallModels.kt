@@ -10,6 +10,8 @@ internal data class CallInfo(
   val openUrl: String?,
   /** Speaker rather than earpiece when no headset is connected. */
   val speakerFirst: Boolean,
+  /** The screen is being shared; the notification says so. */
+  val sharing: Boolean,
   val startedAt: Long,
 )
 
