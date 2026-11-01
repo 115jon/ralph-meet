@@ -9,7 +9,8 @@ namespace Installer
     {
         public const string DefaultInstallDirectoryName = "RalphMeet";
         public const string CurrentStateFileName = "current.json";
-        public const string RootLauncherFileName = "Update.exe";
+        public const string UpdateExeFileName = "Update.exe";
+        public const string RootStubFileName = "RalphMeet.exe";
         public const string RootIconFileName = "app.ico";
         public const string StagingDirectoryName = "staging";
         public const string LogsDirectoryName = "logs";
@@ -20,7 +21,8 @@ namespace Installer
         private static readonly string[] PreservedRootFileNames =
         {
             CurrentStateFileName,
-            RootLauncherFileName,
+            UpdateExeFileName,
+            RootStubFileName,
             RootIconFileName
         };
 
@@ -43,7 +45,10 @@ namespace Installer
 
         public string RootPath { get; }
 
-        public string UpdateExePath => Path.Combine(RootPath, RootLauncherFileName);
+        public string UpdateExePath => Path.Combine(RootPath, UpdateExeFileName);
+
+        /// <summary>The native launcher stub every shortcut points at (see RootLauncher).</summary>
+        public string RootStubPath => Path.Combine(RootPath, RootStubFileName);
 
         public string CurrentStatePath => Path.Combine(RootPath, CurrentStateFileName);
 

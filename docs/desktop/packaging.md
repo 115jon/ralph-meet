@@ -7,14 +7,18 @@ How the Windows installer (`RalphMeetSetup.exe`) gets its files, and how CI chec
 One file defines it: [`desktop/packaging/payload-manifest.json`](../../desktop/packaging/payload-manifest.json).
 Each entry names a `source` and a path to copy (`to` defaults to `from`):
 
-| source      | directory                          | what comes from it                                                |
-| ----------- | ---------------------------------- | ----------------------------------------------------------------- |
-| `cef`       | `CEF_PATH` (`D:\cef` in CI)        | the 17 CEF root files and the whole `locales` directory           |
-| `release`   | `desktop/src-tauri/target/release` | `ralph-meet-desktop.exe` (as `RalphMeet.exe`) and `obs-capture/*` |
-| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents in `obs-capture/`                             |
+| source      | directory                          | what comes from it                                                    |
+| ----------- | ---------------------------------- | --------------------------------------------------------------------- |
+| `cef`       | `CEF_PATH` (`D:\cef` in CI)        | the 17 CEF root files and the whole `locales` directory               |
+| `release`   | `desktop/src-tauri/target/release` | `ralph-meet-desktop.exe` (as `RalphMeet.exe`) and `obs-capture/*`     |
+| `launcher`  | `desktop/launcher/target/release`  | `ralph-meet-launcher.exe` (as `RalphMeetLauncher.exe`), the root stub |
+| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents in `obs-capture/`                                 |
 
 `obs-capture/` holds the six OBS hook/injector binaries, the two Vulkan layer JSONs, and `LICENSE-GPLv2.txt`,
 `ATTRIBUTION.md` and `SOURCE-OFFER.md`. Nothing is dropped for size: every CEF locale and rendering DLL ships.
+
+The installer copies `RalphMeetLauncher.exe` to the install root as `RalphMeet.exe` on every activation; see
+[launch.md](launch.md).
 
 Changing what ships means editing the manifest. Three things read it:
 
@@ -58,7 +62,8 @@ reversible transform to maintain.
 
 ## Building locally
 
-`desktop/scripts/build-installer.ps1` does the whole thing. To run only the payload step after a release build:
+`desktop/scripts/build-installer.ps1` does the whole thing, including the launcher
+(`cargo build --release --manifest-path desktop/launcher/Cargo.toml`). To run only the payload step after a release build:
 
 ```powershell
 .\desktop\scripts\stage-payload.ps1 -CefDir D:\cef       # stages, packs, then decodes and compares
@@ -80,8 +85,11 @@ The `payload.rmpk` file is git-ignored.
 - `desktop` job: builds the OBS capture binaries, then `cargo check` with the shipped features
   (`cef,native-screen-share,game-capture-hook`) whose `build.rs` also enforces the manifest check above.
 
-`desktop-release.yml` runs the installer tests, stages and packs through `stage-payload.ps1`, checks that the
-built installer is larger than its payload, and runs `desktop/scripts/validate-latest-json.ps1` before
+- `launcher` job (Windows): `cargo fmt --check`, `clippy -D warnings`, `cargo test` and a release build of
+  `desktop/launcher`.
+
+`desktop-release.yml` runs the installer tests, builds the launcher after the app, stages and packs through
+`stage-payload.ps1`, checks that the built installer is larger than its payload, and runs `desktop/scripts/validate-latest-json.ps1` before
 publishing. That script requires the updater manifest's version to match `tauri.conf.json` and the tag, the URL
 to end in `/releases/download/<tag>/RalphMeetSetup.exe`, `pub_date` to be UTC, and the signature to be a
 minisign signature whose key id matches the updater public key. It does not verify the signature itself, since

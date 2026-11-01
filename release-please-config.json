@@ -19,6 +19,11 @@
           "jsonpath": "$.package.version"
         },
         {
+          "type": "toml",
+          "path": "desktop/launcher/Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
           "type": "xml",
           "path": "desktop/installer/installer.csproj",
           "xpath": "//Project/PropertyGroup/Version"

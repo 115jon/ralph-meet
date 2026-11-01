@@ -84,19 +84,7 @@ namespace Installer
 
         private static string ResolveLogDirectoryPath()
         {
-            string roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            if (!string.IsNullOrWhiteSpace(roamingAppData))
-            {
-                return Path.Combine(roamingAppData, "RalphMeet", "logs", "installer");
-            }
-
-            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (!string.IsNullOrWhiteSpace(localAppData))
-            {
-                return Path.Combine(localAppData, "RalphMeet", "logs", "installer");
-            }
-
-            return Path.Combine(Path.GetTempPath(), "RalphMeet", "logs", "installer");
+            return InstallEnvironment.Current.LogsDirectory;
         }
 
         private static string FormatArgs(string[] args)

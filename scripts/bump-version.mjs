@@ -25,6 +25,11 @@ const FILES_TO_UPDATE = [
     regex: /^version\s*=\s*"([^"]+)"/m,
   },
   {
+    path: "desktop/launcher/Cargo.toml",
+    type: "toml",
+    regex: /^version\s*=\s*"([^"]+)"/m,
+  },
+  {
     path: "desktop/installer/installer.csproj",
     type: "xml",
     regex: /<Version>([^<]+)<\/Version>/,

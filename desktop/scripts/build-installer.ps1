@@ -95,10 +95,19 @@ if ($LASTEXITCODE -ne 0) {
 
 $releaseDir = Join-Path $desktopDir "src-tauri\target\release"
 
+# The root RalphMeet.exe launcher stub (docs/desktop/launch.md), shipped in the payload.
+Write-Host "==> Building root launcher stub..." -ForegroundColor Yellow
+cargo build --release --manifest-path (Join-Path $desktopDir "launcher\Cargo.toml")
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Root launcher build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+$launcherDir = Join-Path $desktopDir "launcher\target\release"
+
 # What ships is defined once in packaging\payload-manifest.json; stage-payload.ps1
 # validates it, stages it, and packs installer\Assets\payload.rmpk.
 Write-Host "==> Staging and packing payload..." -ForegroundColor Yellow
-& (Join-Path $scriptDir "stage-payload.ps1") -CefDir $env:CEF_PATH -ReleaseDir $releaseDir -Dotnet "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe"
+& (Join-Path $scriptDir "stage-payload.ps1") -CefDir $env:CEF_PATH -ReleaseDir $releaseDir -LauncherDir $launcherDir -Dotnet "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe"
 
 $tauriConfigPath = Join-Path $desktopDir "src-tauri\tauri.conf.json"
 $conf = Get-Content -LiteralPath $tauriConfigPath -Raw | ConvertFrom-Json
@@ -109,7 +118,7 @@ $installerDisplayName = $conf.app.windows[0].title
 $installerLogDir = Join-Path $env:APPDATA "$productName\logs\installer"
 $installedRoot = Join-Path $env:LOCALAPPDATA $productName
 $installedStatePath = Join-Path $installedRoot "current.json"
-$installedRootLauncherPath = Join-Path $installedRoot "Update.exe"
+$installedRootLauncherPath = Join-Path $installedRoot "RalphMeet.exe"
 
 Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
