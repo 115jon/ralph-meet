@@ -15,60 +15,33 @@ function HardwareAccelerationRow() {
   const hardwareAcceleration = useDesktopSettingsStore(
     (s) => s.hardwareAcceleration,
   );
-  const updateDesktopSettings = useDesktopSettingsStore(
-    (s) => s.updateSettings,
-  );
+  const saveDesktopSettings = useDesktopSettingsStore((s) => s.saveSettings);
   const [pendingHardwareAcceleration, setPendingHardwareAcceleration] =
     useState<boolean | null>(null);
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke<boolean>("get_hardware_acceleration"))
-      .then((enabled) => {
-        if (
-          !cancelled &&
-          typeof enabled === "boolean" &&
-          enabled !== hardwareAcceleration
-        ) {
-          updateDesktopSettings({ hardwareAcceleration: enabled });
-        }
-      })
-      .catch((error) =>
-        log.warn("Failed to read hardware acceleration setting:", error),
-      );
-    return () => {
-      cancelled = true;
-    };
-  }, [hardwareAcceleration, updateDesktopSettings]);
-
   const confirmHardwareAccelerationChange = async () => {
     if (pendingHardwareAcceleration === null) return;
-    const previous = hardwareAcceleration;
     setRestarting(true);
     setRestartError(null);
-    updateDesktopSettings({
-      hardwareAcceleration: pendingHardwareAcceleration,
-    });
     let saved = false;
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("set_hardware_acceleration", {
-        enabled: pendingHardwareAcceleration,
+      // Rust persists it; CEF reads it on the next launch.
+      await saveDesktopSettings({
+        hardwareAcceleration: pendingHardwareAcceleration,
       });
       saved = true;
       await restartDesktopApp();
     } catch (error) {
       log.error("Failed to change hardware acceleration:", error);
-      // Keep the confirm open with the reason.
+      // Keep the confirm open with the reason. A failed save already
+      // reverted the store.
       if (saved) {
         setRestartError(
           "Saved, but Ralph Meet couldn't restart. Quit and reopen the app to apply it.",
         );
       } else {
-        updateDesktopSettings({ hardwareAcceleration: previous });
         setRestartError(
           "Unable to change hardware acceleration. Try again, or restart the app first.",
         );

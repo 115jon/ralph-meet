@@ -33,7 +33,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { isDesktop } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useUser } from "@kova/react";
 import {
   useCallback,
@@ -220,13 +219,6 @@ export default function SettingsModal({
     () => true,
     () => false,
   );
-
-  const desktopSettings = useDesktopSettingsStore();
-  useEffect(() => {
-    if (isDesktop()) {
-      desktopSettings.syncToBackend();
-    }
-  }, [desktopSettings]);
 
   /* Reset to the requested location each time the dialog opens. */
   const wasOpen = useRef(false);

@@ -13,6 +13,10 @@ import {
   useKovaAuthTokenSync,
 } from "@/lib/desktop-auth";
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
+import {
+  inviteCodeFromDeepLink,
+  subscribeDesktopDeepLinks,
+} from "@/lib/desktop-deep-link";
 import { isDesktop, isTauri } from "@/lib/platform";
 import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
@@ -189,89 +193,26 @@ function KovaMeetTokenBridge() {
 function DesktopDeepLinkBridge() {
   const navigate = useNavigate();
 
+  // The page's one deep-link handler. Rust dedupes links, reveals the window
+  // and queues links that arrive before this listens.
   useEffect(() => {
     if (!isTauri()) return;
 
-    let disposed = false;
-    let cleanup: (() => void) | undefined;
-
-    const handleDeepLink = (payload: unknown) => {
-      if (disposed) return;
-      deepLinkLog.info("Event received", {
-        payloadKind: Array.isArray(payload) ? "array" : typeof payload,
-      });
-
-      const url = extractDeepLinkUrl(payload);
-      if (!url) {
-        deepLinkLog.warn("No ralphmeet URL found in event payload");
-        return;
-      }
-
-      deepLinkLog.info("Parsed deep link", { protocol: safeProtocol(url) });
-
+    const { unsubscribe, ready } = subscribeDesktopDeepLinks((url) => {
       // Auth no longer uses deep links (desktop signs in with a device code);
       // invites are the only ralphmeet:// links handled here.
-      const inviteCode = extractInviteCode(url);
-      if (inviteCode) {
-        deepLinkLog.info("Deep link contained invite code");
-        void navigate({
-          to: "/invite/$code",
-          params: { code: inviteCode },
-        } as any);
+      const code = inviteCodeFromDeepLink(url);
+      if (!code) {
+        deepLinkLog.warn("Deep link did not contain an invite");
         return;
       }
-
-      deepLinkLog.warn("Deep link did not contain an invite");
-    };
-
-    async function listenForDeepLinks() {
-      try {
-        const [{ listen }, { getCurrent }] = await Promise.all([
-          import("@tauri-apps/api/event"),
-          import("@tauri-apps/plugin-deep-link"),
-        ]);
-        if (disposed) return;
-
-        const unlistenDeepLink = await listen("deep-link", (event) =>
-          handleDeepLink(event.payload),
-        );
-        if (disposed) {
-          unlistenDeepLink();
-          return;
-        }
-        const unlistenNewUrl = await listen("deep-link://new-url", (event) =>
-          handleDeepLink(event.payload),
-        );
-
-        cleanup = () => {
-          unlistenDeepLink();
-          unlistenNewUrl();
-        };
-        if (disposed) {
-          cleanup();
-          cleanup = undefined;
-          return;
-        }
-
-        deepLinkLog.info("Listening for desktop deep links");
-
-        try {
-          const currentUrls = await getCurrent();
-          if (currentUrls?.length) handleDeepLink(currentUrls);
-        } catch (error) {
-          deepLinkLog.warn("Failed to read current deep link:", error);
-        }
-      } catch (error) {
-        deepLinkLog.error("Failed to listen for deep links:", error);
-      }
-    }
-
-    void listenForDeepLinks();
-
-    return () => {
-      disposed = true;
-      cleanup?.();
-    };
+      deepLinkLog.info("Deep link contained invite code");
+      void navigate({ to: "/invite/$code", params: { code } });
+    });
+    ready.catch((error: unknown) =>
+      deepLinkLog.error("Failed to listen for deep links:", error),
+    );
+    return unsubscribe;
   }, [navigate]);
 
   useEffect(() => {
@@ -298,56 +239,6 @@ function DesktopDeepLinkBridge() {
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, []);
-
-  return null;
-}
-
-function safeProtocol(value: string): string | null {
-  try {
-    return new URL(value).protocol;
-  } catch {
-    return null;
-  }
-}
-
-function extractInviteCode(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname === "invite" && parsed.pathname) {
-      return parsed.pathname.replace(/^\//, "") || null;
-    }
-  } catch {
-    // Ignore malformed deep links.
-  }
-  return null;
-}
-
-function extractDeepLinkUrl(payload: unknown): string | null {
-  if (!payload) return null;
-
-  if (typeof payload === "string") {
-    const cleaned = payload.replace(/^"|"$/g, "");
-    if (cleaned.startsWith("ralphmeet://")) return cleaned;
-    try {
-      return extractDeepLinkUrl(JSON.parse(payload));
-    } catch {
-      return null;
-    }
-  }
-
-  if (Array.isArray(payload)) {
-    for (const item of payload) {
-      const url = extractDeepLinkUrl(item);
-      if (url) return url;
-    }
-    return null;
-  }
-
-  if (typeof payload === "object") {
-    const obj = payload as Record<string, unknown>;
-    if (obj.urls) return extractDeepLinkUrl(obj.urls);
-    if (obj.url) return extractDeepLinkUrl(obj.url);
-  }
 
   return null;
 }

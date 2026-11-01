@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { DitherGlyph } from "@/components/ui/dither-glyph";
 import { fetchDesktopUpdate, installDesktopUpdate } from "@/lib/desktop-update";
 import { restartDesktopApp } from "@/lib/desktop-restart";
-import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { invoke } from "@tauri-apps/api/core";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -145,20 +144,15 @@ export function StandaloneUpdater() {
       let handedOff = false;
 
       try {
-        // Resolve and show the main window in Rust. Window.getByLabel() first
+        // Hand off to the main window in Rust, which shows it or (with
+        // "start minimized") starts it in the tray. Window.getByLabel() first
         // enumerates every window through CEF, which can deadlock while the
         // hidden main window is still completing startup.
-        await withTimeout(
-          useDesktopSettingsStore.getState().syncToBackend(),
-          "desktop settings sync timed out",
-        ).catch((error: unknown) => {
-          console.error("Failed to sync desktop settings:", error);
-        });
         let lastError: unknown = null;
         for (let attempt = 0; attempt < HANDOFF_RETRY_COUNT; attempt++) {
           try {
             await withTimeout(
-              invoke("show_main_window"),
+              invoke("launch_main_window"),
               "main window handoff timed out",
             );
             handedOff = true;
