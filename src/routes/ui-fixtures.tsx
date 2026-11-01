@@ -25,6 +25,7 @@
  *   share, fl-* floating players, pk-* pickers, embed-* link embeds,
  *   act-* activities, pub-* public pages
  *   foundation, component-kit, dither-mockups, type-mockups (design specimens)
+ *   sounds (UI sound audition: built-in vs imported custom files)
  */
 
 import { createFileRoute, notFound } from "@tanstack/react-router";

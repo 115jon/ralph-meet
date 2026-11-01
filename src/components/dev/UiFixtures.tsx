@@ -12,6 +12,7 @@ import { SearchFixture } from "@/components/dev/search-fixtures";
 import { isSearchFixture } from "@/components/dev/search-fixture-surfaces";
 import { PublicFixture } from "@/components/dev/public-fixtures";
 import { FoundationFixture } from "@/components/dev/foundation-fixtures";
+import { SoundFixture } from "@/components/dev/sound-fixtures";
 import { StandaloneUpdaterView } from "@/components/StandaloneUpdater";
 import { DitherMockupsFixture } from "@/components/dev/dither-mockups";
 import { ComponentKitFixture } from "@/components/dev/component-kit-mockups";
@@ -3010,6 +3011,9 @@ export default function UiFixtures() {
       break;
     case "foundation":
       content = <FoundationFixture />;
+      break;
+    case "sounds":
+      content = <SoundFixture />;
       break;
     case "updater":
     case "updater-downloading":
