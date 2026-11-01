@@ -2,8 +2,8 @@
 // UI sound catalog
 //
 // Every UI sound the app plays, the settings toggle that gates it, and how
-// often it may fire. The engine in `sounds.ts` reads this table; the render
-// script in `scripts/sounds/render.mjs` writes one file per id.
+// often it may fire. The engine in `sounds.ts` reads this table; custom sound
+// files are imported per id (`custom-sounds.ts`).
 // ============================================================================
 
 import type { SoundCategory } from "@/stores/useSoundSettingsStore";
@@ -43,8 +43,6 @@ export interface SoundSpec {
   minIntervalMs: number;
   /** Concurrent voices in the group; the oldest is faded out past this. */
   maxVoices: number;
-  /** Random per-play spread so frequent sounds don't machine-gun. */
-  variance?: { cents: number; db: number };
   /** Rings loop on the audio clock with this period (seconds). */
   loopSeconds?: number;
 }
@@ -97,7 +95,6 @@ export const SOUND_SPECS: Record<SoundId, SoundSpec> = {
     group: "message",
     minIntervalMs: 350,
     maxVoices: 2,
-    variance: { cents: 30, db: 1.5 },
   },
   connect: {
     category: "selfConnectDisconnect",
@@ -154,13 +151,42 @@ export const SOUND_SPECS: Record<SoundId, SoundSpec> = {
     group: "watcher",
     minIntervalMs: 250,
     maxVoices: 2,
-    variance: { cents: 15, db: 1 },
   },
   streamWatcherStop: {
     category: "streamWatcherActivity",
     group: "watcher",
     minIntervalMs: 250,
     maxVoices: 2,
-    variance: { cents: 15, db: 1 },
   },
 };
+
+/** What each sound means, in settings copy. */
+export const SOUND_LABELS: Record<SoundId, string> = {
+  voiceJoin: "Someone joins voice",
+  voiceLeave: "Someone leaves voice",
+  mute: "Mute",
+  unmute: "Unmute",
+  deafen: "Deafen",
+  undeafen: "Undeafen",
+  notification: "Notification",
+  message: "New message",
+  connect: "You connect to voice",
+  disconnect: "You disconnect from voice",
+  ring: "Incoming call ring",
+  outgoingRing: "Outgoing call ring",
+  callConnect: "Call connected",
+  callEnd: "Call ended",
+  screenShareStart: "Screen share starts",
+  screenShareStop: "Screen share stops",
+  streamWatcherStart: "Viewer starts watching",
+  streamWatcherStop: "Viewer stops watching",
+};
+
+/** File name (without extension) a bulk import matches to `id`: voice-join. */
+export function soundFileStem(id: SoundId): string {
+  return id.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+}
+
+export function isLoopSound(id: SoundId): id is "ring" | "outgoingRing" {
+  return SOUND_SPECS[id].loopSeconds !== undefined;
+}

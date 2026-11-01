@@ -3,23 +3,23 @@
 //
 // Every UI sound goes through `SoundEngine.play`, the single gate: the master
 // switch and the sound's category toggle, the volume setting, a per-group rate
-// limit and voice cap. Output runs through one master gain (the volume) and a
-// gentle limiter before the speakers.
+// limit and voice cap. The volume setting is one gain stage. Built-in sounds
+// go from it straight to the speakers, so at 100% they are the same signal
+// they always were; imported custom files also pass a peak limiter.
 //
-// Sounds are small pre-rendered files (see scripts/sounds/render.mjs) fetched
-// and decoded once into AudioBuffers. Until a buffer is ready the engine falls
-// back to the oscillator versions in `sound-synth.ts`. Rings loop a buffer on
-// the AudioContext clock, so background-tab timer throttling can't stutter
-// them.
+// The built-in sounds are the oscillator recipes in `sound-synth.ts`. With the
+// experimental custom-sounds setting on, files imported on this device
+// (`custom-sounds.ts`) are decoded once into AudioBuffers and play instead;
+// any sound without one keeps its built-in version. Rings loop a buffer on the
+// AudioContext clock, so background-tab timer throttling can't stutter them.
 // ============================================================================
 
-import {
-  SOUND_IDS,
-  SOUND_SPECS,
-  type SoundId,
-  type SoundSpec,
-} from "@/lib/sound-catalog";
+import { isLoopSound, SOUND_SPECS, type SoundId } from "@/lib/sound-catalog";
 import { playSynth, renderSynthLoop } from "@/lib/sound-synth";
+import {
+  createIdbCustomSoundStorage,
+  type CustomSoundStorage,
+} from "@/lib/custom-sounds";
 import {
   useSoundSettingsStore,
   type SoundSettings,
@@ -27,20 +27,21 @@ import {
 
 export type { SoundId } from "@/lib/sound-catalog";
 
-export type SoundFormat = "webm" | "mp3";
-
 type LoopId = "ring" | "outgoingRing";
 
 export interface SoundEngineOptions {
-  /** URL of the rendered file for a sound, or null to always use the synth. */
-  resolveUrl: (id: SoundId, format: SoundFormat) => string | null;
   getSettings: (userId?: string) => SoundSettings;
+  /** Imported files to decode once the AudioContext exists. */
+  loadCustomSounds?: () => Promise<Array<{ id: SoundId; bytes: ArrayBuffer }>>;
   createContext?: () => AudioContext;
-  fetch?: (url: string) => Promise<Response>;
   /** Milliseconds, for the rate limit. */
   now?: () => number;
-  random?: () => number;
-  canPlayType?: (mime: string) => string;
+  /** Renders one cycle of a built-in ring for looping. */
+  renderLoop?: (
+    id: LoopId,
+    period: number,
+    sampleRate: number,
+  ) => Promise<AudioBuffer>;
 }
 
 export interface PlayOptions {
@@ -48,6 +49,21 @@ export interface PlayOptions {
   userId?: string;
   /** Skip the on/off toggles but keep the volume (settings "Play" buttons). */
   bypassToggles?: boolean;
+  /**
+   * Which version to play. "auto" (default) follows the custom-sounds
+   * setting; previews pick one explicitly. A missing custom file always
+   * falls back to the built-in sound.
+   */
+  source?: "auto" | "builtin" | "custom";
+  /** Play a ring's cycle once instead of looping (previews). */
+  once?: boolean;
+}
+
+/** A ring buffer, where its loop ends, and which output stage it takes. */
+interface Loop {
+  buffer: AudioBuffer;
+  end: number;
+  custom: boolean;
 }
 
 interface Voice {
@@ -59,7 +75,41 @@ interface Voice {
 /** Fade applied when a voice is stolen or a ring stops (seconds). */
 const RELEASE = 0.06;
 
-/** Perceptual taper for the 0-100 volume setting. */
+/** Longest built-in one-shot including its tail (notification). */
+const SYNTH_LENGTH = 0.6;
+
+/**
+ * A fresh DynamicsCompressor attenuates audio for its first ~100 ms (measured
+ * in Chromium: -11 dB on a sound at t=0, 0 dB from 0.1 s). Custom files start
+ * no earlier than this on a new context.
+ */
+const LIMITER_WARMUP = 0.12;
+
+/**
+ * Peak limiter for custom files, which can be mastered at any level. The
+ * built-in sounds peak near -18 dBFS and skip it. Measured in Chromium with
+ * the trim below: a 0 dBFS file comes out at -1.8 dBFS, a +6 dB pile-up at
+ * -1.3, and anything under the threshold at unity.
+ */
+export const LIMITER = {
+  threshold: -2,
+  knee: 0,
+  ratio: 20,
+  attack: 0.003,
+  release: 0.1,
+} as const;
+
+/**
+ * Web Audio's compressor applies automatic makeup gain of
+ * (1 / fullRangeGain)^0.6, which would lift every file by about 1.1 dB. A
+ * trim after it cancels that, so audio below the threshold passes at unity.
+ */
+export function limiterMakeupTrim(): number {
+  const fullRangeDb = LIMITER.threshold - LIMITER.threshold / LIMITER.ratio;
+  return Math.pow(10, (0.6 * fullRangeDb) / 20);
+}
+
+/** Perceptual taper for the 0-100 volume setting; 100 is unity gain. */
 export function volumeToGain(volume: number): number {
   if (!Number.isFinite(volume)) return 1;
   const v = Math.max(0, Math.min(100, volume)) / 100;
@@ -70,31 +120,35 @@ function defaultCreateContext(): AudioContext {
   return new AudioContext({ latencyHint: "interactive" });
 }
 
-function defaultCanPlayType(mime: string): string {
-  if (typeof document === "undefined") return "";
-  return document.createElement("audio").canPlayType(mime);
-}
-
 export class SoundEngine {
   private ctx: AudioContext | null = null;
+  /** Volume stage for built-in sounds, straight to the speakers. */
   private master: GainNode | null = null;
-  private readonly buffers = new Map<SoundId, AudioBuffer>();
-  private loading: Promise<void> | null = null;
-  private loaded = false;
+  /** Volume stage for custom files, through the limiter. */
+  private limited: GainNode | null = null;
+  private readonly custom = new Map<SoundId, AudioBuffer>();
+  /** Ids set or cleared since the stored files started loading. */
+  private readonly customTouched = new Set<SoundId>();
+  private customLoad: Promise<void> = Promise.resolve();
+  private readonly builtinLoops = new Map<
+    LoopId,
+    Promise<AudioBuffer | null>
+  >();
   private readonly lastStart = new Map<string, number>();
   private readonly voices = new Map<string, Voice[]>();
   private readonly loops = new Map<LoopId, Voice>();
-  private readonly pendingLoops = new Set<LoopId>();
+  /** Rings waiting for their buffer, by start token. */
+  private readonly pendingLoops = new Map<LoopId, number>();
+  private loopToken = 0;
   private interactionCallback: (() => void) | null = null;
   private readonly opts: Required<SoundEngineOptions>;
 
   constructor(options: SoundEngineOptions) {
     this.opts = {
       createContext: defaultCreateContext,
-      fetch: (url) => fetch(url),
       now: () => Date.now(),
-      random: Math.random,
-      canPlayType: defaultCanPlayType,
+      loadCustomSounds: async () => [],
+      renderLoop: renderSynthLoop,
       ...options,
     };
   }
@@ -107,43 +161,43 @@ export class SoundEngine {
     return this.ctx?.state === "suspended";
   }
 
-  /** Resume after a user gesture; also starts loading the sound files. */
+  /** Resume after a user gesture. */
   resume(): Promise<void> {
     const a = this.context(false);
     if (!a) return Promise.resolve();
     return a.resume();
   }
 
-  /** Fetch and decode every sound file once. Safe to call repeatedly. */
-  preload(): Promise<void> {
+  /** Resolves once the stored custom files have been decoded (or failed). */
+  customSoundsReady(): Promise<void> {
+    this.context(false);
+    return this.customLoad;
+  }
+
+  /** Decode an audio file with this engine's context. */
+  decode(bytes: ArrayBuffer): Promise<AudioBuffer> {
     const a = this.context(false);
-    if (!a) return Promise.resolve();
-    if (this.loading) return this.loading;
-    const format: SoundFormat = this.opts.canPlayType(
-      'audio/webm; codecs="opus"',
-    )
-      ? "webm"
-      : "mp3";
-    this.loading = Promise.all(
-      SOUND_IDS.map(async (id) => {
-        const url = this.opts.resolveUrl(id, format);
-        if (!url) return;
-        try {
-          const res = await this.opts.fetch(url);
-          if (!res.ok) return;
-          const buffer = await a.decodeAudioData(await res.arrayBuffer());
-          this.buffers.set(id, buffer);
-          if (id === "ring" || id === "outgoingRing") this.startLoop(id);
-        } catch {
-          // Keep the synth fallback for this sound.
-        }
-      }),
-    ).then(() => {
-      this.loaded = true;
-      // Rings whose file never arrived loop the synth version instead.
-      for (const id of this.pendingLoops) this.startLoop(id, true);
-    });
-    return this.loading;
+    if (!a) return Promise.reject(new Error("Web Audio unavailable"));
+    return a.decodeAudioData(bytes.slice(0));
+  }
+
+  /** Use (or, with null, stop using) an imported file for `id`. */
+  async setCustomSound(id: SoundId, bytes: ArrayBuffer | null): Promise<void> {
+    this.customTouched.add(id);
+    if (!bytes) {
+      this.custom.delete(id);
+      return;
+    }
+    this.custom.set(id, await this.decode(bytes));
+  }
+
+  clearCustomSounds() {
+    for (const id of this.custom.keys()) this.customTouched.add(id);
+    this.custom.clear();
+  }
+
+  hasCustomSound(id: SoundId): boolean {
+    return this.custom.has(id);
   }
 
   /**
@@ -161,25 +215,33 @@ export class SoundEngine {
     }
     const volume = volumeToGain(settings.soundVolume);
     if (volume <= 0) return false;
+    const custom =
+      options.source === "custom" ||
+      ((options.source ?? "auto") === "auto" && settings.customSounds);
 
-    if (spec.loopSeconds !== undefined) {
-      return this.ring(id as LoopId, volume);
+    if (isLoopSound(id) && !options.once) {
+      return this.ring(id, volume, custom);
     }
 
+    const group = options.once ? `preview:${spec.group}` : spec.group;
     const now = this.opts.now();
-    const last = this.lastStart.get(spec.group);
+    const last = this.lastStart.get(group);
     if (last !== undefined && now - last < spec.minIntervalMs) return false;
 
     const a = this.context(true);
     if (!a || !this.master) return false;
-    this.lastStart.set(spec.group, now);
+    this.lastStart.set(group, now);
     this.setMasterGain(volume);
-    this.claimVoice(a, spec);
 
-    const voice = this.startVoice(a, id, spec);
-    const pool = this.voices.get(spec.group) ?? [];
-    pool.push(voice);
-    this.voices.set(spec.group, pool);
+    const pool = (this.voices.get(group) ?? []).filter(
+      (v) => v.endsAt > a.currentTime,
+    );
+    while (pool.length >= spec.maxVoices) {
+      const oldest = pool.shift();
+      if (oldest) this.release(oldest, a.currentTime);
+    }
+    pool.push(this.startVoice(a, id, custom));
+    this.voices.set(group, pool);
     return true;
   }
 
@@ -212,24 +274,24 @@ export class SoundEngine {
         return null;
       }
       const limiter = this.ctx.createDynamicsCompressor();
-      // A gentle peak limiter, not a compressor: our files peak at -1 dBTP and
-      // sit far below the threshold, so this only catches overlapping sounds.
-      // Web Audio adds automatic makeup gain (~+1.7 dB with these numbers), so
-      // the effective ceiling lands near -1 dBFS.
-      limiter.threshold.value = -3;
-      limiter.knee.value = 1;
-      limiter.ratio.value = 20;
-      limiter.attack.value = 0.002;
-      limiter.release.value = 0.1;
-      limiter.connect(this.ctx.destination);
+      limiter.threshold.value = LIMITER.threshold;
+      limiter.knee.value = LIMITER.knee;
+      limiter.ratio.value = LIMITER.ratio;
+      limiter.attack.value = LIMITER.attack;
+      limiter.release.value = LIMITER.release;
+      const trim = this.ctx.createGain();
+      trim.gain.value = limiterMakeupTrim();
+      limiter.connect(trim).connect(this.ctx.destination);
+      this.limited = this.ctx.createGain();
+      this.limited.connect(limiter);
       this.master = this.ctx.createGain();
-      this.master.connect(limiter);
-      this.buffers.clear();
-      this.loading = null;
-      this.loaded = false;
+      this.master.connect(this.ctx.destination);
+      this.custom.clear();
+      this.customTouched.clear();
+      this.builtinLoops.clear();
       this.voices.clear();
       this.loops.clear();
-      void this.preload();
+      this.customLoad = this.loadCustom(this.ctx);
     }
     if (this.ctx.state === "suspended") {
       this.ctx.resume().catch(() => {});
@@ -238,77 +300,103 @@ export class SoundEngine {
     return this.ctx;
   }
 
-  private setMasterGain(volume: number) {
-    if (!this.master || !this.ctx) return;
-    const param = this.master.gain;
-    param.cancelScheduledValues(this.ctx.currentTime);
-    param.setTargetAtTime(volume, this.ctx.currentTime, 0.01);
-  }
-
-  private claimVoice(a: AudioContext, spec: SoundSpec) {
-    const pool = (this.voices.get(spec.group) ?? []).filter(
-      (v) => v.endsAt > a.currentTime,
+  private async loadCustom(a: AudioContext): Promise<void> {
+    let stored: Array<{ id: SoundId; bytes: ArrayBuffer }>;
+    try {
+      stored = await this.opts.loadCustomSounds();
+    } catch {
+      return;
+    }
+    await Promise.all(
+      stored.map(async ({ id, bytes }) => {
+        try {
+          const buffer = await a.decodeAudioData(bytes.slice(0));
+          if (!this.customTouched.has(id)) this.custom.set(id, buffer);
+        } catch {
+          // Undecodable here: the built-in sound plays instead.
+        }
+      }),
     );
-    while (pool.length >= spec.maxVoices) {
-      const oldest = pool.shift();
-      if (oldest) this.release(oldest, a.currentTime);
-    }
-    this.voices.set(spec.group, pool);
   }
 
-  private startVoice(a: AudioContext, id: SoundId, spec: SoundSpec): Voice {
-    const gain = a.createGain();
-    gain.connect(this.master as GainNode);
-    const when = a.currentTime;
-    const buffer = this.buffers.get(id);
-    let level = 1;
-    if (spec.variance) {
-      level = Math.pow(10, (this.spread() * spec.variance.db) / 20);
+  private setMasterGain(volume: number) {
+    if (!this.ctx) return;
+    for (const stage of [this.master, this.limited]) {
+      if (!stage) continue;
+      stage.gain.cancelScheduledValues(this.ctx.currentTime);
+      stage.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.01);
     }
-    gain.gain.value = level;
+  }
 
+  private startVoice(a: AudioContext, id: SoundId, custom: boolean): Voice {
+    const gain = a.createGain();
+    const buffer = custom ? this.custom.get(id) : undefined;
     if (!buffer) {
+      const when = a.currentTime;
+      gain.connect(this.master as GainNode);
       playSynth(id, a, gain, when);
-      return { gain, source: null, endsAt: when + 0.6 };
+      return { gain, source: null, endsAt: when + SYNTH_LENGTH };
     }
+    const when = Math.max(a.currentTime, LIMITER_WARMUP);
+    gain.connect(this.limited as GainNode);
     const source = a.createBufferSource();
     source.buffer = buffer;
-    if (spec.variance)
-      source.detune.value = this.spread() * spec.variance.cents;
     source.connect(gain);
     source.start(when);
     source.onended = () => gain.disconnect();
     return { gain, source, endsAt: when + buffer.duration };
   }
 
-  private ring(id: LoopId, volume: number): boolean {
+  private ring(id: LoopId, volume: number, custom: boolean): boolean {
     if (this.isRinging(id)) return true;
     const a = this.context(true);
     if (!a) return false;
     this.setMasterGain(volume);
-    this.pendingLoops.add(id);
-    if (this.buffers.has(id)) this.startLoop(id);
-    else if (this.loaded) this.startLoop(id, true);
-    else void this.preload();
+    const token = ++this.loopToken;
+    this.pendingLoops.set(id, token);
+    void this.loopBuffer(a, id, custom).then((loop) => {
+      if (this.pendingLoops.get(id) !== token || this.ctx !== a) return;
+      this.pendingLoops.delete(id);
+      if (loop) this.startLoop(a, id, loop);
+    });
     return true;
   }
 
-  private startLoop(id: LoopId, synth = false) {
-    const a = this.ctx;
-    if (!a || !this.master || !this.pendingLoops.has(id)) return;
-    this.pendingLoops.delete(id);
-    const buffer = synth ? renderSynthLoop(id, a) : this.buffers.get(id);
-    if (!buffer) return;
-    const period = SOUND_SPECS[id].loopSeconds ?? buffer.duration;
+  private async loopBuffer(
+    a: AudioContext,
+    id: LoopId,
+    custom: boolean,
+  ): Promise<Loop | null> {
+    if (custom) {
+      await this.customLoad;
+      const file = this.custom.get(id);
+      // A custom ring loops the whole file.
+      if (file) return { buffer: file, end: file.duration, custom: true };
+    }
+    const period = SOUND_SPECS[id].loopSeconds ?? 0;
+    let render = this.builtinLoops.get(id);
+    if (!render) {
+      render = this.opts.renderLoop(id, period, a.sampleRate).catch(() => null);
+      this.builtinLoops.set(id, render);
+    }
+    const buffer = await render;
+    return buffer ? { buffer, end: period, custom: false } : null;
+  }
+
+  private startLoop(a: AudioContext, id: LoopId, loop: Loop) {
+    const stage = loop.custom ? this.limited : this.master;
+    if (!stage) return;
     const gain = a.createGain();
-    gain.connect(this.master);
+    gain.connect(stage);
     const source = a.createBufferSource();
-    source.buffer = buffer;
+    source.buffer = loop.buffer;
     source.loop = true;
     source.loopStart = 0;
-    source.loopEnd = Math.min(period, buffer.duration);
+    source.loopEnd = Math.min(loop.end, loop.buffer.duration);
     source.connect(gain);
-    source.start(a.currentTime);
+    source.start(
+      loop.custom ? Math.max(a.currentTime, LIMITER_WARMUP) : a.currentTime,
+    );
     source.onended = () => gain.disconnect();
     this.loops.set(id, { gain, source, endsAt: Number.POSITIVE_INFINITY });
   }
@@ -321,21 +409,29 @@ export class SoundEngine {
     voice.source?.stop(at + RELEASE + 0.01);
     voice.endsAt = at;
   }
-
-  /** Uniform in [-1, 1]. */
-  private spread(): number {
-    return this.opts.random() * 2 - 1;
-  }
 }
 
 // ── App singleton ───────────────────────────────────────────────────────────
 
+let storage: CustomSoundStorage | null = null;
+
+/** This device's imported custom-sound files (IndexedDB). */
+export function customSoundStorage(): CustomSoundStorage {
+  storage ??= createIdbCustomSoundStorage();
+  return storage;
+}
+
 const engine = new SoundEngine({
-  resolveUrl: () => null,
   getSettings: (userId) => useSoundSettingsStore.getState().getSettings(userId),
+  loadCustomSounds: () => customSoundStorage().list(),
 });
 
 useSoundSettingsStore.subscribe(() => engine.syncVolume());
+
+/** The app's sound engine (settings import and previews use it directly). */
+export function soundEngine(): SoundEngine {
+  return engine;
+}
 
 /** Play any UI sound through the settings gate. */
 export function playSound(id: SoundId, options?: PlayOptions): boolean {

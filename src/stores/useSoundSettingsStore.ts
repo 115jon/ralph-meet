@@ -46,6 +46,8 @@ export interface SoundSettings {
   messageReceived: boolean;
   /** Play ringing / call connected / call ended sounds */
   calls: boolean;
+  /** Experimental: play the audio files imported on this device instead of the built-in sounds */
+  customSounds: boolean;
   /** Volume multiplier for all sound effects (0-100) */
   soundVolume: number;
   /** Local receive volume for soundboard playback (0-100). */
@@ -77,6 +79,7 @@ const defaultSoundSettings: SoundSettings = {
   streamWatcherActivity: true,
   messageReceived: true,
   calls: true,
+  customSounds: false,
   soundVolume: 100,
   soundboardVolume: 100,
   voiceJoinSoundboard: { "*": { ...EMPTY_SOUNDBOARD_TRIGGER } },
@@ -115,6 +118,7 @@ const readPersistedSoundSettings = readObject<{
         defaultSoundSettings.messageReceived,
       ),
       calls: orElse(readBoolean, defaultSoundSettings.calls),
+      customSounds: orElse(readBoolean, defaultSoundSettings.customSounds),
       soundVolume: orElse(readNumber, defaultSoundSettings.soundVolume),
       soundboardVolume: orElse(
         readNumber,
@@ -318,10 +322,10 @@ export const useSoundSettingsStore = create<SoundSettingsState>()(
 
 // ── Convenience: check if a specific sound category is enabled ──────────────
 
-/** The per-category on/off toggles (everything but the master switch). */
+/** The per-category on/off toggles (not the master or custom-sounds switch). */
 export type SoundCategory = {
   [K in keyof SoundSettings]: SoundSettings[K] extends boolean
-    ? K extends "soundsEnabled"
+    ? K extends "soundsEnabled" | "customSounds"
       ? never
       : K
     : never;
