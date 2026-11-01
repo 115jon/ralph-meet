@@ -23,7 +23,11 @@ Desktop client for Ralph Meet built with [Tauri 2.0](https://tauri.app/).
    ```
 
 The Tauri window loads from `http://localhost:1420`, and the desktop Vite
-server proxies `/api` and `/ws` to `http://localhost:5173`.
+server proxies `/api` and `/ws` to `http://localhost:5173`. If the web dev
+server runs on another port (`RALPH_DEV_PORT`, see the root README), set the
+same `RALPH_DEV_PORT` here and the proxy follows. Port 1420 is fixed: it is
+the `devUrl` in `src-tauri/tauri.conf.json` and an allowed origin of the Kova
+dev app.
 
 To run the desktop shell against the deployed Cloudflare backend:
 
