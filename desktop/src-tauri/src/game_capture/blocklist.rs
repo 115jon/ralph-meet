@@ -146,6 +146,51 @@ pub fn safety_decision(
     SafetyDecision::Allow
 }
 
+/// Install-folder entries that ship with anti-cheat-protected games. The
+/// executable blocklist above only names the anti-cheat services, which are
+/// never the shared window; the game itself (e.g.
+/// `FortniteClient-Win64-Shipping.exe`) is recognized by these markers in its
+/// install tree instead. Compared lowercase.
+const ANTI_CHEAT_MARKER_DIRS: &[&str] = &["easyanticheat", "easyanticheat_eos", "battleye"];
+
+/// Protected-launch shims that sit next to the real game executable
+/// (`<game>_EAC.exe`, `<game>_EAC_EOS.exe`, `<game>_BE.exe`). Compared lowercase.
+const ANTI_CHEAT_MARKER_SUFFIXES: &[&str] = &["_eac.exe", "_eac_eos.exe", "_be.exe"];
+
+/// How many directories above the executable's own folder are searched.
+/// Unreal titles keep the exe in `<Game>/<Project>/Binaries/Win64` with the
+/// anti-cheat folder at `<Game>/`, three levels up.
+const ANTI_CHEAT_MARKER_PARENT_DEPTH: usize = 3;
+
+/// Return the first directory-entry name that marks an anti-cheat install
+/// (pure; the caller supplies the names).
+pub fn anti_cheat_marker<'a>(entries: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    entries.into_iter().find(|name| {
+        let lower = name.to_ascii_lowercase();
+        ANTI_CHEAT_MARKER_DIRS.contains(&lower.as_str())
+            || ANTI_CHEAT_MARKER_SUFFIXES
+                .iter()
+                .any(|suffix| lower.ends_with(suffix))
+    })
+}
+
+/// Look for an anti-cheat install marker beside `target_exe` and in up to
+/// [`ANTI_CHEAT_MARKER_PARENT_DEPTH`] parent folders. Returns the path of the
+/// first marker found. Unreadable folders are skipped.
+pub fn anti_cheat_marker_near(target_exe: &std::path::Path) -> Option<std::path::PathBuf> {
+    target_exe
+        .ancestors()
+        .skip(1)
+        .take(ANTI_CHEAT_MARKER_PARENT_DEPTH + 1)
+        .find_map(|dir| {
+            let names: Vec<String> = std::fs::read_dir(dir)
+                .ok()?
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                .collect();
+            anti_cheat_marker(names.iter().map(String::as_str)).map(|name| dir.join(name))
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,5 +274,57 @@ mod tests {
         let allowlist = vec![ProcessIdentity::new("game.exe")];
         let decision = safety_decision("game.exe", &blocklist, &allowlist);
         assert_eq!(decision, SafetyDecision::Deny(FallbackReason::Blocklisted));
+    }
+
+    #[test]
+    fn anti_cheat_marker_matches_install_folders_and_launch_shims() {
+        // Fortnite's Binaries/Win64 folder.
+        let fortnite = [
+            "EOSSDK-Win64-Shipping.dll",
+            "EasyAntiCheat",
+            "FortniteClient-Win64-Shipping.exe",
+        ];
+        assert_eq!(anti_cheat_marker(fortnite), Some("EasyAntiCheat"));
+        assert_eq!(
+            anti_cheat_marker(["BattlEye", "game.exe"]),
+            Some("BattlEye")
+        );
+        assert_eq!(
+            anti_cheat_marker(["Game_EAC_EOS.exe"]),
+            Some("Game_EAC_EOS.exe")
+        );
+        assert_eq!(anti_cheat_marker(["Game_BE.exe"]), Some("Game_BE.exe"));
+    }
+
+    #[test]
+    fn anti_cheat_marker_ignores_ordinary_installs() {
+        assert_eq!(
+            anti_cheat_marker(["game.exe", "Engine", "d3dcompiler_47.dll", "BE_notes.txt"]),
+            None
+        );
+        assert_eq!(anti_cheat_marker([]), None);
+    }
+
+    #[test]
+    fn anti_cheat_marker_near_finds_marker_beside_or_above_the_exe() {
+        let root = std::env::temp_dir().join(format!("ralph-ac-marker-{}", std::process::id()));
+        let win64 = root.join("Project").join("Binaries").join("Win64");
+        std::fs::create_dir_all(&win64).unwrap();
+        let exe = win64.join("Project-Win64-Shipping.exe");
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(anti_cheat_marker_near(&exe), None);
+
+        // Three levels above the exe folder, like Unreal titles.
+        std::fs::create_dir_all(root.join("EasyAntiCheat")).unwrap();
+        assert_eq!(
+            anti_cheat_marker_near(&exe),
+            Some(root.join("EasyAntiCheat"))
+        );
+
+        // Beside the exe wins over the root marker.
+        std::fs::create_dir_all(win64.join("BattlEye")).unwrap();
+        assert_eq!(anti_cheat_marker_near(&exe), Some(win64.join("BattlEye")));
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

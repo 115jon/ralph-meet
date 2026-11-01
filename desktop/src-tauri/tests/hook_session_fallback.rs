@@ -526,6 +526,25 @@ fn hook_stopped_mid_session_records_wgc_fallback_capture_status() {
     assert_eq!(snap.fallback_reason, "hook_stopped_mid_session");
 }
 
+/// A window share starts on the WGC pre-roll; when the hook never delivers a
+/// first frame (e.g. an anti-cheat refused the DLL) the pre-roll stays active
+/// and the snapshot names the reason instead of reporting `none`.
+#[test]
+fn hook_no_first_frame_on_preroll_records_wgc_fallback_reason() {
+    let stats = NativeShareStats::default();
+    // What the session records when the WGC pre-roll starts.
+    stats.set_capture_mode(CaptureMode::Wgc);
+    stats.set_active_backend(None);
+    stats.set_fallback_reason(FallbackReason::None);
+    // What the hook loop records when the probe ends before promotion.
+    stats.set_fallback_reason(FallbackReason::HookNoFirstFrame);
+
+    let snap = stats.snapshot();
+    assert_eq!(snap.capture_mode, "wgc");
+    assert_eq!(snap.active_backend, "n/a");
+    assert_eq!(snap.fallback_reason, "hook_no_first_frame");
+}
+
 /// Documents the teardown contract this file deliberately does NOT duplicate.
 ///
 /// On session stop the `HookCaptureSession` drop joins the hook capture thread,

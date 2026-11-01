@@ -253,6 +253,7 @@ proptest! {
                 FallbackReason::InteropFailed
                 | FallbackReason::TargetExited
                 | FallbackReason::HookStoppedMidSession
+                | FallbackReason::HookNoFirstFrame
                 | FallbackReason::None => {
                     prop_assert!(
                         false,

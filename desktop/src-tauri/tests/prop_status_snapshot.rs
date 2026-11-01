@@ -100,6 +100,7 @@ fn oracle_fallback_reason(reason: FallbackReason) -> &'static str {
         FallbackReason::InteropFailed => "interop_failed",
         FallbackReason::TargetExited => "target_exited",
         FallbackReason::HookStoppedMidSession => "hook_stopped_mid_session",
+        FallbackReason::HookNoFirstFrame => "hook_no_first_frame",
     }
 }
 
@@ -148,6 +149,7 @@ fn fallback_reason_strategy() -> impl Strategy<Value = FallbackReason> {
         Just(FallbackReason::InteropFailed),
         Just(FallbackReason::TargetExited),
         Just(FallbackReason::HookStoppedMidSession),
+        Just(FallbackReason::HookNoFirstFrame),
     ]
 }
 
