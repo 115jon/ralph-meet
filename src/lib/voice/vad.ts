@@ -14,7 +14,7 @@ type VadEvent = { type: "speaking" | "stalled"; value: boolean };
  * The AudioWorklet module (same file as VadCore). Vite emits it as a static
  * asset; the literal `new URL(..., import.meta.url)` form is what it rewrites.
  */
-function vadWorkletUrl(): string {
+export function vadWorkletUrl(): string {
   return new URL("./vad-processor.worklet.js", import.meta.url).href;
 }
 
@@ -70,9 +70,31 @@ export function calculateTimeDomainRms(
   return Math.sqrt(sum / data.length) * 100;
 }
 
+/** "auto": gate on speech, "open": gate disabled, "closed": mic muted. */
+export type VoiceGateMode = "auto" | "open" | "closed";
+
+export type VoiceGateEvent = VadEvent & { rms?: number };
+
+/**
+ * A gate that detects speech and applies its gain inside the audio graph
+ * (the "rm-voice-gate" worklet). The detector only sets its mode and
+ * threshold and listens to its transitions for the speaking indicator.
+ */
+export interface InGraphVoiceGate {
+  setMode(mode: VoiceGateMode): void;
+  setThreshold(threshold: number): void;
+  /**
+   * Listen to speaking / stall transitions. A new listener is first told
+   * the current speaking and stall state.
+   */
+  subscribe(listener: (event: VoiceGateEvent) => void): () => void;
+}
+
 export interface VADGateController {
   setGated(gated: boolean): void;
   resume?(): void;
+  /** Present when the gate decides in-graph; setGated() is then unused. */
+  inGraph?: InGraphVoiceGate;
 }
 
 /** Callbacks from the VAD to the owning SFUClient */
@@ -122,6 +144,10 @@ export class VoiceActivityDetector {
   // suspended-context phase before the worklet takes over).
   private workletNode: AudioWorkletNode | null = null;
   private workletModuleReady: AudioContext | null = null;
+  // In-graph gate path: the published gate detects speech itself; this
+  // detector follows its transitions instead of analysing a monitor copy.
+  private gateSubscription: (() => void) | null = null;
+  private followingGate = false;
 
   private readonly callbacks: VADCallbacks;
 
@@ -132,7 +158,21 @@ export class VoiceActivityDetector {
 
   /** Bind VAD gating to the currently published source gate. */
   setGateController(controller: VADGateController | null): void {
+    const previous = this.gateController;
     this.gateController = controller;
+    if (controller?.inGraph) {
+      controller.inGraph.setThreshold(this.threshold);
+      controller.inGraph.setMode(this.getInGraphMode());
+      if (this.followingGate && previous !== controller) {
+        this.followGate(this.lifecycleGeneration);
+      }
+      return;
+    }
+    if (this.followingGate) {
+      // The new source has no in-graph detector; detection resumes when the
+      // owner restarts monitoring with a stream.
+      this.unfollowGate();
+    }
     const desiredGated = this.getDesiredGateState();
     this.isGated = desiredGated;
     if (controller) controller.setGated(desiredGated);
@@ -141,13 +181,22 @@ export class VoiceActivityDetector {
   private vadTrack: MediaStreamTrack | null = null;
 
   /**
-   * Start RMS-based voice activity monitoring on a local audio stream.
+   * Start voice activity monitoring. With an in-graph gate bound (see
+   * setGateController) the detector follows the gate's own transitions and
+   * `stream` may be null; otherwise it analyses `stream` (a monitor copy of
+   * the microphone).
    */
-  start(stream: MediaStream): boolean {
+  start(stream: MediaStream | null): boolean {
     this.stop();
     const generation = ++this.lifecycleGeneration;
 
-    const audioTrack = stream.getAudioTracks()[0];
+    if (this.gateController?.inGraph) {
+      this.followGate(generation);
+      if (DEBUG) vadLog.info("Following the in-graph voice gate");
+      return true;
+    }
+
+    const audioTrack = stream?.getAudioTracks()[0];
     if (!audioTrack) return false;
 
     try {
@@ -365,7 +414,34 @@ export class VoiceActivityDetector {
     if (DEBUG) vadLog.info("Voice activity detection moved to AudioWorklet");
   }
 
-  /** Apply one transition from the hysteresis (either path). */
+  /** Follow the bound in-graph gate's transitions for this lifecycle. */
+  private followGate(generation: number): void {
+    this.unfollowGate();
+    const gate = this.gateController?.inGraph;
+    if (!gate) return;
+    this.followingGate = true;
+    this.contextResumed = true;
+    gate.setThreshold(this.threshold);
+    gate.setMode(this.getInGraphMode());
+    this.gateSubscription = gate.subscribe((event) => {
+      if (
+        this.lifecycleGeneration !== generation ||
+        this.gateController?.inGraph !== gate
+      )
+        return;
+      if (typeof event.rms === "number") this.lastRms = event.rms;
+      this.handleVadEvent(event);
+    });
+  }
+
+  private unfollowGate(): void {
+    const unsubscribe = this.gateSubscription;
+    this.gateSubscription = null;
+    this.followingGate = false;
+    unsubscribe?.();
+  }
+
+  /** Apply one transition from the hysteresis (any path). */
   private handleVadEvent(event: VadEvent): void {
     if (event.type === "stalled") {
       if (this.isStalled === event.value) return;
@@ -395,7 +471,7 @@ export class VoiceActivityDetector {
 
   /** Whether detection currently runs on the audio thread (diagnostics). */
   isUsingAudioWorklet(): boolean {
-    return this.workletNode !== null;
+    return this.workletNode !== null || this.followingGate;
   }
 
   /** Reconcile speaking signaling after a participant ID becomes available. */
@@ -471,7 +547,9 @@ export class VoiceActivityDetector {
    */
   stop(): void {
     this.lifecycleGeneration += 1;
-    if (this.gateEnabled) {
+    this.unfollowGate();
+    // An in-graph gate keeps gating on its own; only its mode is synced.
+    if (!this.syncInGraphGate() && this.gateEnabled) {
       const desiredGated = !this.microphoneEnabled;
       this.applyGate(desiredGated);
     }
@@ -525,6 +603,7 @@ export class VoiceActivityDetector {
     this.threshold = threshold;
     this.core?.setThreshold(threshold);
     this.workletNode?.port.postMessage({ type: "threshold", value: threshold });
+    this.gateController?.inGraph?.setThreshold(threshold);
     if (DEBUG) vadLog.info("Threshold updated to:", threshold);
   }
 
@@ -563,6 +642,10 @@ export class VoiceActivityDetector {
    */
   enableNoiseGate(): void {
     this.gateEnabled = true;
+    if (this.syncInGraphGate()) {
+      if (DEBUG) vadLog.info("Noise gate enabled");
+      return;
+    }
     if (!this.microphoneEnabled) {
       this.applyGate(true);
       if (DEBUG) vadLog.info("Noise gate enabled");
@@ -579,12 +662,13 @@ export class VoiceActivityDetector {
    */
   disableNoiseGate(): void {
     this.gateEnabled = false;
-    this.applyGate(false);
+    if (!this.syncInGraphGate()) this.applyGate(false);
     if (DEBUG) vadLog.info("Noise gate disabled");
   }
 
   /** Reapply the current gate to a newly replaced published source. */
   reapplyGate(): void {
+    if (this.syncInGraphGate()) return;
     if (this.gateEnabled) this.applyGate(this.getDesiredGateState());
   }
 
@@ -597,6 +681,8 @@ export class VoiceActivityDetector {
       this.core?.resetSpeaking();
       this.workletNode?.port.postMessage({ type: "reset-speaking" });
     }
+    // An in-graph gate closes on mute even when sensitivity gating is off.
+    if (this.syncInGraphGate()) return;
     if (this.gateEnabled) this.applyGate(this.getDesiredGateState());
   }
 
@@ -606,7 +692,22 @@ export class VoiceActivityDetector {
     return this.isGated;
   }
 
+  private getInGraphMode(): VoiceGateMode {
+    if (!this.microphoneEnabled) return "closed";
+    return this.gateEnabled ? "auto" : "open";
+  }
+
+  /** Push mode to an in-graph gate; false when the gate is a plain gain. */
+  private syncInGraphGate(): boolean {
+    const gate = this.gateController?.inGraph;
+    if (!gate) return false;
+    gate.setMode(this.getInGraphMode());
+    return true;
+  }
+
   private applyGate(gated: boolean): void {
+    // In-graph gates decide speech gating themselves.
+    if (this.syncInGraphGate()) return;
     if (this.isGated === gated) return;
     this.isGated = gated;
     this.gateController?.setGated(gated);

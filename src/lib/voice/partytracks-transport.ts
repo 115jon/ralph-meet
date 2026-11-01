@@ -7,6 +7,10 @@ import {
 } from "partytracks/client";
 import { EMPTY, map, type Observable, type Subscription } from "rxjs";
 import {
+  installOpusPtimePreference,
+  resolveVoiceOpusPtime,
+} from "./opus-ptime";
+import {
   observePullErrors,
   type PartyTracksApiHistory,
   type PartyTracksPullError,
@@ -54,6 +58,12 @@ export interface RalphPublishedTrack {
 export interface PartyTracksTransportOptions {
   factory?: (config: PartyTracksConfig) => PartyTracksClient;
   resolveApiUrl?: (path: string) => string;
+  /**
+   * Opus frame length to ask for on every peer connection (see
+   * opus-ptime.ts); null keeps the browser default. Defaults to
+   * resolveVoiceOpusPtime().
+   */
+  opusPtimeMs?: number | null;
 }
 
 function requireMetadataField(
@@ -130,9 +140,17 @@ export class PartyTracksTransport {
     this.pullErrors$ = this.client.history
       ? observePullErrors(this.client.history)
       : EMPTY;
+    const opusPtimeMs =
+      options.opusPtimeMs === undefined
+        ? resolveVoiceOpusPtime()
+        : options.opusPtimeMs;
     this.peerConnectionSubscription = this.peerConnection$.subscribe(
       (peerConnection) => {
         this.activePeerConnection = peerConnection;
+        // Before PartyTracks negotiates anything on this connection.
+        if (opusPtimeMs !== null) {
+          installOpusPtimePreference(peerConnection, opusPtimeMs);
+        }
       },
     );
   }

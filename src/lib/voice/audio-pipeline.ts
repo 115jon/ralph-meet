@@ -8,6 +8,8 @@ const audioLog = clog("SFU:Audio");
 // ============================================================================
 
 import { resumeSoundContext } from "@/lib/sounds";
+import { prewarmCaptureAudioContext } from "@/lib/voice/capture-audio-context";
+import { vadWorkletUrl } from "@/lib/voice/vad";
 
 // ── Audio Context Prewarming ──────────────────────────────────────────────
 // Chrome requires AudioContext.resume() to be called during a user gesture.
@@ -55,8 +57,9 @@ function takePrewarmedAudioContext(): AudioContext | null {
  * The AudioPipeline will reuse this context instead of creating a new
  * suspended one. Call this from call Accept/Initiate and voice-join clicks.
  *
- * Also resumes the sound effects AudioContext so a single user gesture
- * unlocks ALL audio — preventing the double "Interaction Required" modal.
+ * Also resumes the sound effects AudioContext and the outbound capture
+ * context (noise gate / RNNoise) so a single user gesture unlocks ALL
+ * audio — preventing the double "Interaction Required" modal.
  */
 export function prewarmAudioContext(): void {
   try {
@@ -72,6 +75,9 @@ export function prewarmAudioContext(): void {
     _prewarmedContext.resume().catch(() => {});
     // Unify: also resume the sound effects context during this gesture
     resumeSoundContext().catch(() => {});
+    // And the outbound capture context the microphone gate is built on, so
+    // the gate starts running instead of publishing a suspended graph.
+    prewarmCaptureAudioContext([vadWorkletUrl()]);
   } catch {
     /* AudioContext unavailable */
   }

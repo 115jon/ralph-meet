@@ -18,6 +18,7 @@ import {
 } from "./gateway-protocol";
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { AudioSentinel, OutboundAudioSentinel } from "./voice/audio-sentinel";
+import { getLocalAudioDiagnostics } from "./voice/capture-audio-context";
 import { RoomGateway } from "./voice/gateways/room-gateway";
 import { VoiceGateway } from "./voice/gateways/voice-gateway";
 import {
@@ -1486,10 +1487,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.stats.getDebugData();
   }
 
-  public getDetailedStats(): ReturnType<
-    ConnectionStatsMonitor["getDetailedStats"]
-  > {
-    return this.stats.getDetailedStats();
+  public async getDetailedStats(): Promise<object> {
+    const detailed = await this.stats.getDetailedStats();
+    return {
+      ...detailed,
+      // Outbound microphone pipeline: publication kind, gate, capture
+      // context state and any problems (e.g. a suspended capture context).
+      localAudio: {
+        ...getLocalAudioDiagnostics(),
+        vadOnAudioThread: this.vad.isUsingAudioWorklet(),
+      },
+    };
   }
 
   public getStatsByUserId(
