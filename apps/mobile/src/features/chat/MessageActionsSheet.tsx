@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
+import { tapHaptic } from "@/lib/haptics";
 import { RADIUS, useTheme } from "@/theme";
 import { Button, Sheet, SheetRow, Text } from "@/ui";
 
@@ -137,6 +138,7 @@ function Actions({
               emoji={emoji}
               mine={mine.has(emoji)}
               onPress={() => {
+                tapHaptic();
                 onClose();
                 void toggleReaction(message, emoji);
               }}

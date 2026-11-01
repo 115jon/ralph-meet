@@ -4,6 +4,7 @@ import { Linking, Text as RNText, type TextStyle, View } from "react-native";
 import { FONT, type Theme, useTheme } from "@/theme";
 import { Text } from "@/ui";
 
+import { useMessageLongPress } from "../long-press";
 import type { Block, Inline } from "./ast";
 import { CodeBlock } from "./CodeBlock";
 import { useMemberNames } from "./context";
@@ -27,6 +28,8 @@ interface Marks {
 interface Env {
   readonly theme: Theme;
   readonly members: ReadonlySet<string>;
+  /** A link or spoiler takes the touch; its long-press opens the message's actions. */
+  readonly onLongPress: (() => void) | undefined;
 }
 
 const PLAIN: Marks = {
@@ -78,6 +81,7 @@ function Spoiler({
       accessibilityRole="button"
       accessibilityLabel="Spoiler, tap to reveal"
       onPress={() => setRevealed(true)}
+      onLongPress={env.onLongPress}
       suppressHighlighting
       style={{ backgroundColor: env.theme.ink3, color: env.theme.ink3 }}
     >
@@ -151,6 +155,7 @@ function renderInline(
           accessibilityRole="link"
           accessibilityHint={node.url}
           onPress={hidden ? undefined : () => openLink(node.url)}
+          onLongPress={hidden ? undefined : env.onLongPress}
           style={linkStyle(marks, theme)}
         >
           {node.text}
@@ -164,6 +169,7 @@ function renderInline(
           key={key}
           accessibilityRole="link"
           onPress={hidden ? undefined : () => openLink(node.url)}
+          onLongPress={hidden ? undefined : env.onLongPress}
           style={linkStyle(marks, theme)}
         >
           {node.url}
@@ -270,7 +276,8 @@ export const Markdown = memo(function Markdown({
 }) {
   const theme = useTheme();
   const members = useMemberNames();
-  const env: Env = { theme, members };
+  const onLongPress = useMessageLongPress();
+  const env: Env = { theme, members, onLongPress };
   const last = blocks.at(-1);
   const editedInline = edited && last !== undefined && last.kind !== "code";
   const nodes = blocks.map((block, index) =>

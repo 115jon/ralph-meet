@@ -12,6 +12,7 @@ import { memo, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
+import { useIsCurrentConversation } from "@/features/conversation/store";
 import { mediaUrl } from "@/lib/api";
 import { FONT, RADIUS, useTheme, type Theme } from "@/theme";
 import { Avatar, Icon, Led, Text } from "@/ui";
@@ -38,25 +39,34 @@ interface RowShellProps {
   label: string;
   last: boolean;
   onPress: () => void;
+  /** The open conversation: a tint-2 ground, as the web's selected row. */
+  selected?: boolean;
   children: ReactNode;
 }
 
-function RowShell({ label, last, onPress, children }: RowShellProps) {
+function RowShell({
+  label,
+  last,
+  onPress,
+  selected = false,
+  children,
+}: RowShellProps) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => ({
-        height: 48,
+        minHeight: 48,
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
         paddingLeft: CHANNEL_INSET,
         paddingRight: 10,
         borderRadius: RADIUS,
-        backgroundColor: pressed ? theme.tint2 : "transparent",
+        backgroundColor: pressed || selected ? theme.tint2 : "transparent",
       })}
     >
       <TreeGuide x={BRANCH_X} last={last} />
@@ -72,10 +82,12 @@ export const TextChannelRow = memo(function TextChannelRow({
 }: ChannelRowProps) {
   const theme = useTheme();
   const unread = useIsUnread(channel.id);
+  const selected = useIsCurrentConversation(channel.id);
   return (
     <RowShell
       label={`${channel.name}, text channel${unread ? ", unread" : ""}`}
       last={last}
+      selected={selected}
       onPress={() => onPress(channel)}
     >
       {unread ? (
@@ -226,7 +238,7 @@ const OccupantRow = memo(function OccupantRow({
         state ? `, ${state.label}` : ""
       }`}
       style={{
-        height: 40,
+        minHeight: 40,
         flexDirection: "row",
         alignItems: "center",
         gap: 10,

@@ -1,7 +1,8 @@
 import { ArrowLeft } from "phosphor-react-native";
-import { View } from "react-native";
+import type { ReactNode } from "react";
+import { Pressable, View } from "react-native";
 
-import { useTheme } from "@/theme";
+import { RADIUS, useTheme } from "@/theme";
 
 import { IconButton } from "./IconButton";
 import { Text } from "./Text";
@@ -15,10 +16,12 @@ interface HeaderProps {
   rule?: "line" | "brand";
   /** A stack screen: a back key before the title. */
   onBack?: () => void;
+  /** One screen-wide action after the title, e.g. Activity's Mark all read. */
+  action?: ReactNode;
 }
 
 /** 48px screen header: title in Bricolage, then a seam or the brand rule. */
-export function Header({ title, rule = "line", onBack }: HeaderProps) {
+export function Header({ title, rule = "line", onBack, action }: HeaderProps) {
   const theme = useTheme();
   return (
     <View>
@@ -29,7 +32,7 @@ export function Header({ title, rule = "line", onBack }: HeaderProps) {
           alignItems: "center",
           gap: 4,
           paddingLeft: onBack ? 4 : 16,
-          paddingRight: 16,
+          paddingRight: action ? 4 : 16,
           borderBottomWidth: rule === "line" ? 1 : 0,
           borderBottomColor: theme.line,
         }}
@@ -45,6 +48,7 @@ export function Header({ title, rule = "line", onBack }: HeaderProps) {
         >
           {title}
         </Text>
+        {action}
       </View>
       {rule === "brand" ? (
         <View
@@ -57,5 +61,34 @@ export function Header({ title, rule = "line", onBack }: HeaderProps) {
         </View>
       ) : null}
     </View>
+  );
+}
+
+/** A worded key for the header's action slot: 40 tall, 48 with its slop. */
+export function HeaderAction({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => ({
+        minHeight: 40,
+        justifyContent: "center",
+        paddingHorizontal: 12,
+        borderRadius: RADIUS,
+        backgroundColor: pressed ? theme.tint2 : "transparent",
+      })}
+    >
+      <Text variant="control" style={{ fontSize: 14 }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }

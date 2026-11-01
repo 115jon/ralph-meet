@@ -111,7 +111,7 @@ export const ParticipantTile = memo(function ParticipantTile({
           accessibilityRole="button"
           accessibilityLabel="Switch camera"
           onPress={flipCamera}
-          hitSlop={4}
+          hitSlop={6}
           style={({ pressed }) => ({
             position: "absolute",
             top: 8,

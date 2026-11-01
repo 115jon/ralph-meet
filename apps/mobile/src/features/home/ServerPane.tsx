@@ -1,9 +1,14 @@
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { ScrollView } from "react-native";
 
+import { openConversation } from "@/features/conversation/store";
 import { usePlateClearance } from "@/features/panel/metrics";
-import { loadServers, loadTree } from "@/features/servers/actions";
+import {
+  loadServers,
+  loadTree,
+  refreshReadStates,
+} from "@/features/servers/actions";
 import {
   ChannelTree,
   ChannelTreeSkeleton,
@@ -13,36 +18,70 @@ import {
   useSelectedServer,
   useServerList,
   useServerTree,
+  useServersStore,
 } from "@/features/servers/store";
 import { channelKind } from "@/features/servers/tree";
-import { joinVoiceChannel } from "@/features/voice/actions";
-import { EmptyState, Header } from "@/ui";
+import { joinVoiceChannel, type JoinTarget } from "@/features/voice/actions";
+import { useVoiceStore } from "@/features/voice/store";
+import { VoiceSwitchSheet } from "@/features/voice/VoiceSwitchSheet";
+import { EmptyState, Header, useRefreshControl } from "@/ui";
 
 function SelectedServerTree() {
   const router = useRouter();
   const server = useSelectedServer();
   const tree = useServerTree(server?.id ?? null);
+  const [switchTo, setSwitchTo] = useState<JoinTarget | null>(null);
+  const call = useVoiceStore((s) => s.call);
+  const callServer = useServersStore(
+    (s) => s.servers.find((x) => x.id === call?.serverId)?.name,
+  );
+  const currentPlace = call
+    ? callServer
+      ? `${call.channelName} in ${callServer}`
+      : call.channelName
+    : "";
+  const targetPlace = switchTo
+    ? `${switchTo.channelName} in ${server?.name ?? "this server"}`
+    : "";
+
+  const join = useCallback(
+    (target: JoinTarget) => {
+      setSwitchTo(null);
+      void joinVoiceChannel(target);
+      router.push("/call");
+    },
+    [router],
+  );
 
   const openChannel = useCallback(
     (channel: Channel) => {
-      if (channelKind(channel) === "voice") {
-        if (!server) return;
-        // Joining the channel already in the call just opens the call.
-        void joinVoiceChannel({
-          serverId: server.id,
-          channelId: channel.id,
-          channelName: channel.name,
+      if (channelKind(channel) !== "voice") {
+        openConversation({
+          kind: "channel",
+          id: channel.id,
+          name: channel.name,
         });
+        return;
+      }
+      if (!server) return;
+      const call = useVoiceStore.getState().call;
+      // The channel already in the call just opens the call.
+      if (call?.channelId === channel.id) {
         router.push("/call");
         return;
       }
-      router.push({
-        pathname: "/channel/[id]",
-        params: { id: channel.id, name: channel.name },
-      });
+      const target = {
+        serverId: server.id,
+        channelId: channel.id,
+        channelName: channel.name,
+      };
+      // A mis-tap must not drop a call that has run all evening: ask first.
+      if (call) setSwitchTo(target);
+      else join(target);
     },
-    [router, server],
+    [router, server, join],
   );
+  const cancelSwitch = useCallback(() => setSwitchTo(null), []);
 
   if (!server || !tree || tree.status === "loading") {
     return <ChannelTreeSkeleton />;
@@ -65,11 +104,20 @@ function SelectedServerTree() {
     );
   }
   return (
-    <ChannelTree
-      categories={tree.categories}
-      channels={tree.channels}
-      onOpenChannel={openChannel}
-    />
+    <>
+      <ChannelTree
+        categories={tree.categories}
+        channels={tree.channels}
+        onOpenChannel={openChannel}
+      />
+      <VoiceSwitchSheet
+        target={switchTo}
+        currentPlace={currentPlace}
+        targetPlace={targetPlace}
+        onCancel={cancelSwitch}
+        onSwitch={join}
+      />
+    </>
   );
 }
 
@@ -94,15 +142,29 @@ function NoServers() {
   );
 }
 
+/** Pull-to-refresh: the server list, the shown tree and every unread mark. */
+async function refreshServers(): Promise<void> {
+  const selectedId = useServersStore.getState().selectedId;
+  await Promise.all([
+    loadServers(),
+    selectedId ? loadTree(selectedId) : null,
+    refreshReadStates(),
+  ]);
+}
+
 /** The selected server: its name over the brand rule, then its channel tree. */
 export function ServerPane() {
   const { servers } = useServerList();
   const server = useSelectedServer();
   const clearance = usePlateClearance();
+  const refreshControl = useRefreshControl(refreshServers);
   return (
     <>
       <Header title={server?.name ?? "Servers"} rule="brand" />
-      <ScrollView contentContainerStyle={{ paddingBottom: clearance }}>
+      <ScrollView
+        refreshControl={refreshControl}
+        contentContainerStyle={{ paddingBottom: clearance }}
+      >
         {servers.length === 0 ? <NoServers /> : <SelectedServerTree />}
       </ScrollView>
     </>

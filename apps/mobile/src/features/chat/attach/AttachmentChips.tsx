@@ -143,13 +143,14 @@ function Chip({
         accessibilityRole="button"
         accessibilityLabel={`Remove ${item.name}`}
         onPress={onRemove}
-        hitSlop={8}
+        // 24 plus 12 a side: a 48dp target over the chip's corner.
+        hitSlop={12}
         style={({ pressed }) => ({
           position: "absolute",
           top: 0,
           right: 0,
-          width: 22,
-          height: 22,
+          width: 24,
+          height: 24,
           borderRadius: RADIUS,
           alignItems: "center",
           justifyContent: "center",

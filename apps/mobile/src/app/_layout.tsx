@@ -36,8 +36,9 @@ function ThemedStack() {
         <Stack.Screen name="index" />
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="home" />
-          <Stack.Screen name="channel/[id]" />
-          <Stack.Screen name="dm/[id]" />
+          {/* Links into home's pager: they hand over and close at once. */}
+          <Stack.Screen name="channel/[id]" options={{ animation: "none" }} />
+          <Stack.Screen name="dm/[id]" options={{ animation: "none" }} />
           <Stack.Screen name="activity" />
           <Stack.Screen name="settings" />
           <Stack.Screen

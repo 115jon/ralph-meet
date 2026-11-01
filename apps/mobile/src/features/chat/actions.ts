@@ -3,6 +3,7 @@ import { subscribeChannel } from "@/features/realtime/gateway";
 import { markRead } from "@/features/servers/actions";
 
 import { fetchMembers, fetchMessages } from "./api";
+import { evictChannels, trimChannel } from "./cache";
 import type { Message, Reaction } from "./schema";
 import {
   mergeMessages,
@@ -120,9 +121,16 @@ export async function loadMembers(serverId: string): Promise<void> {
   }
 }
 
-/** The chat screen came to the front: subscribe, load, mark read. */
+/** Conversations by when they were last opened, most recent first. */
+let recent: string[] = [];
+
+/** The chat came to the front: subscribe, load, mark read. */
 export function openChannel(channelId: string): void {
-  setState({ openChannelId: channelId });
+  recent = [channelId, ...recent.filter((id) => id !== channelId)];
+  setState((s) => ({
+    openChannelId: channelId,
+    channels: evictChannels(s.channels, recent),
+  }));
   subscribeChannel(channelId);
   markRead(channelId);
   readChannelActivity(channelId);
@@ -131,6 +139,7 @@ export function openChannel(channelId: string): void {
 
 export function closeChannel(channelId: string): void {
   if (getState().openChannelId !== channelId) return;
+  patchChannel(channelId, (c) => c && trimChannel(c));
   setState({ openChannelId: null });
   subscribeChannel(null);
 }

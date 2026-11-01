@@ -18,8 +18,11 @@ export interface ChannelMessages {
   readonly loadingOlder: boolean;
 }
 
+/** channelId → its cached history. */
+export type ChannelCache = Readonly<Record<string, ChannelMessages>>;
+
 interface ChatState {
-  readonly channels: Readonly<Record<string, ChannelMessages>>;
+  readonly channels: ChannelCache;
   /** The channel on screen; its new messages are marked read. */
   readonly openChannelId: string | null;
   /** channelId → ids of the people typing there now. */

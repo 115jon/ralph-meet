@@ -4,6 +4,7 @@ import { useAppActive } from "@/lib/app-active";
 import { RADIUS, useTheme } from "@/theme";
 import { RemoteImage, Text } from "@/ui";
 
+import { LONG_PRESS_MS, useMessageLongPress } from "../long-press";
 import { useIsMessageVisible } from "../visibility";
 import type { LinkCard as Card } from "./classify";
 import { MediaView } from "./MediaView";
@@ -37,6 +38,7 @@ export function LinkCard({
   const theme = useTheme();
   const visible = useIsMessageVisible(messageId);
   const active = useAppActive();
+  const onLongPress = useMessageLongPress();
   const { embed, media } = card;
   const site = embed.provider?.name?.trim() || (embed.url && hostOf(embed.url));
   const title = embed.rawTitle?.trim() || embed.author?.name?.trim();
@@ -60,6 +62,8 @@ export function LinkCard({
         accessibilityRole="link"
         accessibilityLabel={title ?? site ?? "Link"}
         onPress={() => openLink(embed.url)}
+        onLongPress={onLongPress}
+        delayLongPress={LONG_PRESS_MS}
         style={{ flexDirection: "row", gap: PADDING }}
       >
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>

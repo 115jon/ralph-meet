@@ -1,5 +1,4 @@
-import { useRouter } from "expo-router";
-import { ArrowLeft } from "phosphor-react-native";
+import { List } from "phosphor-react-native";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -14,13 +13,19 @@ interface ChatHeaderProps {
   subtitle: string;
   /** A DM shows who it is with. */
   avatar?: { name: string; uri: string | null };
+  /** Slides the chat aside to the drawer (channels and messages). */
+  onMenu: () => void;
 }
 
-/** Back key, the title in Bricolage, then context or link state in silk. */
-export function ChatHeader({ title, subtitle, avatar }: ChatHeaderProps) {
+/** Menu key, the title in Bricolage, then context or link state in silk. */
+export function ChatHeader({
+  title,
+  subtitle,
+  avatar,
+  onMenu,
+}: ChatHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const status = useGatewayStatus();
   const offline = status === "reconnecting" || status === "signed-out";
   return (
@@ -43,9 +48,9 @@ export function ChatHeader({ title, subtitle, avatar }: ChatHeaderProps) {
         }}
       >
         <IconButton
-          icon={ArrowLeft}
-          label="Back"
-          onPress={() => router.back()}
+          icon={List}
+          label="Channels and messages"
+          onPress={onMenu}
         />
         {avatar ? (
           <View style={{ marginRight: 8 }}>

@@ -1,14 +1,15 @@
-import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { FlatList, View } from "react-native";
 
+import { openConversation } from "@/features/conversation/store";
 import { loadDms } from "@/features/dms/actions";
 import { DmRow } from "@/features/dms/DmRow";
 import type { DmChannel } from "@/features/dms/schema";
 import { sortByActivity, useDmsStore } from "@/features/dms/store";
 import { usePlateClearance } from "@/features/panel/metrics";
+import { refreshReadStates } from "@/features/servers/actions";
 import { useServersStore } from "@/features/servers/store";
-import { EmptyState, Header, Skeleton, Text } from "@/ui";
+import { EmptyState, Header, Skeleton, Text, useRefreshControl } from "@/ui";
 
 function DmsSkeleton() {
   return (
@@ -37,9 +38,15 @@ function DmsSkeleton() {
 
 const keyOf = (dm: DmChannel) => dm.id;
 
+const openDm = (dm: DmChannel) => openConversation({ kind: "dm", id: dm.id });
+
+/** Pull-to-refresh: the list and its unread marks. */
+async function refreshDms(): Promise<void> {
+  await Promise.all([loadDms(), refreshReadStates()]);
+}
+
 /** Direct messages, most recent first; a row opens the conversation. */
 export function DmsPane() {
-  const router = useRouter();
   const clearance = usePlateClearance();
   const status = useDmsStore((s) => s.status);
   const dms = useDmsStore((s) => s.dms);
@@ -53,14 +60,10 @@ export function DmsPane() {
     void loadDms();
   }, []);
 
-  const open = useCallback(
-    (dm: DmChannel) =>
-      router.push({ pathname: "/dm/[id]", params: { id: dm.id } }),
-    [router],
-  );
+  const refreshControl = useRefreshControl(refreshDms);
   const renderRow = useCallback(
-    ({ item }: { item: DmChannel }) => <DmRow dm={item} onOpen={open} />,
-    [open],
+    ({ item }: { item: DmChannel }) => <DmRow dm={item} onOpen={openDm} />,
+    [],
   );
 
   let body;
@@ -87,6 +90,7 @@ export function DmsPane() {
         data={sorted}
         keyExtractor={keyOf}
         renderItem={renderRow}
+        refreshControl={refreshControl}
         contentContainerStyle={{ paddingBottom: clearance }}
         ListHeaderComponent={
           <View

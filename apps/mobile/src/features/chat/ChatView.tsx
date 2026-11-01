@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import Animated, {
   useAnimatedKeyboard,
@@ -7,6 +7,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { tapHaptic } from "@/lib/haptics";
 import { useTheme } from "@/theme";
 
 import { closeChannel, openChannel } from "./actions";
@@ -37,6 +38,13 @@ export interface ChatViewProps {
   intro: string;
   /** Who can be mentioned and named in the typing line. */
   people: readonly Author[];
+  /**
+   * In front of the user: the pager's chat page, not covered by the drawer
+   * or another screen. Media plays and back cancels a reply only then.
+   */
+  attended: boolean;
+  /** The header's menu key: slides the chat aside to the drawer. */
+  onOpenDrawer: () => void;
 }
 
 /**
@@ -53,21 +61,30 @@ export function ChatView({
   placeholder,
   intro,
   people,
+  attended,
+  onOpenDrawer,
 }: ChatViewProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useAnimatedKeyboard();
   const composer = useRef<ComposerHandle>(null);
   const attach = useAttach(channelId);
-  const { lift } = attach;
+  const { lift, closeTray } = attach;
   const [selected, setSelected] = useState<ChatMessage | null>(null);
 
+  // Open while home is on screen, whichever page is in front: peeking at
+  // the drawer keeps the history live instead of reloading it on return.
   useFocusEffect(
     useCallback(() => {
       openChannel(channelId);
       return () => closeChannel(channelId);
     }, [channelId]),
   );
+
+  // The tray belongs to the chat in front; sliding to the drawer puts it away.
+  useEffect(() => {
+    if (!attended) closeTray();
+  }, [attended, closeTray]);
 
   const bottomInset = insets.bottom;
   const bodyStyle = useAnimatedStyle(() => ({
@@ -80,20 +97,34 @@ export function ChatView({
     [people],
   );
   const closeSheet = useCallback(() => setSelected(null), []);
+  const openActions = useCallback((message: ChatMessage) => {
+    tapHaptic();
+    setSelected(message);
+  }, []);
   const compose = useCallback((intent: ComposerIntent) => {
     composer.current?.compose(intent);
+  }, []);
+  const reply = useCallback((message: ChatMessage) => {
+    composer.current?.compose({ kind: "reply", message });
   }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.ply0 }}>
-      <ChatHeader title={title} subtitle={subtitle} avatar={avatar} />
+      <ChatHeader
+        title={title}
+        subtitle={subtitle}
+        avatar={avatar}
+        onMenu={onOpenDrawer}
+      />
       <Animated.View style={[{ flex: 1 }, bodyStyle]}>
         <MembersContext value={memberNames}>
           <MessageList
             channelId={channelId}
             title={title}
             intro={intro}
-            onLongPress={setSelected}
+            attended={attended}
+            onLongPress={openActions}
+            onReply={reply}
           />
         </MembersContext>
         <TypingLine channelId={channelId} people={people} />
@@ -103,6 +134,7 @@ export function ChatView({
           placeholder={placeholder}
           people={people}
           attach={attach}
+          attended={attended}
         />
       </Animated.View>
       <AttachTray attach={attach} />

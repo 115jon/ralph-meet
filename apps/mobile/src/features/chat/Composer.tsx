@@ -7,8 +7,16 @@ import {
   XCircle,
   type Icon as PhosphorIcon,
 } from "phosphor-react-native";
-import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import {
+  useEffect,
+  useEffectEvent,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
+import {
+  BackHandler,
   Pressable,
   TextInput,
   View,
@@ -17,6 +25,7 @@ import {
 
 import { useSession } from "@/features/auth/session";
 import { mediaUrl } from "@/lib/api";
+import { tapHaptic } from "@/lib/haptics";
 import { FONT, RADIUS, useTheme } from "@/theme";
 import { Avatar, Icon, IconButton, Text } from "@/ui";
 
@@ -24,6 +33,7 @@ import { AttachmentChips, NoticeLine } from "./attach/AttachmentChips";
 import { canAttach } from "./attach/sources";
 import type { AttachController } from "./attach/useAttach";
 import { authorName } from "./authors";
+import { clearDraft, readDraft, saveDraft } from "./drafts";
 import type { ComposerIntent } from "./MessageActionsSheet";
 import { insertMention, mentionQueryAt, suggestPeople } from "./mentions";
 import { editMessage, notifyTyping, sendMessage } from "./mutations";
@@ -46,6 +56,8 @@ interface ComposerProps {
   people: readonly Author[];
   /** The files on the next message and the tray that picks them. */
   attach: AttachController;
+  /** The chat is in front, so back cancels a reply or an edit here first. */
+  attended: boolean;
 }
 
 /** The send key: the one primary, notched at its top-right corner. */
@@ -112,7 +124,7 @@ function IntentBar({
   return (
     <View
       style={{
-        height: 40,
+        minHeight: 40,
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
@@ -172,7 +184,7 @@ function Suggestions({
           accessibilityLabel={`Mention ${authorName(person)}`}
           onPress={() => onPick(person)}
           style={({ pressed }) => ({
-            height: 44,
+            minHeight: 44,
             flexDirection: "row",
             alignItems: "center",
             gap: 10,
@@ -204,9 +216,10 @@ function Suggestions({
 
 /**
  * The floating composer: attach key, a Geist field that grows to five
- * lines, and the notched send key. It owns its draft text; the files come
- * from the attach tray, and the message sheet steers it into reply or edit
- * through the handle. Sending with files uploads them first (each chip
+ * lines, and the notched send key. Its text is the conversation's draft,
+ * kept across visits and launches; the files come from the attach tray, and
+ * the message sheet (or a swipe) steers it into reply or edit through the
+ * handle. Back cancels a reply or an edit before it leaves the chat. Sending with files uploads them first (each chip
  * shows its progress), then posts through the optimistic send.
  */
 export function Composer({
@@ -215,13 +228,37 @@ export function Composer({
   placeholder,
   people,
   attach,
+  attended,
 }: ComposerProps) {
   const theme = useTheme();
   const myId = useSession((s) => s.user?.id);
   const input = useRef<TextInputInstance>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => readDraft(channelId));
   const [cursor, setCursor] = useState(0);
   const [intent, setIntent] = useState<ComposerIntent | null>(null);
+  const editingNow = intent?.kind === "edit";
+
+  /** Typing into the draft; an edit's text is the message's, never the draft. */
+  const changeText = (next: string) => {
+    setText(next);
+    if (!editingNow) saveDraft(channelId, next);
+  };
+
+  /** Leaves reply or edit; an edit gives the field back its draft. */
+  const endIntent = () => {
+    if (editingNow) setText(readDraft(channelId));
+    setIntent(null);
+  };
+  const onBack = useEffectEvent(endIntent);
+
+  useEffect(() => {
+    if (!intent || !attended) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [intent, attended]);
 
   useImperativeHandle(ref, () => ({
     compose: (next) => {
@@ -230,6 +267,8 @@ export function Composer({
         const content = next.message.content ?? "";
         setText(content);
         setCursor(content.length);
+      } else if (editingNow) {
+        setText(readDraft(channelId));
       }
       attach.closeTray();
       input.current?.focus();
@@ -246,19 +285,13 @@ export function Composer({
     (text.trim().length > 0 || (!editing && files.length > 0));
   const showAttach = canAttach && !editing;
 
-  const cancelIntent = () => {
-    if (editing) setText("");
-    setIntent(null);
-  };
-
   const submit = async () => {
     if (!canSend) return;
     const content = text.trim();
     if (editing) {
       if (content !== editing.content?.trim())
         void editMessage(editing, content);
-      setText("");
-      setIntent(null);
+      endIntent();
       return;
     }
     const sent = files.length > 0 ? await attach.upload() : [];
@@ -273,8 +306,10 @@ export function Composer({
       url: localUri,
     }));
     sendMessage(channelId, { content, replyTo, attachments });
+    tapHaptic();
     attach.clear();
     attach.closeTray();
+    clearDraft(channelId);
     setText("");
     setIntent(null);
   };
@@ -286,7 +321,7 @@ export function Composer({
           people={suggestions}
           onPick={(person) => {
             const next = insertMention(text, query, person);
-            setText(next.text);
+            changeText(next.text);
             setCursor(next.cursor);
           }}
         />
@@ -296,14 +331,14 @@ export function Composer({
           icon={PencilSimple}
           label="Editing"
           detail={editing.content ?? ""}
-          onCancel={cancelIntent}
+          onCancel={endIntent}
         />
       ) : replyTo ? (
         <IntentBar
           icon={ArrowBendUpLeft}
           label="Replying to"
           detail={authorName(replyTo.author)}
-          onCancel={cancelIntent}
+          onCancel={endIntent}
         />
       ) : null}
       {attach.notice && !editing ? <NoticeLine notice={attach.notice} /> : null}
@@ -347,7 +382,7 @@ export function Composer({
             value={text}
             editable={!attach.sending}
             onChangeText={(next) => {
-              setText(next);
+              changeText(next);
               if (next.trim() && !editing) notifyTyping(channelId);
             }}
             onSelectionChange={(event) =>

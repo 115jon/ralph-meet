@@ -10,7 +10,15 @@ import {
 import { ActivityRow } from "@/features/activity/ActivityRow";
 import type { Notification } from "@/features/activity/schema";
 import { useActivityStore } from "@/features/activity/store";
-import { Button, EmptyState, Header, Screen, Skeleton } from "@/ui";
+import { goToConversation } from "@/features/conversation/navigation";
+import {
+  EmptyState,
+  Header,
+  HeaderAction,
+  Screen,
+  Skeleton,
+  useRefreshControl,
+} from "@/ui";
 
 function ActivitySkeleton() {
   return (
@@ -33,6 +41,19 @@ function ActivitySkeleton() {
 
 const keyOf = (n: Notification) => n.id;
 
+function open(n: Notification): void {
+  markRead([n.id]);
+  goToConversation(
+    n.server_id
+      ? { kind: "channel", id: n.channel_id, name: n.channel_name ?? undefined }
+      : { kind: "dm", id: n.channel_id },
+  );
+}
+
+const renderRow = ({ item }: { item: Notification }) => (
+  <ActivityRow notification={item} onOpen={open} />
+);
+
 /** Mentions and replies, newest first; opened from the panel's bell. */
 export default function ActivityScreen() {
   const router = useRouter();
@@ -40,30 +61,12 @@ export default function ActivityScreen() {
   const notifications = useActivityStore((s) => s.notifications);
   const anyUnread = notifications.some((n) => !n.is_read);
 
+  const refreshControl = useRefreshControl(loadActivity);
+  const back = useCallback(() => router.back(), [router]);
+
   useEffect(() => {
     void loadActivity();
   }, []);
-
-  const open = useCallback(
-    (n: Notification) => {
-      markRead([n.id]);
-      if (n.server_id) {
-        router.push({
-          pathname: "/channel/[id]",
-          params: { id: n.channel_id, name: n.channel_name ?? undefined },
-        });
-      } else {
-        router.push({ pathname: "/dm/[id]", params: { id: n.channel_id } });
-      }
-    },
-    [router],
-  );
-  const renderRow = useCallback(
-    ({ item }: { item: Notification }) => (
-      <ActivityRow notification={item} onOpen={open} />
-    ),
-    [open],
-  );
 
   let body;
   if (notifications.length === 0 && status === "loading") {
@@ -89,24 +92,22 @@ export default function ActivityScreen() {
         data={notifications}
         keyExtractor={keyOf}
         renderItem={renderRow}
-        ListFooterComponent={
-          anyUnread ? (
-            <View style={{ padding: 16, alignItems: "flex-start" }}>
-              <Button
-                variant="ghost"
-                label="Mark all read"
-                onPress={markAllRead}
-              />
-            </View>
-          ) : undefined
-        }
+        refreshControl={refreshControl}
       />
     );
   }
 
   return (
     <Screen scroll={false}>
-      <Header title="Activity" onBack={() => router.back()} />
+      <Header
+        title="Activity"
+        onBack={back}
+        action={
+          anyUnread ? (
+            <HeaderAction label="Mark all read" onPress={markAllRead} />
+          ) : null
+        }
+      />
       {body}
     </Screen>
   );
