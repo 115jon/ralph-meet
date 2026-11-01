@@ -1,5 +1,83 @@
 # Changelog
 
+## [3.4.0](https://github.com/115jon/ralph-meet/compare/v3.3.0...v3.4.0) (2026-11-01)
+
+
+### Features
+
+* **mobile:** ✨ attach from an in-app tray like discord ([db16e91](https://github.com/115jon/ralph-meet/commit/db16e912a6a0fcef4a4d820d5f0fc067446c6075))
+* **mobile:** ✨ join voice channels over partytracks ([162918b](https://github.com/115jon/ralph-meet/commit/162918b34add7ae65ab50176e206844e4ebcce48))
+* **mobile:** ✨ keep voice calls alive in the background ([71076e3](https://github.com/115jon/ralph-meet/commit/71076e39832efcb91cb9afb95679c16d85dd0267))
+* **mobile:** ✨ play gifs and video embeds in chat ([38698fc](https://github.com/115jon/ralph-meet/commit/38698fc501331f748d139e409180f655d897dfd8))
+* **mobile:** ✨ publish camera and screen share in calls ([476eb54](https://github.com/115jon/ralph-meet/commit/476eb5466de54d4953de6dd8ec00ef14e78e46f0))
+* **mobile:** ✨ register for push and open conversations from them ([60d72d9](https://github.com/115jon/ralph-meet/commit/60d72d9c83eb85c1cec63324e8af0f8a3aac9544))
+* **mobile:** ✨ replace the tab bar with a server rail and your panel ([ba915a6](https://github.com/115jon/ralph-meet/commit/ba915a61f71c704045cf6c265c1e512146d00c98))
+* **mobile:** ✨ scaffold the expo android app with the floating app bar ([74642a9](https://github.com/115jon/ralph-meet/commit/74642a921f9b30957c29bf1ed56f79afba47d111))
+* **mobile:** ✨ send messages and add dms and activity ([88ea584](https://github.com/115jon/ralph-meet/commit/88ea584c7413fb305723503ae665cd7e7c0436f0))
+* **mobile:** ✨ show real servers, channels and read-only chat ([a365dce](https://github.com/115jon/ralph-meet/commit/a365dce119ffe395972ecd99d90db3cdbfb67b80))
+* **mobile:** ✨ sign in with a kova device code ([c8c6c0d](https://github.com/115jon/ralph-meet/commit/c8c6c0db4534d151498027545469708994f90299))
+* **mobile:** ✨ watch video in calls and add call settings ([16b77f8](https://github.com/115jon/ralph-meet/commit/16b77f8f718938a06722d0e831fb38c1000e79f3))
+* **mobile:** animated GIFs and playable video embeds ([9c4f3c0](https://github.com/115jon/ralph-meet/commit/9c4f3c04dc3691075f54c4da96e034f46e527a16))
+* **mobile:** background calls with Telecom, CallStyle and audio routes ([87f3d07](https://github.com/115jon/ralph-meet/commit/87f3d07f33f81640957b52fba40765c0a183ad33))
+* **mobile:** camera and screen share in calls, safer sign-out ([d8acd7b](https://github.com/115jon/ralph-meet/commit/d8acd7b36136f6aff3f34e292dbf2b36959bd17e))
+* **mobile:** composer, message actions, DMs and activity ([5a7063b](https://github.com/115jon/ralph-meet/commit/5a7063b46b81cc1040fc29ca1756e91cee85881c))
+* **mobile:** Discord-style attach tray ([7317a09](https://github.com/115jon/ralph-meet/commit/7317a09d1db92ae350e8647f364627e4a517c303))
+* **mobile:** rail + your panel, animated media, camera/screen share, attach tray ([992ca4c](https://github.com/115jon/ralph-meet/commit/992ca4c1fa0613e0d71b7a2f8ffa7a945d65d13b))
+* **mobile:** Ralph Meet Android app (Expo) with push and signed releases ([f469dcd](https://github.com/115jon/ralph-meet/commit/f469dcdf52f85bd2105d40101c5f821e1a9f042a))
+* **mobile:** real servers, channel tree and read-only chat ([e841913](https://github.com/115jon/ralph-meet/commit/e841913afdd8c6670ddd2a6e0b988af60d48c856))
+* **mobile:** sign in with a Kova device code ([fa5e4a0](https://github.com/115jon/ralph-meet/commit/fa5e4a0d281d095d6ba298612e38ca9985afc872))
+* **mobile:** voice channels over the patched PartyTracks transport ([7723df8](https://github.com/115jon/ralph-meet/commit/7723df8c7afa116c8582281cd1be0a02bab4e716))
+* **mobile:** watch video in calls, settings, mobile CI ([52f16aa](https://github.com/115jon/ralph-meet/commit/52f16aa3c3833017eaa935fe9aa323ae59e728c8))
+* **push:** ✨ send fcm pushes for mentions, replies and dms ([7fbfeab](https://github.com/115jon/ralph-meet/commit/7fbfeab407fff8b91c6145208c1eb03e80cfe972))
+* **push:** FCM push notifications for mentions, replies and DMs ([cb9c106](https://github.com/115jon/ralph-meet/commit/cb9c1064ce175e6f55e217edd41dcc3fb956036b))
+* **voice:** ✨ add a spectral noise floor estimator ([96d6d49](https://github.com/115jon/ralph-meet/commit/96d6d49ab858baef244c7fba70d942528d9c8d80))
+* **voice:** ✨ keep warm standby sessions for occupied voice channels ([e97fd89](https://github.com/115jon/ralph-meet/commit/e97fd89f516eb7a5c130f67626052fc0eb36e1df))
+* **voice:** ✨ republish a track listeners cannot pull ([301ebeb](https://github.com/115jon/ralph-meet/commit/301ebebefba6f701af928198e7c61733ad191a6b))
+* **voice:** ✨ time each voice join stage ([ffe8d99](https://github.com/115jon/ralph-meet/commit/ffe8d9928b52426ad96d9542f86cb732bc5ba075))
+
+
+### Bug Fixes
+
+* **auth:** 🐛 re-mint a revoked app token instead of hanging ([72839f8](https://github.com/115jon/ralph-meet/commit/72839f8454d226a2d0ec04a61b9821d5b6195bcc))
+* **auth:** 🐛 sign the kova cookie out before switching accounts ([d935b8b](https://github.com/115jon/ralph-meet/commit/d935b8ba13fe05dce9f523c1fc3d02e32e6f46f4))
+* **auth:** account switching, real sign-in methods, modals below the title bar ([cb35199](https://github.com/115jon/ralph-meet/commit/cb35199fb7e70c1a089839c81a58a26a6c1125e0))
+* **auth:** re-mint a revoked app token instead of hanging on Reconnecting ([5445dd6](https://github.com/115jon/ralph-meet/commit/5445dd64b9e386fa521e06e9a467b384328637f0))
+* **desktop:** 🐛 stop the screen picker's thumbnail batch on unmount ([cf75588](https://github.com/115jon/ralph-meet/commit/cf7558831b69bfc03d88c6ad029394f4a8559e42))
+* **desktop:** stop the screen picker's thumbnail batch on unmount ([affa5ee](https://github.com/115jon/ralph-meet/commit/affa5eec75165fddfb9fb0e1e2de6bf810fe063e))
+* **lint:** 🐛 guard unsafe optional chains and make three rules errors ([4d4abf8](https://github.com/115jon/ralph-meet/commit/4d4abf8edb28b592bdc4de292315fcb0e4bdc88a))
+* **mobile:** 🐛 confirm a 401 before signing the user out ([34185e3](https://github.com/115jon/ralph-meet/commit/34185e3a4b2a61f305af0a01a30730782e8617b6))
+* **mobile:** 🐛 default the api url to the web app's public url ([7fc44d8](https://github.com/115jon/ralph-meet/commit/7fc44d850060690d914e51d6f341631c47e31c1a))
+* **mobile:** 🐛 show the handle in body type, not silkscreen caps ([105d3e6](https://github.com/115jon/ralph-meet/commit/105d3e646d17ff2f1e992ec37e56d0ad5f7de1a3))
+* **realtime:** 🐛 pass the payload to voice leave and call end ([b255626](https://github.com/115jon/ralph-meet/commit/b255626ca2b11b334b9850b29c01f2ff621f8eaa))
+* **realtime:** 🐛 skip tracks a restart left behind in voice ready ([d3c3241](https://github.com/115jon/ralph-meet/commit/d3c3241fb20657f00fa45bdaecb57d2b13a1b460))
+* **realtime:** pass leave and call-end payloads; typecheck workerd tests ([5fe7451](https://github.com/115jon/ralph-meet/commit/5fe74516b55a0ea0f7a3b6dad2aee582bc7d1340))
+* **settings:** 🐛 keep modals below the desktop title bar ([db2bc33](https://github.com/115jon/ralph-meet/commit/db2bc3366e043c6c517c0f403b11552c24c2fea2))
+* **settings:** 🐛 show the real sign-in methods instead of ralph auth ([6af089c](https://github.com/115jon/ralph-meet/commit/6af089c2c1491808c656901bf2600fe8f150e16a))
+* **voice:** 🐛 hold a pull until the peer connection is connected ([c354fe8](https://github.com/115jon/ralph-meet/commit/c354fe85c9e6be50af81a31619d9a639686e7d3f))
+* **voice:** 🐛 keep isolated clicks from opening the gate ([556fbe0](https://github.com/115jon/ralph-meet/commit/556fbe0824d3f89f40c4d22dd1d12e28461c3669))
+* **voice:** 🐛 keep warm standby private and idle ([e67ac9c](https://github.com/115jon/ralph-meet/commit/e67ac9cd2d5f483aeb285d41889ba4aed84f7f03))
+* **voice:** 🐛 republish stale standby track on join ([1c40fed](https://github.com/115jon/ralph-meet/commit/1c40fed41ead14b9a8c000b31752a347e5312fd1))
+* **voice:** 🐛 require a channel join for voice identify and pulls ([29c2079](https://github.com/115jon/ralph-meet/commit/29c2079fc881196e28c33113972c61a56ab76f81))
+* **voice:** 🐛 retry a partytracks pull when its bulk request fails ([4099417](https://github.com/115jon/ralph-meet/commit/40994179463ecb00e28c2931265834858762d768))
+* **voice:** hold a pull until the peer connection is connected ([2aa797d](https://github.com/115jon/ralph-meet/commit/2aa797d7d0e1f3ea53806060b567794d4388cb24))
+* **voice:** republish stale standby track on join ([811a3d3](https://github.com/115jon/ralph-meet/commit/811a3d39b87d67b3ef9b1b06890eda029ab7b4e8))
+* **voice:** require a channel join for voice identify and pulls ([5b0299b](https://github.com/115jon/ralph-meet/commit/5b0299b9e288dac6d03f43644a5b4642b11ef733))
+* **voice:** retry failed partytracks pulls and skip stale tracks after a restart ([ff9ad73](https://github.com/115jon/ralph-meet/commit/ff9ad734264e01c99b6ca6eb0ad1fbd342084c87))
+
+
+### Performance Improvements
+
+* **app:** ⚡️ load the call stack, chat store and panels only when needed ([bf194fb](https://github.com/115jon/ralph-meet/commit/bf194fbfa1298a9c2440885b817ba69664d806bb))
+* **app:** lazy-load the call stack, chat store and panels ([74d6f83](https://github.com/115jon/ralph-meet/commit/74d6f83c3cc07daf174b119f18ed3dbe096653d7))
+* **realtime:** ⚡️ retry waiting sockets once the server is reachable ([8f4dfb0](https://github.com/115jon/ralph-meet/commit/8f4dfb06772fd423d5952fea22360bbf057dbd6d))
+* **voice:** ⚡️ build the gated processor while the gateway connects ([bd66d0f](https://github.com/115jon/ralph-meet/commit/bd66d0f62819dc3a6bb33818e4e0c8f16e501f98))
+* **voice:** ⚡️ gate the mic in the audio graph with a 20 ms lookahead ([125457d](https://github.com/115jon/ralph-meet/commit/125457d62ced99fb00aef7a0fc4c18e6b774f193))
+* **voice:** ⚡️ identify on the voice socket from the ticket bootstrap ([3c08c01](https://github.com/115jon/ralph-meet/commit/3c08c0123378c6320ffa2214b425053603e7e688))
+* **voice:** ⚡️ retry early partytracks pulls from 100 ms ([2519c70](https://github.com/115jon/ralph-meet/commit/2519c7051cf9ce64030a40af6bcdac410ca733e9))
+* **voice:** ⚡️ send 10 ms opus frames ([0973b0c](https://github.com/115jon/ralph-meet/commit/0973b0c046c23f05ebdfec66c588320061b140e0))
+* **voice:** ⚡️ skip the rtp wait and send ice with the socket ticket ([1d23263](https://github.com/115jon/ralph-meet/commit/1d232630147535f02a7ff760fa24213f83db2985))
+* **voice:** cut mouth-to-ear latency from about 170 to 100 ms ([83b28e6](https://github.com/115jon/ralph-meet/commit/83b28e6c4c381c1d42b96e732fd4cb5f12c9a9c7))
+
 ## [3.3.0](https://github.com/115jon/ralph-meet/compare/v3.2.0...v3.3.0) (2026-10-30)
 
 
