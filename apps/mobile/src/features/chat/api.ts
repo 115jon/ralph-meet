@@ -33,14 +33,29 @@ async function send(
   if (!response.ok) throw new ApiError(response.status, path);
 }
 
+/** Which page: before or after a loaded message, or around a message id. */
+export type PageCursor =
+  | { readonly before: Message }
+  | { readonly after: Message }
+  | { readonly around: string };
+
+/** The server's cursor is "created_at|id", so equal timestamps page cleanly. */
+function cursorOf(message: Message): string {
+  return `${message.created_at}|${message.id}`;
+}
+
 /**
- * GET /api/channels/:id/messages: the newest page, or the page before
- * `before` (oldest first, as the server sends it).
+ * GET /api/channels/:id/messages: the newest page, or the page before or
+ * after a loaded message, or the one around a message id (a jump). Oldest
+ * first, as the server sends it.
  */
-export function fetchMessages(channelId: string, before?: Message) {
+export function fetchMessages(channelId: string, cursor?: PageCursor) {
   const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
-  // The server's cursor is "created_at|id", so equal timestamps page cleanly.
-  if (before) params.set("before", `${before.created_at}|${before.id}`);
+  if (cursor && "before" in cursor)
+    params.set("before", cursorOf(cursor.before));
+  else if (cursor && "after" in cursor)
+    params.set("after", cursorOf(cursor.after));
+  else if (cursor) params.set("around", cursor.around);
   return apiJson(
     channelPath(channelId, `/messages?${params}`),
     MessagePageSchema,

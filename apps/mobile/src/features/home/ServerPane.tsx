@@ -23,6 +23,7 @@ import {
 import { channelKind } from "@/features/servers/tree";
 import { joinVoiceChannel, type JoinTarget } from "@/features/voice/actions";
 import { useVoiceStore } from "@/features/voice/store";
+import { ServerSheet } from "@/features/servers/ServerSheet";
 import { VoiceSwitchSheet } from "@/features/voice/VoiceSwitchSheet";
 import { EmptyState, Header, useRefreshControl } from "@/ui";
 
@@ -158,9 +159,16 @@ export function ServerPane() {
   const server = useSelectedServer();
   const clearance = usePlateClearance();
   const refreshControl = useRefreshControl(refreshServers);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
   return (
     <>
-      <Header title={server?.name ?? "Servers"} rule="brand" />
+      <Header
+        title={server?.name ?? "Servers"}
+        rule="brand"
+        onTitle={server ? () => setMenuOpen(true) : undefined}
+      />
+      <ServerSheet server={menuOpen ? server : null} onClose={closeMenu} />
       <ScrollView
         refreshControl={refreshControl}
         contentContainerStyle={{ paddingBottom: clearance }}

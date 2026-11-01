@@ -16,6 +16,23 @@ export interface ChannelMessages {
   /** Older messages remain on the server. */
   readonly hasMore: boolean;
   readonly loadingOlder: boolean;
+  /**
+   * A jump loaded a page from the past: newer messages remain, so live ones
+   * are not appended (that would leave a hole) until the list reaches the
+   * present again.
+   */
+  readonly hasNewer?: boolean;
+  readonly loadingNewer?: boolean;
+}
+
+/** A message to scroll to and flash once its conversation is on screen. */
+export interface JumpRequest {
+  readonly channelId: string;
+  readonly messageId: string;
+  /** Tells two jumps to the same message apart. */
+  readonly seq: number;
+  /** Scrolled to: the row is lit until the jump clears. */
+  readonly landed?: boolean;
 }
 
 /** channelId → its cached history. */
@@ -27,12 +44,14 @@ interface ChatState {
   readonly openChannelId: string | null;
   /** channelId → ids of the people typing there now. */
   readonly typing: Readonly<Record<string, readonly string[]>>;
+  readonly jump: JumpRequest | null;
 }
 
 const INITIAL: ChatState = {
   channels: {},
   openChannelId: null,
   typing: {},
+  jump: null,
 };
 
 /** State only; the actions that change it live in ./actions and ./mutations. */
@@ -46,6 +65,11 @@ const NOBODY: readonly string[] = [];
 
 export function useChannelMessages(channelId: string): ChannelMessages | null {
   return useChatStore((s) => s.channels[channelId] ?? null);
+}
+
+/** The pending jump into `channelId`, if any. */
+export function useJump(channelId: string): JumpRequest | null {
+  return useChatStore((s) => (s.jump?.channelId === channelId ? s.jump : null));
 }
 
 export function useTypingIds(channelId: string): readonly string[] {

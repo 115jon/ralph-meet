@@ -23,6 +23,7 @@ import { startProfileEvents } from "@/features/profile/realtime";
 import { resetProfiles } from "@/features/profile/store";
 import { startServerEvents } from "@/features/servers/realtime";
 import { resetServersStore } from "@/features/servers/store";
+import { resetShare } from "@/features/share/store";
 import { leaveCall, wakeCall } from "@/features/voice/actions";
 
 import { connectGateway, wakeGateway } from "./gateway";
@@ -88,5 +89,6 @@ export function useRealtime(): void {
     resetDrafts();
     resetRecents();
     resetLibrary();
+    resetShare();
   }, [signedOut]);
 }

@@ -1,5 +1,6 @@
-import { Linking, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 
+import { openLink } from "@/features/links/links";
 import { useAppActive } from "@/lib/app-active";
 import { RADIUS, useTheme } from "@/theme";
 import { RemoteImage, Text } from "@/ui";
@@ -17,8 +18,8 @@ function hostOf(url: string): string {
   return match?.[1]?.replace(/^www\./, "") ?? url;
 }
 
-function openLink(url: string | undefined): void {
-  if (url) Linking.openURL(url).catch(() => undefined);
+function openEmbed(url: string | undefined): void {
+  if (url) openLink(url);
 }
 
 /**
@@ -61,7 +62,7 @@ export function LinkCard({
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={title ?? site ?? "Link"}
-        onPress={() => openLink(embed.url)}
+        onPress={() => openEmbed(embed.url)}
         onLongPress={onLongPress}
         delayLongPress={LONG_PRESS_MS}
         style={{ flexDirection: "row", gap: PADDING }}

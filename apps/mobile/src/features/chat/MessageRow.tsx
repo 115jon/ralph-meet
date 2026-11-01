@@ -5,6 +5,7 @@ import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   Extrapolation,
+  FadeOut,
   interpolate,
   useAnimatedStyle,
   useReducedMotion,
@@ -35,6 +36,7 @@ import type { ChatMessage } from "./store";
 import { formatTime } from "./time";
 
 const AVATAR = 40;
+const HIGHLIGHT_OUT = FadeOut.duration(600).easing(Easing.out(Easing.cubic));
 const GUTTER = 12;
 
 /** Pulled this far left, letting go replies; past it the row drags heavier. */
@@ -107,6 +109,8 @@ interface MessageRowProps {
   sentAt: Date;
   /** A follow-up from the same author: no avatar, no name line. */
   grouped: boolean;
+  /** Just jumped to (a link, a push): lit for a moment, then fades. */
+  highlighted?: boolean;
   onLongPress: (message: ChatMessage) => void;
   onReply: (message: ChatMessage) => void;
 }
@@ -115,6 +119,7 @@ export const MessageRow = memo(function MessageRow({
   message,
   sentAt,
   grouped,
+  highlighted = false,
   onLongPress,
   onReply,
 }: MessageRowProps) {
@@ -179,6 +184,22 @@ export const MessageRow = memo(function MessageRow({
                     : theme.ply0,
               })}
             >
+              {highlighted ? (
+                <Animated.View
+                  pointerEvents="none"
+                  exiting={HIGHLIGHT_OUT}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: theme.accentTint,
+                    borderLeftWidth: 2,
+                    borderLeftColor: theme.accentInk,
+                  }}
+                />
+              ) : null}
               {targetsMe ? (
                 <View
                   style={{
