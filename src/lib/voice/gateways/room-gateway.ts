@@ -307,7 +307,6 @@ export class RoomGateway extends BaseGateway<
       display_name: this.options?.displayName,
       avatar_url: this.options?.avatarUrl,
       avatar_display: this.options?.avatarDisplay,
-      clerk_user_id: this.options?.userId,
       supports_voice_state_deltas: true,
       ...(this.options?.standby ? { standby: true } : {}),
     };

@@ -43,7 +43,7 @@ describe("voice presence helpers", () => {
   it("preserves reconnecting state when refreshing a stale member identity", () => {
     const member = refreshVoiceMemberIdentity(
       {
-        clerk_user_id: "u1",
+        user_id: "u1",
         name: "Old Name",
         connected: false,
         connection_state: "reconnecting" as const,

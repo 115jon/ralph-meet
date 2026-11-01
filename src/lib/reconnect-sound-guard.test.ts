@@ -37,10 +37,10 @@ describe("reconnect sound guard", () => {
 
   it("detects a remote voice-channel join while you stay in the channel", () => {
     const sound = getVoiceChannelPresenceSound(
-      [{ clerk_user_id: "me", name: "Me" } as any],
+      [{ user_id: "me", name: "Me" } as any],
       [
-        { clerk_user_id: "me", name: "Me" } as any,
-        { clerk_user_id: "them", name: "Them" } as any,
+        { user_id: "me", name: "Me" } as any,
+        { user_id: "them", name: "Them" } as any,
       ],
       "me",
     );
@@ -51,10 +51,10 @@ describe("reconnect sound guard", () => {
   it("detects a remote voice-channel leave while you stay in the channel", () => {
     const sound = getVoiceChannelPresenceSound(
       [
-        { clerk_user_id: "me", name: "Me" } as any,
-        { clerk_user_id: "them", name: "Them" } as any,
+        { user_id: "me", name: "Me" } as any,
+        { user_id: "them", name: "Them" } as any,
       ],
-      [{ clerk_user_id: "me", name: "Me" } as any],
+      [{ user_id: "me", name: "Me" } as any],
       "me",
     );
 
@@ -63,8 +63,8 @@ describe("reconnect sound guard", () => {
 
   it("ignores voice-channel diffs when you are not in that channel", () => {
     const sound = getVoiceChannelPresenceSound(
-      [{ clerk_user_id: "them", name: "Them" } as any],
-      [{ clerk_user_id: "them", name: "Them" } as any],
+      [{ user_id: "them", name: "Them" } as any],
+      [{ user_id: "them", name: "Them" } as any],
       "me",
     );
 

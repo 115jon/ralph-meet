@@ -3,6 +3,8 @@ import {
   ErrorPayload,
   GatewayOp,
   HelloPayload,
+  normalizeUserIdField,
+  normalizeUserIdFields,
   type DecodedMessage,
   type PayloadRules,
 } from "@ralph/protocol";
@@ -12,7 +14,8 @@ import { Schema } from "effect";
 // Mirrors the web's src/lib/gateway-protocol/server-payloads.ts (which carries
 // web-only types, so it is not shared): looser than what the Durable Objects
 // send, extra keys pass, and a frame that fails is logged and dropped by
-// RealtimeSocket.
+// RealtimeSocket. Every VoiceState is normalized to `user_id` before the
+// schema sees it, so a pre-rename server's payloads decode too.
 
 const OptionalText = Schema.optional(Schema.NullOr(Schema.String));
 const OptionalFlag = Schema.optional(Schema.Boolean);
@@ -46,7 +49,7 @@ export type IceServer = typeof IceServerSchema.Type;
  */
 export const VoiceStateSchema = Schema.Struct({
   id: Schema.String,
-  clerk_user_id: OptionalText,
+  user_id: OptionalText,
   name: Schema.optional(Schema.String),
   username: OptionalText,
   display_name: OptionalText,
@@ -96,6 +99,25 @@ const ProfileUpdatePayload = Schema.Struct({
   avatar_url: OptionalText,
 });
 
+// TODO(user-id-rename phase 2): the `normalize` steps below (and the
+// `clerk_user_id` fallback they apply) go; see docs/user-id-rename.md.
+
+/** Ready and Resumed: the roster, with each user id under `user_id`. */
+function normalizeParticipantUserIds<
+  T extends { readonly participants?: readonly VoiceState[] },
+>(d: T): T {
+  return d.participants === undefined
+    ? d
+    : { ...d, participants: normalizeUserIdFields(d.participants) };
+}
+
+/** VoiceStateUpdate: the participant's user id under `user_id`. */
+function normalizeVoiceStateUpdateUserId<
+  T extends { readonly participant: object },
+>(d: T): T {
+  return { ...d, participant: normalizeUserIdField(d.participant) };
+}
+
 const roomServerRules = {
   [GatewayOp.Hello]: { schema: HelloPayload, invalid: "Invalid Hello" },
   [GatewayOp.HeartbeatACK]: null,
@@ -103,11 +125,20 @@ const roomServerRules = {
     schema: MediaReadyPayload,
     invalid: "Invalid MediaReady",
   },
-  [GatewayOp.Ready]: { schema: ReadyPayload, invalid: "Invalid Ready" },
-  [GatewayOp.Resumed]: { schema: ResumedPayload, invalid: "Invalid Resumed" },
+  [GatewayOp.Ready]: {
+    schema: ReadyPayload,
+    invalid: "Invalid Ready",
+    normalize: normalizeParticipantUserIds,
+  },
+  [GatewayOp.Resumed]: {
+    schema: ResumedPayload,
+    invalid: "Invalid Resumed",
+    normalize: normalizeParticipantUserIds,
+  },
   [GatewayOp.VoiceStateUpdate]: {
     schema: VoiceStateUpdatePayload,
     invalid: "Invalid VoiceStateUpdate",
+    normalize: normalizeVoiceStateUpdateUserId,
   },
   [GatewayOp.ProfileUpdate]: {
     schema: ProfileUpdatePayload,

@@ -18,7 +18,7 @@ import ChannelSidebar, {
 
 function member(id: string, name: string): VoiceChannelMember {
   return {
-    clerk_user_id: id,
+    user_id: id,
     name,
     username: name,
     display_name: null,

@@ -493,14 +493,14 @@ const voiceFlags = {
 };
 const voiceMembers: VoiceChannelMember[] = [
   {
-    clerk_user_id: "u-ada",
+    user_id: "u-ada",
     name: "Ada Lovelace",
     username: "ada",
     display_name: "Ada Lovelace",
     ...voiceFlags,
   },
   {
-    clerk_user_id: "u-grace",
+    user_id: "u-grace",
     name: "Grace Hopper",
     username: "grace",
     display_name: "Grace Hopper",
@@ -890,7 +890,7 @@ function voiceMembersFromItems(items: GridItem[]): VoiceChannelMember[] {
     if (item.isRinging) continue;
     const user = users[item.userId.replace(/^u-/, "")];
     const member = byUser.get(item.userId) ?? {
-      clerk_user_id: item.userId,
+      user_id: item.userId,
       name: user?.display_name ?? item.name.replace(/(?:'s|') Stream$/, ""),
       username: user?.username,
       display_name: user?.display_name,
@@ -1490,9 +1490,9 @@ function RoomFixture({ step }: { step: "join" | "connecting" | "room" }) {
 type DmCallStep = "ringing-out" | "ringing-in" | "lobby" | "active" | "video";
 
 function seedDmCall(step: DmCallStep) {
-  const me = { clerk_user_id: "u-me", name: "Jon", ...voiceFlags };
+  const me = { user_id: "u-me", name: "Jon", ...voiceFlags };
   const ada = {
-    clerk_user_id: "u-ada",
+    user_id: "u-ada",
     name: "Ada Lovelace",
     username: "ada",
     display_name: "Ada Lovelace",
@@ -2016,7 +2016,7 @@ function MembersPageFixture() {
       voiceChannelStates: {
         "ch-lounge": [
           ...voiceMembers,
-          { clerk_user_id: "u-me", name: "Jon", ...voiceFlags },
+          { user_id: "u-me", name: "Jon", ...voiceFlags },
         ],
       },
       speakingUsers: { "u-ada": true },

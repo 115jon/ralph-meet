@@ -22,7 +22,7 @@ const MAX_LISTED = 6;
 
 /** One person already in the channel: who they are and whether they talk. */
 function LandingMember({ member }: { member: any }) {
-  const speaking = useSpeakingAttr(member.clerk_user_id);
+  const speaking = useSpeakingAttr(member.user_id);
   const name = member.display_name || member.name || member.username || "?";
   return (
     <li
@@ -131,7 +131,7 @@ export function VoiceLanding({
             className="flex w-full max-w-[280px] flex-col rounded-lg border border-line bg-ply-1 p-1"
           >
             {listed.map((m) => (
-              <LandingMember key={m.clerk_user_id} member={m} />
+              <LandingMember key={m.user_id} member={m} />
             ))}
             {count > MAX_LISTED && (
               <li className="flex h-8 items-center px-2 text-ui-xs text-ink-3">

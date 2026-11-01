@@ -928,7 +928,6 @@ export function createChatGateway(
       op: GatewayOp.Identify,
       d: {
         name: "ChatClient",
-        clerk_user_id: appUserId,
         platform: getCurrentPresencePlatform(),
         supports_voice_state_deltas: true,
       },
@@ -1097,7 +1096,6 @@ export function createChatGateway(
         op: GatewayOp.Identify,
         d: {
           name: "ChatClient",
-          clerk_user_id: userId,
           platform: getCurrentPresencePlatform(),
           supports_voice_state_deltas: true,
         },

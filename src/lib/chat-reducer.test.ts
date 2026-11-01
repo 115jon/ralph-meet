@@ -159,7 +159,7 @@ describe("chatReducer speaking sources", () => {
 
 describe("chatReducer voice channel profiles", () => {
   const fullMember: VoiceChannelMember = {
-    clerk_user_id: "user-1",
+    user_id: "user-1",
     name: "Alice",
     username: "alice",
     display_name: "Alice Display",
@@ -181,7 +181,7 @@ describe("chatReducer voice channel profiles", () => {
     });
 
     const compactMember: VoiceChannelMemberDelta = {
-      clerk_user_id: fullMember.clerk_user_id,
+      user_id: fullMember.user_id,
       self_mute: true,
       self_deaf: false,
       self_video: false,
@@ -195,7 +195,7 @@ describe("chatReducer voice channel profiles", () => {
 
     expect(next.voiceChannelStates["voice-1"]?.[0]).toEqual(
       expect.objectContaining({
-        clerk_user_id: "user-1",
+        user_id: "user-1",
         name: "Alice Display",
         username: "alice",
         display_name: "Alice Display",
@@ -215,7 +215,7 @@ describe("chatReducer voice channel profiles", () => {
     });
 
     const compactMember: VoiceChannelMemberDelta = {
-      clerk_user_id: fullMember.clerk_user_id,
+      user_id: fullMember.user_id,
       self_mute: true,
       self_deaf: false,
       self_video: false,
@@ -230,7 +230,7 @@ describe("chatReducer voice channel profiles", () => {
 
     const member = next.voiceChannelStates["voice-1"]?.[0];
     expect(member).toEqual({
-      clerk_user_id: "user-1",
+      user_id: "user-1",
       name: "Alice Display",
       username: "alice",
       display_name: "Alice Display",
@@ -254,7 +254,7 @@ describe("chatReducer voice channel profiles", () => {
 
     const next = chatReducer(state, {
       type: "UPDATE_MEMBER_PROFILE",
-      userId: fullMember.clerk_user_id,
+      userId: fullMember.user_id,
       username: "alice-updated",
       display_name: null,
       avatar_url: null,
@@ -279,7 +279,7 @@ describe("chatReducer voice channel profiles", () => {
         members: [
           {
             user: {
-              id: fullMember.clerk_user_id,
+              id: fullMember.user_id,
               username: "stale-user",
               display_name: "Stale Display",
               avatar_url: "https://example.com/stale.png",
@@ -328,7 +328,7 @@ describe("chatReducer voice channel profiles", () => {
         relationships: [
           {
             user: {
-              id: fullMember.clerk_user_id,
+              id: fullMember.user_id,
               username: "stale-user",
               display_name: "Stale Display",
               avatar_url: "https://example.com/stale.png",

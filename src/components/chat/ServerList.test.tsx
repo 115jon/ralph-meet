@@ -55,7 +55,7 @@ describe("ServerList voice activity", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "user-1",
+              user_id: "user-1",
               name: "Alice",
               display_name: "Alice",
               avatar_url: null,
@@ -116,7 +116,7 @@ describe("ServerList voice activity", () => {
         voiceChannelStates: {
           "vc-visible": [
             {
-              clerk_user_id: "user-1",
+              user_id: "user-1",
               name: "Alice",
               avatar_url: null,
               self_mute: false,
@@ -127,7 +127,7 @@ describe("ServerList voice activity", () => {
           ],
           "vc-hidden": [
             {
-              clerk_user_id: "user-2",
+              user_id: "user-2",
               name: "Bob",
               avatar_url: null,
               self_mute: false,
@@ -136,7 +136,7 @@ describe("ServerList voice activity", () => {
               self_stream: false,
             },
             {
-              clerk_user_id: "user-3",
+              user_id: "user-3",
               name: "Casey",
               avatar_url: null,
               self_mute: false,

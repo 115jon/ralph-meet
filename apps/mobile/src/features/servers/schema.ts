@@ -49,7 +49,7 @@ export const ReadStatesSchema = Schema.Struct({
 
 /** A member of a voice channel, from the gateway's voice channel events. */
 export const VoiceMemberSchema = Schema.Struct({
-  clerk_user_id: Schema.String,
+  user_id: Schema.String,
   name: Schema.optional(Schema.String),
   username: OptionalText,
   display_name: OptionalText,

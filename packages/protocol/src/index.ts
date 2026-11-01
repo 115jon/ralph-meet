@@ -21,6 +21,7 @@ export * from "./opcodes";
 export * from "./codec";
 export * from "./client-payloads";
 export * from "./server-payloads";
+export * from "./user-id";
 
 // ── Decoders, built once ───────────────────────────────────────────────────
 
