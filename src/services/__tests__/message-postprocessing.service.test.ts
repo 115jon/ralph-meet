@@ -384,6 +384,7 @@ describe("message postprocessing", () => {
       .fn()
       .mockRejectedValueOnce(new Error("notification gateway unavailable"))
       .mockResolvedValue(undefined);
+    const push = vi.fn(async () => undefined);
 
     await expect(
       processMessagePostprocessingTask(
@@ -395,6 +396,7 @@ describe("message postprocessing", () => {
           notify: true,
         },
         broadcast,
+        { push },
       ),
     ).rejects.toThrow("notification gateway unavailable");
 
@@ -416,9 +418,21 @@ describe("message postprocessing", () => {
         notify: true,
       },
       broadcast,
+      { push },
     );
 
     expect(broadcast).toHaveBeenCalledTimes(2);
+    // The first attempt pushed even though its broadcast failed; the replay
+    // found the existing notification and did not push again.
+    expect(push).toHaveBeenCalledOnce();
+    expect(push.mock.calls[0]).toEqual([
+      [
+        expect.objectContaining({
+          recipientId: "mentioned-1",
+          notificationId: "message:message-1:mention:mentioned-1",
+        }),
+      ],
+    ]);
     expect(broadcast.mock.calls[0]?.[2]).toMatchObject({
       id: "message:message-1:mention:mentioned-1",
     });
@@ -519,6 +533,20 @@ describe("message postprocessing", () => {
     expect(broadcast).toHaveLength(1);
     expect(duplicate).toHaveLength(1);
     expect(duplicate[0]?.data.id).toBe("notif-1");
+    // Only the first delivery pushes; a replay must not buzz the phone again.
+    expect(broadcast[0]?.push).toEqual({
+      recipientId: "mentioned-1",
+      notificationId: "notif-1",
+      type: "mention",
+      channelId: "channel-1",
+      serverId: "server-1",
+      messageId: "message-1",
+      senderName: "author",
+      channelName: "general",
+      serverName: "server",
+      content: "hello @mentioned",
+    });
+    expect(duplicate[0]?.push).toBeUndefined();
   });
 
   it("requires revisioned notification delivery to be newer than the clear watermark", async () => {

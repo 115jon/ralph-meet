@@ -4,6 +4,8 @@ export interface AppConfig {
   apiBaseUrl: string;
   kovaAuthUrl: string;
   kovaPublishableKey: string;
+  /** "development" | "preview" | "production": which build this is. */
+  appVariant: string;
 }
 
 // Set in app.config.ts `extra`; a missing value is a build mistake, so fail
@@ -20,4 +22,5 @@ export const config: AppConfig = {
   apiBaseUrl: readExtra("apiBaseUrl").replace(/\/$/, ""),
   kovaAuthUrl: readExtra("kovaAuthUrl").replace(/\/$/, ""),
   kovaPublishableKey: readExtra("kovaPublishableKey"),
+  appVariant: readExtra("appVariant"),
 };

@@ -15,18 +15,35 @@ export interface GatewayTicket {
   readonly protocols: string[];
 }
 
+/** The WebSocket subprotocols that carry `ticket`. */
+export function ticketProtocols(ticket: string): string[] {
+  return [SOCKET_PROTOCOL, `${TICKET_PROTOCOL_PREFIX}${ticket}`];
+}
+
+/** `path` on the API host as a ws(s):// URL. */
+export function socketUrl(path: string): string {
+  return `${config.apiBaseUrl.replace(/^http/, "ws")}${path}`;
+}
+
+/** POSTs a ticket request; a 401 rejects with ApiError (status 401). */
+export function requestSocketTicket<
+  S extends Schema.ConstraintDecoder<unknown>,
+>(body: Record<string, string>, schema: S): Promise<S["Type"]> {
+  return apiJson("/api/voice/socket-ticket", schema, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * One single-use ticket for the global chat socket. A 401 rejects with an
  * ApiError whose `status` RealtimeSocket reads as "the session is gone".
  */
 export async function acquireGatewayTicket(): Promise<GatewayTicket> {
-  const { ticket } = await apiJson("/api/voice/socket-ticket", TicketSchema, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ audience: "global" }),
-  });
-  return {
-    url: `${config.apiBaseUrl.replace(/^http/, "ws")}/api/gateway`,
-    protocols: [SOCKET_PROTOCOL, `${TICKET_PROTOCOL_PREFIX}${ticket}`],
-  };
+  const { ticket } = await requestSocketTicket(
+    { audience: "global" },
+    TicketSchema,
+  );
+  return { url: socketUrl("/api/gateway"), protocols: ticketProtocols(ticket) };
 }

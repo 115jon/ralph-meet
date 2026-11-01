@@ -1,37 +1,33 @@
-import { create } from "zustand";
+import { useCallSummary, type CallSummary } from "@/features/voice/store";
+import type { LedState } from "@/ui";
 
 export interface CallSegmentState {
   channel: string;
   status: string;
+  led: LedState;
   muted: boolean;
 }
 
-interface CallSegmentStore {
-  call: CallSegmentState | null;
-  setCall: (call: CallSegmentState | null) => void;
-  toggleMute: () => void;
+/** The head-count, or where the call is when it is not up. */
+export function callStatusText(call: CallSummary): string {
+  if (call.status === "joining") return "Joining";
+  if (call.status === "reconnecting") return "Reconnecting";
+  return `${call.count} in call`;
 }
 
-// Stub until the voice PR: nothing starts a call, only the You screen's dev
-// toggle does.
-const useCallSegmentStore = create<CallSegmentStore>((set) => ({
-  call: null,
-  setCall: (call) => set({ call }),
-  toggleMute: () =>
-    set((state) =>
-      state.call
-        ? { call: { ...state.call, muted: !state.call.muted } }
-        : state,
-    ),
-}));
+/** Live while connected; amber while joining or reconnecting. */
+export function callLed(call: CallSummary): LedState {
+  return call.status === "connected" ? "talk" : "idle";
+}
 
 /** The active call to show in the app bar, or null. */
 export function useCallSegment(): CallSegmentState | null {
-  return useCallSegmentStore((state) => state.call);
-}
-
-export function useCallSegmentActions() {
-  const setCall = useCallSegmentStore((state) => state.setCall);
-  const toggleMute = useCallSegmentStore((state) => state.toggleMute);
-  return { setCall, toggleMute };
+  const call = useCallSummary();
+  if (!call) return null;
+  return {
+    channel: call.channelName,
+    status: callStatusText(call),
+    led: callLed(call),
+    muted: call.muted,
+  };
 }

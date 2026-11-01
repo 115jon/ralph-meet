@@ -148,6 +148,27 @@ export function subscribeServers(ids: readonly string[]): void {
   }
 }
 
+// Voice presence lives on the chat socket, as on the web (chat-gateway.ts):
+// it is what puts the user under the channel in every member's tree. A send
+// while the socket is down is dropped; the voice session re-asserts its join
+// on every Ready and every 30 s, as useVoiceChannel does.
+
+export function sendVoiceChannelJoin(
+  d: MainClientPayload<GatewayOp.VoiceChannelJoin>,
+): void {
+  send({ op: GatewayOp.VoiceChannelJoin, d });
+}
+
+export function sendVoiceChannelLeave(channelId: string): void {
+  send({ op: GatewayOp.VoiceChannelLeave, d: { channel_id: channelId } });
+}
+
+export function sendVoiceStateUpdate(
+  d: MainClientPayload<GatewayOp.VoiceStateUpdate>,
+): void {
+  send({ op: GatewayOp.VoiceStateUpdate, d });
+}
+
 /** Message events for the open channel; one at a time, like the web. */
 export function subscribeChannel(id: string | null): void {
   if (id === channelId) return;
