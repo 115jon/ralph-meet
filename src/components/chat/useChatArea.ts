@@ -12,7 +12,6 @@ import {
 import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { isSoundEnabled } from "@/stores/useSoundSettingsStore";
 import {
   useCallback,
   useEffect,
@@ -193,7 +192,6 @@ export function useChatArea({
 
     if (previous.channelId !== channelId) return;
     if (!previous.loaded) return;
-    if (!isSoundEnabled("messageReceived")) return;
     if (areReconnectSoundsSuppressed()) return;
 
     if (
