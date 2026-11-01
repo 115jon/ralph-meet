@@ -1,22 +1,28 @@
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import {
-  useCallSegment,
-  useCallSegmentActions,
-} from "@/features/app-bar/call-segment";
-import {
-  RADIUS,
-  THEME_IDS,
-  THEME_LABELS,
-  useTheme,
-  useThemeOverride,
-} from "@/theme";
-import { Avatar, Button, Header, Led, Screen, Text } from "@/ui";
+import { useSession } from "@/features/auth/session";
+import { AppPanel } from "@/features/settings/AppPanel";
+import { CallsPanel } from "@/features/settings/CallsPanel";
+import { YouPanel } from "@/features/settings/YouPanel";
+import { mediaUrl } from "@/lib/api";
+import { FONT, useTheme } from "@/theme";
+import { Avatar, Header, Screen, Text } from "@/ui";
 
-const TABS = ["01 You", "02 Calls", "03 App"] as const;
-type TabId = (typeof TABS)[number];
+// The Studio settings on a phone: three index tabs, 01 You, 02 Calls, 03 App.
 
+const TABS = [
+  { id: "you", number: "01", label: "You" },
+  { id: "calls", number: "02", label: "Calls" },
+  { id: "app", number: "03", label: "App" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+/**
+ * C2 index tabs: equal cells on a 2px rule, a silkscreen number over a 17px
+ * Bricolage label; the chosen cell's rule and label are ink-1, its number
+ * accent.
+ */
 function IndexTabs({
   active,
   onChange,
@@ -27,30 +33,35 @@ function IndexTabs({
   const theme = useTheme();
   return (
     <View
-      style={{
-        flexDirection: "row",
-        borderBottomWidth: 1,
-        borderBottomColor: theme.line,
-      }}
+      accessibilityRole="tablist"
+      style={{ flexDirection: "row", paddingHorizontal: 16 }}
     >
       {TABS.map((tab) => {
-        const selected = tab === active;
+        const selected = tab.id === active;
         return (
           <Pressable
-            key={tab}
+            key={tab.id}
             accessibilityRole="tab"
+            accessibilityLabel={tab.label}
             accessibilityState={{ selected }}
-            onPress={() => onChange(tab)}
+            onPress={() => onChange(tab.id)}
             style={{
-              height: 40,
-              paddingHorizontal: 16,
-              justifyContent: "center",
+              flex: 1,
+              paddingTop: 8,
+              paddingBottom: 10,
+              gap: 2,
               borderBottomWidth: 2,
-              borderBottomColor: selected ? theme.accentInk : "transparent",
+              borderBottomColor: selected ? theme.ink1 : theme.line,
             }}
           >
-            <Text variant="silk" tone={selected ? "ink1" : "ink3"}>
-              {tab}
+            <Text variant="silk" tone={selected ? "accent" : "ink3"}>
+              {tab.number}
+            </Text>
+            <Text
+              tone={selected ? "ink1" : "ink3"}
+              style={{ fontFamily: FONT.name, fontSize: 17, lineHeight: 22 }}
+            >
+              {tab.label}
             </Text>
           </Pressable>
         );
@@ -59,98 +70,44 @@ function IndexTabs({
   );
 }
 
-function ThemePicker() {
-  const theme = useTheme();
-  const { override, setOverride } = useThemeOverride();
-  const options = [null, ...THEME_IDS] as const;
+function ProfileHeader() {
+  const user = useSession((s) => s.user);
+  const name = user?.display_name ?? user?.username ?? "You";
   return (
-    <View style={{ gap: 4 }}>
-      <Text variant="silk" tone="ink3" style={{ marginBottom: 4 }}>
-        Theme
-      </Text>
-      {options.map((id) => {
-        const selected = override === id;
-        return (
-          <Pressable
-            key={id ?? "system"}
-            accessibilityRole="radio"
-            accessibilityState={{ selected }}
-            onPress={() => setOverride(id)}
-            style={({ pressed }) => ({
-              height: 48,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              paddingHorizontal: 12,
-              borderRadius: RADIUS,
-              backgroundColor:
-                selected || pressed ? theme.tint2 : "transparent",
-            })}
-          >
-            <Led state={selected ? "talk" : "off"} />
-            <Text variant="row">{id ? THEME_LABELS[id] : "Follow system"}</Text>
-          </Pressable>
-        );
-      })}
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        padding: 16,
+      }}
+    >
+      <Avatar name={name} size={56} uri={mediaUrl(user?.avatar_url)} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="title" numberOfLines={1}>
+          {name}
+        </Text>
+        {user ? (
+          <Text variant="row" tone="ink3" numberOfLines={1}>
+            @{user.username}
+          </Text>
+        ) : null}
+      </View>
     </View>
-  );
-}
-
-function DevCallToggle() {
-  const call = useCallSegment();
-  const { setCall } = useCallSegmentActions();
-  return (
-    <Button
-      variant="ghost"
-      label={call ? "End fake call" : "Fake a call"}
-      onPress={() =>
-        setCall(
-          call
-            ? null
-            : { channel: "Standup", status: "3 in the room", muted: false },
-        )
-      }
-    />
   );
 }
 
 export default function YouScreen() {
-  const [tab, setTab] = useState<TabId>("01 You");
+  const [tab, setTab] = useState<TabId>("you");
   return (
     <Screen>
       <Header title="You" />
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          padding: 16,
-        }}
-      >
-        <Avatar name="Jon" size={56} presence="talk" />
-        <View>
-          <Text variant="title">Jon</Text>
-          <Text variant="silk" tone="ink3">
-            Online
-          </Text>
-        </View>
-      </View>
+      <ProfileHeader />
       <IndexTabs active={tab} onChange={setTab} />
-      <View style={{ padding: 16, gap: 16 }}>
-        {tab === "01 You" ? <ThemePicker /> : null}
-        {tab === "02 Calls" ? (
-          <Text variant="body" tone="ink2">
-            Call history lands with the voice release.
-          </Text>
-        ) : null}
-        {tab === "03 App" ? (
-          <>
-            <Text variant="body" tone="ink2">
-              Developer
-            </Text>
-            <DevCallToggle />
-          </>
-        ) : null}
+      <View style={{ paddingHorizontal: 4, paddingVertical: 20 }}>
+        {tab === "you" ? <YouPanel /> : null}
+        {tab === "calls" ? <CallsPanel /> : null}
+        {tab === "app" ? <AppPanel /> : null}
       </View>
     </Screen>
   );

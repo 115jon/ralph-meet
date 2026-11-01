@@ -1,0 +1,28 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--
+    A voice call that keeps running behind other apps and with the screen off.
+    Android 14+ wants the generic FOREGROUND_SERVICE permission plus one per
+    service type. microphone keeps capture alive in the background (it must be
+    started while the app is visible); phoneCall marks it as the app's call,
+    which needs MANAGE_OWN_CALLS (merged in from core-telecom).
+  -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+  <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+  <!-- The ongoing call notification (runtime permission on Android 13+). -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Bluetooth headsets as call endpoints (runtime permission on Android 12+). -->
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+  <application>
+    <service
+      android:name=".RalphCallService"
+      android:exported="false"
+      android:foregroundServiceType="microphone|phoneCall" />
+    <receiver
+      android:name=".CallActionReceiver"
+      android:exported="false" />
+  </application>
+</manifest>

@@ -17,6 +17,7 @@ import { markSharesDeletedForMessage } from "./message-share.service";
 import type { BroadcastDescriptor } from "./server.service";
 import { clog } from "@/lib/console-logger";
 import { extractAndProcessEmbedsWithStatus } from "./embed-fetcher";
+import type { MessagePush } from "./push.service";
 
 const messageHistoryLog = clog("message-history");
 
@@ -890,11 +891,23 @@ export interface MessagePostprocessingOutcome {
   retryEmbeds: boolean;
 }
 
+export interface MessagePostprocessingOptions {
+  genId?: () => string;
+  /**
+   * Sends the pushes for notifications delivered for the first time. Runs
+   * alongside the gateway broadcasts and must not throw.
+   */
+  push?: (pushes: MessagePush[]) => Promise<void>;
+}
+
 export async function processMessagePostprocessingTask(
   db: D1Database,
   task: MessagePostprocessingTask,
   broadcast: MessagePostprocessingBroadcast,
-  genId: () => string = () => crypto.randomUUID(),
+  {
+    genId = () => crypto.randomUUID(),
+    push,
+  }: MessagePostprocessingOptions = {},
 ): Promise<MessagePostprocessingOutcome> {
   const message = (await db
     .prepare(
@@ -1017,13 +1030,22 @@ export async function processMessagePostprocessingTask(
         `message:${task.messageId}:${type}:${userId}`,
     });
 
-    for (const notification of notifBroadcasts) {
-      if (!(await isCurrentRevision())) return { retryEmbeds: false };
-      await broadcast(
-        { kind: "user", id: notification.userId },
-        notification.event,
-        notification.data,
-      );
+    const pushes = notifBroadcasts.flatMap((n) => (n.push ? [n.push] : []));
+    const pushed =
+      push && pushes.length > 0 && (await isCurrentRevision())
+        ? push(pushes)
+        : Promise.resolve();
+    try {
+      for (const notification of notifBroadcasts) {
+        if (!(await isCurrentRevision())) return { retryEmbeds: false };
+        await broadcast(
+          { kind: "user", id: notification.userId },
+          notification.event,
+          notification.data,
+        );
+      }
+    } finally {
+      await pushed;
     }
   }
 
@@ -1306,6 +1328,14 @@ export interface NotificationBroadcast {
   userId: string;
   event: string;
   data: Record<string, unknown>;
+  /** Set the first time this notification is delivered; retries leave it out. */
+  push?: MessagePush;
+}
+
+/** `fresh`: inserted now, not found from an earlier attempt. */
+interface DeliveredNotification {
+  id: string;
+  fresh: boolean;
 }
 
 async function insertMessageNotification(
@@ -1322,7 +1352,7 @@ async function insertMessageNotification(
     createdAt: string;
     contentRevision?: number;
   },
-): Promise<string | null> {
+): Promise<DeliveredNotification | null> {
   if (values.contentRevision === undefined) {
     await db
       .prepare(
@@ -1343,7 +1373,7 @@ async function insertMessageNotification(
         values.createdAt,
       )
       .run();
-    return values.id;
+    return { id: values.id, fresh: true };
   }
 
   const dedupeKey = `${values.messageId}:${values.type}:${values.userId}`;
@@ -1412,10 +1442,10 @@ async function insertMessageNotification(
       )
       .bind(dedupeKey)
       .first()) as { notification_id: string } | null;
-    return (
+    const id =
       marker?.notification_id ??
-      (Number(notificationResult?.meta?.changes ?? 0) > 0 ? values.id : null)
-    );
+      (Number(notificationResult?.meta?.changes ?? 0) > 0 ? values.id : null);
+    return id ? { id, fresh: true } : null;
   }
 
   const marker = (await db
@@ -1432,7 +1462,7 @@ async function insertMessageNotification(
     )
     .bind(dedupeKey, values.userId)
     .first()) as { notification_id: string } | null;
-  return marker?.notification_id ?? null;
+  return marker ? { id: marker.notification_id, fresh: false } : null;
 }
 
 export async function generateMessageNotifications(
@@ -1475,6 +1505,27 @@ export async function generateMessageNotifications(
   } | null;
 
   const serverId = channelInfo?.server_id ?? null;
+  const senderName = opts.authorDisplayName?.trim() || opts.authorUsername;
+  const pushFor = (
+    delivered: DeliveredNotification,
+    recipientId: string,
+    type: "mention" | "reply" | "dm",
+  ): MessagePush | undefined =>
+    delivered.fresh
+      ? {
+          recipientId,
+          notificationId: delivered.id,
+          type,
+          channelId: opts.channelId,
+          serverId: type === "dm" ? null : serverId,
+          messageId: opts.messageId,
+          senderName,
+          channelName:
+            type === "dm" ? null : (channelInfo?.channel_name ?? null),
+          serverName: type === "dm" ? null : (channelInfo?.server_name ?? null),
+          content: snippet,
+        }
+      : undefined;
 
   // 1. Parse @username mentions
   const mentionRegex = /@(\w+)/g;
@@ -1506,7 +1557,7 @@ export async function generateMessageNotifications(
       notifiedUserIds.add(mentionedId);
 
       const notifId = opts.notificationId?.("mention", mentionedId) ?? genId();
-      const deliveredNotificationId = await insertMessageNotification(db, {
+      const delivered = await insertMessageNotification(db, {
         id: notifId,
         userId: mentionedId,
         type: "mention",
@@ -1519,12 +1570,13 @@ export async function generateMessageNotifications(
         contentRevision: opts.contentRevision,
       });
 
-      if (deliveredNotificationId) {
+      if (delivered) {
         broadcasts.push({
           userId: mentionedId,
           event: "NOTIFICATION_CREATE",
+          push: pushFor(delivered, mentionedId, "mention"),
           data: {
-            id: deliveredNotificationId,
+            id: delivered.id,
             type: "mention",
             channel_id: opts.channelId,
             server_id: serverId,
@@ -1560,7 +1612,7 @@ export async function generateMessageNotifications(
     ) {
       const notifId =
         opts.notificationId?.("reply", parentMsg.author_id) ?? genId();
-      const deliveredNotificationId = await insertMessageNotification(db, {
+      const delivered = await insertMessageNotification(db, {
         id: notifId,
         userId: parentMsg.author_id,
         type: "reply",
@@ -1573,12 +1625,13 @@ export async function generateMessageNotifications(
         contentRevision: opts.contentRevision,
       });
 
-      if (deliveredNotificationId) {
+      if (delivered) {
         broadcasts.push({
           userId: parentMsg.author_id,
           event: "NOTIFICATION_CREATE",
+          push: pushFor(delivered, parentMsg.author_id, "reply"),
           data: {
-            id: deliveredNotificationId,
+            id: delivered.id,
             type: "reply",
             channel_id: opts.channelId,
             server_id: serverId,
@@ -1609,7 +1662,7 @@ export async function generateMessageNotifications(
         notifiedUserIds.add(recipientId);
 
         const notifId = opts.notificationId?.("dm", recipientId) ?? genId();
-        const deliveredNotificationId = await insertMessageNotification(db, {
+        const delivered = await insertMessageNotification(db, {
           id: notifId,
           userId: recipientId,
           type: "dm",
@@ -1622,12 +1675,13 @@ export async function generateMessageNotifications(
           contentRevision: opts.contentRevision,
         });
 
-        if (deliveredNotificationId) {
+        if (delivered) {
           broadcasts.push({
             userId: recipientId,
             event: "NOTIFICATION_CREATE",
+            push: pushFor(delivered, recipientId, "dm"),
             data: {
-              id: deliveredNotificationId,
+              id: delivered.id,
               type: "dm",
               channel_id: opts.channelId,
               server_id: null,

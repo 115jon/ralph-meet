@@ -5,12 +5,25 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import { useSession } from "@/features/auth/session";
+import { useCurrentUser } from "@/features/auth/use-current-user";
+import { ImageViewer } from "@/features/media/ImageViewer";
+import { loadCallPreferences } from "@/features/preferences/call-preferences";
+import { configurePush } from "@/features/push/push";
+import { usePush } from "@/features/push/use-push";
+import { useRealtime } from "@/features/realtime/use-realtime";
 import { FONT_ASSETS, ThemeProvider, useTheme } from "@/theme";
+import { ToastHost } from "@/ui";
 
 void SplashScreen.preventAutoHideAsync();
+configurePush();
 
 function ThemedStack() {
   const theme = useTheme();
+  const signedIn = useSession((s) => s.status === "signed-in");
+  useCurrentUser();
+  useRealtime();
+  usePush();
   return (
     <>
       <StatusBar style={theme.scheme === "dark" ? "light" : "dark"} />
@@ -19,14 +32,36 @@ function ThemedStack() {
           headerShown: false,
           contentStyle: { backgroundColor: theme.ply0 },
         }}
-      />
+      >
+        <Stack.Screen name="index" />
+        <Stack.Protected guard={signedIn}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="channel/[id]" />
+          <Stack.Screen name="dm/[id]" />
+          <Stack.Screen
+            name="call"
+            options={{ animation: "slide_from_bottom" }}
+          />
+        </Stack.Protected>
+        <Stack.Protected guard={!signedIn}>
+          <Stack.Screen name="sign-in" />
+        </Stack.Protected>
+      </Stack>
+      <ImageViewer />
+      <ToastHost />
     </>
   );
 }
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
-  const ready = fontsLoaded || fontError !== null;
+  const sessionReady = useSession((s) => s.status !== "loading");
+  const ready = (fontsLoaded || fontError !== null) && sessionReady;
+
+  useEffect(() => {
+    void useSession.getState().hydrate();
+    void loadCallPreferences();
+  }, []);
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
