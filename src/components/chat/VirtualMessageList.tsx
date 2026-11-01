@@ -37,6 +37,7 @@ import {
 } from "./NewMessageSeparator";
 import { setMessageListScrolling } from "./message-list-scroll";
 import { estimateListItemSize } from "./message-row-height";
+import { CallRecordRow } from "./CallRecordRow";
 import { useMessageTimeFormat } from "./message-time";
 import { buildMessageRows, type MessageRow } from "./message-rows";
 import { isStickyDayVisible } from "./sticky-day";
@@ -240,24 +241,32 @@ const VirtualMessageRow = memo(function VirtualMessageRow({
     >
       {dayLabel && <DayDivider label={dayLabel} iso={message.created_at} />}
       {showSeparator && <NewMessageSeparator />}
-      <MessageItem
-        id={`message-${message.id}`}
-        message={message}
-        showHeader={showHeader}
-        currentUserId={currentUserId}
-        canPin={canPin}
-        canDeleteMessages={canDeleteMessages}
-        onReply={onReply}
-        onPin={onPin}
-        onUnpin={onUnpin}
-        onJump={onJump}
-        onBan={onBan}
-        onThread={onThread}
-        onMediaPlay={handleMediaPlay}
-        onMediaStop={handleMediaStop}
-        onVisible={onMessageVisible ? handleVisible : undefined}
-        onHeightChange={onHeightChange}
-      />
+      {message.type === "call" && message.call ? (
+        <CallRecordRow
+          message={message}
+          call={message.call}
+          currentUserId={currentUserId}
+        />
+      ) : (
+        <MessageItem
+          id={`message-${message.id}`}
+          message={message}
+          showHeader={showHeader}
+          currentUserId={currentUserId}
+          canPin={canPin}
+          canDeleteMessages={canDeleteMessages}
+          onReply={onReply}
+          onPin={onPin}
+          onUnpin={onUnpin}
+          onJump={onJump}
+          onBan={onBan}
+          onThread={onThread}
+          onMediaPlay={handleMediaPlay}
+          onMediaStop={handleMediaStop}
+          onVisible={onMessageVisible ? handleVisible : undefined}
+          onHeightChange={onHeightChange}
+        />
+      )}
     </div>
   );
 });

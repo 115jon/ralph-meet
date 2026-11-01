@@ -1689,6 +1689,123 @@ describe("MeetingRoom lifecycle", () => {
     callee.close();
   });
 
+  it("answers a ring over REST for the callee only, and saves a declined call in the DM", async () => {
+    for (const sql of [
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS dm_recipients (channel_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS relationships (user_id TEXT NOT NULL, target_user_id TEXT NOT NULL, type INTEGER NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT, display_name TEXT, avatar_url TEXT, avatar_display TEXT, status TEXT)",
+      "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, author_id TEXT NOT NULL, content TEXT NOT NULL, reply_to_id TEXT, created_at TEXT, content_revision INTEGER, type TEXT, metadata TEXT)",
+    ]) {
+      await env.DB.prepare(sql).run();
+    }
+
+    const roomName = crypto.randomUUID();
+    const channelId = `call-rest-${crypto.randomUUID()}`;
+    const callerId = `call-rest-caller-${crypto.randomUUID()}`;
+    const calleeId = `call-rest-callee-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, NULL, 'dm')",
+    )
+      .bind(channelId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?), (?, ?)",
+    )
+      .bind(channelId, callerId, channelId, calleeId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO users (id, username, display_name) VALUES (?, 'rest-caller', 'Rest Caller')",
+    )
+      .bind(callerId)
+      .run();
+
+    const caller = await openMeetingSocket(roomName, callerId);
+    await identifyMeetingSocket(caller, { name: "Rest Caller" });
+    const callee = await openMeetingSocket(roomName, calleeId);
+    await identifyMeetingSocket(callee, { name: "Rest Callee" });
+    const room = meetingRoom(roomName);
+    const answer = (path: string, callId: string, userId: string) =>
+      room.fetch(`https://internal/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ call_id: callId, user_id: userId }),
+      });
+    const ringOnce = async () => {
+      const ring = nextDispatchEvent(callee, "CALL_RING");
+      caller.send(
+        JSON.stringify({
+          op: 36,
+          d: { target_user_id: calleeId, channel_id: channelId },
+        }),
+      );
+      return ((await ring).d as { data: { call_id: string } }).data.call_id;
+    };
+    const stopFor = (socket: WebSocket, callId: string) =>
+      nextDispatchEventMatching(
+        socket,
+        "CALL_RING_STOP",
+        (message) =>
+          (message.d as { data?: { call_id?: string } }).data?.call_id ===
+          callId,
+      );
+
+    // Accept: the caller is refused, an unknown call is gone, the callee wins.
+    const accepted = await ringOnce();
+    expect((await answer("call-accept", accepted, callerId)).status).toBe(403);
+    expect((await answer("call-accept", "nope", calleeId)).status).toBe(404);
+    const acceptStop = stopFor(caller, accepted);
+    expect((await answer("call-accept", accepted, calleeId)).status).toBe(200);
+    await expect(acceptStop).resolves.toMatchObject({
+      d: { data: { call_id: accepted, reason: "accepted" } },
+    });
+    // A second answer (notification, then the app) is still fine.
+    expect((await answer("call-accept", accepted, calleeId)).status).toBe(200);
+
+    // Hang up (the caller leaves the empty call), then ring again and decline.
+    caller.send(JSON.stringify({ op: 34, d: { channel_id: channelId } }));
+    const declined = await ringOnce();
+    const declineStop = stopFor(caller, declined);
+    const record = nextDispatchEventMatching(
+      caller,
+      "MESSAGE_CREATE",
+      (message) =>
+        (message.d as { data?: { call?: { call_id?: string } } }).data?.call
+          ?.call_id === declined,
+    );
+    expect((await answer("call-decline", declined, calleeId)).status).toBe(200);
+    await expect(declineStop).resolves.toMatchObject({
+      d: { data: { call_id: declined, reason: "declined" } },
+    });
+    await expect(record).resolves.toMatchObject({
+      d: {
+        data: {
+          channel_id: channelId,
+          author_id: callerId,
+          type: "call",
+          content: "Declined call",
+          call: {
+            call_id: declined,
+            outcome: "declined",
+            caller_id: callerId,
+            callee_id: calleeId,
+          },
+        },
+      },
+    });
+    const stored = await env.DB.prepare(
+      "SELECT type, metadata FROM messages WHERE channel_id = ? AND type = 'call'",
+    )
+      .bind(channelId)
+      .all<{ type: string; metadata: string }>();
+    expect(
+      stored.results.map((row) => JSON.parse(row.metadata).outcome).sort(),
+    ).toEqual(["declined", "ended"]);
+
+    caller.close();
+    callee.close();
+  });
+
   it("keeps a throttled background tab (one heartbeat a minute) and prunes a dead one", async () => {
     const roomName = crypto.randomUUID();
     const userId = `throttled-${crypto.randomUUID()}`;

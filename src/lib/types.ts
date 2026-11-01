@@ -2,6 +2,7 @@ import type { MediaContentFilter } from "@/lib/media-content-filter";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { DisplayNameStyle } from "@/lib/profile-customization";
 import type { PresencePlatform } from "@/lib/presence-platform";
+import type { CallRecord } from "@ralph/protocol";
 
 // ============================================================================
 // Gateway protocol re-exports. The wire protocol (opcodes, codes, payload
@@ -369,6 +370,9 @@ export interface Message {
   reply_count?: number;
   /** Durable server revision used to reject reordered realtime updates */
   content_revision?: number;
+  /** A system message: "call" is a DM call record, with its outcome in `call`. */
+  type?: "call";
+  call?: CallRecord;
 }
 
 /** Attachment object */

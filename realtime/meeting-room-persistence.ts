@@ -1,6 +1,7 @@
 import { normalizeUserIdField } from "../src/lib/gateway-protocol";
 
 export const PENDING_CALLS_STORAGE_KEY = "pendingCalls";
+export const ACTIVE_CALLS_STORAGE_KEY = "activeCalls";
 export const SPATIAL_AUDIO_STORAGE_PREFIX = "spatialAudio:";
 const MAX_SPATIAL_MANUAL_POSITIONS = 64;
 const MAX_SPATIAL_AUDIO_STATE_BYTES = 32 * 1024;
@@ -21,6 +22,17 @@ export interface StoredPendingCall {
   calleeUsername?: string;
   calleeDisplayName?: string | null;
   calleeAvatar?: string | null;
+  /** The callee's phones were rung over FCM: the ring outlives their sockets. */
+  pushed?: boolean;
+}
+
+/** An answered DM call, until its voice channel empties. */
+export interface StoredActiveCall {
+  callId: string;
+  callerId: string;
+  calleeId: string;
+  channelId: string;
+  acceptedAt: number;
 }
 
 export interface SpatialAudioState {
@@ -67,7 +79,8 @@ function isStoredPendingCall(value: unknown): value is StoredPendingCall {
     isOptionalString(value.calleeName) &&
     isOptionalString(value.calleeUsername) &&
     isOptionalString(value.calleeDisplayName) &&
-    isOptionalString(value.calleeAvatar)
+    isOptionalString(value.calleeAvatar) &&
+    (value.pushed === undefined || typeof value.pushed === "boolean")
   );
 }
 
@@ -89,6 +102,7 @@ export function serializePendingCall(
     calleeUsername: call.calleeUsername,
     calleeDisplayName: call.calleeDisplayName,
     calleeAvatar: call.calleeAvatar,
+    pushed: call.pushed,
   };
 }
 
@@ -142,6 +156,52 @@ export function restorePendingCalls(
     calls: new Map(Object.entries(restored.valid)),
     hadInvalidEntries,
   };
+}
+
+function isStoredActiveCall(value: unknown): value is StoredActiveCall {
+  return (
+    isRecord(value) &&
+    typeof value.callId === "string" &&
+    typeof value.callerId === "string" &&
+    typeof value.calleeId === "string" &&
+    typeof value.channelId === "string" &&
+    isFiniteNumber(value.acceptedAt)
+  );
+}
+
+/** Active calls as stored: by channel id. */
+export interface StoredActiveCalls {
+  [channelId: string]: StoredActiveCall;
+}
+
+export function serializeActiveCalls(
+  calls: ReadonlyMap<string, StoredActiveCall>,
+): StoredActiveCalls {
+  const serialized: StoredActiveCalls = {};
+  for (const [channelId, call] of calls) {
+    serialized[channelId] = {
+      callId: call.callId,
+      callerId: call.callerId,
+      calleeId: call.calleeId,
+      channelId: call.channelId,
+      acceptedAt: call.acceptedAt,
+    };
+  }
+  return serialized;
+}
+
+/** Active calls by channel id; malformed entries are dropped. */
+export function restoreActiveCalls(
+  value: unknown,
+): Map<string, StoredActiveCall> {
+  const calls = new Map<string, StoredActiveCall>();
+  if (!isRecord(value)) return calls;
+  for (const [channelId, candidate] of Object.entries(value)) {
+    if (isStoredActiveCall(candidate) && candidate.channelId === channelId) {
+      calls.set(channelId, candidate);
+    }
+  }
+  return calls;
 }
 
 export function getSpatialAudioStorageKey(roomOrChannelId: string): string {

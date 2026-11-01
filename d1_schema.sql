@@ -122,7 +122,10 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT,
     embeds TEXT DEFAULT '[]',
-    content_revision INTEGER NOT NULL DEFAULT 0
+    content_revision INTEGER NOT NULL DEFAULT 0,
+    -- NULL = written by a person; 'call' = a DM call record (see migration 037)
+    type TEXT,
+    metadata TEXT
 );
 
 CREATE TABLE IF NOT EXISTS message_postprocessing_jobs (

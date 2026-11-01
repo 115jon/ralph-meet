@@ -1,7 +1,7 @@
 // The gateway wire protocol shared by every client and the Durable Objects:
-// opcodes, codes, the codec, every client payload schema, and the server
-// payloads of the chat socket. Schema only: no Effect runtime modules, no
-// browser, React Native or Worker globals.
+// opcodes, codes, the codec, every client payload schema, the server payloads
+// of the chat socket, and the DM call record. Schema only: no Effect runtime
+// modules, no browser, React Native or Worker globals.
 //
 // The web app re-exports this from src/lib/gateway-protocol, which adds the
 // call sockets' server rules (they carry the web app's voice types).
@@ -22,6 +22,7 @@ export * from "./codec";
 export * from "./client-payloads";
 export * from "./server-payloads";
 export * from "./user-id";
+export * from "./call-record";
 
 // ── Decoders, built once ───────────────────────────────────────────────────
 
