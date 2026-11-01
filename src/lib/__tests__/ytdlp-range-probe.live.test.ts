@@ -2,23 +2,16 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveYouTubePlayback } from "../ytdlp/youtube";
+import { resolvePlayableYouTubeAudio } from "../ytdlp/youtube";
 
 const OUTPUT_DIR = join(tmpdir(), "ralph-meet-ytdlp-range-probe");
 const OUTPUT_FILE = join(OUTPUT_DIR, "VtcP0PFifpE-worker-native.m4a");
 
 describe("yt-dlp live range probe", () => {
   it("resolves a YouTube audio URL that survives the second chunk request", async () => {
-    const resolved = await resolveYouTubePlayback(
-      "https://www.youtube.com/watch?v=VtcP0PFifpE",
-      {
-        preferredKind: "audio",
-        preferredContainer: "mp4",
-        includeFormats: true,
-      },
-    );
+    const resolved = await resolvePlayableYouTubeAudio("VtcP0PFifpE", "mp4");
 
-    const url = resolved.selectedFormat?.url;
+    const url = resolved.url;
     expect(url).toBeTruthy();
 
     const chunk1 = await fetch(url!, {
@@ -54,18 +47,18 @@ describe("yt-dlp live range probe", () => {
   }, 120_000);
 
   it("downloads the full resolved audio file and writes it to disk", async () => {
-    const resolved = await resolveYouTubePlayback(
-      "https://www.youtube.com/watch?v=VtcP0PFifpE",
-      {
-        preferredKind: "audio",
-        preferredContainer: "mp4",
-        includeFormats: true,
-      },
-    );
+    const resolved = await resolvePlayableYouTubeAudio("VtcP0PFifpE", "mp4");
 
-    const url = resolved.selectedFormat?.url;
+    const url = resolved.url;
     expect(url).toBeTruthy();
-    const totalBytes = resolved.selectedFormat?.contentLength;
+    // The muxed fallback (itag 18) has no contentLength in the player answer.
+    const totalBytes =
+      resolved.contentLength ??
+      Number(
+        (await fetch(url!, { headers: { Range: "bytes=0-1" } })).headers
+          .get("Content-Range")
+          ?.split("/")[1],
+      );
     expect(totalBytes).toBeGreaterThan(1024 * 1024);
 
     const chunkSize = 1024 * 1024;
