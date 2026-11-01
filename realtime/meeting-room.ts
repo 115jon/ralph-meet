@@ -3021,11 +3021,8 @@ export class MeetingRoom extends DurableObject<Env> {
       this.generateTurnCredentials(),
     ]);
 
-    const participants: VoiceState[] = [];
-    for (const [, data] of this.sessions) {
-      if (data.standby) continue;
-      participants.push(this.buildVoiceState(data));
-    }
+    // Clients take this Resumed's roster as the participant list, like any.
+    const participants = this.buildRoomRoster();
 
     this.sendTo(ws, {
       op: Op.Resumed,

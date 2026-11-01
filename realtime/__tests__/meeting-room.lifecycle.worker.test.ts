@@ -3528,6 +3528,16 @@ describe("MeetingRoom lifecycle", () => {
       expect.objectContaining({ id: sharerId, self_stream: true }),
     );
 
+    // A credential refresh answers with a Resumed roster too.
+    const refreshed = nextMessageWithOpcode(late, 9);
+    late.send(JSON.stringify({ op: 40, d: {} }));
+    expect(
+      ((await refreshed).d as { participants: Array<Record<string, unknown>> })
+        .participants,
+    ).toContainEqual(
+      expect.objectContaining({ id: sharerId, self_stream: true }),
+    );
+
     // When the sharer resumes, the others hear it again in full (an update
     // with its profile), so a client that dropped it brings it back.
     const reannounced = nextMessageWithOpcodeMatching(
