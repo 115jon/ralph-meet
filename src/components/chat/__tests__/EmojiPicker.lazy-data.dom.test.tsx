@@ -17,11 +17,32 @@ vi.mock("@emoji-mart/data", () => ({
   default: { categories: [], emojis: {}, aliases: {} },
 }));
 vi.mock("@emoji-mart/data/sets/15/native.json", async () => {
-  const real = (
+  const full = (
     (await vi.importActual("@emoji-mart/data/sets/15/native.json")) as {
-      default: Record<string, unknown>;
+      default: {
+        categories: { id: string; emojis: string[] }[];
+        emojis: Record<string, unknown>;
+        aliases: Record<string, unknown>;
+      };
     }
   ).default;
+  // Every category, but only its first few emoji: rendering all ~1900 in
+  // jsdom took ~4.5 s and timed the test out under CI load. The assertions
+  // only need the category rail and :grinning:.
+  const categories = full.categories.map((category) => ({
+    ...category,
+    emojis: category.emojis.slice(0, 4),
+  }));
+  const kept = new Set(categories.flatMap((category) => category.emojis));
+  const real = {
+    categories,
+    emojis: Object.fromEntries(
+      Object.entries(full.emojis).filter(([id]) => kept.has(id)),
+    ),
+    aliases: Object.fromEntries(
+      Object.entries(full.aliases).filter(([, id]) => kept.has(String(id))),
+    ),
+  };
   return {
     default: {
       get categories() {

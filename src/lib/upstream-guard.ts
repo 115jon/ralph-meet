@@ -72,6 +72,22 @@ export interface GuardedFetchOptions extends SafeFetchOptions {
   tripOn?: ReadonlyArray<number>;
 }
 
+/** How a thrown error counts against a provider's circuit. */
+export type GuardErrorOutcome =
+  | "failure"
+  | "ignore"
+  | { trip: { retryAfterSeconds?: number } };
+
+export interface GuardedRunOptions {
+  /** Statuses that open the circuit at once. 429 always does. */
+  tripOn?: ReadonlyArray<number>;
+  /**
+   * Decide what a thrown error means for the circuit. Default: a soft
+   * failure (network error), like `fetch`.
+   */
+  classifyError?: (error: unknown) => GuardErrorOutcome;
+}
+
 export interface UpstreamGuard {
   /** Milliseconds until the provider may be called again; 0 when closed. */
   remainingMs(provider: string): number;
@@ -82,6 +98,16 @@ export interface UpstreamGuard {
   recordFailure(provider: string): void;
   /** Open the circuit now (429, a bot wall, an API's rate-limit code). */
   trip(provider: string, retryAfterSeconds?: number): void;
+  /**
+   * Any call that yields a `Response`, behind the provider's circuit. This is
+   * what `fetch` is built on; the egress proxy client uses it to guard
+   * requests that do not go straight to the upstream.
+   */
+  run(
+    provider: string,
+    call: () => Promise<Response>,
+    options?: GuardedRunOptions,
+  ): Promise<Response>;
   /**
    * `safeFetch` behind the provider's circuit. Statuses are returned to the
    * caller as usual; the guard only watches them.
@@ -163,13 +189,17 @@ export function createUpstreamGuard(
     recordSuccess,
     recordFailure,
     trip,
-    async fetch(provider, input, init, options) {
+    async run(provider, call, options) {
       assertClosed(provider);
       let response: Response;
       try {
-        response = await safeFetch(input, init, options);
+        response = await call();
       } catch (error) {
-        recordFailure(provider);
+        const outcome = options?.classifyError?.(error) ?? "failure";
+        if (outcome === "failure") recordFailure(provider);
+        else if (outcome !== "ignore") {
+          trip(provider, outcome.trip.retryAfterSeconds);
+        }
         throw error;
       }
       const status = response.status;
@@ -181,6 +211,11 @@ export function createUpstreamGuard(
         recordSuccess(provider);
       }
       return response;
+    },
+    fetch(provider, input, init, options) {
+      return guard.run(provider, () => safeFetch(input, init, options), {
+        tripOn: options?.tripOn,
+      });
     },
     reset() {
       states.clear();
