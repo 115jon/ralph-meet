@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { CaretDown } from "phosphor-react-native";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -8,10 +8,12 @@ import { callLed } from "@/features/app-bar/call-segment";
 import { CallDock } from "@/features/voice/CallDock";
 import { ParticipantTile } from "@/features/voice/ParticipantTile";
 import {
-  useCallSummary,
-  useParticipantIds,
   type CallStatus,
+  type CallTile,
+  useCallSummary,
+  useCallTiles,
 } from "@/features/voice/store";
+import { useWatchCallVideo } from "@/features/voice/use-watch-video";
 import { useTheme } from "@/theme";
 import { IconButton, Led, Text } from "@/ui";
 
@@ -22,27 +24,76 @@ const STATUS_LABEL: Record<CallStatus, string> = {
 };
 
 /** Two tiles a row; an odd one out spans the first row. */
-function rowsOf(ids: readonly string[]): string[][] {
-  const rows: string[][] = [];
+function rowsOf<T>(items: readonly T[]): T[][] {
+  const rows: T[][] = [];
   let index = 0;
-  if (ids.length % 2 === 1) {
-    rows.push([ids[0] ?? ""]);
+  if (items.length % 2 === 1) {
+    rows.push(items.slice(0, 1));
     index = 1;
   }
-  for (; index < ids.length; index += 2) {
-    rows.push(ids.slice(index, index + 2));
+  for (; index < items.length; index += 2) {
+    rows.push(items.slice(index, index + 2));
   }
   return rows;
 }
 
-/** The call: participants fill the height between the header and the dock. */
+const FILMSTRIP_HEIGHT = 96;
+
+interface StageProps {
+  staged: CallTile;
+  others: readonly CallTile[];
+  onPress: (tile: CallTile) => void;
+}
+
+/** One tile large; the rest in a filmstrip below it. */
+function Stage({ staged, others, onPress }: StageProps) {
+  return (
+    <View style={{ flex: 1, gap: 8, paddingHorizontal: 12, paddingTop: 8 }}>
+      <ParticipantTile tile={staged} staged onPress={onPress} />
+      {others.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, height: FILMSTRIP_HEIGHT }}
+          contentContainerStyle={{ gap: 8 }}
+        >
+          {others.map((tile) => (
+            <ParticipantTile
+              key={tile.key}
+              tile={tile}
+              compact
+              onPress={onPress}
+              style={{ flex: 0, width: 128, height: FILMSTRIP_HEIGHT }}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * The call: tiles fill the height between the header and the dock. Tapping a
+ * tile puts it on the stage (a shared screen is easiest to read there);
+ * tapping it again returns to the grid. Video is pulled only while this
+ * screen is visible.
+ */
 export default function CallScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const call = useCallSummary();
-  const ids = useParticipantIds();
+  const tiles = useCallTiles();
   const inCall = call !== null;
+  const [stagedKey, setStagedKey] = useState<string | null>(null);
+  // A staged tile that went away (they left, the share ended) leaves the grid.
+  const staged = tiles.find((tile) => tile.key === stagedKey) ?? null;
+  const toggleStage = useCallback(
+    (tile: CallTile) =>
+      setStagedKey((current) => (current === tile.key ? null : tile.key)),
+    [],
+  );
+  useWatchCallVideo();
 
   // Leaving (here or from the bar) or a failed join closes the screen.
   useEffect(() => {
@@ -98,36 +149,52 @@ export default function CallScreen() {
           </View>
         </View>
       </View>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          flexGrow: 1,
-          gap: 8,
-          paddingHorizontal: 12,
-          paddingTop: 8,
-          paddingBottom: 12,
-        }}
-      >
-        {ids.length === 0 ? (
-          <View
-            style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
-          >
-            <Text variant="body" tone="ink3">
-              Connecting to {call.channelName}
-            </Text>
-          </View>
-        ) : null}
-        {rowsOf(ids).map((row) => (
-          <View
-            key={row.join(":")}
-            style={{ flex: 1, minHeight: 140, flexDirection: "row", gap: 8 }}
-          >
-            {row.map((id) => (
-              <ParticipantTile key={id} id={id} />
-            ))}
-          </View>
-        ))}
-      </ScrollView>
+      {staged ? (
+        <Stage
+          staged={staged}
+          others={tiles.filter((tile) => tile !== staged)}
+          onPress={toggleStage}
+        />
+      ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            gap: 8,
+            paddingHorizontal: 12,
+            paddingTop: 8,
+            paddingBottom: 12,
+          }}
+        >
+          {tiles.length === 0 ? (
+            <View
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text variant="body" tone="ink3">
+                Connecting to {call.channelName}
+              </Text>
+            </View>
+          ) : null}
+          {rowsOf(tiles).map((row) => (
+            <View
+              key={row.map((tile) => tile.key).join("|")}
+              style={{ flex: 1, minHeight: 140, flexDirection: "row", gap: 8 }}
+            >
+              {row.map((tile) => (
+                <ParticipantTile
+                  key={tile.key}
+                  tile={tile}
+                  onPress={toggleStage}
+                />
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      )}
       <CallDock
         muted={call.muted}
         deafened={call.deafened}

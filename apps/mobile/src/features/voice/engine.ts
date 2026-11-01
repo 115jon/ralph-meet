@@ -1,6 +1,7 @@
 // The WebRTC side of voice, loaded on the first join (see ./actions).
 import "./webrtc-runtime";
 
+import { Platform } from "react-native";
 import InCallManager from "react-native-incall-manager";
 
 export { VoiceSession } from "./session";
@@ -20,17 +21,14 @@ export function releaseMicrophone(stream: MediaStream): void {
 }
 
 /**
- * Puts the phone in call audio mode with the loudspeaker as the default
- * route; InCallManager's automatic routing still moves to a wired headset or
- * Bluetooth when one is connected. ("video" is its name for speaker-first;
- * "audio" would start on the earpiece and blank the screen near the face.)
- * Picking a route by hand, Bluetooth, and the foreground service are the next
- * step; they build on this same manager.
+ * Call audio mode, speaker-first ("video" is InCallManager's name for that).
+ * iOS only: on Android the ralph-call module's Telecom call owns audio mode,
+ * focus and routing, and a second owner would fight it over the route.
  */
 export function startCallAudio(): void {
-  InCallManager.start({ media: "video" });
+  if (Platform.OS === "ios") InCallManager.start({ media: "video" });
 }
 
 export function stopCallAudio(): void {
-  InCallManager.stop();
+  if (Platform.OS === "ios") InCallManager.stop();
 }

@@ -1,0 +1,164 @@
+name: Mobile Release
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build and publish (for example 1.2.3). Creates the mobile-v<version> release."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # SHA-256 of the release signing certificate (alias ralphmeet). The build
+  # fails if the APK is signed with anything else.
+  EXPECTED_CERT_SHA256: "3E:32:29:17:07:BB:C3:1F:09:CD:0C:8D:DD:4A:B8:5C:17:63:E4:C8:85:8B:91:08:57:AB:89:04:54:4F:1E:EF"
+
+jobs:
+  apk:
+    name: signed apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION#mobile-v}"
+          else
+            version="${GITHUB_REF_NAME#mobile-v}"
+          fi
+          if ! [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Version $version is not X.Y.Z"
+            exit 1
+          fi
+          major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
+          if [ "$minor" -ge 100 ] || [ "$patch" -ge 100 ]; then
+            echo "::error::minor and patch must stay below 100 for a monotonic versionCode"
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "tag=mobile-v$version"
+            echo "version_code=$((major * 10000 + minor * 100 + patch))"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup pnpm workspace
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Setup Java 17
+        # actions/setup-java v4.9.1
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Gradle
+        # actions/cache v4.3.0
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-mobile-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/**') }}
+          restore-keys: |
+            gradle-mobile-${{ runner.os }}-
+
+      - name: Decode signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > "$RUNNER_TEMP/google-services.json"
+          {
+            echo "RALPH_UPLOAD_STORE_FILE=$RUNNER_TEMP/release.p12"
+            echo "GOOGLE_SERVICES_JSON=$RUNNER_TEMP/google-services.json"
+          } >> "$GITHUB_ENV"
+
+      - name: Prebuild Android project
+        working-directory: apps/mobile
+        env:
+          APP_VARIANT: production
+          RALPH_APP_VERSION: ${{ steps.version.outputs.version }}
+          RALPH_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+        run: pnpm exec expo prebuild --platform android --no-install --clean
+
+      - name: Build release APK
+        working-directory: apps/mobile/android
+        env:
+          RALPH_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RALPH_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RALPH_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Metro runs inside gradle and evaluates app.config.ts again.
+          APP_VARIANT: production
+          RALPH_APP_VERSION: ${{ steps.version.outputs.version }}
+          RALPH_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+        # 32-bit ARM and x86 are dropped to keep the universal APK (129 MB measured with armeabi-v7a, about 105 MB without).
+        run: ./gradlew assembleRelease --console=plain --no-daemon -PreactNativeArchitectures=arm64-v8a,x86_64
+
+      - name: Verify signature and package
+        id: apk
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          src=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          out=$("$apksigner" verify --print-certs "$src")
+          echo "$out"
+          actual=$(echo "$out" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1 | tr 'a-f' 'A-F')
+          expected=$(echo "$EXPECTED_CERT_SHA256" | tr -d ':')
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::APK is not signed with the release certificate (got ${actual:-none})"
+            exit 1
+          fi
+          name="ralph-meet-$VERSION.apk"
+          mkdir -p dist
+          cp "$src" "dist/$name"
+          ls -l "dist/$name"
+          echo "path=dist/$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ralph-meet-${{ steps.version.outputs.version }}-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Ralph Meet Android $VERSION" \
+              --notes "Signed Android APK. Install it over an earlier release to update." \
+              --target "$GITHUB_SHA" --latest=false -R "$GITHUB_REPOSITORY"
+          fi
+          gh release upload "$TAG" "$APK" --clobber -R "$GITHUB_REPOSITORY"
+
+      - name: Remove secret files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12" "$RUNNER_TEMP/google-services.json"

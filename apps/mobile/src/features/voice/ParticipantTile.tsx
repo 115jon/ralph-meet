@@ -1,82 +1,123 @@
-import { MicrophoneSlash, SpeakerSlash } from "phosphor-react-native";
-import { memo } from "react";
-import { View } from "react-native";
+import { MicrophoneSlash, Monitor, SpeakerSlash } from "phosphor-react-native";
+import { lazy, memo, Suspense } from "react";
+import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { mediaUrl } from "@/lib/api";
 import { RADIUS, useTheme } from "@/theme";
 import { Avatar, Icon, Led, Text } from "@/ui";
 
-import { useIsSelf, useIsSpeaking, useParticipant } from "./store";
+import {
+  type CallTile,
+  useIsSelf,
+  useIsSpeaking,
+  useParticipant,
+  useTileStream,
+} from "./store";
+
+const VideoView = lazy(() => import("./VideoView"));
 
 interface ParticipantTileProps {
-  id: string;
+  tile: CallTile;
+  /** This tile is on the stage; a press returns to the grid. */
+  staged?: boolean;
+  /** A filmstrip thumbnail under the stage: smaller avatar and plate. */
+  compact?: boolean;
+  onPress: (tile: CallTile) => void;
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
- * One participant: square avatar, name plate, and state. Speaking lights the
- * LED and rings the tile in talk green; muted or deafened shows the glyph in
- * danger. Both are state changes, nothing animates.
+ * One tile: a participant (camera video when it is on, else the square
+ * avatar) or the screen they share. Speaking lights the LED and rings the
+ * tile in talk green; muted or deafened shows the glyph in danger. Both are
+ * state changes, nothing animates.
  */
 export const ParticipantTile = memo(function ParticipantTile({
-  id,
+  tile,
+  staged = false,
+  compact = false,
+  onPress,
+  style,
 }: ParticipantTileProps) {
   const theme = useTheme();
-  const participant = useParticipant(id);
-  const speaking = useIsSpeaking(id);
-  const self = useIsSelf(id);
+  const participant = useParticipant(tile.participantId);
+  const speaking = useIsSpeaking(tile.participantId);
+  const self = useIsSelf(tile.participantId);
+  const stream = useTileStream(tile);
   if (!participant) return null;
 
-  const mark = participant.deafened
-    ? { icon: SpeakerSlash, label: "deafened" }
-    : participant.muted
-      ? { icon: MicrophoneSlash, label: "muted" }
-      : null;
+  const screen = tile.kind === "screen";
+  // A screen tile shows the share, not the person: no ring, no mute glyph.
+  const ringed = speaking && !screen;
+  const mark = screen
+    ? null
+    : participant.deafened
+      ? { icon: SpeakerSlash, label: "deafened" }
+      : participant.muted
+        ? { icon: MicrophoneSlash, label: "muted" }
+        : null;
   const name = self ? `${participant.name} (you)` : participant.name;
+  const label = screen
+    ? `${name}, sharing their screen`
+    : `${name}${mark ? `, ${mark.label}` : ""}${speaking ? ", speaking" : ""}`;
 
   return (
-    <View
-      accessible
-      accessibilityLabel={`${name}${mark ? `, ${mark.label}` : ""}${
-        speaking ? ", speaking" : ""
-      }`}
-      style={{
-        flex: 1,
-        borderRadius: RADIUS,
-        backgroundColor: theme.ply2,
-        borderWidth: speaking ? 2 : 1,
-        borderColor: speaking ? theme.talk : theme.line,
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-      }}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={
+        staged ? "Returns to the grid" : "Shows this tile large"
+      }
+      onPress={() => onPress(tile)}
+      style={[
+        {
+          flex: 1,
+          borderRadius: RADIUS,
+          backgroundColor: screen || stream ? theme.ply0 : theme.ply2,
+          borderWidth: ringed ? 2 : 1,
+          borderColor: ringed ? theme.talk : theme.line,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+        },
+        style,
+      ]}
     >
-      <Avatar
-        name={participant.name}
-        size={56}
-        uri={mediaUrl(participant.avatarUrl)}
-      />
+      {stream ? (
+        <Suspense fallback={null}>
+          <VideoView streamURL={stream} fit={screen ? "contain" : "cover"} />
+        </Suspense>
+      ) : (
+        <Avatar
+          name={participant.name}
+          size={compact ? 40 : 56}
+          uri={mediaUrl(participant.avatarUrl)}
+        />
+      )}
       <View
         style={{
           position: "absolute",
-          left: 8,
-          bottom: 8,
-          right: 8,
+          left: compact ? 4 : 8,
+          bottom: compact ? 4 : 8,
+          right: compact ? 4 : 8,
           flexDirection: "row",
         }}
       >
         <View
           style={{
-            height: 24,
+            height: compact ? 20 : 24,
             maxWidth: "100%",
             flexDirection: "row",
             alignItems: "center",
             gap: 6,
-            paddingHorizontal: 8,
+            paddingHorizontal: compact ? 6 : 8,
             borderRadius: RADIUS,
             backgroundColor: theme.ply4,
           }}
         >
-          {mark ? (
+          {screen ? (
+            <Icon icon={Monitor} size={14} color={theme.ink2} />
+          ) : mark ? (
             <Icon icon={mark.icon} active size={14} color={theme.dangerInk} />
           ) : (
             <Led state={speaking ? "talk" : "off"} />
@@ -90,6 +131,6 @@ export const ParticipantTile = memo(function ParticipantTile({
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 });
