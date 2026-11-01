@@ -1,36 +1,355 @@
 // ============================================================================
 // Sound Effects Engine — Web Audio API
 //
-// All sounds are synthesised on-the-fly using oscillators and noise buffers.
-// This avoids bundling audio files and works identically in the browser,
-// CEF (desktop Tauri), and any ServiceWorker-free environment.
+// Every UI sound goes through `SoundEngine.play`, the single gate: the master
+// switch and the sound's category toggle, the volume setting, a per-group rate
+// limit and voice cap. Output runs through one master gain (the volume) and a
+// gentle limiter before the speakers.
+//
+// Sounds are small pre-rendered files (see scripts/sounds/render.mjs) fetched
+// and decoded once into AudioBuffers. Until a buffer is ready the engine falls
+// back to the oscillator versions in `sound-synth.ts`. Rings loop a buffer on
+// the AudioContext clock, so background-tab timer throttling can't stutter
+// them.
 // ============================================================================
 
-let _ctx: AudioContext | null = null;
-let _interactionCallback: (() => void) | null = null;
+import {
+  SOUND_IDS,
+  SOUND_SPECS,
+  type SoundId,
+  type SoundSpec,
+} from "@/lib/sound-catalog";
+import { playSynth, renderSynthLoop } from "@/lib/sound-synth";
+import {
+  useSoundSettingsStore,
+  type SoundSettings,
+} from "@/stores/useSoundSettingsStore";
 
-function ctx(): AudioContext {
-  if (!_ctx || _ctx.state === "closed") {
-    _ctx = new AudioContext();
+export type { SoundId } from "@/lib/sound-catalog";
+
+export type SoundFormat = "webm" | "mp3";
+
+type LoopId = "ring" | "outgoingRing";
+
+export interface SoundEngineOptions {
+  /** URL of the rendered file for a sound, or null to always use the synth. */
+  resolveUrl: (id: SoundId, format: SoundFormat) => string | null;
+  getSettings: (userId?: string) => SoundSettings;
+  createContext?: () => AudioContext;
+  fetch?: (url: string) => Promise<Response>;
+  /** Milliseconds, for the rate limit. */
+  now?: () => number;
+  random?: () => number;
+  canPlayType?: (mime: string) => string;
+}
+
+export interface PlayOptions {
+  /** Settings owner when it isn't the store's current user (room guests). */
+  userId?: string;
+  /** Skip the on/off toggles but keep the volume (settings "Play" buttons). */
+  bypassToggles?: boolean;
+}
+
+interface Voice {
+  gain: GainNode;
+  source: AudioScheduledSourceNode | null;
+  endsAt: number;
+}
+
+/** Fade applied when a voice is stolen or a ring stops (seconds). */
+const RELEASE = 0.06;
+
+/** Perceptual taper for the 0-100 volume setting. */
+export function volumeToGain(volume: number): number {
+  if (!Number.isFinite(volume)) return 1;
+  const v = Math.max(0, Math.min(100, volume)) / 100;
+  return v * v;
+}
+
+function defaultCreateContext(): AudioContext {
+  return new AudioContext({ latencyHint: "interactive" });
+}
+
+function defaultCanPlayType(mime: string): string {
+  if (typeof document === "undefined") return "";
+  return document.createElement("audio").canPlayType(mime);
+}
+
+export class SoundEngine {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private readonly buffers = new Map<SoundId, AudioBuffer>();
+  private loading: Promise<void> | null = null;
+  private loaded = false;
+  private readonly lastStart = new Map<string, number>();
+  private readonly voices = new Map<string, Voice[]>();
+  private readonly loops = new Map<LoopId, Voice>();
+  private readonly pendingLoops = new Set<LoopId>();
+  private interactionCallback: (() => void) | null = null;
+  private readonly opts: Required<SoundEngineOptions>;
+
+  constructor(options: SoundEngineOptions) {
+    this.opts = {
+      createContext: defaultCreateContext,
+      fetch: (url) => fetch(url),
+      now: () => Date.now(),
+      random: Math.random,
+      canPlayType: defaultCanPlayType,
+      ...options,
+    };
   }
-  // Resume suspended context (autoplay policy)
-  if (_ctx.state === "suspended") {
-    _ctx.resume().catch(() => {});
-    // Notify UI that interaction is needed
-    if (_interactionCallback) _interactionCallback();
+
+  onInteractionNeeded(cb: (() => void) | null) {
+    this.interactionCallback = cb;
   }
-  return _ctx;
+
+  isSuspended(): boolean {
+    return this.ctx?.state === "suspended";
+  }
+
+  /** Resume after a user gesture; also starts loading the sound files. */
+  resume(): Promise<void> {
+    const a = this.context(false);
+    if (!a) return Promise.resolve();
+    return a.resume();
+  }
+
+  /** Fetch and decode every sound file once. Safe to call repeatedly. */
+  preload(): Promise<void> {
+    const a = this.context(false);
+    if (!a) return Promise.resolve();
+    if (this.loading) return this.loading;
+    const format: SoundFormat = this.opts.canPlayType(
+      'audio/webm; codecs="opus"',
+    )
+      ? "webm"
+      : "mp3";
+    this.loading = Promise.all(
+      SOUND_IDS.map(async (id) => {
+        const url = this.opts.resolveUrl(id, format);
+        if (!url) return;
+        try {
+          const res = await this.opts.fetch(url);
+          if (!res.ok) return;
+          const buffer = await a.decodeAudioData(await res.arrayBuffer());
+          this.buffers.set(id, buffer);
+          if (id === "ring" || id === "outgoingRing") this.startLoop(id);
+        } catch {
+          // Keep the synth fallback for this sound.
+        }
+      }),
+    ).then(() => {
+      this.loaded = true;
+      // Rings whose file never arrived loop the synth version instead.
+      for (const id of this.pendingLoops) this.startLoop(id, true);
+    });
+    return this.loading;
+  }
+
+  /**
+   * Play a sound if its settings allow it. Returns whether it started (or, for
+   * rings, is now ringing).
+   */
+  play(id: SoundId, options: PlayOptions = {}): boolean {
+    const spec = SOUND_SPECS[id];
+    const settings = this.opts.getSettings(options.userId);
+    if (
+      !options.bypassToggles &&
+      !(settings.soundsEnabled && settings[spec.category])
+    ) {
+      return false;
+    }
+    const volume = volumeToGain(settings.soundVolume);
+    if (volume <= 0) return false;
+
+    if (spec.loopSeconds !== undefined) {
+      return this.ring(id as LoopId, volume);
+    }
+
+    const now = this.opts.now();
+    const last = this.lastStart.get(spec.group);
+    if (last !== undefined && now - last < spec.minIntervalMs) return false;
+
+    const a = this.context(true);
+    if (!a || !this.master) return false;
+    this.lastStart.set(spec.group, now);
+    this.setMasterGain(volume);
+    this.claimVoice(a, spec);
+
+    const voice = this.startVoice(a, id, spec);
+    const pool = this.voices.get(spec.group) ?? [];
+    pool.push(voice);
+    this.voices.set(spec.group, pool);
+    return true;
+  }
+
+  /** Stop a ring with a short fade. Never gated. */
+  stop(id: LoopId) {
+    this.pendingLoops.delete(id);
+    const voice = this.loops.get(id);
+    if (!voice || !this.ctx) return;
+    this.loops.delete(id);
+    this.release(voice, this.ctx.currentTime);
+  }
+
+  isRinging(id: LoopId): boolean {
+    return this.loops.has(id) || this.pendingLoops.has(id);
+  }
+
+  /** Apply a volume change to sounds already playing (rings). */
+  syncVolume(userId?: string) {
+    if (!this.master) return;
+    this.setMasterGain(volumeToGain(this.opts.getSettings(userId).soundVolume));
+  }
+
+  // ── internals ────────────────────────────────────────────────────────────
+
+  private context(notify: boolean): AudioContext | null {
+    if (!this.ctx || this.ctx.state === "closed") {
+      try {
+        this.ctx = this.opts.createContext();
+      } catch {
+        return null;
+      }
+      const limiter = this.ctx.createDynamicsCompressor();
+      // A gentle peak limiter, not a compressor: our files peak at -1 dBTP and
+      // sit far below the threshold, so this only catches overlapping sounds.
+      // Web Audio adds automatic makeup gain (~+1.7 dB with these numbers), so
+      // the effective ceiling lands near -1 dBFS.
+      limiter.threshold.value = -3;
+      limiter.knee.value = 1;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.1;
+      limiter.connect(this.ctx.destination);
+      this.master = this.ctx.createGain();
+      this.master.connect(limiter);
+      this.buffers.clear();
+      this.loading = null;
+      this.loaded = false;
+      this.voices.clear();
+      this.loops.clear();
+      void this.preload();
+    }
+    if (this.ctx.state === "suspended") {
+      this.ctx.resume().catch(() => {});
+      if (notify) this.interactionCallback?.();
+    }
+    return this.ctx;
+  }
+
+  private setMasterGain(volume: number) {
+    if (!this.master || !this.ctx) return;
+    const param = this.master.gain;
+    param.cancelScheduledValues(this.ctx.currentTime);
+    param.setTargetAtTime(volume, this.ctx.currentTime, 0.01);
+  }
+
+  private claimVoice(a: AudioContext, spec: SoundSpec) {
+    const pool = (this.voices.get(spec.group) ?? []).filter(
+      (v) => v.endsAt > a.currentTime,
+    );
+    while (pool.length >= spec.maxVoices) {
+      const oldest = pool.shift();
+      if (oldest) this.release(oldest, a.currentTime);
+    }
+    this.voices.set(spec.group, pool);
+  }
+
+  private startVoice(a: AudioContext, id: SoundId, spec: SoundSpec): Voice {
+    const gain = a.createGain();
+    gain.connect(this.master as GainNode);
+    const when = a.currentTime;
+    const buffer = this.buffers.get(id);
+    let level = 1;
+    if (spec.variance) {
+      level = Math.pow(10, (this.spread() * spec.variance.db) / 20);
+    }
+    gain.gain.value = level;
+
+    if (!buffer) {
+      playSynth(id, a, gain, when);
+      return { gain, source: null, endsAt: when + 0.6 };
+    }
+    const source = a.createBufferSource();
+    source.buffer = buffer;
+    if (spec.variance)
+      source.detune.value = this.spread() * spec.variance.cents;
+    source.connect(gain);
+    source.start(when);
+    source.onended = () => gain.disconnect();
+    return { gain, source, endsAt: when + buffer.duration };
+  }
+
+  private ring(id: LoopId, volume: number): boolean {
+    if (this.isRinging(id)) return true;
+    const a = this.context(true);
+    if (!a) return false;
+    this.setMasterGain(volume);
+    this.pendingLoops.add(id);
+    if (this.buffers.has(id)) this.startLoop(id);
+    else if (this.loaded) this.startLoop(id, true);
+    else void this.preload();
+    return true;
+  }
+
+  private startLoop(id: LoopId, synth = false) {
+    const a = this.ctx;
+    if (!a || !this.master || !this.pendingLoops.has(id)) return;
+    this.pendingLoops.delete(id);
+    const buffer = synth ? renderSynthLoop(id, a) : this.buffers.get(id);
+    if (!buffer) return;
+    const period = SOUND_SPECS[id].loopSeconds ?? buffer.duration;
+    const gain = a.createGain();
+    gain.connect(this.master);
+    const source = a.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.loopStart = 0;
+    source.loopEnd = Math.min(period, buffer.duration);
+    source.connect(gain);
+    source.start(a.currentTime);
+    source.onended = () => gain.disconnect();
+    this.loops.set(id, { gain, source, endsAt: Number.POSITIVE_INFINITY });
+  }
+
+  private release(voice: Voice, at: number) {
+    const param = voice.gain.gain;
+    param.cancelScheduledValues(at);
+    param.setValueAtTime(param.value, at);
+    param.linearRampToValueAtTime(0, at + RELEASE);
+    voice.source?.stop(at + RELEASE + 0.01);
+    voice.endsAt = at;
+  }
+
+  /** Uniform in [-1, 1]. */
+  private spread(): number {
+    return this.opts.random() * 2 - 1;
+  }
+}
+
+// ── App singleton ───────────────────────────────────────────────────────────
+
+const engine = new SoundEngine({
+  resolveUrl: () => null,
+  getSettings: (userId) => useSoundSettingsStore.getState().getSettings(userId),
+});
+
+useSoundSettingsStore.subscribe(() => engine.syncVolume());
+
+/** Play any UI sound through the settings gate. */
+export function playSound(id: SoundId, options?: PlayOptions): boolean {
+  return engine.play(id, options);
 }
 
 /** Check if the sound AudioContext is suspended (needs user interaction) */
 export function isSoundContextSuspended(): boolean {
-  return !!_ctx && _ctx.state === "suspended";
+  return engine.isSuspended();
 }
 
 /** Resume the sound AudioContext after a user gesture */
 export function resumeSoundContext(): Promise<void> {
-  if (!_ctx) _ctx = new AudioContext();
-  return _ctx.resume();
+  return engine.resume();
 }
 
 /**
@@ -38,277 +357,71 @@ export function resumeSoundContext(): Promise<void> {
  * is suspended. Use this to show an "Interaction Required" popup.
  */
 export function onSoundInteractionNeeded(cb: (() => void) | null) {
-  _interactionCallback = cb;
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Create a gain node that fades out over `duration` seconds */
-function _fadeOut(
-  a: AudioContext,
-  startGain: number,
-  duration: number,
-): GainNode {
-  const g = a.createGain();
-  g.gain.setValueAtTime(startGain, a.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + duration);
-  return g;
-}
-
-/** Play a tone burst: freq (Hz), duration (s), volume 0-1, type */
-function tone(
-  freq: number,
-  duration: number,
-  volume = 0.15,
-  type: OscillatorType = "sine",
-  delay = 0,
-) {
-  const a = ctx();
-  const osc = a.createOscillator();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, a.currentTime + delay);
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(0, a.currentTime + delay);
-  // Quick attack
-  g.gain.linearRampToValueAtTime(volume, a.currentTime + delay + 0.01);
-  // Smooth decay
-  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + delay + duration);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(a.currentTime + delay);
-  osc.stop(a.currentTime + delay + duration + 0.05);
-}
-
-/** Play two tones in sequence (ascending = join-like, descending = leave-like) */
-function twoTone(f1: number, f2: number, dur = 0.1, gap = 0.08, volume = 0.12) {
-  tone(f1, dur, volume, "sine", 0);
-  tone(f2, dur, volume, "sine", dur + gap);
-}
-
-/** Short click/pop for mute/unmute */
-function clickPop(freq: number, volume = 0.1) {
-  const a = ctx();
-  const osc = a.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(freq, a.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(freq * 0.5, a.currentTime + 0.06);
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(volume, a.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.06);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(a.currentTime);
-  osc.stop(a.currentTime + 0.08);
-}
-
-/** Soft chime for notifications (richer timbre using harmonics) */
-function chime(baseFreq: number, duration = 0.4, volume = 0.08) {
-  const a = ctx();
-  const now = a.currentTime;
-
-  // Fundamental
-  const osc1 = a.createOscillator();
-  osc1.type = "sine";
-  osc1.frequency.value = baseFreq;
-
-  // Octave harmonic (soft)
-  const osc2 = a.createOscillator();
-  osc2.type = "sine";
-  osc2.frequency.value = baseFreq * 2;
-
-  // Fifth harmonic (very soft)
-  const osc3 = a.createOscillator();
-  osc3.type = "sine";
-  osc3.frequency.value = baseFreq * 1.5;
-
-  const master = a.createGain();
-  master.gain.setValueAtTime(volume, now);
-  master.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-  const g1 = a.createGain();
-  g1.gain.value = 1.0;
-  const g2 = a.createGain();
-  g2.gain.value = 0.3;
-  const g3 = a.createGain();
-  g3.gain.value = 0.15;
-
-  osc1.connect(g1).connect(master);
-  osc2.connect(g2).connect(master);
-  osc3.connect(g3).connect(master);
-  master.connect(a.destination);
-
-  osc1.start(now);
-  osc2.start(now);
-  osc3.start(now);
-  osc1.stop(now + duration + 0.05);
-  osc2.stop(now + duration + 0.05);
-  osc3.stop(now + duration + 0.05);
+  engine.onInteractionNeeded(cb);
 }
 
 // ── Public Sound Effects ────────────────────────────────────────────────────
+// Each is gated by its settings toggle; callers don't check settings.
 
-/** Discord-style ascending two-tone: someone joined voice */
-export function playVoiceJoin() {
-  twoTone(880, 1175, 0.08, 0.06, 0.12);
-}
+/** Someone joined the voice channel you're in */
+export const playVoiceJoin = (o?: PlayOptions) =>
+  void playSound("voiceJoin", o);
+/** Someone left the voice channel you're in */
+export const playVoiceLeave = (o?: PlayOptions) =>
+  void playSound("voiceLeave", o);
+/** Microphone muted */
+export const playMute = (o?: PlayOptions) => void playSound("mute", o);
+/** Microphone unmuted */
+export const playUnmute = (o?: PlayOptions) => void playSound("unmute", o);
+/** Deafened */
+export const playDeafen = (o?: PlayOptions) => void playSound("deafen", o);
+/** Undeafened */
+export const playUndeafen = (o?: PlayOptions) => void playSound("undeafen", o);
+/** New notification (mention, reply, DM) */
+export const playNotification = (o?: PlayOptions) =>
+  void playSound("notification", o);
+/** New message in the current channel */
+export const playMessageReceived = (o?: PlayOptions) =>
+  void playSound("message", o);
+/** You connected to voice */
+export const playConnected = (o?: PlayOptions) => void playSound("connect", o);
+/** You disconnected from voice */
+export const playDisconnect = (o?: PlayOptions) =>
+  void playSound("disconnect", o);
+/** Screen share started */
+export const playScreenShareStart = (o?: PlayOptions) =>
+  void playSound("screenShareStart", o);
+/** Screen share stopped */
+export const playScreenShareStop = (o?: PlayOptions) =>
+  void playSound("screenShareStop", o);
+/** A viewer started watching your stream */
+export const playStreamWatcherStart = (o?: PlayOptions) =>
+  void playSound("streamWatcherStart", o);
+/** A viewer stopped watching your stream */
+export const playStreamWatcherStop = (o?: PlayOptions) =>
+  void playSound("streamWatcherStop", o);
+/** Call connected */
+export const playCallConnect = (o?: PlayOptions) =>
+  void playSound("callConnect", o);
+/** Call ended */
+export const playCallEnd = (o?: PlayOptions) => void playSound("callEnd", o);
 
-/** Discord-style descending two-tone: someone left voice */
-export function playVoiceLeave() {
-  twoTone(1175, 880, 0.08, 0.06, 0.12);
-}
+// ── Rings ───────────────────────────────────────────────────────────────────
 
-/** Short pop — microphone muted */
-export function playMute() {
-  clickPop(400, 0.12);
-}
-
-/** Short pop (higher) — microphone unmuted */
-export function playUnmute() {
-  clickPop(600, 0.12);
-}
-
-/** Lower pop — deafened */
-export function playDeafen() {
-  clickPop(300, 0.14);
-}
-
-/** Higher pop — undeafened */
-export function playUndeafen() {
-  clickPop(700, 0.12);
-}
-
-/** Soft chime — new notification (mention, reply, DM) */
-export function playNotification() {
-  chime(1047, 0.35, 0.1); // C6
-  setTimeout(() => chime(1319, 0.3, 0.07), 120); // E6
-}
-
-/** Subtle knock — new message in current channel */
-export function playMessageReceived() {
-  const a = ctx();
-  const now = a.currentTime;
-  const osc = a.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(800, now);
-  osc.frequency.exponentialRampToValueAtTime(600, now + 0.05);
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(0.06, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(now);
-  osc.stop(now + 0.1);
-}
-
-/** Warm disconnect tone — you disconnected from voice */
-export function playDisconnect() {
-  const a = ctx();
-  const now = a.currentTime;
-
-  const osc = a.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(523, now); // C5
-  osc.frequency.exponentialRampToValueAtTime(330, now + 0.2); // E4
-
-  const g = a.createGain();
-  g.gain.setValueAtTime(0.12, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-
-  osc.connect(g).connect(a.destination);
-  osc.start(now);
-  osc.stop(now + 0.3);
-}
-
-/** Three-tone connection chime — you connected to voice */
-export function playConnected() {
-  tone(523, 0.1, 0.1, "sine", 0); // C5
-  tone(659, 0.1, 0.1, "sine", 0.1); // E5
-  tone(784, 0.15, 0.1, "sine", 0.2); // G5
-}
-
-/** Incoming call ring — repeated chime pattern */
-let ringInterval: ReturnType<typeof setInterval> | null = null;
-
+/** Incoming call ring; loops until playRingStop. */
 export function playRingStart() {
-  playRingStop();
-  const ringOnce = () => {
-    chime(880, 0.2, 0.08);
-    setTimeout(() => chime(1047, 0.2, 0.08), 200);
-    setTimeout(() => chime(880, 0.2, 0.06), 400);
-  };
-  ringOnce();
-  ringInterval = setInterval(ringOnce, 2500);
+  playSound("ring");
 }
 
 export function playRingStop() {
-  if (ringInterval) {
-    clearInterval(ringInterval);
-    ringInterval = null;
-  }
+  engine.stop("ring");
 }
 
-/** Screen share started */
-export function playScreenShareStart() {
-  tone(660, 0.08, 0.08, "sine", 0);
-  tone(880, 0.12, 0.08, "sine", 0.1);
-}
-
-/** Screen share stopped */
-export function playScreenShareStop() {
-  tone(880, 0.08, 0.08, "sine", 0);
-  tone(660, 0.12, 0.08, "sine", 0.1);
-}
-
-/** Distinct shimmer when a viewer starts watching your stream */
-export function playStreamWatcherStart() {
-  tone(740, 0.07, 0.07, "triangle", 0);
-  tone(988, 0.09, 0.06, "sine", 0.06);
-  tone(1245, 0.12, 0.05, "triangle", 0.14);
-}
-
-/** Distinct glide when a viewer stops watching your stream */
-export function playStreamWatcherStop() {
-  tone(1245, 0.08, 0.06, "triangle", 0);
-  tone(880, 0.08, 0.05, "sine", 0.07);
-  tone(659, 0.12, 0.05, "triangle", 0.14);
-}
-
-// ── Call Sound Effects ──────────────────────────────────────────────────────
-
-/** Outgoing ring — caller hears this while waiting for callee to pick up
- *  Repeating double-beep pattern like a phone line */
-let outgoingRingInterval: ReturnType<typeof setInterval> | null = null;
-
+/** Outgoing ring the caller hears while waiting; loops until stopped. */
 export function playOutgoingRingStart() {
-  playOutgoingRingStop();
-  const ringOnce = () => {
-    // Double-beep: boop-boop ... pause
-    tone(440, 0.3, 0.06, "sine", 0);
-    tone(440, 0.3, 0.06, "sine", 0.5);
-  };
-  ringOnce();
-  outgoingRingInterval = setInterval(ringOnce, 3000);
+  playSound("outgoingRing");
 }
 
 export function playOutgoingRingStop() {
-  if (outgoingRingInterval) {
-    clearInterval(outgoingRingInterval);
-    outgoingRingInterval = null;
-  }
-}
-
-/** Call connected — short ascending 3-tone chime */
-export function playCallConnect() {
-  tone(523, 0.08, 0.1, "sine", 0); // C5
-  tone(659, 0.08, 0.1, "sine", 0.09); // E5
-  tone(880, 0.15, 0.1, "sine", 0.18); // A5
-}
-
-/** Call ended — warm descending two-tone */
-export function playCallEnd() {
-  tone(660, 0.12, 0.1, "sine", 0);
-  tone(440, 0.18, 0.1, "sine", 0.14);
+  engine.stop("outgoingRing");
 }

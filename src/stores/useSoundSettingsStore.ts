@@ -318,16 +318,16 @@ export const useSoundSettingsStore = create<SoundSettingsState>()(
 
 // ── Convenience: check if a specific sound category is enabled ──────────────
 
-export function isSoundEnabled(
-  category: Exclude<
-    keyof SoundSettings,
-    | "soundsEnabled"
-    | "soundVolume"
-    | "soundboardVolume"
-    | "voiceJoinSoundboard"
-    | "voiceLeaveSoundboard"
-  >,
-): boolean {
+/** The per-category on/off toggles (everything but the master switch). */
+export type SoundCategory = {
+  [K in keyof SoundSettings]: SoundSettings[K] extends boolean
+    ? K extends "soundsEnabled"
+      ? never
+      : K
+    : never;
+}[keyof SoundSettings];
+
+export function isSoundEnabled(category: SoundCategory): boolean {
   const store = useSoundSettingsStore.getState();
   const settings = store.getSettings();
   return settings.soundsEnabled && settings[category];
