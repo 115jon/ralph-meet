@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { getBotUserAgent, getPublicWebUrl } from "@/lib/platform";
 import type { MessageShare } from "@/services/message-share.service";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
@@ -6,6 +7,12 @@ import { safeFetch, readJsonCapped, readTextCapped } from "@/lib/safe-fetch";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { singleFlight } from "@/lib/single-flight";
 import { TtlMemo, upstreamGuard } from "@/lib/upstream-guard";
+import {
+  egressEnabled,
+  guardedEgressFetch,
+  guardedEgressResolve,
+  egressProviderName,
+} from "@/lib/egress-proxy";
 import {
   InstagramOEmbedResponse,
   InstagramVideoApiResponse,
@@ -55,6 +62,49 @@ const TIKTOK_PAGE_RESOLVE_HEADERS = {
   Accept: "text/html,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
 } as const;
+
+/**
+ * Which network a TikTok request leaves from. "direct" is the Worker's own
+ * egress; "egress" is the house proxy (see `@/lib/egress-proxy`). Each has its
+ * own circuit per provider, so a blocked direct path never pauses the proxy.
+ */
+type TikTokTransport = "direct" | "egress";
+
+/** The proxy path is only taken when the Worker has its secret. */
+function egressAvailable(): boolean {
+  return egressEnabled(env);
+}
+
+/** A circuit-guarded GET (or HEAD) of `url` over the chosen transport. */
+function fetchTikTokUpstream(
+  via: TikTokTransport,
+  provider: string,
+  url: string,
+  options: {
+    headers: Record<string, string>;
+    method?: "GET" | "HEAD";
+    tripOn: ReadonlyArray<number>;
+  },
+): Promise<Response> {
+  if (via === "egress") {
+    return guardedEgressFetch(
+      env,
+      provider,
+      { url, method: options.method ?? "GET", headers: options.headers },
+      { tripOn: options.tripOn },
+    );
+  }
+  return upstreamGuard.fetch(
+    provider,
+    url,
+    {
+      method: options.method,
+      headers: options.headers,
+      redirect: "follow",
+    },
+    { tripOn: options.tripOn },
+  );
+}
 
 interface TikTokProxyMetadata {
   id?: string;
@@ -405,6 +455,13 @@ async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
     return cached;
   }
 
+  const remember = (resolved: string): string => {
+    shortLinkMemo.set(key, resolved, TIKTOK_SHORT_LINK_TTL_SECONDS * 1000);
+    void cacheSet(key, resolved, TIKTOK_SHORT_LINK_TTL_SECONDS);
+    return resolved;
+  };
+
+  let directUrl: string | undefined;
   try {
     const response = await upstreamGuard.fetch(
       TIKTOK_UPSTREAM.web,
@@ -417,15 +474,29 @@ async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
       { tripOn: [403] },
     );
     const resolved = response.url ? stripTikTokUrl(response.url) : null;
-    if (resolved && extractTikTokItemId(resolved)) {
-      shortLinkMemo.set(key, resolved, TIKTOK_SHORT_LINK_TTL_SECONDS * 1000);
-      void cacheSet(key, resolved, TIKTOK_SHORT_LINK_TTL_SECONDS);
-      return resolved;
-    }
-    return response.url || rawUrl;
+    if (resolved && extractTikTokItemId(resolved)) return remember(resolved);
+    directUrl = response.url || undefined;
   } catch {
-    return rawUrl;
+    // Blocked or unreachable from here; the proxy may still get through.
   }
+
+  // The direct path did not end on a post: ask the proxy to follow the link.
+  if (egressAvailable()) {
+    try {
+      const result = await guardedEgressResolve(env, TIKTOK_UPSTREAM.web, {
+        url: rawUrl,
+        headers: TIKTOK_PAGE_RESOLVE_HEADERS,
+      });
+      const resolved = stripTikTokUrl(result.url);
+      if (extractTikTokItemId(resolved)) return remember(resolved);
+    } catch (error) {
+      log.warn("TikTok short link resolve via egress failed", {
+        sourceUrl: rawUrl,
+        error: describeError(error),
+      });
+    }
+  }
+  return directUrl ?? rawUrl;
 }
 
 function urlsOf(ref: TikTokUrlRef | undefined): ReadonlyArray<string> {
@@ -598,6 +669,12 @@ interface TikTokSourceResult {
   restricted?: boolean;
   /** The request failed in a way worth retrying (network, 429, 5xx, backoff). */
   transient: boolean;
+  /**
+   * The source gave no answer at all (refused, unreachable, backing off, a
+   * bot wall): the same request from another network may succeed. A source
+   * that answered "nothing here" is not unanswered.
+   */
+  unanswered?: boolean;
 }
 
 /**
@@ -636,6 +713,7 @@ function describeError(error: unknown): string {
 async function fetchTikTokPlayerApiSource(
   itemId: string,
   sourceUrl: string,
+  via: TikTokTransport = "direct",
 ): Promise<TikTokSourceResult & { nil?: boolean }> {
   const apiUrl = `https://www.tiktok.com/player/api/v1/items?item_ids=${encodeURIComponent(itemId)}`;
 
@@ -643,7 +721,8 @@ async function fetchTikTokPlayerApiSource(
     // The endpoint answers a missing item with 200 + nil_core_data, so a 403
     // or 404 means it refused this caller (it does from some egress ranges):
     // back off instead of asking again on every view.
-    const response = await upstreamGuard.fetch(
+    const response = await fetchTikTokUpstream(
+      via,
       TIKTOK_UPSTREAM.player,
       apiUrl,
       {
@@ -651,8 +730,8 @@ async function fetchTikTokPlayerApiSource(
           ...TIKTOK_PLAYER_REQUEST_HEADERS,
           Referer: `https://www.tiktok.com/player/v1/${itemId}?description=1&music_info=1`,
         },
+        tripOn: [403, 404],
       },
-      { tripOn: [403, 404] },
     );
 
     const contentType =
@@ -660,6 +739,7 @@ async function fetchTikTokPlayerApiSource(
     if (!response.ok || !contentType.includes("json")) {
       log.warn("TikTok player api request failed", {
         apiUrl,
+        via,
         status: response.status,
         contentType,
         sourceUrl,
@@ -667,6 +747,7 @@ async function fetchTikTokPlayerApiSource(
       return {
         metadata: null,
         transient: isTransientUpstreamStatus(response.status),
+        unanswered: true,
       };
     }
 
@@ -680,9 +761,10 @@ async function fetchTikTokPlayerApiSource(
   } catch (error) {
     log.warn("TikTok player api request threw", {
       sourceUrl,
+      via,
       error: describeError(error),
     });
-    return { metadata: null, transient: true };
+    return { metadata: null, transient: true, unanswered: true };
   }
 }
 
@@ -779,22 +861,25 @@ function mapTikTokPageDetail(
 async function fetchTikTokPageSource(
   pageUrl: string,
   itemId: string,
+  via: TikTokTransport = "direct",
 ): Promise<TikTokSourceResult> {
   try {
-    const response = await upstreamGuard.fetch(
+    const response = await fetchTikTokUpstream(
+      via,
       TIKTOK_UPSTREAM.page,
       pageUrl,
-      { headers: TIKTOK_PAGE_RESOLVE_HEADERS, redirect: "follow" },
-      { tripOn: [403] },
+      { headers: TIKTOK_PAGE_RESOLVE_HEADERS, tripOn: [403] },
     );
     if (!response.ok) {
       log.warn("TikTok page request failed", {
+        via,
         status: response.status,
         sourceUrl: pageUrl,
       });
       return {
         metadata: null,
         transient: isTransientUpstreamStatus(response.status),
+        unanswered: true,
       };
     }
 
@@ -803,8 +888,8 @@ async function fetchTikTokPageSource(
     );
     if (!detail) {
       // A captcha or bot wall: no answer either way.
-      log.warn("TikTok page had no video detail", { sourceUrl: pageUrl });
-      return { metadata: null, transient: false };
+      log.warn("TikTok page had no video detail", { via, sourceUrl: pageUrl });
+      return { metadata: null, transient: false, unanswered: true };
     }
     if (isTikTokPageGone(detail)) {
       return { metadata: null, gone: true, transient: false };
@@ -821,9 +906,10 @@ async function fetchTikTokPageSource(
   } catch (error) {
     log.warn("TikTok page request threw", {
       sourceUrl: pageUrl,
+      via,
       error: describeError(error),
     });
-    return { metadata: null, transient: true };
+    return { metadata: null, transient: true, unanswered: true };
   }
 }
 
@@ -888,6 +974,10 @@ async function fetchTikTokTikwmSource(
 ): Promise<{ metadata: TikTokProxyMetadata | null; transient: boolean }> {
   let data: TikwmData | null = null;
   let transient = false;
+  // From Cloudflare's shared IPs tikwm answers "Free Api Limit" for everyone,
+  // so with the proxy configured it is the only route; direct is the fallback
+  // for local dev and Previews, which have no secret.
+  const via: TikTokTransport = egressAvailable() ? "egress" : "direct";
 
   for (const baseUrl of TIKTOK_PROXY_API_BASE_URLS) {
     const apiUrl = `${baseUrl}?url=${encodeURIComponent(url)}`;
@@ -898,18 +988,19 @@ async function fetchTikTokTikwmSource(
     try {
       // tikwm answers an unknown post with 200 + a non-zero code, so 403/404
       // means it refused this caller.
-      const response = await upstreamGuard.fetch(
-        provider,
-        apiUrl,
-        { headers: TIKTOK_PROXY_REQUEST_HEADERS },
-        { tripOn: [403, 404] },
-      );
+      const response = await fetchTikTokUpstream(via, provider, apiUrl, {
+        headers: TIKTOK_PROXY_REQUEST_HEADERS,
+        tripOn: [403, 404],
+      });
 
       const contentType =
         response.headers.get("Content-Type")?.toLowerCase() ?? "";
-      if (!response.ok || !contentType.includes("json")) {
+      // The proxy forwards content-type only when the upstream sent one, and
+      // a non-JSON body fails the parse below as a thrown (transient) miss.
+      if (!response.ok || (via === "direct" && !contentType.includes("json"))) {
         log.warn("TikTok proxy metadata request failed", {
           apiUrl: baseUrl,
+          via,
           status: response.status,
           contentType,
           sourceUrl: url,
@@ -927,7 +1018,11 @@ async function fetchTikTokTikwmSource(
         });
         // "Free Api Limit: 1 request/second": the other host shares it.
         if (payload?.msg && /limit/i.test(payload.msg)) {
-          upstreamGuard.trip(provider, 2);
+          // A daily quota ("10000 request/ 1 day") will not clear in seconds.
+          upstreamGuard.trip(
+            via === "egress" ? egressProviderName(provider) : provider,
+            /day/i.test(payload.msg) ? 5 * 60 : 2,
+          );
           transient = true;
           break;
         }
@@ -1044,10 +1139,29 @@ function mergeOptionalTikTokMetadata(
  *   3. tikwm, for a direct video (or slideshow images and audio) nothing
  *      above supplied.
  *
+ * With the egress proxy configured (see `@/lib/egress-proxy`): short links,
+ * the player API and the page go direct first and retry through the proxy
+ * when the direct request got no answer (refused, 404, 5xx, unreachable) or,
+ * for the player API, when the page told nothing either; tikwm always goes
+ * through the proxy, because Cloudflare's shared IP is over its daily quota.
+ *
  * "Gone" needs a positive answer from the page. A failed scraper, a
  * `nil_core_data` from the player API, or an oEmbed that answers for any id
  * never mark a post unavailable.
  */
+/**
+ * The result to keep after retrying an unanswered `direct` request through
+ * the proxy: the proxy's if it answered, otherwise the direct miss, transient
+ * if either route failed softly.
+ */
+function settleViaEgress<T extends TikTokSourceResult>(
+  direct: T,
+  egress: T,
+): T {
+  if (!egress.unanswered) return egress;
+  return { ...direct, transient: direct.transient || egress.transient };
+}
+
 async function runTikTokLookupChain(url: string): Promise<TikTokProxyLookup> {
   const resolvedUrl = await resolveTikTokLookupUrl(url);
   const itemId =
@@ -1071,12 +1185,30 @@ async function runTikTokLookupChain(url: string): Promise<TikTokProxyLookup> {
   let transient = false;
 
   if (itemId) {
-    const player = await fetchTikTokPlayerApiSource(itemId, url);
+    const egressOn = egressAvailable();
+    let playerViaEgress = false;
+    let player = await fetchTikTokPlayerApiSource(itemId, url);
+    if (egressOn && !player.metadata && player.unanswered) {
+      // Refused or unreachable from Cloudflare: try the proxy's network.
+      playerViaEgress = true;
+      player = settleViaEgress(
+        player,
+        await fetchTikTokPlayerApiSource(itemId, url, "egress"),
+      );
+    }
     metadata = player.metadata;
     transient ||= player.transient;
 
     if (!metadata && canonicalUrl) {
-      const page = await fetchTikTokPageSource(canonicalUrl, itemId);
+      let page = await fetchTikTokPageSource(canonicalUrl, itemId);
+      // Only a page that gave no answer is asked again: "gone" or an
+      // age-gated item are verdicts, and the proxy would say the same.
+      if (egressOn && !page.gone && !page.metadata && page.unanswered) {
+        page = settleViaEgress(
+          page,
+          await fetchTikTokPageSource(canonicalUrl, itemId, "egress"),
+        );
+      }
       if (page.gone) {
         return {
           metadata: null,
@@ -1088,6 +1220,14 @@ async function runTikTokLookupChain(url: string): Promise<TikTokProxyLookup> {
       metadata = page.metadata;
       restricted = page.restricted === true;
       transient ||= page.transient;
+
+      // Direct, the player API said "nil" and the page told us nothing: the
+      // proxy's network may be served an item the Worker's is not.
+      if (egressOn && !metadata && !playerViaEgress) {
+        const retry = await fetchTikTokPlayerApiSource(itemId, url, "egress");
+        metadata = retry.metadata;
+        transient ||= retry.transient;
+      }
     }
   }
 
