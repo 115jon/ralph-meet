@@ -105,6 +105,13 @@ const WINDOWS_RESTART_HELPER_POLL_INTERVAL_MS: u64 = 150;
 const WINDOWS_RESTART_HELPER_TIMEOUT_MS: u64 = 10_000;
 #[cfg(target_os = "windows")]
 const WINDOWS_RESTART_HELPER_SETTLE_DELAY_MS: u64 = 300;
+/// The root launcher stub (desktop/launcher), installed by the installer.
+#[cfg(target_os = "windows")]
+const WINDOWS_ROOT_STUB_FILE_NAME: &str = "RalphMeet.exe";
+/// Same as `identifier` in tauri.conf.json (which the notification plugin uses
+/// for toasts) and `RootLauncher.AppUserModelId` in the installer.
+#[cfg(target_os = "windows")]
+const WINDOWS_APP_USER_MODEL_ID: &str = "site.115jon.ralphmeet";
 
 impl Default for DesktopRuntimeSettings {
     fn default() -> Self {
@@ -163,6 +170,20 @@ fn versioned_windows_install_root_from_exe_path(
     install_dir.parent().map(std::path::Path::to_path_buf)
 }
 
+/// The installed launcher at the install root: the native `RalphMeet.exe` stub,
+/// or `Update.exe` (which needs `--processStart`) for installs made before the
+/// stub existed. The bool is true for `Update.exe`. See docs/desktop/launch.md.
+#[cfg(target_os = "windows")]
+fn windows_root_launcher(root: &std::path::Path) -> Option<(std::path::PathBuf, bool)> {
+    let stub = root.join(WINDOWS_ROOT_STUB_FILE_NAME);
+    if stub.is_file() {
+        return Some((stub, false));
+    }
+
+    let update_exe = root.join("Update.exe");
+    update_exe.is_file().then_some((update_exe, true))
+}
+
 #[cfg(target_os = "windows")]
 fn resolve_windows_startup_executable() -> Result<(std::path::PathBuf, bool), String> {
     let current_exe = std::env::current_exe().map_err(|err| err.to_string())?;
@@ -174,14 +195,34 @@ fn resolve_windows_startup_executable() -> Result<(std::path::PathBuf, bool), St
         return Ok((current_exe, true));
     }
 
-    if let Some(root) = versioned_windows_install_root_from_exe_path(&current_exe) {
-        let update_exe = root.join("Update.exe");
-        if update_exe.is_file() {
-            return Ok((update_exe, true));
-        }
+    if let Some(launcher) = versioned_windows_install_root_from_exe_path(&current_exe)
+        .and_then(|root| windows_root_launcher(&root))
+    {
+        return Ok(launcher);
     }
 
     Ok((current_exe, false))
+}
+
+/// Gives the process the AppUserModelID the installer puts on the Start menu and
+/// desktop shortcuts, so the taskbar groups this window with them and a pin made
+/// from the running window starts the root stub instead of `app-<version>`. Only
+/// for installed builds; dev runs keep the default per-path identity.
+#[cfg(target_os = "windows")]
+fn set_windows_app_user_model_id() {
+    let Ok(current_exe) = std::env::current_exe() else {
+        return;
+    };
+    if versioned_windows_install_root_from_exe_path(&current_exe).is_none() {
+        return;
+    }
+
+    let app_id = windows::core::HSTRING::from(WINDOWS_APP_USER_MODEL_ID);
+    if let Err(err) =
+        unsafe { windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(&app_id) }
+    {
+        eprintln!("[DesktopRuntime] SetCurrentProcessExplicitAppUserModelID failed: {err}");
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -692,6 +733,10 @@ pub fn run() {
             std::process::exit(1);
         }
     }
+
+    // Before any window exists.
+    #[cfg(target_os = "windows")]
+    set_windows_app_user_model_id();
 
     // Install the rustls ring crypto provider before anything touches TLS.
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -1286,9 +1331,43 @@ fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
 mod windows_startup_registration_tests {
     use super::{
         build_windows_startup_command_for_executable, parse_windows_restart_helper_parent_pid,
-        versioned_windows_install_root_from_exe_path,
+        versioned_windows_install_root_from_exe_path, windows_root_launcher,
+        WINDOWS_APP_USER_MODEL_ID,
     };
     use std::path::Path;
+
+    #[test]
+    fn root_launcher_prefers_stub_then_update_exe() {
+        let root = std::env::temp_dir().join(format!("ralph-root-launcher-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        assert_eq!(windows_root_launcher(&root), None);
+
+        std::fs::write(root.join("Update.exe"), b"update").unwrap();
+        assert_eq!(
+            windows_root_launcher(&root),
+            Some((root.join("Update.exe"), true))
+        );
+
+        std::fs::write(root.join("RalphMeet.exe"), b"stub").unwrap();
+        let (launcher, is_update_launcher) = windows_root_launcher(&root).unwrap();
+        assert_eq!(launcher, root.join("RalphMeet.exe"));
+        assert!(!is_update_launcher);
+        assert_eq!(
+            build_windows_startup_command_for_executable(&launcher, is_update_launcher),
+            format!("\"{}\"", root.join("RalphMeet.exe").display())
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn app_user_model_id_matches_tauri_identifier() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(config["identifier"], WINDOWS_APP_USER_MODEL_ID);
+    }
 
     #[test]
     fn versioned_install_root_resolves_from_app_directory() {
