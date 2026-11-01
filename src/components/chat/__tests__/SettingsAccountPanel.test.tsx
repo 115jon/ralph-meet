@@ -14,10 +14,18 @@ const mocks = vi.hoisted(() => ({
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
   loadCurrentUser: vi.fn(),
+  signOut: vi.fn(() => Promise.resolve()),
+  endKovaBrowserSession: vi.fn(() => Promise.resolve()),
+  linked: {
+    accounts: [] as { providerId: string }[],
+    isLoaded: true,
+    error: null as string | null,
+  },
 }));
 
 vi.mock("@kova/react", () => ({
-  useAuth: () => ({ signOut: vi.fn(() => Promise.resolve()) }),
+  useAuth: () => ({ signOut: mocks.signOut }),
+  useLinkedAccounts: () => mocks.linked,
   useUser: () => ({
     user: {
       username: "old_handle",
@@ -25,6 +33,10 @@ vi.mock("@kova/react", () => ({
       primaryEmailAddress: { emailAddress: "user@example.com" },
     },
   }),
+}));
+
+vi.mock("@/lib/kova-sign-out", () => ({
+  endKovaBrowserSession: mocks.endKovaBrowserSession,
 }));
 
 vi.mock("@/lib/api-client", () => ({
@@ -185,5 +197,76 @@ describe("AccountPanel inline profile editing", () => {
     expect(
       screen.getByRole("button", { name: "Claim account" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("AccountPanel sign-in", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.linked.accounts = [];
+    mocks.linked.isLoaded = true;
+    mocks.linked.error = null;
+  });
+
+  it("shows the account's real sign-in methods from Kova", () => {
+    routeApiGet();
+    mocks.linked.accounts = [
+      { providerId: "credential" },
+      { providerId: "google" },
+    ];
+    render(<AccountPanel />);
+    expect(screen.getByText("Sign-in methods")).toBeInTheDocument();
+    expect(screen.getByText("Google, Email & password")).toBeInTheDocument();
+    expect(screen.queryByText("Ralph Auth")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "How you sign in. Kova manages your password and security.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("The address you sign in with."),
+    ).toBeInTheDocument();
+  });
+
+  it("says Loading… until the methods arrive", () => {
+    routeApiGet();
+    mocks.linked.isLoaded = false;
+    render(<AccountPanel />);
+    expect(screen.getByText("Sign-in methods")).toBeInTheDocument();
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+  });
+
+  it("leaves the row out when Kova can't list them", () => {
+    routeApiGet();
+    mocks.linked.error = "Unauthorized";
+    render(<AccountPanel />);
+    expect(screen.queryByText("Sign-in methods")).not.toBeInTheDocument();
+    expect(screen.getByText("Email")).toBeInTheDocument();
+  });
+
+  it("ends the auth-domain session before the SDK signs out", async () => {
+    routeApiGet();
+    const replace = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...original, replace },
+    });
+    try {
+      render(<AccountPanel />);
+      fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+      const confirm = screen.getAllByRole("button", { name: "Sign out" });
+      fireEvent.click(confirm[confirm.length - 1]!);
+      await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+      const [endSession] = mocks.endKovaBrowserSession.mock.invocationCallOrder;
+      const [signOut] = mocks.signOut.mock.invocationCallOrder;
+      expect(endSession).toBeLessThan(signOut!);
+      expect(mocks.signOut).toHaveBeenCalledWith("/sign-in");
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: original,
+      });
+    }
   });
 });
