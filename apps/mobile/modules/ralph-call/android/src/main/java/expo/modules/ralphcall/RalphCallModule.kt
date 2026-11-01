@@ -53,6 +53,14 @@ class IncomingCallRecord : Record {
   @Field val ringSeconds: Int = IncomingCall.DEFAULT_RING_SECONDS
 }
 
+class PipRecord : Record {
+  @Field val aspectWidth: Int = 16
+
+  @Field val aspectHeight: Int = 9
+
+  @Field val muted: Boolean = false
+}
+
 class RalphCallModule : Module() {
   private val context: Context
     get() = requireNotNull(appContext.reactContext) { "React context is gone" }
@@ -95,6 +103,8 @@ class RalphCallModule : Module() {
         "onIncomingCall",
         "onIncomingCallEnded",
         "onIncomingCallAnswered",
+        "onPipModeChanged",
+        "onSoundEnded",
       )
 
       OnCreate {
@@ -104,7 +114,12 @@ class RalphCallModule : Module() {
           IncomingCallNotification.ensureChannels(it)
           LockScreenCall.register(it)
         }
-        appContext.currentActivity?.let { LockScreenCall.track(it) }
+        appContext.currentActivity?.let {
+          LockScreenCall.track(it)
+          CallPip.attach(it)
+        }
+        CallPip.listener = { active -> sendEvent("onPipModeChanged", mapOf("active" to active)) }
+        CallSounds.onEnded = { id, error -> sendEvent("onSoundEnded", mapOf("id" to id, "error" to error)) }
       }
 
       // The JS that owned the call is gone (reload, teardown): end it.
@@ -113,6 +128,10 @@ class RalphCallModule : Module() {
         if (IncomingCalls.listener === incomingListener) IncomingCalls.listener = null
         stopKeepAlive()
         appContext.reactContext?.let { CallController.end(it) }
+        CallPip.listener = null
+        CallPip.configure(null)
+        CallSounds.onEnded = null
+        CallSounds.stopAll()
       }
 
       AsyncFunction("startCall") { options: CallOptions ->
@@ -190,6 +209,40 @@ class RalphCallModule : Module() {
           }
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
       }
+
+      // ── Picture-in-picture and rotation (the call screen) ──────────
+
+      AsyncFunction("setPip") { params: PipRecord? ->
+        CallPip.attach(appContext.currentActivity)
+        CallPip.configure(params?.let { PipConfig(it.aspectWidth, it.aspectHeight, it.muted) })
+      }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("enterPip") {
+        CallPip.enter(appContext.currentActivity)
+      }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("closePip") {
+        CallPip.close()
+      }.runOnQueue(Queues.MAIN)
+
+      Function("isInPip") {
+        CallPip.active
+      }
+
+      AsyncFunction("setRotationUnlocked") { unlocked: Boolean ->
+        CallPip.attach(appContext.currentActivity)
+        CallPip.setRotationUnlocked(unlocked)
+      }.runOnQueue(Queues.MAIN)
+
+      // ── Call sounds (tones, soundboard) ────────────────────────────
+
+      AsyncFunction("playSound") { id: String, uri: String, headers: Map<String, String>?, volume: Double ->
+        CallSounds.play(context, id, uri, headers ?: emptyMap(), volume.toFloat())
+      }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("stopSound") { id: String ->
+        CallSounds.stop(id)
+      }.runOnQueue(Queues.MAIN)
 
       // Only acts while startScreenShare() armed it; see onProjectionConsent.
       OnActivityResult { _, payload ->

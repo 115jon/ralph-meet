@@ -18,12 +18,20 @@ import {
   speakingLevel,
   useCallPreferences,
 } from "@/features/preferences/call-preferences";
+import {
+  handleSoundboardEvent,
+  handleSoundboardRejected,
+  resetSoundboard,
+} from "@/features/soundboard/playback";
 import { showToast } from "@/ui";
 
 import type { CameraFacing } from "./local-media";
+import { peerGain, peerSettings, usePeerSettingsStore } from "./peer-settings";
+import { inPip, usePipStore } from "./pip";
 import { dmCallRoomSlug, voiceRoomSlug } from "./protocol";
-import type { VoiceSession } from "./session";
+import type { AudioSource, VoiceSession } from "./session";
 import { type DmCall, NO_LOCAL_MEDIA, useVoiceStore } from "./store";
+import { startJoinLeaveTones } from "./tones";
 
 // Starting and ending calls. The WebRTC engine (react-native-webrtc,
 // PartyTracks) is imported on the first join, so the app starts without it.
@@ -43,6 +51,8 @@ let screenStarting = false;
  */
 let resumeCamera: CameraFacing | null = null;
 let appStateSubscription: NativeEventSubscription | null = null;
+/** What follows the session while it lives: tones, gains, PiP. */
+let stopCallWatchers: (() => void) | null = null;
 
 export interface JoinTarget {
   /** Empty for a DM call. */
@@ -60,6 +70,51 @@ async function microphoneAllowed(): Promise<boolean> {
     PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
   );
   return result === PermissionsAndroid.RESULTS.GRANTED;
+}
+
+/** A participant's voice or share gain, from their user's settings here. */
+function audioGain(participantId: string, source: AudioSource): number {
+  const participant =
+    useVoiceStore.getState().call?.participants[participantId];
+  return peerGain(peerSettings(participant?.userId ?? null), source);
+}
+
+/**
+ * Tones on others joining and leaving, gains re-read when a person's
+ * settings or the roster change, and the camera's background rule when the
+ * PiP window closes behind other apps.
+ */
+function watchCall(current: VoiceSession): () => void {
+  const stopTones = startJoinLeaveTones();
+  const stopSettings = usePeerSettingsStore.subscribe(() =>
+    current.refreshAudioGains(),
+  );
+  const stopRoster = useVoiceStore.subscribe((state, previous) => {
+    if (state.call?.participants !== previous.call?.participants) {
+      current.refreshAudioGains();
+    }
+  });
+  const stopPip = usePipStore.subscribe((state, previous) => {
+    if (
+      previous.active &&
+      !state.active &&
+      AppState.currentState !== "active"
+    ) {
+      onAppStateChange("background");
+    }
+  });
+  return () => {
+    stopTones();
+    stopSettings();
+    stopRoster();
+    stopPip();
+  };
+}
+
+function stopWatchingCall(): void {
+  stopCallWatchers?.();
+  stopCallWatchers = null;
+  resetSoundboard();
 }
 
 function failJoin(label: string, text: string): void {
@@ -143,11 +198,15 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     muted: joinMuted,
     deafened: false,
     speakingLevel,
+    audioGain,
+    onAppEvent: handleSoundboardEvent,
+    onAppEventRejected: handleSoundboardRejected,
     onEnd: (end) => {
       engine.stopCallAudio();
       if (session === next) {
         stopCallService();
         stopWatchingAppState();
+        stopWatchingCall();
         session = null;
       }
       const call = useVoiceStore.getState().call;
@@ -167,6 +226,7 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
   next.setWatchingVideo(watchingVideo);
   next.start();
   watchAppState();
+  stopCallWatchers = watchCall(next);
   // While the app is still in front: Android only starts the microphone
   // foreground service from a visible app.
   startCallService({ toggleMute, leave: leaveCall });
@@ -178,11 +238,17 @@ export function leaveCall(): void {
   const ending = session;
   session = null;
   stopWatchingAppState();
+  stopWatchingCall();
   // The session stops the camera and screen tracks; ending the call service
   // drops its mediaProjection type with it.
   ending?.leave();
   stopCallService();
   useVoiceStore.setState({ call: null });
+}
+
+/** A voice-session app event (the soundboard's play) to everyone in the call. */
+export function sendVoiceAppEvent(d: Readonly<Record<string, unknown>>): void {
+  session?.sendAppEvent(d);
 }
 
 export function toggleMute(): void {
@@ -312,7 +378,8 @@ export function stopScreenShare(): void {
 function onAppStateChange(state: AppStateStatus): void {
   const current = session;
   if (!current) return;
-  if (state === "background" && current.cameraOn) {
+  // In PiP the call is still on screen: the camera stays on.
+  if (state === "background" && current.cameraOn && !inPip()) {
     resumeCamera = current.facing;
     current.setCamera(null);
   } else if (state === "active" && resumeCamera) {

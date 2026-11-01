@@ -3,6 +3,7 @@ import {
   MicrophoneSlash,
   Monitor,
   SpeakerSlash,
+  SpeakerX,
 } from "phosphor-react-native";
 import { lazy, memo, Suspense } from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
@@ -12,6 +13,7 @@ import { RADIUS, useTheme } from "@/theme";
 import { Avatar, Icon, Led, Text } from "@/ui";
 
 import { flipCamera } from "./actions";
+import { PEER_VOLUME, usePeerSettings } from "./peer-settings";
 import {
   type CallTile,
   useIsSelf,
@@ -30,20 +32,24 @@ interface ParticipantTileProps {
   /** A filmstrip thumbnail under the stage: smaller avatar and plate. */
   compact?: boolean;
   onPress: (tile: CallTile) => void;
+  /** Opens the person's sheet (volume, mute for me) or your own options. */
+  onLongPress?: (tile: CallTile) => void;
   style?: StyleProp<ViewStyle>;
 }
 
 /**
  * One tile: a participant (camera video when it is on, else the square
  * avatar) or the screen they share. Speaking lights the LED and rings the
- * tile in talk green; muted or deafened shows the glyph in danger. Both are
- * state changes, nothing animates.
+ * tile in talk green; muted or deafened shows the glyph in danger, and so
+ * does a struck speaker when you muted them for yourself. A volume other
+ * than 100% shows as a readout on the plate. All state, nothing animates.
  */
 export const ParticipantTile = memo(function ParticipantTile({
   tile,
   staged = false,
   compact = false,
   onPress,
+  onLongPress,
   style,
 }: ParticipantTileProps) {
   const theme = useTheme();
@@ -52,18 +58,24 @@ export const ParticipantTile = memo(function ParticipantTile({
   const self = useIsSelf(tile.participantId);
   const stream = useTileStream(tile);
   const mirrored = useTileMirrored(tile);
+  const settings = usePeerSettings(self ? null : (participant?.userId ?? null));
   if (!participant) return null;
 
   const screen = tile.kind === "screen";
+  const level = screen ? settings.streamVolume : settings.volume;
+  const readout =
+    !settings.muted && level !== PEER_VOLUME.default ? `${level}%` : null;
   // A screen tile shows the share, not the person: no ring, no mute glyph.
   const ringed = speaking && !screen;
-  const mark = screen
-    ? null
-    : participant.deafened
-      ? { icon: SpeakerSlash, label: "deafened" }
-      : participant.muted
-        ? { icon: MicrophoneSlash, label: "muted" }
-        : null;
+  const mark = settings.muted
+    ? { icon: SpeakerX, label: "muted for you" }
+    : screen
+      ? null
+      : participant.deafened
+        ? { icon: SpeakerSlash, label: "deafened" }
+        : participant.muted
+          ? { icon: MicrophoneSlash, label: "muted" }
+          : null;
   const name = self ? `${participant.name} (you)` : participant.name;
   const label = screen
     ? `${name}, sharing their screen`
@@ -76,7 +88,13 @@ export const ParticipantTile = memo(function ParticipantTile({
       accessibilityHint={
         staged ? "Returns to the grid" : "Shows this tile large"
       }
+      accessibilityActions={
+        onLongPress ? [{ name: "longpress", label: "Options" }] : undefined
+      }
+      onAccessibilityAction={() => onLongPress?.(tile)}
       onPress={() => onPress(tile)}
+      onLongPress={onLongPress ? () => onLongPress(tile) : undefined}
+      delayLongPress={350}
       style={[
         {
           flex: 1,
@@ -148,10 +166,10 @@ export const ParticipantTile = memo(function ParticipantTile({
             backgroundColor: theme.ply4,
           }}
         >
-          {screen ? (
-            <Icon icon={Monitor} size={14} color={theme.ink2} />
-          ) : mark ? (
+          {mark ? (
             <Icon icon={mark.icon} active size={14} color={theme.dangerInk} />
+          ) : screen ? (
+            <Icon icon={Monitor} size={14} color={theme.ink2} />
           ) : (
             <Led state={speaking ? "talk" : "off"} />
           )}
@@ -162,6 +180,11 @@ export const ParticipantTile = memo(function ParticipantTile({
           >
             {name}
           </Text>
+          {readout && !compact ? (
+            <Text variant="num" tone="ink2" style={{ fontSize: 11 }}>
+              {readout}
+            </Text>
+          ) : null}
         </View>
       </View>
     </Pressable>

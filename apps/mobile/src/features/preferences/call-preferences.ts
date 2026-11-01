@@ -22,6 +22,11 @@ export interface CallPreferences {
   readonly skipCallConfirm: boolean;
   /** The lock-screen permission was offered once (Android 14+). */
   readonly fullScreenOffered: boolean;
+  /**
+   * A short tone when someone joins or leaves the call (the web's
+   * voiceJoinLeave sound setting).
+   */
+  readonly joinLeaveTones: boolean;
 }
 
 /** The slider's range. -29 dB is the level the detector shipped with (0.035). */
@@ -33,6 +38,7 @@ const DEFAULTS: CallPreferences = {
   audioRoute: "speaker",
   skipCallConfirm: false,
   fullScreenOffered: false,
+  joinLeaveTones: true,
 };
 
 const StoredPreferences = Schema.Struct({
@@ -41,6 +47,7 @@ const StoredPreferences = Schema.Struct({
   audioRoute: Schema.optional(Schema.Literals(["speaker", "earpiece"])),
   skipCallConfirm: Schema.optional(Schema.Boolean),
   fullScreenOffered: Schema.optional(Schema.Boolean),
+  joinLeaveTones: Schema.optional(Schema.Boolean),
 });
 const decodeStored = Schema.decodeUnknownOption(StoredPreferences);
 
@@ -69,6 +76,7 @@ function parse(raw: string | null): Partial<CallPreferences> {
     audioRoute,
     skipCallConfirm,
     fullScreenOffered,
+    joinLeaveTones,
   } = stored;
   return {
     ...(speakingThresholdDb !== undefined && {
@@ -78,6 +86,7 @@ function parse(raw: string | null): Partial<CallPreferences> {
     ...(audioRoute !== undefined && { audioRoute }),
     ...(skipCallConfirm !== undefined && { skipCallConfirm }),
     ...(fullScreenOffered !== undefined && { fullScreenOffered }),
+    ...(joinLeaveTones !== undefined && { joinLeaveTones }),
   };
 }
 

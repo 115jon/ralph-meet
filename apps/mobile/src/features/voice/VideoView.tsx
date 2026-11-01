@@ -1,6 +1,8 @@
 import { StyleSheet } from "react-native";
 import { RTCView } from "react-native-webrtc";
 
+import { setVideoSize } from "./video-size";
+
 interface VideoViewProps {
   streamURL: string;
   /** contain for screens (nothing cropped), cover for cameras. */
@@ -23,6 +25,7 @@ export default function VideoView({
       streamURL={streamURL}
       objectFit={fit}
       mirror={mirror}
+      onDimensionsChange={(event) => setVideoSize(streamURL, event.nativeEvent)}
       style={StyleSheet.absoluteFill}
     />
   );

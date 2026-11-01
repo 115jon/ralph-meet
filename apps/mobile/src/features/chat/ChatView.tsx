@@ -60,7 +60,9 @@ export interface ChatViewProps {
    */
   attended: boolean;
   /** The header's menu key: slides the chat aside to the drawer. */
-  onOpenDrawer: () => void;
+  onOpenDrawer?: () => void;
+  /** Replaces the chat header (the call's chat drawer draws its own). */
+  header?: ReactNode;
   /** A channel's members key. */
   onMembers?: () => void;
   /** A DM's header opens the other person's profile. */
@@ -94,6 +96,7 @@ export function ChatView({
   onCall,
   callDisabled,
   banner,
+  header,
 }: ChatViewProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -194,16 +197,19 @@ export function ChatView({
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.ply0 }}>
-      <ChatHeader
-        title={title}
-        subtitle={subtitle}
-        avatar={avatar}
-        onMenu={onOpenDrawer}
-        onMembers={onMembers}
-        onTitle={onTitle}
-        onCall={onCall}
-        callDisabled={callDisabled}
-      />
+      {header ??
+        (onOpenDrawer ? (
+          <ChatHeader
+            title={title}
+            subtitle={subtitle}
+            avatar={avatar}
+            onMenu={onOpenDrawer}
+            onMembers={onMembers}
+            onTitle={onTitle}
+            onCall={onCall}
+            callDisabled={callDisabled}
+          />
+        ) : null)}
       {banner}
       <Animated.View style={[{ flex: 1 }, bodyStyle]}>
         <MembersContext value={memberNames}>

@@ -10,6 +10,7 @@ export interface CallParticipant {
   readonly id: string;
   readonly userId: string | null;
   readonly name: string;
+  readonly username: string | null;
   readonly avatarUrl: string | null;
   readonly muted: boolean;
   readonly deafened: boolean;
@@ -179,17 +180,42 @@ export function useCallTiles(): readonly CallTile[] {
  * A tile's stream URL: the camera only while it is on, or the screen. Our
  * own tile shows the local camera, never a pull of ourselves.
  */
+function tileStream(call: ActiveCall | null, tile: CallTile): string | null {
+  if (!call) return null;
+  if (tile.participantId === call.selfId) {
+    return tile.kind === "person" ? call.local.camera : null;
+  }
+  const video = call.videos[tile.participantId];
+  if (!video) return null;
+  if (tile.kind === "screen") return video.screen;
+  return call.participants[tile.participantId]?.camera ? video.camera : null;
+}
+
 export function useTileStream(tile: CallTile): string | null {
-  return useVoiceStore((s) => {
+  return useVoiceStore((s) => tileStream(s.call, tile));
+}
+
+/**
+ * The tile the PiP window shows: the staged one if it has video, else the
+ * camera of whoever is speaking, else a share, else any camera (ours too).
+ * Null with no video on screen: a voice-only call never enters PiP.
+ */
+export function usePipTile(
+  tiles: readonly CallTile[],
+  stagedKey: string | null,
+): CallTile | null {
+  const key = useVoiceStore((s) => {
     const call = s.call;
-    if (call && tile.participantId === call.selfId) {
-      return tile.kind === "person" ? call.local.camera : null;
-    }
-    const video = call?.videos[tile.participantId];
-    if (!video) return null;
-    if (tile.kind === "screen") return video.screen;
-    return call?.participants[tile.participantId]?.camera ? video.camera : null;
+    if (!call) return null;
+    const live = tiles.filter((tile) => tileStream(call, tile) !== null);
+    const staged = live.find((tile) => tile.key === stagedKey);
+    const speaking = live.find(
+      (tile) => tile.kind === "person" && call.speaking[tile.participantId],
+    );
+    const screen = live.find((tile) => tile.kind === "screen");
+    return (staged ?? speaking ?? screen ?? live[0])?.key ?? null;
   });
+  return tiles.find((tile) => tile.key === key) ?? null;
 }
 
 /** Our front-camera tile is mirrored; everything else shows as sent. */

@@ -176,6 +176,15 @@ const StopTracksPayload = Schema.Struct({
   tracks: Schema.optional(TrackInfos),
 });
 
+/**
+ * VoiceAppEvent (106): a lightweight session event the voice room relays to
+ * every participant, the sender included (realtime/voice-room.ts
+ * handleVoiceAppEvent). Only the envelope is checked here; the soundboard
+ * decodes the events it knows (features/soundboard/events.ts).
+ */
+const VoiceAppEventPayload = Schema.Record(Schema.String, Schema.Unknown);
+export type VoiceAppEvent = typeof VoiceAppEventPayload.Type;
+
 /** Push this publication again under a new SFU track (listeners cannot pull it). */
 const RepublishRequestPayload = Schema.Struct({
   track_name: Schema.String,
@@ -207,6 +216,10 @@ const voiceServerRules = {
   [GatewayOp.RepublishRequest]: {
     schema: RepublishRequestPayload,
     invalid: "Invalid RepublishRequest",
+  },
+  [GatewayOp.VoiceAppEvent]: {
+    schema: VoiceAppEventPayload,
+    invalid: "Invalid VoiceAppEvent",
   },
   [GatewayOp.Error]: { schema: ErrorPayload, invalid: "Invalid Error" },
 } as const satisfies PayloadRules;
