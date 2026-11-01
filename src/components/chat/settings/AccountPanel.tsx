@@ -14,11 +14,13 @@ import {
   markAuthLogoutIntent,
 } from "@/lib/desktop-auth";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { endKovaBrowserSession } from "@/lib/kova-sign-out";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { safeParse } from "@/lib/schema";
+import { signInMethodLabels } from "@/lib/sign-in-methods";
 import { DisplayNameSchema, UsernameSchema } from "@/lib/validations";
 import { useChatStore } from "@/stores/chat-store";
-import { useAuth, useUser } from "@kova/react";
+import { useAuth, useLinkedAccounts, useUser } from "@kova/react";
 import { useEffect, useRef, useState } from "react";
 import {
   ComingLater,
@@ -455,6 +457,7 @@ function ClaimAccountCard() {
 export default function AccountPanel() {
   const { user, isLoaded } = useUser();
   const { signOut } = useAuth();
+  const linkedAccounts = useLinkedAccounts();
   const { openProfileEditor } = useSettings();
   const chatUser = useChatStore((s) => s.user);
   const loadCurrentUser = useChatStore((s) => s.actions.loadCurrentUser);
@@ -493,6 +496,13 @@ export default function AccountPanel() {
   const email =
     user?.primaryEmailAddress?.emailAddress ??
     (isLoaded === false ? "Loading…" : "No email on file");
+  // Kova's linked accounts. If they can't be read, the row stays out rather
+  // than guess.
+  const signInMethods = linkedAccounts.isLoaded
+    ? signInMethodLabels(
+        linkedAccounts.accounts.map((account) => account.providerId),
+      ).join(", ")
+    : "Loading…";
   const avatarUrl = chatUser?.avatar_url
     ? getAuthAssetUrl(chatUser.avatar_url)
     : (user?.imageUrl ?? null);
@@ -532,11 +542,15 @@ export default function AccountPanel() {
     setSigningOut(true);
     markAuthLogoutIntent();
     clearDesktopAuthSession();
-    void signOut("/sign-in").finally(() => {
-      if (typeof window !== "undefined") {
-        window.location.replace("/sign-in");
-      }
-    });
+    // Auth-domain session first, so the SDK can't mint a new token from it
+    // mid sign-out and land /sign-in signed in again.
+    void endKovaBrowserSession()
+      .then(() => signOut("/sign-in"))
+      .finally(() => {
+        if (typeof window !== "undefined") {
+          window.location.replace("/sign-in");
+        }
+      });
   };
 
   return (
@@ -596,9 +610,11 @@ export default function AccountPanel() {
         <SettingsRow id="email" layout="inline">
           {() => <ValueText>{email}</ValueText>}
         </SettingsRow>
-        <SettingsRow id="sign-in-method" layout="inline">
-          {() => <ValueText>Ralph Auth</ValueText>}
-        </SettingsRow>
+        {linkedAccounts.error ? null : (
+          <SettingsRow id="sign-in-method" layout="inline">
+            {() => <ValueText>{signInMethods}</ValueText>}
+          </SettingsRow>
+        )}
         <SettingsRow
           id="sign-out"
           layout="inline"

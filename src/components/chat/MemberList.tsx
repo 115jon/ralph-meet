@@ -964,9 +964,7 @@ function findCallChannelId(
 ): string | null {
   if (!userId) return null;
   for (const channelId in voiceChannelStates) {
-    if (
-      voiceChannelStates[channelId]?.some((m) => m.clerk_user_id === userId)
-    ) {
+    if (voiceChannelStates[channelId]?.some((m) => m.user_id === userId)) {
       return channelId;
     }
   }
@@ -1748,7 +1746,7 @@ const MemberItem = memo(function MemberItem({
   const inCall = useChatStore((state) =>
     callChannelId
       ? (state.voiceChannelStates[callChannelId]?.some(
-          (m) => m.clerk_user_id === userId,
+          (m) => m.user_id === userId,
         ) ?? false)
       : false,
   );

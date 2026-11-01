@@ -5,6 +5,12 @@
 @source "../src";
 @source "./";
 
+/* Height of the window chrome below. Overlays that cover the window
+   (the settings workbench) start under it, since it stays on top of them. */
+:root {
+  --app-chrome-top: 32px;
+}
+
 .desktop-window-shell {
   display: flex;
   flex-direction: column;
@@ -22,9 +28,9 @@
   z-index: 10000;
   display: flex;
   align-items: center;
-  flex: 0 0 32px;
-  height: 32px;
-  min-height: 32px;
+  flex: 0 0 var(--app-chrome-top);
+  height: var(--app-chrome-top);
+  min-height: var(--app-chrome-top);
   user-select: none;
   -webkit-user-select: none;
   background: var(--ply-0);

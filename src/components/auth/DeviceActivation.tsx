@@ -42,6 +42,7 @@ import {
   waitPhrase,
 } from "@/lib/device-code-format";
 import { getKovaAuthUrl } from "@/lib/kova-auth-config";
+import { endKovaBrowserSession } from "@/lib/kova-sign-out";
 import {
   useAuth,
   useDeviceApproval,
@@ -495,6 +496,9 @@ export function DeviceActivation({
       ? switchAccountSignInUrl(code)
       : releaseFailedPath(code);
     markAuthLogoutIntent();
+    // End the auth-domain session first. Otherwise the SDK mints a new token
+    // from it mid sign-out, and /sign-in signs the same account back in.
+    await endKovaBrowserSession();
     // The SDK hard-navigates to this URL once signed out. Passing it here is
     // what keeps its afterSignOutUrl ("/sign-in", no query) from winning.
     await signOut(target).catch(() => {});

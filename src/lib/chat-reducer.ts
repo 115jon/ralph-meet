@@ -124,7 +124,7 @@ export interface ChatState {
 }
 
 export interface VoiceChannelMember {
-  clerk_user_id: string;
+  user_id: string;
   name: string;
   username?: string;
   display_name?: string | null;
@@ -515,7 +515,7 @@ function enrichVoiceMembers(
   state: ChatState,
 ): VoiceChannelMember[] {
   return members.map((m) => {
-    const knownUser = findKnownUser(state, m.clerk_user_id);
+    const knownUser = findKnownUser(state, m.user_id);
     const hasName = hasVoiceMemberField(m, "name");
     const hasUsername = hasVoiceMemberField(m, "username");
     const hasDisplayName = hasVoiceMemberField(m, "display_name");
@@ -535,7 +535,7 @@ function enrichVoiceMembers(
       hasDisplayNameStyle && "display_name_style" in m
         ? m.display_name_style
         : undefined;
-    const fallbackName = memberName || memberUsername || m.clerk_user_id;
+    const fallbackName = memberName || memberUsername || m.user_id;
     const displayName = getDisplayName(
       {
         display_name: hasDisplayName
@@ -552,7 +552,7 @@ function enrichVoiceMembers(
       name: displayName,
       username: hasUsername
         ? memberUsername
-        : (knownUser?.username ?? memberName ?? m.clerk_user_id),
+        : (knownUser?.username ?? memberName ?? m.user_id),
       display_name: hasDisplayName
         ? (memberDisplayName ?? null)
         : (knownUser?.display_name ?? null),
@@ -581,10 +581,10 @@ function mergeVoiceMemberProfiles(
   previous: VoiceChannelMember[],
 ): VoiceChannelMemberInput[] {
   const previousByUserId = new Map(
-    previous.map((member) => [member.clerk_user_id, member]),
+    previous.map((member) => [member.user_id, member]),
   );
   return members.map((member) => {
-    const previousMember = previousByUserId.get(member.clerk_user_id);
+    const previousMember = previousByUserId.get(member.user_id);
     return {
       ...previousMember,
       ...member,
@@ -1507,9 +1507,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       let voiceChanged = false;
       for (const channelId of Object.keys(newVoiceStates)) {
         const members = newVoiceStates[channelId];
-        const vcIdx = members.findIndex(
-          (m) => m.clerk_user_id === action.userId,
-        );
+        const vcIdx = members.findIndex((m) => m.user_id === action.userId);
         if (vcIdx !== -1) {
           const updated = { ...members[vcIdx] };
           if (action.name !== undefined) updated.name = action.name;

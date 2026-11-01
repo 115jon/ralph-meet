@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@kova/react", () => ({
   useUser: () => ({ isLoaded: true, user: null }),
   useAuth: () => ({ signOut: vi.fn(() => Promise.resolve()) }),
+  useLinkedAccounts: () => ({ accounts: [], isLoaded: true, error: null }),
 }));
 
 vi.mock("@/lib/platform", async () => {

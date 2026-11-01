@@ -704,7 +704,12 @@ export default function SettingsModal({
         <div className="flex min-w-0 flex-col gap-10">
           <PanelComponent />
         </div>
-        <aside aria-label="Preview" className="sticky top-8 min-w-0">
+        {/* Pinned while it fits; on short windows a tall card (a decorated
+            profile) would hang past the scroller, so it scrolls instead. */}
+        <aside
+          aria-label="Preview"
+          className="sticky top-8 min-w-0 [@media(max-height:800px)]:static"
+        >
           <SettingsRail panel={shownPanel} />
         </aside>
       </div>

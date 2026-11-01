@@ -149,7 +149,7 @@ function mergeParticipant(
 ): CallParticipant {
   return {
     id: state.id,
-    userId: state.clerk_user_id ?? previous?.userId ?? null,
+    userId: state.user_id ?? previous?.userId ?? null,
     name: participantName(state, previous),
     avatarUrl:
       state.avatar_url !== undefined

@@ -416,7 +416,7 @@ export default function UserPanel({
       : [];
     return Object.fromEntries(
       (gridItems ?? []).map((item) => {
-        const member = vcMembers.find((m) => m.clerk_user_id === item.userId);
+        const member = vcMembers.find((m) => m.user_id === item.userId);
         return [
           item.userId,
           {

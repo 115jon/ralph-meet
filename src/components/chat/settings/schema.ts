@@ -115,14 +115,24 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
           {
             id: "email",
             label: "Email",
-            desc: "The address on your Ralph Auth account.",
+            desc: "The address you sign in with.",
             keywords: ["mail", "address"],
           },
           {
             id: "sign-in-method",
-            label: "Sign-in method",
-            desc: "Your password and security are managed by Ralph Auth.",
-            keywords: ["password", "security", "ralph auth", "login"],
+            label: "Sign-in methods",
+            desc: "How you sign in. Kova manages your password and security.",
+            keywords: [
+              "password",
+              "security",
+              "kova",
+              "login",
+              "google",
+              "discord",
+              "github",
+              "provider",
+              "linked",
+            ],
           },
           {
             id: "sign-out",

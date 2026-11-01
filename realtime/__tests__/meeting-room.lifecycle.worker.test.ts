@@ -15,6 +15,7 @@ import {
   HEARTBEAT_FRAME,
   mainGatewayClientRules,
 } from "../../src/lib/gateway-protocol";
+import { MeetingRoom } from "../meeting-room";
 
 async function createAdmissionHeaders(
   roomName: string,
@@ -160,7 +161,6 @@ async function identifyMeetingSocket(
         avatar_url: profile.avatar_url,
         avatar_display: profile.avatar_display,
         supports_voice_state_deltas: profile.supports_voice_state_deltas,
-        clerk_user_id: "forged-user",
       },
     }),
   );
@@ -469,6 +469,7 @@ describe("MeetingRoom lifecycle", () => {
       action: "update",
       participant: {
         id: senderReady.participant_id,
+        user_id: "profile-sender",
         clerk_user_id: "profile-sender",
         platform: "web",
         stream_preview_url: null,
@@ -489,6 +490,7 @@ describe("MeetingRoom lifecycle", () => {
       action: "update",
       participant: {
         id: senderReady.participant_id,
+        user_id: "profile-sender",
         clerk_user_id: "profile-sender",
         name: "Sender Name",
         username: "sender-user",
@@ -578,6 +580,7 @@ describe("MeetingRoom lifecycle", () => {
       action: "update",
       participant: {
         id: senderReady.participant_id,
+        user_id: "replay-sender",
         clerk_user_id: "replay-sender",
         platform: "web",
         stream_preview_url: null,
@@ -598,6 +601,7 @@ describe("MeetingRoom lifecycle", () => {
       action: "update",
       participant: {
         id: senderReady.participant_id,
+        user_id: "replay-sender",
         clerk_user_id: "replay-sender",
         name: "Replay Sender",
         username: "replay-sender",
@@ -915,7 +919,7 @@ describe("MeetingRoom lifecycle", () => {
           channel_id: channelId,
           members: [
             expect.objectContaining({
-              clerk_user_id: userId,
+              user_id: userId,
               name: "New Display",
               username: "new-user",
               display_name: "New Display",
@@ -1384,7 +1388,7 @@ describe("MeetingRoom lifecycle", () => {
       }
     ).data.members;
     const legacyMember = legacyMembers.find(
-      (member) => member.clerk_user_id === firstUserId,
+      (member) => member.user_id === firstUserId,
     );
     expect(legacyMember).toMatchObject({
       self_mute: false,
@@ -1401,7 +1405,7 @@ describe("MeetingRoom lifecycle", () => {
       }
     ).data.members;
     const capableMember = capableMembers.find(
-      (member) => member.clerk_user_id === firstUserId,
+      (member) => member.user_id === firstUserId,
     );
     expect(capableMember).toMatchObject({ self_mute: false });
     expect(capableMember).not.toHaveProperty("name");
@@ -1461,8 +1465,7 @@ describe("MeetingRoom lifecycle", () => {
           message.d as {
             data?: { members?: Array<Record<string, unknown>> };
           }
-        ).data?.members?.some((member) => member.clerk_user_id === callerId) ??
-        false,
+        ).data?.members?.some((member) => member.user_id === callerId) ?? false,
     );
     caller.send(
       JSON.stringify({
@@ -1477,7 +1480,7 @@ describe("MeetingRoom lifecycle", () => {
           channel_id: channelId,
           members: [
             expect.objectContaining({
-              clerk_user_id: callerId,
+              user_id: callerId,
               name: "Call Caller",
               username: "call-caller",
               display_name: "Call Caller Display",
@@ -1843,16 +1846,19 @@ describe("MeetingRoom lifecycle", () => {
     socket.close();
   });
 
-  it("binds Identify to the admitted subject instead of clerk_user_id", async () => {
+  it("binds Identify to the admitted subject, ignoring any user id the client sends", async () => {
     const roomName = crypto.randomUUID();
     const socket = await openMeetingSocket(roomName);
     const ready = nextMessageWithOpcode(socket, 2);
 
+    // Pre-rename clients still send clerk_user_id in Identify. The room must
+    // accept the frame and take the user from the ticket, not from either key.
     socket.send(
       JSON.stringify({
         op: 0,
         d: {
           clerk_user_id: "forged-user",
+          user_id: "forged-user",
           name: "Forged Name",
         },
       }),
@@ -2269,9 +2275,8 @@ describe("MeetingRoom lifecycle", () => {
           message.d as {
             data?: { members?: Array<Record<string, unknown>> };
           }
-        ).data?.members?.some(
-          (member) => member.clerk_user_id === "user-test",
-        ) ?? false,
+        ).data?.members?.some((member) => member.user_id === "user-test") ??
+        false,
     );
     owner.send(
       JSON.stringify({
@@ -2279,7 +2284,15 @@ describe("MeetingRoom lifecycle", () => {
         d: { channel_id: channelId, self_mute: true },
       }),
     );
-    await initialJoin;
+    // Members carry user_id and, for pre-rename clients, clerk_user_id too.
+    expect(
+      ((await initialJoin).d as { data: { members: unknown[] } }).data.members,
+    ).toEqual([
+      expect.objectContaining({
+        user_id: "user-test",
+        clerk_user_id: "user-test",
+      }),
+    ]);
 
     const updatedState = nextDispatchEventMatching(
       observer,
@@ -2291,7 +2304,7 @@ describe("MeetingRoom lifecycle", () => {
           }
         ).data?.members?.some(
           (member) =>
-            member.clerk_user_id === "user-test" &&
+            member.user_id === "user-test" &&
             member.avatar_url === "https://example.com/new.png" &&
             member.avatar_display === "frame:new",
         ) ?? false,
@@ -2329,7 +2342,7 @@ describe("MeetingRoom lifecycle", () => {
         data: {
           members: [
             expect.objectContaining({
-              clerk_user_id: "user-test",
+              user_id: "user-test",
               name: "New Name",
               username: "new-user",
               display_name: "New Name",
@@ -2373,7 +2386,7 @@ describe("MeetingRoom lifecycle", () => {
           }
         ).data?.members?.some(
           (member) =>
-            member.clerk_user_id === "user-test" &&
+            member.user_id === "user-test" &&
             member.avatar_url === "https://example.com/new.png",
         ) ?? false,
     );
@@ -2388,7 +2401,7 @@ describe("MeetingRoom lifecycle", () => {
         data: {
           members: [
             expect.objectContaining({
-              clerk_user_id: "user-test",
+              user_id: "user-test",
               avatar_url: "https://example.com/new.png",
               avatar_display: "frame:new",
             }),
@@ -3479,5 +3492,201 @@ describe("MeetingRoom gateway protocol edge", () => {
     });
     sender.close();
     observer.close();
+  });
+});
+
+describe("MeetingRoom user_id rename compatibility", () => {
+  it("sends VoiceState with user_id and the pre-rename clerk_user_id", async () => {
+    const roomName = crypto.randomUUID();
+    const first = await openMeetingSocket(roomName, "first-user");
+    await identifyMeetingSocket(first, { name: "First" });
+    const second = await openMeetingSocket(roomName, "second-user");
+    const joined = nextMessageWithOpcodeMatching(
+      first,
+      15,
+      (message) =>
+        (message.d as { participant?: { user_id?: string } }).participant
+          ?.user_id === "second-user",
+    );
+    const ready = await identifyMeetingSocket(second, { name: "Second" });
+
+    expect(ready.participants).toContainEqual(
+      expect.objectContaining({
+        user_id: "first-user",
+        clerk_user_id: "first-user",
+      }),
+    );
+    expect((await joined).d).toMatchObject({
+      action: "join",
+      participant: { user_id: "second-user", clerk_user_id: "second-user" },
+    });
+
+    first.close();
+    second.close();
+  });
+
+  it("restores pre-rename state as user_id and stores both names for a rollback", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openMeetingSocket(roomName, "live-user");
+    await identifyMeetingSocket(socket, { name: "Live" });
+    const now = Date.now();
+    const legacyAttachment = (id: string, userId: string) => ({
+      id,
+      name: userId,
+      clerk_user_id: userId,
+      self_mute: true,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+      seq: 0,
+      subscribed_channels: [],
+      subscribed_servers: [],
+    });
+    const legacyMember = (userId: string) => ({
+      clerk_user_id: userId,
+      name: userId,
+      self_mute: true,
+      self_deaf: false,
+      self_video: false,
+      self_stream: false,
+      connected: true,
+    });
+
+    await runInDurableObject(
+      meetingRoom(roomName),
+      async (_instance, state) => {
+        // Rewrite what this room stored in the shape written before the rename.
+        const [ws] = state.getWebSockets();
+        const { user_id: liveUserId, ...attachment } =
+          ws.deserializeAttachment() as Record<string, unknown>;
+        expect(liveUserId).toBe("live-user");
+        ws.serializeAttachment({ ...attachment, clerk_user_id: liveUserId });
+        await state.storage.put({
+          resumableSessions: {
+            "snapshot-session": {
+              attachment: legacyAttachment("snapshot-session", "snapshot-user"),
+              replay: [],
+              persist_writes: 1,
+            },
+            "bare-session": {
+              ...legacyAttachment("bare-session", "bare-user"),
+              replay_buffer: [],
+            },
+          },
+          resumableSessionExpiry: {
+            "snapshot-session": now,
+            "bare-session": now,
+          },
+          "vc:members:vc-legacy": [
+            legacyMember("live-user"),
+            legacyMember("snapshot-user"),
+          ],
+        });
+
+        // A restart (deploy or hibernation wake) reads it all back.
+        // The test env's bindings type is wider than the room's Env.
+        const restarted = new MeetingRoom(
+          state as unknown as ConstructorParameters<typeof MeetingRoom>[0],
+          env as unknown as ConstructorParameters<typeof MeetingRoom>[1],
+        ) as unknown as {
+          sessions: Map<WebSocket, Record<string, unknown>>;
+          resumableSessions: Map<string, Record<string, unknown>>;
+          voiceChannelMembers: Map<
+            string,
+            Map<string, Record<string, unknown>>
+          >;
+          persist(ws: WebSocket, data: Record<string, unknown>): void;
+          persistVoiceChannelMembers(): void;
+          persistResumableSessions(): void;
+          flushDirtyStorage(): void;
+        };
+        await vi.waitFor(() =>
+          expect(restarted.voiceChannelMembers.get("vc-legacy")?.size).toBe(2),
+        );
+
+        const session = restarted.sessions.get(ws);
+        expect(session).toMatchObject({
+          id: attachment.id,
+          user_id: "live-user",
+        });
+        expect(session).not.toHaveProperty("clerk_user_id");
+        for (const [id, userId] of [
+          ["snapshot-session", "snapshot-user"],
+          ["bare-session", "bare-user"],
+        ]) {
+          const resumable = restarted.resumableSessions.get(id);
+          expect(resumable).toMatchObject({ id, user_id: userId });
+          expect(resumable).not.toHaveProperty("clerk_user_id");
+          expect(resumable).not.toHaveProperty("replay_buffer");
+        }
+        const members = restarted.voiceChannelMembers.get("vc-legacy")!;
+        expect([...members.keys()].sort()).toEqual([
+          "live-user",
+          "snapshot-user",
+        ]);
+        for (const member of members.values()) {
+          expect(member).not.toHaveProperty("clerk_user_id");
+        }
+
+        // Writes carry both names, so the previous Worker version (which
+        // reads only clerk_user_id) still finds every user after a rollback.
+        restarted.persist(ws, session!);
+        restarted.persistVoiceChannelMembers();
+        restarted.persistResumableSessions();
+        restarted.flushDirtyStorage();
+        let stored = new Map<string, unknown>();
+        await vi.waitFor(async () => {
+          stored = await state.storage.get([
+            "vc:members:vc-legacy",
+            "resumableSessions",
+          ]);
+          expect(stored.size).toBe(2);
+        });
+
+        // The previous version's reads, field for field.
+        const preRenameAttachment = ws.deserializeAttachment() as {
+          id?: string;
+          clerk_user_id?: string;
+        };
+        expect(preRenameAttachment.clerk_user_id).toBe("live-user");
+        const preRenameMembers = new Map<string, unknown>();
+        for (const m of stored.get("vc:members:vc-legacy") as Array<{
+          clerk_user_id: string;
+        }>) {
+          preRenameMembers.set(m.clerk_user_id, m);
+        }
+        expect([...preRenameMembers.keys()].sort()).toEqual([
+          "live-user",
+          "snapshot-user",
+        ]);
+        const preRenameSnapshots = stored.get("resumableSessions") as Record<
+          string,
+          { attachment: { clerk_user_id?: string; user_id?: string } }
+        >;
+        for (const [id, userId] of [
+          ["snapshot-session", "snapshot-user"],
+          ["bare-session", "bare-user"],
+        ]) {
+          expect(preRenameSnapshots[id]?.attachment).toMatchObject({
+            clerk_user_id: userId,
+            user_id: userId,
+          });
+        }
+        // Both names, the same value, everywhere.
+        expect(
+          (stored.get("vc:members:vc-legacy") as unknown[]).every(
+            (member) =>
+              (member as { user_id?: string }).user_id ===
+              (member as { clerk_user_id?: string }).clerk_user_id,
+          ),
+        ).toBe(true);
+        // What the room keeps in memory has only user_id.
+        expect(restarted.sessions.get(ws)).not.toHaveProperty("clerk_user_id");
+      },
+    );
+
+    socket.close();
   });
 });

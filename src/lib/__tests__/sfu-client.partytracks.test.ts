@@ -392,7 +392,7 @@ describe("SFUClient PartyTracks facade", () => {
     });
 
     client.roomGW.emit("participant-joined", {
-      participant: voiceParticipant("newcomer", { clerk_user_id: "clerk-new" }),
+      participant: voiceParticipant("newcomer", { user_id: "user-new" }),
     });
     client.roomGW.emit("voice-state-update", {
       action: "update",
@@ -418,7 +418,7 @@ describe("SFUClient PartyTracks facade", () => {
       self_mute: true,
       self_video: false,
     });
-    expect(joined[1]?.[1]?.clerk_user_id).toBe("clerk-new");
+    expect(joined[1]?.[1]?.user_id).toBe("user-new");
     client.disconnect("component-unmount");
   });
 

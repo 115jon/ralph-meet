@@ -72,7 +72,7 @@ export interface TrackInfo {
 /** A participant in the room — Discord-style voice state */
 export interface VoiceState {
   id: string;
-  clerk_user_id?: string;
+  user_id?: string;
   name: string;
   username?: string;
   display_name?: string | null;

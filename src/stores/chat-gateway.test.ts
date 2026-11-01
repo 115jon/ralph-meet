@@ -162,7 +162,7 @@ describe("chat gateway continuity", () => {
     expect(sentMessages(first)).toContainEqual({
       op: 0,
       d: expect.objectContaining({
-        clerk_user_id: "user-1",
+        name: "ChatClient",
         supports_voice_state_deltas: true,
       }),
     });
@@ -226,7 +226,7 @@ describe("chat gateway continuity", () => {
     expect(sentMessages(second)).toContainEqual({
       op: 0,
       d: expect.objectContaining({
-        clerk_user_id: "user-1",
+        name: "ChatClient",
         supports_voice_state_deltas: true,
       }),
     });
@@ -265,7 +265,7 @@ describe("chat gateway continuity", () => {
 
     expect(sentMessages(second)).toContainEqual({
       op: 0,
-      d: expect.objectContaining({ clerk_user_id: "user-2" }),
+      d: expect.objectContaining({ name: "ChatClient" }),
     });
     expect(sentMessages(second)).not.toContainEqual(
       expect.objectContaining({ op: 7 }),
@@ -645,9 +645,10 @@ describe("chat gateway frame decoding", () => {
     expect(first.sent).toEqual([]);
 
     first.message({ op: 8, d: { heartbeat_interval: 45_000 } });
-    // The wire bytes of Identify are unchanged by the codec.
+    // The wire bytes of Identify are unchanged by the codec. No user id: the
+    // room takes it from the ticket (clients no longer send clerk_user_id).
     expect(first.sent).toEqual([
-      '{"op":0,"d":{"name":"ChatClient","clerk_user_id":"user-1","platform":"web","supports_voice_state_deltas":true}}',
+      '{"op":0,"d":{"name":"ChatClient","platform":"web","supports_voice_state_deltas":true}}',
     ]);
     first.message({ op: 2, d: { participant_id: "session-1" } });
     expect(dispatch).toHaveBeenCalledWith({

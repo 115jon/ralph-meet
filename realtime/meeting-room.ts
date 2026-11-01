@@ -20,6 +20,7 @@ import {
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
   parseGatewayFrame,
+  withLegacyClerkUserId,
   type MainClientPayload,
 } from "../src/lib/gateway-protocol";
 import { clog } from "../src/lib/console-logger";
@@ -69,6 +70,9 @@ import {
 import {
   getSpatialAudioStorageKey,
   isSpatialAudioState,
+  normalizeStoredResumableSession,
+  normalizeStoredVoiceChannelMembers,
+  normalizeStoredWsAttachment,
   PENDING_CALLS_STORAGE_KEY,
   restorePendingCalls,
   serializePendingCalls,
@@ -112,7 +116,7 @@ interface TrackInfo {
 
 interface VoiceState {
   id: string;
-  clerk_user_id?: string;
+  user_id?: string;
   name: string;
   username?: string;
   display_name?: string | null;
@@ -160,7 +164,7 @@ interface WsAttachment {
   avatar_url?: string | null;
   avatar_display?: string | null;
   platform?: PresencePlatform;
-  clerk_user_id?: string;
+  user_id?: string;
   stream_preview_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
@@ -204,7 +208,7 @@ interface ResumableSessionSnapshot {
 }
 
 interface VoiceChannelMember {
-  clerk_user_id: string;
+  user_id: string;
   name: string;
   username?: string;
   display_name?: string | null;
@@ -374,8 +378,10 @@ export class MeetingRoom extends DurableObject<Env> {
     // Restore sessions from hibernation-safe WebSocket attachments
     for (const ws of this.ctx.getWebSockets()) {
       try {
-        const attachment = ws.deserializeAttachment() as WsAttachment | null;
-        if (attachment?.id) {
+        const attachment = normalizeStoredWsAttachment<WsAttachment>(
+          ws.deserializeAttachment(),
+        );
+        if (attachment) {
           const { replay_buffer: _legacyReplay, ...liveAttachment } =
             attachment;
           this.sessions.set(ws, liveAttachment);
@@ -422,29 +428,19 @@ export class MeetingRoom extends DurableObject<Env> {
       )) as Record<string, unknown> | undefined;
       if (storedResumable) {
         for (const [id, stored] of Object.entries(storedResumable)) {
-          if (this.isResumableSnapshot(stored)) {
-            const { replay_buffer: _legacyReplay, ...attachment } =
-              stored.attachment;
-            this.resumableSessions.set(id, attachment);
-            this.replayBuffers.set(id, this.trimReplayBuffer(stored.replay));
-            this.replayPersistWrites.set(
-              id,
-              this.normalizeReplayPersistWrites(stored.persist_writes),
-            );
-          } else if (
-            this.isPlainObject(stored) &&
-            typeof stored.id === "string"
-          ) {
-            const storedAttachment = stored as unknown as WsAttachment;
-            const { replay_buffer: _legacyReplay, ...attachment } =
-              storedAttachment;
-            this.resumableSessions.set(id, attachment);
-            this.replayBuffers.set(
-              id,
-              this.trimReplayBuffer(storedAttachment.replay_buffer ?? []),
-            );
-            this.replayPersistWrites.set(id, MAX_REPLAY_PERSIST_WRITES);
-          }
+          const restored = normalizeStoredResumableSession<
+            WsAttachment,
+            ReplayEntry
+          >(stored);
+          if (!restored) continue;
+          const { replay_buffer: _legacyReplay, ...attachment } =
+            restored.attachment;
+          this.resumableSessions.set(id, attachment);
+          this.replayBuffers.set(id, this.trimReplayBuffer(restored.replay));
+          this.replayPersistWrites.set(
+            id,
+            this.normalizeReplayPersistWrites(restored.persistWrites),
+          );
         }
       }
 
@@ -452,10 +448,11 @@ export class MeetingRoom extends DurableObject<Env> {
       const vcEntries = await this.ctx.storage.list({ prefix: "vc:members:" });
       for (const [key, value] of vcEntries) {
         const channelId = key.slice("vc:members:".length);
-        const memberList = value as VoiceChannelMember[];
         const memberMap = new Map<string, VoiceChannelMember>();
-        for (const m of memberList) {
-          memberMap.set(m.clerk_user_id, m);
+        for (const m of normalizeStoredVoiceChannelMembers<VoiceChannelMember>(
+          value,
+        )) {
+          memberMap.set(m.user_id, m);
         }
         if (memberMap.size > 0) {
           this.voiceChannelMembers.set(channelId, memberMap);
@@ -466,18 +463,23 @@ export class MeetingRoom extends DurableObject<Env> {
       if (vcEntries.size === 0) {
         const oldStored = (await this.ctx.storage.get(
           "voiceChannelMembers",
-        )) as Record<string, VoiceChannelMember[]> | undefined;
+        )) as Record<string, unknown> | undefined;
         if (oldStored) {
           const migrationBatch: Record<string, VoiceChannelMember[]> = {};
           for (const channelId of Object.keys(oldStored)) {
-            const memberList = oldStored[channelId] as VoiceChannelMember[];
+            const memberList =
+              normalizeStoredVoiceChannelMembers<VoiceChannelMember>(
+                oldStored[channelId],
+              );
             const memberMap = new Map<string, VoiceChannelMember>();
             for (const m of memberList) {
-              memberMap.set(m.clerk_user_id, m);
+              memberMap.set(m.user_id, m);
             }
             if (memberMap.size > 0) {
               this.voiceChannelMembers.set(channelId, memberMap);
-              migrationBatch[`vc:members:${channelId}`] = memberList;
+              migrationBatch[`vc:members:${channelId}`] = memberList.map(
+                (member) => withLegacyClerkUserId(member),
+              );
             }
           }
           if (Object.keys(migrationBatch).length > 0) {
@@ -560,9 +562,9 @@ export class MeetingRoom extends DurableObject<Env> {
       }
 
       for (const [, session] of this.sessions) {
-        if (session.clerk_user_id) {
+        if (session.user_id) {
           for (const [channelId, members] of this.voiceChannelMembers) {
-            if (members.has(session.clerk_user_id)) {
+            if (members.has(session.user_id)) {
               session.voice_channel_id = channelId;
               break;
             }
@@ -756,7 +758,7 @@ export class MeetingRoom extends DurableObject<Env> {
         let exactSessionMatched = false;
 
         for (const attachment of this.sessions.values()) {
-          if (attachment.clerk_user_id !== userId) continue;
+          if (attachment.user_id !== userId) continue;
           if (requireChannelMatch && attachment.voice_channel_id !== channelId)
             continue;
 
@@ -1283,10 +1285,13 @@ export class MeetingRoom extends DurableObject<Env> {
       data.admission ?? this.getSessionAdmission(ws) ?? undefined;
     const nextData = admission ? { ...data, admission } : data;
     const { replay_buffer: _legacyReplay, ...serializedData } = nextData;
+    // Stored with clerk_user_id too, for a rollback (withLegacyClerkUserId);
+    // the session the room keeps has only user_id.
+    const storedData = withLegacyClerkUserId(serializedData);
     const serializedBytes = new TextEncoder().encode(
-      JSON.stringify(serializedData),
+      JSON.stringify(storedData),
     ).byteLength;
-    const compactData: WsAttachment = {
+    const compactData: WsAttachment = withLegacyClerkUserId({
       ...serializedData,
       stream_preview_url: null,
       avatar_url: null,
@@ -1297,12 +1302,12 @@ export class MeetingRoom extends DurableObject<Env> {
       subscribed_channels: serializedData.subscribed_channels.slice(-32),
       subscribed_servers: serializedData.subscribed_servers.slice(-32),
       name: serializedData.name.slice(0, 256),
-    };
+    });
     try {
       ws.serializeAttachment(
         serializedBytes > MAX_WEBSOCKET_ATTACHMENT_BYTES
           ? compactData
-          : serializedData,
+          : storedData,
       );
     } catch (error) {
       try {
@@ -1349,8 +1354,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!limit) return false;
 
     const session = this.getSession(ws);
-    const subject =
-      session?.clerk_user_id ?? this.getSessionAdmission(ws)?.subject;
+    const subject = session?.user_id ?? this.getSessionAdmission(ws)?.subject;
     const keys = [
       `session:${session?.id ?? "unidentified"}:${op}`,
       ...(subject ? [`subject:${subject}:${op}`] : []),
@@ -1403,7 +1407,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     for (const [sessionWs, session] of this.sessions) {
       if (options?.excludeWs && sessionWs === options.excludeWs) continue;
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       const platform = normalizePresencePlatform(session.platform);
       if (!platform || seen.has(platform)) continue;
       seen.add(platform);
@@ -1419,7 +1423,7 @@ export class MeetingRoom extends DurableObject<Env> {
   ): "online" | "idle" | "dnd" | "offline" {
     for (const [sessionWs, session] of this.sessions) {
       if (options?.excludeWs && sessionWs === options.excludeWs) continue;
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       if (session.status) {
         return session.status;
       }
@@ -1442,8 +1446,8 @@ export class MeetingRoom extends DurableObject<Env> {
     const userIds = new Set<string>();
 
     for (const [, session] of this.sessions) {
-      if (session.clerk_user_id) {
-        userIds.add(session.clerk_user_id);
+      if (session.user_id) {
+        userIds.add(session.user_id);
       }
     }
 
@@ -1465,7 +1469,12 @@ export class MeetingRoom extends DurableObject<Env> {
     for (const [channelId, members] of this.voiceChannelMembers) {
       if (members.size > 0) {
         activeChannelIds.add(channelId);
-        this.markDirty(`vc:members:${channelId}`, Array.from(members.values()));
+        this.markDirty(
+          `vc:members:${channelId}`,
+          Array.from(members.values(), (member) =>
+            withLegacyClerkUserId(member),
+          ),
+        );
       }
     }
   }
@@ -1556,7 +1565,9 @@ export class MeetingRoom extends DurableObject<Env> {
     const spatialAudioStates: Record<string, SpatialAudioState> = {};
     for (const [channelId, members] of this.voiceChannelMembers) {
       if (members.size > 0) {
-        voiceStates[channelId] = Array.from(members.values());
+        voiceStates[channelId] = Array.from(members.values(), (member) =>
+          withLegacyClerkUserId(member),
+        );
         const startedAt = this.voiceChannelStartedAt.get(channelId);
         if (startedAt) {
           voiceStartedAt[channelId] = startedAt;
@@ -1585,7 +1596,7 @@ export class MeetingRoom extends DurableObject<Env> {
           channel_id: channelId,
           members: members
             ? Array.from(members.values()).map((member) => {
-                if (includeProfiles) return member;
+                if (includeProfiles) return withLegacyClerkUserId(member);
                 const {
                   name: _name,
                   username: _username,
@@ -1594,7 +1605,7 @@ export class MeetingRoom extends DurableObject<Env> {
                   avatar_display: _avatarDisplay,
                   ...state
                 } = member;
-                return state;
+                return withLegacyClerkUserId(state);
               })
             : [],
           started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
@@ -1692,15 +1703,13 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async sendVoiceChannelStates(ws: WebSocket) {
     const session = this.getSession(ws);
-    if (!session?.clerk_user_id) return;
+    if (!session?.user_id) return;
 
     const data = this.buildVoiceChannelStatesPayload();
     const visibleChannelIds = new Set<string>();
 
     for (const channelId of Object.keys(data.voice_states)) {
-      if (
-        await this.canUserAccessVoiceChannel(channelId, session.clerk_user_id)
-      ) {
+      if (await this.canUserAccessVoiceChannel(channelId, session.user_id)) {
         visibleChannelIds.add(channelId);
       }
     }
@@ -1723,13 +1732,8 @@ export class MeetingRoom extends DurableObject<Env> {
     includeProfiles = false,
   ) {
     for (const [ws, session] of this.sessions) {
-      if (ws === excludeWs || !session.clerk_user_id) continue;
-      if (
-        !(await this.canUserAccessVoiceChannel(
-          channelId,
-          session.clerk_user_id,
-        ))
-      )
+      if (ws === excludeWs || !session.user_id) continue;
+      if (!(await this.canUserAccessVoiceChannel(channelId, session.user_id)))
         continue;
 
       const message = this.buildVoiceChannelStateUpdateMessage(
@@ -1759,13 +1763,13 @@ export class MeetingRoom extends DurableObject<Env> {
     session: WsAttachment,
     joinedAt?: number,
   ) {
-    if (!session.clerk_user_id) return;
+    if (!session.user_id) return;
 
     const members = this.ensureVoiceChannelMembers(
       channelId,
       joinedAt ?? Date.now(),
     );
-    const existing = members.get(session.clerk_user_id);
+    const existing = members.get(session.user_id);
     const canonicalIdentity = existing
       ? {
           name: existing.name,
@@ -1774,12 +1778,12 @@ export class MeetingRoom extends DurableObject<Env> {
           avatar_url: existing.avatar_url ?? null,
           avatar_display: existing.avatar_display ?? null,
         }
-      : this.getCanonicalProfileIdentity(session.clerk_user_id);
+      : this.getCanonicalProfileIdentity(session.user_id);
     if (canonicalIdentity)
       this.setSessionProfileIdentity(session, canonicalIdentity);
-    members.set(session.clerk_user_id, {
+    members.set(session.user_id, {
       ...existing,
-      clerk_user_id: session.clerk_user_id,
+      user_id: session.user_id,
       name: session.name,
       username: session.username,
       display_name: session.display_name,
@@ -1811,10 +1815,10 @@ export class MeetingRoom extends DurableObject<Env> {
     disconnectedAt: number,
     excludeWs?: WebSocket,
   ) {
-    if (!session.voice_channel_id || !session.clerk_user_id) return;
+    if (!session.voice_channel_id || !session.user_id) return;
 
     const members = this.ensureVoiceChannelMembers(session.voice_channel_id);
-    const existing = members.get(session.clerk_user_id);
+    const existing = members.get(session.user_id);
     const canonicalIdentity = existing
       ? {
           name: existing.name,
@@ -1823,12 +1827,12 @@ export class MeetingRoom extends DurableObject<Env> {
           avatar_url: existing.avatar_url ?? null,
           avatar_display: existing.avatar_display ?? null,
         }
-      : this.getCanonicalProfileIdentity(session.clerk_user_id);
+      : this.getCanonicalProfileIdentity(session.user_id);
     if (canonicalIdentity)
       this.setSessionProfileIdentity(session, canonicalIdentity);
-    members.set(session.clerk_user_id, {
+    members.set(session.user_id, {
       ...existing,
-      clerk_user_id: session.clerk_user_id,
+      user_id: session.user_id,
       name: existing ? existing.name : session.name,
       username: existing ? existing.username : session.username,
       display_name: existing ? existing.display_name : session.display_name,
@@ -1862,21 +1866,21 @@ export class MeetingRoom extends DurableObject<Env> {
   /** Remove voice channel members that don't have a live or resumable session */
   private reconcileVoiceMembers() {
     const now = Date.now();
-    // Build a set of clerk_user_ids that have active sessions OR resumable sessions
+    // Build a set of user_ids that have active sessions OR resumable sessions
     // (pending reconnect within grace period). This prevents premature cleanup
     // of voice members who are just reconnecting their WebSocket.
     const activeUserIds = new Set<string>();
     for (const [, session] of this.sessions) {
-      if (session.clerk_user_id) {
-        activeUserIds.add(session.clerk_user_id);
+      if (session.user_id) {
+        activeUserIds.add(session.user_id);
       }
     }
     // Also include resumable sessions (disconnected but within grace period)
     for (const [sessionId, disconnectedAt] of this.resumableSessionExpiry) {
       if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) continue;
       const resumable = this.resumableSessions.get(sessionId);
-      if (resumable?.clerk_user_id) {
-        activeUserIds.add(resumable.clerk_user_id);
+      if (resumable?.user_id) {
+        activeUserIds.add(resumable.user_id);
       }
     }
 
@@ -1936,10 +1940,15 @@ export class MeetingRoom extends DurableObject<Env> {
     return session;
   }
 
+  // VoiceState and VoiceChannelMember go out through withLegacyClerkUserId,
+  // which adds `clerk_user_id` next to `user_id` for pre-rename clients while
+  // LEGACY_CLERK_USER_ID_COMPAT is on (see user-id.ts in @ralph/protocol), as
+  // do the attachments, snapshots and vc:members lists the room stores.
+  // TODO(user-id-rename phase 2): every withLegacyClerkUserId call goes.
   private buildVoiceState(data: WsAttachment): VoiceState {
-    return {
+    return withLegacyClerkUserId({
       id: data.id,
-      clerk_user_id: data.clerk_user_id,
+      user_id: data.user_id,
       name: data.name,
       username: data.username,
       display_name: data.display_name,
@@ -1957,13 +1966,13 @@ export class MeetingRoom extends DurableObject<Env> {
       suppress: data.suppress,
       status: data.status,
       tracks: [...data.tracks],
-    };
+    });
   }
 
   private buildVoiceStateDelta(data: WsAttachment): VoiceStateDelta {
-    return {
+    return withLegacyClerkUserId({
       id: data.id,
-      clerk_user_id: data.clerk_user_id,
+      user_id: data.user_id,
       platform: data.platform,
       stream_preview_url: data.stream_preview_url,
       self_mute: data.self_mute,
@@ -1976,7 +1985,7 @@ export class MeetingRoom extends DurableObject<Env> {
       suppress: data.suppress,
       status: data.status,
       tracks: [...data.tracks],
-    };
+    });
   }
 
   private buildVoiceStateUpdateMessage(
@@ -2038,7 +2047,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const ws = this.getSessionSocket(sessionId);
     if (ws) {
       const session = this.getSession(ws);
-      if (!session || session.clerk_user_id !== userId) return false;
+      if (!session || session.user_id !== userId) return false;
       if (
         channelId &&
         session.voice_channel_id &&
@@ -2051,7 +2060,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     const resumable = this.resumableSessions.get(sessionId);
-    if (!resumable || resumable.clerk_user_id !== userId) {
+    if (!resumable || resumable.user_id !== userId) {
       return false;
     }
 
@@ -2068,8 +2077,8 @@ export class MeetingRoom extends DurableObject<Env> {
       delete resumable.voice_channel_id;
     }
 
-    if (resumable.clerk_user_id) {
-      this.cleanupCallsForUser(resumable.clerk_user_id, "disconnected");
+    if (resumable.user_id) {
+      this.cleanupCallsForUser(resumable.user_id, "disconnected");
     }
 
     this.revokeVoiceJoin(resumable);
@@ -2202,25 +2211,12 @@ export class MeetingRoom extends DurableObject<Env> {
       const { replay_buffer: _legacyReplay, ...snapshotAttachment } =
         attachment;
       serialized[id] = {
-        attachment: snapshotAttachment,
+        attachment: withLegacyClerkUserId(snapshotAttachment),
         replay: this.replayBuffers.get(id) ?? [],
         persist_writes: this.replayPersistWrites.get(id) ?? 0,
       };
     }
     this.markDirty("resumableSessions", serialized);
-  }
-
-  private isResumableSnapshot(
-    value: unknown,
-  ): value is ResumableSessionSnapshot {
-    if (!this.isPlainObject(value)) return false;
-    const attachment = value.attachment;
-    const replay = value.replay;
-    return (
-      this.isPlainObject(attachment) &&
-      typeof attachment.id === "string" &&
-      Array.isArray(replay)
-    );
   }
 
   private normalizeReplayPersistWrites(value: unknown) {
@@ -2260,7 +2256,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     for (const session of this.sessions.values()) {
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       return {
         name: session.name,
         username: session.username,
@@ -2271,7 +2267,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     for (const session of this.resumableSessions.values()) {
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       return {
         name: session.name,
         username: session.username,
@@ -2327,14 +2323,14 @@ export class MeetingRoom extends DurableObject<Env> {
     this.profileIdentities.set(userId, mergedIdentity);
 
     for (const [sessionWs, session] of this.sessions) {
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       this.setSessionProfileIdentity(session, mergedIdentity);
       this.persist(sessionWs, session);
     }
 
     let updatedResumableSession = false;
     for (const session of this.resumableSessions.values()) {
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       this.setSessionProfileIdentity(session, mergedIdentity);
       updatedResumableSession = true;
     }
@@ -2364,7 +2360,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const liveSessions: WsAttachment[] = [];
     for (const [sessionWs, session] of this.sessions) {
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       this.setSessionProfileIdentity(session, identity);
       this.persist(sessionWs, session);
       liveSessions.push(session);
@@ -2372,7 +2368,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     let updatedResumableSession = false;
     for (const session of this.resumableSessions.values()) {
-      if (session.clerk_user_id !== userId) continue;
+      if (session.user_id !== userId) continue;
       this.setSessionProfileIdentity(session, identity);
       updatedResumableSession = true;
     }
@@ -2540,7 +2536,7 @@ export class MeetingRoom extends DurableObject<Env> {
         id: participantId,
         ...identity,
         platform: resolvedPlatform,
-        clerk_user_id: admittedUserId,
+        user_id: admittedUserId,
         stream_preview_url: null,
         self_mute: true,
         self_deaf: false,
@@ -2598,10 +2594,10 @@ export class MeetingRoom extends DurableObject<Env> {
         );
       }
 
-      if (attachment.clerk_user_id) {
+      if (attachment.user_id) {
         if (!attachment.standby) {
           const presenceSnapshot = this.buildPresenceSnapshotForUser(
-            attachment.clerk_user_id,
+            attachment.user_id,
           );
           this.broadcast(
             {
@@ -2616,7 +2612,7 @@ export class MeetingRoom extends DurableObject<Env> {
         }
 
         // Resume Pending Ringing upon Identify
-        const userId = attachment.clerk_user_id;
+        const userId = attachment.user_id;
 
         const pending = this.findPendingCallForUser(userId);
         if (pending && pending.calleeId === userId) {
@@ -2803,10 +2799,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // During handleLeave, we now defer voice channel cleanup for resumable
       // sessions — but if reconcileVoiceMembers() ran during the disconnect
       // window (or a future code path removed them), re-ensure membership.
-      if (
-        resumedAttachment.voice_channel_id &&
-        resumedAttachment.clerk_user_id
-      ) {
+      if (resumedAttachment.voice_channel_id && resumedAttachment.user_id) {
         this.markVoiceMemberConnected(
           resumedAttachment.voice_channel_id,
           resumedAttachment,
@@ -2966,13 +2959,13 @@ export class MeetingRoom extends DurableObject<Env> {
           },
           ws,
         );
-        if (session.clerk_user_id) {
+        if (session.user_id) {
           this.broadcast(
             {
               op: Op.Dispatch,
               d: {
                 event: "PRESENCE_UPDATE",
-                data: this.buildPresenceSnapshotForUser(session.clerk_user_id),
+                data: this.buildPresenceSnapshotForUser(session.user_id),
               },
             },
             ws,
@@ -3031,14 +3024,14 @@ export class MeetingRoom extends DurableObject<Env> {
     if (isSpatialAudioState(d.spatial_audio_state)) {
       const nextSpatialAudioState = {
         ...d.spatial_audio_state,
-        updatedBy: session.clerk_user_id || session.id,
+        updatedBy: session.user_id || session.id,
         updatedAt: Date.now(),
       };
       this.spatialAudioStates.set(spatialRoomKey, nextSpatialAudioState);
       this.persistSpatialAudioState(spatialRoomKey, nextSpatialAudioState);
     }
     // Also update the voice channel sidebar state if user is in a VC
-    if (session.voice_channel_id && session.clerk_user_id) {
+    if (session.voice_channel_id && session.user_id) {
       this.markVoiceMemberConnected(session.voice_channel_id, session);
     }
     this.persist(ws, session);
@@ -3049,7 +3042,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.spatialAudioStates.get(spatialRoomKey),
     );
 
-    if (session.voice_channel_id && session.clerk_user_id) {
+    if (session.voice_channel_id && session.user_id) {
       this.ctx.waitUntil(
         this.broadcastVoiceChannelState(session.voice_channel_id),
       );
@@ -3068,23 +3061,23 @@ export class MeetingRoom extends DurableObject<Env> {
     const status = d.status;
     if (!isPresenceStatus(status)) return;
 
-    if (session.clerk_user_id) {
+    if (session.user_id) {
       let presenceChanged = false;
       for (const [sessionWs, otherSession] of this.sessions) {
-        if (otherSession.clerk_user_id !== session.clerk_user_id) continue;
+        if (otherSession.user_id !== session.user_id) continue;
         if (otherSession.status !== status) presenceChanged = true;
         otherSession.status = status;
         this.persist(sessionWs, otherSession);
       }
 
       // 1. Debounced persist to D1 (coalesces rapid toggles into one write)
-      this.ctx.waitUntil(this.persistPresence(session.clerk_user_id, status));
+      this.ctx.waitUntil(this.persistPresence(session.user_id, status));
 
       if (!presenceChanged) return;
 
       // 3. Broadcast to all
       const presenceSnapshot = this.buildPresenceSnapshotForUser(
-        session.clerk_user_id,
+        session.user_id,
       );
       this.broadcast({
         op: Op.Dispatch,
@@ -3132,7 +3125,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleProfileRefresh(ws: WebSocket) {
     const session = this.requireSession(ws);
-    if (!session?.clerk_user_id) return;
+    if (!session?.user_id) return;
 
     const now = Date.now();
     const lastRefresh = this.profileRefreshCooldowns.get(session.id) ?? 0;
@@ -3140,9 +3133,9 @@ export class MeetingRoom extends DurableObject<Env> {
     this.profileRefreshCooldowns.set(session.id, now);
 
     const profileRequest = this.profileRequestCoordinator.begin(
-      session.clerk_user_id,
+      session.user_id,
     );
-    const verified = await this.fetchProfile(session.clerk_user_id);
+    const verified = await this.fetchProfile(session.user_id);
     if (!verified || this.getSession(ws) !== session) return;
     if (!this.profileRequestCoordinator.acceptSuccess(profileRequest)) return;
 
@@ -3153,7 +3146,7 @@ export class MeetingRoom extends DurableObject<Env> {
       avatar_url: verified.avatarUrl ?? null,
       avatar_display: verified.avatarDisplay ?? null,
     };
-    await this.updateProfileIdentity(session.clerk_user_id, identity);
+    await this.updateProfileIdentity(session.user_id, identity);
   }
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
@@ -3167,7 +3160,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!session) return;
 
     // Broadcast updated presence/platform state before cleanup
-    if (session.clerk_user_id && !session.standby) {
+    if (session.user_id && !session.standby) {
       let nextSnapshot: {
         user_id: string;
         status: "online" | "idle" | "dnd" | "offline";
@@ -3175,15 +3168,11 @@ export class MeetingRoom extends DurableObject<Env> {
       } | null = null;
 
       for (const [otherWs, otherSession] of this.sessions) {
-        if (
-          otherWs === ws ||
-          otherSession.clerk_user_id !== session.clerk_user_id
-        )
+        if (otherWs === ws || otherSession.user_id !== session.user_id)
           continue;
-        nextSnapshot = this.buildPresenceSnapshotForUser(
-          session.clerk_user_id,
-          { excludeWs: ws },
-        );
+        nextSnapshot = this.buildPresenceSnapshotForUser(session.user_id, {
+          excludeWs: ws,
+        });
         break;
       }
 
@@ -3193,7 +3182,7 @@ export class MeetingRoom extends DurableObject<Env> {
           d: {
             event: "PRESENCE_UPDATE",
             data: nextSnapshot ?? {
-              user_id: session.clerk_user_id,
+              user_id: session.user_id,
               status: "offline",
               platforms: [],
             },
@@ -3219,8 +3208,8 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     // Clean up calls — cancel pending or end active
-    if (session.clerk_user_id && !session.standby) {
-      this.cleanupCallsForUser(session.clerk_user_id, "disconnected");
+    if (session.user_id && !session.standby) {
+      this.cleanupCallsForUser(session.user_id, "disconnected");
     }
 
     // Clean up channel and server subscriptions
@@ -3435,18 +3424,18 @@ export class MeetingRoom extends DurableObject<Env> {
 
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs || !liveSockets.has(ws)) continue;
-      if (session.clerk_user_id) {
-        candidates.push({ ws, session, userId: session.clerk_user_id });
+      if (session.user_id) {
+        candidates.push({ ws, session, userId: session.user_id });
       }
     }
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs || !this.resumingSockets.has(ws)) continue;
       if (
         session.subscribed_channels.includes(channelId) &&
-        session.clerk_user_id &&
+        session.user_id &&
         !candidates.some((candidate) => candidate.ws === ws)
       ) {
-        candidates.push({ ws, session, userId: session.clerk_user_id });
+        candidates.push({ ws, session, userId: session.user_id });
       }
     }
     const liveSessionIds = new Set(
@@ -3456,10 +3445,10 @@ export class MeetingRoom extends DurableObject<Env> {
       if (
         liveSessionIds.has(sessionId) ||
         !session.subscribed_channels.includes(channelId) ||
-        !session.clerk_user_id
+        !session.user_id
       )
         continue;
-      candidates.push({ session, userId: session.clerk_user_id });
+      candidates.push({ session, userId: session.user_id });
     }
 
     if (candidates.length === 0) return;
@@ -3510,7 +3499,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const liveSockets = new Set(subscribers ?? []);
     for (const [ws, session] of this.sessions) {
       if (!liveSockets.has(ws) || ws === excludeWs) continue;
-      if (!session.clerk_user_id) {
+      if (!session.user_id) {
         subscribers?.delete(ws);
         continue;
       }
@@ -3523,7 +3512,7 @@ export class MeetingRoom extends DurableObject<Env> {
         !this.resumingSockets.has(ws) ||
         (!session.subscribed_servers.includes(serverId) &&
           (!channelId || !session.subscribed_channels.includes(channelId))) ||
-        !session.clerk_user_id ||
+        !session.user_id ||
         candidates.some((candidate) => candidate.ws === ws)
       )
         continue;
@@ -3538,7 +3527,7 @@ export class MeetingRoom extends DurableObject<Env> {
         )
           continue;
         const session = this.getSession(ws);
-        if (session?.clerk_user_id) candidates.push({ ws, session });
+        if (session?.user_id) candidates.push({ ws, session });
       }
     }
 
@@ -3550,7 +3539,7 @@ export class MeetingRoom extends DurableObject<Env> {
         liveSessionIds.has(sessionId) ||
         (!session.subscribed_servers.includes(serverId) &&
           (!channelId || !session.subscribed_channels.includes(channelId))) ||
-        !session.clerk_user_id
+        !session.user_id
       )
         continue;
       candidates.push({ session });
@@ -3563,7 +3552,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     const uniqueUserIds = [
-      ...new Set(candidates.map((c) => c.session.clerk_user_id as string)),
+      ...new Set(candidates.map((c) => c.session.user_id as string)),
     ];
     const members = await this.resolveServerMembership(serverId, uniqueUserIds);
 
@@ -3576,7 +3565,7 @@ export class MeetingRoom extends DurableObject<Env> {
       : null;
     let resumableChanged = false;
     for (const { ws, session } of candidates) {
-      if (!members.has(session.clerk_user_id as string)) {
+      if (!members.has(session.user_id as string)) {
         if (ws) subscribers?.delete(ws);
         session.subscribed_servers = session.subscribed_servers.filter(
           (id) => id !== serverId,
@@ -3587,9 +3576,8 @@ export class MeetingRoom extends DurableObject<Env> {
       }
       if (
         channelDecisions &&
-        (!channelDecisions.get(session.clerk_user_id as string) ||
-          channelDecisions.get(session.clerk_user_id as string)?.kind !==
-            "allowed")
+        (!channelDecisions.get(session.user_id as string) ||
+          channelDecisions.get(session.user_id as string)?.kind !== "allowed")
       ) {
         continue;
       }
@@ -3660,13 +3648,13 @@ export class MeetingRoom extends DurableObject<Env> {
     entry: ReplayEntry,
   ): Promise<boolean> {
     if (!entry.scope) return false;
-    if (!session.clerk_user_id || entry.scope.kind === "global") return true;
+    if (!session.user_id || entry.scope.kind === "global") return true;
 
     try {
       if (entry.scope.kind === "channel") {
         const access = await resolveChannelAccess(
           this.env.DB,
-          session.clerk_user_id,
+          session.user_id,
           entry.scope.channelId,
         );
         return Boolean(
@@ -3677,7 +3665,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const membership = await this.env.DB.prepare(
         "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
       )
-        .bind(entry.scope.serverId, session.clerk_user_id)
+        .bind(entry.scope.serverId, session.user_id)
         .first();
       return membership !== null;
     } catch {
@@ -3690,15 +3678,14 @@ export class MeetingRoom extends DurableObject<Env> {
     let count = 0;
     const liveSessionIds = new Set<string>();
     for (const [ws, session] of this.sessions) {
-      if (session.clerk_user_id === userId) {
+      if (session.user_id === userId) {
         liveSessionIds.add(session.id);
         this.sendReplayable(ws, session, msg);
         count++;
       }
     }
     for (const [sessionId, session] of this.resumableSessions) {
-      if (liveSessionIds.has(sessionId) || session.clerk_user_id !== userId)
-        continue;
+      if (liveSessionIds.has(sessionId) || session.user_id !== userId) continue;
       this.queueResumable(session, msg);
     }
     log.info(`broadcastToUser ${userId}: sent to ${count} sessions`);
@@ -3711,11 +3698,11 @@ export class MeetingRoom extends DurableObject<Env> {
     d: MainClientPayload<Op.ChannelSubscribe>,
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id || !session.clerk_user_id) return;
+    if (!session || !d.channel_id || !session.user_id) return;
 
     const access = await resolveChannelAccess(
       this.env.DB,
-      session.clerk_user_id,
+      session.user_id,
       d.channel_id,
     );
     if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
@@ -3787,11 +3774,11 @@ export class MeetingRoom extends DurableObject<Env> {
     this.cleanupServerSubscriptions(ws);
 
     const validChannels: string[] = [];
-    if (session.clerk_user_id) {
+    if (session.user_id) {
       for (const channelId of session.subscribed_channels ?? []) {
         const access = await resolveChannelAccess(
           this.env.DB,
-          session.clerk_user_id,
+          session.user_id,
           channelId,
         );
         if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS))
@@ -3807,12 +3794,12 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     const validServers: string[] = [];
-    if (session.clerk_user_id) {
+    if (session.user_id) {
       for (const serverId of session.subscribed_servers ?? []) {
         const member = await this.env.DB.prepare(
           "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
         )
-          .bind(serverId, session.clerk_user_id)
+          .bind(serverId, session.user_id)
           .first()
           .catch(() => null);
         if (!member) continue;
@@ -3850,11 +3837,11 @@ export class MeetingRoom extends DurableObject<Env> {
     d: MainClientPayload<Op.VoiceChannelJoin>,
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id || !session.clerk_user_id) return;
+    if (!session || !d.channel_id || !session.user_id) return;
 
     const access = await resolveChannelAccess(
       this.env.DB,
-      session.clerk_user_id,
+      session.user_id,
       d.channel_id,
     );
     if (!access || !hasChannelPermission(access, PERMISSIONS.CONNECT)) {
@@ -3879,8 +3866,8 @@ export class MeetingRoom extends DurableObject<Env> {
       session.self_mute = d.self_mute ?? true;
       this.persist(ws, session);
       const members = this.voiceChannelMembers.get(d.channel_id);
-      if (members?.has(session.clerk_user_id)) {
-        const member = members.get(session.clerk_user_id)!;
+      if (members?.has(session.user_id)) {
+        const member = members.get(session.user_id)!;
         member.self_mute = session.self_mute;
         member.connected = true;
         member.connection_state = "connected";
@@ -3930,7 +3917,7 @@ export class MeetingRoom extends DurableObject<Env> {
       Date.now();
 
     const member: VoiceChannelMember = {
-      clerk_user_id: session.clerk_user_id,
+      user_id: session.user_id,
       name: session.name,
       username: session.username,
       display_name: session.display_name,
@@ -3948,7 +3935,7 @@ export class MeetingRoom extends DurableObject<Env> {
       self_stream_audio: session.self_stream_audio,
       joined_at: joinedAt,
     };
-    members.set(session.clerk_user_id, member);
+    members.set(session.user_id, member);
 
     // Broadcast to all clients
     this.ctx.waitUntil(
@@ -3961,7 +3948,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // --- IMPLICIT CALL ACCEPT ---
     // If the callee manually joins the voice channel instead of hitting "Accept",
     // we should treat the call as accepted and stop the ringing.
-    const pending = this.pendingCalls.get(session.clerk_user_id);
+    const pending = this.pendingCalls.get(session.user_id);
     if (pending && pending.channelId === d.channel_id) {
       log.info(
         `${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`,
@@ -3969,7 +3956,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
       const callIdToCache = pending.callId;
       clearTimeout(pending.timeout);
-      this.pendingCalls.delete(session.clerk_user_id);
+      this.pendingCalls.delete(session.user_id);
       this.persistPendingCalls();
 
       // Cache the accepted call to avoid race conditions with a late Op 37 (CallAccept)
@@ -4020,11 +4007,11 @@ export class MeetingRoom extends DurableObject<Env> {
   /** Remove a user from their current voice channel and broadcast the update */
   private removeFromVoiceChannel(session: WsAttachment) {
     const channelId = session.voice_channel_id;
-    if (!channelId || !session.clerk_user_id) return;
+    if (!channelId || !session.user_id) return;
 
     const members = this.voiceChannelMembers.get(channelId);
     if (members) {
-      members.delete(session.clerk_user_id);
+      members.delete(session.user_id);
       if (members.size === 0) {
         this.voiceChannelMembers.delete(channelId);
         this.deleteVoiceChannelStorage(channelId);
@@ -4080,7 +4067,7 @@ export class MeetingRoom extends DurableObject<Env> {
   ) {
     const session = this.requireSession(ws);
     if (
-      !session?.clerk_user_id ||
+      !session?.user_id ||
       !d.channel_id ||
       !d.content.trim() ||
       d.content.length > 4000 ||
@@ -4109,7 +4096,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const access = await resolveChannelAccess(
       this.env.DB,
-      session.clerk_user_id,
+      session.user_id,
       d.channel_id,
     );
     if (!access || !hasChannelPermission(access, PERMISSIONS.SEND_MESSAGES)) {
@@ -4154,7 +4141,7 @@ export class MeetingRoom extends DurableObject<Env> {
         ).bind(
           messageId,
           d.channel_id,
-          session.clerk_user_id,
+          session.user_id,
           d.content.trim(),
           d.reply_to_id ?? null,
           now,
@@ -4178,9 +4165,9 @@ export class MeetingRoom extends DurableObject<Env> {
     const message = {
       id: messageId,
       channel_id: d.channel_id,
-      author_id: session.clerk_user_id,
+      author_id: session.user_id,
       author: {
-        id: session.clerk_user_id,
+        id: session.user_id,
         username: session.username ?? session.name,
         display_name: session.display_name ?? session.name,
         avatar_url: session.avatar_url,
@@ -4213,7 +4200,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const { results } = await this.env.DB.prepare(
         "SELECT user_id FROM dm_recipients WHERE channel_id = ? AND user_id != ?",
       )
-        .bind(d.channel_id, session.clerk_user_id)
+        .bind(d.channel_id, session.user_id)
         .all<{ user_id: string }>();
       for (const row of results ?? []) {
         if (typeof row.user_id === "string") {
@@ -4237,7 +4224,7 @@ export class MeetingRoom extends DurableObject<Env> {
   ) {
     const session = this.requireSession(ws);
     if (
-      !session?.clerk_user_id ||
+      !session?.user_id ||
       !d.message_id ||
       !d.content.trim() ||
       d.content.length > 4000
@@ -4269,17 +4256,14 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const access = await resolveChannelAccess(
       this.env.DB,
-      session.clerk_user_id,
+      session.user_id,
       messageRow.channel_id,
     );
     const canManage =
       !!access &&
       access.serverId !== null &&
       hasChannelPermission(access, PERMISSIONS.MANAGE_MESSAGES);
-    if (
-      !access ||
-      (messageRow.author_id !== session.clerk_user_id && !canManage)
-    ) {
+    if (!access || (messageRow.author_id !== session.user_id && !canManage)) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: 4004, message: "Message not found or not owner" },
@@ -4300,7 +4284,7 @@ export class MeetingRoom extends DurableObject<Env> {
           now,
           d.message_id,
           messageRow.channel_id,
-          session.clerk_user_id,
+          session.user_id,
           canManage ? 1 : 0,
         ),
         this.env.DB.prepare(
@@ -4378,7 +4362,7 @@ export class MeetingRoom extends DurableObject<Env> {
     d: MainClientPayload<Op.MessageDelete>,
   ) {
     const session = this.requireSession(ws);
-    if (!session?.clerk_user_id || !d.message_id || !d.channel_id) {
+    if (!session?.user_id || !d.message_id || !d.channel_id) {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -4405,17 +4389,14 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const access = await resolveChannelAccess(
       this.env.DB,
-      session.clerk_user_id,
+      session.user_id,
       messageRow.channel_id,
     );
     const canManage =
       !!access &&
       access.serverId !== null &&
       hasChannelPermission(access, PERMISSIONS.MANAGE_MESSAGES);
-    if (
-      !access ||
-      (messageRow.author_id !== session.clerk_user_id && !canManage)
-    ) {
+    if (!access || (messageRow.author_id !== session.user_id && !canManage)) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: 4004, message: "Message not found or not owner" },
@@ -4446,7 +4427,7 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(
           d.message_id,
           messageRow.channel_id,
-          session.clerk_user_id,
+          session.user_id,
           canManage ? 1 : 0,
         )
         .run();
@@ -4503,11 +4484,11 @@ export class MeetingRoom extends DurableObject<Env> {
     d: MainClientPayload<Op.TypingStart>,
   ) {
     const session = this.requireSession(ws);
-    if (!session?.clerk_user_id) return;
+    if (!session?.user_id) return;
 
     const access = await resolveChannelAccess(
       this.env.DB,
-      session.clerk_user_id,
+      session.user_id,
       d.channel_id,
     );
     if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
@@ -4529,7 +4510,7 @@ export class MeetingRoom extends DurableObject<Env> {
           event: "TYPING_START",
           data: {
             channel_id: d.channel_id,
-            user_id: session.clerk_user_id,
+            user_id: session.user_id,
             username: session.username ?? session.name,
             display_name: session.display_name ?? session.name,
             timestamp: Date.now(),
@@ -4548,7 +4529,7 @@ export class MeetingRoom extends DurableObject<Env> {
   ) {
     const session = this.requireSession(ws);
     if (
-      !session?.clerk_user_id ||
+      !session?.user_id ||
       !d.channel_id ||
       !d.message_id ||
       !d.emoji ||
@@ -4573,7 +4554,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const access = message
       ? await resolveChannelAccess(
           this.env.DB,
-          session.clerk_user_id,
+          session.user_id,
           message.channel_id,
         )
       : null;
@@ -4593,7 +4574,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    const userId = session.clerk_user_id;
+    const userId = session.user_id;
     const now = new Date().toISOString();
 
     try {
@@ -4630,7 +4611,7 @@ export class MeetingRoom extends DurableObject<Env> {
   ) {
     const session = this.requireSession(ws);
     if (
-      !session?.clerk_user_id ||
+      !session?.user_id ||
       !d.channel_id ||
       !d.message_id ||
       !d.emoji ||
@@ -4655,7 +4636,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const access = message
       ? await resolveChannelAccess(
           this.env.DB,
-          session.clerk_user_id,
+          session.user_id,
           message.channel_id,
         )
       : null;
@@ -4675,7 +4656,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    const userId = session.clerk_user_id;
+    const userId = session.user_id;
 
     try {
       await this.env.DB.prepare(
@@ -4739,7 +4720,7 @@ export class MeetingRoom extends DurableObject<Env> {
     d: MainClientPayload<Op.ServerSubscribe>,
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.server_id || !session.clerk_user_id) return;
+    if (!session || !d.server_id || !session.user_id) return;
 
     // Already subscribed?
     if (session.subscribed_servers?.includes(d.server_id)) return;
@@ -4749,7 +4730,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const row = await this.env.DB.prepare(
         "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?",
       )
-        .bind(d.server_id, session.clerk_user_id)
+        .bind(d.server_id, session.user_id)
         .first();
 
       if (!row) {
@@ -4810,15 +4791,10 @@ export class MeetingRoom extends DurableObject<Env> {
     d: MainClientPayload<Op.CallInitiate>,
   ) {
     const session = this.requireSession(ws);
-    if (
-      !session ||
-      !session.clerk_user_id ||
-      !d.target_user_id ||
-      !d.channel_id
-    )
+    if (!session || !session.user_id || !d.target_user_id || !d.channel_id)
       return;
 
-    const callerId = session.clerk_user_id;
+    const callerId = session.user_id;
     const calleeId = d.target_user_id;
 
     const unavailable = () =>
@@ -4897,7 +4873,7 @@ export class MeetingRoom extends DurableObject<Env> {
     let calleeDisplayName: string | null | undefined;
     let calleeAvatar: string | null | undefined;
     for (const [, sess] of this.sessions) {
-      if (sess.clerk_user_id === calleeId) {
+      if (sess.user_id === calleeId) {
         calleeOnline = true;
         calleeName = sess.name;
         calleeUsername = sess.username ?? sess.name;
@@ -5001,9 +4977,9 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private handleCallAccept(ws: WebSocket, d: MainClientPayload<Op.CallAccept>) {
     const session = this.requireSession(ws);
-    if (!session || !session.clerk_user_id || !d.call_id) return;
+    if (!session || !session.user_id || !d.call_id) return;
 
-    const calleeId = session.clerk_user_id;
+    const calleeId = session.user_id;
 
     if (this.acceptedCalls.has(d.call_id)) {
       log.info(
@@ -5075,9 +5051,9 @@ export class MeetingRoom extends DurableObject<Env> {
     d: MainClientPayload<Op.CallDecline>,
   ) {
     const session = this.requireSession(ws);
-    if (!session || !session.clerk_user_id || !d.call_id) return;
+    if (!session || !session.user_id || !d.call_id) return;
 
-    const calleeId = session.clerk_user_id;
+    const calleeId = session.user_id;
     const pending = this.pendingCalls.get(calleeId);
     if (!pending || pending.callId !== d.call_id) return;
 
@@ -5106,9 +5082,9 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private handleCallEnd(ws: WebSocket, d: MainClientPayload<Op.CallEnd>) {
     const session = this.requireSession(ws);
-    if (!session || !session.clerk_user_id) return;
+    if (!session || !session.user_id) return;
 
-    const userId = session.clerk_user_id;
+    const userId = session.user_id;
 
     // Active calls are automatically torn down natively when both users drop out of the voice channel.
     // CALL_END is now purely designated for aborting/declining pending Rings!
@@ -5211,7 +5187,7 @@ export class MeetingRoom extends DurableObject<Env> {
   /** Add a user to voiceChannelMembers for a call (reuses voice channel infra) */
   private addToVoiceChannelForCall(session: WsAttachment) {
     const channelId = session.voice_channel_id;
-    if (!channelId || !session.clerk_user_id) return;
+    if (!channelId || !session.user_id) return;
 
     let members = this.voiceChannelMembers.get(channelId);
     if (!members) {
@@ -5222,9 +5198,9 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persistVoiceChannelStartedAt();
     }
 
-    const inserted = !members.has(session.clerk_user_id);
+    const inserted = !members.has(session.user_id);
     const member: VoiceChannelMember = {
-      clerk_user_id: session.clerk_user_id,
+      user_id: session.user_id,
       name: session.name,
       username: session.username,
       display_name: session.display_name,
@@ -5244,7 +5220,7 @@ export class MeetingRoom extends DurableObject<Env> {
       spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
       joined_at: this.voiceChannelStartedAt.get(channelId) ?? Date.now(),
     };
-    members.set(session.clerk_user_id, member);
+    members.set(session.user_id, member);
 
     // Broadcast to all clients
     this.ctx.waitUntil(
@@ -5254,10 +5230,10 @@ export class MeetingRoom extends DurableObject<Env> {
     this.persistVoiceChannelMembers();
   }
 
-  /** Find a WebSocket by clerk_user_id */
+  /** Find a WebSocket by user_id */
   private findWsByUserId(userId: string): WebSocket | null {
     for (const [ws, session] of this.sessions) {
-      if (session.clerk_user_id === userId) return ws;
+      if (session.user_id === userId) return ws;
     }
     return null;
   }

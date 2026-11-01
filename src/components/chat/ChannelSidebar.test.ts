@@ -148,7 +148,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Alice",
               self_mute: true,
               self_deaf: true,
@@ -209,7 +209,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Legacy Name",
               username: "alice",
               display_name: "Alice Display",
@@ -280,7 +280,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "member-user",
+              user_id: "member-user",
               name: "Authoritative Member",
               username: "member-user",
               display_name: null,
@@ -293,7 +293,7 @@ describe("ChannelSidebar voice member identities", () => {
               self_stream: false,
             },
             {
-              clerk_user_id: "relationship-user",
+              user_id: "relationship-user",
               name: "Authoritative Relationship",
               username: "relationship-user",
               display_name: null,
@@ -339,7 +339,7 @@ describe("ChannelSidebar voice member identities", () => {
       states: {
         "vc-1": [
           {
-            clerk_user_id: "u1",
+            user_id: "u1",
             name: "Legacy Name",
             username: "alice",
             display_name: "Alice Display",
@@ -405,7 +405,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Alice",
               username: "alice",
               display_name: null,
@@ -456,7 +456,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Alice",
               username: "alice",
               display_name: null,
@@ -505,7 +505,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Alice",
               username: "alice",
               display_name: null,
@@ -571,7 +571,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Alice",
               username: "alice",
               display_name: "Alice",
@@ -614,7 +614,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Alice",
               username: "alice",
               display_name: "Alice",
@@ -684,7 +684,7 @@ describe("ChannelSidebar voice member identities", () => {
         voiceChannelStates: {
           "vc-1": [
             {
-              clerk_user_id: "u1",
+              user_id: "u1",
               name: "Alice",
               username: "alice",
               display_name: "Alice",

@@ -12,6 +12,7 @@ import {
 import { createSoundboardPlaybackId } from "../../src/lib/voice/soundboard-playback-id";
 import { verifySoundboardMediaCapability } from "../../src/lib/voice/soundboard-media-capability";
 import { GET as GET_SOUNDBOARD_UPLOAD } from "../../src/lib/voice/soundboard-upload-handler";
+import { VoiceRoom } from "../voice-room";
 import {
   GatewayOp,
   HEARTBEAT_FRAME,
@@ -2754,7 +2755,7 @@ describe("VoiceRoom lifecycle", () => {
     await runInDurableObject(room, (_instance, state) => {
       for (const { participantId, subject } of leftover) {
         state.storage.sql.exec(
-          "INSERT INTO participants (id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id) VALUES (?, ?, NULL, ?, 1, ?)",
+          "INSERT INTO participants (id, user_id, native_screen_session_id, last_heartbeat, speaking, connection_id) VALUES (?, ?, NULL, ?, 1, ?)",
           participantId,
           subject,
           Date.now(),
@@ -5392,6 +5393,199 @@ describe("VoiceRoom gateway protocol edge", () => {
     await expect(reply).resolves.toEqual({
       op: 18,
       d: { code: 4001, message: "Unknown voice opcode: 999" },
+    });
+    socket.close();
+  });
+});
+
+// The previous Worker version (pre-rename, origin/main before this change)
+// runs these statements against participants, verbatim. After a rollback it
+// must keep working on a table this code created or migrated.
+const PRE_RENAME_PARTICIPANTS_SQL = {
+  createTable: `
+      CREATE TABLE IF NOT EXISTS participants (
+        id TEXT PRIMARY KEY,
+        clerk_user_id TEXT,
+        native_screen_session_id TEXT,
+        last_heartbeat INTEGER DEFAULT 0,
+        speaking INTEGER DEFAULT 0,
+        connection_id TEXT
+      );
+    `,
+  addColumns: [
+    `ALTER TABLE participants ADD COLUMN connection_id TEXT;`,
+    `ALTER TABLE participants ADD COLUMN native_screen_session_id TEXT;`,
+  ],
+  upsert: `INSERT INTO participants (id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id)
+       VALUES (?, ?, NULL, ?, 0, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         clerk_user_id = excluded.clerk_user_id,
+         native_screen_session_id = NULL,
+         last_heartbeat = excluded.last_heartbeat,
+         connection_id = excluded.connection_id`,
+  userIdOf: "SELECT clerk_user_id FROM participants WHERE id = ?",
+  screenParticipantOf: `SELECT p.id
+       FROM participants p
+       WHERE (p.clerk_user_id = ? OR p.id = ?)
+         AND EXISTS (
+           SELECT 1
+           FROM tracks t
+           WHERE t.participant_id = p.id
+             AND t.track_name LIKE 'screen-%'
+             AND t.native_screen_pending = 0
+         )
+       LIMIT 1`,
+  owners: "SELECT id, clerk_user_id FROM participants",
+};
+
+describe("VoiceRoom participants user id columns", () => {
+  type SqlStorage = DurableObjectState["storage"]["sql"];
+  type Internals = {
+    getUserIdForParticipant(participantId: string): string | null;
+    getActiveScreenParticipantIdForUserId(userId: string): string | null;
+    getLegacySoundboardPlaybackOwners(playbackId: string): Set<string>;
+  };
+  const columns = (sql: SqlStorage) =>
+    [...sql.exec<{ name: string }>("PRAGMA table_info(participants)")].map(
+      (row) => row.name,
+    );
+  const rowOf = (sql: SqlStorage, participantId: string) =>
+    [
+      ...sql.exec<{ user_id: string | null; clerk_user_id: string | null }>(
+        "SELECT user_id, clerk_user_id FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ][0];
+  /** The previous version starting up: its schema statements, as it runs them. */
+  const startPreRename = (sql: SqlStorage) => {
+    sql.exec(PRE_RENAME_PARTICIPANTS_SQL.createTable);
+    for (const statement of PRE_RENAME_PARTICIPANTS_SQL.addColumns) {
+      try {
+        sql.exec(statement);
+      } catch {
+        // As the previous version: the column already exists.
+      }
+    }
+  };
+  const roomEnv = env as unknown as ConstructorParameters<typeof VoiceRoom>[1];
+
+  it("adds user_id to a pre-rename table, backfills it, and is a no-op on a second start", async () => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const oldId = crypto.randomUUID();
+
+    await runInDurableObject(room, (_instance, state) => {
+      const sql = state.storage.sql;
+      // A room the previous version created, with one row it wrote.
+      sql.exec("DROP TABLE participants");
+      startPreRename(sql);
+      sql.exec(
+        PRE_RENAME_PARTICIPANTS_SQL.upsert,
+        oldId,
+        "old-user",
+        Date.now(),
+        crypto.randomUUID(),
+      );
+      expect(columns(sql)).not.toContain("user_id");
+
+      const migrated = new VoiceRoom(state, roomEnv) as unknown as Internals;
+      expect(columns(sql)).toEqual(
+        expect.arrayContaining(["user_id", "clerk_user_id"]),
+      );
+      expect(rowOf(sql, oldId)).toEqual({
+        user_id: "old-user",
+        clerk_user_id: "old-user",
+      });
+      expect(migrated.getUserIdForParticipant(oldId)).toBe("old-user");
+      expect([
+        ...migrated.getLegacySoundboardPlaybackOwners("s-old-user-1"),
+      ]).toEqual(["old-user"]);
+
+      const before = columns(sql);
+      new VoiceRoom(state, roomEnv);
+      expect(columns(sql)).toEqual(before);
+      expect(rowOf(sql, oldId)).toEqual({
+        user_id: "old-user",
+        clerk_user_id: "old-user",
+      });
+    });
+  });
+
+  it("keeps the previous version's statements working on rows this version wrote", async () => {
+    // A fresh room: this version creates the table and writes the row.
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "new-user");
+    await identifyVoiceSocket(socket, participantId, roomName, "new-user");
+
+    await runInDurableObject(room, (_instance, state) => {
+      const sql = state.storage.sql;
+      expect(rowOf(sql, participantId)).toEqual({
+        user_id: "new-user",
+        clerk_user_id: "new-user",
+      });
+      sql.exec(
+        "INSERT INTO tracks (track_name, participant_id, sfu_track_name, session_id, kind) VALUES (?, ?, ?, ?, 'video')",
+        `screen-video-${participantId}`,
+        participantId,
+        `opaque-${participantId}`,
+        "session-1",
+      );
+
+      // Rollback: the previous version starts and reads this version's rows.
+      startPreRename(sql);
+      expect([
+        ...sql.exec(PRE_RENAME_PARTICIPANTS_SQL.userIdOf, participantId),
+      ]).toEqual([{ clerk_user_id: "new-user" }]);
+      expect([
+        ...sql.exec(
+          PRE_RENAME_PARTICIPANTS_SQL.screenParticipantOf,
+          "new-user",
+          "new-user",
+        ),
+      ]).toEqual([{ id: participantId }]);
+      expect([...sql.exec(PRE_RENAME_PARTICIPANTS_SQL.owners)]).toEqual([
+        { id: participantId, clerk_user_id: "new-user" },
+      ]);
+
+      // It inserts a row and re-identifies an existing one (as another user,
+      // the worst case for the stale copy in user_id).
+      const rollbackId = crypto.randomUUID();
+      sql.exec(
+        PRE_RENAME_PARTICIPANTS_SQL.upsert,
+        rollbackId,
+        "rollback-user",
+        Date.now(),
+        crypto.randomUUID(),
+      );
+      sql.exec(
+        PRE_RENAME_PARTICIPANTS_SQL.upsert,
+        participantId,
+        "other-user",
+        Date.now(),
+        crypto.randomUUID(),
+      );
+      expect([
+        ...sql.exec(PRE_RENAME_PARTICIPANTS_SQL.userIdOf, rollbackId),
+      ]).toEqual([{ clerk_user_id: "rollback-user" }]);
+
+      // Roll forward: this version starts again and reads what it wrote.
+      const restarted = new VoiceRoom(state, roomEnv) as unknown as Internals;
+      expect(rowOf(sql, rollbackId)).toEqual({
+        user_id: "rollback-user",
+        clerk_user_id: "rollback-user",
+      });
+      expect(rowOf(sql, participantId)).toEqual({
+        user_id: "other-user",
+        clerk_user_id: "other-user",
+      });
+      expect(restarted.getUserIdForParticipant(rollbackId)).toBe(
+        "rollback-user",
+      );
+      expect(
+        restarted.getActiveScreenParticipantIdForUserId("other-user"),
+      ).toBe(participantId);
     });
     socket.close();
   });

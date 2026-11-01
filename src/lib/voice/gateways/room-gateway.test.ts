@@ -201,18 +201,24 @@ describe("RoomGateway", () => {
       {
         op: GatewayOp.Identify,
         d: expect.objectContaining({
-          clerk_user_id: "user-1",
+          name: "Test User",
           supports_voice_state_deltas: true,
         }),
       },
       {
         op: GatewayOp.Identify,
         d: expect.objectContaining({
-          clerk_user_id: "user-1",
+          name: "Test User",
           supports_voice_state_deltas: true,
         }),
       },
     ]);
+    // The room takes the user from the ticket; Identify names no user id,
+    // under either the current or the pre-rename key.
+    for (const message of identifyMessages) {
+      expect(message.d).not.toHaveProperty("user_id");
+      expect(message.d).not.toHaveProperty("clerk_user_id");
+    }
 
     gateway.disconnect();
   });
@@ -257,8 +263,8 @@ describe("RoomGateway", () => {
       (message) => message.op === GatewayOp.Identify,
     );
     expect(identifyMessages.map((message) => message.d)).toEqual([
-      expect.objectContaining({ clerk_user_id: "user-1", standby: true }),
-      expect.objectContaining({ clerk_user_id: "user-1", standby: true }),
+      expect.objectContaining({ name: "Test User", standby: true }),
+      expect.objectContaining({ name: "Test User", standby: true }),
       expect.not.objectContaining({ standby: true }),
     ]);
     expect(sentMessages(socket)).toContainEqual({

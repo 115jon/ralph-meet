@@ -143,6 +143,7 @@ mobile/node_modules/
 showcase/
 
 !/docs/deploy.md
+!/docs/user-id-rename.md
 !/docs/design-system.md
 !/docs/design-audit.md
 !/docs/performance.md

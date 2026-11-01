@@ -76,7 +76,7 @@ const mocks = vi.hoisted(() => {
       gateway: null,
       user: { id: "user-1" },
       voiceChannelStates: {
-        "channel-1": [{ clerk_user_id: "user-1" }],
+        "channel-1": [{ user_id: "user-1" }],
       },
       dmChannels: [
         {
