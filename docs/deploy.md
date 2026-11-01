@@ -114,6 +114,11 @@ Previews are public by default.
   `pnpm exec wrangler preview base-config secret put <NAME>`. For an existing
   Preview: `pnpm exec wrangler preview secret put <NAME> --name main`. The names
   are listed at the top of `wrangler.toml`.
+- **Egress proxy.** TikTok lookups (`/api/tiktok-video`, link embeds) go
+  through the house egress proxy, `https://egress.115jon.com`, when the Worker
+  has `EGRESS_PROXY_SECRET`. Production has it; Previews do not, so a Preview
+  fetches TikTok and tikwm directly, and age-gated posts do not get a playable
+  video there. See [Egress proxy](#egress-proxy).
 - **Background tasks.** A Queue consumer cannot target a Preview, so tasks sent
   to `BACKGROUND_TASKS` stay in the preview queue and never run.
 - **Cron triggers.** They run on production only.
@@ -166,3 +171,32 @@ check fails.
 | Variable | `WEB_PRODUCTION_URL`    | Optional. Production base URL for the smoke test. Without it, the workflow uses `DEFAULT_PUBLIC_WEB_URL` from `src/lib/site-defaults.ts`. |
 
 The token is passed only to the steps that call Cloudflare.
+
+## Egress proxy
+
+From Cloudflare's shared IP ranges tikwm answers `Free Api Limit` for every
+caller and TikTok's player API sometimes answers 404, so an age-gated TikTok
+resolves to no video. `src/lib/egress-proxy.ts` sends those requests through a
+signed proxy on a US server instead.
+
+| Name                  | Kind   | Notes                                               |
+| --------------------- | ------ | --------------------------------------------------- |
+| `EGRESS_PROXY_SECRET` | Secret | HMAC key. Set in production. Unset: proxy disabled. |
+| `EGRESS_PROXY_URL`    | Var    | Optional. Defaults to `https://egress.115jon.com`.  |
+
+- Each call is `POST /fetch` (or `/resolve` for short links) with a JSON body
+  and `X-Egress-Timestamp` / `X-Egress-Signature` headers
+  (`hex(HMAC_SHA256(secret, ts + "
+" + body))`). The timestamp must be within
+  60 seconds of the proxy's clock, and every body carries a fresh nonce.
+- The proxy only reaches `tiktok.com` (and `www`, `m`, `vm`, `vt`) and
+  `tikwm.com`. Instagram and X mirrors are disabled on it.
+- tikwm always goes through the proxy when it is enabled. The player API, the
+  post page and short-link resolution go direct first and use the proxy when
+  the direct request is refused, empty or unreachable.
+- Failures: 429 and 503 pause the proxy for `Retry-After`; 424 and non-JSON
+  answers count as soft failures; 400, 401, 403 and 413 are logged once as
+  `The egress proxy refused a request` and pause the proxy for ten minutes.
+  Direct and proxy requests have separate circuits (`<provider>@egress`).
+- To rotate the key, change it on the proxy and run
+  `pnpm exec wrangler secret put EGRESS_PROXY_SECRET` together.

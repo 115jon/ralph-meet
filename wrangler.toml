@@ -19,6 +19,7 @@ upload_source_maps = false
 #   wrangler secret put TURN_TOKEN_SECRET
 #   wrangler secret put RALPH_AUTH_WEBHOOK_SECRET  # only if /api/auth/sync webhooks are enabled
 #   wrangler secret put FCM_SERVICE_ACCOUNT < fcm-service-account.json  # mobile push; unset = off
+#   wrangler secret put EGRESS_PROXY_SECRET  # signs TikTok lookups sent via egress.115jon.com; unset = direct only
 
 [vars]
 CALLS_APP_ID = "19e070aa92dd233340bfb829a1ffd742"
