@@ -58,6 +58,7 @@ function optionsFor(call: ActiveCall): RalphCall.CallOptions {
     deafened: call.deafened,
     openUrl: Linking.createURL("/call"),
     speakerFirst: useCallPreferences.getState().audioRoute === "speaker",
+    sharing: call.local.sharing,
   };
 }
 
@@ -105,7 +106,8 @@ export function startCallService(controls: CallControls): void {
     if (
       next.muted === prev.muted &&
       next.deafened === prev.deafened &&
-      next.channelName === prev.channelName
+      next.channelName === prev.channelName &&
+      next.local.sharing === prev.local.sharing
     ) {
       return;
     }
@@ -146,6 +148,22 @@ export function stopCallService(): void {
   stopCurrent = null;
   useAudioRoutes.setState({ routes: [] });
   RalphCall.endCall().catch(warn("Could not end"));
+}
+
+/**
+ * Readies the call service for a screen capture (see ralph-call
+ * startScreenShare). False off Android or with no call service running.
+ */
+export function prepareScreenCapture(): Promise<boolean> {
+  return RalphCall.startScreenShare().catch((error: unknown) => {
+    warn("Could not prepare screen sharing")(error);
+    return false;
+  });
+}
+
+/** The screen capture ended: the service drops its mediaProjection type. */
+export function releaseScreenCapture(): void {
+  RalphCall.stopScreenShare().catch(warn("Could not end screen sharing"));
 }
 
 export function selectAudioRoute(id: string): void {

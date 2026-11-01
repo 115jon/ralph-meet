@@ -152,7 +152,7 @@ export const VoiceChannelRow = memo(function VoiceChannelRow({
             </Text>
           </View>
         ) : (
-          <Text variant="silk" tone="inkOff">
+          <Text variant="silk" tone="inkOff" numberOfLines={1}>
             Empty
           </Text>
         )}

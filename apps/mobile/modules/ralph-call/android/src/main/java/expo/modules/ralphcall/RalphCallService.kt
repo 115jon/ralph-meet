@@ -23,33 +23,56 @@ class RalphCallService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
-    try {
-      ServiceCompat.startForeground(this, CallNotification.ID, CallNotification.build(this, call), foregroundTypes())
-    } catch (error: Exception) {
-      // ForegroundServiceStartNotAllowedException (12+, started from the
-      // background) or SecurityException (14+, microphone not usable now).
-      Log.w("RalphCall", "Could not enter the foreground", error)
-      stopSelf()
-    }
+    current = this
+    if (!enterForeground(call, CallController.projecting)) stopSelf()
     // Not sticky: after the process dies there is no call to bring back.
     return START_NOT_STICKY
   }
 
   override fun onDestroy() {
+    if (current === this) current = null
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     super.onDestroy()
   }
 
   /**
+   * Declares (or re-declares) the foreground types. Calling startForeground
+   * again on a running service replaces its types, which is how screen
+   * sharing adds and drops mediaProjection without restarting the call.
+   * False when Android refused: ForegroundServiceStartNotAllowedException
+   * (12+, started from the background) or SecurityException (14+, the
+   * microphone not usable now, or mediaProjection without the user's consent).
+   */
+  internal fun enterForeground(call: CallInfo, projecting: Boolean): Boolean =
+    try {
+      ServiceCompat.startForeground(this, CallNotification.ID, CallNotification.build(this, call), foregroundTypes(projecting))
+      true
+    } catch (error: Exception) {
+      Log.w("RalphCall", "Could not enter the foreground (projecting=$projecting)", error)
+      false
+    }
+
+  /**
    * microphone: capture keeps working in the background (Android 11+ cuts
    * the mic off for background apps without it). phoneCall: this is the
-   * app's call (needs MANAGE_OWN_CALLS). The microphone type exists from 30.
+   * app's call (needs MANAGE_OWN_CALLS). mediaProjection: required by
+   * MediaProjectionManager.getMediaProjection() from Android 10, and from 14
+   * only allowed once the user has accepted the capture dialog. The
+   * microphone type exists from 30.
    */
-  private fun foregroundTypes(): Int =
-    when {
+  private fun foregroundTypes(projecting: Boolean): Int {
+    val projection = if (projecting) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0
+    return when {
       Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
-        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-      Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or projection
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or projection
       else -> 0
     }
+  }
+
+  internal companion object {
+    /** The running service, so the controller can change its types. Main thread only. */
+    var current: RalphCallService? = null
+      private set
+  }
 }

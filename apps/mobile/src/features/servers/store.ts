@@ -97,6 +97,16 @@ export function useIsUnread(channelId: string): boolean {
   );
 }
 
+/** Any unread channel in the server's tree: the rail's short pill. */
+export function useServerHasUnread(serverId: string): boolean {
+  return useServersStore(
+    (s) =>
+      s.trees[serverId]?.channels.some((c) =>
+        isUnread(s.lastMessageAt[c.id], s.readAt[c.id]),
+      ) ?? false,
+  );
+}
+
 export function useVoiceMembers(channelId: string): readonly VoiceMember[] {
   return useServersStore((s) => s.voice[channelId] ?? NO_MEMBERS);
 }

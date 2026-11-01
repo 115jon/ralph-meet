@@ -10,6 +10,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/theme";
 
 import { closeChannel, openChannel } from "./actions";
+import { AttachTray } from "./attach/AttachTray";
+import { useAttach } from "./attach/useAttach";
 import { ChatHeader } from "./ChatHeader";
 import { Composer, type ComposerHandle } from "./Composer";
 import {
@@ -38,8 +40,9 @@ export interface ChatViewProps {
 
 /**
  * One conversation: header, history, typing line and composer, plus the
- * message sheet. The body follows the keyboard frame by frame (edge to
- * edge, so the window never resizes), keeping the composer on top of it.
+ * attach tray and the message sheet. The body follows the keyboard or the
+ * tray frame by frame (edge to edge, so the window never resizes), keeping
+ * the composer on top of whichever is up.
  */
 export function ChatView({
   channelId,
@@ -54,6 +57,8 @@ export function ChatView({
   const insets = useSafeAreaInsets();
   const keyboard = useAnimatedKeyboard();
   const composer = useRef<ComposerHandle>(null);
+  const attach = useAttach(channelId);
+  const { lift } = attach;
   const [selected, setSelected] = useState<ChatMessage | null>(null);
 
   useFocusEffect(
@@ -65,7 +70,8 @@ export function ChatView({
 
   const bottomInset = insets.bottom;
   const bodyStyle = useAnimatedStyle(() => ({
-    paddingBottom: Math.max(keyboard.height.value, bottomInset) + COMPOSER_GAP,
+    paddingBottom:
+      Math.max(keyboard.height.value, lift.value, bottomInset) + COMPOSER_GAP,
   }));
 
   const closeSheet = useCallback(() => setSelected(null), []);
@@ -89,8 +95,10 @@ export function ChatView({
           channelId={channelId}
           placeholder={placeholder}
           people={people}
+          attach={attach}
         />
       </Animated.View>
+      <AttachTray attach={attach} />
       <MessageActionsSheet
         message={selected}
         onClose={closeSheet}

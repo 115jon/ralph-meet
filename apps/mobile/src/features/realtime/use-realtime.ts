@@ -9,6 +9,7 @@ import { startChatEvents } from "@/features/chat/realtime";
 import { resetChatStore } from "@/features/chat/store";
 import { startDmEvents } from "@/features/dms/realtime";
 import { resetDmsStore } from "@/features/dms/store";
+import { startPresenceEvents } from "@/features/presence/realtime";
 import { startServerEvents } from "@/features/servers/realtime";
 import { resetServersStore } from "@/features/servers/store";
 import { leaveCall, wakeCall } from "@/features/voice/actions";
@@ -32,6 +33,7 @@ export function useRealtime(): void {
     const stopChat = startChatEvents();
     const stopDms = startDmEvents();
     const stopActivity = startActivityEvents();
+    const stopPresence = startPresenceEvents();
     const appState = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         wakeGateway();
@@ -43,6 +45,7 @@ export function useRealtime(): void {
       stopChat();
       stopDms();
       stopActivity();
+      stopPresence();
       appState.remove();
     };
   }, []);

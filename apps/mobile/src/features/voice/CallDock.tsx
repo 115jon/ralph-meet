@@ -3,11 +3,14 @@ import {
   Microphone,
   MicrophoneSlash,
   PhoneX,
+  Screencast,
   SpeakerSlash,
+  VideoCamera,
+  VideoCameraSlash,
   type Icon as PhosphorIcon,
 } from "phosphor-react-native";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 
 import { AudioRouteSheet } from "@/features/call-service/AudioRouteSheet";
 import {
@@ -19,13 +22,21 @@ import { askBluetoothPermission } from "@/features/call-service/service";
 import { RADIUS, useTheme } from "@/theme";
 import { Icon } from "@/ui";
 
-import { leaveCall, toggleDeafen, toggleMute } from "./actions";
+import {
+  leaveCall,
+  toggleCamera,
+  toggleDeafen,
+  toggleMute,
+  toggleScreenShare,
+} from "./actions";
 
 interface DockKeyProps {
   icon: PhosphorIcon;
   label: string;
   /** On: muted or deafened, shown in danger. */
   on?: boolean;
+  /** Live: camera on or sharing, shown in live azure. */
+  live?: boolean;
   danger?: boolean;
   onPress: () => void;
 }
@@ -34,6 +45,7 @@ function DockKey({
   icon,
   label,
   on = false,
+  live = false,
   danger = false,
   onPress,
 }: DockKeyProps) {
@@ -42,13 +54,21 @@ function DockKey({
     ? theme.dangerFill
     : on
       ? theme.dangerTint
-      : theme.tint1;
-  const color = danger ? theme.onDanger : on ? theme.dangerInk : theme.ink1;
+      : live
+        ? theme.liveTint
+        : theme.tint1;
+  const color = danger
+    ? theme.onDanger
+    : on
+      ? theme.dangerInk
+      : live
+        ? theme.live
+        : theme.ink1;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={danger ? undefined : { selected: on }}
+      accessibilityState={danger ? undefined : { selected: on || live }}
       onPress={onPress}
       style={({ pressed }) => ({
         flex: danger ? 1.25 : 1,
@@ -60,7 +80,7 @@ function DockKey({
         opacity: pressed ? 0.8 : 1,
       })}
     >
-      <Icon icon={icon} active={on || danger} size={24} color={color} />
+      <Icon icon={icon} active={on || live || danger} size={24} color={color} />
     </Pressable>
   );
 }
@@ -68,14 +88,22 @@ function DockKey({
 interface CallDockProps {
   muted: boolean;
   deafened: boolean;
+  camera: boolean;
+  sharing: boolean;
   bottomInset: number;
 }
 
 /**
- * Floating ply-3 plate under a 2px ink rule: Mute, Deafen, the audio route
- * (when the phone reports routes), Leave.
+ * Floating ply-3 plate under a 2px ink rule: Mute, Deafen, Camera, Share
+ * (Android), the audio route (when the phone reports routes), Leave.
  */
-export function CallDock({ muted, deafened, bottomInset }: CallDockProps) {
+export function CallDock({
+  muted,
+  deafened,
+  camera,
+  sharing,
+  bottomInset,
+}: CallDockProps) {
   const theme = useTheme();
   const route = useActiveRoute();
   const [routesOpen, setRoutesOpen] = useState(false);
@@ -116,6 +144,20 @@ export function CallDock({ muted, deafened, bottomInset }: CallDockProps) {
         on={deafened}
         onPress={toggleDeafen}
       />
+      <DockKey
+        icon={camera ? VideoCamera : VideoCameraSlash}
+        label={camera ? "Turn off camera" : "Turn on camera"}
+        live={camera}
+        onPress={() => void toggleCamera()}
+      />
+      {Platform.OS === "android" ? (
+        <DockKey
+          icon={Screencast}
+          label={sharing ? "Stop sharing your screen" : "Share your screen"}
+          live={sharing}
+          onPress={() => void toggleScreenShare()}
+        />
+      ) : null}
       {route ? (
         <DockKey
           icon={routeIcon(route.type)}

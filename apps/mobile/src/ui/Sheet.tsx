@@ -1,6 +1,6 @@
 import type { Icon as PhosphorIcon } from "phosphor-react-native";
 import type { ReactNode } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Pressable, View } from "react-native";
 import Animated, { Easing, SlideInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -35,7 +35,12 @@ export function Sheet({ visible, onClose, label, children }: SheetProps) {
       navigationBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+      {/* An edge-to-edge modal window is never resized for the keyboard, so a
+          field in the sheet (the custom status) is lifted here instead. */}
+      <KeyboardAvoidingView
+        behavior="padding"
+        style={{ flex: 1, justifyContent: "flex-end" }}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
@@ -80,7 +85,7 @@ export function Sheet({ visible, onClose, label, children }: SheetProps) {
           />
           {children}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

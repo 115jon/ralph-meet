@@ -33,7 +33,7 @@ export function useDmPreview(channelId: string): Message | null {
   return useDmsStore((s) => s.previews[channelId] ?? null);
 }
 
-/** Conversations with a message the user has not read: the DMs tab badge. */
+/** Conversations with a message the user has not read: the DMs key's count. */
 export function useUnreadDmCount(): number {
   const dms = useDmsStore((s) => s.dms);
   return useServersStore(

@@ -1,22 +1,22 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
+import { ScrollView } from "react-native";
 
+import { usePlateClearance } from "@/features/panel/metrics";
 import { loadServers, loadTree } from "@/features/servers/actions";
 import {
   ChannelTree,
   ChannelTreeSkeleton,
 } from "@/features/servers/ChannelTree";
 import type { Channel } from "@/features/servers/schema";
-import { ServerRail, ServerRailSkeleton } from "@/features/servers/ServerRail";
 import {
-  type LoadStatus,
   useSelectedServer,
   useServerList,
   useServerTree,
 } from "@/features/servers/store";
 import { channelKind } from "@/features/servers/tree";
 import { joinVoiceChannel } from "@/features/voice/actions";
-import { EmptyState, Header, Screen } from "@/ui";
+import { EmptyState, Header } from "@/ui";
 
 function SelectedServerTree() {
   const router = useRouter();
@@ -73,16 +73,10 @@ function SelectedServerTree() {
   );
 }
 
-/** Before the list arrives, when it failed, or when there is none. */
-function NoServers({ status }: { status: LoadStatus }) {
-  if (status === "loading") {
-    return (
-      <>
-        <ServerRailSkeleton />
-        <ChannelTreeSkeleton />
-      </>
-    );
-  }
+/** The list failed, or there is none: said in the pane, the rail stays. */
+function NoServers() {
+  const { status } = useServerList();
+  if (status === "loading") return <ChannelTreeSkeleton />;
   if (status === "error") {
     return (
       <EmptyState
@@ -100,28 +94,17 @@ function NoServers({ status }: { status: LoadStatus }) {
   );
 }
 
-export default function ServersScreen() {
-  const { servers, status } = useServerList();
+/** The selected server: its name over the brand rule, then its channel tree. */
+export function ServerPane() {
+  const { servers } = useServerList();
   const server = useSelectedServer();
-
-  useEffect(() => {
-    void loadServers();
-  }, []);
-
-  if (servers.length === 0) {
-    return (
-      <Screen>
-        <Header title="Servers" rule="brand" />
-        <NoServers status={status} />
-      </Screen>
-    );
-  }
-
+  const clearance = usePlateClearance();
   return (
-    <Screen>
+    <>
       <Header title={server?.name ?? "Servers"} rule="brand" />
-      <ServerRail servers={servers} />
-      <SelectedServerTree />
-    </Screen>
+      <ScrollView contentContainerStyle={{ paddingBottom: clearance }}>
+        {servers.length === 0 ? <NoServers /> : <SelectedServerTree />}
+      </ScrollView>
+    </>
   );
 }

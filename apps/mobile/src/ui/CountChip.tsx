@@ -11,7 +11,7 @@ export function CountChip({ count }: { count: number }) {
     <View
       style={{
         minWidth: 18,
-        height: 18,
+        minHeight: 18,
         paddingHorizontal: 4,
         borderRadius: RADIUS,
         backgroundColor: theme.badge,

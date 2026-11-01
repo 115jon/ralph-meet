@@ -35,9 +35,11 @@ function ThemedStack() {
       >
         <Stack.Screen name="index" />
         <Stack.Protected guard={signedIn}>
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="home" />
           <Stack.Screen name="channel/[id]" />
           <Stack.Screen name="dm/[id]" />
+          <Stack.Screen name="activity" />
+          <Stack.Screen name="settings" />
           <Stack.Screen
             name="call"
             options={{ animation: "slide_from_bottom" }}

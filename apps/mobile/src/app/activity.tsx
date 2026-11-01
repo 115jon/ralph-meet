@@ -33,6 +33,7 @@ function ActivitySkeleton() {
 
 const keyOf = (n: Notification) => n.id;
 
+/** Mentions and replies, newest first; opened from the panel's bell. */
 export default function ActivityScreen() {
   const router = useRouter();
   const status = useActivityStore((s) => s.status);
@@ -105,7 +106,7 @@ export default function ActivityScreen() {
 
   return (
     <Screen scroll={false}>
-      <Header title="Activity" />
+      <Header title="Activity" onBack={() => router.back()} />
       {body}
     </Screen>
   );

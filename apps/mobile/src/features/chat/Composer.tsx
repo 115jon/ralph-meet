@@ -4,6 +4,7 @@ import {
   PencilSimple,
   PlusCircle,
   X,
+  XCircle,
   type Icon as PhosphorIcon,
 } from "phosphor-react-native";
 import { useImperativeHandle, useRef, useState, type Ref } from "react";
@@ -17,20 +18,16 @@ import {
 import { useSession } from "@/features/auth/session";
 import { mediaUrl } from "@/lib/api";
 import { FONT, RADIUS, useTheme } from "@/theme";
-import { Avatar, Icon, IconButton, Led, RemoteImage, Text } from "@/ui";
+import { Avatar, Icon, IconButton, Text } from "@/ui";
 
-import type { UploadFile } from "./api";
+import { AttachmentChips, NoticeLine } from "./attach/AttachmentChips";
+import { canAttach } from "./attach/sources";
+import type { AttachController } from "./attach/useAttach";
 import { authorName } from "./authors";
 import type { ComposerIntent } from "./MessageActionsSheet";
 import { insertMention, mentionQueryAt, suggestPeople } from "./mentions";
-import {
-  editMessage,
-  notifyTyping,
-  sendMessage,
-  uploadFile,
-} from "./mutations";
-import { canPickImages, pickImages } from "./pick-images";
-import type { Attachment, Author } from "./schema";
+import { editMessage, notifyTyping, sendMessage } from "./mutations";
+import type { Author } from "./schema";
 
 const MAX_INPUT_HEIGHT = 128;
 const KEY = 52;
@@ -47,13 +44,8 @@ interface ComposerProps {
   placeholder: string;
   /** Who can be @mentioned here. */
   people: readonly Author[];
-}
-
-interface PendingUpload {
-  readonly key: string;
-  readonly file: UploadFile;
-  /** Null while it uploads. */
-  readonly attachment: Attachment | null;
+  /** The files on the next message and the tray that picks them. */
+  attach: AttachController;
 }
 
 /** The send key: the one primary, notched at its top-right corner. */
@@ -132,7 +124,7 @@ function IntentBar({
       }}
     >
       <Icon icon={icon} size={14} color={theme.ink3} />
-      <Text variant="silk" tone="ink3">
+      <Text variant="silk" tone="ink3" numberOfLines={1}>
         {label}
       </Text>
       <Text
@@ -210,78 +202,19 @@ function Suggestions({
   );
 }
 
-function UploadTile({
-  upload,
-  onRemove,
-}: {
-  upload: PendingUpload;
-  onRemove: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <View
-      style={{
-        width: 64,
-        height: 64,
-        borderRadius: RADIUS,
-        overflow: "hidden",
-        borderWidth: 1,
-        borderColor: theme.line,
-        backgroundColor: theme.tint1,
-      }}
-    >
-      <RemoteImage
-        url={upload.file.uri}
-        style={{ width: "100%", height: "100%" }}
-      />
-      {upload.attachment ? null : (
-        <View
-          accessibilityLabel="Uploading"
-          style={{
-            position: "absolute",
-            left: 4,
-            bottom: 4,
-            padding: 3,
-            borderRadius: RADIUS,
-            backgroundColor: theme.ply3,
-          }}
-        >
-          <Led state="idle" size={6} />
-        </View>
-      )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${upload.file.name}`}
-        onPress={onRemove}
-        hitSlop={6}
-        style={{
-          position: "absolute",
-          top: 2,
-          right: 2,
-          width: 22,
-          height: 22,
-          borderRadius: RADIUS,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: theme.ply3,
-        }}
-      >
-        <Icon icon={X} size={12} />
-      </Pressable>
-    </View>
-  );
-}
-
 /**
  * The floating composer: attach key, a Geist field that grows to five
- * lines, and the notched send key. It owns its draft; the message sheet
- * steers it into reply or edit through the handle.
+ * lines, and the notched send key. It owns its draft text; the files come
+ * from the attach tray, and the message sheet steers it into reply or edit
+ * through the handle. Sending with files uploads them first (each chip
+ * shows its progress), then posts through the optimistic send.
  */
 export function Composer({
   ref,
   channelId,
   placeholder,
   people,
+  attach,
 }: ComposerProps) {
   const theme = useTheme();
   const myId = useSession((s) => s.user?.id);
@@ -289,7 +222,6 @@ export function Composer({
   const [text, setText] = useState("");
   const [cursor, setCursor] = useState(0);
   const [intent, setIntent] = useState<ComposerIntent | null>(null);
-  const [uploads, setUploads] = useState<readonly PendingUpload[]>([]);
 
   useImperativeHandle(ref, () => ({
     compose: (next) => {
@@ -299,6 +231,7 @@ export function Composer({
         setText(content);
         setCursor(content.length);
       }
+      attach.closeTray();
       input.current?.focus();
     },
   }));
@@ -307,45 +240,43 @@ export function Composer({
   const replyTo = intent?.kind === "reply" ? intent.message : undefined;
   const query = mentionQueryAt(text, cursor);
   const suggestions = query ? suggestPeople(people, query.text, myId) : [];
-  const uploading = uploads.some((upload) => !upload.attachment);
-  const ready = uploads.flatMap((upload) =>
-    upload.attachment ? [upload.attachment] : [],
-  );
+  const files = editing ? [] : attach.items;
   const canSend =
-    !uploading && (text.trim().length > 0 || (!editing && ready.length > 0));
+    !attach.sending &&
+    (text.trim().length > 0 || (!editing && files.length > 0));
+  const showAttach = canAttach && !editing;
 
   const cancelIntent = () => {
     if (editing) setText("");
     setIntent(null);
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!canSend) return;
     const content = text.trim();
     if (editing) {
       if (content !== editing.content?.trim())
         void editMessage(editing, content);
-    } else {
-      sendMessage(channelId, { content, replyTo, attachments: ready });
-      setUploads([]);
+      setText("");
+      setIntent(null);
+      return;
     }
+    const sent = files.length > 0 ? await attach.upload() : [];
+    // A failed upload keeps the draft (text, chips and reply) for a retry.
+    if (!sent) return;
+    if (!content && sent.length === 0) return;
+    // The server serves an attachment only once a message links it, so the
+    // optimistic row draws the local files; the stored copy brings the real
+    // URLs when it replaces the row.
+    const attachments = sent.map(({ attachment, localUri }) => ({
+      ...attachment,
+      url: localUri,
+    }));
+    sendMessage(channelId, { content, replyTo, attachments });
+    attach.clear();
+    attach.closeTray();
     setText("");
     setIntent(null);
-  };
-
-  const attach = async () => {
-    const files = await pickImages();
-    for (const file of files) {
-      const key = `${file.uri}-${Date.now()}`;
-      setUploads((list) => [...list, { key, file, attachment: null }]);
-      void uploadFile(channelId, file).then((attachment) =>
-        setUploads((list) =>
-          attachment
-            ? list.map((u) => (u.key === key ? { ...u, attachment } : u))
-            : list.filter((u) => u.key !== key),
-        ),
-      );
-    }
   };
 
   return (
@@ -375,18 +306,14 @@ export function Composer({
           onCancel={cancelIntent}
         />
       ) : null}
-      {uploads.length > 0 && !editing ? (
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {uploads.map((upload) => (
-            <UploadTile
-              key={upload.key}
-              upload={upload}
-              onRemove={() =>
-                setUploads((list) => list.filter((u) => u.key !== upload.key))
-              }
-            />
-          ))}
-        </View>
+      {attach.notice && !editing ? <NoticeLine notice={attach.notice} /> : null}
+      {files.length > 0 ? (
+        <AttachmentChips
+          items={files}
+          sending={attach.sending}
+          onRemove={attach.remove}
+          onRetry={attach.retry}
+        />
       ) : null}
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
         <View
@@ -396,7 +323,7 @@ export function Composer({
             flexDirection: "row",
             alignItems: "flex-end",
             gap: 2,
-            paddingLeft: canPickImages && !editing ? 6 : 12,
+            paddingLeft: showAttach ? 6 : 12,
             paddingRight: 8,
             borderRadius: RADIUS,
             borderWidth: 1,
@@ -404,18 +331,21 @@ export function Composer({
             backgroundColor: theme.ply2,
           }}
         >
-          {canPickImages && !editing ? (
+          {showAttach ? (
             <View style={{ paddingVertical: 5 }}>
               <IconButton
-                icon={PlusCircle}
-                label="Attach images"
-                onPress={() => void attach()}
+                icon={attach.trayOpen ? XCircle : PlusCircle}
+                active={attach.trayOpen}
+                label={attach.trayOpen ? "Close attachments" : "Attach files"}
+                disabled={attach.sending}
+                onPress={attach.trayOpen ? attach.closeTray : attach.openTray}
               />
             </View>
           ) : null}
           <TextInput
             ref={input}
             value={text}
+            editable={!attach.sending}
             onChangeText={(next) => {
               setText(next);
               if (next.trim() && !editing) notifyTyping(channelId);
@@ -423,6 +353,8 @@ export function Composer({
             onSelectionChange={(event) =>
               setCursor(event.nativeEvent.selection.end)
             }
+            // The keyboard and the tray share the space under the composer.
+            onFocus={attach.closeTray}
             placeholder={placeholder}
             placeholderTextColor={theme.ink3}
             multiline
@@ -443,7 +375,7 @@ export function Composer({
             }}
           />
         </View>
-        <SendKey enabled={canSend} onPress={submit} />
+        <SendKey enabled={canSend} onPress={() => void submit()} />
       </View>
     </View>
   );

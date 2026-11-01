@@ -1,4 +1,9 @@
-import { MicrophoneSlash, Monitor, SpeakerSlash } from "phosphor-react-native";
+import {
+  CameraRotate,
+  MicrophoneSlash,
+  Monitor,
+  SpeakerSlash,
+} from "phosphor-react-native";
 import { lazy, memo, Suspense } from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 
@@ -6,11 +11,13 @@ import { mediaUrl } from "@/lib/api";
 import { RADIUS, useTheme } from "@/theme";
 import { Avatar, Icon, Led, Text } from "@/ui";
 
+import { flipCamera } from "./actions";
 import {
   type CallTile,
   useIsSelf,
   useIsSpeaking,
   useParticipant,
+  useTileMirrored,
   useTileStream,
 } from "./store";
 
@@ -44,6 +51,7 @@ export const ParticipantTile = memo(function ParticipantTile({
   const speaking = useIsSpeaking(tile.participantId);
   const self = useIsSelf(tile.participantId);
   const stream = useTileStream(tile);
+  const mirrored = useTileMirrored(tile);
   if (!participant) return null;
 
   const screen = tile.kind === "screen";
@@ -85,7 +93,11 @@ export const ParticipantTile = memo(function ParticipantTile({
     >
       {stream ? (
         <Suspense fallback={null}>
-          <VideoView streamURL={stream} fit={screen ? "contain" : "cover"} />
+          <VideoView
+            streamURL={stream}
+            fit={screen ? "contain" : "cover"}
+            mirror={mirrored}
+          />
         </Suspense>
       ) : (
         <Avatar
@@ -94,6 +106,27 @@ export const ParticipantTile = memo(function ParticipantTile({
           uri={mediaUrl(participant.avatarUrl)}
         />
       )}
+      {self && stream && !screen && !compact ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Switch camera"
+          onPress={flipCamera}
+          hitSlop={4}
+          style={({ pressed }) => ({
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 36,
+            height: 36,
+            borderRadius: RADIUS,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: pressed ? theme.ply3 : theme.ply4,
+          })}
+        >
+          <Icon icon={CameraRotate} size={20} color={theme.ink1} />
+        </Pressable>
+      ) : null}
       <View
         style={{
           position: "absolute",

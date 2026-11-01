@@ -1,8 +1,7 @@
 import { View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BAR_CLEARANCE, BAR_INSET_X } from "@/features/app-bar/metrics";
+import { PLATE_INSET_X, usePlateClearance } from "@/features/panel/metrics";
 import { RADIUS, useTheme } from "@/theme";
 
 import { Led } from "./Led";
@@ -11,11 +10,11 @@ import { useToast } from "./toast-store";
 
 /**
  * The one toast host, mounted at the root: a ply-3 plate under a 2px ink
- * rule, clear of the floating app bar. It fades in once and out once.
+ * rule, clear of the floating panel (and of a chat's composer). It fades in once and out once.
  */
 export function ToastHost() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  const clearance = usePlateClearance();
   const toast = useToast();
   // The host stays mounted so a leaving toast can play its exit.
   return (
@@ -23,9 +22,9 @@ export function ToastHost() {
       pointerEvents="none"
       style={{
         position: "absolute",
-        left: BAR_INSET_X,
-        right: BAR_INSET_X,
-        bottom: insets.bottom + BAR_CLEARANCE - 8,
+        left: PLATE_INSET_X,
+        right: PLATE_INSET_X,
+        bottom: clearance,
       }}
     >
       {toast ? (
@@ -57,7 +56,7 @@ export function ToastHost() {
         >
           <Led state={toast.led} />
           <View style={{ flex: 1, gap: 2 }}>
-            <Text variant="silk" tone="ink3">
+            <Text variant="silk" tone="ink3" numberOfLines={1}>
               {toast.label}
             </Text>
             <Text variant="row">{toast.text}</Text>

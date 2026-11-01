@@ -6,8 +6,9 @@ import { loadDms } from "@/features/dms/actions";
 import { DmRow } from "@/features/dms/DmRow";
 import type { DmChannel } from "@/features/dms/schema";
 import { sortByActivity, useDmsStore } from "@/features/dms/store";
+import { usePlateClearance } from "@/features/panel/metrics";
 import { useServersStore } from "@/features/servers/store";
-import { EmptyState, Header, Screen, Skeleton, Text } from "@/ui";
+import { EmptyState, Header, Skeleton, Text } from "@/ui";
 
 function DmsSkeleton() {
   return (
@@ -36,8 +37,10 @@ function DmsSkeleton() {
 
 const keyOf = (dm: DmChannel) => dm.id;
 
-export default function DmsScreen() {
+/** Direct messages, most recent first; a row opens the conversation. */
+export function DmsPane() {
   const router = useRouter();
+  const clearance = usePlateClearance();
   const status = useDmsStore((s) => s.status);
   const dms = useDmsStore((s) => s.dms);
   const lastMessageAt = useServersStore((s) => s.lastMessageAt);
@@ -84,11 +87,12 @@ export default function DmsScreen() {
         data={sorted}
         keyExtractor={keyOf}
         renderItem={renderRow}
+        contentContainerStyle={{ paddingBottom: clearance }}
         ListHeaderComponent={
           <View
             style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}
           >
-            <Text variant="silk" tone="ink3">
+            <Text variant="silk" tone="ink3" numberOfLines={1}>
               Recent
             </Text>
           </View>
@@ -98,9 +102,9 @@ export default function DmsScreen() {
   }
 
   return (
-    <Screen scroll={false}>
-      <Header title="Messages" />
+    <>
+      <Header title="Messages" rule="brand" />
       {body}
-    </Screen>
+    </>
   );
 }

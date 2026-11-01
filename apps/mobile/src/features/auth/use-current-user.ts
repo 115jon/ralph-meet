@@ -17,7 +17,7 @@ export function useCurrentUser() {
         if (live) setUser(me);
       })
       .catch(() => {
-        // Offline or a server error: the You tab falls back to a placeholder.
+        // Offline or a server error: the panel falls back to a placeholder.
       });
     return () => {
       live = false;

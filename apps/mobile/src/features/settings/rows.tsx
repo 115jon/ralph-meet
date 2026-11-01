@@ -20,7 +20,12 @@ export function Section({
   return (
     <View style={{ gap: 4 }}>
       <View style={{ gap: 2, paddingHorizontal: 12, marginBottom: 4 }}>
-        <Text variant="silk" tone="ink3" accessibilityRole="header">
+        <Text
+          variant="silk"
+          tone="ink3"
+          numberOfLines={1}
+          accessibilityRole="header"
+        >
           {title}
         </Text>
         {note ? <RowNote>{note}</RowNote> : null}

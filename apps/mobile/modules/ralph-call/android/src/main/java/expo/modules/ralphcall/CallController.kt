@@ -33,6 +33,13 @@ internal object CallController {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   private var router: AudioRouter? = null
 
+  /** JS is about to open the system's screen capture dialog. */
+  private var projectionRequested = false
+
+  /** The service carries the mediaProjection type (a screen share is live). */
+  var projecting = false
+    private set
+
   val routes: RouteState
     get() = router?.state ?: RouteState.EMPTY
 
@@ -58,6 +65,8 @@ internal object CallController {
   fun end(context: Context) {
     if (info == null) return
     info = null
+    projectionRequested = false
+    projecting = false
     router?.stop()
     router = null
     val app = context.applicationContext
@@ -67,6 +76,46 @@ internal object CallController {
   }
 
   fun selectRoute(id: String): Boolean = router?.select(id) ?: false
+
+  /**
+   * Arms the next activity result as the screen capture consent. JS calls
+   * this right before getDisplayMedia(); false when there is no running call
+   * service to add the type to, and then JS must not ask for a capture:
+   * react-native-webrtc would call getMediaProjection() on a worker thread
+   * without the type and Android would throw there.
+   */
+  fun startScreenShare(): Boolean {
+    if (info == null || RalphCallService.current == null) return false
+    projectionRequested = true
+    return true
+  }
+
+  /**
+   * The capture dialog answered. Android 14+ only lets a service take the
+   * mediaProjection type after the user said yes, and react-native-webrtc
+   * asks for the projection right after the same activity result, on its
+   * own executor. Expo dispatches activity results to its modules from a
+   * listener registered when the React context is created, before WebRTC's
+   * (created on the first call), and synchronously on the main thread, so
+   * the type is in place by the time WebRTC asks.
+   */
+  fun onProjectionConsent(granted: Boolean) {
+    if (!projectionRequested) return
+    projectionRequested = false
+    if (!granted) return
+    val call = info ?: return
+    val service = RalphCallService.current ?: return
+    projecting = service.enterForeground(call, projecting = true)
+  }
+
+  /** The share ended: drop the mediaProjection type, keep the call. */
+  fun stopScreenShare() {
+    projectionRequested = false
+    if (!projecting) return
+    projecting = false
+    val call = info ?: return
+    RalphCallService.current?.enterForeground(call, projecting = false)
+  }
 
   /** A notification button. JS owns the call state, so it decides. */
   fun onNotificationAction(context: Context, action: String) {

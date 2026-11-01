@@ -19,6 +19,13 @@ import {
   type MediaCredentials,
   type SocketGiveUp,
 } from "./gateways";
+import {
+  type CameraFacing,
+  facingOf,
+  stopStream,
+  streamUrl,
+  switchCamera,
+} from "./local-media";
 import { PartyTracksMediaManager } from "./media-manager";
 import {
   SPEAKING_MICROPHONE,
@@ -51,8 +58,16 @@ import { PartyTracksTransport } from "./transport";
 // call screen watches (setWatchingVideo); ./remote-video keeps those offers
 // apart so starting and stopping video never touches an audio pull.
 //
+// Camera and screen are published like the web's publishTracks(stream, "cam")
+// and (stream, "screen"): more pushes on the same media manager and session as
+// the microphone, so they are announced the moment the SFU answers (queued
+// until VoiceReady), re-announced on VoiceReady, rebuilt with the media on a
+// new participant id, and republished on a listener's request like any
+// publication. Voice state carries them as self_video and self_stream.
+//
 // Leave says goodbye on both sockets, closes them and the peer connection,
-// stops the microphone and leaves the channel on the chat socket.
+// stops the microphone, camera and screen, and leaves the channel on the
+// chat socket.
 
 const log = {
   info: (message: string, ...args: unknown[]) =>
@@ -67,8 +82,24 @@ const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
 const REPUBLISH_REQUEST_INTERVAL_MS = 5_000;
 /** useVoiceChannel re-asserts its channel presence this often. */
 const PRESENCE_REASSERT_MS = 30_000;
-/** publishTracks(stream, "cam"): the microphone is `cam-audio-<participant>`. */
+/**
+ * publishTracks(stream, "cam"): the microphone is `cam-audio-<participant>`,
+ * the camera `cam-video-<participant>`.
+ */
 const MIC_PREFIX = "cam";
+/** publishTracks(stream, "screen"): `screen-video-<participant>`. */
+const SCREEN_PREFIX = "screen";
+
+/**
+ * Sender limits for our video, set once a push is answered (and again on a
+ * republish, which is a new sender). The web publishes one camera encoding
+ * (no simulcast) and caps screens per quality preset; these suit a phone's
+ * uplink.
+ */
+const VIDEO_ENCODING = {
+  cam: { maxBitrate: 1_200_000, maxFramerate: 30 },
+  screen: { maxBitrate: 1_500_000, maxFramerate: 15 },
+} as const;
 
 const GIVE_UP_MESSAGE: Record<SocketGiveUp, string> = {
   replaced: "You joined this call somewhere else",
@@ -138,16 +169,14 @@ function pullable(tracks: readonly TrackInfo[]): TrackInfo[] {
   );
 }
 
-function stopStream(stream: MediaStream): void {
-  for (const track of stream.getTracks()) track.stop();
-  // react-native-webrtc frees the native stream only on release().
-  (stream as unknown as { release?: () => void }).release?.();
-}
-
 export class VoiceSession {
   private readonly target: CallTarget;
   private readonly identity: SessionIdentity;
   private readonly microphone: MediaStream;
+  /** Our camera and screen captures while on; the session owns them. */
+  private camera: MediaStream | null = null;
+  private cameraFacing: CameraFacing = "front";
+  private screen: MediaStream | null = null;
   private readonly onEnd: (end: SessionEnd) => void;
   private readonly room: RoomSocket;
   private readonly voice: VoiceSocket;
@@ -299,6 +328,74 @@ export class VoiceSession {
     }
   }
 
+  /**
+   * Publishes `stream` (one video track) as our camera, replacing the one on
+   * air, or stops the camera with null. The session owns the stream from
+   * here and stops it when it is replaced, turned off or the call ends.
+   */
+  setCamera(stream: MediaStream | null): void {
+    if (this.ended) {
+      if (stream) stopStream(stream);
+      return;
+    }
+    const previous = this.camera;
+    if (previous === stream) return;
+    this.camera = stream;
+    if (stream) this.cameraFacing = facingOf(stream);
+    if (stream) {
+      // An existing publication swaps its source track: no new SFU track.
+      this.media?.publishStream(stream, MIC_PREFIX);
+    } else {
+      this.unpublishOwn(MIC_PREFIX);
+    }
+    if (previous) stopStream(previous);
+    this.syncLocalMedia();
+  }
+
+  /**
+   * Front to back camera and back, on the published track (no new SFU
+   * track). Rejects when the phone has no other camera.
+   */
+  async flipCamera(): Promise<void> {
+    const camera = this.camera;
+    if (this.ended || !camera) return;
+    const facing = await switchCamera(camera);
+    if (this.camera !== camera) return;
+    this.cameraFacing = facing;
+    this.syncLocalMedia();
+  }
+
+  get cameraOn(): boolean {
+    return this.camera !== null;
+  }
+
+  get facing(): CameraFacing {
+    return this.cameraFacing;
+  }
+
+  /** Publishes a screen capture, or stops sharing with null. Owned as above. */
+  setScreen(stream: MediaStream | null): void {
+    if (this.ended) {
+      if (stream) stopStream(stream);
+      return;
+    }
+    const previous = this.screen;
+    if (previous === stream) return;
+    this.screen = stream;
+    if (stream) this.media?.publishStream(stream, SCREEN_PREFIX);
+    else this.unpublishOwn(SCREEN_PREFIX);
+    if (previous) stopStream(previous);
+    this.syncLocalMedia();
+  }
+
+  get sharingScreen(): boolean {
+    return this.screen !== null;
+  }
+
+  isScreen(stream: MediaStream): boolean {
+    return this.screen === stream;
+  }
+
   // ── Credentials and media ────────────────────────────────────────────────
 
   private onMediaBootstrap(credentials: MediaCredentials): void {
@@ -354,6 +451,7 @@ export class VoiceSession {
     });
     const media = new PartyTracksMediaManager(transport, participantId, {
       onPublicationMetadata: (track) => {
+        if (track.kind === "video") void this.limitVideoSender(track);
         const d: VoiceClientPayload<GatewayOp.Video> = {
           tracks: [
             {
@@ -420,6 +518,8 @@ export class VoiceSession {
     this.mediaParticipantId = participantId;
     this.peerState = "new";
     media.publishStream(this.microphone, MIC_PREFIX);
+    if (this.camera) media.publishStream(this.camera, MIC_PREFIX);
+    if (this.screen) media.publishStream(this.screen, SCREEN_PREFIX);
     if (this.deferredRemoteTracks.size > 0) {
       const deferred = [...this.deferredRemoteTracks.values()];
       this.deferredRemoteTracks.clear();
@@ -438,6 +538,45 @@ export class VoiceSession {
     this.mediaParticipantId = null;
     this.remoteAudio.clear();
     this.video.clearStreams();
+  }
+
+  /** Stops our `<prefix>-video-<participant>` publication, if any. */
+  private unpublishOwn(prefix: string): void {
+    if (!this.media || !this.mediaParticipantId) return;
+    this.media.unpublishTrack(`${prefix}-video-${this.mediaParticipantId}`);
+  }
+
+  /**
+   * Caps a video sender's bitrate and frame rate (see VIDEO_ENCODING). Runs
+   * when the push is answered, so the sender exists; a failure only leaves
+   * WebRTC's own rate control in charge.
+   */
+  private async limitVideoSender(track: TrackInfo): Promise<void> {
+    const limits = track.track_name.startsWith(`${SCREEN_PREFIX}-`)
+      ? VIDEO_ENCODING.screen
+      : VIDEO_ENCODING.cam;
+    const source = this.media?.getPublishedTrack(track.track_name);
+    const sender = source
+      ? this.transport?.peerConnection
+          ?.getSenders()
+          .find((candidate) => candidate.track?.id === source.id)
+      : undefined;
+    if (!sender) return;
+    try {
+      const parameters = sender.getParameters();
+      // react-native-webrtc's encodings are classes with setters (and toJSON
+      // over private fields), so set them in place rather than spreading.
+      if (!parameters.encodings?.length) {
+        parameters.encodings = [{ active: true }];
+      }
+      for (const encoding of parameters.encodings) {
+        encoding.maxBitrate = limits.maxBitrate;
+        encoding.maxFramerate = limits.maxFramerate;
+      }
+      await sender.setParameters(parameters);
+    } catch (error) {
+      log.warn("Could not limit the video sender", track.track_name, error);
+    }
   }
 
   private microphoneSender(): RTCRtpSender | null {
@@ -469,8 +608,8 @@ export class VoiceSession {
       avatarUrl: this.identity.avatarUrl,
       muted: this.muted,
       deafened: this.deafened,
-      camera: false,
-      sharing: false,
+      camera: this.camera !== null,
+      sharing: this.screen !== null,
     };
     this.replaceParticipants(participants, self);
     // The room starts us muted; tell it (and the channel) where we are.
@@ -782,10 +921,31 @@ export class VoiceSession {
     return {
       self_mute: this.muted,
       self_deaf: this.deafened,
-      self_video: false,
-      self_stream: false,
+      self_video: this.camera !== null,
+      self_stream: this.screen !== null,
       self_stream_audio: false,
     };
+  }
+
+  /** Our camera and share into the store and voice state. */
+  private syncLocalMedia(): void {
+    const camera = this.camera ? streamUrl(this.camera) : null;
+    const sharing = this.screen !== null;
+    const mirror = this.cameraFacing === "front";
+    updateCall((call) => {
+      const self = call.selfId ? call.participants[call.selfId] : undefined;
+      return {
+        ...call,
+        local: { camera, mirror, sharing },
+        participants: self
+          ? {
+              ...call.participants,
+              [self.id]: { ...self, camera: camera !== null, sharing },
+            }
+          : call.participants,
+      };
+    });
+    if (this.roomReady || this.everConnected) this.sendVoiceState();
   }
 
   /** The room roster and the channel tree both carry mute and deafen. */
@@ -845,6 +1005,10 @@ export class VoiceSession {
     this.deferredRemoteTracks.clear();
     this.video.clear();
     stopStream(this.microphone);
+    if (this.camera) stopStream(this.camera);
+    if (this.screen) stopStream(this.screen);
+    this.camera = null;
+    this.screen = null;
     if (this.joinedChannel) sendVoiceChannelLeave(this.target.channelId);
     this.onEnd(end);
   }
