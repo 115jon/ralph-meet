@@ -8,8 +8,12 @@ import {
   buildListenTogetherStreamUrl,
   getListenTogetherPlaybackPlan,
   isExpectedListenTogetherPlayCancellation,
+  LISTEN_TOGETHER_MAX_TRANSIENT_RETRIES,
+  planListenTogetherPlaybackRecovery,
+  probeListenTogetherStream,
+  shouldTryAlternateListenTogetherFormat,
 } from "@/lib/voice/listen-together-player";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 function makeSnapshot(
   overrides: Partial<ListenTogetherStateSnapshot> = {},
@@ -240,5 +244,165 @@ describe("listen together stream url", () => {
     expect(parsed.searchParams.get("sessionId")).toBe("session-1");
     expect(parsed.searchParams.get("format")).toBe("mp4");
     expect(parsed.searchParams.get("token")).toBe("desktop-token");
+  });
+});
+
+describe("listen together playback recovery", () => {
+  const fresh = { transientRetries: 0, formatSwitched: false };
+
+  it("retries YouTube's bot wall after the route's Retry-After, with backoff", () => {
+    const first = planListenTogetherPlaybackRecovery({
+      mediaErrorCode: 4,
+      probe: { status: 503, retryAfterSeconds: 20 },
+      state: fresh,
+      canTryAlternateFormat: true,
+    });
+    expect(first).toMatchObject({ action: "retry", delayMs: 20_000 });
+    expect(first.error.code).toBe("PLAYBACK_RETRYING");
+    expect(first.error.message).toContain("Retrying in 20s");
+
+    const second = planListenTogetherPlaybackRecovery({
+      mediaErrorCode: 4,
+      probe: { status: 503, retryAfterSeconds: 20 },
+      state: { transientRetries: 1, formatSwitched: false },
+      canTryAlternateFormat: true,
+    });
+    expect(second.delayMs).toBe(40_000);
+  });
+
+  it("gives up on the wall after the retry budget, without switching formats", () => {
+    const plan = planListenTogetherPlaybackRecovery({
+      mediaErrorCode: 4,
+      probe: { status: 503, retryAfterSeconds: null },
+      state: {
+        transientRetries: LISTEN_TOGETHER_MAX_TRANSIENT_RETRIES,
+        formatSwitched: false,
+      },
+      canTryAlternateFormat: true,
+    });
+    expect(plan.action).toBe("fail");
+    expect(plan.error.code).toBe("PLAYBACK_UNAVAILABLE");
+  });
+
+  it("switches container only when the route serves the stream but the element cannot decode it", () => {
+    expect(
+      planListenTogetherPlaybackRecovery({
+        mediaErrorCode: 4,
+        probe: { status: 200, retryAfterSeconds: null },
+        state: fresh,
+        canTryAlternateFormat: true,
+      }).action,
+    ).toBe("switch-format");
+
+    const exhausted = planListenTogetherPlaybackRecovery({
+      mediaErrorCode: 3,
+      probe: { status: 200, retryAfterSeconds: null },
+      state: { transientRetries: 0, formatSwitched: true },
+      canTryAlternateFormat: true,
+    });
+    expect(exhausted.action).toBe("fail");
+    expect(exhausted.error.code).toBe("PLAYBACK_SRC_NOT_SUPPORTED");
+
+    expect(
+      planListenTogetherPlaybackRecovery({
+        mediaErrorCode: 4,
+        probe: { status: 200, retryAfterSeconds: null },
+        state: fresh,
+        canTryAlternateFormat: false,
+      }).action,
+    ).toBe("fail");
+  });
+
+  it("asks to rejoin voice when the route refuses the session", () => {
+    const plan = planListenTogetherPlaybackRecovery({
+      mediaErrorCode: 4,
+      probe: { status: 403, retryAfterSeconds: null },
+      state: fresh,
+      canTryAlternateFormat: true,
+    });
+    expect(plan.action).toBe("fail");
+    expect(plan.error.code).toBe("PLAYBACK_SESSION");
+  });
+
+  it("tries the other container once for a 502, then names the track as unplayable", () => {
+    expect(
+      planListenTogetherPlaybackRecovery({
+        mediaErrorCode: 4,
+        probe: { status: 502, retryAfterSeconds: null },
+        state: fresh,
+        canTryAlternateFormat: true,
+      }).action,
+    ).toBe("switch-format");
+    const plan = planListenTogetherPlaybackRecovery({
+      mediaErrorCode: 4,
+      probe: { status: 502, retryAfterSeconds: null },
+      state: { transientRetries: 0, formatSwitched: true },
+      canTryAlternateFormat: true,
+    });
+    expect(plan.error.code).toBe("PLAYBACK_UNAVAILABLE");
+    expect(plan.error.message).not.toContain("multiple supported");
+  });
+
+  it("reconnects when the route itself was unreachable", () => {
+    const plan = planListenTogetherPlaybackRecovery({
+      mediaErrorCode: 2,
+      probe: null,
+      state: fresh,
+      canTryAlternateFormat: true,
+    });
+    expect(plan).toMatchObject({ action: "retry", delayMs: 3_000 });
+  });
+
+  it("does not trust a platform that answers canPlayType with nothing", () => {
+    // jsdom answers "" for every type.
+    expect(shouldTryAlternateListenTogetherFormat("mp4")).toBe(true);
+  });
+
+  it("does not switch to a container the platform says it cannot play", () => {
+    const spy = vi
+      .spyOn(HTMLMediaElement.prototype, "canPlayType")
+      .mockImplementation((type: string) =>
+        type.startsWith("audio/mp4") ? "probably" : "",
+      );
+    try {
+      expect(shouldTryAlternateListenTogetherFormat("mp4")).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("probes the stream with HEAD and reads Retry-After", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(null, { status: 503, headers: { "Retry-After": "12" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(
+        probeListenTogetherStream(
+          "https://meet.example/api/listen-together/stream?videoId=v",
+        ),
+      ).resolves.toEqual({ status: 503, retryAfterSeconds: 12 });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://meet.example/api/listen-together/stream?videoId=v",
+        expect.objectContaining({ method: "HEAD" }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports an unreachable route as a null probe", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    try {
+      await expect(probeListenTogetherStream("/api/x")).resolves.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

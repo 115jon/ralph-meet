@@ -4,6 +4,12 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import path from "path";
 import { defineConfig, loadEnv, type PluginOption } from "vite";
+import {
+  DESKTOP_DEV_PORT,
+  describeBusyDevPort,
+  resolveWebDevPort,
+} from "../src/lib/dev-port";
+import { busyPortHint } from "../tools/vite/busy-port-hint";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
 const shimDir = path.resolve(rootDir, "src/shims");
@@ -44,7 +50,7 @@ export default defineConfig(async ({ mode }) => {
   const baseApiUrl =
     process.env.VITE_API_BASE_URL ||
     env.VITE_API_BASE_URL ||
-    "http://localhost:5173";
+    `http://localhost:${resolveWebDevPort(env.RALPH_DEV_PORT)}`;
   const baseWsUrl = baseApiUrl
     .replace(/^https:/, "wss:")
     .replace(/^http:/, "ws:");
@@ -55,6 +61,7 @@ export default defineConfig(async ({ mode }) => {
     envDir: rootDir,
     publicDir: path.resolve(rootDir, "public"),
     plugins: [
+      busyPortHint((port) => describeBusyDevPort("desktop", port)),
       // Desktop route tree: same src/routes as the web app, minus the server
       // API handlers (src/routes/api/**, ~300 KB with the services they pull
       // in), with each route's component split into its own lazy chunk.
@@ -160,12 +167,12 @@ export default defineConfig(async ({ mode }) => {
       ],
     },
     server: {
-      port: 1420,
+      port: DESKTOP_DEV_PORT,
       strictPort: true,
       hmr: {
         protocol: "ws",
         host: "localhost",
-        clientPort: 1420,
+        clientPort: DESKTOP_DEV_PORT,
       },
       watch: {
         usePolling: true,

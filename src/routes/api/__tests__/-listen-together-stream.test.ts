@@ -1,10 +1,45 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const resolveMock = vi.hoisted(() => vi.fn());
+vi.mock("@/services/listen-together.service", () => ({
+  resolveListenTogetherAudioStream: resolveMock,
+}));
+
 import {
   buildProxyHeaders,
+  isAllowedListenTogetherStreamHost,
   makeSyntheticRangeResponse,
   normalizeListenTogetherUpstreamRange,
-  refreshListenTogetherResolvedStream,
+  streamListenTogetherAudio,
 } from "../listen-together/stream";
-import { describe, expect, it } from "vitest";
+import { UpstreamBlockedError } from "@/lib/upstream-guard";
+import { YouTubeBotCheckError } from "@/lib/ytdlp/youtube";
+
+function resolvedStream(url: string) {
+  return {
+    url,
+    itag: 140,
+    mimeType: 'audio/mp4; codecs="mp4a.40.2"',
+    contentLength: 4_000_000,
+    expiresAt: Date.now() + 6 * 60 * 60 * 1000,
+  };
+}
+
+const STALE_URL =
+  "https://rr1---sn-stale.googlevideo.com/videoplayback?itag=140";
+const FRESH_URL =
+  "https://rr2---sn-fresh.googlevideo.com/videoplayback?itag=140";
+
+function audioChunk(start: number, end: number, total = 4_000_000) {
+  return new Response(new Uint8Array(end - start + 1), {
+    status: 206,
+    headers: {
+      "Content-Type": "audio/mp4",
+      "Content-Range": `bytes ${start}-${end}/${total}`,
+      "Content-Length": String(end - start + 1),
+    },
+  });
+}
 
 describe("listen together stream proxy helpers", () => {
   it("builds ranged responses when an upstream stream ignores the range header", async () => {
@@ -108,23 +143,195 @@ describe("listen together stream proxy helpers", () => {
     ).toBe("bytes=2048-2049");
   });
 
-  it("keeps the current direct stream when forced refresh is rate-limited", async () => {
-    const current = {
-      url: "https://r1---sn.example.googlevideo.com/videoplayback",
-      itag: 140,
-      mimeType: "audio/mp4",
-      contentLength: 1_024,
-      expiresAt: Date.now() + 60_000,
-    };
-    const refreshError = new Error("YouTube watch page request failed (429)");
+  it("only allows googlevideo media hosts over https", () => {
+    expect(isAllowedListenTogetherStreamHost(new URL(FRESH_URL))).toBe(true);
+    expect(
+      isAllowedListenTogetherStreamHost(
+        new URL("https://googlevideo.com.example.net/videoplayback"),
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedListenTogetherStreamHost(
+        new URL("http://rr1---sn.googlevideo.com/videoplayback"),
+      ),
+    ).toBe(false);
+  });
+});
 
-    await expect(
-      refreshListenTogetherResolvedStream(current, async () => {
-        throw refreshError;
-      }),
-    ).resolves.toEqual({
-      resolved: current,
-      refreshError,
+describe("streamListenTogetherAudio", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    fetchMock.mockReset();
+    resolveMock.mockReset();
+  });
+
+  it("relays a bounded upstream range with its audio headers", async () => {
+    resolveMock.mockResolvedValue(resolvedStream(FRESH_URL));
+    fetchMock.mockResolvedValue(audioChunk(0, 10_485_759, 20_000_000));
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: "bytes=0-",
+      includeBody: true,
     });
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("Content-Type")).toBe("audio/mp4");
+    expect(response.headers.get("Content-Range")).toBe(
+      "bytes 0-10485759/20000000",
+    );
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(new Headers(init?.headers).get("Range")).toBe("bytes=0-10485759");
+  });
+
+  it("resolves again once when the cached URL is refused, then streams", async () => {
+    resolveMock
+      .mockResolvedValueOnce(resolvedStream(STALE_URL))
+      .mockResolvedValueOnce(resolvedStream(FRESH_URL));
+    fetchMock
+      .mockResolvedValueOnce(new Response("Forbidden", { status: 403 }))
+      .mockResolvedValueOnce(audioChunk(0, 1023));
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: "bytes=0-1023",
+      includeBody: true,
+    });
+
+    expect(response.status).toBe(206);
+    expect(resolveMock).toHaveBeenNthCalledWith(2, "video-1", "mp4", {
+      forceRefresh: true,
+    });
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(FRESH_URL);
+  });
+
+  it("fails after one refresh instead of retrying a refused stream", async () => {
+    resolveMock.mockResolvedValue(resolvedStream(STALE_URL));
+    fetchMock.mockImplementation(
+      async () => new Response("Forbidden", { status: 403 }),
+    );
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: "bytes=0-",
+      includeBody: true,
+    });
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("X-Listen-Together-Error")).toBe(
+      "UPSTREAM_FAILED",
+    );
+    expect(resolveMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-resolve for an upstream server error", async () => {
+    resolveMock.mockResolvedValue(resolvedStream(FRESH_URL));
+    fetchMock.mockResolvedValue(new Response("oops", { status: 500 }));
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: null,
+      includeBody: true,
+    });
+
+    expect(response.status).toBe(502);
+    expect(resolveMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers YouTube's bot wall with a retryable 503", async () => {
+    resolveMock.mockRejectedValue(new YouTubeBotCheckError("walled"));
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "webm",
+      range: null,
+      includeBody: false,
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("20");
+    expect(response.headers.get("X-Listen-Together-Error")).toBe(
+      "YOUTUBE_BOT_CHECK",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("passes an open circuit's remaining backoff to the client", async () => {
+    resolveMock.mockRejectedValue(
+      new UpstreamBlockedError("youtube-player", 7),
+    );
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: null,
+      includeBody: true,
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("7");
+  });
+
+  it("reports a track with no playable stream as RESOLVE_FAILED", async () => {
+    resolveMock.mockRejectedValue(new Error("no formats"));
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: null,
+      includeBody: true,
+    });
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ code: "RESOLVE_FAILED" });
+  });
+
+  it("refuses to fetch a resolved URL outside googlevideo", async () => {
+    resolveMock.mockResolvedValue(
+      resolvedStream("https://example.com/videoplayback"),
+    );
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: null,
+      includeBody: true,
+    });
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("X-Listen-Together-Error")).toBe(
+      "HOST_NOT_ALLOWED",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("answers HEAD with the full length from a two-byte probe", async () => {
+    resolveMock.mockResolvedValue(resolvedStream(FRESH_URL));
+    fetchMock.mockResolvedValue(audioChunk(0, 1));
+
+    const response = await streamListenTogetherAudio({
+      videoId: "video-1",
+      preferredFormat: "mp4",
+      range: null,
+      includeBody: false,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Length")).toBe("4000000");
+    expect(response.headers.get("Content-Range")).toBeNull();
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(new Headers(init?.headers).get("Range")).toBe("bytes=0-1");
   });
 });

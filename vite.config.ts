@@ -6,12 +6,14 @@ import path from "path";
 import { defineConfig, type Plugin } from "vite";
 import killerInstincts from "vite-plugin-killer-instincts";
 import { unstable_readConfig } from "wrangler";
+import { busyPortHint } from "./tools/vite/busy-port-hint";
 import { prefetchManifest } from "./tools/vite/prefetch-manifest";
 import {
   describeDevAuth,
   resolveDevAuthTarget,
   selectDevAuthKey,
 } from "./src/lib/dev-auth-target";
+import { describeBusyDevPort, resolveWebDevPort } from "./src/lib/dev-port";
 
 const shimDir = path.resolve(import.meta.dirname, "src/shims");
 const usePolling = process.env.VITE_USE_POLLING === "true";
@@ -137,6 +139,9 @@ export default defineConfig(({ command, isPreview }) => {
       : undefined,
     server: {
       host: "0.0.0.0",
+      // RALPH_DEV_PORT moves it off 5173; never a silent fallback, because
+      // Kova dev sign-in only accepts 5173 (see src/lib/dev-port.ts).
+      port: resolveWebDevPort(process.env.RALPH_DEV_PORT),
       strictPort: true,
       cors: {
         origin: ["http://tauri.localhost", "https://tauri.localhost"],
@@ -164,6 +169,8 @@ export default defineConfig(({ command, isPreview }) => {
         /\.(?:woff2?|ttf|otf|eot)(?:$|\?)/i.test(filePath) ? false : undefined,
     },
     plugins: [
+      // Before killerInstincts, which fails on a busy port first.
+      busyPortHint((port) => describeBusyDevPort("web", port)),
       killerInstincts({ autoKill: true }),
       tanstackStart({
         srcDirectory: "src",
