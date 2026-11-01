@@ -1,8 +1,8 @@
 import * as Notifications from "expo-notifications";
-import { useRouter } from "expo-router";
 import { useEffect } from "react";
 
 import { useSession } from "@/features/auth/session";
+import { goToConversation } from "@/features/conversation/navigation";
 
 import {
   devicePushToken,
@@ -18,7 +18,6 @@ import {
  */
 export function usePush(): void {
   const token = useSession((s) => s.token);
-  const router = useRouter();
   const response = Notifications.useLastNotificationResponse();
 
   useEffect(() => {
@@ -57,13 +56,9 @@ export function usePush(): void {
     Notifications.clearLastNotificationResponse();
     const target = pushTarget(response.notification);
     if (!target) return;
-    if (target.serverId) {
-      router.push({
-        pathname: "/channel/[id]",
-        params: { id: target.channelId },
-      });
-    } else {
-      router.push({ pathname: "/dm/[id]", params: { id: target.channelId } });
-    }
-  }, [token, response, router]);
+    goToConversation(
+      { kind: target.serverId ? "channel" : "dm", id: target.channelId },
+      target.messageId,
+    );
+  }, [token, response]);
 }

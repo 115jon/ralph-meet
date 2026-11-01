@@ -1,128 +1,302 @@
-import { memo, useMemo } from "react";
+import { ArrowBendUpLeft } from "phosphor-react-native";
+import { memo, useCallback, useMemo } from "react";
 import { Pressable, View } from "react-native";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import Animated, {
+  Easing,
+  Extrapolation,
+  FadeOut,
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { useSession } from "@/features/auth/session";
+import { openProfile } from "@/features/profile/store";
 import { mediaUrl } from "@/lib/api";
+import { tapHaptic } from "@/lib/haptics";
 import { FONT, RADIUS, useTheme } from "@/theme";
-import { Avatar, Led, Text } from "@/ui";
+import { Avatar, Icon, Led, Text } from "@/ui";
 
 import { authorName } from "./authors";
-import { mentionsUser, parseContent } from "./content";
+import { LONG_PRESS_MS, MessageLongPress } from "./long-press";
+import { Markdown } from "./markdown/Markdown";
+import { mentionsViewer } from "./markdown/mentions-viewer";
+import { parseMessage } from "./markdown/parse";
 import { messageMedia } from "./media/classify";
-import { MessageBody } from "./MessageBody";
 import { MessageMedia } from "./media/MessageMedia";
 import { discardSend, retrySend, toggleReaction } from "./mutations";
+import { EmojiGlyph } from "./picker/EmojiGlyph";
+import { useReactionDetails } from "./reaction-details";
 import type { Reaction, ReplyPreview } from "./schema";
 import type { ChatMessage } from "./store";
 import { formatTime } from "./time";
 
 const AVATAR = 40;
+const HIGHLIGHT_OUT = FadeOut.duration(600).easing(Easing.out(Easing.cubic));
 const GUTTER = 12;
+
+/** Pulled this far left, letting go replies; past it the row drags heavier. */
+const REPLY_AT = 64;
+const MAX_PULL = 96;
+/** Leftward travel before the swipe claims the touch (the pager takes rightward). */
+const SWIPE_SLOP = 16;
+const SNAP_BACK = { duration: 200, easing: Easing.out(Easing.cubic) };
+
+/**
+ * Swipe a message left to reply, as on Discord: a reply arrow fades in
+ * behind it, a light knock says it is armed, and letting go sets the
+ * composer to reply. Rightward drags belong to the pager.
+ */
+function useSwipeToReply(enabled: boolean, onReply: () => void) {
+  const reducedMotion = useReducedMotion();
+  const offset = useSharedValue(0);
+  const armed = useSharedValue(false);
+  const gesture = usePanGesture({
+    enabled,
+    activeOffsetX: -SWIPE_SLOP,
+    failOffsetX: SWIPE_SLOP,
+    failOffsetY: [-10, 10],
+    onUpdate: (event) => {
+      "worklet";
+      const pull = Math.max(0, -event.translationX);
+      const eased =
+        pull <= REPLY_AT ? pull : REPLY_AT + (pull - REPLY_AT) * 0.35;
+      offset.set(-Math.min(MAX_PULL, eased));
+      const nowArmed = pull >= REPLY_AT;
+      if (nowArmed !== armed.get()) {
+        armed.set(nowArmed);
+        if (nowArmed) scheduleOnRN(tapHaptic);
+      }
+    },
+    onDeactivate: () => {
+      "worklet";
+      if (armed.get()) scheduleOnRN(onReply);
+    },
+    onFinalize: () => {
+      "worklet";
+      armed.set(false);
+      offset.set(reducedMotion ? 0 : withTiming(0, SNAP_BACK));
+    },
+  });
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: offset.get() }],
+  }));
+  const arrowStyle = useAnimatedStyle(() => {
+    const pull = -offset.get();
+    const shown = interpolate(
+      pull,
+      [SWIPE_SLOP, REPLY_AT],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: shown, transform: [{ scale: 0.6 + 0.4 * shown }] };
+  });
+  return { gesture, rowStyle, arrowStyle };
+}
+
+/** Screen readers reach the swipe and the sheet as actions. */
+const ROW_ACTIONS = [
+  { name: "reply", label: "Reply" },
+  { name: "longpress", label: "Message actions" },
+];
 
 interface MessageRowProps {
   message: ChatMessage;
   sentAt: Date;
   /** A follow-up from the same author: no avatar, no name line. */
   grouped: boolean;
+  /** Just jumped to (a link, a push): lit for a moment, then fades. */
+  highlighted?: boolean;
   onLongPress: (message: ChatMessage) => void;
+  onReply: (message: ChatMessage) => void;
 }
 
 export const MessageRow = memo(function MessageRow({
   message,
   sentAt,
   grouped,
+  highlighted = false,
   onLongPress,
+  onReply,
 }: MessageRowProps) {
   const theme = useTheme();
   const username = useSession((s) => s.user?.username);
   const myId = useSession((s) => s.user?.id);
-  const parts = useMemo(
-    () => parseContent(message.content ?? ""),
-    [message.content],
+  const blocks = useMemo(
+    () => parseMessage(message.id, message.content ?? ""),
+    [message.id, message.content],
   );
   const media = useMemo(() => messageMedia(message), [message]);
-  const targetsMe =
-    message.author_id !== myId &&
-    (mentionsUser(parts, username) || message.reply_to?.author_id === myId);
+  const targetsMe = mentionsViewer(message, { id: myId, username });
   const name = authorName(message.author);
+  const openActions = useCallback(
+    () => onLongPress(message),
+    [onLongPress, message],
+  );
+  const reply = useCallback(() => onReply(message), [onReply, message]);
+  const showAuthor = useCallback(
+    () => openProfile(message.author_id, message.author),
+    [message.author_id, message.author],
+  );
+  const swipe = useSwipeToReply(!message.send, reply);
 
   return (
-    <Pressable
-      onLongPress={() => onLongPress(message)}
-      delayLongPress={350}
-      accessibilityHint="Long press for actions"
-      style={({ pressed }) => ({
-        paddingHorizontal: 16,
-        paddingTop: grouped ? 2 : 12,
-        paddingBottom: 2,
-        backgroundColor: pressed
-          ? theme.tint1
-          : targetsMe
-            ? theme.accentTint
-            : "transparent",
-      })}
-    >
-      {targetsMe ? (
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: 2,
-            backgroundColor: theme.accentInk,
-          }}
-        />
-      ) : null}
-      {message.reply_to ? <ReplyQuote reply={message.reply_to} /> : null}
-      <View style={{ flexDirection: "row", gap: GUTTER }}>
-        {grouped ? (
-          <View style={{ width: AVATAR }} />
-        ) : (
-          <Avatar
-            name={name}
-            size={AVATAR}
-            uri={mediaUrl(message.author?.avatar_url)}
-          />
-        )}
-        <View
-          style={{
-            flex: 1,
-            minWidth: 0,
-            opacity: message.send === "sending" ? 0.56 : 1,
-          }}
+    <MessageLongPress value={openActions}>
+      <View>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              right: 20,
+              justifyContent: "center",
+            },
+            swipe.arrowStyle,
+          ]}
         >
-          {grouped ? null : (
-            <View
-              style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}
+          <Icon icon={ArrowBendUpLeft} size={20} color={theme.ink2} />
+        </Animated.View>
+        <GestureDetector gesture={swipe.gesture}>
+          <Animated.View style={swipe.rowStyle}>
+            <Pressable
+              onLongPress={openActions}
+              delayLongPress={LONG_PRESS_MS}
+              accessibilityHint="Long press for actions, swipe left to reply"
+              accessibilityActions={message.send ? undefined : ROW_ACTIONS}
+              onAccessibilityAction={(event) => {
+                if (event.nativeEvent.actionName === "reply") reply();
+                else openActions();
+              }}
+              style={({ pressed }) => ({
+                paddingHorizontal: 16,
+                paddingTop: grouped ? 2 : 12,
+                paddingBottom: 2,
+                backgroundColor: pressed
+                  ? theme.tint1
+                  : targetsMe
+                    ? theme.accentTint
+                    : theme.ply0,
+              })}
             >
-              <Text variant="name" numberOfLines={1} style={{ flexShrink: 1 }}>
-                {name}
-              </Text>
-              <Text variant="num" tone="ink3" style={{ fontSize: 11 }}>
-                {formatTime(sentAt)}
-              </Text>
-            </View>
-          )}
-          {parts.length > 0 ? (
-            <MessageBody parts={parts} edited={!!message.updated_at} />
-          ) : null}
-          <MessageMedia media={media} messageId={message.id} />
-          {message.reactions?.length ? (
-            <Reactions message={message} reactions={message.reactions} />
-          ) : null}
-          {message.send === "failed" ? <FailedSend message={message} /> : null}
-        </View>
+              {highlighted ? (
+                <Animated.View
+                  pointerEvents="none"
+                  exiting={HIGHLIGHT_OUT}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: theme.accentTint,
+                    borderLeftWidth: 2,
+                    borderLeftColor: theme.accentInk,
+                  }}
+                />
+              ) : null}
+              {targetsMe ? (
+                <View
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    backgroundColor: theme.accentInk,
+                  }}
+                />
+              ) : null}
+              {message.reply_to ? (
+                <ReplyQuote reply={message.reply_to} />
+              ) : null}
+              <View style={{ flexDirection: "row", gap: GUTTER }}>
+                {grouped ? (
+                  <View style={{ width: AVATAR }} />
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${name}'s profile`}
+                    onPress={showAuthor}
+                    onLongPress={openActions}
+                    delayLongPress={LONG_PRESS_MS}
+                    style={({ pressed }) => ({
+                      alignSelf: "flex-start",
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Avatar
+                      name={name}
+                      size={AVATAR}
+                      uri={mediaUrl(message.author?.avatar_url)}
+                    />
+                  </Pressable>
+                )}
+                <View
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    opacity: message.send === "sending" ? 0.56 : 1,
+                  }}
+                >
+                  {grouped ? null : (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "baseline",
+                        gap: 8,
+                      }}
+                    >
+                      <Text
+                        variant="name"
+                        numberOfLines={1}
+                        accessibilityRole="button"
+                        onPress={showAuthor}
+                        onLongPress={openActions}
+                        style={{ flexShrink: 1 }}
+                      >
+                        {name}
+                      </Text>
+                      <Text variant="num" tone="ink3" style={{ fontSize: 11 }}>
+                        {formatTime(sentAt)}
+                      </Text>
+                    </View>
+                  )}
+                  {blocks.length > 0 ? (
+                    <Markdown blocks={blocks} edited={!!message.updated_at} />
+                  ) : null}
+                  <MessageMedia media={media} messageId={message.id} />
+                  {message.reactions?.length ? (
+                    <Reactions
+                      message={message}
+                      reactions={message.reactions}
+                    />
+                  ) : null}
+                  {message.send === "failed" ? (
+                    <FailedSend message={message} />
+                  ) : null}
+                </View>
+              </View>
+            </Pressable>
+          </Animated.View>
+        </GestureDetector>
       </View>
-    </Pressable>
+    </MessageLongPress>
   );
 });
+
+const CUSTOM_EMOJI_TOKEN = /<a?:(\w+):[\w-]+>/g;
 
 /** The quoted header line of a reply: who and the first line of what. */
 function ReplyQuote({ reply }: { reply: ReplyPreview }) {
   const theme = useTheme();
   const text =
-    reply.content?.trim() ||
+    reply.content?.trim().replace(CUSTOM_EMOJI_TOKEN, ":$1:") ||
     (reply.attachment_count ? "Attachment" : "Original message");
   return (
     <View
@@ -131,7 +305,7 @@ function ReplyQuote({ reply }: { reply: ReplyPreview }) {
       style={{
         flexDirection: "row",
         alignItems: "center",
-        height: 20,
+        minHeight: 20,
         marginBottom: 2,
       }}
     >
@@ -175,7 +349,10 @@ function ReplyQuote({ reply }: { reply: ReplyPreview }) {
   );
 }
 
-/** Count chips; the user's own reaction sits on the accent tint. */
+/**
+ * Count chips; the user's own reaction sits on the accent tint. Tap toggles
+ * yours; long-press shows who reacted.
+ */
 function Reactions({
   message,
   reactions,
@@ -184,6 +361,7 @@ function Reactions({
   reactions: readonly Reaction[];
 }) {
   const theme = useTheme();
+  const showDetails = useReactionDetails();
   return (
     <View
       style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 }}
@@ -193,12 +371,27 @@ function Reactions({
           key={reaction.emoji}
           accessibilityRole="button"
           accessibilityState={{ selected: reaction.me }}
-          accessibilityLabel={`${reaction.emoji}, ${reaction.count}${reaction.me ? ", yours" : ""}`}
+          accessibilityLabel={`${reaction.emoji.replace(CUSTOM_EMOJI_TOKEN, ":$1:")}, ${reaction.count}${reaction.me ? ", yours" : ""}`}
           disabled={!!message.send}
-          onPress={() => void toggleReaction(message, reaction.emoji)}
-          hitSlop={4}
+          onPress={() => {
+            tapHaptic();
+            void toggleReaction(message, reaction.emoji);
+          }}
+          onLongPress={
+            showDetails
+              ? () => {
+                  tapHaptic();
+                  showDetails(message, reaction.emoji);
+                }
+              : undefined
+          }
+          delayLongPress={LONG_PRESS_MS}
+          accessibilityHint="Long press to see who reacted"
+          // 32 tall and 8 more above and below: a 48dp target. Neighbours
+          // sit 6 apart, so 3 a side never overlaps.
+          hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}
           style={({ pressed }) => ({
-            height: 28,
+            minHeight: 32,
             minWidth: 44,
             flexDirection: "row",
             alignItems: "center",
@@ -215,9 +408,7 @@ function Reactions({
                 : "transparent",
           })}
         >
-          <Text style={{ fontSize: 15, lineHeight: 20 }}>
-            {emojiLabel(reaction.emoji)}
-          </Text>
+          <EmojiGlyph value={reaction.emoji} size={16} animate />
           <Text
             variant="num"
             style={{
@@ -231,12 +422,6 @@ function Reactions({
       ))}
     </View>
   );
-}
-
-/** Custom server emoji arrive as `<:name:id>`; print the name until they render. */
-function emojiLabel(emoji: string): string {
-  const custom = /^<a?:(\w+):[\w-]+>$/.exec(emoji);
-  return custom ? `:${custom[1]}:` : emoji;
 }
 
 /** "Not sent" with Retry and Delete, under a send that failed. */
@@ -268,9 +453,11 @@ function TextKey({ label, onPress }: { label: string; onPress: () => void }) {
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      hitSlop={8}
+      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
       style={({ pressed }) => ({
-        height: 28,
+        minHeight: 32,
+        minWidth: 48,
+        alignItems: "center",
         paddingHorizontal: 8,
         justifyContent: "center",
         borderRadius: RADIUS,

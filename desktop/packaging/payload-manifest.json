@@ -4,6 +4,7 @@
   "sources": {
     "cef": "CEF runtime directory (CEF_PATH)",
     "release": "cargo release output (desktop/src-tauri/target/release)",
+    "launcher": "root launcher stub release output (desktop/launcher/target/release)",
     "resources": "desktop/src-tauri/resources"
   },
   "entries": [
@@ -12,6 +13,12 @@
       "source": "release",
       "from": "ralph-meet-desktop.exe",
       "to": "RalphMeet.exe"
+    },
+    {
+      "type": "file",
+      "source": "launcher",
+      "from": "ralph-meet-launcher.exe",
+      "to": "RalphMeetLauncher.exe"
     },
 
     { "type": "file", "source": "cef", "from": "libcef.dll" },

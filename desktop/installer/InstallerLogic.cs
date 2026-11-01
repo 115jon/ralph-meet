@@ -13,14 +13,11 @@ namespace Installer
     public class InstallerLogic
     {
         private const string DisplayName = "RalphMeet";
-        private const string LegacyInstallDirectoryName = "Ralph Meet";
         private const string Publisher = "115jon";
         private const string CurrentUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\RalphMeet";
         private const string LegacyUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Ralph Meet";
         private const string CurrentPublisherKeyPath = @"Software\115jon\RalphMeet";
         private const string LegacyPublisherKeyPath = @"Software\Jon Titor\Ralph Meet";
-        private const string LauncherArguments = "--processStart RalphMeet.exe";
-        private const string UninstallerName = "Update.exe";
 
         public const string ExecutableFileName = "RalphMeet.exe";
 
@@ -40,21 +37,24 @@ namespace Installer
         {
             await Task.Run(() =>
             {
-                string localAppData = GetLocalAppDataDirectory();
-                InstallRootLayout layout = InstallRootLayout.FromLocalAppData(localAppData);
-                string legacyInstallDir = GetLegacyInstallDirectory(localAppData);
+                InstallEnvironment environment = InstallEnvironment.Current;
+                InstallRootLayout layout = environment.Layout;
+                string legacyInstallDir = environment.LegacyInstallDirectory;
 
                 InstallerLogger.Info("Starting installation.");
+                LogSandbox(environment);
                 InstallerLogger.Info("Install root: " + layout.RootPath);
                 InstallerLogger.Info("Legacy install directory: " + legacyInstallDir);
                 InstallerLogger.Info("Current state path: " + layout.CurrentStatePath);
                 LogKnownLockDiagnostics(layout, "Pre-install lock snapshot");
 
-                WaitForProcessesToExit(ManagedProcessNames, TimeSpan.FromSeconds(30));
-                WaitForInstalledArtifactsToExit(layout.GetInstalledExecutablePaths(ExecutableFileName), layout.RootPath, TimeSpan.FromSeconds(30));
-                DeleteShortcuts();
-                DeleteRegistryKeyTree(Registry.CurrentUser, LegacyUninstallKeyPath);
-                DeleteRegistryKeyTree(Registry.CurrentUser, LegacyPublisherKeyPath);
+                WaitForManagedProcessesToExit(environment, TimeSpan.FromSeconds(30));
+                DeleteShortcuts(environment);
+                using (RegistryKey userRoot = environment.OpenUserRoot())
+                {
+                    DeleteRegistryKeyTree(userRoot, LegacyUninstallKeyPath);
+                    DeleteRegistryKeyTree(userRoot, LegacyPublisherKeyPath);
+                }
                 DeleteDirectoryIfExists(legacyInstallDir);
 
                 Directory.CreateDirectory(layout.RootPath);
@@ -74,15 +74,33 @@ namespace Installer
 
                 DeleteLegacyRootEntries(layout);
 
+                RootLauncher.Refresh(layout, activation.ActiveDirectoryPath);
                 string uninstallerPath = CopyBootstrapperToUninstaller(layout.RootPath);
-                CreateUninstallRegistryKeys(layout.RootPath, activation.ActiveExecutablePath, uninstallerPath);
-                CreateCompatibilityInstallLocationKey(layout.RootPath);
-                RegisterDeepLinkProtocol(uninstallerPath);
-                CreateShortcuts(layout.RootPath, uninstallerPath, activation.ActiveExecutablePath);
+                RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
+                bool hasRootStub = File.Exists(layout.RootStubPath);
+                InstallerLogger.Info("App entry point: " + launcherPath + " " + launcherArguments);
+
+                using (RegistryKey userRoot = environment.OpenUserRoot())
+                {
+                    CreateUninstallRegistryKeys(userRoot, layout.RootPath, activation.ActiveExecutablePath, uninstallerPath, launcherPath);
+                    CreateCompatibilityInstallLocationKey(userRoot, layout.RootPath);
+                    RegisterDeepLinkProtocol(userRoot, launcherPath, launcherArguments);
+                    if (hasRootStub)
+                    {
+                        LauncherMigration.MigrateRunValue(userRoot, layout);
+                    }
+                }
+
+                CreateShortcuts(environment, launcherPath, launcherArguments);
+                if (hasRootStub)
+                {
+                    int pins = LauncherMigration.RetargetPinnedShortcuts(environment.TaskbarPinsDirectory, layout);
+                    InstallerLogger.Info("Retargeted " + pins + " taskbar pin(s) to the root launcher.");
+                }
 
                 if (launchApplication)
                 {
-                    LaunchApplication(uninstallerPath, LauncherArguments, layout.RootPath);
+                    LaunchApplication(launcherPath, launcherArguments, layout.RootPath);
                 }
                 InstallerLogger.Info("Installation finished successfully.");
             }).ConfigureAwait(false);
@@ -92,37 +110,59 @@ namespace Installer
         {
             await Task.Run(() =>
             {
-                string localAppData = GetLocalAppDataDirectory();
-                InstallRootLayout layout = InstallRootLayout.FromLocalAppData(localAppData);
-                string legacyInstallDir = GetLegacyInstallDirectory(localAppData);
+                InstallEnvironment environment = InstallEnvironment.Current;
+                InstallRootLayout layout = environment.Layout;
+                string legacyInstallDir = environment.LegacyInstallDirectory;
 
                 InstallerLogger.Info("Starting uninstallation.");
+                LogSandbox(environment);
                 InstallerLogger.Info("Install root: " + layout.RootPath);
                 InstallerLogger.Info("Legacy install directory: " + legacyInstallDir);
                 LogKnownLockDiagnostics(layout, "Pre-uninstall lock snapshot");
 
-                WaitForProcessesToExit(ManagedProcessNames, TimeSpan.FromSeconds(30));
-                WaitForInstalledArtifactsToExit(layout.GetInstalledExecutablePaths(ExecutableFileName), layout.RootPath, TimeSpan.FromSeconds(30));
-                DeleteShortcuts();
-                DeleteRegistryKeyTree(Registry.CurrentUser, CurrentUninstallKeyPath);
-                DeleteRegistryKeyTree(Registry.CurrentUser, LegacyUninstallKeyPath);
-                DeleteRegistryKeyTree(Registry.CurrentUser, CurrentPublisherKeyPath);
-                DeleteRegistryKeyTree(Registry.CurrentUser, LegacyPublisherKeyPath);
-                UnregisterDeepLinkProtocolIfOwned(layout.UpdateExePath);
+                WaitForManagedProcessesToExit(environment, TimeSpan.FromSeconds(30));
+                DeleteShortcuts(environment);
+                using (RegistryKey userRoot = environment.OpenUserRoot())
+                {
+                    DeleteRegistryKeyTree(userRoot, CurrentUninstallKeyPath);
+                    DeleteRegistryKeyTree(userRoot, LegacyUninstallKeyPath);
+                    DeleteRegistryKeyTree(userRoot, CurrentPublisherKeyPath);
+                    DeleteRegistryKeyTree(userRoot, LegacyPublisherKeyPath);
+                    UnregisterDeepLinkProtocolIfOwned(userRoot, layout);
+                    if (LauncherMigration.RemoveRunValueIfOwned(userRoot, layout))
+                    {
+                        InstallerLogger.Info("Removed the RalphMeet Run value.");
+                    }
+                }
                 DeleteDirectoryIfExists(legacyInstallDir);
                 ScheduleDirectoryDeletion(layout.RootPath);
                 InstallerLogger.Info("Uninstallation cleanup scheduled successfully.");
             }).ConfigureAwait(false);
         }
 
-        private static string GetLocalAppDataDirectory()
+        private static void LogSandbox(InstallEnvironment environment)
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (environment.IsSandbox)
+            {
+                InstallerLogger.Warn(
+                    "Sandbox install (" + InstallEnvironment.SandboxRootVariable + "): registry under HKCU\\" +
+                    InstallEnvironment.SandboxRegistryPath + ", shortcuts beside the root, processes matched by path only.");
+            }
         }
 
-        private static string GetLegacyInstallDirectory(string localAppData)
+        /// <summary>
+        /// Stops the app before files are replaced. Sandbox installs skip the by-name match so
+        /// they never stop the real install; the by-path match is scoped to the install root.
+        /// </summary>
+        private static void WaitForManagedProcessesToExit(InstallEnvironment environment, TimeSpan timeout)
         {
-            return Path.Combine(localAppData, LegacyInstallDirectoryName);
+            InstallRootLayout layout = environment.Layout;
+            if (!environment.IsSandbox)
+            {
+                WaitForProcessesToExit(ManagedProcessNames, timeout);
+            }
+
+            WaitForInstalledArtifactsToExit(layout.GetInstalledExecutablePaths(ExecutableFileName), layout.RootPath, timeout);
         }
 
         private static void WaitForProcessesToExit(IEnumerable<string> processNames, TimeSpan timeout)
@@ -357,7 +397,7 @@ namespace Installer
         private static string CopyBootstrapperToUninstaller(string installDir)
         {
             string currentProcessPath = GetCurrentProcessPath();
-            string uninstallerPath = Path.Combine(installDir, UninstallerName);
+            string uninstallerPath = Path.Combine(installDir, InstallRootLayout.UpdateExeFileName);
             if (PathsEqual(currentProcessPath, uninstallerPath))
             {
                 return uninstallerPath;
@@ -445,7 +485,7 @@ namespace Installer
             }
         }
 
-        private static void CreateUninstallRegistryKeys(string installDir, string exePath, string uninstallerPath)
+        private static void CreateUninstallRegistryKeys(RegistryKey userRoot, string installDir, string exePath, string uninstallerPath, string iconPath)
         {
             if (!File.Exists(exePath))
             {
@@ -464,7 +504,7 @@ namespace Installer
             string quietUninstallCommand = uninstallCommand + " /S";
 
             InstallerLogger.Info("Writing uninstall registry keys.");
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(CurrentUninstallKeyPath))
+            using (RegistryKey key = userRoot.CreateSubKey(CurrentUninstallKeyPath))
             {
                 if (key == null)
                 {
@@ -472,7 +512,8 @@ namespace Installer
                 }
 
                 key.SetValue("DisplayName", DisplayName);
-                key.SetValue("DisplayIcon", exePath);
+                // The root stub carries the app icon and, unlike app-<version>, never moves.
+                key.SetValue("DisplayIcon", iconPath);
                 key.SetValue("DisplayVersion", displayVersion);
                 key.SetValue("Publisher", publisher);
                 key.SetValue("InstallLocation", installDir);
@@ -499,10 +540,10 @@ namespace Installer
             return "0.0.0";
         }
 
-        private static void CreateCompatibilityInstallLocationKey(string installDir)
+        private static void CreateCompatibilityInstallLocationKey(RegistryKey userRoot, string installDir)
         {
             InstallerLogger.Info("Writing compatibility install-location registry key.");
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(CurrentPublisherKeyPath))
+            using (RegistryKey key = userRoot.CreateSubKey(CurrentPublisherKeyPath))
             {
                 if (key == null)
                 {
@@ -513,15 +554,15 @@ namespace Installer
             }
         }
 
-        private static void RegisterDeepLinkProtocol(string launcherPath)
+        private static void RegisterDeepLinkProtocol(RegistryKey userRoot, string launcherPath, string launcherArguments)
         {
             InstallerLogger.Info("Registering ralphmeet:// deep-link protocol to launcher " + launcherPath);
-            DeepLinkRegistration.Register(Registry.CurrentUser, launcherPath);
+            DeepLinkRegistration.Register(userRoot, launcherPath, launcherArguments);
         }
 
-        private static void UnregisterDeepLinkProtocolIfOwned(string launcherPath)
+        private static void UnregisterDeepLinkProtocolIfOwned(RegistryKey userRoot, InstallRootLayout layout)
         {
-            if (DeepLinkRegistration.UnregisterIfOwned(Registry.CurrentUser, launcherPath))
+            if (DeepLinkRegistration.UnregisterIfOwned(userRoot, layout))
             {
                 InstallerLogger.Info("Removed installer-owned ralphmeet:// deep-link protocol registration.");
                 return;
@@ -530,64 +571,38 @@ namespace Installer
             InstallerLogger.Info("Skipped ralphmeet:// deep-link protocol removal because registration was missing or no longer owned by this installer.");
         }
 
-        private static void CreateShortcuts(string installDir, string launcherPath, string iconPath)
+        private static void CreateShortcuts(InstallEnvironment environment, string launcherPath, string launcherArguments)
         {
             InstallerLogger.Info("Creating desktop and Start menu shortcuts.");
-            DeleteShortcuts();
+            DeleteShortcuts(environment);
 
             if (!File.Exists(launcherPath))
             {
                 throw new FileNotFoundException("Installed launcher was not found.", launcherPath);
             }
 
-            if (string.IsNullOrWhiteSpace(iconPath) || !File.Exists(iconPath))
+            // The AppUserModelID matches the one the app sets on its process, so the taskbar groups
+            // the running window with this shortcut and pins the root stub, not app-<version>.
+            ShellLinkData shortcut = new ShellLinkData
             {
-                iconPath = launcherPath;
-            }
-
-            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType == null)
-            {
-                throw new InvalidOperationException("WScript.Shell is unavailable, so installer shortcuts could not be created.");
-            }
-
-            dynamic shell = Activator.CreateInstance(shellType);
-            CreateShortcut(
-                shell,
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), DisplayName + ".lnk"),
-                installDir,
-                launcherPath,
-                LauncherArguments,
-                iconPath);
-            CreateShortcut(
-                shell,
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), DisplayName + ".lnk"),
-                installDir,
-                launcherPath,
-                LauncherArguments,
-                iconPath);
+                TargetPath = launcherPath,
+                Arguments = launcherArguments,
+                WorkingDirectory = environment.Layout.RootPath,
+                IconPath = launcherPath,
+                IconIndex = 0,
+                Description = DisplayName,
+                AppUserModelId = RootLauncher.AppUserModelId
+            };
+            ShellLink.Save(Path.Combine(environment.DesktopDirectory, DisplayName + ".lnk"), shortcut);
+            ShellLink.Save(Path.Combine(environment.ProgramsDirectory, DisplayName + ".lnk"), shortcut);
         }
 
-        private static void CreateShortcut(dynamic shell, string shortcutPath, string workingDirectory, string targetPath, string arguments, string iconPath)
+        private static void DeleteShortcuts(InstallEnvironment environment)
         {
-            dynamic shortcut = shell.CreateShortcut(shortcutPath);
-            shortcut.TargetPath = targetPath;
-            shortcut.Arguments = arguments;
-            shortcut.WorkingDirectory = workingDirectory;
-            shortcut.IconLocation = iconPath;
-            shortcut.Description = DisplayName;
-            shortcut.Save();
-        }
-
-        private static void DeleteShortcuts()
-        {
-            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            string startMenuPath = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-
             foreach (string shortcutName in ShortcutFileNames)
             {
-                DeleteFileIfExists(Path.Combine(desktopPath, shortcutName));
-                DeleteFileIfExists(Path.Combine(startMenuPath, shortcutName));
+                DeleteFileIfExists(Path.Combine(environment.DesktopDirectory, shortcutName));
+                DeleteFileIfExists(Path.Combine(environment.ProgramsDirectory, shortcutName));
             }
         }
 

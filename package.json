@@ -1,6 +1,6 @@
 {
   "name": "ralph-meet",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "dev:prod-auth": "cross-env CI=true RALPH_AUTH=prod vite dev --port 5199",
     "build": "vite build",
     "icons:generate": "node scripts/generate-phosphor-icons.mjs",
+    "icons:app": "node scripts/generate-app-icons.mjs",
     "preview": "vite preview",
     "perf": "pnpm run build && lhci autorun",
     "perf:budgets": "pnpm run build && node scripts/check-bundle-budgets.mjs",
@@ -102,6 +103,7 @@
     "cross-env": "^10.1.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "fake-indexeddb": "^6.2.7",
     "fast-check": "^4.8.0",
     "jsdom": "^29.1.1",
     "lefthook": "^2.1.14",

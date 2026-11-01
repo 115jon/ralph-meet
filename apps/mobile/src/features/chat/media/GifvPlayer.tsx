@@ -23,7 +23,7 @@ const FILL = {
  * The silent player. It exists only while the loop holds a slot, so a row
  * that scrolls away, or a backgrounded app, releases its decoder.
  */
-function LoopSurface({ url }: { url: string }) {
+export function LoopSurface({ url }: { url: string }) {
   const source = useMemo(() => videoSource(url), [url]);
   const [shown, setShown] = useState(false);
   const player = useVideoPlayer(source, (p) => {

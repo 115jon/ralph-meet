@@ -8,6 +8,7 @@ import {
   MENU_PANEL,
 } from "@/components/ui/menu";
 import { FLOATING_LAYER_ATTR } from "@/components/ui/popover";
+import { collisionPaddingBelowChrome } from "@/lib/app-chrome";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { User } from "@/lib/types";
@@ -89,7 +90,7 @@ export function MentionAutocomplete({
             side="top"
             align="start"
             sideOffset={4}
-            collisionPadding={8}
+            collisionPadding={collisionPaddingBelowChrome()}
             className="z-50 outline-none"
           >
             <PopoverPrimitive.Popup

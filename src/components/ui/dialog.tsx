@@ -405,7 +405,7 @@ const DialogContent = React.forwardRef<
           "fixed left-[50%] z-50 data-stacked:z-60 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] gap-4 overscroll-contain p-6",
           placement === "top"
             ? "top-[max(48px,12vh)] max-h-[calc(100dvh-max(48px,12vh)-24px)] origin-top"
-            : "top-[50%] translate-y-[-50%]",
+            : "top-[calc(50%+var(--app-chrome-top,0px)/2)] translate-y-[-50%]",
           DIALOG_SURFACE,
           BEHIND_CUE,
           DIALOG_SIZE[size],

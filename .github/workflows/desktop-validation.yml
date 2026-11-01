@@ -30,6 +30,7 @@ on:
       - "desktop/src-tauri/**"
       - "desktop/installer/**"
       - "desktop/installer.tests/**"
+      - "desktop/launcher/**"
       - "desktop/packaging/**"
       - "desktop/scripts/**"
   workflow_dispatch:
@@ -180,6 +181,38 @@ jobs:
         # With game-capture-hook, build.rs also fails if the payload manifest
         # stops shipping any required obs-capture material (GPLv2 documents).
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features cef,native-screen-share,game-capture-hook
+
+  # The root RalphMeet.exe launcher stub (desktop/launcher). Standalone crate
+  # with no Tauri or CEF dependencies, so it needs none of the desktop job's setup.
+  launcher:
+    name: launcher
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup Rust
+        # dtolnay/rust-toolchain stable branch (2026-10-16)
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          components: clippy, rustfmt
+
+      - name: Check, test and build the launcher
+        shell: pwsh
+        working-directory: desktop/launcher
+        run: |
+          cargo fmt --check
+          if ($LASTEXITCODE -ne 0) { throw "cargo fmt --check failed" }
+          cargo clippy --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw "cargo clippy failed" }
+          cargo test
+          if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
+          cargo build --release
+          if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed" }
+          $stub = Get-Item "target/release/ralph-meet-launcher.exe"
+          Write-Host "==> ralph-meet-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
 
   # Installer, payload format, and packaging scripts. Windows only (WPF, net48),
   # and independent of the Rust job: it needs no CEF, cargo build, or pnpm.

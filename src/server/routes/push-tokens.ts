@@ -23,6 +23,7 @@ const registerSchema = Schema.Struct({
   app_variant: Schema.optional(
     Schema.NullOr(Schema.String.check(Schema.isMaxLength(32))),
   ),
+  push_format: Schema.optional(Schema.NullOr(Schema.Literals(["native"]))),
 });
 
 const unregisterSchema = Schema.Struct({ token: PushToken });
@@ -43,6 +44,7 @@ const registerToken = Effect.fn("pushTokens.register")(function* (
       token: body.token,
       platform: body.platform,
       appVariant: body.app_variant ?? null,
+      pushFormat: body.push_format ?? null,
     }),
   );
 

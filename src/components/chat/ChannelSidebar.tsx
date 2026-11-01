@@ -2,6 +2,7 @@ import { LONG_PRESS_TARGET, useLongPressMenu } from "@/hooks/useLongPress";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useSpeakingAttr } from "@/hooks/useIsSpeaking";
 import { apiPatch } from "@/lib/api-client";
+import { readAppChromeTop } from "@/lib/app-chrome";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import {
@@ -1869,7 +1870,8 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
       const left =
         preferredLeft <= maxLeft ? preferredLeft : Math.max(12, fallbackLeft);
       const centerY = rect.top + rect.height / 2;
-      const minCenterY = STREAM_PREVIEW_CARD_HEIGHT / 2 + 12;
+      const minCenterY =
+        STREAM_PREVIEW_CARD_HEIGHT / 2 + 12 + readAppChromeTop();
       const maxCenterY =
         window.innerHeight - STREAM_PREVIEW_CARD_HEIGHT / 2 - 12;
       const top = Math.min(maxCenterY, Math.max(minCenterY, centerY));

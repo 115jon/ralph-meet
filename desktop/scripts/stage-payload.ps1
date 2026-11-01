@@ -17,6 +17,9 @@
 .PARAMETER ReleaseDir
     Cargo release output. Defaults to desktop/src-tauri/target/release.
 
+.PARAMETER LauncherDir
+    Root launcher stub release output. Defaults to desktop/launcher/target/release.
+
 .PARAMETER ResourcesDir
     Defaults to desktop/src-tauri/resources.
 
@@ -43,6 +46,7 @@
 param(
     [string]$CefDir = $env:CEF_PATH,
     [string]$ReleaseDir,
+    [string]$LauncherDir,
     [string]$ResourcesDir,
     [string]$StageDir,
     [string]$OutputPath,
@@ -58,6 +62,7 @@ $ErrorActionPreference = "Stop"
 
 $desktopDir = Split-Path -Parent $PSScriptRoot
 if (-not $ReleaseDir) { $ReleaseDir = Join-Path $desktopDir "src-tauri\target\release" }
+if (-not $LauncherDir) { $LauncherDir = Join-Path $desktopDir "launcher\target\release" }
 if (-not $ResourcesDir) { $ResourcesDir = Join-Path $desktopDir "src-tauri\resources" }
 if (-not $Manifest) { $Manifest = Join-Path $desktopDir "packaging\payload-manifest.json" }
 if (-not $OutputPath) { $OutputPath = Join-Path $desktopDir "installer\Assets\payload.rmpk" }
@@ -66,7 +71,7 @@ if (-not $Dotnet) {
     $Dotnet = if (Test-Path -LiteralPath $scoopDotnet) { $scoopDotnet } else { "dotnet" }
 }
 
-$sourceDirs = @{ cef = $CefDir; release = $ReleaseDir; resources = $ResourcesDir }
+$sourceDirs = @{ cef = $CefDir; release = $ReleaseDir; launcher = $LauncherDir; resources = $ResourcesDir }
 foreach ($name in $sourceDirs.Keys) {
     if (-not $sourceDirs[$name] -or -not (Test-Path -LiteralPath $sourceDirs[$name] -PathType Container)) {
         throw "Payload source '$name' directory not found: '$($sourceDirs[$name])'"

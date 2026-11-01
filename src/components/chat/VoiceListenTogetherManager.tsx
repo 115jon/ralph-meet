@@ -13,9 +13,14 @@ import {
 import type { SFUClient } from "@/lib/sfu-client";
 import {
   buildListenTogetherStreamUrl,
+  alternateListenTogetherAudioFormat,
   detectPreferredListenTogetherAudioFormat,
   getListenTogetherPlaybackPlan,
   isExpectedListenTogetherPlayCancellation,
+  type ListenTogetherRecoveryState,
+  planListenTogetherPlaybackRecovery,
+  probeListenTogetherStream,
+  shouldTryAlternateListenTogetherFormat,
 } from "@/lib/voice/listen-together-player";
 import { ListenTogetherAudioProcessor } from "@/lib/voice/listen-together-audio";
 import { useListenTogetherAudioSettingsStore } from "@/stores/useListenTogetherAudioSettingsStore";
@@ -305,7 +310,13 @@ export function VoiceListenTogetherManager({
   const musicSrcRef = useRef<string | null>(null);
   const radioSrcRef = useRef<string | null>(null);
   const preferredFormatRef = useRef(detectPreferredListenTogetherAudioFormat());
-  const playbackRetryKeyRef = useRef<string | null>(null);
+  // Attempts spent recovering the current track, keyed by room:entry:track.
+  const playbackRecoveryRef = useRef<
+    (ListenTogetherRecoveryState & { key: string }) | null
+  >(null);
+  const playbackRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const playbackGenerationRef = useRef(0);
   const playbackGenerationKeyRef = useRef<string | null>(null);
   const pendingNativePauseTimersRef = useRef(
@@ -347,7 +358,13 @@ export function VoiceListenTogetherManager({
 
   useEffect(() => {
     preferredFormatRef.current = detectPreferredListenTogetherAudioFormat();
-    playbackRetryKeyRef.current = null;
+    playbackRecoveryRef.current = null;
+    return () => {
+      if (playbackRetryTimerRef.current) {
+        clearTimeout(playbackRetryTimerRef.current);
+        playbackRetryTimerRef.current = null;
+      }
+    };
   }, [currentEntryId, voiceSessionId]);
 
   useEffect(() => {
@@ -364,7 +381,7 @@ export function VoiceListenTogetherManager({
             voiceSessionId,
           },
         );
-        playbackRetryKeyRef.current = null;
+        playbackRecoveryRef.current = null;
         return normalizedToken;
       });
     });
@@ -561,7 +578,7 @@ export function VoiceListenTogetherManager({
         const activeRoomSlug = roomSlugRef.current;
         if (!activeRoomSlug) return;
         if (!playbackErrorRef.current?.code.startsWith("PLAYBACK_")) return;
-        playbackRetryKeyRef.current = null;
+        playbackRecoveryRef.current = null;
         log.info("Listen together audio can play", {
           roomSlug: activeRoomSlug,
           src: redactListenTogetherStreamUrl(
@@ -591,35 +608,80 @@ export function VoiceListenTogetherManager({
           ),
         });
         playbackGenerationRef.current += 1;
+        const generation = playbackGenerationRef.current;
+        const failedSrc = audio.src || currentSrcRef.current;
+        const mediaErrorCode = audio.error?.code ?? null;
 
         const retryKey = `${activeRoomSlug}:${activeEntry.entryId}:${getTrackIdentifier(activeEntry.track)}`;
-        if (playbackRetryKeyRef.current !== retryKey) {
-          playbackRetryKeyRef.current = retryKey;
-          preferredFormatRef.current =
-            preferredFormatRef.current === "mp4" ? "webm" : "mp4";
+        if (playbackRecoveryRef.current?.key !== retryKey) {
+          playbackRecoveryRef.current = {
+            key: retryKey,
+            transientRetries: 0,
+            formatSwitched: false,
+          };
+        }
+        const recovery = playbackRecoveryRef.current;
+        const isCurrent = () =>
+          playbackGenerationRef.current === generation &&
+          getActiveAudio() === audio &&
+          roomSlugRef.current === activeRoomSlug &&
+          snapshotRef.current?.currentEntry?.entryId === activeEntry.entryId;
+
+        void (async () => {
+          const probe = failedSrc
+            ? await probeListenTogetherStream(failedSrc)
+            : null;
+          if (!isCurrent()) return;
+
+          const plan = planListenTogetherPlaybackRecovery({
+            mediaErrorCode,
+            probe,
+            state: recovery,
+            canTryAlternateFormat: shouldTryAlternateListenTogetherFormat(
+              preferredFormatRef.current,
+            ),
+          });
+          log.warn("Listen together playback recovery", {
+            roomSlug: activeRoomSlug,
+            probeStatus: probe?.status ?? null,
+            mediaErrorCode,
+            action: plan.action,
+            delayMs: plan.delayMs,
+            code: plan.error.code,
+          });
+          setError(activeRoomSlug, plan.error);
+          if (plan.action === "fail") return;
+
           currentSrcRef.current = null;
           if (!audio.paused) markProgrammaticMediaEvent(audio, "pause");
           audio.pause();
           audio.removeAttribute("src");
           audio.load();
-          setError(activeRoomSlug, {
-            code: "PLAYBACK_RETRYING",
-            message: "Retrying playback with an alternate audio format.",
-          });
-          setSourceAttempt((value) => value + 1);
-          return;
-        }
 
-        const mediaErrorCode = audio.error?.code ?? null;
-        const code =
-          mediaErrorCode === 4
-            ? "PLAYBACK_SRC_NOT_SUPPORTED"
-            : "PLAYBACK_FAILED";
-        setError(activeRoomSlug, {
-          code,
-          message:
-            "Playback failed after trying multiple supported audio formats.",
-        });
+          if (plan.action === "switch-format") {
+            recovery.formatSwitched = true;
+            preferredFormatRef.current = alternateListenTogetherAudioFormat(
+              preferredFormatRef.current,
+            );
+            setSourceAttempt((value) => value + 1);
+            return;
+          }
+
+          recovery.transientRetries += 1;
+          if (playbackRetryTimerRef.current) {
+            clearTimeout(playbackRetryTimerRef.current);
+          }
+          playbackRetryTimerRef.current = setTimeout(() => {
+            playbackRetryTimerRef.current = null;
+            if (
+              roomSlugRef.current !== activeRoomSlug ||
+              snapshotRef.current?.currentEntry?.entryId !== activeEntry.entryId
+            ) {
+              return;
+            }
+            setSourceAttempt((value) => value + 1);
+          }, plan.delayMs);
+        })();
       };
 
       const handleLoadStart = () => {

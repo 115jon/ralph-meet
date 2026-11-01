@@ -4,7 +4,7 @@ import {
   MusicNote,
   type Icon as PhosphorIcon,
 } from "phosphor-react-native";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { useWindowDimensions, View } from "react-native";
 
 import { RADIUS, useTheme } from "@/theme";
@@ -12,6 +12,7 @@ import { Icon, Text } from "@/ui";
 
 import type { Attachment } from "../schema";
 import type { MessageMedia as Media } from "./classify";
+import { MessageGallery } from "./gallery";
 import { LinkCard } from "./LinkCard";
 import { MediaView } from "./MediaView";
 
@@ -74,8 +75,18 @@ export const MessageMedia = memo(function MessageMedia({
 }) {
   const { width } = useWindowDimensions();
   const maxWidth = width - COLUMN_INSET;
+  // The message's pictures, in order: the viewer pages through them.
+  const gallery = useMemo(
+    () =>
+      media.bare.flatMap((item) =>
+        item.kind === "image"
+          ? [{ url: item.url, label: item.label, animated: item.animated }]
+          : [],
+      ),
+    [media.bare],
+  );
   return (
-    <>
+    <MessageGallery value={gallery}>
       {media.bare.map((item) => (
         <MediaView
           key={item.key}
@@ -95,6 +106,6 @@ export const MessageMedia = memo(function MessageMedia({
           maxWidth={maxWidth}
         />
       ))}
-    </>
+    </MessageGallery>
   );
 });

@@ -68,6 +68,7 @@ mod thumbnail_toolbar;
 mod tray;
 mod window;
 mod window_icon;
+mod window_state;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
@@ -90,18 +91,6 @@ struct DesktopRuntimeSettings {
     hardware_acceleration: bool,
 }
 
-#[derive(Clone, serde::Deserialize)]
-struct PersistedWindowStateEntry {
-    width: u32,
-    height: u32,
-    x: i32,
-    y: i32,
-    #[serde(default)]
-    maximized: bool,
-    #[serde(default)]
-    fullscreen: bool,
-}
-
 fn default_hardware_acceleration() -> bool {
     true
 }
@@ -116,6 +105,13 @@ const WINDOWS_RESTART_HELPER_POLL_INTERVAL_MS: u64 = 150;
 const WINDOWS_RESTART_HELPER_TIMEOUT_MS: u64 = 10_000;
 #[cfg(target_os = "windows")]
 const WINDOWS_RESTART_HELPER_SETTLE_DELAY_MS: u64 = 300;
+/// The root launcher stub (desktop/launcher), installed by the installer.
+#[cfg(target_os = "windows")]
+const WINDOWS_ROOT_STUB_FILE_NAME: &str = "RalphMeet.exe";
+/// Same as `identifier` in tauri.conf.json (which the notification plugin uses
+/// for toasts) and `RootLauncher.AppUserModelId` in the installer.
+#[cfg(target_os = "windows")]
+const WINDOWS_APP_USER_MODEL_ID: &str = "site.115jon.ralphmeet";
 
 impl Default for DesktopRuntimeSettings {
     fn default() -> Self {
@@ -174,6 +170,20 @@ fn versioned_windows_install_root_from_exe_path(
     install_dir.parent().map(std::path::Path::to_path_buf)
 }
 
+/// The installed launcher at the install root: the native `RalphMeet.exe` stub,
+/// or `Update.exe` (which needs `--processStart`) for installs made before the
+/// stub existed. The bool is true for `Update.exe`. See docs/desktop/launch.md.
+#[cfg(target_os = "windows")]
+fn windows_root_launcher(root: &std::path::Path) -> Option<(std::path::PathBuf, bool)> {
+    let stub = root.join(WINDOWS_ROOT_STUB_FILE_NAME);
+    if stub.is_file() {
+        return Some((stub, false));
+    }
+
+    let update_exe = root.join("Update.exe");
+    update_exe.is_file().then_some((update_exe, true))
+}
+
 #[cfg(target_os = "windows")]
 fn resolve_windows_startup_executable() -> Result<(std::path::PathBuf, bool), String> {
     let current_exe = std::env::current_exe().map_err(|err| err.to_string())?;
@@ -185,14 +195,34 @@ fn resolve_windows_startup_executable() -> Result<(std::path::PathBuf, bool), St
         return Ok((current_exe, true));
     }
 
-    if let Some(root) = versioned_windows_install_root_from_exe_path(&current_exe) {
-        let update_exe = root.join("Update.exe");
-        if update_exe.is_file() {
-            return Ok((update_exe, true));
-        }
+    if let Some(launcher) = versioned_windows_install_root_from_exe_path(&current_exe)
+        .and_then(|root| windows_root_launcher(&root))
+    {
+        return Ok(launcher);
     }
 
     Ok((current_exe, false))
+}
+
+/// Gives the process the AppUserModelID the installer puts on the Start menu and
+/// desktop shortcuts, so the taskbar groups this window with them and a pin made
+/// from the running window starts the root stub instead of `app-<version>`. Only
+/// for installed builds; dev runs keep the default per-path identity.
+#[cfg(target_os = "windows")]
+fn set_windows_app_user_model_id() {
+    let Ok(current_exe) = std::env::current_exe() else {
+        return;
+    };
+    if versioned_windows_install_root_from_exe_path(&current_exe).is_none() {
+        return;
+    }
+
+    let app_id = windows::core::HSTRING::from(WINDOWS_APP_USER_MODEL_ID);
+    if let Err(err) =
+        unsafe { windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(&app_id) }
+    {
+        eprintln!("[DesktopRuntime] SetCurrentProcessExplicitAppUserModelID failed: {err}");
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -542,104 +572,6 @@ pub(crate) fn log_window_state_file<R: tauri::Runtime>(app: &tauri::AppHandle<R>
     }
 }
 
-fn read_persisted_window_state<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    label: &str,
-) -> Result<Option<PersistedWindowStateEntry>, String> {
-    let Some(current_path) = app
-        .path()
-        .app_config_dir()
-        .ok()
-        .map(|dir| dir.join(".window-state.json"))
-    else {
-        return Ok(None);
-    };
-
-    let mut candidate_paths = vec![current_path];
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(base) = std::env::var_os("APPDATA") {
-            candidate_paths.push(
-                std::path::PathBuf::from(base)
-                    .join(LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME)
-                    .join(".window-state.json"),
-            );
-        }
-    }
-
-    for path in candidate_paths {
-        let raw = match std::fs::read_to_string(&path) {
-            Ok(raw) => raw,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(err) => return Err(err.to_string()),
-        };
-
-        let states = serde_json::from_str::<
-            std::collections::HashMap<String, PersistedWindowStateEntry>,
-        >(&raw)
-        .map_err(|err| err.to_string())?;
-
-        if let Some(state) = states.get(label).cloned() {
-            return Ok(Some(state));
-        }
-    }
-
-    Ok(None)
-}
-
-pub(crate) fn restore_main_window_geometry_from_state<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    context: &str,
-) -> Result<(), String> {
-    let Some(state) = read_persisted_window_state(app, "main")? else {
-        log::info!("[WindowState][{context}] no saved main window state");
-        return Ok(());
-    };
-
-    let Some(window) = app.get_webview_window("main") else {
-        log::info!("[WindowState][{context}] main window missing");
-        return Ok(());
-    };
-
-    log::info!(
-        "[WindowState][{context}] restoring main x={} y={} width={} height={} maximized={} fullscreen={}",
-        state.x,
-        state.y,
-        state.width,
-        state.height,
-        state.maximized,
-        state.fullscreen
-    );
-
-    if !state.fullscreen {
-        window
-            .set_size(tauri::PhysicalSize::new(state.width, state.height))
-            .map_err(|err| err.to_string())?;
-        window
-            .set_position(tauri::PhysicalPosition::new(state.x, state.y))
-            .map_err(|err| err.to_string())?;
-    }
-
-    if state.maximized {
-        #[cfg(target_os = "windows")]
-        {
-            let raw_hwnd = window.hwnd().map_err(|err| err.to_string())?;
-            let hwnd = windows::Win32::Foundation::HWND(raw_hwnd.0 as _);
-            window::set_maximized_native(hwnd, true);
-        }
-        #[cfg(not(target_os = "windows"))]
-        window.maximize().map_err(|err| err.to_string())?;
-    }
-
-    if state.fullscreen {
-        window.set_fullscreen(true).map_err(|err| err.to_string())?;
-    }
-
-    log_window_snapshot(&window, &format!("{context}:after"));
-    Ok(())
-}
-
 pub(crate) fn log_window_snapshot<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
     context: &str,
@@ -718,15 +650,7 @@ fn spawn_app_exit_claimed<R: tauri::Runtime>(
 
     let app = app.clone();
     let _ = tauri::async_runtime::spawn(async move {
-        use tauri_plugin_window_state::AppHandleExt;
-
-        let flags = tauri_plugin_window_state::StateFlags::SIZE
-            | tauri_plugin_window_state::StateFlags::POSITION
-            | tauri_plugin_window_state::StateFlags::MAXIMIZED
-            | tauri_plugin_window_state::StateFlags::FULLSCREEN;
-        if let Err(err) = app.save_window_state(flags) {
-            log::error!("[DesktopRuntime][{context}] failed to save window state: {err}");
-        }
+        window_state::save_now(&app);
 
         #[cfg(feature = "native-screen-share")]
         {
@@ -809,6 +733,10 @@ pub fn run() {
             std::process::exit(1);
         }
     }
+
+    // Before any window exists.
+    #[cfg(target_os = "windows")]
+    set_windows_app_user_model_id();
 
     // Install the rustls ring crypto provider before anything touches TLS.
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -1003,30 +931,16 @@ pub fn run() {
             // (with a 10s delay) and the user-facing toast UI. The Rust commands
             // (fetch_update / install_update) are available for the Settings page.
 
-            // Persist window size & position across restarts
-            // Persist window size & position across restarts (but NOT visibility)
-            #[cfg(desktop)]
-            app.handle()
-                .plugin(
-                    tauri_plugin_window_state::Builder::default()
-                        .with_state_flags(
-                            tauri_plugin_window_state::StateFlags::SIZE
-                                | tauri_plugin_window_state::StateFlags::POSITION
-                                | tauri_plugin_window_state::StateFlags::MAXIMIZED
-                                | tauri_plugin_window_state::StateFlags::FULLSCREEN
-                        )
-                        .build()
-                )?;
-
+            // Restore the main window's size, position and maximized state
+            // while it is still hidden. See window_state.rs for why this does
+            // not use tauri-plugin-window-state.
             #[cfg(desktop)]
             {
                 let handle = app.handle().clone();
-                log_window_state_file(&handle, "setup:after-window-state-plugin");
-                if let Err(err) = restore_main_window_geometry_from_state(&handle, "setup:manual-restore") {
-                    log::warn!("[WindowState][setup:manual-restore] failed: {err}");
-                }
-                log_window_snapshot_by_label(&handle, "main", "setup:after-window-state-plugin");
-                log_window_snapshot_by_label(&handle, "updater", "setup:after-window-state-plugin");
+                log_window_state_file(&handle, "setup:before-restore");
+                window_state::restore(&handle);
+                log_window_snapshot_by_label(&handle, "main", "setup:after-restore");
+                log_window_snapshot_by_label(&handle, "updater", "setup:after-restore");
                 spawn_window_state_diagnostics(&handle, "startup");
             }
 
@@ -1100,6 +1014,13 @@ pub fn run() {
                     let hw = windows::Win32::Foundation::HWND(hwnd.0 as _);
                     window::set_dark_title_bar(hw, true);
                 }
+                // The default window icon is the .ico's 32 px entry, which the
+                // tray and its unread badge are drawn from. Give the window
+                // itself the 256 px art, so the taskbar and Alt+Tab scale down
+                // at 125% and above instead of up.
+                if let Err(err) = win.set_icon(tauri::include_image!("icons/128x128@2x.png")) {
+                    log::warn!("[Window] failed to set the 256px window icon: {err}");
+                }
             }
 
             #[cfg(target_os = "windows")]
@@ -1128,6 +1049,9 @@ pub fn run() {
             if matches!(window.label(), "main" | "updater") {
                 match event {
                     tauri::WindowEvent::Moved(position) => {
+                        if window.label() == "main" {
+                            window_state::schedule_save(window.app_handle());
+                        }
                         log::info!(
                             "[WindowState][event:moved] label={} pos={},{}",
                             window.label(),
@@ -1136,6 +1060,9 @@ pub fn run() {
                         );
                     }
                     tauri::WindowEvent::Resized(size) => {
+                        if window.label() == "main" {
+                            window_state::schedule_save(window.app_handle());
+                        }
                         log::info!(
                             "[WindowState][event:resized] label={} size={}x{}",
                             window.label(),
@@ -1199,6 +1126,9 @@ pub fn run() {
                     "[Window][close-requested] label=main close_to_tray={}",
                     close_to_tray
                 );
+                // Save before hiding: a tray-hidden app usually ends by
+                // updater install or Windows shutdown, which skip exit hooks.
+                window_state::save_now(window.app_handle());
                 if !close_to_tray {
                     // User disabled minimize-to-tray — actually quit the app
                     api.prevent_close();
@@ -1399,9 +1329,43 @@ fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
 mod windows_startup_registration_tests {
     use super::{
         build_windows_startup_command_for_executable, parse_windows_restart_helper_parent_pid,
-        versioned_windows_install_root_from_exe_path,
+        versioned_windows_install_root_from_exe_path, windows_root_launcher,
+        WINDOWS_APP_USER_MODEL_ID,
     };
     use std::path::Path;
+
+    #[test]
+    fn root_launcher_prefers_stub_then_update_exe() {
+        let root = std::env::temp_dir().join(format!("ralph-root-launcher-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        assert_eq!(windows_root_launcher(&root), None);
+
+        std::fs::write(root.join("Update.exe"), b"update").unwrap();
+        assert_eq!(
+            windows_root_launcher(&root),
+            Some((root.join("Update.exe"), true))
+        );
+
+        std::fs::write(root.join("RalphMeet.exe"), b"stub").unwrap();
+        let (launcher, is_update_launcher) = windows_root_launcher(&root).unwrap();
+        assert_eq!(launcher, root.join("RalphMeet.exe"));
+        assert!(!is_update_launcher);
+        assert_eq!(
+            build_windows_startup_command_for_executable(&launcher, is_update_launcher),
+            format!("\"{}\"", root.join("RalphMeet.exe").display())
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn app_user_model_id_matches_tauri_identifier() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(config["identifier"], WINDOWS_APP_USER_MODEL_ID);
+    }
 
     #[test]
     fn versioned_install_root_resolves_from_app_directory() {

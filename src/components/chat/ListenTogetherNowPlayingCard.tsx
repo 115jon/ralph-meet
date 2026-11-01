@@ -293,6 +293,9 @@ export function ListenTogetherNowPlayingCard({
   } = playback;
 
   const canControl = !!roomSlug && !!sfu && sfu.voiceGW.isReady !== false;
+  // A recovery in flight (another format, or YouTube's wall backing off) is
+  // not a failure yet: amber and neutral, not red.
+  const retrying = error?.code === "PLAYBACK_RETRYING";
   const [confirmClear, setConfirmClear] = useState(false);
   const pendingSeekRef = useRef<{
     entryId: string;
@@ -334,18 +337,20 @@ export function ListenTogetherNowPlayingCard({
     led: LedState;
     className: string;
     normal?: boolean;
-  } = error
-    ? { label: "Issue", led: "muted", className: "text-danger-ink" }
-    : !canControl
-      ? { label: "Not connected", led: "off", className: "text-ink-3" }
-      : isPaused
-        ? { label: "Paused", led: "off", className: "text-ink-3" }
-        : {
-            label: "In sync",
-            led: "talk",
-            className: "text-ink-3",
-            normal: true,
-          };
+  } = retrying
+    ? { label: "Retrying", led: "idle", className: "text-ink-3" }
+    : error
+      ? { label: "Issue", led: "muted", className: "text-danger-ink" }
+      : !canControl
+        ? { label: "Not connected", led: "off", className: "text-ink-3" }
+        : isPaused
+          ? { label: "Paused", led: "off", className: "text-ink-3" }
+          : {
+              label: "In sync",
+              led: "talk",
+              className: "text-ink-3",
+              normal: true,
+            };
 
   const artwork = currentEntry.track.artworkUrl ? (
     <img
@@ -704,8 +709,18 @@ export function ListenTogetherNowPlayingCard({
             </div>
           </div>
           {error ? (
-            <p className="flex items-start gap-1.5 text-ui-xs text-danger-ink">
-              <Icon name="warning" size="xs" className="mt-0.5 shrink-0" />
+            <p
+              role={retrying ? "status" : undefined}
+              className={cn(
+                "flex items-start gap-1.5 text-ui-xs",
+                retrying ? "text-ink-2" : "text-danger-ink",
+              )}
+            >
+              <Icon
+                name={retrying ? "clock" : "warning"}
+                size="xs"
+                className="mt-0.5 shrink-0"
+              />
               {describeListenTogetherError(error, "control playback")}
             </p>
           ) : null}
@@ -737,10 +752,19 @@ export function ListenTogetherNowPlayingCard({
 
         {error && (
           <div
-            role="alert"
-            className="flex items-start gap-2 rounded-md bg-danger-tint px-3 py-2 text-ui-sm text-danger-ink"
+            role={retrying ? "status" : "alert"}
+            className={cn(
+              "flex items-start gap-2 rounded-md px-3 py-2 text-ui-sm",
+              retrying
+                ? "bg-tint-1 text-ink-2"
+                : "bg-danger-tint text-danger-ink",
+            )}
           >
-            <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
+            <Icon
+              name={retrying ? "clock" : "warning"}
+              size="sm"
+              className="mt-0.5 shrink-0"
+            />
             {describeListenTogetherError(error, "control playback")}
           </div>
         )}

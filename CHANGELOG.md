@@ -1,5 +1,43 @@
 # Changelog
 
+## [3.6.0](https://github.com/115jon/ralph-meet/compare/v3.5.1...v3.6.0) (2026-11-01)
+
+
+### Features
+
+* **dev:** ✨ add sound audition fixture ([76736bf](https://github.com/115jon/ralph-meet/commit/76736bf2c9cacb59a4d8e7ccc9994fc8a980af8e))
+* **settings:** ✨ add experimental custom sounds card ([d95e10d](https://github.com/115jon/ralph-meet/commit/d95e10d7b20b13d43a8a83e2e5f0fe99663dc9b6))
+* **sounds:** ✨ play imported custom sounds and keep built-ins exact ([e7354b1](https://github.com/115jon/ralph-meet/commit/e7354b1ebc9b3fdcd406cdf8d7e789558ec95e1f))
+* **sounds:** gated sound engine with exact built-ins and experimental custom sounds ([88c9eea](https://github.com/115jon/ralph-meet/commit/88c9eea6eb7628f5f2dc0cd6776e1ad46843b930))
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 regenerate app icons edge to edge with all ico sizes ([9c2b26b](https://github.com/115jon/ralph-meet/commit/9c2b26bcc6758f93b0d20a4ab1a75b764ca9d166))
+* **desktop:** 🐛 save window geometry as it changes and clamp restore ([b7377c4](https://github.com/115jon/ralph-meet/commit/b7377c42add88855173e764e7226e614db985f6c))
+* **desktop:** persist window geometry and regenerate app icons ([ff1703e](https://github.com/115jon/ralph-meet/commit/ff1703e8d5ddd8076c933d8c3c27ca92434a4c41))
+* **dev:** 🐛 make the dev server port configurable with a busy-port hint ([d05af37](https://github.com/115jon/ralph-meet/commit/d05af37b61008176733263d6072795b6903288f3))
+* **dev:** make the dev server port configurable with a busy-port hint ([5e53cfe](https://github.com/115jon/ralph-meet/commit/5e53cfe823043c426cf4c929e8da0b0469c3e0eb))
+* **listen-together:** 🐛 recover playback by what the stream route says ([d35410b](https://github.com/115jon/ralph-meet/commit/d35410bdb2ce60b44307e94cefdaa515387da112))
+* **listen-together:** 🐛 refresh a refused stream once and name failures ([55cc747](https://github.com/115jon/ralph-meet/commit/55cc747872ce9541f17644dba6cc4ae1f3c4351f))
+* **listen-together:** 🐛 resolve youtube audio that plays to the end ([e4671fc](https://github.com/115jon/ralph-meet/commit/e4671fc967c71b9d4b5615a955a8e9aa5724e900))
+* **listen-together:** play YouTube audio that streams to the end ([3580faf](https://github.com/115jon/ralph-meet/commit/3580faf16ad86d27cf2d00cbfe5efd64d481a9e7))
+* **sounds:** 🐛 gate every ui sound on the master switch ([889dc8b](https://github.com/115jon/ralph-meet/commit/889dc8b687cd080f69d43413b365878fe15a2250))
+
+## [3.5.1](https://github.com/115jon/ralph-meet/compare/v3.5.0...v3.5.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 keep overlays below the title bar ([258dbcd](https://github.com/115jon/ralph-meet/commit/258dbcdbec14de9c574e21950e315d35947ecf8b))
+* **desktop:** keep overlays below the title bar ([e45a265](https://github.com/115jon/ralph-meet/commit/e45a2655437d2b89bcec3a5e3a4d763893ea0819))
+
+
+### Performance Improvements
+
+* **installer:** ⚡️ pack the desktop payload with lzma from one manifest ([2c5dd32](https://github.com/115jon/ralph-meet/commit/2c5dd32adc1cd4a914e95cccc0474ee4286177b8))
+* **installer:** pack the desktop payload with lzma from one manifest ([e5e55e7](https://github.com/115jon/ralph-meet/commit/e5e55e7ef199aa9a5330d37d2f7dea053fd69968))
+
 ## [3.5.0](https://github.com/115jon/ralph-meet/compare/v3.4.0...v3.5.0) (2026-11-01)
 
 

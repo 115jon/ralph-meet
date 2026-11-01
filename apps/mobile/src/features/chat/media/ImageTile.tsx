@@ -7,6 +7,7 @@ import { RemoteImage } from "@/ui";
 import type { ImageMedia } from "./classify";
 import { useMediaBox } from "./box";
 import { MediaFrame } from "./frame";
+import { useMessageGallery } from "./gallery";
 
 // URLs that failed, so a dead preview never draws an empty frame again.
 const failedUrls = new Set<string>();
@@ -22,6 +23,7 @@ export function ImageTile({
   maxWidth: number;
 }) {
   const active = useAppActive();
+  const gallery = useMessageGallery();
   const { box, onSize } = useMediaBox(image.url, image, maxWidth);
   const [failed, setFailed] = useState(() => failedUrls.has(image.url));
   if (failed) return null;
@@ -30,11 +32,10 @@ export function ImageTile({
       box={box}
       label={`Open image: ${image.label}`}
       onPress={() =>
-        openImage({
-          url: image.url,
-          label: image.label,
-          animated: image.animated,
-        })
+        openImage(
+          { url: image.url, label: image.label, animated: image.animated },
+          gallery,
+        )
       }
     >
       <RemoteImage

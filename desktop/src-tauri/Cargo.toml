@@ -1,6 +1,6 @@
 [package]
 name = "ralph-meet-desktop"
-version = "3.5.0"
+version = "3.6.0"
 description = "Ralph Meet — Real-Time Communication Desktop Client"
 authors = ["115jon"]
 license = "MIT"
@@ -43,7 +43,6 @@ tauri-plugin-deep-link = { git = "https://github.com/tauri-apps/plugins-workspac
 # every message (13-95% self-time across all threads). External links use tauri-plugin-opener.
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-notification = { path = "./vendor/tauri-plugin-notification" }
-tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }

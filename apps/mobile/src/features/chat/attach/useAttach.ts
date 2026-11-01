@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Keyboard } from "react-native";
-import { useSharedValue, type SharedValue } from "react-native-reanimated";
 
 import { ApiError } from "@/lib/api";
 
@@ -29,11 +27,6 @@ export interface AttachController {
   readonly notice: Notice | null;
   /** Uploading for a send: the field and the attach key wait. */
   readonly sending: boolean;
-  readonly trayOpen: boolean;
-  /** How far the tray stands above the screen's bottom edge, per frame. */
-  readonly lift: SharedValue<number>;
-  readonly openTray: () => void;
-  readonly closeTray: () => void;
   readonly add: (files: readonly PickedFile[]) => void;
   /** A recent-media tile: select it, or drop it if it was selected. */
   readonly toggle: (file: PickedFile) => void;
@@ -86,7 +79,8 @@ async function inPool<T, R>(
 }
 
 /**
- * The composer's attachments for one channel and the tray that picks them.
+ * The composer's attachments for one channel (the tray that picks them
+ * opens in the composer's slot, ../slot).
  * Files upload when the message is sent (Discord's order), so toggling tiles
  * in the tray never spends the upload rate limit; a failed one keeps its
  * chip with the reason, and retry or send tries it again.
@@ -95,8 +89,6 @@ export function useAttach(channelId: string): AttachController {
   const [items, setItems] = useState<readonly DraftItem[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [sending, setSending] = useState(false);
-  const [trayOpen, setTrayOpen] = useState(false);
-  const lift = useSharedValue(0);
 
   const itemsRef = useRef(items);
   const inflight = useRef(new Map<string, Promise<Attachment | null>>());
@@ -265,20 +257,10 @@ export function useAttach(channelId: string): AttachController {
     setNotice(null);
   }, []);
 
-  const openTray = useCallback(() => {
-    Keyboard.dismiss();
-    setTrayOpen(true);
-  }, []);
-  const closeTray = useCallback(() => setTrayOpen(false), []);
-
   return {
     items,
     notice,
     sending,
-    trayOpen,
-    lift,
-    openTray,
-    closeTray,
     add,
     toggle,
     remove,

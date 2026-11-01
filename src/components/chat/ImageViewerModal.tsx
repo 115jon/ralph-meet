@@ -550,7 +550,7 @@ export const ImageViewerModal: React.FC = () => {
             // quieter backdrop than a confirm, so the scrim is laid twice
             // (about .8 in dark): the chat behind stops competing with the
             // image while staying recognisable.
-            "group/viewer fixed inset-0 z-50 flex flex-col items-center justify-center bg-scrim outline-none before:pointer-events-none before:absolute before:inset-0 before:bg-scrim before:content-['']",
+            "group/viewer fixed inset-below-chrome z-50 flex flex-col items-center justify-center bg-scrim outline-none before:pointer-events-none before:absolute before:inset-0 before:bg-scrim before:content-['']",
             // Phones: the viewer takes the whole screen on solid ply-0. A
             // see-through scrim let the channel header and the sticky day
             // label read through the viewer's header bar.

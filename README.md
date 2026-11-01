@@ -83,6 +83,28 @@ live key from `[vars]`.
 Prod sign-in only works from an origin listed on the live Kova app (its
 `allowed_origins` and `redirect_uris`). Localhost is not listed by default.
 
+### Dev server ports
+
+`pnpm dev` listens on port 5173. If another process holds that port, the
+server stops and says so. Set `RALPH_DEV_PORT` to use another port:
+
+```powershell
+$env:RALPH_DEV_PORT = 5174; pnpm dev
+```
+
+```bash
+RALPH_DEV_PORT=5174 pnpm dev
+```
+
+The server never falls back to the next free port on its own, because the
+**Ralph Meet (dev)** Kova app only allows `http://localhost:5173`,
+`http://127.0.0.1:5173` and `http://localhost:1420`. On any other port the
+app loads, but sign-in fails until that origin is added to the Kova app.
+
+Desktop dev (`desktop/`, `pnpm run dev`) always uses port 1420, the `devUrl`
+in `desktop/src-tauri/tauri.conf.json`. Its `/api` and `/ws` proxy follows
+`RALPH_DEV_PORT`, so set the same value in both terminals.
+
 ### Deploying the web app
 
 Pushes to `main` deploy through the **Deploy web** workflow: build, a Worker

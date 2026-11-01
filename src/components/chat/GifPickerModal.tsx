@@ -25,6 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { readAppChromeTop } from "@/lib/app-chrome";
 import { apiGet } from "@/lib/api-client";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import klipyTextLightUrl from "@/assets/klipy-text-light.svg";
@@ -1328,7 +1329,8 @@ export default function GifPickerModal({
       const rect = markerRef.current.getBoundingClientRect();
       const pickerWidth = PICKER_WIDTH;
 
-      const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
+      const chromeTop = readAppChromeTop();
+      const MAX_HEIGHT = Math.min(600, window.innerHeight - 20 - chromeTop);
 
       const style: React.CSSProperties = {
         opacity: 1,
@@ -1344,7 +1346,10 @@ export default function GifPickerModal({
 
       // Prefer top placement if there's room, otherwise bottom
       style.bottom = window.innerHeight - rect.top + 8;
-      style.maxHeight = Math.min(MAX_HEIGHT, Math.max(100, rect.top - 16));
+      style.maxHeight = Math.min(
+        MAX_HEIGHT,
+        Math.max(100, rect.top - 16 - chromeTop),
+      );
 
       setDynamicStyle(style);
     };
@@ -1360,10 +1365,13 @@ export default function GifPickerModal({
   // Expanded is a centred workbench (modal, with the standard scrim), so it
   // may grow past the anchored-picker cap.
   const panelLayout = isExpanded
-    ? "left-1/2 top-1/2 h-[min(780px,calc(100dvh-48px))] max-h-[min(780px,calc(100dvh-48px))] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
+    ? "left-1/2 top-[calc(50%+var(--app-chrome-top,0px)/2)] h-[min(780px,calc(100dvh-var(--app-chrome-top,0px)-48px))] max-h-[min(780px,calc(100dvh-var(--app-chrome-top,0px)-48px))] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
     : markerRef
-      ? cn("h-[min(600px,calc(100dvh-24px))]", PICKER_WIDTH_CLASS)
-      : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(600px,calc(100dvh-112px))] w-[min(420px,calc(100vw-2rem))]";
+      ? cn(
+          "h-[min(600px,calc(100dvh-var(--app-chrome-top,0px)-24px))]",
+          PICKER_WIDTH_CLASS,
+        )
+      : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(600px,calc(100dvh-var(--app-chrome-top,0px)-112px))] w-[min(420px,calc(100vw-2rem))]";
 
   const searchRow =
     mode === "favorites" ? (

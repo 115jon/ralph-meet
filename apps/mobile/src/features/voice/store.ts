@@ -203,3 +203,14 @@ export function useIsSelf(id: string): boolean {
 export function useIsSpeaking(id: string): boolean {
   return useVoiceStore((s) => s.call?.speaking[id] === true);
 }
+
+/** Whether `userId` is speaking in the call we are in (any of their sessions). */
+export function useIsUserSpeaking(userId: string): boolean {
+  return useVoiceStore((s) => {
+    const call = s.call;
+    if (!call) return false;
+    return Object.values(call.participants).some(
+      (p) => p.userId === userId && call.speaking[p.id] === true,
+    );
+  });
+}

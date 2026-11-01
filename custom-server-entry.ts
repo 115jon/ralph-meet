@@ -6,6 +6,7 @@
 //   /api/gateway                    → MeetingRoom DO  (Global Main Gateway)
 //   /api/channels/:channelId/ws     → MeetingRoom DO  (Channel-scoped presence)
 //   /api/channels/:channelId/voice  → VoiceRoom DO    (Voice Gateway — media)
+//   /.well-known/assetlinks.json    → Android App Links statement
 //   Everything else                 → TanStack Start handler
 // ============================================================================
 
@@ -20,6 +21,7 @@ import {
   handleCorsPreflightIfNeeded,
 } from "./src/lib/api-helpers";
 import { buildHealthzPayload } from "./src/lib/healthz";
+import { handleAssetLinksRequest } from "./src/server/assetlinks";
 import { handleYtDlpRequest } from "./src/lib/ytdlp/http";
 import { syncYtDlpUpstream } from "./src/lib/ytdlp/upstream";
 import {
@@ -335,6 +337,9 @@ export default {
     if (url.pathname === "/api/healthz" && request.method === "GET") {
       return withDesktopCors(request, Response.json(buildHealthzPayload()));
     }
+
+    const assetLinks = handleAssetLinksRequest(request);
+    if (assetLinks) return assetLinks;
 
     // ── Rate limiting for API routes ─────────────────────────────────────
     // Skip WebSocket upgrades and attachment/background static asset reads.

@@ -112,7 +112,7 @@ export function SheetRow({
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => ({
-        height: 52,
+        minHeight: 52,
         flexDirection: "row",
         alignItems: "center",
         gap: 14,

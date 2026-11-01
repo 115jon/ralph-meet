@@ -5,6 +5,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { describeApiError } from "@/lib/api-errors";
+import { readAppChromeTop } from "@/lib/app-chrome";
 import { apiGet, apiPost } from "@/lib/api-client";
 import {
   MAX_AI_EMOJI_PROMPT_LENGTH,
@@ -674,7 +675,11 @@ export default function EmojiPicker({
       const pickerWidth = PICKER_WIDTH;
 
       // Calculate absolute safe max height
-      const MAX_HEIGHT = Math.min(PICKER_HEIGHT, window.innerHeight - 20);
+      const chromeTop = readAppChromeTop();
+      const MAX_HEIGHT = Math.min(
+        PICKER_HEIGHT,
+        window.innerHeight - 20 - chromeTop,
+      );
 
       const style: React.CSSProperties = {
         opacity: 1,
@@ -694,8 +699,8 @@ export default function EmojiPicker({
         left = Math.min(Math.max(10, left), maxLeft);
         style.left = left;
         style.top = Math.min(
-          Math.max(10, rect.top),
-          Math.max(10, window.innerHeight - MAX_HEIGHT - 10),
+          Math.max(10 + chromeTop, rect.top),
+          Math.max(10 + chromeTop, window.innerHeight - MAX_HEIGHT - 10),
         );
       } else {
         let left = rect.left;
@@ -715,7 +720,10 @@ export default function EmojiPicker({
         }
       } else if (placement !== "left" && placement !== "right") {
         style.bottom = window.innerHeight - rect.top + 8;
-        style.maxHeight = Math.min(MAX_HEIGHT, Math.max(100, rect.top - 16));
+        style.maxHeight = Math.min(
+          MAX_HEIGHT,
+          Math.max(100, rect.top - 16 - chromeTop),
+        );
       }
       setDynamicStyle(style);
     };
@@ -882,7 +890,7 @@ export default function EmojiPicker({
                   onOpenChange={(nextOpen) => !nextOpen && onClose()}
                   ariaLabel="Emoji picker"
                   className={cn(
-                    "h-[min(560px,calc(100dvh-24px))]",
+                    "h-[min(560px,calc(100dvh-var(--app-chrome-top,0px)-24px))]",
                     PICKER_WIDTH_CLASS,
                   )}
                   style={dynamicStyle}

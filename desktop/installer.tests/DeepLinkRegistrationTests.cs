@@ -1,4 +1,3 @@
-using System.IO;
 using Installer;
 using Xunit;
 
@@ -6,14 +5,20 @@ namespace Installer.Tests
 {
     public sealed class DeepLinkRegistrationTests
     {
-        [Fact]
-        public void BuildLaunchCommand_Points_Protocol_At_StableRootLauncher()
-        {
-            string launcherPath = Path.Combine(
-                "C:\\Users\\jon\\AppData\\Local\\RalphMeet",
-                "Update.exe");
+        private static readonly InstallRootLayout Layout = new InstallRootLayout("C:\\Users\\jon\\AppData\\Local\\RalphMeet");
 
-            string command = DeepLinkRegistration.BuildLaunchCommand(launcherPath);
+        [Fact]
+        public void BuildLaunchCommand_Points_Protocol_At_RootStub()
+        {
+            string command = DeepLinkRegistration.BuildLaunchCommand(Layout.RootStubPath);
+
+            Assert.Equal("\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\RalphMeet.exe\" \"%1\"", command);
+        }
+
+        [Fact]
+        public void BuildLaunchCommand_Keeps_UpdateExe_Fallback_Form()
+        {
+            string command = DeepLinkRegistration.BuildLaunchCommand(Layout.UpdateExePath, "--processStart RalphMeet.exe");
 
             Assert.Equal(
                 "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\Update.exe\" --processStart RalphMeet.exe \"%1\"",
@@ -21,25 +26,25 @@ namespace Installer.Tests
         }
 
         [Fact]
-        public void IsOwnedByLauncherCommand_Matches_Our_Installed_Command()
+        public void IsOwnedByInstall_Matches_Stub_And_Legacy_Commands()
         {
-            string launcherPath = Path.Combine(
-                "C:\\Users\\jon\\AppData\\Local\\RalphMeet",
-                "Update.exe");
-            string command = "\"C:\\USERS\\JON\\APPDATA\\LOCAL\\RALPHMEET\\UPDATE.EXE\" --processStart RalphMeet.exe \"%1\"";
-
-            Assert.True(DeepLinkRegistration.IsOwnedByLauncherCommand(command, launcherPath));
+            Assert.True(DeepLinkRegistration.IsOwnedByInstall(
+                "\"C:\\USERS\\JON\\APPDATA\\LOCAL\\RALPHMEET\\RALPHMEET.EXE\" \"%1\"",
+                Layout));
+            Assert.True(DeepLinkRegistration.IsOwnedByInstall(
+                "\"C:\\USERS\\JON\\APPDATA\\LOCAL\\RALPHMEET\\UPDATE.EXE\" --processStart RalphMeet.exe \"%1\"",
+                Layout));
         }
 
         [Fact]
-        public void IsOwnedByLauncherCommand_Rejects_Different_Command()
+        public void IsOwnedByInstall_Rejects_Different_Command()
         {
-            string launcherPath = Path.Combine(
-                "C:\\Users\\jon\\AppData\\Local\\RalphMeet",
-                "Update.exe");
-            string command = "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\Update.exe\" --processStart OtherApp.exe \"%1\"";
-
-            Assert.False(DeepLinkRegistration.IsOwnedByLauncherCommand(command, launcherPath));
+            Assert.False(DeepLinkRegistration.IsOwnedByInstall(
+                "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\Update.exe\" --processStart OtherApp.exe \"%1\"",
+                Layout));
+            Assert.False(DeepLinkRegistration.IsOwnedByInstall(
+                "\"C:\\Users\\jon\\AppData\\Local\\Other\\RalphMeet.exe\" \"%1\"",
+                Layout));
         }
     }
 }
