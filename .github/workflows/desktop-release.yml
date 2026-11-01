@@ -197,6 +197,15 @@ jobs:
           Set-Location desktop
           cargo tauri build --config src-tauri/tauri.deployed.conf.json --features cef,native-screen-share,game-capture-hook --no-bundle
 
+      # The root RalphMeet.exe launcher stub (docs/desktop/launch.md). A small
+      # standalone crate with no Tauri or CEF dependencies; it builds in seconds.
+      - name: Build root launcher
+        shell: pwsh
+        run: |
+          cargo build --release --manifest-path desktop/launcher/Cargo.toml
+          $stub = Get-Item "desktop/launcher/target/release/ralph-meet-launcher.exe"
+          Write-Host "==> ralph-meet-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
+
       - name: Save desktop Rust target cache
         if: steps.restore-desktop-target.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

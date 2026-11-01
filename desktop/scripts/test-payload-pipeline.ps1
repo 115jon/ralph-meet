@@ -27,7 +27,8 @@ if ($Dotnet) { $extra.Dotnet = $Dotnet }
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("RalphMeetPipelineTest_" + [guid]::NewGuid().ToString("N"))
 $cef = Join-Path $work "cef"
 $release = Join-Path $work "release"
-New-Item -ItemType Directory -Force -Path $cef, $release | Out-Null
+$launcher = Join-Path $work "launcher"
+New-Item -ItemType Directory -Force -Path $cef, $release, $launcher | Out-Null
 
 function New-FakeFile([string]$Path, [int]$Bytes) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
@@ -37,7 +38,7 @@ function New-FakeFile([string]$Path, [int]$Bytes) {
 }
 
 try {
-    $roots = @{ cef = $cef; release = $release }
+    $roots = @{ cef = $cef; release = $release; launcher = $launcher }
     foreach ($entry in $manifest.entries) {
         if (-not $roots.ContainsKey($entry.source)) { continue }
         $path = Join-Path $roots[$entry.source] $entry.from
@@ -51,7 +52,7 @@ try {
     }
 
     $out = Join-Path $work "payload.rmpk"
-    & $stageScript -CefDir $cef -ReleaseDir $release -ResourcesDir $resourcesDir -StageDir (Join-Path $work "stage") `
+    & $stageScript -CefDir $cef -ReleaseDir $release -LauncherDir $launcher -ResourcesDir $resourcesDir -StageDir (Join-Path $work "stage") `
         -OutputPath $out -PackerArgs @("--block-mb", "1") @extra
     if (-not (Test-Path -LiteralPath $out)) { throw "Payload was not produced" }
 
@@ -64,13 +65,15 @@ try {
             throw "Packed payload is missing obs-capture\$doc"
         }
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $extracted "RalphMeet.exe"))) { throw "Packed payload is missing RalphMeet.exe" }
+    foreach ($exe in "RalphMeet.exe", "RalphMeetLauncher.exe") {
+        if (-not (Test-Path -LiteralPath (Join-Path $extracted $exe))) { throw "Packed payload is missing $exe" }
+    }
 
     # Negative case: a missing manifest file must fail staging.
     Remove-Item -LiteralPath (Join-Path $cef "libEGL.dll")
     $failed = $false
     try {
-        & $stageScript -CefDir $cef -ReleaseDir $release -ResourcesDir $resourcesDir -StageDir (Join-Path $work "stage2") -NoPack @extra
+        & $stageScript -CefDir $cef -ReleaseDir $release -LauncherDir $launcher -ResourcesDir $resourcesDir -StageDir (Join-Path $work "stage2") -NoPack @extra
     } catch {
         $failed = $_.Exception.Message -match "libEGL.dll"
     }
