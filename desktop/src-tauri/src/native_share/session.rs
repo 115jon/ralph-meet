@@ -12,9 +12,7 @@
 //! * A session can end itself (source closed, connection lost) through its
 //!   [`SessionEnder`], which only acts while that session is still current.
 
-#[cfg(all(feature = "game-capture-hook", windows))]
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
@@ -384,8 +382,10 @@ pub(crate) struct ShareSession {
     wgc: Arc<StdMutex<Option<WgcCapture>>>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     hook: Option<super::capture::HookCaptureSession>,
-    /// The DLL capture-rate cap the hook thread pushes into `hook_info`.
     #[cfg(all(feature = "game-capture-hook", windows))]
+    vulkan_layer: Option<crate::game_capture::vulkan_layer::LayerLease>,
+    /// The share's frame interval: the WGC pacer reads it per frame, and the
+    /// hook thread pushes it into `hook_info` as the DLL's capture-rate cap.
     frame_interval_ns: Arc<AtomicU64>,
     /// Audio / watchdog / diagnostics threads (shared so the deferred audio
     /// start can register its thread later).
@@ -406,6 +406,8 @@ struct BlockingParts {
     wgc: Option<WgcCapture>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     hook: Option<super::capture::HookCaptureSession>,
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    vulkan_layer: Option<crate::game_capture::vulkan_layer::LayerLease>,
     encoder: Option<MftEncoderWorker>,
     threads: Vec<std::thread::JoinHandle<()>>,
 }
@@ -413,7 +415,7 @@ struct BlockingParts {
 impl BlockingParts {
     fn is_empty(&self) -> bool {
         #[cfg(all(feature = "game-capture-hook", windows))]
-        let hook_empty = self.hook.is_none();
+        let hook_empty = self.hook.is_none() && self.vulkan_layer.is_none();
         #[cfg(not(all(feature = "game-capture-hook", windows)))]
         let hook_empty = true;
         self.wgc.is_none() && hook_empty && self.encoder.is_none() && self.threads.is_empty()
@@ -427,6 +429,10 @@ impl BlockingParts {
         if let Some(mut hook) = self.hook.take() {
             hook.stop();
         }
+        // After the hook stops: unregisters the Vulkan layer if this was the
+        // last hook share.
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        drop(self.vulkan_layer.take());
         if let Some(mut encoder) = self.encoder.take() {
             encoder.stop();
         }
@@ -450,6 +456,7 @@ impl ShareSession {
             #[cfg(all(feature = "game-capture-hook", windows))]
             hook: None,
             #[cfg(all(feature = "game-capture-hook", windows))]
+            vulkan_layer: None,
             frame_interval_ns: Arc::new(AtomicU64::new(0)),
             threads: Arc::new(StdMutex::new(Vec::new())),
             tasks: Vec::new(),
@@ -645,6 +652,8 @@ impl ShareSession {
             })
         };
         let frame_gate = Arc::new(AtomicBool::new(true));
+        self.frame_interval_ns
+            .store(frame_interval_ns(params.fps), Ordering::Relaxed);
         let start_hook = selection.start_hook();
         let mut wgc_preroll = start_hook && selection.source_kind == SourceKind::Window;
         log::info!(
@@ -667,6 +676,7 @@ impl ShareSession {
                 frames.clone(),
                 Arc::clone(&self.stats),
                 Arc::clone(&frame_gate),
+                Arc::clone(&self.frame_interval_ns),
                 Some(Arc::clone(&on_closed)),
             ) {
                 Ok(capture) => {
@@ -692,6 +702,7 @@ impl ShareSession {
             {
                 use crate::game_capture::CapturePolicy;
                 let mut selection = selection;
+                self.vulkan_layer = selection.vulkan_layer.take();
                 let hook = selection
                     .hook
                     .take()
@@ -707,8 +718,6 @@ impl ShareSession {
                     first_frame_timeout.as_millis(),
                     wgc_preroll,
                 );
-                self.frame_interval_ns
-                    .store(frame_interval_ns(params.fps), Ordering::Relaxed);
                 self.hook = Some(super::capture::spawn_hook_capture_session(
                     super::capture::HookThreadContext {
                         hook,
@@ -746,6 +755,7 @@ impl ShareSession {
                 frames,
                 Arc::clone(&self.stats),
                 frame_gate,
+                Arc::clone(&self.frame_interval_ns),
                 Some(on_closed),
             )?;
             *self.wgc.lock().unwrap_or_else(|p| p.into_inner()) = Some(capture);
@@ -826,7 +836,8 @@ impl ShareSession {
     }
 
     /// Apply a quality preset in place: the encoder refits the source aspect
-    /// ratio inside the new box; the hook's DLL capture rate follows the fps.
+    /// ratio inside the new box; the WGC pacer and the hook's DLL capture rate
+    /// follow the fps.
     pub(crate) fn update_quality(&self, quality: &str) -> Result<(u32, u32, u32, u32), String> {
         let encoder = self
             .encoder
@@ -841,9 +852,11 @@ impl ShareSession {
                 bitrate,
             })
             .map_err(|e| format!("encoder reconfigure failed: {e}"))?;
-        #[cfg(all(feature = "game-capture-hook", windows))]
-        self.frame_interval_ns
-            .store(frame_interval_ns(fps), Ordering::Relaxed);
+        let interval = frame_interval_ns(fps);
+        self.frame_interval_ns.store(interval, Ordering::Relaxed);
+        if let Some(wgc) = self.wgc.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+            wgc.set_frame_interval(interval);
+        }
         Ok((max_width, max_height, fps, bitrate))
     }
 
@@ -925,6 +938,8 @@ impl ShareSession {
             wgc: self.wgc.lock().unwrap_or_else(|p| p.into_inner()).take(),
             #[cfg(all(feature = "game-capture-hook", windows))]
             hook: self.hook.take(),
+            #[cfg(all(feature = "game-capture-hook", windows))]
+            vulkan_layer: self.vulkan_layer.take(),
             encoder: self.encoder.take(),
             threads: std::mem::take(&mut *self.threads.lock().unwrap_or_else(|p| p.into_inner())),
         }
@@ -1026,7 +1041,6 @@ impl Drop for PreviewLoopback {
     }
 }
 
-#[cfg(all(feature = "game-capture-hook", windows))]
 fn frame_interval_ns(fps: u32) -> u64 {
     if fps > 0 {
         1_000_000_000u64 / fps as u64
@@ -1077,7 +1091,7 @@ fn spawn_diagnostics(
             while started.elapsed() < Duration::from_secs(20) {
                 let snap = stats.snapshot();
                 log::info!(
-                    "[NativeShareDiag] t={}ms source={} pc={} mode={} backend={} encoder={} fallback={} unavailable={} foreign_hook={} negotiated={:?}x{:?}@{:?} captured={} encoded={} encode_errors={} samples={} audio_samples={} write_errors={} dropped={}",
+                    "[NativeShareDiag] t={}ms source={} pc={} mode={} backend={} encoder={} fallback={} unavailable={} foreign_hook={} negotiated={:?}x{:?}@{:?} captured={} encoded={} encode_errors={} samples={} audio_samples={} write_errors={} dropped={} paced={}",
                     started.elapsed().as_millis(),
                     source_id,
                     pc.connection_state(),
@@ -1097,6 +1111,7 @@ fn spawn_diagnostics(
                     stats.audio_samples_written.load(Ordering::Relaxed),
                     stats.write_errors.load(Ordering::Relaxed),
                     stats.dropped_frames.load(Ordering::Relaxed),
+                    stats.paced_frames.load(Ordering::Relaxed),
                 );
                 ticks += 1;
                 let interval = if ticks < 12 { 250 } else { 500 };
