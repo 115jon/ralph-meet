@@ -661,7 +661,17 @@ describe("MeetingRoom lifecycle", () => {
           (message) => typeof (message.d as { seq?: unknown }).seq === "number",
         )
         .map((message) => (message.d as { seq: number }).seq),
-    ).toEqual([1, 2, 3, 4]);
+      // 5: the capable session resuming first is re-announced in full.
+    ).toEqual([1, 2, 3, 4, 5]);
+    expect(
+      legacyMessages.find(
+        (message) =>
+          (message.d as { seq?: number }).seq === 5 &&
+          (message.d as { action?: string }).action === "update",
+      )?.d,
+    ).toMatchObject({
+      participant: { id: capableReady.participant_id, name: "Test User" },
+    });
 
     sender.close();
     resumedCapable.close();
@@ -3483,6 +3493,119 @@ describe("MeetingRoom lifecycle", () => {
 
     intentionalObserver.close();
     abruptObserver.close();
+  });
+
+  it("keeps a screen sharer held for resume in rosters and re-announces it on resume", async () => {
+    type Participant = { id?: string; name?: string; self_stream?: boolean };
+    const participantOf = (message: { d: unknown }) =>
+      (message.d as { participant?: Participant; action?: string })
+        .participant ?? {};
+    const roomName = crypto.randomUUID();
+
+    const sharer = await openMeetingSocket(roomName, "sharer-user");
+    const sharerId = (await identifyMeetingSocket(sharer, { name: "Sharer" }))
+      .participant_id;
+    const viewer = await openMeetingSocket(roomName, "viewer-user");
+    const viewerId = (await identifyMeetingSocket(viewer, { name: "Viewer" }))
+      .participant_id;
+
+    // The sharer starts a screen share; the viewer sees self_stream.
+    const shared = nextMessageWithOpcodeMatching(
+      viewer,
+      15,
+      (message) =>
+        participantOf(message).id === sharerId &&
+        participantOf(message).self_stream === true,
+    );
+    sharer.send(JSON.stringify({ op: 15, d: { self_stream: true } }));
+    await shared;
+
+    // The sharer's room socket drops (a phone in the background, a network
+    // change): no leave goes out and its voice tracks stay.
+    sharer.close();
+    await waitForResumableSession(roomName, sharerId);
+
+    // A viewer joining meanwhile gets the held sharer in its Ready roster.
+    const late = await openMeetingSocket(roomName, "late-viewer");
+    const lateReady = await identifyMeetingSocket(late, { name: "Late" });
+    expect(lateReady.participants).toContainEqual(
+      expect.objectContaining({ id: sharerId, self_stream: true }),
+    );
+
+    // A viewer that resumes meanwhile replaces its participant list with the
+    // Resumed roster: the held sharer must be in it, or the viewer drops the
+    // sharer and its screen until it rejoins.
+    viewer.close();
+    await waitForResumableSession(roomName, viewerId);
+    const viewerAgain = await openMeetingSocket(roomName, "viewer-user");
+    const viewerResumed = nextMessageWithOpcode(viewerAgain, 9);
+    viewerAgain.send(
+      JSON.stringify({ op: 7, d: { session_id: viewerId, seq_ack: 0 } }),
+    );
+    expect(
+      (
+        (await viewerResumed).d as {
+          participants: Array<Record<string, unknown>>;
+        }
+      ).participants,
+    ).toContainEqual(
+      expect.objectContaining({ id: sharerId, self_stream: true }),
+    );
+
+    // A credential refresh answers with a Resumed roster too.
+    const refreshed = nextMessageWithOpcode(late, 9);
+    late.send(JSON.stringify({ op: 40, d: {} }));
+    expect(
+      ((await refreshed).d as { participants: Array<Record<string, unknown>> })
+        .participants,
+    ).toContainEqual(
+      expect.objectContaining({ id: sharerId, self_stream: true }),
+    );
+
+    // When the sharer resumes, the others hear it again in full (an update
+    // with its profile), so a client that dropped it brings it back.
+    const reannounced = nextMessageWithOpcodeMatching(
+      late,
+      15,
+      (message) =>
+        (message.d as { action?: string }).action === "update" &&
+        participantOf(message).id === sharerId,
+    );
+    const sharerAgain = await openMeetingSocket(roomName, "sharer-user");
+    const sharerResumed = nextMessageWithOpcode(sharerAgain, 9);
+    sharerAgain.send(
+      JSON.stringify({ op: 7, d: { session_id: sharerId, seq_ack: 0 } }),
+    );
+    await sharerResumed;
+    expect(participantOf(await reannounced)).toMatchObject({
+      id: sharerId,
+      name: "Sharer",
+      self_stream: true,
+    });
+
+    sharerAgain.close();
+    viewerAgain.close();
+    late.close();
+  });
+
+  it("leaves a session held past the resume grace out of the roster", async () => {
+    const roomName = crypto.randomUUID();
+    const gone = await openMeetingSocket(roomName, "gone-user");
+    const goneId = (await identifyMeetingSocket(gone)).participant_id;
+    gone.close();
+    await waitForResumableSession(roomName, goneId);
+    await runInDurableObject(meetingRoom(roomName), (instance) => {
+      (
+        instance as unknown as { resumableSessionExpiry: Map<string, number> }
+      ).resumableSessionExpiry.set(goneId, Date.now() - 121_000);
+    });
+
+    const late = await openMeetingSocket(roomName, "late-user");
+    const ready = await identifyMeetingSocket(late);
+    expect(
+      ready.participants.map((participant) => participant.id),
+    ).not.toContain(goneId);
+    late.close();
   });
 });
 
