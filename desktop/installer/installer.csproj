@@ -7,6 +7,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>RalphMeetSetup</AssemblyName>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <Company>115jon</Company>
     <Product>Ralph Meet Setup</Product>
     <Version>3.9.0</Version>
@@ -14,6 +15,9 @@
 
   <ItemGroup>
     <Resource Include="Assets\icon.ico"/>
+    <!-- The app's fonts, static Latin instances (SIL OFL 1.1, see Assets/Fonts/OFL.txt), compiled
+         into the exe's resources: nothing ships beside it. -->
+    <Resource Include="Assets\Fonts\*.ttf"/>
     <EmbeddedResource Include="Assets\payload.rmpk" Condition="Exists('Assets\payload.rmpk')"/>
     <!-- LZMA SDK + RMPK container, shared with the payload packer (see docs/desktop/packaging.md). -->
     <Compile Include="..\packaging\Shared\**\*.cs" LinkBase="Shared"/>

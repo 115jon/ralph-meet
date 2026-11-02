@@ -161,6 +161,50 @@ namespace Installer.Tests
             Assert.Equal(Path.GetFullPath(locked), reported);
         }
 
+        [Fact]
+        public void Extraction_ReportsMonotonicProgressFromZeroToTheTotal()
+        {
+            string source = CreateTree(new Dictionary<string, byte[]>
+            {
+                { "a.bin", Random(11, TinyBlock * 3 + 17) },
+                { "b/c.bin", Compressible(12, TinyBlock * 2 + 5) },
+                { "empty.bin", new byte[0] },
+            });
+            byte[] payload = Pack(source, EnumerateRelative(source));
+            long expectedTotal = TinyBlock * 5 + 22;
+
+            // Other tests extract in parallel; keep only this thread's reports (Extract reports
+            // from the thread that calls it).
+            int thread = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            List<KeyValuePair<long, long>> reports = new List<KeyValuePair<long, long>>();
+            Action<long, long> listener = (done, total) =>
+            {
+                if (System.Threading.Thread.CurrentThread.ManagedThreadId == thread)
+                {
+                    reports.Add(new KeyValuePair<long, long>(done, total));
+                }
+            };
+
+            InstallProgress.PayloadProgress += listener;
+            try
+            {
+                Extract(payload, Path.Combine(_root, "progress"), 2);
+            }
+            finally
+            {
+                InstallProgress.PayloadProgress -= listener;
+            }
+
+            Assert.NotEmpty(reports);
+            Assert.All(reports, r => Assert.Equal(expectedTotal, r.Value));
+            Assert.Equal(0, reports[0].Key);
+            Assert.Equal(expectedTotal, reports[reports.Count - 1].Key);
+            for (int i = 1; i < reports.Count; i++)
+            {
+                Assert.True(reports[i].Key >= reports[i - 1].Key, "progress went backwards");
+            }
+        }
+
         private PayloadExtractionResult Extract(byte[] payload, string install, int parallel)
         {
             return PayloadExtractor.Extract(new MemoryStream(payload), install, parallel, 0);

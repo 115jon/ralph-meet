@@ -75,6 +75,9 @@ It fails listing every missing file. The packer can also be run by hand (`dotnet
 Then `dotnet build desktop/installer/installer.csproj -c Release` embeds the payload if `payload.rmpk` exists.
 The `payload.rmpk` file is git-ignored.
 
+The installer window (its look, embedded fonts, progress and how to preview each state) is described in
+[installer-ui.md](installer-ui.md). It adds no libraries: the exe is still the only file that ships.
+
 ## How CI checks it
 
 `desktop-validation.yml` (on changes under `desktop/`, including the installer, packaging and scripts):

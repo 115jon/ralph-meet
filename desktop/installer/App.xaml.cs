@@ -14,6 +14,13 @@ namespace Installer
 
         protected override void OnStartup(StartupEventArgs e)
         {
+#if DEBUG
+            // --preview / --capture: show the window's states without installing or logging.
+            if (Ui.Preview.TryStart(this, e.Args))
+            {
+                return;
+            }
+#endif
             InstallerLogger.Initialize(e.Args);
             InstallerLogger.Info("App startup entered.");
 
@@ -79,6 +86,7 @@ namespace Installer
                 if (!isSilent)
                 {
                     base.OnStartup(e);
+                    new MainWindow().Show();
                     return;
                 }
 
@@ -99,7 +107,7 @@ namespace Installer
             {
                 try
                 {
-                    InstallerLogic.RunInstallationAsync(!IsNoLaunch).GetAwaiter().GetResult();
+                    InstallerLogic.RunInstallationAsync(!IsNoLaunch, relaunchOnFailure: true).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
@@ -111,6 +119,7 @@ namespace Installer
             }
 
             base.OnStartup(e);
+            new MainWindow().Show();
         }
 
         private static string GetCurrentProcessPath()

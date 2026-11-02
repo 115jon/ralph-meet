@@ -33,7 +33,12 @@ namespace Installer
 
         private static readonly string[] ShortcutFileNames = { "RalphMeet.lnk", "Ralph Meet.lnk" };
 
-        public static async Task RunInstallationAsync(bool launchApplication = true)
+        /// <param name="relaunchOnFailure">
+        /// Start the installed version again if this install fails. For the silent updater only:
+        /// it closed the app and nobody sees the error. The interactive window shows the error
+        /// and offers Try again, which would close a relaunched app again.
+        /// </param>
+        public static async Task RunInstallationAsync(bool launchApplication = true, bool relaunchOnFailure = false)
         {
             await Task.Run(() =>
             {
@@ -58,7 +63,7 @@ namespace Installer
                 {
                     // Nothing destructive ran before activation, so the version that was
                     // installed is intact. The updater closed it; bring it back.
-                    if (launchApplication)
+                    if (launchApplication && relaunchOnFailure)
                     {
                         TryRelaunchInstalledVersion(layout);
                     }

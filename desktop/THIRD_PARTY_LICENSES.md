@@ -99,3 +99,15 @@ Pavlov (`CS/7zip/{Common,Compress/LZ,Compress/LZMA,Compress/RangeCoder}` and
 placed in the **public domain** by its author; no license obligations apply, and
 this entry records provenance. The container format that wraps it is documented
 in [`docs/desktop/packaging.md`](../docs/desktop/packaging.md).
+
+## Installer fonts and glyphs — SIL OFL 1.1 and MIT
+
+The installer window (`desktop/installer`) embeds static, Latin-subset instances of the app's
+fonts as WPF resources inside `RalphMeetSetup.exe`: Bricolage Grotesque (Copyright 2022 The
+Bricolage Grotesque Project Authors), Geist (Copyright 2024 The Geist Project Authors) and
+Martian Mono (Copyright 2020 The Martian Mono Project Authors), all under the **SIL Open Font
+License 1.1**. They are cut from the Fontsource packages by
+`desktop/scripts/build-installer-fonts.py` and renamed (`RM ...`) as modified versions; each
+file keeps its copyright and license notice in its name table, and the full license text is in
+`desktop/installer/Assets/Fonts/OFL.txt`. The window's icons are path data from
+**Phosphor Icons** (MIT, Copyright Phosphor Icons), the same glyphs the app uses.
