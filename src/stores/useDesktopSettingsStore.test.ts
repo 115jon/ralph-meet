@@ -30,6 +30,7 @@ const rustDefaults: DesktopSettings = {
   closeToTray: true,
   hardwareAcceleration: true,
   desktopNotifications: true,
+  gameCaptureHook: true,
 };
 
 function settingsOf(state: DesktopSettings): DesktopSettings {
@@ -39,6 +40,7 @@ function settingsOf(state: DesktopSettings): DesktopSettings {
     closeToTray: state.closeToTray,
     hardwareAcceleration: state.hardwareAcceleration,
     desktopNotifications: state.desktopNotifications,
+    gameCaptureHook: state.gameCaptureHook,
   };
 }
 
@@ -81,6 +83,7 @@ describe("desktop settings owned by Rust", () => {
       closeToTray: false,
       hardwareAcceleration: false,
       desktopNotifications: false,
+      gameCaptureHook: true,
     };
     invokeMock.mockImplementation(async (cmd) =>
       cmd === "get_desktop_settings"
