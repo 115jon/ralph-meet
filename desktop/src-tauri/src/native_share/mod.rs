@@ -28,6 +28,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 
+#[cfg(all(feature = "game-capture-hook", windows))]
+pub use capture::hook_layer_wanted;
 pub use capture::should_notify_hook_unavailable;
 pub use quality::{parse_quality_params, QualityParams};
 pub use session::ShareEndedPayload;

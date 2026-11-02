@@ -711,13 +711,15 @@ pub fn run() {
             tray::setup_tray(app)?;
 
             // ── Vulkan capture layer ─────────────────────────────────────
-            // An implicit Vulkan layer loads into every Vulkan process started
-            // while it is registered, so it is registered only while a hook
-            // share runs (game_capture::vulkan_layer::LayerLease). Remove any
-            // registration left by an older version, a dev build, or a run
-            // that crashed before unregistering.
+            // Like OBS, keep the (dormant) OBS-signed Vulkan layer registered
+            // while "Game capture hook" is on, so a Vulkan game started
+            // before a share can still be captured. This also moves the
+            // registration to the pinned version and removes entries left by
+            // older versions and the old unsigned layer.
             #[cfg(all(feature = "game-capture-hook", windows))]
-            game_capture::vulkan_layer::remove_registrations();
+            game_capture::vulkan_layer::spawn_sync(native_share::hook_layer_wanted(
+                settings.settings.game_capture_hook,
+            ));
 
             // Register deep-link schemes with the OS so `ralphmeet://` URLs
             // are routed to this executable. On Windows this writes the
