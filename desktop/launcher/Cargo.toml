@@ -1,6 +1,6 @@
 [package]
 name = "ralph-meet-launcher"
-version = "3.7.0"
+version = "3.8.0"
 description = "RalphMeet root launcher: starts the active app-<version> RalphMeet.exe"
 authors = ["115jon"]
 license = "MIT"
