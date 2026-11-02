@@ -53,8 +53,10 @@ all of it is off: values are set at once and the segment is hidden.
 
 ## Window
 
-- Per-monitor v2 DPI awareness (`app.manifest`, which also keeps `asInvoker`; without a
-  manifest Windows' installer detection would ask to elevate a file named "Setup").
+- Per-monitor v2 DPI awareness (`app.manifest`, which also restates `asInvoker`, the compiler's
+  default).
+- Closing the window (Alt+F4, the system menu, the taskbar) is ignored while an install or
+  uninstall is running, so it can't stop halfway.
 - No layered window (`AllowsTransparency` is off), so WPF renders it on the GPU directly.
 - Keyboard: Tab moves through the keys (footer, then the log plate, then the title bar keys),
   Enter is the primary key, Esc the secondary. Every key and the progress bar has an automation

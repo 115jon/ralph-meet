@@ -2,8 +2,9 @@
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.0.0.0" name="RalphMeetSetup.app"/>
 
-  <!-- A per-user installer: never elevate. Without this, Windows' installer detection would
-       prompt for admin because the file name contains "Setup". -->
+  <!-- A per-user installer: never elevate. The compiler's default manifest already says asInvoker
+       (so the "Setup" file name never triggered installer detection); this file restates it and
+       adds per-monitor DPI awareness. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">

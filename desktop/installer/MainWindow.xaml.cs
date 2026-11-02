@@ -95,6 +95,22 @@ namespace Installer
             _phase = phase;
         }
 
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            // Alt+F4, the system menu or the taskbar must not stop an install or uninstall halfway.
+            if (IsBusy(_phase))
+            {
+                e.Cancel = true;
+                return;
+            }
+            base.OnClosing(e);
+        }
+
+        private static bool IsBusy(Phase phase)
+        {
+            return phase == Phase.Preparing || phase == Phase.Unpacking || phase == Phase.SettingUp || phase == Phase.Uninstalling;
+        }
+
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
@@ -245,7 +261,7 @@ namespace Installer
 
             bool install = phase <= Phase.InstallFailed;
             bool failed = phase == Phase.InstallFailed || phase == Phase.UninstallFailed;
-            bool busy = phase == Phase.Preparing || phase == Phase.Unpacking || phase == Phase.SettingUp || phase == Phase.Uninstalling;
+            bool busy = IsBusy(phase);
 
             Title = install ? "Ralph Meet Setup" : "Ralph Meet Uninstall";
             WindowLabel.Text = install ? "RALPH MEET SETUP" : "RALPH MEET UNINSTALL";
@@ -257,6 +273,8 @@ namespace Installer
             Mark.Pending = busy;
             Mark.Width = Mark.Height = failed ? 64 : 96;
             StatusScroll.MaxHeight = failed ? 66 : 88;
+            // A long error can overflow the capped box; let the keyboard reach and scroll it.
+            StatusScroll.Focusable = failed;
 
             // Only a state that needs the person shows the close key; Alt+F4 is unchanged.
             CloseKey.Visibility = busy || phase == Phase.Installed || phase == Phase.Uninstalled ? Visibility.Collapsed : Visibility.Visible;
