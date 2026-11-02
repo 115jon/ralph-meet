@@ -36,12 +36,13 @@ pub struct RequiredMaterial {
     pub role: &'static str,
 }
 
-/// The complete set of `Owned_Capture_Component` required materials (design —
-/// *required materials*; Requirements 11.1–11.3, 12.3): the 64- and 32-bit
-/// `Forked_Hook_DLL` payloads, the four `Owned_Injector` artifacts (forked
-/// `inject-helper` + `get-graphics-offsets`, both bitnesses), the GPLv2 license
-/// text, the OBS Project attribution, and the source-availability/written-offer
-/// material.
+/// The complete set of required game-capture materials (Requirements
+/// 11.1–11.3, 12.3): the six OBS-signed release files (graphics-hook,
+/// inject-helper and get-graphics-offsets, both bitnesses, under `obs-signed/`,
+/// fetched by `desktop/scripts/fetch-obs-signed-hook.ps1` and pinned by
+/// `desktop/packaging/obs-signed-hook.lock.json`), the GPLv2 license text, the
+/// OBS Project attribution, and the source-availability/written-offer material.
+/// The unsigned fork build is optional (development only).
 ///
 /// The six artifact names mirror the `GRAPHICS_HOOK64` / `GRAPHICS_HOOK32` /
 /// `INJECT_HELPER64` / `INJECT_HELPER32` / `GET_GRAPHICS_OFFSETS64` /
@@ -51,36 +52,36 @@ pub struct RequiredMaterial {
 /// 11.2 (attribution + pinned upstream identifier), and 11.3 (source offer).
 pub const REQUIRED_MATERIALS: &[RequiredMaterial] = &[
     RequiredMaterial {
-        name: "graphics-hook64.dll",
-        role: "64-bit Forked_Hook_DLL payload (GRAPHICS_HOOK64)",
+        name: "obs-signed/graphics-hook64.dll",
+        role: "64-bit OBS-signed graphics-hook (desktop/packaging/obs-signed-hook.lock.json)",
     },
     RequiredMaterial {
-        name: "graphics-hook32.dll",
-        role: "32-bit Forked_Hook_DLL payload (GRAPHICS_HOOK32)",
+        name: "obs-signed/graphics-hook32.dll",
+        role: "32-bit OBS-signed graphics-hook",
     },
     RequiredMaterial {
-        name: "inject-helper64.exe",
-        role: "64-bit Owned_Injector — inject-helper (INJECT_HELPER64)",
+        name: "obs-signed/inject-helper64.exe",
+        role: "64-bit OBS-signed inject-helper",
     },
     RequiredMaterial {
-        name: "inject-helper32.exe",
-        role: "32-bit Owned_Injector — inject-helper (INJECT_HELPER32)",
+        name: "obs-signed/inject-helper32.exe",
+        role: "32-bit OBS-signed inject-helper",
     },
     RequiredMaterial {
-        name: "get-graphics-offsets64.exe",
-        role: "64-bit Owned_Injector — get-graphics-offsets (GET_GRAPHICS_OFFSETS64)",
+        name: "obs-signed/get-graphics-offsets64.exe",
+        role: "64-bit OBS-signed get-graphics-offsets",
     },
     RequiredMaterial {
-        name: "get-graphics-offsets32.exe",
-        role: "32-bit Owned_Injector — get-graphics-offsets (GET_GRAPHICS_OFFSETS32)",
+        name: "obs-signed/get-graphics-offsets32.exe",
+        role: "32-bit OBS-signed get-graphics-offsets",
     },
     RequiredMaterial {
         name: "LICENSE-GPLv2.txt",
-        role: "GPLv2 license text for the Forked_Hook_DLL/Owned_Injector (Req 11.1)",
+        role: "GPLv2 license text for the OBS capture binaries (Req 11.1)",
     },
     RequiredMaterial {
         name: "ATTRIBUTION.md",
-        role: "OBS Project attribution + pinned win-capture identifier (Req 11.2)",
+        role: "OBS Project attribution + pinned OBS release (Req 11.2)",
     },
     RequiredMaterial {
         name: "SOURCE-OFFER.md",

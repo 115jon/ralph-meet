@@ -61,37 +61,17 @@ const LAYER_JSON_32: &str = "obs-vulkan32.json";
 /// `C:\ProgramData\obs-studio-hook\obs-vulkan64.json`) declare
 /// `VK_LAYER_OBS_HOOK` and are never touched.
 const OWN_LAYER_NAME: &str = "VK_LAYER_RALPH_MEET_HOOK";
-/// The folder our manifests ship in, next to the binary.
+/// The folder the fork's manifests ship in, next to the binary.
 const OWN_ARTIFACT_DIR: &str = "obs-capture";
+/// The parent of the staged signed-hook folders (`obs-<ver>-<sha8>`), see
+/// `signed_hook.rs`.
+const STAGED_PARENT_DIR: &str = "capture-hook";
 
 /// Both registry views, each with the manifest its loader bitness reads.
 const VIEWS: [(&str, &str, REG_SAM_FLAGS); 2] = [
     (LAYER_JSON_64, "graphics-hook64.dll", KEY_WOW64_64KEY),
     (LAYER_JSON_32, "graphics-hook32.dll", KEY_WOW64_32KEY),
 ];
-
-/// Resolve the directory that holds the bundled capture artifacts
-/// (`obs-capture/` next to the running executable), mirroring how
-/// [`crate::game_capture::inject::ObsArtifacts`] discovers the DLLs/helpers.
-fn obs_capture_dir() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?.join(OWN_ARTIFACT_DIR);
-    if dir.is_dir() {
-        Some(dir)
-    } else {
-        None
-    }
-}
-
-/// The absolute path to a layer manifest if it exists next to the binary.
-fn layer_manifest_path(file: &str) -> Option<PathBuf> {
-    let path = obs_capture_dir()?.join(file);
-    if path.is_file() {
-        Some(path)
-    } else {
-        None
-    }
-}
 
 /// Whether a manifest's `library_path` resolves to a DLL that exists, so we
 /// don't register a manifest whose DLL is missing (which would make the Vulkan
@@ -105,9 +85,10 @@ fn manifest_dll_present(manifest: &Path, dll_name: &str) -> bool {
 }
 
 /// Whether a registered manifest path is one this app wrote: an
-/// `obs-vulkan{64,32}.json` inside an `obs-capture` folder. That is the layout
-/// of every install (`RalphMeet\app-<ver>\obs-capture\`) and every dev build
-/// (`target\<profile>\obs-capture\`). OBS's own manifests live in
+/// `obs-vulkan{64,32}.json` inside an `obs-capture` folder (every install,
+/// `RalphMeet\app-<ver>\obs-capture\`, and every dev build,
+/// `target\<profile>\obs-capture\`), or inside a staged signed-hook folder
+/// (`capture-hook\obs-<ver>-<sha8>\`). OBS's own manifests live in
 /// `obs-studio-hook` or OBS's install folder and never match.
 ///
 /// `manifest_text` is the manifest's contents when it still exists. A manifest
@@ -119,11 +100,17 @@ fn is_own_registration(path: &str, manifest_text: Option<&str>) -> bool {
     let file_matches = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
         n.eq_ignore_ascii_case(LAYER_JSON_64) || n.eq_ignore_ascii_case(LAYER_JSON_32)
     });
-    let dir_matches = path
-        .parent()
-        .and_then(|d| d.file_name())
-        .and_then(|n| n.to_str())
-        .is_some_and(|n| n.eq_ignore_ascii_case(OWN_ARTIFACT_DIR));
+    let name_of = |p: Option<&Path>| {
+        p.and_then(|d| d.file_name())
+            .and_then(|n| n.to_str())
+            .map(str::to_ascii_lowercase)
+    };
+    let parent = path.parent();
+    let dir_matches = match (name_of(parent), name_of(parent.and_then(Path::parent))) {
+        (Some(dir), _) if dir == OWN_ARTIFACT_DIR => true,
+        (Some(dir), Some(grand)) => dir.starts_with("obs-") && grand == STAGED_PARENT_DIR,
+        _ => false,
+    };
     if !(file_matches && dir_matches) {
         return false;
     }
@@ -250,17 +237,19 @@ fn delete_value(key: HKEY, name: &str) -> Result<(), String> {
 /// Best-effort: each (manifest, registry-view) pair is registered
 /// independently; a missing manifest/DLL or a registry error for one is logged
 /// and skipped. Returns the number of manifests registered.
-fn ensure_registered() -> usize {
+fn ensure_registered(dir: &Path) -> usize {
     let mut registered = 0usize;
 
     for (json, dll, view) in VIEWS {
-        let Some(manifest) = layer_manifest_path(json) else {
+        let manifest = dir.join(json);
+        if !manifest.is_file() {
             log::debug!(
-                "[VulkanLayer] manifest {json} not found next to the binary; \
-                 skipping registration (Vulkan capture unavailable for that bitness)"
+                "[VulkanLayer] manifest {json} not found in {}; skipping registration \
+                 (Vulkan capture unavailable for that bitness)",
+                dir.display()
             );
             continue;
-        };
+        }
         if !manifest_dll_present(&manifest, dll) {
             log::warn!(
                 "[VulkanLayer] manifest {json} present but its {dll} is missing; \
@@ -290,6 +279,29 @@ fn ensure_registered() -> usize {
 /// registry views: the running build's, older install folders', and dev build
 /// folders' (see [`is_own_registration`]). Registrations by OBS or anyone else
 /// are kept. Returns the number of values removed.
+/// Read-only: the registered manifest paths in both views, split into this
+/// app's own and everyone else's (what [`remove_registrations`] would keep).
+pub fn list_registrations() -> (Vec<String>, Vec<String>) {
+    let (mut own, mut others) = (Vec::new(), Vec::new());
+    for (_, _, view) in VIEWS {
+        let Ok(Some(key)) = open_implicit_layers_key(view, false) else {
+            continue;
+        };
+        for name in value_names(key) {
+            let text = std::fs::read_to_string(&name).ok();
+            if is_own_registration(&name, text.as_deref()) {
+                own.push(name);
+            } else {
+                others.push(name);
+            }
+        }
+        unsafe {
+            let _ = RegCloseKey(key);
+        }
+    }
+    (own, others)
+}
+
 pub fn remove_registrations() -> usize {
     let mut removed = 0usize;
     let mut kept_foreign = 0usize;
@@ -336,10 +348,12 @@ static LEASES: Mutex<usize> = Mutex::new(0);
 pub struct LayerLease(());
 
 impl LayerLease {
-    pub fn acquire() -> Self {
+    /// `dir` holds the `obs-vulkan{64,32}.json` manifests for the hook build
+    /// in use (the staged signed set, or the fork next to the binary).
+    pub fn acquire(dir: &Path) -> Self {
         let mut leases = LEASES.lock().unwrap_or_else(|p| p.into_inner());
         if *leases == 0 {
-            let registered = ensure_registered();
+            let registered = ensure_registered(dir);
             log::info!(
                 "[VulkanLayer] hook share started: {registered} manifest(s) registered \
                  (Vulkan games launched from now until the share ends load the layer)"
@@ -366,6 +380,11 @@ impl Drop for LayerLease {
 /// Vulkan target without it cannot be hooked, so injecting would only put a
 /// DLL in the game for nothing.
 pub fn process_has_hook_module(pid: u32) -> bool {
+    process_hook_module_path(pid).is_some()
+}
+
+/// The full path of the `graphics-hook{64,32}.dll` loaded in `pid`, if any.
+pub fn process_hook_module_path(pid: u32) -> Option<PathBuf> {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W, TH32CS_SNAPMODULE,
@@ -375,9 +394,9 @@ pub fn process_has_hook_module(pid: u32) -> bool {
     let Ok(snapshot) =
         (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) })
     else {
-        return false;
+        return None;
     };
-    let mut found = false;
+    let mut found = None;
     let mut entry = MODULEENTRY32W {
         dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
         ..Default::default()
@@ -393,7 +412,14 @@ pub fn process_has_hook_module(pid: u32) -> bool {
         if module.eq_ignore_ascii_case("graphics-hook64.dll")
             || module.eq_ignore_ascii_case("graphics-hook32.dll")
         {
-            found = true;
+            let len = entry
+                .szExePath
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(entry.szExePath.len());
+            found = Some(PathBuf::from(String::from_utf16_lossy(
+                &entry.szExePath[..len],
+            )));
             break;
         }
         entry = MODULEENTRY32W {
@@ -451,6 +477,8 @@ mod tests {
             r"C:\Users\u\AppData\Local\RalphMeet\obs-capture\obs-vulkan64.json",
             r"F:\dev\ralph-meet\desktop\src-tauri\target\debug\obs-capture\obs-vulkan64.json",
             r"F:\dev\ralph-meet\desktop\src-tauri\target\profiling\OBS-CAPTURE\OBS-VULKAN32.JSON",
+            r"C:\Users\u\AppData\Local\RalphMeet\capture-hook\obs-33.0.1-c37f4412\obs-vulkan64.json",
+            r"F:\Temp\capture-hook\obs-32.1.2-12345678\obs-vulkan32.json",
         ] {
             assert!(is_own_registration(path, None), "{path}");
         }
@@ -463,6 +491,8 @@ mod tests {
             r"C:\Program Files\obs-studio\data\obs-plugins\win-capture\obs-vulkan64.json",
             r"C:\Program Files (x86)\Steam\SteamOverlayVulkanLayer64.json",
             r"C:\x\obs-capture\other-layer.json",
+            r"C:\x\capture-hook\obs-vulkan64.json",
+            r"C:\x\elsewhere\obs-33.0.1-c37f4412\obs-vulkan64.json",
         ] {
             assert!(!is_own_registration(path, None), "{path}");
         }

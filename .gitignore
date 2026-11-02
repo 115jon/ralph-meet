@@ -130,6 +130,8 @@ desktop/packaging/**/obj/
 desktop/src-tauri/resources/obs-capture/*.dll
 desktop/src-tauri/resources/obs-capture/*.exe
 desktop/src-tauri/resources/obs-capture/*.pdb
+# The OBS-signed release files, fetched by desktop/scripts/fetch-obs-signed-hook.ps1.
+desktop/src-tauri/resources/obs-capture/obs-signed/
 !desktop/src-tauri/resources/obs-capture/LICENSE-GPLv2.txt
 !desktop/src-tauri/resources/obs-capture/ATTRIBUTION.md
 !desktop/src-tauri/resources/obs-capture/SOURCE-OFFER.md

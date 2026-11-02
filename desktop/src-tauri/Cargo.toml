@@ -78,6 +78,12 @@ windows = { version = "0.61.3", features = [
     # Used by the `game-capture-hook` feature (game_capture/inject.rs).
     "Win32_System_SystemInformation",
     "Win32_Security",
+    # Authenticode check of the OBS-signed capture hook before each injection
+    # (game_capture/signed_hook.rs): WinVerifyTrust + signer certificate.
+    "Win32_Security_WinTrust",
+    "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
     "Win32_System_Memory",
     # Named-pipe server to drain the injected graphics-hook DLL's hlog
     # diagnostics into desktop.log (game_capture/obs_ipc.rs HookLogPipe).
@@ -109,6 +115,8 @@ windows = { version = "0.61.3", features = [
 windows-core = "0.61.2"
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 bytes = { version = "1", optional = true }
+# SHA-256 of the pinned OBS-signed capture hook files (game_capture/signed_hook.rs).
+sha2 = { version = "0.10", optional = true }
 bytemuck = { version = "1", optional = true }
 shiguredo_opus = { version = "2026.1.0", default-features = false, features = ["source-build"], optional = true }
 wasapi = { version = "0.23.0", optional = true }
@@ -149,7 +157,7 @@ native-screen-share = ["webrtc", "bytes", "bytemuck", "shiguredo_opus", "wasapi"
 # Bitness detection + process creation rely on the Win32 features enabled above
 # (`Win32_System_SystemInformation` for `IsWow64Process2`/`IMAGE_FILE_MACHINE`,
 # and `Win32_System_Threading` + `Win32_Security` for `CreateProcessW`).
-game-capture-hook = ["native-screen-share"]
+game-capture-hook = ["native-screen-share", "sha2"]
 
 # ── Dev-only dependencies (tests/benches; not part of runtime deps) ──────
 [dev-dependencies]

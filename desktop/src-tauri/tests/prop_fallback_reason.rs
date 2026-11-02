@@ -254,6 +254,12 @@ proptest! {
                 | FallbackReason::TargetExited
                 | FallbackReason::HookStoppedMidSession
                 | FallbackReason::HookNoFirstFrame
+                | FallbackReason::HookNotLoaded
+                | FallbackReason::HookVersionUnsupported
+                // Safety denials the generator never produces.
+                | FallbackReason::HookArtifactUnverified
+                | FallbackReason::HookInUse
+                | FallbackReason::HookAttemptSpent
                 | FallbackReason::None => {
                     prop_assert!(
                         false,

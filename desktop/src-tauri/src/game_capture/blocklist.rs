@@ -65,10 +65,14 @@ fn normalize_exe(name: &str) -> String {
 /// protected by, a kernel/user-mode anti-cheat that can ban users or crash a
 /// hooked game (Requirement 10.1).
 ///
-/// Seeded with the three major anti-cheats in use today:
-/// - **Easy Anti-Cheat (EAC / EOS)** — the service and protected-launch shims.
-/// - **BattlEye** — the `BEService` / `BEClient` service and client executables.
-/// - **Riot Vanguard** — the `vgc` / `vgtray` components and VALORANT itself.
+/// Seeded with:
+/// - **Easy Anti-Cheat (EAC / EOS)** and **BattlEye**: the services and
+///   protected-launch shims (never the shared window itself). The games they
+///   protect are recognized by install markers instead and get the OBS-signed
+///   hook ([`anti_cheat_marker_near`], `hook_policy`).
+/// - **Kernel anti-cheats** (Riot Vanguard, FACEIT) and **VAC**: the protected
+///   games themselves, so they always stay on WGC. VAC blocks injection into
+///   CS2 unless it is launched untrusted, and FACEIT runs over CS2.
 ///
 /// This is the *data* behind [`default_blocklist`]; keeping it as a flat slice
 /// makes the set trivial to grow as new protected titles are identified.
@@ -89,6 +93,12 @@ const DEFAULT_BLOCKLIST_EXECUTABLES: &[&str] = &[
     "vgtray.exe",
     "valorant.exe",
     "VALORANT-Win64-Shipping.exe",
+    // League of Legends runs under Vanguard too.
+    "League of Legends.exe",
+    // ── FACEIT client and VAC (CS2) ────────────────────────────────────────
+    "faceit.exe",
+    "FACEITClient.exe",
+    "cs2.exe",
 ];
 
 /// The default `Process_Blocklist` of anti-cheat-protected executables for
