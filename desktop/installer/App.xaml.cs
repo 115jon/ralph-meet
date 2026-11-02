@@ -107,7 +107,7 @@ namespace Installer
             {
                 try
                 {
-                    InstallerLogic.RunInstallationAsync(!IsNoLaunch).GetAwaiter().GetResult();
+                    InstallerLogic.RunInstallationAsync(!IsNoLaunch, relaunchOnFailure: true).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
