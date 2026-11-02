@@ -38,6 +38,7 @@ import {
   formatResolution,
   graphicsBackendLabel,
   hasLiveCaptureActivity,
+  hookSourceLabel,
   usToMs,
 } from "./streamingStats";
 
@@ -205,7 +206,7 @@ function StreamingStatsContent({
         "flex items-center gap-2 text-ui-xs font-medium",
         className,
       )}
-      title={`Capture ${mode.text}${backend ? ` (${backend})` : ""} · encoder ${data.encoder_backend}`}
+      title={`Capture ${mode.text}${backend ? ` (${backend})` : ""}${hookSourceLabel(data)} · encoder ${data.encoder_backend}`}
     >
       {/* Capture mode (Req 8.2) */}
       <span className={cn("font-semibold", toneClass)}>{mode.text}</span>

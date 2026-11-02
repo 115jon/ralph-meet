@@ -84,6 +84,24 @@ function HardwareAccelerationRow() {
   );
 }
 
+function GameCaptureHookRow() {
+  const gameCaptureHook = useDesktopSettingsStore((s) => s.gameCaptureHook);
+  const updateSettings = useDesktopSettingsStore((s) => s.updateSettings);
+
+  return (
+    <SettingsRow id="game-capture-hook" layout="inline">
+      {(ids) => (
+        <SettingsSwitch
+          checked={gameCaptureHook}
+          onChange={() => updateSettings({ gameCaptureHook: !gameCaptureHook })}
+          labelledBy={ids.labelId}
+          describedBy={ids.descId}
+        />
+      )}
+    </SettingsRow>
+  );
+}
+
 function UpdatesRow() {
   const {
     status,
@@ -226,6 +244,7 @@ export default function DesktopPanel() {
       </SettingsCard>
       <SettingsCard id="performance">
         <HardwareAccelerationRow />
+        <GameCaptureHookRow />
       </SettingsCard>
       <SettingsCard id="updates">
         <UpdatesRow />

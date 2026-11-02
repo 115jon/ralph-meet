@@ -53,6 +53,10 @@ pub mod obs_ipc;
 #[cfg(feature = "game-capture-hook")]
 pub mod blocklist;
 
+/// Which hook build a share injects (OBS-signed by default). Pure.
+#[cfg(feature = "game-capture-hook")]
+pub mod hook_policy;
+
 /// Implicit-Vulkan-layer registration (Vulkan present interception activation).
 /// Vulkan cannot be Detours-hooked like DX/GL; OBS's capture is an implicit
 /// Vulkan layer the loader only activates when its JSON manifest is registered
@@ -61,6 +65,10 @@ pub mod blocklist;
 /// loads our `graphics-hook` layer. Windows + `game-capture-hook` only.
 #[cfg(all(feature = "game-capture-hook", windows))]
 pub mod vulkan_layer;
+
+/// The pinned OBS-signed capture hook: lock, runtime verification, staging.
+#[cfg(all(feature = "game-capture-hook", windows))]
+pub mod signed_hook;
 
 /// The active capture strategy for a native share session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -322,6 +330,19 @@ pub enum FallbackReason {
     /// Injection was reported, but the hook never delivered a first frame
     /// before the initial watchdog (typically an anti-cheat refusing the DLL).
     HookNoFirstFrame,
+    /// The helper reported success, but the hook's objects never appeared in
+    /// the target: the DLL did not load (or did not initialize) there.
+    HookNotLoaded,
+    /// A signed hook file failed its hash, signature, or signer check.
+    HookArtifactUnverified,
+    /// The hook reported a `hook_ver_major` this host does not speak.
+    HookVersionUnsupported,
+    /// Another host (OBS Studio, for instance) is already capturing the
+    /// target with the stock hook.
+    HookInUse,
+    /// A hook attempt on this anti-cheat-protected game already failed this
+    /// run; it is not retried until the app restarts.
+    HookAttemptSpent,
 }
 
 impl FallbackReason {
@@ -343,6 +364,11 @@ impl FallbackReason {
             FallbackReason::TargetExited => "target_exited",
             FallbackReason::HookStoppedMidSession => "hook_stopped_mid_session",
             FallbackReason::HookNoFirstFrame => "hook_no_first_frame",
+            FallbackReason::HookNotLoaded => "hook_not_loaded",
+            FallbackReason::HookArtifactUnverified => "hook_artifact_unverified",
+            FallbackReason::HookVersionUnsupported => "hook_version_unsupported",
+            FallbackReason::HookInUse => "hook_in_use",
+            FallbackReason::HookAttemptSpent => "hook_attempt_spent",
         }
     }
 }
@@ -543,6 +569,20 @@ pub fn initial_hook_first_frame_timeout_ms(policy: CapturePolicy) -> u64 {
     match policy {
         CapturePolicy::WgcEnabled => 1_500,
         CapturePolicy::HookExclusive => 8_000,
+    }
+}
+
+/// [`initial_hook_first_frame_timeout_ms`] for a given hook build. The stock
+/// OBS DLL commits to the first API whose hook installs (D3D9 before DXGI) and
+/// re-attempts only every 4 s (`capture_loop`, `n % 100`), so a DX11/12 game
+/// that also loads `d3d9.dll` can take 4-5 s to deliver. It gets at least 6 s;
+/// the WGC pre-roll keeps the viewer fed meanwhile.
+#[cfg(feature = "game-capture-hook")]
+pub fn hook_first_frame_timeout_ms(policy: CapturePolicy, flavor: obs_ipc::HookFlavor) -> u64 {
+    let base = initial_hook_first_frame_timeout_ms(policy);
+    match flavor {
+        obs_ipc::HookFlavor::Own => base,
+        obs_ipc::HookFlavor::ObsSigned => base.max(6_000),
     }
 }
 

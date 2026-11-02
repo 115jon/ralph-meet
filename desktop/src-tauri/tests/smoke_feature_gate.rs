@@ -314,10 +314,10 @@ fn feature_off_build_excludes_hook_modules() {
 /// of these is absent from `resources/obs-capture/` when `game-capture-hook` is
 /// enabled (Req 12.6).
 const OBS_CAPTURE_REQUIRED_FILES: &[&str] = &[
-    "graphics-hook64.dll",
-    "graphics-hook32.dll",
-    "inject-helper64.exe",
-    "inject-helper32.exe",
+    "obs-signed/graphics-hook64.dll",
+    "obs-signed/graphics-hook32.dll",
+    "obs-signed/inject-helper64.exe",
+    "obs-signed/inject-helper32.exe",
     "LICENSE-GPLv2.txt",
     "ATTRIBUTION.md",
 ];
@@ -349,6 +349,14 @@ fn unique_temp_dir(tag: &str) -> PathBuf {
     dir
 }
 
+/// Write a stub file, creating its parent (some materials sit in `obs-signed/`).
+fn write_stub(path: &std::path::Path) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("create stub dir");
+    }
+    std::fs::write(path, b"stub").expect("write stub artifact");
+}
+
 /// Req 12.6 (guard logic) — when every required artifact is present the guard
 /// passes (no missing files); when any single required artifact is absent the
 /// guard reports it missing (and so would fail the build). This exercises the
@@ -359,7 +367,7 @@ fn packaging_guard_fails_when_a_required_artifact_is_absent() {
     // (a) All required files present → guard passes (empty missing set).
     let full = unique_temp_dir("full");
     for name in OBS_CAPTURE_REQUIRED_FILES {
-        std::fs::write(full.join(name), b"stub").expect("write stub artifact");
+        write_stub(&full.join(name));
     }
     assert!(
         missing_required_files(&full, OBS_CAPTURE_REQUIRED_FILES).is_empty(),
@@ -372,7 +380,7 @@ fn packaging_guard_fails_when_a_required_artifact_is_absent() {
         let dir = unique_temp_dir("absent");
         for name in OBS_CAPTURE_REQUIRED_FILES {
             if name != absent {
-                std::fs::write(dir.join(name), b"stub").expect("write stub artifact");
+                write_stub(&dir.join(name));
             }
         }
         let missing = missing_required_files(&dir, OBS_CAPTURE_REQUIRED_FILES);
@@ -387,14 +395,13 @@ fn packaging_guard_fails_when_a_required_artifact_is_absent() {
     let _ = std::fs::remove_dir_all(&full);
 }
 
-/// Documents the current repo state for Req 12.6: the GPLv2 binary artifacts are
-/// intentionally **not** committed, so a real `game-capture-hook` build fails the
-/// packaging guard until a maintainer drops them in. The committed license +
-/// attribution text files are present. This pins the "fails by design" state so
-/// it is visible and intentional (and re-evaluates automatically once a
-/// maintainer adds the real OBS binaries).
+/// Documents the repo state for Req 12.6: the OBS-signed binaries are
+/// intentionally **not** committed (git-ignored, fetched by
+/// `desktop/scripts/fetch-obs-signed-hook.ps1`), so a `game-capture-hook` build
+/// fails the packaging guard until they are fetched. The committed license and
+/// attribution files are present.
 #[test]
-fn obs_capture_binary_artifacts_are_absent_by_design_but_license_present() {
+fn obs_capture_binary_artifacts_are_not_committed_but_license_present() {
     let dir = manifest_dir().join(OBS_CAPTURE_RESOURCE_DIR);
     assert!(
         dir.is_dir(),
@@ -402,21 +409,14 @@ fn obs_capture_binary_artifacts_are_absent_by_design_but_license_present() {
         dir.display()
     );
 
-    // GPLv2 binaries are not committed → guard would fail a feature-on build.
-    let missing = missing_required_files(&dir, OBS_CAPTURE_REQUIRED_FILES);
-    let binaries = [
-        "graphics-hook64.dll",
-        "graphics-hook32.dll",
-        "inject-helper64.exe",
-        "inject-helper32.exe",
-    ];
-    for bin in binaries {
-        assert!(
-            missing.iter().any(|m| m == bin),
-            "GPLv2 binary {bin:?} should be absent by design (Req 12.6 fails-build state); \
-             if a maintainer added the real OBS artifacts this assertion intentionally flips"
-        );
-    }
+    let gitignore =
+        std::fs::read_to_string(manifest_dir().join("../../.gitignore")).expect("repo .gitignore");
+    assert!(
+        gitignore
+            .lines()
+            .any(|l| l.trim() == "desktop/src-tauri/resources/obs-capture/obs-signed/"),
+        "the fetched OBS-signed binaries must stay git-ignored (Req 12.6)"
+    );
 
     // License + attribution text are committed and present.
     for committed in ["LICENSE-GPLv2.txt", "ATTRIBUTION.md"] {

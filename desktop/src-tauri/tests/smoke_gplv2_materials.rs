@@ -59,23 +59,26 @@ mod packaging_guard;
 
 use packaging_guard::REQUIRED_MATERIALS;
 
-/// The pinned upstream identifier the attribution MUST carry (Req 11.2). Kept in
-/// sync with `ATTRIBUTION.md`, `SOURCE-OFFER.md`, `README.md`, and
-/// `desktop/THIRD_PARTY_LICENSES.md`.
-const PINNED_VERSION: &str = "32.1.2";
-const PINNED_COMMIT: &str = "fb4d98b";
+/// The pinned OBS release the attribution MUST carry (Req 11.2). Kept in sync
+/// with `desktop/packaging/obs-signed-hook.lock.json`, `ATTRIBUTION.md`,
+/// `SOURCE-OFFER.md`, and `desktop/THIRD_PARTY_LICENSES.md`.
+const PINNED_VERSION: &str = "33.0.1";
+const PINNED_COMMIT: &str = "65c320b";
 
-/// The two `Forked_Hook_DLL` payloads that MUST ship next to the GPLv2 materials
+/// The two OBS-signed hook payloads that MUST ship next to the GPLv2 materials
 /// (Req 1.2 — exactly one 64-bit and one 32-bit).
-const FORKED_HOOK_DLLS: &[&str] = &["graphics-hook64.dll", "graphics-hook32.dll"];
+const FORKED_HOOK_DLLS: &[&str] = &[
+    "obs-signed/graphics-hook64.dll",
+    "obs-signed/graphics-hook32.dll",
+];
 
-/// The `Owned_Injector` binaries that round out the component shipped alongside
-/// the GPLv2 materials (Req 1.1).
+/// The OBS-signed helper binaries shipped alongside the GPLv2 materials
+/// (Req 1.1).
 const OWNED_INJECTOR_BINARIES: &[&str] = &[
-    "inject-helper64.exe",
-    "inject-helper32.exe",
-    "get-graphics-offsets64.exe",
-    "get-graphics-offsets32.exe",
+    "obs-signed/inject-helper64.exe",
+    "obs-signed/inject-helper32.exe",
+    "obs-signed/get-graphics-offsets64.exe",
+    "obs-signed/get-graphics-offsets32.exe",
 ];
 
 /// The three committed GPLv2 documents and the content each MUST contain.
@@ -321,7 +324,7 @@ fn present_forked_hook_dlls_sit_in_the_same_dir_as_the_gplv2_materials() {
     if present == 0 {
         eprintln!(
             "[skip] no Forked_Hook_DLL payload present under {} — the GPLv2 binaries are \
-             git-ignored and built on demand (`desktop/scripts/build-capture-fork.ps1`). The \
+             git-ignored and fetched on demand (`desktop/scripts/fetch-obs-signed-hook.ps1`). The \
              GPLv2 materials contract is asserted by the other tests; skipping the \
              binary-co-location check (Req 1.2).",
             dir.display()

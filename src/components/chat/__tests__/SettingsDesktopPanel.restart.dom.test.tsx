@@ -40,6 +40,7 @@ vi.mock("@/stores/useDesktopSettingsStore", () => {
     closeToTray: true,
     hardwareAcceleration: true,
     desktopNotifications: true,
+    gameCaptureHook: true,
     updateSettings: mocks.updateSettings,
     saveSettings: mocks.saveSettings,
   };

@@ -12,10 +12,10 @@ Each entry names a `source` and a path to copy (`to` defaults to `from`):
 | `cef`       | `CEF_PATH` (`D:\cef` in CI)        | the 17 CEF root files and the whole `locales` directory               |
 | `release`   | `desktop/src-tauri/target/release` | `ralph-meet-desktop.exe` (as `RalphMeet.exe`) and `obs-capture/*`     |
 | `launcher`  | `desktop/launcher/target/release`  | `ralph-meet-launcher.exe` (as `RalphMeetLauncher.exe`), the root stub |
-| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents in `obs-capture/`                                 |
+| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents and the OBS-signed files in `obs-capture/`        |
 
-`obs-capture/` holds the six OBS hook/injector binaries, the two Vulkan layer JSONs, and `LICENSE-GPLv2.txt`,
-`ATTRIBUTION.md` and `SOURCE-OFFER.md`. Nothing is dropped for size: every CEF locale and rendering DLL ships.
+`obs-capture/obs-signed/` holds the six unmodified OBS-signed hook/injector binaries (pinned by
+`obs-signed-hook.lock.json`, fetched by `fetch-obs-signed-hook.ps1`, never re-signed); `obs-capture/` holds `LICENSE-GPLv2.txt`, `ATTRIBUTION.md` and `SOURCE-OFFER.md`. Nothing is dropped for size: every CEF locale and rendering DLL ships.
 
 The installer copies `RalphMeetLauncher.exe` to the install root as `RalphMeet.exe` on every activation; see
 [launch.md](launch.md).

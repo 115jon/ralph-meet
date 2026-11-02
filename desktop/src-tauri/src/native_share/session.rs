@@ -707,12 +707,15 @@ impl ShareSession {
                     .hook
                     .take()
                     .ok_or("start_hook implies a prepared hook")?;
-                let first_frame_timeout = Duration::from_millis(
-                    crate::game_capture::initial_hook_first_frame_timeout_ms(selection.policy),
-                );
+                let first_frame_timeout =
+                    Duration::from_millis(crate::game_capture::hook_first_frame_timeout_ms(
+                        selection.policy,
+                        hook.flavor(),
+                    ));
                 log::info!(
-                    "[NativeShare] starting hook session target_pid={} backend={} policy={} first_frame_timeout_ms={} wgc_preroll={}",
+                    "[NativeShare] starting hook session target_pid={} flavor={} backend={} policy={} first_frame_timeout_ms={} wgc_preroll={}",
                     hook.target_pid(),
+                    hook.flavor().as_str(),
                     hook.backend().as_str(),
                     selection.policy.as_str(),
                     first_frame_timeout.as_millis(),
@@ -722,6 +725,8 @@ impl ShareSession {
                     super::capture::HookThreadContext {
                         hook,
                         helper: selection.helper.take(),
+                        verified: selection.verified.take(),
+                        protected_exe: selection.protected_exe.take(),
                         d3d: Arc::clone(d3d),
                         source_id: source_id.to_string(),
                         frames,

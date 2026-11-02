@@ -29,6 +29,12 @@ $cef = Join-Path $work "cef"
 $release = Join-Path $work "release"
 $launcher = Join-Path $work "launcher"
 New-Item -ItemType Directory -Force -Path $cef, $release, $launcher | Out-Null
+# The committed GPL documents, plus fake stand-ins for the fetched OBS-signed
+# files (the lock check is skipped for these synthetic bytes).
+$resources = Join-Path $work "resources"
+New-Item -ItemType Directory -Force -Path (Join-Path $resources "obs-capture") | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $resourcesDir "obs-capture") -File -Include *.md, *.txt -Name |
+    ForEach-Object { Copy-Item -LiteralPath (Join-Path $resourcesDir "obs-capture\$_") -Destination (Join-Path $resources "obs-capture") }
 
 function New-FakeFile([string]$Path, [int]$Bytes) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
@@ -38,9 +44,10 @@ function New-FakeFile([string]$Path, [int]$Bytes) {
 }
 
 try {
-    $roots = @{ cef = $cef; release = $release; launcher = $launcher }
+    $roots = @{ cef = $cef; release = $release; launcher = $launcher; resources = $resources }
     foreach ($entry in $manifest.entries) {
         if (-not $roots.ContainsKey($entry.source)) { continue }
+        if ($entry.source -eq "resources" -and $entry.from -notlike "obs-capture/obs-signed/*") { continue }
         $path = Join-Path $roots[$entry.source] $entry.from
         if ($entry.type -eq "directory") {
             New-FakeFile (Join-Path $path "en-US.pak") 2048
@@ -52,8 +59,8 @@ try {
     }
 
     $out = Join-Path $work "payload.rmpk"
-    & $stageScript -CefDir $cef -ReleaseDir $release -LauncherDir $launcher -ResourcesDir $resourcesDir -StageDir (Join-Path $work "stage") `
-        -OutputPath $out -PackerArgs @("--block-mb", "1") @extra
+    & $stageScript -CefDir $cef -ReleaseDir $release -LauncherDir $launcher -ResourcesDir $resources -StageDir (Join-Path $work "stage") `
+        -OutputPath $out -PackerArgs @("--block-mb", "1") -SkipLockCheck @extra
     if (-not (Test-Path -LiteralPath $out)) { throw "Payload was not produced" }
 
     $extracted = Join-Path $work "extracted"
@@ -69,11 +76,20 @@ try {
         if (-not (Test-Path -LiteralPath (Join-Path $extracted $exe))) { throw "Packed payload is missing $exe" }
     }
 
+    # Negative case: OBS-signed files that differ from the lock must fail staging.
+    $failed = $false
+    try {
+        & $stageScript -CefDir $cef -ReleaseDir $release -LauncherDir $launcher -ResourcesDir $resources -StageDir (Join-Path $work "stage3") -NoPack @extra
+    } catch {
+        $failed = $_.Exception.Message -match "does not match the lock"
+    }
+    if (-not $failed) { throw "stage-payload.ps1 did not fail on OBS-signed files that differ from the lock" }
+
     # Negative case: a missing manifest file must fail staging.
     Remove-Item -LiteralPath (Join-Path $cef "libEGL.dll")
     $failed = $false
     try {
-        & $stageScript -CefDir $cef -ReleaseDir $release -LauncherDir $launcher -ResourcesDir $resourcesDir -StageDir (Join-Path $work "stage2") -NoPack @extra
+        & $stageScript -CefDir $cef -ReleaseDir $release -LauncherDir $launcher -ResourcesDir $resources -StageDir (Join-Path $work "stage2") -NoPack -SkipLockCheck @extra
     } catch {
         $failed = $_.Exception.Message -match "libEGL.dll"
     }
