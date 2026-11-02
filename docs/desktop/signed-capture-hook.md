@@ -1,7 +1,10 @@
 # OBS-signed capture hook
 
-Status: proposal, not implemented. Researched 2026-11-01 against `main` at `e3880f50`, OBS Studio 30.2.3, 31.1.2,
-32.1.2 and 33.0.1 (latest, released 2026-10-29), and the 3.7.0 install on a second Windows 11 machine.
+Status: implemented with a changed policy (see [Implementation](#implementation-2026-11-01)): the OBS-signed hook is
+the default hook for every eligible window, including Easy Anti-Cheat and BattlEye games, and the fork is
+development-only. Researched 2026-11-01 against `main` at `e3880f50`, OBS Studio 30.2.3, 31.1.2, 32.1.2 and 33.0.1
+(latest, released 2026-10-29), and the 3.7.0 install on a second Windows 11 machine. The research below is kept as
+written; where it disagrees with the implementation section, the implementation section is current.
 
 This document answers one question: could the native share drive the graphics hook that OBS Studio ships, signed by
 the OBS Project, instead of the hook we build from source? It then proposes how to do that without losing what the
@@ -383,6 +386,75 @@ New `FallbackReason` values, alongside #129's `hook_no_first_frame`:
 
 Order relative to the desktop plan: after #129 merges, and independent of C4 (web desktop-host interface). Phase 2
 touches the payload manifest from #112 and the installer, so it goes through the same packaging review.
+
+## Implementation (2026-11-01)
+
+The owner's direction replaced the recommendation above: inject the OBS-signed files, not an unsigned DLL, and drop
+the fork from the default path.
+
+| Target                                                                                     | Hook                                                                   |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| "Game capture hook" desktop setting off                                                    | none → WGC (`hook_disabled`)                                           |
+| monitor source, or the app's own window                                                    | none → WGC                                                             |
+| Vanguard (VALORANT, League of Legends), FACEIT client, CS2/VAC, anti-cheat services        | none → WGC (`blocklisted`, executable blocklist)                       |
+| another host already drives a stock hook in the target (`CaptureHook_KeepAlive<pid>`)      | none → WGC (`hook_in_use`)                                             |
+| Easy Anti-Cheat / BattlEye install marker, an earlier attempt this run failed              | none → WGC (`hook_attempt_spent`)                                      |
+| Easy Anti-Cheat / BattlEye install marker                                                  | `ObsSigned`, by default, one attempt per app run                       |
+| unprotected                                                                                | `ObsSigned`; `Own` only with `RALPH_CAPTURE_HOOK_FLAVOR=own` (dev)     |
+| a verified OBS-signed hook is already resident and idle (our earlier share, or OBS's copy) | attach without injecting (signal `Restart`), after checking its signer |
+
+- Files: `desktop/packaging/obs-signed-hook.lock.json` pins OBS 33.0.1 (zip SHA-256, per-file SHA-256, file version,
+  signer thumbprints). `desktop/scripts/fetch-obs-signed-hook.ps1` fetches and checks them in CI and locally;
+  `stage-payload.ps1` checks the staged bytes; the installer ships them under `obs-capture/obs-signed/`.
+- Before every injection the host opens the three files for the target bitness with read-only sharing, checks
+  SHA-256 against the embedded lock and the Authenticode signature (`WinVerifyTrust`, signer "OBS Project, LLC",
+  thumbprint), and holds the handles until the inject helper exits. Failure: `hook_artifact_unverified`, WGC.
+- The verified set is staged to `%LOCALAPPDATA%\RalphMeet\capture-hook\obs-<ver>-<sha8>\` with our own Vulkan layer
+  manifest beside it. The Vulkan layer is registered only while a hook share runs, and startup removes every
+  registration the app has ever written (PR #135).
+- Host stock profile: `CaptureHook_` names; the log pipe and keepalive are created before injecting (the stock DLL
+  opens its pipe once); the pipe is duplex (OBS's client opens it read/write); the first-frame window is at least
+  6 s; no unload wait (the DLL stays loaded until the game exits); `hook_ver_major` checked on each ready; timer
+  pacing on a running deadline. New reasons: `hook_not_loaded` (no hook objects ever appeared), `hook_artifact_unverified`,
+  `hook_version_unsupported`, `hook_in_use`, `hook_attempt_spent`.
+- Status: `hook_flavor`, `hook_attached`, `hook_version`, `obs_version`, `pacing` in the stats snapshot; the panel
+  tooltip reads "OBS Studio capture hook 1.8 (33.0.1), timer pacing".
+- GPL: OBS's source tarball, the Detours source at the obs-deps pin, and the obs-deps scripts are attached to each
+  desktop release; `ATTRIBUTION.md`, `SOURCE-OFFER.md` and `THIRD_PARTY_LICENSES.md` describe the unmodified files.
+
+Not done: an anti-cheat game test (needs the owner's go-ahead and an account they accept to risk), D3D12/Vulkan/GL
+targets, `compatibility.json` as data, cleanup of staged folders from older OBS versions, telling the OBS Project.
+
+### Local measurements (this machine, 2026-11-01)
+
+RTX 3080, Windows 11 26200, 60 Hz. Target: a minimal D3D11 test app (no anti-cheat) at 1600×900 that encodes its frame
+index in the clear colour and records each Present's QPC; a harness drove the production modules (verify/stage, OBS
+`inject-helper`, `ObsIpcChannel`, `GameCaptureHook`, `MftEncoderWorker`/NVENC, `start_wgc_capture`). Latency is
+Present → frame readable on the host device, sampled every 10th frame by reading back one pixel.
+
+| App 60 fps, share fps | Capture fps | Latency p50 / p95 (ms) | First frame       | Encoder VP blt (µs) |
+| --------------------- | ----------- | ---------------------- | ----------------- | ------------------- |
+| signed hook, 30       | 29.9        | 20.0 / 24.1            | 698 ms (inject)   | 1108                |
+| signed hook, 60       | 59.9        | 4.9 / 8.6              | 22–45 ms (attach) | see below           |
+| fork hook, 30         | 28.6        | 3.6 / 6.5              | 702 ms            | 2909                |
+| fork hook, 60         | 57.3        | 3.7 / 5.4              | 678 ms            | —                   |
+| WGC raw (no pacing)   | 57.0        | 14.4 / 17.2            | 16 ms             | —                   |
+| WGC paced, 30 / 24    | 30.0 / 24.0 | —                      | —                 | 2199 / 2793         |
+
+GPU-loaded app (uncapped, 40 full-screen clears per frame, about 2,600 fps, so GPU clocks stay high), share 60 fps
+with NVENC: WGC 57.0 fps, VP blt 991 µs; signed hook 56.7 fps, 956–1112 µs (logs "[VP] normalizing hook surface via
+same-device copy": the extra copy, no `BIND_RENDER_TARGET`); fork 58.5 fps, 614 µs. The app's own fps with each
+capture running stayed within its run-to-run noise (2,480–3,030 fps), so in-game cost was not measurable here. VP
+blt times at low GPU load (the 60 fps app) vary 1.1–4.3 ms with clocks and are not comparable across rows.
+
+- The signed hook works end to end through our host: OBS's `inject-helper` loads it, `hook_ver 1.8`, the DLL's own
+  log reaches us from the target pid ("d3d11 shared texture capture successful"), frames arrive through
+  `CaptureHook_Texture_*`. A second share attaches to the resident hook without injecting.
+- Timer pacing costs latency at low share rates (content age up to one share interval); the fork's present counter
+  does not. At 60 fps the signed hook is lower latency than WGC.
+- The fork's measured advantage is about 0.3–0.5 ms less VP time per frame and lower latency at 30 fps. That is not
+  a strong enough reason to inject an unsigned DLL by default; it stays behind the dev flag.
+- With the display asleep, WGC fell to 3.7 fps while the hook kept delivering about 28 fps.
 
 ## Sources
 
