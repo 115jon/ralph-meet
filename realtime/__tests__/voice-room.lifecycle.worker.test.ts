@@ -660,7 +660,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -2247,18 +2247,27 @@ describe("VoiceRoom lifecycle", () => {
         },
       }),
     );
+    // Announced pullable: the pushed name as the SFU track name, and a
+    // capability for the native session (viewers pull via PartyTracks).
+    const nativeCapability = await issuePartyTracksSessionCapability(
+      participantId,
+      roomName,
+      "native-screen-session",
+    );
     await expect(published).resolves.toMatchObject({
       d: {
         tracks: [
           {
             participant_id: participantId,
             track_name: `screen-video-${participantId}`,
-            session_id: "native-screen-session",
+            sfu_track_name: `screen-video-${participantId}`,
+            session_id: nativeCapability,
           },
           {
             participant_id: participantId,
             track_name: `screen-audio-${participantId}`,
-            session_id: "native-screen-session",
+            sfu_track_name: `screen-audio-${participantId}`,
+            session_id: nativeCapability,
           },
         ],
       },
@@ -2496,7 +2505,12 @@ describe("VoiceRoom lifecycle", () => {
         tracks: [
           {
             track_name: trackName,
-            session_id: "native-latest-session",
+            sfu_track_name: trackName,
+            session_id: await issuePartyTracksSessionCapability(
+              participantId,
+              roomName,
+              "native-latest-session",
+            ),
           },
         ],
       },
@@ -2726,7 +2740,12 @@ describe("VoiceRoom lifecycle", () => {
           expect.objectContaining({
             participant_id: participantId,
             track_name: `screen-video-${participantId}`,
-            session_id: "native-replay-session",
+            sfu_track_name: `screen-video-${participantId}`,
+            session_id: await issuePartyTracksSessionCapability(
+              participantId,
+              roomName,
+              "native-replay-session",
+            ),
             kind: "video",
           }),
         ]),
@@ -4432,7 +4451,7 @@ describe("VoiceRoom lifecycle", () => {
       const roomName = crypto.randomUUID();
       const socket = await openVoiceSocket(roomName);
       await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-      const response = nextMessageWithOpcodeOrNull(socket, 18);
+      const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
       const broadcast = nextMessageWithOpcodeAndTypeOrNull(
         socket,
         106,
@@ -4470,7 +4489,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4510,7 +4529,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4542,7 +4561,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4779,7 +4798,7 @@ describe("VoiceRoom lifecycle", () => {
       roomName,
       "other-user",
     );
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -5151,7 +5170,7 @@ describe("VoiceRoom lifecycle", () => {
     const oversizedDataUrl = audioDataUrlForDecodedBytes(
       MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
     );
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -5188,7 +5207,7 @@ describe("VoiceRoom lifecycle", () => {
       MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
     );
 
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
