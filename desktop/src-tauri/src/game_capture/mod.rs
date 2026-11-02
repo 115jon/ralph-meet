@@ -60,9 +60,10 @@ pub mod hook_policy;
 /// Implicit-Vulkan-layer registration (Vulkan present interception activation).
 /// Vulkan cannot be Detours-hooked like DX/GL; OBS's capture is an implicit
 /// Vulkan layer the loader only activates when its JSON manifest is registered
-/// under `HKCU\SOFTWARE\Khronos\Vulkan\ImplicitLayers`. This module registers
-/// the bundled `obs-vulkan{64,32}.json` so a Vulkan game launched afterward
-/// loads our `graphics-hook` layer. Windows + `game-capture-hook` only.
+/// under `HKCU\SOFTWARE\Khronos\Vulkan\ImplicitLayers`. As OBS does, this
+/// module keeps the staged OBS-signed `obs-vulkan{64,32}.json` registered while
+/// the "Game capture hook" setting is on; the layer stays dormant until a share
+/// asks the hook to capture. Windows + `game-capture-hook` only.
 #[cfg(all(feature = "game-capture-hook", windows))]
 pub mod vulkan_layer;
 

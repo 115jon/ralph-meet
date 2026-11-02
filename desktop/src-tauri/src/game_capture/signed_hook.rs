@@ -292,14 +292,25 @@ pub fn open_verified(dir: &Path, names: &[&str]) -> Result<VerifiedSet, String> 
     })
 }
 
-/// Our Vulkan layer manifest for the staged DLL. Our own layer name, never
-/// OBS's: `VK_LAYER_OBS_HOOK` belongs to OBS's own registration.
-fn vulkan_manifest(dll: &str) -> String {
+/// The start of every layer name we register. `vulkan_layer` recognizes its own
+/// registrations by it. Never OBS's `VK_LAYER_OBS_HOOK`, which belongs to OBS's
+/// own registration.
+pub const LAYER_NAME_PREFIX: &str = "VK_LAYER_RALPH_MEET_HOOK";
+
+/// Our Vulkan layer manifest for the staged DLL, named for its bitness
+/// (`bits` is `"64"` or `"32"`).
+///
+/// The names differ on purpose. The 64- and 32-bit manifests share one `HKCU`
+/// key (`HKCU\SOFTWARE\Khronos` is not redirected), the loader drops a later
+/// layer whose name repeats an earlier one (`loader_remove_duplicate_layers`)
+/// before it checks bitness, and the survivor then fails to load as the wrong
+/// bit-type. With one shared name only one bitness ever works.
+fn vulkan_manifest(dll: &str, bits: &str) -> String {
     format!(
         r#"{{
     "file_format_version": "1.1.2",
     "layer": {{
-        "name": "VK_LAYER_RALPH_MEET_HOOK",
+        "name": "{LAYER_NAME_PREFIX}_{bits}",
         "type": "GLOBAL",
         "library_path": ".\\{dll}",
         "api_version": "1.3.216",
@@ -370,12 +381,12 @@ pub fn ensure_staged() -> Result<PathBuf, String> {
         log::info!("[SignedHook] staged {} to {}", entry.name, dir.display());
     }
 
-    for (json, dll) in [
-        ("obs-vulkan64.json", "graphics-hook64.dll"),
-        ("obs-vulkan32.json", "graphics-hook32.dll"),
+    for (json, dll, bits) in [
+        ("obs-vulkan64.json", "graphics-hook64.dll", "64"),
+        ("obs-vulkan32.json", "graphics-hook32.dll", "32"),
     ] {
         let path = dir.join(json);
-        let text = vulkan_manifest(dll);
+        let text = vulkan_manifest(dll, bits);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(text.as_str()) {
             std::fs::write(&path, text).map_err(|e| format!("write {}: {e}", path.display()))?;
         }
@@ -468,8 +479,8 @@ mod tests {
 
     #[test]
     fn the_vulkan_manifest_uses_our_layer_name() {
-        let text = vulkan_manifest("graphics-hook64.dll");
-        assert!(text.contains("VK_LAYER_RALPH_MEET_HOOK"));
+        let text = vulkan_manifest("graphics-hook64.dll", "64");
+        assert!(text.contains(r#""name": "VK_LAYER_RALPH_MEET_HOOK_64""#));
         assert!(!text.contains("VK_LAYER_OBS_HOOK"));
         assert!(text.contains(r#"".\\graphics-hook64.dll""#));
         let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -477,6 +488,23 @@ mod tests {
             parsed["layer"]["functions"]["vkNegotiateLoaderLayerInterfaceVersion"],
             "OBS_Negotiate"
         );
+    }
+
+    #[test]
+    fn each_bitness_has_its_own_layer_name() {
+        // The loader keeps only the first of two same-named layers, before it
+        // looks at bitness (see `vulkan_manifest`).
+        let name = |dll, bits| {
+            let parsed: serde_json::Value =
+                serde_json::from_str(&vulkan_manifest(dll, bits)).unwrap();
+            parsed["layer"]["name"].as_str().unwrap().to_string()
+        };
+        let (n64, n32) = (
+            name("graphics-hook64.dll", "64"),
+            name("graphics-hook32.dll", "32"),
+        );
+        assert_ne!(n64, n32);
+        assert!(n64.starts_with(LAYER_NAME_PREFIX) && n32.starts_with(LAYER_NAME_PREFIX));
     }
 
     /// Runs against the fetched files when they are present

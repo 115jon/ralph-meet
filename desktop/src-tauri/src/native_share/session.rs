@@ -382,8 +382,6 @@ pub(crate) struct ShareSession {
     wgc: Arc<StdMutex<Option<WgcCapture>>>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     hook: Option<super::capture::HookCaptureSession>,
-    #[cfg(all(feature = "game-capture-hook", windows))]
-    vulkan_layer: Option<crate::game_capture::vulkan_layer::LayerLease>,
     /// The share's frame interval: the WGC pacer reads it per frame, and the
     /// hook thread pushes it into `hook_info` as the DLL's capture-rate cap.
     frame_interval_ns: Arc<AtomicU64>,
@@ -406,8 +404,6 @@ struct BlockingParts {
     wgc: Option<WgcCapture>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     hook: Option<super::capture::HookCaptureSession>,
-    #[cfg(all(feature = "game-capture-hook", windows))]
-    vulkan_layer: Option<crate::game_capture::vulkan_layer::LayerLease>,
     encoder: Option<MftEncoderWorker>,
     threads: Vec<std::thread::JoinHandle<()>>,
 }
@@ -415,7 +411,7 @@ struct BlockingParts {
 impl BlockingParts {
     fn is_empty(&self) -> bool {
         #[cfg(all(feature = "game-capture-hook", windows))]
-        let hook_empty = self.hook.is_none() && self.vulkan_layer.is_none();
+        let hook_empty = self.hook.is_none();
         #[cfg(not(all(feature = "game-capture-hook", windows)))]
         let hook_empty = true;
         self.wgc.is_none() && hook_empty && self.encoder.is_none() && self.threads.is_empty()
@@ -429,10 +425,6 @@ impl BlockingParts {
         if let Some(mut hook) = self.hook.take() {
             hook.stop();
         }
-        // After the hook stops: unregisters the Vulkan layer if this was the
-        // last hook share.
-        #[cfg(all(feature = "game-capture-hook", windows))]
-        drop(self.vulkan_layer.take());
         if let Some(mut encoder) = self.encoder.take() {
             encoder.stop();
         }
@@ -455,8 +447,6 @@ impl ShareSession {
             wgc: Arc::new(StdMutex::new(None)),
             #[cfg(all(feature = "game-capture-hook", windows))]
             hook: None,
-            #[cfg(all(feature = "game-capture-hook", windows))]
-            vulkan_layer: None,
             frame_interval_ns: Arc::new(AtomicU64::new(0)),
             threads: Arc::new(StdMutex::new(Vec::new())),
             tasks: Vec::new(),
@@ -702,7 +692,6 @@ impl ShareSession {
             {
                 use crate::game_capture::CapturePolicy;
                 let mut selection = selection;
-                self.vulkan_layer = selection.vulkan_layer.take();
                 let hook = selection
                     .hook
                     .take()
@@ -943,8 +932,6 @@ impl ShareSession {
             wgc: self.wgc.lock().unwrap_or_else(|p| p.into_inner()).take(),
             #[cfg(all(feature = "game-capture-hook", windows))]
             hook: self.hook.take(),
-            #[cfg(all(feature = "game-capture-hook", windows))]
-            vulkan_layer: self.vulkan_layer.take(),
             encoder: self.encoder.take(),
             threads: std::mem::take(&mut *self.threads.lock().unwrap_or_else(|p| p.into_inner())),
         }

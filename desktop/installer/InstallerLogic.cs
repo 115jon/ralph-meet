@@ -129,6 +129,7 @@ namespace Installer
                     DeleteRegistryKeyTree(userRoot, CurrentPublisherKeyPath);
                     DeleteRegistryKeyTree(userRoot, LegacyPublisherKeyPath);
                     UnregisterDeepLinkProtocolIfOwned(userRoot, layout);
+                    RemoveVulkanLayerRegistrations(userRoot, layout);
                     if (LauncherMigration.RemoveRunValueIfOwned(userRoot, layout))
                     {
                         InstallerLogger.Info("Removed the RalphMeet Run value.");
@@ -569,6 +570,19 @@ namespace Installer
             }
 
             InstallerLogger.Info("Skipped ralphmeet:// deep-link protocol removal because registration was missing or no longer owned by this installer.");
+        }
+
+        private static void RemoveVulkanLayerRegistrations(RegistryKey userRoot, InstallRootLayout layout)
+        {
+            try
+            {
+                int removed = VulkanLayerRegistration.RemoveOwned(userRoot, layout);
+                InstallerLogger.Info("Removed " + removed + " Vulkan capture layer registration(s) written by this install.");
+            }
+            catch (Exception ex)
+            {
+                InstallerLogger.Warn("Failed to remove the Vulkan capture layer registrations: " + ex.Message);
+            }
         }
 
         private static void CreateShortcuts(InstallEnvironment environment, string launcherPath, string launcherArguments)

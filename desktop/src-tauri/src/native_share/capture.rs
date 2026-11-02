@@ -140,6 +140,15 @@ fn game_capture_hook_enabled() -> bool {
     }
 }
 
+/// Whether the Vulkan capture layer should be registered (see
+/// `game_capture::vulkan_layer`): the hook is compiled in and not forced off by
+/// `RALPH_GAME_CAPTURE_HOOK`, and the "Game capture hook" desktop setting
+/// (`setting_on`) is on.
+#[cfg(all(feature = "game-capture-hook", windows))]
+pub fn hook_layer_wanted(setting_on: bool) -> bool {
+    game_capture_hook_enabled() && setting_on
+}
+
 /// The runtime `Capture_Policy` setting for the session, read from the
 /// `RALPH_CAPTURE_POLICY` environment variable (Req 5.1).
 ///
@@ -302,8 +311,6 @@ pub(crate) struct HookPreparation {
     verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
     /// The anti-cheat-protected executable, so a failed attempt is remembered.
     protected_exe: Option<String>,
-    /// Where the Vulkan layer manifests for this build live.
-    layer_dir: Option<std::path::PathBuf>,
 }
 
 #[cfg(all(feature = "game-capture-hook", windows))]
@@ -324,7 +331,6 @@ impl HookPreparation {
             attached: false,
             verified: None,
             protected_exe: None,
-            layer_dir: None,
         }
     }
 }
@@ -795,7 +801,6 @@ fn attempt_hook_injection(
                         set.dir.display()
                     );
                     let artifacts = ObsArtifacts::discover(&set.dir);
-                    prep.layer_dir = Some(set.dir.clone());
                     prep.verified = Some(set);
                     artifacts
                 }
@@ -813,9 +818,7 @@ fn attempt_hook_injection(
                 "[NativeShare] RALPH_CAPTURE_HOOK_FLAVOR=own: using the unsigned fork build \
                  (development only)"
             );
-            let artifacts = ObsArtifacts::discover_next_to_binary();
-            prep.layer_dir = artifacts.dir();
-            artifacts
+            ObsArtifacts::discover_next_to_binary()
         }
     };
 
@@ -875,15 +878,18 @@ fn attempt_hook_injection(
     prep.attached = attach;
 
     // A Vulkan game is hooked through the implicit layer, which attaches only
-    // at vkCreateInstance. Without a graphics-hook module already in the game
-    // there is nothing to drive; do not inject a DLL into it for nothing.
+    // at vkCreateInstance. The layer stays registered while the setting is on
+    // (as OBS does), so a game started after that has the dormant hook loaded
+    // and is driven like any resident hook. Without a graphics-hook module
+    // already in the game there is nothing to drive; do not inject a DLL into
+    // it for nothing.
     if backend == GraphicsApiBackend::Vulkan
         && !crate::game_capture::vulkan_layer::process_has_hook_module(target_pid)
     {
         log::info!(
-            "[NativeShare] Vulkan target pid {target_pid} has no capture layer loaded (the layer \
-             is registered only during hook shares, so a game started before the share has \
-             none); skipping injection and using WGC (backend_disabled)"
+            "[NativeShare] Vulkan target pid {target_pid} has no capture layer loaded (it \
+             started before the layer was registered, or the layer is turned off); skipping \
+             injection and using WGC (backend_disabled)"
         );
         prep.missing_offsets = true;
         return prep;
@@ -1773,9 +1779,6 @@ pub(crate) struct CaptureSelection {
     pub(crate) hook: Option<crate::game_capture::dx11::GameCaptureHook>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     pub(crate) helper: Option<std::process::Child>,
-    /// Keeps the Vulkan capture layer registered while this hook share runs.
-    #[cfg(all(feature = "game-capture-hook", windows))]
-    pub(crate) vulkan_layer: Option<crate::game_capture::vulkan_layer::LayerLease>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     pub(crate) verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
     #[cfg(all(feature = "game-capture-hook", windows))]
@@ -2020,13 +2023,6 @@ pub(crate) fn select_capture<R: tauri::Runtime>(
         hook,
         #[cfg(all(feature = "game-capture-hook", windows))]
         helper: prep.helper,
-        #[cfg(all(feature = "game-capture-hook", windows))]
-        vulkan_layer: match (capture_mode, prep.layer_dir.as_deref()) {
-            (CaptureMode::Hook, Some(dir)) => {
-                Some(crate::game_capture::vulkan_layer::LayerLease::acquire(dir))
-            }
-            _ => None,
-        },
         #[cfg(all(feature = "game-capture-hook", windows))]
         verified: prep.verified,
         #[cfg(all(feature = "game-capture-hook", windows))]

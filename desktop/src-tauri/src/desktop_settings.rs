@@ -237,6 +237,14 @@ impl DesktopSettingsStore {
             apply_open_on_startup(app, next.open_on_startup)?;
         }
 
+        // The Vulkan capture layer is registered only while the hook is on.
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        if next.game_capture_hook != previous.game_capture_hook {
+            crate::game_capture::vulkan_layer::spawn_sync(crate::native_share::hook_layer_wanted(
+                next.game_capture_hook,
+            ));
+        }
+
         let path = self
             .path
             .as_deref()
