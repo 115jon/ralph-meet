@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { issueVoiceToken } from "../voice-token";
 import {
   handlePartyTracksProxyRequest,
+  issuePartyTracksSessionCapability,
+  verifyPartyTracksSessionCapability,
   type PartyTracksProxyEnv,
   type PartyTracksRouter,
 } from "../partytracks-proxy";
@@ -443,6 +445,95 @@ describe("PartyTracks proxy", () => {
       route,
     );
     expect(stolen?.status).toBe(403);
+  });
+
+  it("lets a viewer pull a native screen track announced with a session capability", async () => {
+    // The VoiceRoom opened this Calls session for a desktop's Rust publisher
+    // and announces its tracks with a capability bound to that publisher.
+    const nativeSession = "cloudflare-native-screen-session";
+    const announcedSession = await issuePartyTracksSessionCapability(
+      {
+        roomSlug: "room-one",
+        participantId: "desktop",
+        sessionId: nativeSession,
+      },
+      env.CALLS_APP_SECRET,
+    );
+    expect(
+      await verifyPartyTracksSessionCapability(
+        announcedSession,
+        env.CALLS_APP_SECRET,
+      ),
+    ).toEqual({
+      version: 1,
+      roomSlug: "room-one",
+      participantId: "desktop",
+      sessionId: nativeSession,
+    });
+
+    const routedPulls: Array<Array<{ sessionId: string; trackName: string }>> =
+      [];
+    const route = vi.fn<PartyTracksRouter>(async ({ request: routed }) => {
+      if (new URL(routed.url).pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: "cloudflare-viewer-session" });
+      }
+      const body = (await routed.json()) as {
+        tracks: Array<{ sessionId: string; trackName: string }>;
+      };
+      routedPulls.push(body.tracks);
+      return Response.json({ tracks: body.tracks });
+    });
+    const viewerToken = await token("viewer", "room-one");
+    const viewer = (await (
+      await handlePartyTracksProxyRequest(
+        request("room-one", "/sessions/new", "viewer", viewerToken, {
+          method: "POST",
+        }),
+        env,
+        route,
+      )
+    )?.json()) as { sessionId: string };
+    const authorizeRemotePull = vi.fn(async () => true);
+    const pull = (sessionId: string) =>
+      handlePartyTracksProxyRequest(
+        request(
+          "room-one",
+          `/sessions/${viewer.sessionId}/tracks/new`,
+          "viewer",
+          viewerToken,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              tracks: [
+                {
+                  location: "remote",
+                  sessionId,
+                  trackName: "screen-video-desktop",
+                },
+              ],
+            }),
+          },
+        ),
+        env,
+        route,
+        { authorizeRemotePull },
+      );
+
+    // What the room used to announce: the raw session id. Refused.
+    expect((await pull(nativeSession))?.status).toBe(403);
+
+    const response = await pull(announcedSession);
+    expect(response?.status).toBe(200);
+    expect(authorizeRemotePull).toHaveBeenCalledTimes(1);
+    expect(routedPulls).toEqual([
+      [
+        {
+          location: "remote",
+          sessionId: nativeSession,
+          trackName: "screen-video-desktop",
+        },
+      ],
+    ]);
   });
 
   it("refuses remote pulls for a participant without a join grant", async () => {

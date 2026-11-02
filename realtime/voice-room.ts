@@ -62,7 +62,10 @@ import {
   RETIRED_BROWSER_SFU_OPS,
   type VoiceClientPayload,
 } from "../src/lib/gateway-protocol";
-import { verifyPartyTracksSessionCapability } from "./partytracks-proxy";
+import {
+  issuePartyTracksSessionCapability,
+  verifyPartyTracksSessionCapability,
+} from "./partytracks-proxy";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { verifyVoiceToken } from "./voice-token";
 import {
@@ -696,7 +699,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         break;
 
       case Op.TracksReady:
-        this.handleTracksReady(ws, msg.d);
+        await this.handleTracksReady(ws, msg.d);
         break;
 
       case Op.Speaking:
@@ -2257,11 +2260,22 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       );
     }
 
+    // A native screen share in the room is announced pullable (see
+    // toPullableTracks); signing it is the only await, and only then.
+    const announcedTracks = existingTracks.some(
+      (track) => !track.sfu_track_name,
+    )
+      ? await this.toPullableTracks(existingTracks)
+      : existingTracks;
+    if (!this.isCurrentVoiceConnection(ws, d.participant_id, connectionId)) {
+      return;
+    }
+
     this.sendTo(ws, {
       op: Op.VoiceReady,
       d: {
         participant_id: d.participant_id,
-        tracks: existingTracks,
+        tracks: announcedTracks,
         speaking: speakingStates,
         join_wait_ms: joinWaitMs,
       },
@@ -2824,10 +2838,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     this.broadcastStoppedTracks(participantId, removedTracks, ws);
   }
 
-  private handleTracksReady(
+  private async handleTracksReady(
     ws: WebSocket,
     d: VoiceClientPayload<Op.TracksReady>,
-  ): void {
+  ): Promise<void> {
     const participantId = this.requireParticipantId(ws);
     if (!participantId || d.track_names.length === 0) return;
     const connectionId = this.getVoiceAttachment(ws)?.connection_id;
@@ -2866,12 +2880,43 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
     if (readyTracks.length === 0) return;
 
+    const announced = await this.toPullableTracks(readyTracks);
+    if (!this.isCurrentVoiceConnection(ws, participantId, connectionId)) return;
     this.broadcast(
       {
         op: Op.Video,
-        d: { participant_id: participantId, tracks: readyTracks },
+        d: { participant_id: participantId, tracks: announced },
       },
       ws,
+    );
+  }
+
+  /**
+   * Viewers pull every remote track through the PartyTracks proxy, which
+   * takes a signed session capability, never a raw Calls session id, and
+   * clients pull only tracks with an SFU track name. A native screen track
+   * lives in the Calls session this room opened for the Rust publisher
+   * (stored raw, sfu_track_name NULL, which other paths here rely on), and
+   * its SFU track name is the name it was pushed under. So announce it with
+   * that name and a capability for that session, bound to its publisher.
+   */
+  private async toPullableTracks(tracks: TrackInfo[]): Promise<TrackInfo[]> {
+    return Promise.all(
+      tracks.map(async (track) => {
+        if (track.sfu_track_name) return track;
+        return {
+          ...track,
+          sfu_track_name: track.track_name,
+          session_id: await issuePartyTracksSessionCapability(
+            {
+              roomSlug: this.roomSlug,
+              participantId: track.participant_id,
+              sessionId: track.session_id,
+            },
+            this.env.CALLS_APP_SECRET,
+          ),
+        };
+      }),
     );
   }
 
