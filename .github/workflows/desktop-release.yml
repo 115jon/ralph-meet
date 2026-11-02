@@ -150,22 +150,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build OBS game capture binaries from source
+      # The game-capture hook ships as OBS Studio's own signed release files,
+      # unmodified (desktop/packaging/obs-signed-hook.lock.json). Their GPL-2.0
+      # corresponding source (OBS sources, Detours, obs-deps) is downloaded,
+      # checked against the same lock, and attached to this release below.
+      - name: Fetch and verify OBS-signed capture hook and its source
         shell: pwsh
-        run: |
-          ./desktop/scripts/build-capture-fork.ps1 -Arch both -Config Release -FetchDetours
-
-          $requiredHookDlls = @(
-            "desktop/src-tauri/resources/obs-capture/graphics-hook64.dll",
-            "desktop/src-tauri/resources/obs-capture/graphics-hook32.dll"
-          )
-          $missingHookDlls = $requiredHookDlls | Where-Object {
-            -not (Test-Path -LiteralPath $_)
-          }
-
-          if ($missingHookDlls.Count -gt 0) {
-            throw "Capture fork build did not produce required hook DLLs: $($missingHookDlls -join ', ')"
-          }
+        run: ./desktop/scripts/fetch-obs-signed-hook.ps1 -CacheDir "$env:RUNNER_TEMP\obs-signed-hook" -SourcesDir "$env:RUNNER_TEMP\obs-signed-sources"
 
       # Key the CLI on the feat/cef commit so a release reuses the cached binary
       # until upstream moves (every few weeks). The cache used to be keyed on a
@@ -308,6 +299,12 @@ jobs:
           # 4. Upload artifacts to the release
           gh release upload $env:RELEASE_TAG $SetupRenamePath --clobber -R ${{ github.repository }}
           gh release upload $env:RELEASE_TAG $LatestJsonPath --clobber -R ${{ github.repository }}
+
+          # GPL-2.0 corresponding source for the OBS capture binaries in the
+          # installer (obs-capture/SOURCE-OFFER.md points here).
+          Get-ChildItem -LiteralPath "$env:RUNNER_TEMP\obs-signed-sources" -File | ForEach-Object {
+              gh release upload $env:RELEASE_TAG $_.FullName --clobber -R ${{ github.repository }}
+          }
 
           # 5. Publish the release and mark it as latest
           gh release edit $env:RELEASE_TAG --draft=false --latest -R ${{ github.repository }}
