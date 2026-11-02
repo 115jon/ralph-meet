@@ -162,7 +162,15 @@ pub(crate) fn setup(app: &tauri::App<TauriRuntime>) {
 
     let handle = app.handle().clone();
     app.deep_link().on_open_url(move |event| {
-        for url in event.urls() {
+        // The CEF runtime catches a second launch before the single-instance
+        // plugin can, and reports a launch without a link as an empty open.
+        let urls = event.urls();
+        if urls.is_empty() {
+            log::info!("[Window][relaunch] launched again; revealing the main window");
+            reveal(&handle, "relaunch");
+            return;
+        }
+        for url in urls {
             if let Some(url) = normalize_deep_link(url.as_str()) {
                 route_deep_link(&handle, url, "plugin");
             }
