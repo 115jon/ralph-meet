@@ -660,7 +660,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4451,7 +4451,7 @@ describe("VoiceRoom lifecycle", () => {
       const roomName = crypto.randomUUID();
       const socket = await openVoiceSocket(roomName);
       await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-      const response = nextMessageWithOpcodeOrNull(socket, 18);
+      const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
       const broadcast = nextMessageWithOpcodeAndTypeOrNull(
         socket,
         106,
@@ -4489,7 +4489,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4529,7 +4529,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4561,7 +4561,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4798,7 +4798,7 @@ describe("VoiceRoom lifecycle", () => {
       roomName,
       "other-user",
     );
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -5170,7 +5170,7 @@ describe("VoiceRoom lifecycle", () => {
     const oversizedDataUrl = audioDataUrlForDecodedBytes(
       MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
     );
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -5207,7 +5207,7 @@ describe("VoiceRoom lifecycle", () => {
       MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
     );
 
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
