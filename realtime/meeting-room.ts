@@ -2089,6 +2089,37 @@ export class MeetingRoom extends DurableObject<Env> {
     });
   }
 
+  /**
+   * The roster a Ready or Resumed carries: live non-standby sessions (but
+   * `exceptWs`) and non-standby sessions held for resume within grace. A
+   * held session is still in the call: its abrupt close broadcast no leave
+   * and its voice tracks stay. Clients replace their participant list with
+   * this roster, so leaving it out made them drop that participant, and its
+   * streams (a screen share included), until they rejoined.
+   */
+  private buildRoomRoster(exceptWs?: WebSocket): VoiceState[] {
+    const participants: VoiceState[] = [];
+    const liveIds = new Set<string>();
+    for (const [otherWs, data] of this.sessions) {
+      liveIds.add(data.id);
+      if (otherWs === exceptWs || data.standby) continue;
+      participants.push(this.buildVoiceState(data));
+    }
+    const now = Date.now();
+    for (const [id, held] of this.resumableSessions) {
+      if (liveIds.has(id) || held.standby) continue;
+      const disconnectedAt = this.resumableSessionExpiry.get(id);
+      if (
+        disconnectedAt === undefined ||
+        now - disconnectedAt >= RESUME_GRACE_PERIOD_MS
+      ) {
+        continue;
+      }
+      participants.push(this.buildVoiceState(held));
+    }
+    return participants;
+  }
+
   private buildVoiceStateDelta(data: WsAttachment): VoiceStateDelta {
     return withLegacyClerkUserId({
       id: data.id,
@@ -2799,12 +2830,8 @@ export class MeetingRoom extends DurableObject<Env> {
       // This join takes over the user's voice sessions on other devices.
       this.replaceOtherVoiceSessions(ws, attachment);
 
-      // Build roster
-      const participants: VoiceState[] = [];
-      for (const [otherWs, data] of this.sessions) {
-        if (otherWs === ws || data.standby) continue;
-        participants.push(this.buildVoiceState(data));
-      }
+      // Build roster (after the takeover, so no replaced session is in it)
+      const participants = this.buildRoomRoster(ws);
 
       // Op 2: Ready — includes voice_token for Voice Gateway connection
       this.sendTo(ws, {
@@ -3115,11 +3142,7 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
 
-      const participants: VoiceState[] = [];
-      for (const [, data] of this.sessions) {
-        if (data.standby) continue;
-        participants.push(this.buildVoiceState(data));
-      }
+      const participants = this.buildRoomRoster();
 
       this.sendTo(ws, {
         op: Op.Resumed,
@@ -3132,6 +3155,23 @@ export class MeetingRoom extends DurableObject<Env> {
           ),
         },
       });
+
+      // Re-announce the resumed participant in full. Its abrupt close sent no
+      // leave, but a client that took a roster in the meantime (its own
+      // Ready or Resumed) may have dropped it; an update with the full state
+      // brings it back (with its screen share tile) without a rejoin.
+      if (!resumedAttachment.standby) {
+        this.broadcast(
+          {
+            op: Op.VoiceStateUpdate,
+            d: {
+              participant: this.buildVoiceState(resumedAttachment),
+              action: "update",
+            },
+          },
+          ws,
+        );
+      }
 
       // Send current voice channel states so the client can reconcile their
       // sidebar. During the disconnect window, the client may have missed
@@ -3178,11 +3218,8 @@ export class MeetingRoom extends DurableObject<Env> {
       this.generateTurnCredentials(),
     ]);
 
-    const participants: VoiceState[] = [];
-    for (const [, data] of this.sessions) {
-      if (data.standby) continue;
-      participants.push(this.buildVoiceState(data));
-    }
+    // Clients take this Resumed's roster as the participant list, like any.
+    const participants = this.buildRoomRoster();
 
     this.sendTo(ws, {
       op: Op.Resumed,

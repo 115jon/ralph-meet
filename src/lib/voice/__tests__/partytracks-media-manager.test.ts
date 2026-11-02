@@ -137,6 +137,53 @@ describe("PartyTracksMediaManager", () => {
     );
   });
 
+  it("pulls a screen share announced after the viewer's VoiceReady without a rejoin", () => {
+    const transport = new TestTransport();
+    const remoteEvents: string[] = [];
+    const viewer = new PartyTracksMediaManager(transport, "viewer", {
+      onPublicationMetadata: vi.fn(),
+      onPublicationStopped: vi.fn(),
+      onRemoteTrack: ({ action, trackInfo }) =>
+        remoteEvents.push(`${action}:${trackInfo.track_name}`),
+    });
+    const microphone: TrackInfo = {
+      participant_id: "sharer",
+      track_name: "cam-audio-sharer",
+      sfu_track_name: "opaque-sharer-audio",
+      session_id: "sharer-session",
+      kind: "audio",
+    };
+    // The viewer joins: VoiceReady lists only the sharer's microphone.
+    viewer.syncRemoteTracks([microphone]);
+    transport.pulledTracks
+      .get(microphone.track_name)
+      ?.next(mediaTrack("audio", "sharer-mic"));
+
+    // Later the sharer (a phone) starts a screen share; the room announces it.
+    const screen: TrackInfo = {
+      participant_id: "sharer",
+      track_name: "screen-video-sharer",
+      sfu_track_name: "opaque-sharer-screen",
+      session_id: "sharer-session",
+      kind: "video",
+    };
+    viewer.offerTracks([screen]);
+    expect(transport.pullCount).toBe(2);
+    expect(transport.pullMetadata.get(screen.track_name)).toEqual([screen]);
+    transport.pulledTracks
+      .get(screen.track_name)
+      ?.next(mediaTrack("video", "sharer-screen"));
+
+    // A later VoiceReady (the voice socket reconnecting) keeps both pulls.
+    viewer.syncRemoteTracks([microphone, screen]);
+    expect(transport.pullCount).toBe(2);
+    expect(remoteEvents).toEqual([
+      "add:cam-audio-sharer",
+      "add:screen-video-sharer",
+    ]);
+    viewer.dispose();
+  });
+
   it("notifies when push and pull start on the shared transport", () => {
     const transport = new TestTransport();
     const onPushStarted = vi.fn();

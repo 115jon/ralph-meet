@@ -1,4 +1,4 @@
-//! Implicit-Vulkan-layer registration for the Forked_Hook_DLL's Vulkan present
+//! Implicit-Vulkan-layer registration for the hook DLL's Vulkan present
 //! interception.
 //!
 //! # Why this exists
@@ -11,40 +11,40 @@
 //! if* the layer's JSON manifest is registered under
 //! `HKEY_*\SOFTWARE\Khronos\Vulkan\ImplicitLayers`. Without that registry value
 //! the loader never loads our DLL into a Vulkan app, `OBS_Negotiate` is never
-//! called, `vulkan_seen` stays false, and `hook_vulkan()` returns false forever
-//! (the symptom seen in the field: `initialize_signaled_no_hookready`, 0 frames
-//! for a Vulkan game).
+//! called, and the Vulkan hook never captures.
 //!
-//! # What this module does
+//! # Scope + lifetime
 //!
-//! It registers the bundled `obs-vulkan{64,32}.json` manifests (which point at
-//! the matching `graphics-hook{64,32}.dll`) under the **current user's**
-//! `ImplicitLayers` key, value = the absolute manifest path, data = `0`
-//! (DWORD; the Vulkan loader treats `0` as "enabled"). Per-user `HKCU` avoids
-//! requiring elevation. Registration is **idempotent** and best-effort —
-//! failure to register only means Vulkan games fall back to WGC / unavailable,
-//! exactly as before, never a crash.
+//! An implicit layer is loaded into **every** Vulkan process started while it
+//! is registered, including anti-cheat-protected games, whether or not
+//! anything is being shared. The app used to register at startup and never
+//! unregister, so every Vulkan process loaded the hook DLL from the moment the
+//! app ran, and every past install or build folder left a registration behind.
 //!
-//! # Scope + lifetime (matches OBS)
+//! Registration is now held by a [`LayerLease`] for the duration of a hook
+//! share and removed when the last lease drops. At startup,
+//! [`remove_registrations`] deletes every registration this app has ever
+//! written (the current build's, older `app-<ver>` folders', dev `target\`
+//! folders'), which also recovers from a crash that skipped the unregister.
 //!
-//! An implicit layer, once registered, is offered to **every** Vulkan process
-//! on the system, but our layer is inert unless OBS-style capture objects exist
-//! for that PID — so an idle registration costs a process a no-op layer load.
-//! Crucially, the loader only consults the registry at `vkCreateInstance`, so a
-//! game must be **launched after** registration for the layer to attach; this
-//! is why we register at app startup (and again, idempotently, when a capture
-//! session starts) rather than only at injection time.
+//! The loader only reads the registry at `vkCreateInstance`, so a Vulkan game
+//! loads the layer only if it starts while a hook share is active. A Vulkan
+//! game that was already running stays on WGC (see
+//! [`process_has_hook_module`]).
 
 #![cfg(all(feature = "game-capture-hook", windows))]
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
-use windows::core::{HSTRING, PCWSTR};
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+use windows::core::{HSTRING, PCWSTR, PWSTR};
+use windows::Win32::Foundation::{
+    ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS,
+};
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegOpenKeyExW, RegSetValueExW, HKEY,
-    HKEY_CURRENT_USER, KEY_WOW64_32KEY, KEY_WOW64_64KEY, KEY_WRITE, REG_DWORD,
-    REG_OPTION_NON_VOLATILE, REG_SAM_FLAGS,
+    RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegEnumValueW, RegOpenKeyExW, RegSetValueExW,
+    HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_WOW64_32KEY, KEY_WOW64_64KEY, KEY_WRITE,
+    REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SAM_FLAGS,
 };
 
 /// The Khronos implicit-layer registry subkey (per the Vulkan loader spec). The
@@ -57,13 +57,25 @@ const IMPLICIT_LAYERS_SUBKEY: &str = r"SOFTWARE\Khronos\Vulkan\ImplicitLayers";
 const LAYER_JSON_64: &str = "obs-vulkan64.json";
 /// The bundled 32-bit Vulkan layer manifest.
 const LAYER_JSON_32: &str = "obs-vulkan32.json";
+/// The layer name our manifests declare. OBS's own manifests (for example
+/// `C:\ProgramData\obs-studio-hook\obs-vulkan64.json`) declare
+/// `VK_LAYER_OBS_HOOK` and are never touched.
+const OWN_LAYER_NAME: &str = "VK_LAYER_RALPH_MEET_HOOK";
+/// The folder our manifests ship in, next to the binary.
+const OWN_ARTIFACT_DIR: &str = "obs-capture";
+
+/// Both registry views, each with the manifest its loader bitness reads.
+const VIEWS: [(&str, &str, REG_SAM_FLAGS); 2] = [
+    (LAYER_JSON_64, "graphics-hook64.dll", KEY_WOW64_64KEY),
+    (LAYER_JSON_32, "graphics-hook32.dll", KEY_WOW64_32KEY),
+];
 
 /// Resolve the directory that holds the bundled capture artifacts
 /// (`obs-capture/` next to the running executable), mirroring how
 /// [`crate::game_capture::inject::ObsArtifacts`] discovers the DLLs/helpers.
 fn obs_capture_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?.join("obs-capture");
+    let dir = exe.parent()?.join(OWN_ARTIFACT_DIR);
     if dir.is_dir() {
         Some(dir)
     } else {
@@ -92,41 +104,79 @@ fn manifest_dll_present(manifest: &Path, dll_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Open-or-create the per-user `ImplicitLayers` key for the given bitness view
-/// (`KEY_WOW64_64KEY` / `KEY_WOW64_32KEY` so the 32- and 64-bit loaders each see
-/// their manifest). Returns the open key on success.
-fn open_implicit_layers_key(view: REG_SAM_FLAGS) -> Result<HKEY, String> {
+/// Whether a registered manifest path is one this app wrote: an
+/// `obs-vulkan{64,32}.json` inside an `obs-capture` folder. That is the layout
+/// of every install (`RalphMeet\app-<ver>\obs-capture\`) and every dev build
+/// (`target\<profile>\obs-capture\`). OBS's own manifests live in
+/// `obs-studio-hook` or OBS's install folder and never match.
+///
+/// `manifest_text` is the manifest's contents when it still exists. A manifest
+/// that exists must also declare [`OWN_LAYER_NAME`], so a third party that
+/// happened to use the same folder name is left alone. A missing manifest is
+/// judged by its path alone (that is the stale case being cleaned up).
+fn is_own_registration(path: &str, manifest_text: Option<&str>) -> bool {
+    let path = Path::new(path);
+    let file_matches = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+        n.eq_ignore_ascii_case(LAYER_JSON_64) || n.eq_ignore_ascii_case(LAYER_JSON_32)
+    });
+    let dir_matches = path
+        .parent()
+        .and_then(|d| d.file_name())
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.eq_ignore_ascii_case(OWN_ARTIFACT_DIR));
+    if !(file_matches && dir_matches) {
+        return false;
+    }
+    match manifest_text {
+        Some(text) => text.contains(OWN_LAYER_NAME),
+        None => true,
+    }
+}
+
+/// Open the per-user `ImplicitLayers` key for one bitness view.
+fn open_implicit_layers_key(view: REG_SAM_FLAGS, create: bool) -> Result<Option<HKEY>, String> {
     let subkey = HSTRING::from(IMPLICIT_LAYERS_SUBKEY);
     let mut key = HKEY::default();
     // SAFETY: valid HKCU root + a well-formed subkey; phkresult is a live local.
     let status = unsafe {
-        RegCreateKeyExW(
-            HKEY_CURRENT_USER,
-            PCWSTR(subkey.as_ptr()),
-            Some(0),
-            PCWSTR::null(),
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE | view,
-            None,
-            &mut key,
-            None,
-        )
+        if create {
+            RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(subkey.as_ptr()),
+                Some(0),
+                PCWSTR::null(),
+                REG_OPTION_NON_VOLATILE,
+                KEY_WRITE | KEY_QUERY_VALUE | view,
+                None,
+                &mut key,
+                None,
+            )
+        } else {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(subkey.as_ptr()),
+                Some(0),
+                KEY_WRITE | KEY_QUERY_VALUE | view,
+                &mut key,
+            )
+        }
     };
     if status == ERROR_SUCCESS {
-        Ok(key)
+        Ok(Some(key))
+    } else if status == ERROR_FILE_NOT_FOUND {
+        Ok(None)
     } else {
-        Err(format!("RegCreateKeyExW failed: {}", status.0))
+        Err(format!("open ImplicitLayers failed: {}", status.0))
     }
 }
 
 /// Register one manifest path under the given registry view, value data `0`
 /// (enabled). Idempotent: rewriting the same value is a no-op for the loader.
 fn register_one(manifest: &Path, view: REG_SAM_FLAGS) -> Result<(), String> {
-    let key = open_implicit_layers_key(view)?;
+    let key = open_implicit_layers_key(view, true)?.ok_or("ImplicitLayers key missing")?;
     let value_name = HSTRING::from(manifest.as_os_str());
     let enabled: u32 = 0;
-    // SAFETY: `key` is a live handle from open_implicit_layers_key; the data
-    // slice lives for the duration of the call.
+    // SAFETY: `key` is a live handle; the data slice lives for the call.
     let status = unsafe {
         RegSetValueExW(
             key,
@@ -146,31 +196,46 @@ fn register_one(manifest: &Path, view: REG_SAM_FLAGS) -> Result<(), String> {
     }
 }
 
-/// Remove one manifest path from the given registry view. `ERROR_FILE_NOT_FOUND`
-/// (the value was never present) counts as success.
-fn unregister_one(manifest: &Path, view: REG_SAM_FLAGS) -> Result<(), String> {
-    let subkey = HSTRING::from(IMPLICIT_LAYERS_SUBKEY);
-    let mut key = HKEY::default();
-    let open = unsafe {
-        RegOpenKeyExW(
-            HKEY_CURRENT_USER,
-            PCWSTR(subkey.as_ptr()),
-            Some(0),
-            KEY_WRITE | view,
-            &mut key,
-        )
-    };
-    if open == ERROR_FILE_NOT_FOUND {
-        return Ok(()); // the key never existed → nothing registered
+/// Every value name under `key`.
+fn value_names(key: HKEY) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut index = 0u32;
+    loop {
+        // Manifest paths are well under 32k UTF-16 units (the registry limit
+        // for a value name is 16,383 characters).
+        let mut buf = vec![0u16; 16_384];
+        let mut len = buf.len() as u32;
+        // SAFETY: `buf`/`len` describe a live buffer; no data is requested.
+        let status = unsafe {
+            RegEnumValueW(
+                key,
+                index,
+                Some(PWSTR(buf.as_mut_ptr())),
+                &mut len,
+                None,
+                None,
+                None,
+                None,
+            )
+        };
+        if status == ERROR_NO_MORE_ITEMS {
+            break;
+        }
+        if status == ERROR_SUCCESS || status == ERROR_MORE_DATA {
+            names.push(String::from_utf16_lossy(&buf[..len as usize]));
+        }
+        index += 1;
+        if index > 10_000 {
+            break;
+        }
     }
-    if open != ERROR_SUCCESS {
-        return Err(format!("RegOpenKeyExW failed: {}", open.0));
-    }
-    let value_name = HSTRING::from(manifest.as_os_str());
+    names
+}
+
+/// Delete one value. `ERROR_FILE_NOT_FOUND` counts as success.
+fn delete_value(key: HKEY, name: &str) -> Result<(), String> {
+    let value_name = HSTRING::from(name);
     let status = unsafe { RegDeleteValueW(key, PCWSTR(value_name.as_ptr())) };
-    unsafe {
-        let _ = RegCloseKey(key);
-    }
     if status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND {
         Ok(())
     } else {
@@ -178,24 +243,17 @@ fn unregister_one(manifest: &Path, view: REG_SAM_FLAGS) -> Result<(), String> {
     }
 }
 
-/// Ensure the bundled Vulkan implicit-layer manifests are registered with the
-/// Vulkan loader for the current user, so a Vulkan game launched afterward loads
-/// our `graphics-hook` layer and the present interception can attach.
+/// Register the bundled Vulkan implicit-layer manifests for the current user,
+/// so a Vulkan game launched afterward loads the hook layer. Prefer a
+/// [`LayerLease`], which also removes the registration again.
 ///
-/// Idempotent and best-effort: each (manifest, registry-view) pair is registered
+/// Best-effort: each (manifest, registry-view) pair is registered
 /// independently; a missing manifest/DLL or a registry error for one is logged
-/// and skipped without failing the others. Registers the 64-bit manifest in the
-/// 64-bit registry view and the 32-bit manifest in the 32-bit view, matching the
-/// bitness the respective Vulkan loader reads.
-///
-/// Returns the number of manifests successfully registered (0 if none could be).
-pub fn ensure_registered() -> usize {
+/// and skipped. Returns the number of manifests registered.
+fn ensure_registered() -> usize {
     let mut registered = 0usize;
 
-    for (json, dll, view) in [
-        (LAYER_JSON_64, "graphics-hook64.dll", KEY_WOW64_64KEY),
-        (LAYER_JSON_32, "graphics-hook32.dll", KEY_WOW64_32KEY),
-    ] {
+    for (json, dll, view) in VIEWS {
         let Some(manifest) = layer_manifest_path(json) else {
             log::debug!(
                 "[VulkanLayer] manifest {json} not found next to the binary; \
@@ -214,10 +272,9 @@ pub fn ensure_registered() -> usize {
             Ok(()) => {
                 registered += 1;
                 log::info!(
-                    "[VulkanLayer] registered implicit layer {} (HKCU\\{}\\{})",
+                    "[VulkanLayer] registered implicit layer {} (HKCU\\{})",
                     manifest.display(),
                     IMPLICIT_LAYERS_SUBKEY,
-                    json,
                 );
             }
             Err(e) => log::warn!(
@@ -226,39 +283,129 @@ pub fn ensure_registered() -> usize {
             ),
         }
     }
-
-    if registered == 0 {
-        log::info!(
-            "[VulkanLayer] no Vulkan implicit-layer manifests registered; Vulkan \
-             games will fall back (DX/GL capture is unaffected)"
-        );
-    }
     registered
 }
 
-/// Remove the bundled Vulkan implicit-layer registrations for the current user.
-/// Best-effort; intended for an uninstall/cleanup path. Returns the number of
-/// manifests successfully removed (or already absent).
-pub fn ensure_unregistered() -> usize {
+/// Remove every implicit-layer registration this app has written, in both
+/// registry views: the running build's, older install folders', and dev build
+/// folders' (see [`is_own_registration`]). Registrations by OBS or anyone else
+/// are kept. Returns the number of values removed.
+pub fn remove_registrations() -> usize {
     let mut removed = 0usize;
-    for (json, view) in [
-        (LAYER_JSON_64, KEY_WOW64_64KEY),
-        (LAYER_JSON_32, KEY_WOW64_32KEY),
-    ] {
-        // Build the path even if the file is gone, so we can still delete a
-        // stale registry value pointing at a removed manifest.
-        let manifest = obs_capture_dir()
-            .map(|d| d.join(json))
-            .unwrap_or_else(|| PathBuf::from(json));
-        match unregister_one(&manifest, view) {
-            Ok(()) => removed += 1,
-            Err(e) => log::warn!(
-                "[VulkanLayer] failed to unregister implicit layer {}: {e}",
-                manifest.display()
-            ),
+    let mut kept_foreign = 0usize;
+    for (_, _, view) in VIEWS {
+        let key = match open_implicit_layers_key(view, false) {
+            Ok(Some(key)) => key,
+            Ok(None) => continue,
+            Err(e) => {
+                log::warn!("[VulkanLayer] cannot open ImplicitLayers for cleanup: {e}");
+                continue;
+            }
+        };
+        for name in value_names(key) {
+            let text = std::fs::read_to_string(&name).ok();
+            if !is_own_registration(&name, text.as_deref()) {
+                kept_foreign += 1;
+                continue;
+            }
+            match delete_value(key, &name) {
+                Ok(()) => {
+                    removed += 1;
+                    log::debug!("[VulkanLayer] removed registration {name}");
+                }
+                Err(e) => log::warn!("[VulkanLayer] could not remove registration {name}: {e}"),
+            }
+        }
+        unsafe {
+            let _ = RegCloseKey(key);
         }
     }
+    log::info!(
+        "[VulkanLayer] removed {removed} implicit-layer registration(s) written by this app; \
+         kept {kept_foreign} from other software"
+    );
     removed
+}
+
+/// How many [`LayerLease`]s are alive.
+static LEASES: Mutex<usize> = Mutex::new(0);
+
+/// Keeps the Vulkan layer registered while a hook share runs. The first lease
+/// registers the manifests; dropping the last one removes them.
+#[derive(Debug)]
+pub struct LayerLease(());
+
+impl LayerLease {
+    pub fn acquire() -> Self {
+        let mut leases = LEASES.lock().unwrap_or_else(|p| p.into_inner());
+        if *leases == 0 {
+            let registered = ensure_registered();
+            log::info!(
+                "[VulkanLayer] hook share started: {registered} manifest(s) registered \
+                 (Vulkan games launched from now until the share ends load the layer)"
+            );
+        }
+        *leases += 1;
+        LayerLease(())
+    }
+}
+
+impl Drop for LayerLease {
+    fn drop(&mut self) {
+        let mut leases = LEASES.lock().unwrap_or_else(|p| p.into_inner());
+        *leases = leases.saturating_sub(1);
+        if *leases == 0 {
+            let removed = remove_registrations();
+            log::info!("[VulkanLayer] hook share ended: {removed} registration(s) removed");
+        }
+    }
+}
+
+/// Whether the target process has a `graphics-hook{64,32}.dll` loaded, which
+/// for a Vulkan game means a capture layer attached at `vkCreateInstance`. A
+/// Vulkan target without it cannot be hooked, so injecting would only put a
+/// DLL in the game for nothing.
+pub fn process_has_hook_module(pid: u32) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W, TH32CS_SNAPMODULE,
+        TH32CS_SNAPMODULE32,
+    };
+
+    let Ok(snapshot) =
+        (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) })
+    else {
+        return false;
+    };
+    let mut found = false;
+    let mut entry = MODULEENTRY32W {
+        dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
+        ..Default::default()
+    };
+    let mut walk = unsafe { Module32FirstW(snapshot, &mut entry) };
+    while walk.is_ok() {
+        let len = entry
+            .szModule
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(entry.szModule.len());
+        let module = String::from_utf16_lossy(&entry.szModule[..len]);
+        if module.eq_ignore_ascii_case("graphics-hook64.dll")
+            || module.eq_ignore_ascii_case("graphics-hook32.dll")
+        {
+            found = true;
+            break;
+        }
+        entry = MODULEENTRY32W {
+            dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
+            ..Default::default()
+        };
+        walk = unsafe { Module32NextW(snapshot, &mut entry) };
+    }
+    unsafe {
+        let _ = CloseHandle(snapshot);
+    }
+    found
 }
 
 #[cfg(test)]
@@ -280,6 +427,8 @@ mod tests {
         // These must match the JSON shipped by build.rs / the fork.
         assert_eq!(LAYER_JSON_64, "obs-vulkan64.json");
         assert_eq!(LAYER_JSON_32, "obs-vulkan32.json");
+        let bundled = include_str!("../../resources/obs-capture/obs-vulkan64.json");
+        assert!(bundled.contains(OWN_LAYER_NAME));
     }
 
     #[test]
@@ -291,5 +440,44 @@ mod tests {
         let _ = std::fs::write(&manifest, b"{}");
         assert!(!manifest_dll_present(&manifest, "graphics-hook64.dll"));
         let _ = std::fs::remove_file(&manifest);
+    }
+
+    #[test]
+    fn stale_install_and_dev_registrations_are_ours() {
+        // Seen on two machines: every past install and dev build folder.
+        for path in [
+            r"C:\Users\u\AppData\Local\RalphMeet\app-3.3.0\obs-capture\obs-vulkan64.json",
+            r"C:\Users\u\AppData\Local\RalphMeet\app-3.7.0\obs-capture\obs-vulkan32.json",
+            r"C:\Users\u\AppData\Local\RalphMeet\obs-capture\obs-vulkan64.json",
+            r"F:\dev\ralph-meet\desktop\src-tauri\target\debug\obs-capture\obs-vulkan64.json",
+            r"F:\dev\ralph-meet\desktop\src-tauri\target\profiling\OBS-CAPTURE\OBS-VULKAN32.JSON",
+        ] {
+            assert!(is_own_registration(path, None), "{path}");
+        }
+    }
+
+    #[test]
+    fn obs_and_other_layers_are_never_ours() {
+        for path in [
+            r"C:\ProgramData\obs-studio-hook\obs-vulkan64.json",
+            r"C:\Program Files\obs-studio\data\obs-plugins\win-capture\obs-vulkan64.json",
+            r"C:\Program Files (x86)\Steam\SteamOverlayVulkanLayer64.json",
+            r"C:\x\obs-capture\other-layer.json",
+        ] {
+            assert!(!is_own_registration(path, None), "{path}");
+        }
+    }
+
+    #[test]
+    fn an_existing_manifest_must_name_our_layer() {
+        let path = r"C:\x\obs-capture\obs-vulkan64.json";
+        assert!(is_own_registration(
+            path,
+            Some(r#"{"layer":{"name":"VK_LAYER_RALPH_MEET_HOOK"}}"#)
+        ));
+        assert!(!is_own_registration(
+            path,
+            Some(r#"{"layer":{"name":"VK_LAYER_OBS_HOOK"}}"#)
+        ));
     }
 }
