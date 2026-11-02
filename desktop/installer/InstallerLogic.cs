@@ -49,61 +49,111 @@ namespace Installer
                 LogKnownLockDiagnostics(layout, "Pre-install lock snapshot");
 
                 WaitForManagedProcessesToExit(environment, TimeSpan.FromSeconds(30));
-                DeleteShortcuts(environment);
-                using (RegistryKey userRoot = environment.OpenUserRoot())
+
+                try
                 {
-                    DeleteRegistryKeyTree(userRoot, LegacyUninstallKeyPath);
-                    DeleteRegistryKeyTree(userRoot, LegacyPublisherKeyPath);
+                    InstallAndActivate(environment, layout, legacyInstallDir, launchApplication);
                 }
-                DeleteDirectoryIfExists(legacyInstallDir);
-
-                Directory.CreateDirectory(layout.RootPath);
-                Directory.CreateDirectory(layout.StagingPath);
-                InstallerLogger.Info("Ensured install root exists.");
-
-                string stagingDirectoryPath = ActivationManager.PrepareStagingDirectory(layout, DisplayName);
-                InstallerLogger.Info("Prepared staging directory: " + stagingDirectoryPath);
-                ExtractPayload(stagingDirectoryPath);
-
-                string payloadExecutablePath = Path.Combine(stagingDirectoryPath, ExecutableFileName);
-                string payloadVersion = ResolvePayloadVersion(payloadExecutablePath);
-                InstallerLogger.Info("Resolved payload version: " + payloadVersion);
-
-                ActivationResult activation = ActivationManager.Activate(layout, stagingDirectoryPath, payloadVersion);
-                InstallerLogger.Info("Activated version directory: " + activation.ActiveDirectoryPath);
-
-                DeleteLegacyRootEntries(layout);
-
-                RootLauncher.Refresh(layout, activation.ActiveDirectoryPath);
-                string uninstallerPath = CopyBootstrapperToUninstaller(layout.RootPath);
-                RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
-                bool hasRootStub = File.Exists(layout.RootStubPath);
-                InstallerLogger.Info("App entry point: " + launcherPath + " " + launcherArguments);
-
-                using (RegistryKey userRoot = environment.OpenUserRoot())
+                catch
                 {
-                    CreateUninstallRegistryKeys(userRoot, layout.RootPath, activation.ActiveExecutablePath, uninstallerPath, launcherPath);
-                    CreateCompatibilityInstallLocationKey(userRoot, layout.RootPath);
-                    RegisterDeepLinkProtocol(userRoot, launcherPath, launcherArguments);
-                    if (hasRootStub)
+                    // Nothing destructive ran before activation, so the version that was
+                    // installed is intact. The updater closed it; bring it back.
+                    if (launchApplication)
                     {
-                        LauncherMigration.MigrateRunValue(userRoot, layout);
+                        TryRelaunchInstalledVersion(layout);
                     }
+                    throw;
                 }
+            }).ConfigureAwait(false);
+        }
 
-                CreateShortcuts(environment, launcherPath, launcherArguments);
+        private static void InstallAndActivate(
+            InstallEnvironment environment,
+            InstallRootLayout layout,
+            string legacyInstallDir,
+            bool launchApplication)
+        {
+            Directory.CreateDirectory(layout.RootPath);
+            Directory.CreateDirectory(layout.StagingPath);
+            InstallerLogger.Info("Ensured install root exists.");
+
+            string stagingDirectoryPath = ActivationManager.PrepareStagingDirectory(layout, DisplayName);
+            InstallerLogger.Info("Prepared staging directory: " + stagingDirectoryPath);
+            ExtractPayload(stagingDirectoryPath);
+
+            string payloadExecutablePath = Path.Combine(stagingDirectoryPath, ExecutableFileName);
+            string payloadVersion = ResolvePayloadVersion(payloadExecutablePath);
+            InstallerLogger.Info("Resolved payload version: " + payloadVersion);
+
+            ActivationResult activation = ActivationManager.Activate(layout, stagingDirectoryPath, payloadVersion);
+            InstallerLogger.Info("Activated version directory: " + activation.ActiveDirectoryPath);
+
+            // Remove the legacy install only once the new version is active, so a failed
+            // install never leaves the user without shortcuts or an app. CreateShortcuts
+            // below replaces the current shortcuts itself.
+            DeleteShortcuts(environment);
+            using (RegistryKey userRoot = environment.OpenUserRoot())
+            {
+                DeleteRegistryKeyTree(userRoot, LegacyUninstallKeyPath);
+                DeleteRegistryKeyTree(userRoot, LegacyPublisherKeyPath);
+            }
+            DeleteDirectoryIfExists(legacyInstallDir);
+
+            DeleteLegacyRootEntries(layout);
+
+            RootLauncher.Refresh(layout, activation.ActiveDirectoryPath);
+            string uninstallerPath = CopyBootstrapperToUninstaller(layout.RootPath);
+            RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
+            bool hasRootStub = File.Exists(layout.RootStubPath);
+            InstallerLogger.Info("App entry point: " + launcherPath + " " + launcherArguments);
+
+            using (RegistryKey userRoot = environment.OpenUserRoot())
+            {
+                CreateUninstallRegistryKeys(userRoot, layout.RootPath, activation.ActiveExecutablePath, uninstallerPath, launcherPath);
+                CreateCompatibilityInstallLocationKey(userRoot, layout.RootPath);
+                RegisterDeepLinkProtocol(userRoot, launcherPath, launcherArguments);
                 if (hasRootStub)
                 {
-                    int pins = LauncherMigration.RetargetPinnedShortcuts(environment.TaskbarPinsDirectory, layout);
-                    InstallerLogger.Info("Retargeted " + pins + " taskbar pin(s) to the root launcher.");
+                    LauncherMigration.MigrateRunValue(userRoot, layout);
+                }
+            }
+
+            CreateShortcuts(environment, launcherPath, launcherArguments);
+            if (hasRootStub)
+            {
+                int pins = LauncherMigration.RetargetPinnedShortcuts(environment.TaskbarPinsDirectory, layout);
+                InstallerLogger.Info("Retargeted " + pins + " taskbar pin(s) to the root launcher.");
+            }
+
+            if (launchApplication)
+            {
+                LaunchApplication(launcherPath, launcherArguments, layout.RootPath);
+            }
+            InstallerLogger.Info("Installation finished successfully.");
+        }
+
+        /// <summary>
+        /// After a failed install, start the version current.json still points at, if any.
+        /// Never throws: the install error is what the caller reports.
+        /// </summary>
+        private static void TryRelaunchInstalledVersion(InstallRootLayout layout)
+        {
+            try
+            {
+                if (InstallState.LoadIfExists(layout.CurrentStatePath) == null)
+                {
+                    InstallerLogger.Info("Install failed and no version is installed; nothing to relaunch.");
+                    return;
                 }
 
-                if (launchApplication)
-                {
-                    LaunchApplication(launcherPath, launcherArguments, layout.RootPath);
-                }
-                InstallerLogger.Info("Installation finished successfully.");
-            }).ConfigureAwait(false);
+                RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
+                InstallerLogger.Warn("Install failed; relaunching the installed version.");
+                LaunchApplication(launcherPath, launcherArguments, layout.RootPath);
+            }
+            catch (Exception ex)
+            {
+                InstallerLogger.Error("Could not relaunch the installed version after a failed install.", ex);
+            }
         }
 
         public static async Task RunUninstallationAsync()

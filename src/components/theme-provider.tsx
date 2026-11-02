@@ -1,4 +1,5 @@
 import { isDesktop, isTauri } from "@/lib/platform";
+import { getHost } from "@/lib/host";
 import { isDarkAppTheme, NEXT_THEME_NAMES } from "@/lib/theme-preferences";
 import {
   isChatStoreLoaded,
@@ -67,9 +68,9 @@ function NativeTitleBarSync() {
 
     const dark = isDarkAppTheme(resolvedTheme);
     if (isDesktop()) {
-      import("@tauri-apps/api/core")
-        .then(({ invoke }) => invoke("set_title_bar_dark_mode", { dark }))
-        .catch((e) => {
+      getHost()
+        .window.setTitleBarDarkMode(dark)
+        .catch((e: unknown) => {
           console.error("Theme set error:", e);
         });
     } else {

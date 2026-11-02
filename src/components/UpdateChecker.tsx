@@ -1,17 +1,16 @@
 import { isDesktop } from "@/lib/platform";
 import { Button } from "@/components/ui/button";
-import { fetchDesktopUpdate, installDesktopUpdate } from "@/lib/desktop-update";
-import { restartDesktopApp } from "@/lib/desktop-restart";
+import {
+  appUpdates,
+  progressPercent,
+  useAppUpdateState,
+  type UpdateState,
+} from "@/lib/app-updates";
+import { getHost } from "@/lib/host";
 import { clog } from "@/lib/console-logger";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const log = clog("UpdateChecker");
-
-interface UpdateInfo {
-  version: string;
-  body: string | null;
-  date: string | null;
-}
 
 type UpdateStatus =
   | "idle"
@@ -21,6 +20,26 @@ type UpdateStatus =
   | "ready"
   | "error";
 
+/** The toast's view of the shared update state. Check failures stay silent. */
+function toastStatus({ phase, pending, failed }: UpdateState): UpdateStatus {
+  switch (phase) {
+    case "available":
+      return "available";
+    // A re-check (Settings opened) keeps showing what was found.
+    case "checking":
+      return pending ? "available" : "checking";
+    case "downloading":
+    case "installing":
+      return "downloading";
+    case "installed":
+      return "ready";
+    case "error":
+      return failed === "install" ? "error" : "idle";
+    default:
+      return "idle";
+  }
+}
+
 /**
  * Headless component that checks for app updates in the background, 10 s
  * after launch and every 30 minutes. The launch itself never waits on it:
@@ -29,82 +48,39 @@ type UpdateStatus =
  * download + restart controls.
  */
 export function UpdateChecker() {
-  const [status, setStatus] = useState<UpdateStatus>("idle");
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [progress, setProgress] = useState(0);
+  const updateState = useAppUpdateState();
+  const status = toastStatus(updateState);
+  const updateInfo = updateState.pending;
+  const progress = progressPercent(updateState.progress);
   const [dismissed, setDismissed] = useState(false);
-  const updateAvailableRef = useRef(false);
 
   const checkForUpdate = useCallback(async () => {
     if (!isDesktop()) return;
 
     try {
-      setStatus("checking");
-      const update = await fetchDesktopUpdate();
-
-      if (update) {
-        updateAvailableRef.current = true;
-        setUpdateInfo({
-          version: update.version,
-          body: update.notes,
-          date: null,
-        });
-        setStatus("available");
-        setDismissed(false);
-      } else {
-        updateAvailableRef.current = false;
-        setStatus("idle");
-      }
+      const update = await appUpdates.check();
+      if (update) setDismissed(false);
     } catch (e) {
-      updateAvailableRef.current = false;
-      log.warn("Check failed:", e);
-      setStatus("idle"); // Silent fail — don't nag the user
+      log.warn("Check failed:", e); // Silent fail — don't nag the user
     }
   }, []);
 
   const downloadAndInstall = useCallback(async () => {
-    if (!updateAvailableRef.current) return;
-
     try {
-      setStatus("downloading");
-      setProgress(0);
-
-      let downloaded = 0;
-      let contentLength = 0;
-
-      await installDesktopUpdate((event) => {
-        switch (event.event) {
-          case "started":
-            contentLength = event.data.contentLength ?? 0;
-            break;
-          case "progress":
-            downloaded += event.data.chunkLength;
-            if (contentLength > 0) {
-              setProgress(
-                Math.min(100, Math.round((downloaded / contentLength) * 100)),
-              );
-            }
-            break;
-          case "finished":
-            setProgress(100);
-            break;
-        }
-      });
-
-      setStatus("ready");
-
-      // Auto-relaunch after a brief moment
-      setTimeout(async () => {
-        try {
-          await restartDesktopApp();
-        } catch {
-          // If relaunch fails, user can still manually restart
-        }
-      }, 2000);
+      await appUpdates.install();
     } catch (e) {
       log.error("Download failed:", e);
-      setStatus("error");
+      return;
     }
+
+    // Auto-relaunch after a brief moment
+    setTimeout(async () => {
+      try {
+        await getHost().window.restart();
+      } catch {
+        // If relaunch fails, user can still manually restart
+      }
+    }, 2000);
   }, []);
 
   // Check on mount + every 30 minutes
@@ -132,9 +108,9 @@ export function UpdateChecker() {
             <p className="text-ui-sm font-semibold text-ink-1">
               Update available — v{updateInfo?.version}
             </p>
-            {updateInfo?.body && (
+            {updateInfo?.notes && (
               <p className="text-ui-xs text-ink-3 leading-relaxed line-clamp-3">
-                {updateInfo.body}
+                {updateInfo.notes}
               </p>
             )}
           </div>

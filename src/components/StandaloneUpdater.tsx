@@ -1,8 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { DitherGlyph } from "@/components/ui/dither-glyph";
-import { fetchDesktopUpdate, installDesktopUpdate } from "@/lib/desktop-update";
-import { restartDesktopApp } from "@/lib/desktop-restart";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  appUpdates,
+  progressPercent,
+  useAppUpdateState,
+  withTimeout,
+} from "@/lib/app-updates";
+import { getHost } from "@/lib/host";
 import type React from "react";
 import { useEffect, useState } from "react";
 
@@ -45,28 +49,9 @@ export function getStandaloneUpdaterStatusText(
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(message)),
-      HANDOFF_TIMEOUT_MS,
-    );
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
 export function StandaloneUpdater() {
   const [status, setStatus] = useState<StandaloneUpdaterStatus>("checking");
-  const [progress, setProgress] = useState(0);
+  const update = useAppUpdateState();
 
   useEffect(() => {
     console.info("[StandaloneUpdater] useEffect mounted");
@@ -76,7 +61,7 @@ export function StandaloneUpdater() {
       console.info("[StandaloneUpdater] runUpdateCheck called");
       try {
         const outcome = await Promise.race([
-          fetchDesktopUpdate().then((update) => ({ update })),
+          appUpdates.check().then((update) => ({ update })),
           sleep(UPDATE_CHECK_BUDGET_MS).then(() => null),
         ]);
         if (!outcome) {
@@ -90,35 +75,12 @@ export function StandaloneUpdater() {
         const { update } = outcome;
         if (update && mounted) {
           setStatus("downloading");
-          let downloaded = 0;
-          let contentLength = 0;
-
-          await installDesktopUpdate((event) => {
-            switch (event.event) {
-              case "started":
-                contentLength = event.data.contentLength ?? 0;
-                break;
-              case "progress":
-                downloaded += event.data.chunkLength;
-                if (contentLength > 0 && mounted) {
-                  setProgress(
-                    Math.min(
-                      100,
-                      Math.round((downloaded / contentLength) * 100),
-                    ),
-                  );
-                }
-                break;
-              case "finished":
-                if (mounted) setStatus("installing");
-                break;
-            }
-          });
+          await appUpdates.install();
 
           // Fallback auto-relaunch if the installer doesn't do it
           setTimeout(async () => {
             try {
-              await restartDesktopApp();
+              await getHost().window.restart();
             } catch (e) {
               console.error("Relaunch failed", e);
             }
@@ -140,7 +102,7 @@ export function StandaloneUpdater() {
     }
 
     async function switchToMain() {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const host = getHost();
       let handedOff = false;
 
       try {
@@ -152,7 +114,8 @@ export function StandaloneUpdater() {
         for (let attempt = 0; attempt < HANDOFF_RETRY_COUNT; attempt++) {
           try {
             await withTimeout(
-              invoke("launch_main_window"),
+              host.window.launchMainWindow(),
+              HANDOFF_TIMEOUT_MS,
               "main window handoff timed out",
             );
             handedOff = true;
@@ -176,7 +139,8 @@ export function StandaloneUpdater() {
           for (let attempt = 0; attempt < HANDOFF_RETRY_COUNT; attempt++) {
             try {
               await withTimeout(
-                getCurrentWindow().close(),
+                host.window.closeCurrentWindow(),
+                HANDOFF_TIMEOUT_MS,
                 "updater window close timed out",
               );
               updaterClosed = true;
@@ -192,7 +156,8 @@ export function StandaloneUpdater() {
           if (!updaterClosed) {
             try {
               await withTimeout(
-                invoke("close_updater_window"),
+                host.window.closeUpdaterWindow(),
+                HANDOFF_TIMEOUT_MS,
                 "native updater close timed out",
               );
             } catch (closeErr: unknown) {
@@ -213,7 +178,18 @@ export function StandaloneUpdater() {
     };
   }, []);
 
-  return <StandaloneUpdaterView status={status} progress={progress} />;
+  // The install's own steps (download, then install) come from the client.
+  const shown =
+    status === "downloading" &&
+    (update.phase === "installing" || update.phase === "installed")
+      ? "installing"
+      : status;
+  return (
+    <StandaloneUpdaterView
+      status={shown}
+      progress={progressPercent(update.progress)}
+    />
+  );
 }
 
 /** The updater window's one screen; the fixtures render it without Tauri. */
