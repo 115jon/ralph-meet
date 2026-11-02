@@ -2,8 +2,9 @@ import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
 import { Button } from "@/components/ui/button";
 import { Num } from "@/components/ui/num";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
+import { progressPercent } from "@/lib/app-updates";
 import { clog } from "@/lib/console-logger";
-import { restartDesktopApp } from "@/lib/desktop-restart";
+import { getHost } from "@/lib/host";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useEffect, useState } from "react";
 import { SettingsCard, SettingsRow, ValueText } from "./primitives";
@@ -32,7 +33,7 @@ function HardwareAccelerationRow() {
         hardwareAcceleration: pendingHardwareAcceleration,
       });
       saved = true;
-      await restartDesktopApp();
+      await getHost().window.restart();
     } catch (error) {
       log.error("Failed to change hardware acceleration:", error);
       // Keep the confirm open with the reason. A failed save already
@@ -96,15 +97,15 @@ function UpdatesRow() {
   const [appVersion, setAppVersion] = useState<string>("");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      import("@tauri-apps/api/app").then(({ getVersion }) => {
-        getVersion().then(setAppVersion).catch(console.error);
-      });
-    }
+    getHost()
+      .updates.getAppVersion()
+      .then((version) => {
+        if (version) setAppVersion(version);
+      })
+      .catch(console.error);
   }, []);
 
-  const progress =
-    downloadProgress !== null ? Math.round(downloadProgress * 100) : 0;
+  const progress = progressPercent(downloadProgress);
   const busy =
     status === "checking" ||
     status === "downloading" ||

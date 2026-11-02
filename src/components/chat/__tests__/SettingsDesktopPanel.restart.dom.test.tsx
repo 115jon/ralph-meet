@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   invoke:
@@ -66,8 +66,14 @@ vi.mock("@/hooks/useAppUpdater", () => ({
 
 import DesktopPanel from "@/components/chat/settings/DesktopPanel";
 import { SettingsContext } from "@/components/chat/settings/primitives";
+import { setHostForTests } from "@/lib/host";
+import { createDesktopHost } from "@/lib/host/desktop";
 
 describe("DesktopPanel hardware acceleration restart", () => {
+  // The real desktop adapter over the mocked `invoke`.
+  beforeAll(() => setHostForTests(createDesktopHost()));
+  afterAll(() => setHostForTests(null));
+
   it("routes hardware acceleration confirmation through the desktop restart command", async () => {
     mocks.saveSettings.mockResolvedValue();
     mocks.invoke.mockResolvedValue(undefined);

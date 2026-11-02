@@ -134,9 +134,15 @@ function devAuthKey(): string {
 export default defineConfig(({ command, isPreview }) => {
   const kovaKey = command === "serve" && !isPreview ? devAuthKey() : null;
   return {
-    define: kovaKey
-      ? { "import.meta.env.RALPH_DEV_KOVA_KEY": JSON.stringify(kovaKey) }
-      : undefined,
+    define: {
+      // Build flags (src/lib/runtime.ts). Constants here, so the web build
+      // drops desktop/mobile branches and the desktop host adapter.
+      __IS_DESKTOP__: false,
+      __IS_MOBILE__: false,
+      ...(kovaKey
+        ? { "import.meta.env.RALPH_DEV_KOVA_KEY": JSON.stringify(kovaKey) }
+        : {}),
+    },
     server: {
       host: "0.0.0.0",
       // RALPH_DEV_PORT moves it off 5173; never a silent fallback, because

@@ -13,10 +13,8 @@ import {
   useKovaAuthTokenSync,
 } from "@/lib/desktop-auth";
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
-import {
-  inviteCodeFromDeepLink,
-  subscribeDesktopDeepLinks,
-} from "@/lib/desktop-deep-link";
+import { inviteCodeFromDeepLink } from "@/lib/desktop-deep-link";
+import { getHost } from "@/lib/host";
 import { isDesktop, isTauri } from "@/lib/platform";
 import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
@@ -196,9 +194,9 @@ function DesktopDeepLinkBridge() {
   // The page's one deep-link handler. Rust dedupes links, reveals the window
   // and queues links that arrive before this listens.
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isDesktop()) return;
 
-    const { unsubscribe, ready } = subscribeDesktopDeepLinks((url) => {
+    const { unsubscribe, ready } = getHost().deepLinks.subscribe((url) => {
       // Auth no longer uses deep links (desktop signs in with a device code);
       // invites are the only ralphmeet:// links handled here.
       const code = inviteCodeFromDeepLink(url);
@@ -229,8 +227,7 @@ function DesktopDeepLinkBridge() {
       event.stopPropagation();
 
       try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke("plugin:webview|internal_toggle_devtools");
+        await getHost().window.toggleDevtools();
       } catch (error) {
         devtoolsLog.error("Failed to toggle devtools", error);
       }

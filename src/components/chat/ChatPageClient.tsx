@@ -26,7 +26,7 @@ import {
   syncDesktopNotificationState,
 } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { isTauri } from "@/lib/platform";
+import { isDesktop, isTauri } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import {
   resolveStreamPreviewAutomation,
@@ -1608,7 +1608,7 @@ export default function ChatPage() {
             />
           ))}
 
-        {isTauri() && (
+        {isDesktop() && (
           <Suspense fallback={null}>
             <DesktopThumbnailToolbarSync
               currentUserId={user?.id ?? null}

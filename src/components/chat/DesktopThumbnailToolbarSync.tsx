@@ -1,20 +1,16 @@
 import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { clog } from "@/lib/console-logger";
 import {
-  clearDesktopThumbnailToolbar,
-  HIDDEN_DESKTOP_THUMBNAIL_TOOLBAR_STATE,
-  listenForDesktopThumbnailToolbarActions,
-  syncDesktopThumbnailToolbar,
-  type DesktopThumbnailToolbarState,
-} from "@/lib/desktop-thumbnail-toolbar";
-import { isTauri } from "@/lib/platform";
+  getHost,
+  HIDDEN_THUMBNAIL_TOOLBAR_STATE,
+  type ThumbnailToolbarState,
+} from "@/lib/host";
 import type { SFUClient } from "@/lib/sfu-client";
 import { playCallEnd } from "@/lib/sounds";
 import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import {
@@ -110,19 +106,19 @@ function sendListenTogetherCommand(
   return sfu.voiceGW.sendAppEvent(payload);
 }
 
-async function focusCurrentDesktopWindow() {
-  if (!isTauri()) return;
+function focusCurrentDesktopWindow() {
+  return getHost().window.focus();
+}
 
-  const currentWindow = getCurrentWindow();
-  await currentWindow.unminimize().catch(() => {
-    /* window is already restored */
-  });
-  await currentWindow.show().catch(() => {
-    /* window may already be visible */
-  });
-  await currentWindow.setFocus().catch(() => {
-    /* focus is best-effort */
-  });
+function syncToolbar(state: ThumbnailToolbarState) {
+  return getHost()
+    .window.syncThumbnailToolbar(state)
+    .catch((error: unknown) => {
+      console.warn(
+        "[DesktopThumbnailToolbar] Failed to sync native thumbnail toolbar state",
+        { state, error },
+      );
+    });
 }
 
 export function DesktopThumbnailToolbarSync({
@@ -272,8 +268,7 @@ export function DesktopThumbnailToolbarSync({
   const toolbarHasMedia = !!mediaControls;
   const toolbarMediaPaused = mediaControls?.paused ?? false;
   useEffect(() => {
-    if (!isTauri()) return;
-    const nextToolbarState: DesktopThumbnailToolbarState = toolbarVisible
+    const nextToolbarState: ThumbnailToolbarState = toolbarVisible
       ? {
           visible: true,
           hasCamera: toolbarHasCamera,
@@ -284,8 +279,8 @@ export function DesktopThumbnailToolbarSync({
           hasMediaControls: toolbarHasMedia,
           isMediaPaused: toolbarMediaPaused,
         }
-      : HIDDEN_DESKTOP_THUMBNAIL_TOOLBAR_STATE;
-    void syncDesktopThumbnailToolbar(nextToolbarState);
+      : HIDDEN_THUMBNAIL_TOOLBAR_STATE;
+    void syncToolbar(nextToolbarState);
   }, [
     toolbarVisible,
     toolbarHasCamera,
@@ -298,80 +293,80 @@ export function DesktopThumbnailToolbarSync({
   ]);
 
   useEffect(() => {
-    if (!isTauri()) return;
-
     let isDisposed = false;
     let unlisten: (() => void) | undefined;
 
-    void listenForDesktopThumbnailToolbarActions(async ({ action }) => {
-      if (isDisposed) return;
+    void getHost()
+      .window.onThumbnailToolbarAction(async ({ action }) => {
+        if (isDisposed) return;
 
-      const session = activeSessionRef.current;
-      const media = mediaControlsRef.current;
+        const session = activeSessionRef.current;
+        const media = mediaControlsRef.current;
 
-      switch (action) {
-        case "toggle-camera":
-          if (!session) return;
-          await handleVoiceCameraToggle({
-            hasCamera: session.hasCamera,
-            isCameraActive: session.isCameraOn,
-            alwaysPreviewVideo: alwaysPreviewVideoRef.current,
-            onToggleCamera: session.toggleCamera,
-            onOpenPreviewModal: () => setIsCameraModalOpen(true),
-            beforeOpenPreviewModal: focusCurrentDesktopWindow,
-          });
-          return;
-        case "toggle-mic":
-          session?.toggleMic?.();
-          return;
-        case "toggle-deafen":
-          session?.toggleDeafen?.();
-          return;
-        case "disconnect":
-          session?.disconnect();
-          return;
-        case "toggle-media-playback": {
-          if (!media) return;
-          // Pin the pause at where the track is now, not at the last render.
-          const live: DesktopMediaControls = {
-            ...media,
-            positionMs: getListenTogetherLivePositionMs(
-              {
-                ...positionSourceRef.current,
-                localPlayback: media.localPlayback,
-              },
-              Date.now(),
-            ),
-          };
-          const sent = sendListenTogetherCommand(media.sfu, media.roomSlug, {
-            type: "listen_together.pause",
-            room_slug: media.roomSlug,
-            paused: !media.paused,
-            entryId: media.entryId,
-          });
-          if (sent) {
-            const nextMedia = getNextDesktopMediaControls(live);
-            mediaControlsRef.current = nextMedia;
-            media.setLocalPlayback(media.roomSlug, nextMedia.localPlayback);
+        switch (action) {
+          case "toggle-camera":
+            if (!session) return;
+            await handleVoiceCameraToggle({
+              hasCamera: session.hasCamera,
+              isCameraActive: session.isCameraOn,
+              alwaysPreviewVideo: alwaysPreviewVideoRef.current,
+              onToggleCamera: session.toggleCamera,
+              onOpenPreviewModal: () => setIsCameraModalOpen(true),
+              beforeOpenPreviewModal: focusCurrentDesktopWindow,
+            });
+            return;
+          case "toggle-mic":
+            session?.toggleMic?.();
+            return;
+          case "toggle-deafen":
+            session?.toggleDeafen?.();
+            return;
+          case "disconnect":
+            session?.disconnect();
+            return;
+          case "toggle-media-playback": {
+            if (!media) return;
+            // Pin the pause at where the track is now, not at the last render.
+            const live: DesktopMediaControls = {
+              ...media,
+              positionMs: getListenTogetherLivePositionMs(
+                {
+                  ...positionSourceRef.current,
+                  localPlayback: media.localPlayback,
+                },
+                Date.now(),
+              ),
+            };
+            const sent = sendListenTogetherCommand(media.sfu, media.roomSlug, {
+              type: "listen_together.pause",
+              room_slug: media.roomSlug,
+              paused: !media.paused,
+              entryId: media.entryId,
+            });
+            if (sent) {
+              const nextMedia = getNextDesktopMediaControls(live);
+              mediaControlsRef.current = nextMedia;
+              media.setLocalPlayback(media.roomSlug, nextMedia.localPlayback);
+            }
+            return;
           }
+          case "skip-media":
+            if (!media) return;
+            sendListenTogetherCommand(media.sfu, media.roomSlug, {
+              type: "listen_together.skip",
+              room_slug: media.roomSlug,
+              entryId: media.entryId,
+            });
+            return;
+        }
+      })
+      .then((dispose) => {
+        if (isDisposed) {
+          dispose();
           return;
         }
-        case "skip-media":
-          if (!media) return;
-          sendListenTogetherCommand(media.sfu, media.roomSlug, {
-            type: "listen_together.skip",
-            room_slug: media.roomSlug,
-            entryId: media.entryId,
-          });
-          return;
-      }
-    }).then((dispose) => {
-      if (isDisposed) {
-        dispose?.();
-        return;
-      }
-      unlisten = dispose;
-    });
+        unlisten = dispose;
+      });
 
     return () => {
       isDisposed = true;
@@ -381,7 +376,7 @@ export function DesktopThumbnailToolbarSync({
 
   useEffect(() => {
     return () => {
-      void clearDesktopThumbnailToolbar();
+      void syncToolbar(HIDDEN_THUMBNAIL_TOOLBAR_STATE);
     };
   }, []);
 

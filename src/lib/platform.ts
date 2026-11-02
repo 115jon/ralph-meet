@@ -7,6 +7,7 @@
 // ============================================================================
 import { getDesktopToken, getStoredKovaAuthSessionToken } from "./desktop-auth";
 import { clog } from "@/lib/console-logger";
+import { isDesktop, isMobile, isTauri } from "@/lib/runtime";
 import {
   DEFAULT_ABUSE_EMAIL,
   DEFAULT_PUBLIC_WEB_URL,
@@ -15,25 +16,8 @@ import type { PresencePlatform } from "@/lib/presence-platform";
 
 const log = clog("platform");
 
-/**
- * Detect whether the app is running inside a Tauri desktop shell.
- * Tauri injects `__TAURI_INTERNALS__` into the webview's window object.
- */
-export function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-/** True when running as a mobile app (Tauri iOS/Android) */
-export function isMobile(): boolean {
-  // @ts-ignore
-  return typeof __IS_MOBILE__ !== "undefined" && __IS_MOBILE__ === true;
-}
-
-/** True when running as a desktop native app (Tauri macOS/Windows/Linux) */
-export function isDesktop(): boolean {
-  // @ts-ignore
-  return typeof __IS_DESKTOP__ !== "undefined" && __IS_DESKTOP__ === true;
-}
+// Detection lives in runtime.ts; re-exported for existing importers.
+export { isDesktop, isMobile, isTauri };
 
 /** True when running as a standard web app (SSR or SPA in browser). */
 function isWeb(): boolean {
