@@ -524,6 +524,7 @@ async function grantVoiceJoin(
   participantId: string,
   subject = TEST_SUBJECT,
   granted = true,
+  replaced = false,
 ) {
   const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
   const response = await room.fetch("https://internal/voice-join-grant", {
@@ -534,6 +535,7 @@ async function grantVoiceJoin(
       subject,
       granted,
       seq: ++voiceJoinGrantSeq,
+      ...(replaced ? { replaced: true } : {}),
     }),
   });
   expect(response.status).toBe(200);
@@ -658,7 +660,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -2245,18 +2247,27 @@ describe("VoiceRoom lifecycle", () => {
         },
       }),
     );
+    // Announced pullable: the pushed name as the SFU track name, and a
+    // capability for the native session (viewers pull via PartyTracks).
+    const nativeCapability = await issuePartyTracksSessionCapability(
+      participantId,
+      roomName,
+      "native-screen-session",
+    );
     await expect(published).resolves.toMatchObject({
       d: {
         tracks: [
           {
             participant_id: participantId,
             track_name: `screen-video-${participantId}`,
-            session_id: "native-screen-session",
+            sfu_track_name: `screen-video-${participantId}`,
+            session_id: nativeCapability,
           },
           {
             participant_id: participantId,
             track_name: `screen-audio-${participantId}`,
-            session_id: "native-screen-session",
+            sfu_track_name: `screen-audio-${participantId}`,
+            session_id: nativeCapability,
           },
         ],
       },
@@ -2494,7 +2505,12 @@ describe("VoiceRoom lifecycle", () => {
         tracks: [
           {
             track_name: trackName,
-            session_id: "native-latest-session",
+            sfu_track_name: trackName,
+            session_id: await issuePartyTracksSessionCapability(
+              participantId,
+              roomName,
+              "native-latest-session",
+            ),
           },
         ],
       },
@@ -2724,7 +2740,12 @@ describe("VoiceRoom lifecycle", () => {
           expect.objectContaining({
             participant_id: participantId,
             track_name: `screen-video-${participantId}`,
-            session_id: "native-replay-session",
+            sfu_track_name: `screen-video-${participantId}`,
+            session_id: await issuePartyTracksSessionCapability(
+              participantId,
+              roomName,
+              "native-replay-session",
+            ),
             kind: "video",
           }),
         ]),
@@ -2921,6 +2942,165 @@ describe("VoiceRoom lifecycle", () => {
     });
 
     socket.close();
+  });
+
+  describe("voice join grant revocation", () => {
+    const closeOf = (socket: WebSocket) =>
+      new Promise<{ code: number; reason: string }>((resolve) => {
+        socket.addEventListener(
+          "close",
+          (event) => resolve({ code: event.code, reason: event.reason }),
+          { once: true },
+        );
+      });
+    const participantRowCount = (roomName: string, participantId: string) =>
+      runInDurableObject(
+        env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName)),
+        (_instance, state) =>
+          [
+            ...state.storage.sql.exec(
+              "SELECT id FROM participants WHERE id = ?",
+              participantId,
+            ),
+          ].length,
+      );
+
+    it("closes a replaced participant with SessionReplaced and tells the room it left", async () => {
+      const roomName = crypto.randomUUID();
+      const replacedId = crypto.randomUUID();
+      const replacedSocket = await openVoiceSocket(roomName, "replaced-user");
+      await identifyVoiceSocket(
+        replacedSocket,
+        replacedId,
+        roomName,
+        "replaced-user",
+      );
+      const observer = await openVoiceSocket(roomName, "observer-user");
+      await identifyVoiceSocket(
+        observer,
+        crypto.randomUUID(),
+        roomName,
+        "observer-user",
+      );
+
+      const error = nextMessageWithOpcode(replacedSocket, 18);
+      const closed = closeOf(replacedSocket);
+      const disconnect = nextMessageWithOpcode(observer, 11);
+      await grantVoiceJoin(roomName, replacedId, "replaced-user", false, true);
+
+      await expect(error).resolves.toMatchObject({
+        op: 18,
+        d: { code: 4010, message: "Voice moved to another device" },
+      });
+      await expect(closed).resolves.toMatchObject({ code: 4010 });
+      await expect(disconnect).resolves.toMatchObject({
+        op: 11,
+        d: { participant_id: replacedId },
+      });
+      expect(await participantRowCount(roomName, replacedId)).toBe(0);
+      observer.close();
+    });
+
+    it("closes a plainly revoked participant with a normal close and no SessionReplaced error", async () => {
+      const roomName = crypto.randomUUID();
+      const participantId = crypto.randomUUID();
+      const socket = await openVoiceSocket(roomName, "revoked-user");
+      await identifyVoiceSocket(
+        socket,
+        participantId,
+        roomName,
+        "revoked-user",
+      );
+
+      const errors: Array<{ d: unknown }> = [];
+      socket.addEventListener("message", (event) => {
+        const message = JSON.parse(event.data as string) as {
+          op: number;
+          d: unknown;
+        };
+        if (message.op === 18) errors.push(message);
+      });
+      const closed = closeOf(socket);
+      await grantVoiceJoin(roomName, participantId, "revoked-user", false);
+
+      await expect(closed).resolves.toMatchObject({ code: 1000 });
+      expect(errors).toEqual([]);
+      expect(await participantRowCount(roomName, participantId)).toBe(0);
+    });
+
+    it("reaps a participant the MeetingRoom no longer reports as joined", async () => {
+      const roomName = crypto.randomUUID();
+      const ghostId = crypto.randomUUID();
+      const ghost = await openVoiceSocket(roomName, "ghost-user");
+      // Granted only by a direct push: no MeetingRoom session exists for it.
+      await identifyVoiceSocket(ghost, ghostId, roomName, "ghost-user");
+      const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+
+      // Inside the recheck window the grant stands and the alarm leaves it be.
+      expect(await runDurableObjectAlarm(room)).toBe(true);
+      expect(await participantRowCount(roomName, ghostId)).toBe(1);
+
+      await runInDurableObject(room, (instance) => {
+        (
+          instance as unknown as { voiceJoinGrantRecheckMs: number }
+        ).voiceJoinGrantRecheckMs = 0;
+      });
+      const closed = closeOf(ghost);
+      expect(await runDurableObjectAlarm(room)).toBe(true);
+
+      await expect(closed).resolves.toMatchObject({ code: 1000 });
+      expect(await participantRowCount(roomName, ghostId)).toBe(0);
+
+      // Its client reconnecting the voice socket is refused, not re-admitted
+      // by the old grant and reaped again at the next alarm.
+      const again = await openVoiceSocket(roomName, "ghost-user");
+      const refused = nextMessageWithOpcode(again, 18);
+      again.send(
+        JSON.stringify({
+          op: 100,
+          d: {
+            participant_id: ghostId,
+            voice_token: await issueVoiceToken(ghostId, roomName, "ghost-user"),
+          },
+        }),
+      );
+      await expect(refused).resolves.toMatchObject({
+        d: { code: 4008, message: "Voice channel join required" },
+      });
+      expect(await participantRowCount(roomName, ghostId)).toBe(0);
+    });
+
+    it("forgets the participant on the server socket once it disconnects", async () => {
+      const roomName = crypto.randomUUID();
+      const participantId = crypto.randomUUID();
+      const socket = await openVoiceSocket(roomName);
+      await identifyVoiceSocket(socket, participantId, roomName);
+      const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+      const attachedParticipants = () =>
+        runInDurableObject(room, (_instance, state) =>
+          state
+            .getWebSockets()
+            .map(
+              (ws) =>
+                (
+                  ws.deserializeAttachment() as {
+                    participant_id?: string;
+                  } | null
+                )?.participant_id,
+            )
+            .filter((id): id is string => id !== undefined),
+        );
+      expect(await attachedParticipants()).toEqual([participantId]);
+
+      const closed = closeOf(socket);
+      socket.send(JSON.stringify({ op: 11, d: null }));
+      await closed;
+
+      await vi.waitFor(async () => {
+        expect(await participantRowCount(roomName, participantId)).toBe(0);
+        expect(await attachedParticipants()).toEqual([]);
+      });
+    });
   });
 
   it("ignores a stale socket close after the participant reconnects", async () => {
@@ -4271,7 +4451,7 @@ describe("VoiceRoom lifecycle", () => {
       const roomName = crypto.randomUUID();
       const socket = await openVoiceSocket(roomName);
       await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-      const response = nextMessageWithOpcodeOrNull(socket, 18);
+      const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
       const broadcast = nextMessageWithOpcodeAndTypeOrNull(
         socket,
         106,
@@ -4309,7 +4489,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4349,7 +4529,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4381,7 +4561,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4618,7 +4798,7 @@ describe("VoiceRoom lifecycle", () => {
       roomName,
       "other-user",
     );
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -4990,7 +5170,7 @@ describe("VoiceRoom lifecycle", () => {
     const oversizedDataUrl = audioDataUrlForDecodedBytes(
       MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
     );
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,
@@ -5027,7 +5207,7 @@ describe("VoiceRoom lifecycle", () => {
       MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
     );
 
-    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const response = nextMessageWithOpcodeOrNull(socket, 18, 5_000);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
       socket,
       106,

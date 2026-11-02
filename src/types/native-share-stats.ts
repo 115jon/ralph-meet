@@ -50,6 +50,20 @@ export interface NativeShareStatsSnapshot {
   encoder_backend: string;
   /** Fallback reason as a stable string (`"none"` while the hook is active). */
   fallback_reason: string;
+  /**
+   * Hook build while the mode is `hook`: `"obs-signed"` (OBS Studio's signed
+   * capture hook), `"own"` (development fork), or `"n/a"`. Absent from older
+   * desktop builds.
+   */
+  hook_flavor?: string;
+  /** The session attached to a hook already loaded in the game. */
+  hook_attached?: boolean;
+  /** `hook_ver` the hook reported (e.g. `"1.8"`), or `null` until then. */
+  hook_version?: string | null;
+  /** OBS Studio release the signed hook comes from (e.g. `"33.0.1"`). */
+  obs_version?: string | null;
+  /** Hook frame pacing: `"present"`, `"timer"`, or `"n/a"`. */
+  pacing?: string;
   // ── Frame counters (reported unchanged from the backend) ───────────────
   /** Cumulative forwarded-frame count (frames handed to the encoder). */
   captured_frames: number;

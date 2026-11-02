@@ -2,7 +2,7 @@
 // Desktop Settings Store — Zustand + persist
 //
 // OS-level preferences for the desktop app (Tauri): autostart, close-to-tray,
-// start-minimized, hardware acceleration, desktop notifications.
+// start-minimized, hardware acceleration, desktop notifications, game capture.
 //
 // On desktop, Rust owns and persists these (desktop-settings.json), so they
 // apply at launch before any webview loads. This store mirrors them: it
@@ -32,6 +32,8 @@ export interface DesktopSettings {
   hardwareAcceleration: boolean;
   /** Show native OS notifications for desktop chat activity */
   desktopNotifications: boolean;
+  /** Capture games with the game capture hook when possible (else WGC only) */
+  gameCaptureHook: boolean;
 }
 
 /** What `get_desktop_settings` returns. */
@@ -57,6 +59,7 @@ const defaults: DesktopSettings = {
   closeToTray: true,
   hardwareAcceleration: true,
   desktopNotifications: true,
+  gameCaptureHook: true,
 };
 
 /** What localStorage or Rust may hold: each flag is a boolean or is dropped. */
@@ -66,6 +69,7 @@ const readDesktopSettings = readObject<Partial<DesktopSettings>>({
   closeToTray: readBoolean,
   hardwareAcceleration: readBoolean,
   desktopNotifications: readBoolean,
+  gameCaptureHook: readBoolean,
 });
 
 const settingKeys = Object.keys(defaults) as Array<keyof DesktopSettings>;

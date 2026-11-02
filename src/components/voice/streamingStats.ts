@@ -113,6 +113,25 @@ export function graphicsBackendLabel(
 }
 
 /**
+ * Where hook frames come from, for the panel tooltip: `" · OBS Studio capture
+ * hook 1.8 (33.0.1), timer pacing"`. Empty unless the mode is `hook` and the
+ * desktop build reports it.
+ */
+export function hookSourceLabel(data: NativeShareStatsSnapshot): string {
+  if (data.capture_unavailable || data.capture_mode !== "hook") return "";
+  const parts: string[] = [];
+  if (data.hook_flavor === "obs-signed") {
+    const release = data.obs_version ? ` (${data.obs_version})` : "";
+    const version = data.hook_version ? ` ${data.hook_version}` : "";
+    parts.push(`OBS Studio capture hook${version}${release}`);
+  } else if (data.hook_flavor === "own") {
+    parts.push("development hook");
+  }
+  if (data.pacing && data.pacing !== "n/a") parts.push(`${data.pacing} pacing`);
+  return parts.length > 0 ? ` · ${parts.join(", ")}` : "";
+}
+
+/**
  * Convert a microsecond timing value to a millisecond display string with one
  * decimal place (Req 8.6). Non-finite / non-positive inputs render as `"0.0"`.
  */

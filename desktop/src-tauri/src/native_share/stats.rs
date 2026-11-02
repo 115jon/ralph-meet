@@ -17,6 +17,9 @@ pub struct NativeShareStats {
     pub audio_samples_written: AtomicU64,
     pub write_errors: AtomicU64,
     pub dropped_frames: AtomicU64,
+    /// WGC frames skipped by the pacer because they arrived faster than the
+    /// share's frame rate. Not losses: the share asked for fewer frames.
+    pub paced_frames: AtomicU64,
 
     // ── Per-frame timing (Req 9.1, 9.2) ──────────────────────────────────
     // Stored as nanoseconds. Written by the encoder worker (task 3.1) on each
@@ -99,6 +102,16 @@ pub struct NativeShareStats {
     /// present interception (Req 3.4). Reported as a bool flag in the snapshot;
     /// defaults to `false`.
     pub foreign_hook: AtomicBool,
+
+    // ── Hook build (signed-capture-hook.md, "Fallback reasons and status") ──
+    /// Which hook build the session drives: `0` none, `1` our fork, `2` the
+    /// OBS-signed release files.
+    pub hook_flavor: AtomicU8,
+    /// The session attached to a hook already resident in the game instead of
+    /// injecting one (the stock DLL stays loaded until the game exits).
+    pub hook_attached: AtomicBool,
+    /// `hook_info.hook_ver_major << 16 | minor`, `0` until the hook reports it.
+    pub hook_version: AtomicU32,
 
     // ── Negotiated capture parameters (Req 9.1, 9.4) ─────────────────────
     /// Negotiated capture width in pixels for the session. `0` is the explicit
@@ -249,6 +262,32 @@ impl NativeShareStats {
         self.foreign_hook.store(present, Ordering::Relaxed);
     }
 
+    /// Record which hook build the session drives, and whether it attached to
+    /// one already resident in the game.
+    #[cfg(feature = "game-capture-hook")]
+    pub fn set_hook_flavor(
+        &self,
+        flavor: Option<crate::game_capture::obs_ipc::HookFlavor>,
+        attached: bool,
+    ) {
+        use crate::game_capture::obs_ipc::HookFlavor;
+        let value = match flavor {
+            None => HOOK_FLAVOR_NONE,
+            Some(HookFlavor::Own) => HOOK_FLAVOR_OWN,
+            Some(HookFlavor::ObsSigned) => HOOK_FLAVOR_OBS_SIGNED,
+        };
+        self.hook_flavor.store(value, Ordering::Relaxed);
+        self.hook_attached.store(attached, Ordering::Relaxed);
+    }
+
+    /// Record the `hook_ver` the hook reported.
+    pub fn set_hook_version(&self, version: Option<(u32, u32)>) {
+        let packed = version
+            .map(|(major, minor)| (major.min(0xffff) << 16) | minor.min(0xffff))
+            .unwrap_or(0);
+        self.hook_version.store(packed, Ordering::Relaxed);
+    }
+
     /// Record the negotiated capture parameters for the session (Req 9.1, 9.3).
     /// `fps` is stored as milli-fps (fps × 1000) so a fractional rate survives
     /// the integer atomic; a value of `0` width/height/fps is the explicit
@@ -303,6 +342,14 @@ impl NativeShareStats {
             // condition (Req 3.4) — reported as-is.
             capture_unavailable: self.capture_unavailable.load(Ordering::Relaxed),
             foreign_hook: self.foreign_hook.load(Ordering::Relaxed),
+            hook_flavor: hook_flavor_str(self.hook_flavor.load(Ordering::Relaxed)).to_string(),
+            hook_attached: self.hook_attached.load(Ordering::Relaxed),
+            hook_version: match self.hook_version.load(Ordering::Relaxed) {
+                0 => None,
+                packed => Some(format!("{}.{}", packed >> 16, packed & 0xffff)),
+            },
+            obs_version: obs_version_for(self.hook_flavor.load(Ordering::Relaxed)),
+            pacing: pacing_str(self.hook_flavor.load(Ordering::Relaxed)).to_string(),
             // Negotiated capture parameters (Req 9.1, 9.4): a `0` sentinel maps
             // to `None`/not-yet-negotiated; milli-fps is divided back to `f64`.
             negotiated_width: sentinel_u32_to_option(self.negotiated_width.load(Ordering::Relaxed)),
@@ -490,6 +537,40 @@ const FALLBACK_REASON_INTEROP_FAILED: u8 = 11;
 const FALLBACK_REASON_TARGET_EXITED: u8 = 12;
 const FALLBACK_REASON_HOOK_STOPPED_MID_SESSION: u8 = 13;
 const FALLBACK_REASON_HOOK_NO_FIRST_FRAME: u8 = 14;
+const FALLBACK_REASON_HOOK_NOT_LOADED: u8 = 15;
+const FALLBACK_REASON_HOOK_ARTIFACT_UNVERIFIED: u8 = 16;
+const FALLBACK_REASON_HOOK_VERSION_UNSUPPORTED: u8 = 17;
+const FALLBACK_REASON_HOOK_IN_USE: u8 = 18;
+const FALLBACK_REASON_HOOK_ATTEMPT_SPENT: u8 = 19;
+
+const HOOK_FLAVOR_NONE: u8 = 0;
+const HOOK_FLAVOR_OWN: u8 = 1;
+const HOOK_FLAVOR_OBS_SIGNED: u8 = 2;
+
+fn hook_flavor_str(value: u8) -> &'static str {
+    match value {
+        HOOK_FLAVOR_OWN => "own",
+        HOOK_FLAVOR_OBS_SIGNED => "obs-signed",
+        _ => "n/a",
+    }
+}
+
+fn pacing_str(flavor: u8) -> &'static str {
+    match flavor {
+        HOOK_FLAVOR_OWN => "present",
+        HOOK_FLAVOR_OBS_SIGNED => "timer",
+        _ => "n/a",
+    }
+}
+
+fn obs_version_for(flavor: u8) -> Option<String> {
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    if flavor == HOOK_FLAVOR_OBS_SIGNED {
+        return Some(crate::game_capture::signed_hook::lock().obs_version.clone());
+    }
+    let _ = flavor;
+    None
+}
 
 /// Map a [`FallbackReason`] to the `u8` discriminant kept in the atomic.
 fn fallback_reason_to_u8(reason: FallbackReason) -> u8 {
@@ -509,6 +590,11 @@ fn fallback_reason_to_u8(reason: FallbackReason) -> u8 {
         FallbackReason::TargetExited => FALLBACK_REASON_TARGET_EXITED,
         FallbackReason::HookStoppedMidSession => FALLBACK_REASON_HOOK_STOPPED_MID_SESSION,
         FallbackReason::HookNoFirstFrame => FALLBACK_REASON_HOOK_NO_FIRST_FRAME,
+        FallbackReason::HookNotLoaded => FALLBACK_REASON_HOOK_NOT_LOADED,
+        FallbackReason::HookArtifactUnverified => FALLBACK_REASON_HOOK_ARTIFACT_UNVERIFIED,
+        FallbackReason::HookVersionUnsupported => FALLBACK_REASON_HOOK_VERSION_UNSUPPORTED,
+        FallbackReason::HookInUse => FALLBACK_REASON_HOOK_IN_USE,
+        FallbackReason::HookAttemptSpent => FALLBACK_REASON_HOOK_ATTEMPT_SPENT,
     }
 }
 
@@ -531,6 +617,11 @@ fn fallback_reason_from_u8(value: u8) -> FallbackReason {
         FALLBACK_REASON_TARGET_EXITED => FallbackReason::TargetExited,
         FALLBACK_REASON_HOOK_STOPPED_MID_SESSION => FallbackReason::HookStoppedMidSession,
         FALLBACK_REASON_HOOK_NO_FIRST_FRAME => FallbackReason::HookNoFirstFrame,
+        FALLBACK_REASON_HOOK_NOT_LOADED => FallbackReason::HookNotLoaded,
+        FALLBACK_REASON_HOOK_ARTIFACT_UNVERIFIED => FallbackReason::HookArtifactUnverified,
+        FALLBACK_REASON_HOOK_VERSION_UNSUPPORTED => FallbackReason::HookVersionUnsupported,
+        FALLBACK_REASON_HOOK_IN_USE => FallbackReason::HookInUse,
+        FALLBACK_REASON_HOOK_ATTEMPT_SPENT => FallbackReason::HookAttemptSpent,
         _ => FallbackReason::None,
     }
 }
@@ -601,6 +692,20 @@ pub struct NativeShareStatsSnapshot {
     /// `true` when a `Foreign_Hook` (e.g. a stock OBS graphics-hook) was
     /// detected for the target (Req 3.4).
     pub foreign_hook: bool,
+    /// The hook build in use: `"own"` (our fork, development only),
+    /// `"obs-signed"` (OBS Studio's signed release files), or `"n/a"`.
+    pub hook_flavor: String,
+    /// The session attached to a hook already resident in the game.
+    pub hook_attached: bool,
+    /// The `hook_ver` the hook reported (e.g. `"1.8"`), or `None` until then.
+    pub hook_version: Option<String>,
+    /// The OBS Studio release the signed hook files come from (e.g.
+    /// `"33.0.1"`), for `obs-signed` only.
+    pub obs_version: Option<String>,
+    /// How hook frames are paced: `"present"` (one per captured present, the
+    /// fork's counter), `"timer"` (the stock DLL, at the share's frame
+    /// interval), or `"n/a"`.
+    pub pacing: String,
     // ── Existing counters (Req 9.5 — reported unchanged) ─────────────────
     pub captured_frames: u64,
     pub encoded_frames: u64,
@@ -639,6 +744,7 @@ pub(crate) fn reset_native_share_stats(stats: &NativeShareStats) {
     stats.audio_samples_written.store(0, Ordering::Relaxed);
     stats.write_errors.store(0, Ordering::Relaxed);
     stats.dropped_frames.store(0, Ordering::Relaxed);
+    stats.paced_frames.store(0, Ordering::Relaxed);
     stats.last_fused_gpu_ns.store(0, Ordering::Relaxed);
     stats.last_encode_submit_ns.store(0, Ordering::Relaxed);
     stats.fused_gpu_ns_ewma.store(0, Ordering::Relaxed);
@@ -658,6 +764,9 @@ pub(crate) fn reset_native_share_stats(stats: &NativeShareStats) {
         .store(FALLBACK_REASON_NONE, Ordering::Relaxed);
     stats.set_capture_unavailable(false);
     stats.set_foreign_hook(false);
+    stats.hook_flavor.store(HOOK_FLAVOR_NONE, Ordering::Relaxed);
+    stats.hook_attached.store(false, Ordering::Relaxed);
+    stats.set_hook_version(None);
     stats.clear_negotiated_params();
 }
 

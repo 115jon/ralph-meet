@@ -4,7 +4,7 @@ This file is the project-level third-party attribution and license record for
 the `ralph-meet-desktop` application. It records reused/derived third-party
 components that ship **alongside** the desktop binary and the licenses they are
 distributed under, satisfying the dependency/attribution-record requirement
-(Requirement 11.5) for the `owned-game-capture-hook` feature.
+(Requirement 11.5) for the `game-capture-hook` feature.
 
 > Scope: this record covers components that are **bundled with / shipped
 > alongside** the desktop app and have attribution obligations beyond the normal
@@ -18,70 +18,63 @@ because they are packaged by the installer.
 
 ---
 
-## Owned_Capture_Component (forked OBS Studio `win-capture`) — GPLv2
+## OBS Studio game-capture files (unmodified, OBS-signed) — GPLv2
 
-The `game-capture-hook` Cargo feature ships the **Owned_Capture_Component**: a
-separately licensed game-capture payload (Forked_Hook_DLL) and injector
-(Owned_Injector) **built from the source of** OBS Studio's `win-capture`
-plugin. The component is distributed under GPL-2.0-only with its complete
-corresponding source made available. Ralph Meet-owned host code communicates
-with this component through its documented IPC boundary.
+The `game-capture-hook` Cargo feature ships OBS Studio's own game-capture files,
+**unmodified and as signed by the OBS Project** (Authenticode signer "OBS
+Project, LLC"), under `obs-capture/obs-signed/`. They are GPL-2.0-only and ship
+with their license text, attribution, and a source offer; the corresponding
+source is attached to every Ralph Meet desktop release. Ralph Meet is not
+affiliated with or endorsed by the OBS Project.
 
 ### Components (name, upstream version, license) — Requirement 11.5
 
-| Component name                           | Files                                                      | Built from (upstream basis)                                           | Pinned upstream identifier                             | License |
-| ---------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ | ------- |
-| Forked_Hook_DLL — graphics-hook payload  | `graphics-hook64.dll`, `graphics-hook32.dll`               | OBS `plugins/win-capture/graphics-hook` (+ `shared/obs-hook-config/`) | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2   |
-| Owned_Injector — inject helper           | `inject-helper64.exe`, `inject-helper32.exe`               | OBS `plugins/win-capture/inject-helper`                               | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2   |
-| Owned_Injector — graphics-offsets helper | `get-graphics-offsets64.exe`, `get-graphics-offsets32.exe` | OBS `plugins/win-capture/get-graphics-offsets`                        | OBS Studio **32.1.2** — tag `32.1.2`, commit `fb4d98b` | GPLv2   |
+| Component               | Files                                                      | Upstream                                       | Release                                                | License              |
+| ----------------------- | ---------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------ | -------------------- |
+| graphics-hook payload   | `graphics-hook64.dll`, `graphics-hook32.dll`               | OBS `plugins/win-capture/graphics-hook`        | OBS Studio **33.0.1** (tag `33.0.1`, commit `65c320b`) | GPLv2 (Detours: MIT) |
+| inject helper           | `inject-helper64.exe`, `inject-helper32.exe`               | OBS `plugins/win-capture/inject-helper`        | OBS Studio **33.0.1**                                  | GPLv2                |
+| graphics-offsets helper | `get-graphics-offsets64.exe`, `get-graphics-offsets32.exe` | OBS `plugins/win-capture/get-graphics-offsets` | OBS Studio **33.0.1**                                  | GPLv2                |
 
-- **Upstream project:** OBS Studio (`obs-studio`), the OBS Project.
-- **Upstream source:** <https://github.com/obsproject/obs-studio>
-- **Component path upstream:** `plugins/win-capture/` (`graphics-hook`,
-  `inject-helper`, `get-graphics-offsets`) and `shared/obs-hook-config/`.
-- **Pinned upstream identifier:** **OBS Studio 32.1.2** — tag `32.1.2`,
-  commit `fb4d98b`. This matches the pin recorded in
-  `src-tauri/resources/obs-capture/ATTRIBUTION.md`. Re-pinning is a deliberate,
-  re-verified step (the `hook_info` layout / event names must be re-checked in
-  `src-tauri/src/game_capture/obs_ipc.rs`).
-- **License:** GNU General Public License, version 2 (GPLv2). The full,
-  verbatim license text ships with the component at
-  [`src-tauri/resources/obs-capture/LICENSE-GPLv2.txt`](src-tauri/resources/obs-capture/LICENSE-GPLv2.txt).
-- **In-bundle attribution:** the per-bundle attribution that ships _inside_ the
-  Owned_Capture_Component is
-  [`src-tauri/resources/obs-capture/ATTRIBUTION.md`](src-tauri/resources/obs-capture/ATTRIBUTION.md);
-  see also
-  [`src-tauri/resources/obs-capture/README.md`](src-tauri/resources/obs-capture/README.md)
-  for how the artifacts are built/obtained and pinned.
-
-### Modifications from upstream
-
-The Forked_Hook_DLL's single intended behavioral change from upstream OBS
-`win-capture` is a **private IPC object namespace** (the `RalphCaptureHook_`
-prefix replacing OBS's `CaptureHook_` across all IPC object names), so the fork
-never shares IPC objects with a stock OBS install capturing the same game. The
-shared-memory struct (`hook_info` / `SHMEM_TEXTURE`) layouts are unchanged.
+- **Source of the bytes:** the official release asset
+  `OBS-Studio-33.0.1-Windows-x64.zip` (`core/win-capture/data/`), fetched and
+  verified by `desktop/scripts/fetch-obs-signed-hook.ps1` against
+  `desktop/packaging/obs-signed-hook.lock.json` (asset SHA-256, per-file
+  SHA-256, file version, signer and certificate thumbprint).
+- **Modifications:** none. The files are never modified or re-signed; any
+  future Authenticode step for Ralph Meet's own binaries must exclude
+  `obs-capture/obs-signed/**`. `stage-payload.ps1` checks the staged bytes
+  against the lock, and the app re-checks hash and signature before each use.
+- **License:** GNU General Public License, version 2. The verbatim text ships
+  at [`src-tauri/resources/obs-capture/LICENSE-GPLv2.txt`](src-tauri/resources/obs-capture/LICENSE-GPLv2.txt).
+- **In-bundle attribution:**
+  [`src-tauri/resources/obs-capture/ATTRIBUTION.md`](src-tauri/resources/obs-capture/ATTRIBUTION.md).
 
 ### Corresponding source / written offer (GPLv2 §3)
 
-The complete corresponding source for the Forked_Hook_DLL and the
-Owned_Injector (the OBS Studio `win-capture` sources at tag `32.1.2`,
-commit `fb4d98b`, plus the project's `RalphCaptureHook_` namespace modifications
-and build wiring) is available from
-<https://github.com/obsproject/obs-studio/releases/tag/32.1.2> and
-<https://github.com/obsproject/obs-studio>, and via the ralph-meet project
-repository for the fork modifications. The in-bundle written offer (valid at
-least three years, per GPLv2 §3) ships at
+Each desktop release attaches `OBS-Studio-33.0.1-Sources.tar.gz` (the OBS
+Project's own source archive), the Microsoft Detours source at the commit
+obs-deps pins, and the obs-deps `2026-10-23` build scripts (release workflow,
+"Fetch and verify OBS-signed capture hook and its source"). The in-bundle
+written offer ships at
 [`src-tauri/resources/obs-capture/SOURCE-OFFER.md`](src-tauri/resources/obs-capture/SOURCE-OFFER.md).
+
+### Development-only fork
+
+`src-tauri/resources/obs-capture/fork/` holds a modified build of the same OBS
+32.1.2 sources (private `RalphCaptureHook_` object names, a present counter,
+self-unload). It is unsigned, is not shipped by the installer, and is used only
+when a developer sets `RALPH_CAPTURE_HOOK_FLAVOR=own` after building it with
+`build-capture-fork.ps1`. It is never injected into an anti-cheat-protected
+game.
 
 ### License posture (linkage)
 
-Ralph Meet-owned host code is GPL-3.0-or-later. The Forked_Hook_DLL is injected
-into the **target game's process** (never into the desktop binary) and the
-Owned_Injector runs as a **standalone child process**; the host interacts with
-them over the shared-texture IPC protocol. The capture component remains
-GPL-2.0-only. This record documents the distribution boundary and does not
-constitute legal advice.
+Ralph Meet-owned host code is GPL-3.0-or-later. The hook DLL is injected into
+the **target game's process** (never into the desktop binary), and the inject
+and offsets helpers run as **standalone child processes**; the host talks to the
+hook over OBS's shared-memory IPC protocol. The OBS files remain GPL-2.0-only.
+This record documents the distribution boundary and does not constitute legal
+advice.
 
 ## CEF/Chromium runtime — upstream included component
 

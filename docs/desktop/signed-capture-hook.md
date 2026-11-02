@@ -1,7 +1,10 @@
 # OBS-signed capture hook
 
-Status: proposal, not implemented. Researched 2026-11-01 against `main` at `e3880f50`, OBS Studio 30.2.3, 31.1.2,
-32.1.2 and 33.0.1 (latest, released 2026-10-29), and the 3.7.0 install on a second Windows 11 machine.
+Status: implemented with a changed policy (see [Implementation](#implementation-2026-11-01)): the OBS-signed hook is
+the default hook for every eligible window, including Easy Anti-Cheat and BattlEye games, and the fork is
+development-only. Researched 2026-11-01 against `main` at `e3880f50`, OBS Studio 30.2.3, 31.1.2, 32.1.2 and 33.0.1
+(latest, released 2026-10-29), and the 3.7.0 install on a second Windows 11 machine. The research below is kept as
+written; where it disagrees with the implementation section, the implementation section is current.
 
 This document answers one question: could the native share drive the graphics hook that OBS Studio ships, signed by
 the OBS Project, instead of the hook we build from source? It then proposes how to do that without losing what the
@@ -374,7 +377,7 @@ New `FallbackReason` values, alongside #129's `hook_no_first_frame`:
 
 | Phase                 | Work                                                                                                                                                                                                                                                                                                                                                                                                           | Estimate  |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| 0a. Safety now        | No new capability. Register the Vulkan layer only while a share is active (or point it at the signed copy once phase 2 lands), and remove stale per-version `ImplicitLayers` values at app start and in the installer/updater. Anti-cheat titles stay on WGC (#129)                                                                                                                                            | 0.5–1 day |
+| 0a. Safety now        | No new capability. Register the Vulkan layer only while a share is active (or point it at the signed copy once phase 2 lands), and remove stale per-version `ImplicitLayers` values at app start and in the installer/updater. Anti-cheat titles stay on WGC (#129). Superseded: the signed layer is now registered permanently while the setting is on, like OBS (see Vulkan layer registration)              | 0.5–1 day |
 | 0b. Evidence          | Throwaway host build with the stock profile against OBS 33.0.1 files: unprotected DX11/DX12/Vulkan game, then one protected title on an account the user accepts to risk (user's decision). PresentMon for present mode and frame time with and without WGC. `NativeShareDiag` for all three modes. Glass-to-glass latency with an on-screen timer                                                             | 1–2 days  |
 | 1. Host stock profile | flavor/profile in `obs_ipc.rs`/`inject.rs`, attach-to-resident, first-frame window, version gate, `hook_not_loaded` detection                                                                                                                                                                                                                                                                                  | 3–5 days  |
 | 2. Artifacts          | lock file, CI fetch/verify, payload manifest entries, shared runtime folder, Vulkan layer cleanup and single registration, source mirror, THIRD_PARTY_LICENSES                                                                                                                                                                                                                                                 | 3–4 days  |
@@ -383,6 +386,133 @@ New `FallbackReason` values, alongside #129's `hook_no_first_frame`:
 
 Order relative to the desktop plan: after #129 merges, and independent of C4 (web desktop-host interface). Phase 2
 touches the payload manifest from #112 and the installer, so it goes through the same packaging review.
+
+## Implementation (2026-11-01)
+
+The owner's direction replaced the recommendation above: inject the OBS-signed files, not an unsigned DLL, and drop
+the fork from the default path.
+
+| Target                                                                                     | Hook                                                                   |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| "Game capture hook" desktop setting off                                                    | none → WGC (`hook_disabled`)                                           |
+| monitor source, or the app's own window                                                    | none → WGC                                                             |
+| Vanguard (VALORANT, League of Legends), FACEIT client, CS2/VAC, anti-cheat services        | none → WGC (`blocklisted`, executable blocklist)                       |
+| another host already drives a stock hook in the target (`CaptureHook_KeepAlive<pid>`)      | none → WGC (`hook_in_use`)                                             |
+| Easy Anti-Cheat / BattlEye install marker, an earlier attempt this run failed              | none → WGC (`hook_attempt_spent`)                                      |
+| Easy Anti-Cheat / BattlEye install marker                                                  | `ObsSigned`, by default, one attempt per app run                       |
+| unprotected                                                                                | `ObsSigned`; `Own` only with `RALPH_CAPTURE_HOOK_FLAVOR=own` (dev)     |
+| a verified OBS-signed hook is already resident and idle (our earlier share, or OBS's copy) | attach without injecting (signal `Restart`), after checking its signer |
+
+- Files: `desktop/packaging/obs-signed-hook.lock.json` pins OBS 33.0.1 (zip SHA-256, per-file SHA-256, file version,
+  signer thumbprints). `desktop/scripts/fetch-obs-signed-hook.ps1` fetches and checks them in CI and locally;
+  `stage-payload.ps1` checks the staged bytes; the installer ships them under `obs-capture/obs-signed/`.
+- Before every injection the host opens the three files for the target bitness with read-only sharing, checks
+  SHA-256 against the embedded lock and the Authenticode signature (`WinVerifyTrust`, signer "OBS Project, LLC",
+  thumbprint), and holds the handles until the inject helper exits. Failure: `hook_artifact_unverified`, WGC.
+- The verified set is staged to `%LOCALAPPDATA%\RalphMeet\capture-hook\obs-<ver>-<sha8>\` with our own Vulkan layer
+  manifests beside it. See [Vulkan layer registration](#vulkan-layer-registration).
+- Host stock profile: `CaptureHook_` names; the log pipe and keepalive are created before injecting (the stock DLL
+  opens its pipe once); the pipe is duplex (OBS's client opens it read/write); the first-frame window is at least
+  6 s; no unload wait (the DLL stays loaded until the game exits); `hook_ver_major` checked on each ready; timer
+  pacing on a running deadline. New reasons: `hook_not_loaded` (no hook objects ever appeared), `hook_artifact_unverified`,
+  `hook_version_unsupported`, `hook_in_use`, `hook_attempt_spent`.
+- Status: `hook_flavor`, `hook_attached`, `hook_version`, `obs_version`, `pacing` in the stats snapshot; the panel
+  tooltip reads "OBS Studio capture hook 1.8 (33.0.1), timer pacing".
+- GPL: OBS's source tarball, the Detours source at the obs-deps pin, and the obs-deps scripts are attached to each
+  desktop release; `ATTRIBUTION.md`, `SOURCE-OFFER.md` and `THIRD_PARTY_LICENSES.md` describe the unmodified files.
+
+### Vulkan layer registration
+
+OBS keeps its Vulkan implicit layer registered permanently and the layer is dormant until a host asks for capture. That
+is how OBS captures a Vulkan game that was already running. The first version of this work (#135) registered the layer
+only during a share, so a Vulkan game started before the share could not be hooked. The app now does what OBS does,
+for the OBS-signed DLL only.
+
+How OBS does it, from OBS 33.0.1 sources:
+
+- `plugins/win-capture/game-capture-file-init.c`, `init_hook_files` → `init_vulkan_registry`, called once from
+  `obs_module_load`: copies `graphics-hook{64,32}.dll` and `obs-vulkan{64,32}.json` to `%ProgramData%\obs-studio-hook\`
+  and writes a `REG_DWORD 0` per manifest path under `SOFTWARE\Khronos\Vulkan\ImplicitLayers`, in `HKLM` when OBS runs
+  elevated and `HKCU` otherwise, unless the value is already there. Nothing removes it when capture stops.
+- `plugins/win-capture/graphics-hook/obs-vulkan64.json`: layer `VK_LAYER_OBS_HOOK`, `library_path`
+  `.\graphics-hook64.dll`, `vkNegotiateLoaderLayerInterfaceVersion` → `OBS_Negotiate`, and
+  `disable_environment` `DISABLE_VULKAN_OBS_CAPTURE=1` (set it in a process to keep the layer out).
+- Dormant behavior, `graphics-hook.c` and `graphics-hook.h`: `DllMain` makes the named objects and starts a capture
+  thread that blocks (`capture_loop` waits `INFINITE` on the Initialize event). Per present, `OBS_QueuePresentKHR` →
+  `vk_capture` does a swapchain lookup and, while no host is capturing, one `WaitForSingleObject(signal_restart, 0)`
+  (`capture_should_init`).
+
+What changed here:
+
+- `vulkan_layer::sync` registers `capture-hook\obs-<ver>-<sha8>\obs-vulkan{64,32}.json` in `HKCU` at app start and when
+  the "Game capture hook" setting changes (on: stage, verify, register; off: remove). It runs on a background thread.
+  It registers only DLLs that verify against the lock. It keeps one entry per bitness at the pinned version, and deletes
+  entries for older staged folders and for the old unsigned `obs-capture` layer. The per-share lease is gone.
+- The installer removes the registrations on uninstall (`VulkanLayerRegistration`); it never touches values it did not
+  write.
+- A Vulkan game started while the layer is registered has the dormant hook loaded, so a share attaches to it like to any
+  resident hook (about 65 ms to the first frame in the local test below). A Vulkan game started before the layer was
+  registered, or while the setting is off, stays on WGC (`backend_disabled`).
+- The development-only fork DLL is never registered as a global layer.
+
+Coexistence with an installed OBS, from the Vulkan loader's `loader.c`:
+
+- The loader keeps only the first layer of a given **name** and drops the rest before it checks bitness
+  (`loader_remove_duplicate_layers`). OBS registers its 64- and 32-bit manifests under one name, in the shared `HKCU`
+  key (`HKCU\SOFTWARE\Khronos` is not redirected by WOW64, only `HKLM` is). A 32-bit loader then sees the 64-bit
+  manifest first and has no OBS layer. Our two manifests therefore have different names
+  (`VK_LAYER_RALPH_MEET_HOOK_64`, `_32`), or only one bitness would ever load.
+- Our names differ from OBS's, so both layers would load. The DLLs share one dup-guard mutex, the second `DllMain`
+  returns FALSE, and the loader logs that at INFO and creates the instance without that layer. Only an
+  application-requested layer turns a failed load into an error. So the result is harmless but wasteful, and `sync`
+  avoids it: it skips a bitness when OBS's layer would already run for that loader (enabled, manifest naming
+  `VK_LAYER_OBS_HOOK`, DLL present, signed by the OBS Project, hook major version 1, and first of its name in that
+  loader's discovery order). The protocol and the `CaptureHook_` names are the same for every OBS-signed hook DLL, so
+  the host drives either copy.
+- If OBS registers its layer after our last `sync`, both stay registered until the next app start or setting change.
+
+Idle cost, measured on the RTX 3080 machine with a minimal Vulkan app (clear and present, uncapped, 4 alternating 14 s
+runs): 2859 fps without the layer and 2858 fps with the OBS-signed layer loaded and idle, a difference of 0.1 µs per
+frame, inside run-to-run noise (frame time is about 350 µs). The code path is one non-blocking kernel wait per present.
+
+Risk: with the setting on, the OBS-signed hook DLL is loaded into every Vulkan process that starts, including
+anti-cheat-protected games, whether or not anyone is sharing. This is what OBS does on every machine that has it
+installed, and vendors allowlist the certificate, but it is not limited to the games the executable blocklist lets us
+hook (a layer manifest cannot name a program). Turning "Game capture hook" off removes the registration.
+
+Not done: an anti-cheat game test (needs the owner's go-ahead and an account they accept to risk), D3D12/GL
+targets, `compatibility.json` as data, cleanup of staged folders from older OBS versions, telling the OBS Project.
+
+### Local measurements (this machine, 2026-11-01)
+
+RTX 3080, Windows 11 26200, 60 Hz. Target: a minimal D3D11 test app (no anti-cheat) at 1600×900 that encodes its frame
+index in the clear colour and records each Present's QPC; a harness drove the production modules (verify/stage, OBS
+`inject-helper`, `ObsIpcChannel`, `GameCaptureHook`, `MftEncoderWorker`/NVENC, `start_wgc_capture`). Latency is
+Present → frame readable on the host device, sampled every 10th frame by reading back one pixel.
+
+| App 60 fps, share fps | Capture fps | Latency p50 / p95 (ms) | First frame       | Encoder VP blt (µs) |
+| --------------------- | ----------- | ---------------------- | ----------------- | ------------------- |
+| signed hook, 30       | 29.9        | 20.0 / 24.1            | 698 ms (inject)   | 1108                |
+| signed hook, 60       | 59.9        | 4.9 / 8.6              | 22–45 ms (attach) | see below           |
+| fork hook, 30         | 28.6        | 3.6 / 6.5              | 702 ms            | 2909                |
+| fork hook, 60         | 57.3        | 3.7 / 5.4              | 678 ms            | —                   |
+| WGC raw (no pacing)   | 57.0        | 14.4 / 17.2            | 16 ms             | —                   |
+| WGC paced, 30 / 24    | 30.0 / 24.0 | —                      | —                 | 2199 / 2793         |
+
+GPU-loaded app (uncapped, 40 full-screen clears per frame, about 2,600 fps, so GPU clocks stay high), share 60 fps
+with NVENC: WGC 57.0 fps, VP blt 991 µs; signed hook 56.7 fps, 956–1112 µs (logs "[VP] normalizing hook surface via
+same-device copy": the extra copy, no `BIND_RENDER_TARGET`); fork 58.5 fps, 614 µs. The app's own fps with each
+capture running stayed within its run-to-run noise (2,480–3,030 fps), so in-game cost was not measurable here. VP
+blt times at low GPU load (the 60 fps app) vary 1.1–4.3 ms with clocks and are not comparable across rows.
+
+- The signed hook works end to end through our host: OBS's `inject-helper` loads it, `hook_ver 1.8`, the DLL's own
+  log reaches us from the target pid ("d3d11 shared texture capture successful"), frames arrive through
+  `CaptureHook_Texture_*`. A second share attaches to the resident hook without injecting.
+- Timer pacing costs latency at low share rates (content age up to one share interval); the fork's present counter
+  does not. At 60 fps the signed hook is lower latency than WGC.
+- The fork's measured advantage is about 0.3–0.5 ms less VP time per frame and lower latency at 30 fps. That is not
+  a strong enough reason to inject an unsigned DLL by default; it stays behind the dev flag.
+- With the display asleep, WGC fell to 3.7 fps while the hook kept delivering about 28 fps.
 
 ## Sources
 

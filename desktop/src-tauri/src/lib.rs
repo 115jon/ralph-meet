@@ -710,20 +710,16 @@ pub fn run() {
             #[cfg(desktop)]
             tray::setup_tray(app)?;
 
-            // ── Vulkan capture activation ────────────────────────────────
-            // The Vulkan present hook is an implicit Vulkan layer the loader
-            // only activates when its manifest is registered (and only at
-            // vkCreateInstance time), so register at startup — before any
-            // Vulkan game launches — rather than at injection time. Best-effort:
-            // failure just means Vulkan games fall back (DX/GL capture is
-            // unaffected).
+            // ── Vulkan capture layer ─────────────────────────────────────
+            // Like OBS, keep the (dormant) OBS-signed Vulkan layer registered
+            // while "Game capture hook" is on, so a Vulkan game started
+            // before a share can still be captured. This also moves the
+            // registration to the pinned version and removes entries left by
+            // older versions and the old unsigned layer.
             #[cfg(all(feature = "game-capture-hook", windows))]
-            {
-                let registered = game_capture::vulkan_layer::ensure_registered();
-                log::info!(
-                    "[DesktopRuntime] Vulkan implicit-layer registration: {registered} manifest(s) active"
-                );
-            }
+            game_capture::vulkan_layer::spawn_sync(native_share::hook_layer_wanted(
+                settings.settings.game_capture_hook,
+            ));
 
             // Register deep-link schemes with the OS so `ralphmeet://` URLs
             // are routed to this executable. On Windows this writes the

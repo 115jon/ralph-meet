@@ -2793,6 +2793,16 @@ export function useVoiceChannel({
       sfu.refreshVoiceCredentials();
     });
 
+    onSfu("kicked", () => {
+      // One voice session per user: a newer join on another device ended
+      // this one. Leave for good (no reassert, no rejoin) and say why.
+      vcLog.warn("Voice moved to another device", { channelId, mode });
+      toast.info("You joined this call on another device", {
+        description: "Voice is connected there now.",
+      });
+      window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+    });
+
     if (adoptingStandby) {
       sfu.replayJoinedSnapshot();
       sfu.promoteStandby({

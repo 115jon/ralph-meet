@@ -101,6 +101,11 @@ fn oracle_fallback_reason(reason: FallbackReason) -> &'static str {
         FallbackReason::TargetExited => "target_exited",
         FallbackReason::HookStoppedMidSession => "hook_stopped_mid_session",
         FallbackReason::HookNoFirstFrame => "hook_no_first_frame",
+        FallbackReason::HookNotLoaded => "hook_not_loaded",
+        FallbackReason::HookArtifactUnverified => "hook_artifact_unverified",
+        FallbackReason::HookVersionUnsupported => "hook_version_unsupported",
+        FallbackReason::HookInUse => "hook_in_use",
+        FallbackReason::HookAttemptSpent => "hook_attempt_spent",
     }
 }
 
@@ -150,6 +155,11 @@ fn fallback_reason_strategy() -> impl Strategy<Value = FallbackReason> {
         Just(FallbackReason::TargetExited),
         Just(FallbackReason::HookStoppedMidSession),
         Just(FallbackReason::HookNoFirstFrame),
+        Just(FallbackReason::HookNotLoaded),
+        Just(FallbackReason::HookArtifactUnverified),
+        Just(FallbackReason::HookVersionUnsupported),
+        Just(FallbackReason::HookInUse),
+        Just(FallbackReason::HookAttemptSpent),
     ]
 }
 

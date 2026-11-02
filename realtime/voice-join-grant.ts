@@ -29,6 +29,11 @@ export interface VoiceJoinGrantUpdate {
   granted: boolean;
   /** Monotonic per MeetingRoom; older updates never overwrite newer ones. */
   seq: number;
+  /**
+   * A revocation because the user's voice moved to another device: the
+   * VoiceRoom closes the socket with SessionReplaced so the client stops.
+   */
+  replaced?: boolean;
 }
 
 export interface VoiceJoinGrantQuery {
@@ -57,7 +62,8 @@ export function parseVoiceJoinGrantUpdate(
     typeof body.granted !== "boolean" ||
     typeof body.seq !== "number" ||
     !Number.isSafeInteger(body.seq) ||
-    body.seq < 0
+    body.seq < 0 ||
+    (body.replaced !== undefined && typeof body.replaced !== "boolean")
   ) {
     return null;
   }
@@ -66,6 +72,7 @@ export function parseVoiceJoinGrantUpdate(
     subject: body.subject,
     granted: body.granted,
     seq: body.seq,
+    replaced: body.replaced === true && !body.granted,
   };
 }
 
@@ -84,6 +91,7 @@ export function serializeVoiceJoinGrantUpdate(update: VoiceJoinGrantUpdate) {
     subject: update.subject,
     granted: update.granted,
     seq: update.seq,
+    replaced: update.replaced === true,
   });
 }
 
@@ -207,6 +215,43 @@ export class VoiceJoinGrantStore {
         participantId,
       );
     }
+  }
+
+  /** When the participant's grant was last pushed or confirmed, or null. */
+  updatedAt(participantId: string): number | null {
+    const row = [
+      ...this.sql.exec(
+        "SELECT updated_at FROM voice_join_grants WHERE participant_id = ?",
+        participantId,
+      ),
+    ][0];
+    return typeof row?.updated_at === "number" ? row.updated_at : null;
+  }
+
+  /**
+   * Revokes locally after the MeetingRoom said the participant is not joined.
+   * The stored sequence is kept, so a later push (a new grant) still applies.
+   */
+  revoke(query: VoiceJoinGrantQuery, now = Date.now()): void {
+    this.sql.exec(
+      `INSERT INTO voice_join_grants (participant_id, subject, granted, seq, updated_at)
+       VALUES (?, ?, 0, 0, ?)
+       ON CONFLICT(participant_id) DO UPDATE SET
+         granted = 0,
+         updated_at = excluded.updated_at`,
+      query.participantId,
+      query.subject,
+      now,
+    );
+  }
+
+  /** Marks a standing grant as confirmed now; never changes its verdict. */
+  touch(participantId: string, now = Date.now()): void {
+    this.sql.exec(
+      "UPDATE voice_join_grants SET updated_at = ? WHERE participant_id = ? AND granted = 1",
+      now,
+      participantId,
+    );
   }
 
   hasRows(): boolean {

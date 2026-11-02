@@ -26,6 +26,9 @@ pub struct DesktopSettings {
     pub close_to_tray: bool,
     pub hardware_acceleration: bool,
     pub desktop_notifications: bool,
+    /// Capture games with the game capture hook (the OBS Studio capture hook)
+    /// when possible. Off: every share uses window capture (WGC).
+    pub game_capture_hook: bool,
 }
 
 impl Default for DesktopSettings {
@@ -36,6 +39,7 @@ impl Default for DesktopSettings {
             close_to_tray: true,
             hardware_acceleration: true,
             desktop_notifications: true,
+            game_capture_hook: true,
         }
     }
 }
@@ -49,6 +53,7 @@ pub struct DesktopSettingsPatch {
     pub close_to_tray: Option<bool>,
     pub hardware_acceleration: Option<bool>,
     pub desktop_notifications: Option<bool>,
+    pub game_capture_hook: Option<bool>,
 }
 
 impl DesktopSettings {
@@ -67,6 +72,9 @@ impl DesktopSettings {
         }
         if let Some(value) = patch.desktop_notifications {
             self.desktop_notifications = value;
+        }
+        if let Some(value) = patch.game_capture_hook {
+            self.game_capture_hook = value;
         }
         self
     }
@@ -227,6 +235,14 @@ impl DesktopSettingsStore {
 
         if next.open_on_startup != previous.open_on_startup {
             apply_open_on_startup(app, next.open_on_startup)?;
+        }
+
+        // The Vulkan capture layer is registered only while the hook is on.
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        if next.game_capture_hook != previous.game_capture_hook {
+            crate::game_capture::vulkan_layer::spawn_sync(crate::native_share::hook_layer_wanted(
+                next.game_capture_hook,
+            ));
         }
 
         let path = self
@@ -561,6 +577,7 @@ mod tests {
             close_to_tray: false,
             hardware_acceleration: false,
             desktop_notifications: false,
+            game_capture_hook: false,
         };
         write_settings_file(&path, &settings).unwrap();
         // Overwrite once more: rename must replace the existing file.
@@ -603,6 +620,7 @@ mod tests {
                     "closeToTray": true,
                     "hardwareAcceleration": true,
                     "desktopNotifications": true,
+                    "gameCaptureHook": true,
                 },
                 "persisted": false,
             })

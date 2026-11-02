@@ -701,6 +701,20 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
             desc: "Uses your GPU for smoother rendering. Turn it off if you see visual glitches.",
             keywords: ["gpu", "graphics", "glitch", "performance", "restart"],
           },
+          {
+            id: "game-capture-hook",
+            label: "Game capture hook",
+            desc: "Captures games directly for smoother screen shares, using the OBS Studio capture hook. Turn it off to always use window capture.",
+            keywords: [
+              "screen share",
+              "game",
+              "capture",
+              "hook",
+              "obs",
+              "anti-cheat",
+              "wgc",
+            ],
+          },
         ],
       },
       {

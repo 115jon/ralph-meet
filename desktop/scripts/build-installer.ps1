@@ -58,6 +58,10 @@ Write-Host "==> Capture policy : wgc-enabled" -ForegroundColor Cyan
 Write-Host "==> Cargo features : $cargoFeatures" -ForegroundColor Cyan
 Write-Host ""
 
+# The game-capture hook is OBS Studio's own signed release files, pinned and
+# verified by desktop/packaging/obs-signed-hook.lock.json.
+& (Join-Path $PSScriptRoot "fetch-obs-signed-hook.ps1")
+
 # ── Run the build from desktop/ ─────────────────────────────────────────────
 Set-Location $desktopDir
 

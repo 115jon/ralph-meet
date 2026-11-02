@@ -451,6 +451,26 @@ impl GameCaptureHook {
         self.ipc.set_frame_interval(frame_interval_ns);
     }
 
+    /// Which hook build the channel drives.
+    pub fn flavor(&self) -> crate::game_capture::obs_ipc::HookFlavor {
+        self.ipc.flavor()
+    }
+
+    /// Whether the DLL's objects were found and `Initialize` was signaled.
+    pub fn ipc_initialized(&self) -> bool {
+        self.ipc.is_initialized()
+    }
+
+    /// `hook_info.hook_ver_major/minor`, once the hook has reported it.
+    pub fn hook_version(&self) -> Option<(u32, u32)> {
+        self.ipc.hook_version()
+    }
+
+    /// The hook reported a `hook_ver_major` this host does not speak.
+    pub fn version_unsupported(&self) -> bool {
+        self.ipc.version_unsupported()
+    }
+
     /// The shared handle currently open (for diagnostics/status); `0` when no
     /// surface is retained.
     pub fn last_handle(&self) -> u64 {

@@ -95,13 +95,13 @@ fn enforce_obs_capture_component_packaging() {
         let mut message = String::from(
             "\n\
             ============================================================\n\
-            Owned_Capture_Component packaging guard FAILED (Req 7.5, 11.4, 12.3, 12.6)\n\
+            Game-capture packaging guard FAILED (Req 7.5, 11.4, 12.3, 12.6)\n\
             ============================================================\n\
-            The `game-capture-hook` feature is enabled, so the project-built\n\
-            Owned_Capture_Component — the Forked_Hook_DLL (64/32), the\n\
-            Owned_Injector artifacts, the GPLv2 license text, the OBS attribution,\n\
-            and the source-availability/written-offer material — MUST ship\n\
-            alongside the desktop binary.\n\n\
+            The `game-capture-hook` feature is enabled, so the OBS-signed capture\n\
+            files (graphics-hook, inject-helper, get-graphics-offsets; 64/32),\n\
+            the GPLv2 license text, the OBS attribution, and the\n\
+            source-availability/written-offer material MUST ship alongside the\n\
+            desktop binary.\n\n\
             Missing required material(s) under\n  ",
         );
         message.push_str(&resource_dir.display().to_string());
@@ -110,13 +110,13 @@ fn enforce_obs_capture_component_packaging() {
             message.push_str(&format!("  - {}  ({})\n", material.name, material.role));
         }
         message.push_str(
-            "\nThe GPLv2 binaries are NOT committed to the repository (the GPLv2\n\
-            license, attribution, and source offer ARE). A maintainer must build\n\
-            the Forked_Hook_DLL/Owned_Injector into that directory (see its\n\
-            README.md — `build-capture-fork.ps1`) before building/packaging with\n\
+            "\nThe OBS-signed capture files are NOT committed to the repository (the\n\
+            GPLv2 license, attribution, and source offer ARE). Fetch and verify\n\
+            them with `desktop/scripts/fetch-obs-signed-hook.ps1` (pinned by\n\
+            desktop/packaging/obs-signed-hook.lock.json) before building with\n\
             `game-capture-hook`. Failing the build here is intentional\n\
             (Req 7.5, 11.4, 12.3, 12.6) — it prevents shipping a game-capture-hook\n\
-            package without the complete Owned_Capture_Component.\n\
+            package without the complete capture component.\n\
             ============================================================\n",
         );
         panic!("{message}");
@@ -221,11 +221,31 @@ fn place_owned_capture_artifacts_next_to_binary() {
     let dest_dir = profile_dir.join("obs-capture");
     let _ = std::fs::create_dir_all(&dest_dir);
 
+    // The OBS-signed set (required, see the packaging guard). Copied
+    // byte-for-byte; the app verifies the bytes against the lock and stages
+    // them to a stable folder before injecting, so a game never loads (or
+    // locks) the copy in the build output.
+    let signed_dest = dest_dir.join("obs-signed");
+    let _ = std::fs::create_dir_all(&signed_dest);
+    for material in REQUIRED_MATERIALS {
+        let Some(name) = material.name.strip_prefix("obs-signed/") else {
+            continue;
+        };
+        let src = source_dir.join(material.name);
+        let dest = signed_dest.join(name);
+        println!("cargo:rerun-if-changed={}", src.display());
+        place_one_artifact(&src, &dest, name, material.role);
+    }
+
+    // The unsigned fork build: development only (RALPH_CAPTURE_HOOK_FLAVOR=own),
+    // placed when a developer has built it with build-capture-fork.ps1.
     for (name, role) in OWNED_CAPTURE_COPY_ARTIFACTS {
         let src = source_dir.join(name);
         let dest = dest_dir.join(name);
         println!("cargo:rerun-if-changed={}", src.display());
-        place_one_artifact(&src, &dest, name, role);
+        if src.is_file() {
+            place_one_artifact(&src, &dest, name, role);
+        }
     }
 
     // Optional Vulkan implicit-layer manifests. These are present only when the
