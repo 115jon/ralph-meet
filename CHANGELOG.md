@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.9.0](https://github.com/115jon/ralph-meet/compare/v3.8.0...v3.9.0) (2026-11-02)
+
+
+### Features
+
+* **desktop:** ✨ keep the signed vulkan layer registered like obs ([d79295b](https://github.com/115jon/ralph-meet/commit/d79295bd9297e010931b61c57e6731794631ccda))
+* **desktop:** keep the signed vulkan capture layer registered like obs ([0fbe5ad](https://github.com/115jon/ralph-meet/commit/0fbe5ad1d1912e36f720ff0c219727e89c11c430))
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 reveal the window when the app is launched again ([a37c2c7](https://github.com/115jon/ralph-meet/commit/a37c2c7a20b07f79a4dbde5d4af5364ba5b8701f))
+* **desktop:** bring the window back when the app is launched again ([5943851](https://github.com/115jon/ralph-meet/commit/594385187e21c8417dff187691899cdf252b70fc))
+* **installer:** 🐛 keep shortcuts and relaunch after a failed install ([55ba1d0](https://github.com/115jon/ralph-meet/commit/55ba1d009baa456e8a35bbca3431914be7a23a1a))
+* **installer:** 🐛 require the capture hook at its signed path ([ef59dd3](https://github.com/115jon/ralph-meet/commit/ef59dd3796e35b316c6084a144cd1ee053e15dbe))
+* **installer:** install 3.8 again and keep the app when an install fails ([4053939](https://github.com/115jon/ralph-meet/commit/4053939affcdfe6754fb762291949b80b7646610))
+
 ## [3.8.0](https://github.com/115jon/ralph-meet/compare/v3.7.0...v3.8.0) (2026-11-02)
 
 
