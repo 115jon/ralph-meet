@@ -1,35 +1,18 @@
 /**
  * useAppUpdater
  *
- * Manages in-app update checks via the Tauri updater plugin.
- *
- * Auto-checks once on mount (for the Settings UI to display a fresh status).
- * The silent *background* check that runs at startup and auto-installs is
- * handled entirely on the Rust side (app_updates::check_and_install), so this
- * hook is purely for the Settings UI that wants to show status / let the user
- * manually trigger a check.
+ * The Settings view of the shared update client (src/lib/app-updates.ts).
+ * Checks once on mount so Settings shows a fresh status, and lets the user
+ * check again or install. The update toast and the updater window use the
+ * same client, so they never race each other for Rust's pending update.
  *
  * Usage:
  *   const { status, updateMeta, checkForUpdate, applyUpdate } = useAppUpdater();
  */
 
-import { invoke, Channel } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
-
-// ── Types mirroring app_updates.rs ───────────────────────────────────────
-
-interface UpdateMetadata {
-  version: string;
-  currentVersion: string;
-  notes: string | null;
-}
-
-type DownloadEventPayload =
-  | { event: "Started"; data: { contentLength: number | null } }
-  | { event: "Progress"; data: { chunkLength: number } }
-  | { event: "Finished"; data: Record<string, never> };
-
-// ── Hook status ───────────────────────────────────────────────────────────
+import { useCallback, useEffect } from "react";
+import { appUpdates, useAppUpdateState } from "@/lib/app-updates";
+import type { UpdateMetadata } from "@/lib/host";
 
 type UpdaterStatus =
   | "idle"
@@ -59,98 +42,43 @@ export interface AppUpdaterState {
   applyUpdate: () => Promise<void>;
 }
 
-// ── Hook implementation ───────────────────────────────────────────────────
+const CHECK_ERROR =
+  "Unable to check for updates. Check your connection and try again.";
+const INSTALL_ERROR = "Unable to install the update. Try again in a moment.";
 
 export function useAppUpdater(): AppUpdaterState {
-  const [status, setStatus] = useState<UpdaterStatus>("idle");
-  const [updateMeta, setUpdateMeta] = useState<UpdateMetadata | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // Prevent concurrent checks
-  const checkingRef = useRef(false);
-
-  const isDesktop =
-    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  const { phase, pending, progress, failed } = useAppUpdateState();
 
   const checkForUpdate = useCallback(async () => {
-    if (!isDesktop || checkingRef.current) return;
-
-    checkingRef.current = true;
-    setStatus("checking");
-    setError(null);
-
-    try {
-      const meta = await invoke<UpdateMetadata | null>("fetch_update");
-      if (meta) {
-        setUpdateMeta(meta);
-        setStatus("available");
-      } else {
-        setUpdateMeta(null);
-        setStatus("up-to-date");
-      }
-    } catch (err) {
-      setError(
-        "Unable to check for updates. Check your connection and try again.",
-      );
-      setStatus("error");
+    await appUpdates.check().catch((err: unknown) => {
       console.error("[useAppUpdater] check failed:", err);
-    } finally {
-      checkingRef.current = false;
-    }
-  }, [isDesktop]);
+    });
+  }, []);
 
   const applyUpdate = useCallback(async () => {
-    if (!isDesktop || status !== "available") return;
-
-    setStatus("downloading");
-    setDownloadProgress(0);
-    setError(null);
-
-    try {
-      const channel = new Channel<DownloadEventPayload>();
-      let totalBytes: number | null = null;
-      let downloadedBytes = 0;
-
-      channel.onmessage = (payload) => {
-        if (payload.event === "Started") {
-          totalBytes = payload.data.contentLength;
-        } else if (payload.event === "Progress") {
-          downloadedBytes += payload.data.chunkLength;
-          if (totalBytes && totalBytes > 0) {
-            setDownloadProgress(downloadedBytes / totalBytes);
-          }
-        } else if (payload.event === "Finished") {
-          setDownloadProgress(1);
-          setStatus("installing");
-        }
-      };
-
-      await invoke("install_update", { onEvent: channel });
-
-      // On Windows the process exits here — this line is never reached.
-      // On other platforms, reset state after install.
-      setStatus("idle");
-      setDownloadProgress(null);
-    } catch (err) {
-      setError("Unable to install the update. Try again in a moment.");
-      setStatus("error");
-      setDownloadProgress(null);
+    if (appUpdates.getState().phase !== "available") return;
+    await appUpdates.install().catch((err: unknown) => {
       console.error("[useAppUpdater] install failed:", err);
-    }
-  }, [isDesktop, status]);
+    });
+  }, []);
 
   // Run once on mount so the Settings page immediately reflects current status
   useEffect(() => {
     void checkForUpdate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [checkForUpdate]);
 
+  // Once installed the process exits on Windows; elsewhere, back to idle.
+  const installed = phase === "installed";
   return {
-    status,
-    updateMeta,
-    downloadProgress,
-    error,
+    status: installed ? "idle" : phase,
+    updateMeta: pending,
+    downloadProgress: installed ? null : progress,
+    error:
+      phase !== "error"
+        ? null
+        : failed === "install"
+          ? INSTALL_ERROR
+          : CHECK_ERROR,
     checkForUpdate,
     applyUpdate,
   };

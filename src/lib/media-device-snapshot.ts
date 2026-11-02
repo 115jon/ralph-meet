@@ -1,4 +1,5 @@
 import { clog } from "@/lib/console-logger";
+import { getHost } from "@/lib/host";
 import { isDesktop } from "@/lib/platform";
 
 const mediaLog = clog("MediaDevices");
@@ -106,10 +107,8 @@ function hasCompleteDesktopDeviceList(
 }
 
 async function getDesktopNativeAudioDevices(): Promise<NativeDevice[]> {
-  if (!isDesktop()) return [];
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<NativeDevice[]>("get_native_audio_devices");
+    return await getHost().media.listNativeAudioDevices();
   } catch (err) {
     mediaLog.warn("Native audio device enumeration failed:", err);
     return [];
@@ -117,10 +116,8 @@ async function getDesktopNativeAudioDevices(): Promise<NativeDevice[]> {
 }
 
 async function getDesktopNativeVideoDevices(): Promise<NativeDevice[]> {
-  if (!isDesktop()) return [];
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<NativeDevice[]>("get_native_video_devices");
+    return await getHost().media.listNativeVideoDevices();
   } catch (err) {
     mediaLog.warn("Native video device enumeration failed:", err);
     return [];

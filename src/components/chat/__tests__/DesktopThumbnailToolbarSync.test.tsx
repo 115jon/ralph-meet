@@ -7,30 +7,42 @@ import { getNextDesktopMediaControls } from "../DesktopThumbnailToolbarSync";
 const mocks = vi.hoisted(() => {
   type ToolbarAction = "toggle-media-playback";
   return {
-    clearToolbar: vi.fn(),
     listener: null as
       | ((event: { action: ToolbarAction }) => void | Promise<void>)
       | null,
     livePosition: vi.fn(() => 12_000),
     sendAppEvent: vi.fn(),
     setLocalPlayback: vi.fn(),
-    syncToolbar: vi.fn(),
+    syncToolbar: vi.fn(async () => {}),
   };
 });
 
 vi.mock("@/components/CameraSettingsModal", () => ({
   CameraSettingsModal: () => null,
 }));
-vi.mock("@/lib/desktop-thumbnail-toolbar", () => ({
-  clearDesktopThumbnailToolbar: mocks.clearToolbar,
-  HIDDEN_DESKTOP_THUMBNAIL_TOOLBAR_STATE: {},
-  listenForDesktopThumbnailToolbarActions: vi.fn(async (handler) => {
-    mocks.listener = handler;
-    return vi.fn();
-  }),
-  syncDesktopThumbnailToolbar: mocks.syncToolbar,
-}));
-vi.mock("@/lib/platform", () => ({ isTauri: () => true }));
+vi.mock("@/lib/host", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/host")>();
+  return {
+    ...actual,
+    getHost: () => ({
+      ...actual.getHost(),
+      window: {
+        ...actual.getHost().window,
+        onThumbnailToolbarAction: vi.fn(
+          async (
+            handler: (event: {
+              action: "toggle-media-playback";
+            }) => void | Promise<void>,
+          ) => {
+            mocks.listener = handler;
+            return vi.fn();
+          },
+        ),
+        syncThumbnailToolbar: mocks.syncToolbar,
+      },
+    }),
+  };
+});
 vi.mock("@/lib/sounds", () => ({ playCallEnd: vi.fn() }));
 vi.mock("@/lib/voice/camera-toggle", () => ({
   handleVoiceCameraToggle: vi.fn(),
@@ -87,11 +99,10 @@ import { DesktopThumbnailToolbarSync } from "../DesktopThumbnailToolbarSync";
 
 describe("DesktopThumbnailToolbarSync media controls", () => {
   beforeEach(() => {
-    mocks.clearToolbar.mockReset();
     mocks.listener = null;
     mocks.sendAppEvent.mockReset();
     mocks.setLocalPlayback.mockReset();
-    mocks.syncToolbar.mockReset();
+    mocks.syncToolbar.mockReset().mockResolvedValue(undefined);
     mocks.livePosition.mockReset().mockReturnValue(12_000);
   });
 

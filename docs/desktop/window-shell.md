@@ -92,8 +92,8 @@ Event contract:
 | `take_pending_deep_links` | returns the queued URLs and marks the listener ready |
 
 The page has one listener, [`src/lib/desktop-deep-link.ts`](../../src/lib/desktop-deep-link.ts): it listens once per
-page, then calls `take_pending_deep_links`. `DesktopDeepLinkBridge` in `src/routes/__root.tsx` subscribes and navigates
-to `/invite/$code`. The old `deep-link` and `deep-link://new-url` listeners and the plugin's `getCurrent()` call are
+page, then calls `take_pending_deep_links`. `DesktopDeepLinkBridge` in `src/routes/__root.tsx` subscribes through
+`getHost().deepLinks` ([web-host.md](web-host.md)) and navigates to `/invite/$code`. The old `deep-link` and `deep-link://new-url` listeners and the plugin's `getCurrent()` call are
 gone.
 
 ## Settings
@@ -125,7 +125,8 @@ Commands:
 
 `set_desktop_settings` writes or deletes the HKCU `Run` value `RalphMeet` (the autostart plugin off Windows) only when
 `openOnStartup` changes; the startup repair above is the only other write. Hardware acceleration takes effect on the next launch. The Zustand store
-([`useDesktopSettingsStore.ts`](../../src/stores/useDesktopSettingsStore.ts)) mirrors the settings and keeps its
+([`useDesktopSettingsStore.ts`](../../src/stores/useDesktopSettingsStore.ts)) reaches the commands through
+`getHost().settings`, mirrors the settings and keeps its
 localStorage copy for first paint and for the web build.
 
 ### Migration from localStorage

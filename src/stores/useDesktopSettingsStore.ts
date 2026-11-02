@@ -6,13 +6,14 @@
 //
 // On desktop, Rust owns and persists these (desktop-settings.json), so they
 // apply at launch before any webview loads. This store mirrors them: it
-// hydrates from `get_desktop_settings` and sends changes with one
-// `set_desktop_settings`. localStorage keeps a copy for first paint and for
-// the web build, and is the source of the one-time migration to Rust.
+// hydrates from the host's settings (`get_desktop_settings`) and sends
+// changes with one save (`set_desktop_settings`). The web host persists
+// nothing. localStorage keeps a copy for first paint and for the web build,
+// and is the source of the one-time migration to Rust.
 // See docs/desktop/window-shell.md.
 // ============================================================================
 
-import { isDesktop } from "@/lib/platform";
+import { getHost } from "@/lib/host";
 import { clog } from "@/lib/console-logger";
 import { readBoolean, readObject } from "@/lib/persisted-guard";
 import { create } from "zustand";
@@ -95,14 +96,6 @@ export function getOSName(): string {
   return "Desktop";
 }
 
-async function invokeRust<T>(
-  cmd: "get_desktop_settings" | "set_desktop_settings",
-  args?: Record<string, unknown>,
-): Promise<T> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(cmd, args);
-}
-
 export const useDesktopSettingsStore = create<DesktopSettingsState>()(
   persist(
     (set, get) => ({
@@ -122,13 +115,13 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
         );
         const previous = pickSettings(get(), keys);
         set(updates);
-        if (!isDesktop() || keys.length === 0) return;
+        if (keys.length === 0) return;
 
         try {
-          const saved = await invokeRust<unknown>("set_desktop_settings", {
-            patch: pickSettings({ ...get(), ...updates }, keys),
-          });
-          set(readDesktopSettings(saved) ?? {});
+          const saved = await getHost().settings.save(
+            pickSettings({ ...get(), ...updates }, keys),
+          );
+          if (saved !== null) set(readDesktopSettings(saved) ?? {});
         } catch (error) {
           set(previous);
           throw error;
@@ -155,7 +148,7 @@ let hydration: Promise<void> | null = null;
  * Safe to call more than once; later calls share the first result.
  */
 export function hydrateDesktopSettings(): Promise<void> {
-  if (!isDesktop()) return Promise.resolve();
+  if (getHost().kind !== "desktop") return Promise.resolve();
   hydration ??= runHydration().catch((error: unknown) => {
     log.warn("Failed to load desktop settings:", error);
     hydration = null;
@@ -164,9 +157,9 @@ export function hydrateDesktopSettings(): Promise<void> {
 }
 
 async function runHydration() {
-  const snapshot = await invokeRust<DesktopSettingsSnapshot>(
-    "get_desktop_settings",
-  );
+  const host = getHost();
+  const snapshot = await host.settings.load();
+  if (!snapshot) return;
   if (snapshot.persisted) {
     useDesktopSettingsStore.setState(
       readDesktopSettings(snapshot.settings) ?? {},
@@ -176,15 +169,17 @@ async function runHydration() {
 
   const state = useDesktopSettingsStore.getState();
   log.info("Migrating desktop settings from localStorage to the desktop app");
-  const saved = await invokeRust<unknown>("set_desktop_settings", {
-    patch: pickSettings(state, [
+  const saved = await host.settings.save(
+    pickSettings(state, [
       "openOnStartup",
       "startMinimized",
       "closeToTray",
       "desktopNotifications",
     ]),
-  });
-  useDesktopSettingsStore.setState(readDesktopSettings(saved) ?? {});
+  );
+  if (saved !== null) {
+    useDesktopSettingsStore.setState(readDesktopSettings(saved) ?? {});
+  }
 }
 
 /** Test-only: forget the shared hydration so a test can run it again. */

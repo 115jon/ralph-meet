@@ -1,21 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const invokeMock =
+const invokeMock = vi.hoisted(() =>
   vi.fn<
     (
       cmd: string,
       args?: Record<string, unknown>,
     ) => Promise<DesktopSettings | DesktopSettingsSnapshot>
-  >();
-
-vi.mock("@/lib/platform", () => ({
-  isDesktop: () => true,
-}));
+  >(),
+);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
 }));
 
+import { setHostForTests } from "@/lib/host";
+import { createDesktopHost } from "@/lib/host/desktop";
 import {
   hydrateDesktopSettings,
   resetDesktopSettingsHydrationForTests,
@@ -44,6 +43,9 @@ function settingsOf(state: DesktopSettings): DesktopSettings {
   };
 }
 
+// The real desktop adapter over the mocked `invoke`.
+setHostForTests(createDesktopHost());
+
 describe("desktop settings owned by Rust", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -61,7 +63,7 @@ describe("desktop settings owned by Rust", () => {
     await hydrateDesktopSettings();
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
-    expect(invokeMock).toHaveBeenCalledWith("get_desktop_settings", undefined);
+    expect(invokeMock).toHaveBeenCalledWith("get_desktop_settings");
     expect(settingsOf(useDesktopSettingsStore.getState())).toEqual({
       ...rustDefaults,
       startMinimized: true,
