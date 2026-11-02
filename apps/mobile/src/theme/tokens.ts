@@ -216,6 +216,8 @@ export interface Theme {
   brand: string;
   brand2: string;
   scrim: string;
+  /** The scrim's alpha alone, for native dims that take colour and opacity apart. */
+  scrimOpacity: number;
   /** Shadow colour for floats (ply-3 and above) only. */
   shadow: string;
 }
@@ -264,6 +266,7 @@ function buildTheme(id: ThemeId): Theme {
     brand: t.brand,
     brand2: t.brand2,
     scrim: `rgba(0, 0, 0, ${s.scrim})`,
+    scrimOpacity: s.scrim,
     shadow: `rgba(${r}, ${g}, ${b}, ${Number((0.6 * s.shadowAlpha).toFixed(3))})`,
   };
 }

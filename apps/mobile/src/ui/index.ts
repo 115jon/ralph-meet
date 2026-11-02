@@ -12,7 +12,7 @@ export { RemoteImage } from "./RemoteImage";
 export { Screen } from "./Screen";
 export { Segmented } from "./Segmented";
 export { Sheet, SheetRow, SheetScrollView } from "./Sheet";
-export { useSheetScroll, type SheetScrollProps } from "./sheet-scroll";
+export { useSheetScroll } from "./sheet-list";
 export { Skeleton } from "./Skeleton";
 export { SquareKey } from "./SquareKey";
 export { SwitchKey } from "./SwitchKey";
