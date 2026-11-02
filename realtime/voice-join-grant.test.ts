@@ -15,12 +15,30 @@ describe("voice join grant messages", () => {
       subject: "user-1",
       granted: true,
       seq: 42,
+      replaced: false,
     };
     expect(
       parseVoiceJoinGrantUpdate(
         JSON.parse(serializeVoiceJoinGrantUpdate(update)),
       ),
     ).toEqual(update);
+    // A revocation can say the user's voice moved to another device.
+    const replaced = { ...update, granted: false, replaced: true };
+    expect(
+      parseVoiceJoinGrantUpdate(
+        JSON.parse(serializeVoiceJoinGrantUpdate(replaced)),
+      ),
+    ).toEqual(replaced);
+    // A grant is never "replaced"; an old sender omits the field.
+    expect(
+      parseVoiceJoinGrantUpdate({
+        participant_id: "participant-1",
+        subject: "user-1",
+        granted: true,
+        seq: 1,
+        replaced: true,
+      }),
+    ).toMatchObject({ replaced: false });
     const query = { participantId: "participant-1", subject: "user-1" };
     expect(
       parseVoiceJoinGrantQuery(JSON.parse(serializeVoiceJoinGrantQuery(query))),
@@ -36,6 +54,7 @@ describe("voice join grant messages", () => {
     { participant_id: "p", subject: "user-1", granted: true, seq: -1 },
     { participant_id: "p", subject: "user-1", granted: true, seq: 1.5 },
     { participant_id: "p".repeat(513), subject: "u", granted: true, seq: 1 },
+    { participant_id: "p", subject: "u", granted: false, seq: 1, replaced: 1 },
   ])("rejects a malformed grant update: %j", (value) => {
     expect(parseVoiceJoinGrantUpdate(value)).toBeNull();
   });

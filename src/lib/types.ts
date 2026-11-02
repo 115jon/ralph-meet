@@ -500,6 +500,10 @@ export interface SFUEventMap {
   "connection-state": { state: string };
   "voice-ready": { speaking?: Record<string, number> };
   disconnected: never;
+  /**
+   * The server ended this session for a newer one (the user joined from
+   * another device). Media is already torn down; the call must not rejoin.
+   */
   kicked: never;
   /** A call socket's ticket was refused twice: the session is gone. */
   "auth-failed": never;

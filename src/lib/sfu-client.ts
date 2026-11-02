@@ -50,6 +50,7 @@ export type SFUDisconnectReason =
   | "forced-disconnect"
   | "user-leave"
   | "voice-gateway-kicked"
+  | "session-replaced"
   | "unknown";
 
 export interface PartyTracksClientTransport extends PartyTracksMediaTransport {
@@ -445,6 +446,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn("Room socket ticket refused: the session is gone");
       this.emit("auth-failed", undefined as never);
     });
+    this.roomGW.on("kicked", () => {
+      // The user joined this room from another device (SessionReplaced).
+      sfuLog.warn("Voice moved to another device");
+      if (this.isLeaving) return;
+      this.disconnect("session-replaced");
+      this.emit("kicked", undefined as never);
+    });
     this.roomGW.on("participant-joined", (event) => {
       this.upsertStandbyParticipant(event.participant);
       this.emit("participant-joined", event);
@@ -601,6 +609,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     });
     this.voiceGW.on("kicked", () => {
       sfuLog.warn("Kicked from VoiceGateway by a replacement connection");
+      if (this.isLeaving) return;
       this.disconnect("voice-gateway-kicked");
       this.emit("kicked", undefined as never);
     });

@@ -163,6 +163,12 @@ export enum GatewayCloseCode {
   /** Realtime admission rejected: the client must not reconnect. */
   AdmissionRejected = 4008,
   SessionTimeout = 4009,
+  /**
+   * The user's voice session in this room moved to another device (one voice
+   * session per user per room; the newest join wins). The client must stop:
+   * no reconnect, resume or rejoin until the user acts.
+   */
+  SessionReplaced = 4010,
   ServerNotFound = 4014,
   UnknownProtocol = 4015,
   /** Per-opcode rate limit exceeded. */
