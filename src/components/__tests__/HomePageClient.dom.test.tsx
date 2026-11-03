@@ -101,7 +101,7 @@ describe("HomePageClient", () => {
     expect(hrefs.some((h) => h?.includes("115jon."))).toBe(false);
     expect(screen.getByRole("link", { name: "GitHub" })).toHaveAttribute(
       "href",
-      "https://github.com/115jon/ralph-meet",
+      "https://github.com/115jon/yap",
     );
   });
 });
