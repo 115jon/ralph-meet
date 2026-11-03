@@ -24,7 +24,7 @@ Yap uses these services:
 
 - `yap.115jon.com` for the Yap
   application API, chat gateway, and service functions.
-- `auth.115jon.site` for the project-maintained Kova authentication service.
+- `auth.115jon.com` for the project-maintained Kova authentication service.
 - Cloudflare services for application delivery and infrastructure.
 - GitHub Releases for published desktop releases and desktop update metadata.
 - WebRTC/SFU services used by Yap for voice, video, and screen sharing.

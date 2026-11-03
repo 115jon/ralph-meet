@@ -57,8 +57,8 @@ thousands of members.
 - Profiles with collectibles from a shop (decorations, effects, nameplates,
   frames) and display-name fonts.
 - Kova handles authentication, including device-code sign-in at `/activate`.
-- Site hostnames come from config. The domain is moving from 115jon.site to
-  115jon.com, so no new `.site` literals.
+- Site hostnames come from config. Everything lives on 115jon.com;
+  115jon.site is retired, so no `.site` literals.
 - A dev-only `/ui-fixtures` route renders real components with mocked data
   for every surface; it is the visual test bed.
 
