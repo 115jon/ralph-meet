@@ -56,7 +56,7 @@ describe("video playback availability", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await primeVideoPlaybackAvailability({
-      src: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2Ftest.mp4",
+      src: "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2Ftest.mp4",
       contentType: "video/mp4",
       posterUrl: "https://pbs.twimg.com/amplify_video_thumb/test.jpg",
       sourceUrl: "https://x.com/example/status/1",
@@ -65,7 +65,7 @@ describe("video playback availability", () => {
 
     expect(result).toBe("playable");
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2Ftest.mp4",
+      "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2Ftest.mp4",
       expect.objectContaining({
         method: "GET",
         headers: {
@@ -89,7 +89,7 @@ describe("video playback availability", () => {
     );
 
     const result = await primeVideoPlaybackAvailability({
-      src: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2Ftest.mp4",
+      src: "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2Ftest.mp4",
       contentType: "video/mp4",
       posterUrl: "https://pbs.twimg.com/amplify_video_thumb/test.jpg",
       sourceUrl: "https://x.com/example/status/1",

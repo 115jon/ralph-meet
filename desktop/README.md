@@ -36,7 +36,7 @@ pnpm run dev:deployed
 ```
 
 That mode uses the `deployed` Vite env file and points the desktop proxy at
-`https://meet.115jon.site`, avoiding the local backend connection-refused loop
+`https://yap.115jon.com`, avoiding the local backend connection-refused loop
 when the web Worker dev server is not running.
 
 ## Production Build

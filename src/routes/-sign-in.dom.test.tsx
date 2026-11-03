@@ -37,7 +37,7 @@ vi.mock("@/lib/desktop-auth", () => ({
 
 vi.mock("@/lib/platform", () => ({
   isTauri: () => false,
-  getPublicWebUrl: () => "https://meet.115jon.site",
+  getPublicWebUrl: () => "https://yap.115jon.com",
 }));
 vi.mock("@/components/DesktopLogin", () => ({ default: () => null }));
 vi.mock("@/components/SplashScreen", () => ({

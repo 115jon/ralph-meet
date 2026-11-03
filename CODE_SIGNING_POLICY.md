@@ -51,7 +51,7 @@ release.
 ## Privacy policy
 
 Ralph Meet's privacy policy is available at [PRIVACY.md](PRIVACY.md) and will be
-published at <https://meet.115jon.site/privacy>. The installer must present this
+published at <https://yap.115jon.com/privacy>. The installer must present this
 policy and required choices before a first installation that enables automatic
 data transfers.
 

@@ -7,7 +7,7 @@
  * `devUrl` in desktop/src-tauri/tauri.conf.json. Its `/api` and `/ws` proxy
  * targets the web dev server, so it reads `RALPH_DEV_PORT` too.
  *
- * Both servers use `strictPort`. The "Ralph Meet (dev)" Kova app only accepts
+ * Both servers use `strictPort`. The "Yap (dev)" Kova app only accepts
  * http://localhost:5173, http://127.0.0.1:5173 and http://localhost:1420 as
  * origins, so a server that quietly moved to the next free port would load
  * fine and then fail every sign-in.
