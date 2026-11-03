@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.10.1](https://github.com/115jon/yap/compare/v3.10.0...v3.10.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **auth:** 🐛 wait for the sign-in code exchange and drop old hosts ([cb56ad9](https://github.com/115jon/yap/commit/cb56ad9a57e9dfcc4eab14f4aa9ace84f562b624))
+* **auth:** 🐛 wait for the sign-in code exchange and drop old hosts ([1cefe2b](https://github.com/115jon/yap/commit/1cefe2b4fd30d7de7a18431610ea05b5450a2e4f))
+* **mobile:** bottom sheets use native TrueSheet ([905045b](https://github.com/115jon/yap/commit/905045b070fe9b5ae0eed3126415492a68c138c3))
+
 ## [3.10.0](https://github.com/115jon/ralph-meet/compare/v3.9.0...v3.10.0) (2026-11-03)
 
 
