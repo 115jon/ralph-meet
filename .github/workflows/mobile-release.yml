@@ -131,7 +131,7 @@ jobs:
             echo "::error::APK is not signed with the release certificate (got ${actual:-none})"
             exit 1
           fi
-          name="ralph-meet-$VERSION.apk"
+          name="yap-$VERSION.apk"
           mkdir -p dist
           cp "$src" "dist/$name"
           ls -l "dist/$name"
@@ -141,7 +141,7 @@ jobs:
         # actions/upload-artifact v4.6.2
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ralph-meet-${{ steps.version.outputs.version }}-apk
+          name: yap-${{ steps.version.outputs.version }}-apk
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
 
@@ -153,7 +153,7 @@ jobs:
           APK: ${{ steps.apk.outputs.path }}
         run: |
           if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "Ralph Meet Android $VERSION" \
+            gh release create "$TAG" --title "Yap Android $VERSION" \
               --notes "Signed Android APK. Install it over an earlier release to update." \
               --target "$GITHUB_SHA" --latest=false -R "$GITHUB_REPOSITORY"
           fi
