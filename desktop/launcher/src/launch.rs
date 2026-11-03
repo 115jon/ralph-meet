@@ -536,10 +536,7 @@ mod tests {
     #[test]
     fn child_arguments_prefix_and_passthrough() {
         let tail = wide(r#""yap://invite/abc""#);
-        assert_eq!(
-            narrow(&child_arguments("", &tail)),
-            r#""yap://invite/abc""#
-        );
+        assert_eq!(narrow(&child_arguments("", &tail)), r#""yap://invite/abc""#);
         assert_eq!(
             narrow(&child_arguments(UPDATE_EXE_ARGS, &tail)),
             r#"--processStart Yap.exe "yap://invite/abc""#

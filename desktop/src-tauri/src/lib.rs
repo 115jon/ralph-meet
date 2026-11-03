@@ -452,7 +452,11 @@ fn move_legacy_app_data(legacy: &std::path::Path, destination: &std::path::Path)
         }
         match std::fs::rename(legacy, destination) {
             Ok(()) => {
-                notes.push(format!("moved {} to {}", legacy.display(), destination.display()));
+                notes.push(format!(
+                    "moved {} to {}",
+                    legacy.display(),
+                    destination.display()
+                ));
                 return notes;
             }
             Err(err) => notes.push(format!(
@@ -475,7 +479,11 @@ fn move_legacy_app_data(legacy: &std::path::Path, destination: &std::path::Path)
     let profile = destination.join("cef");
     if legacy_profile.is_dir() && !profile.exists() {
         match std::fs::rename(&legacy_profile, &profile) {
-            Ok(()) => notes.push(format!("moved {} to {}", legacy_profile.display(), profile.display())),
+            Ok(()) => notes.push(format!(
+                "moved {} to {}",
+                legacy_profile.display(),
+                profile.display()
+            )),
             Err(err) => {
                 notes.push(format!(
                     "could not move {} ({err}); left Ralph Meet's data in place",
@@ -497,12 +505,19 @@ fn move_legacy_app_data(legacy: &std::path::Path, destination: &std::path::Path)
             if name.eq_ignore_ascii_case("logs") {
                 let _ = std::fs::remove_dir_all(&source);
             } else {
-                notes.push(format!("kept {}: Yap already has its own", source.display()));
+                notes.push(format!(
+                    "kept {}: Yap already has its own",
+                    source.display()
+                ));
             }
             continue;
         }
         match std::fs::rename(&source, &target) {
-            Ok(()) => notes.push(format!("moved {} to {}", source.display(), target.display())),
+            Ok(()) => notes.push(format!(
+                "moved {} to {}",
+                source.display(),
+                target.display()
+            )),
             Err(err) => notes.push(format!("kept {}: {err}", source.display())),
         }
     }
@@ -1200,7 +1215,8 @@ mod legacy_product_app_data_tests {
     use std::path::{Path, PathBuf};
 
     fn temp_root(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("yap-legacy-data-{name}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("yap-legacy-data-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         root
@@ -1219,13 +1235,19 @@ mod legacy_product_app_data_tests {
     fn moves_the_whole_folder_when_yap_has_none() {
         let root = temp_root("whole");
         let (legacy, yap) = (root.join("RalphMeet"), root.join("Yap"));
-        write(&legacy.join("cef").join("Network").join("Cookies"), "session");
+        write(
+            &legacy.join("cef").join("Network").join("Cookies"),
+            "session",
+        );
         write(&legacy.join("desktop-settings.json"), "{}");
 
         move_legacy_app_data(&legacy, &yap);
 
         assert!(!legacy.exists());
-        assert_eq!(read(&yap.join("cef").join("Network").join("Cookies")), "session");
+        assert_eq!(
+            read(&yap.join("cef").join("Network").join("Cookies")),
+            "session"
+        );
         assert_eq!(read(&yap.join("desktop-settings.json")), "{}");
         // A second run has nothing left to do.
         assert!(move_legacy_app_data(&legacy, &yap).is_empty());
@@ -1247,7 +1269,10 @@ mod legacy_product_app_data_tests {
         assert_eq!(read(&yap.join("cef").join("Preferences")), "yap");
         assert_eq!(read(&legacy.join("cef").join("Preferences")), "ralph");
         assert_eq!(read(&yap.join(".window-state.json")), "{}");
-        assert_eq!(read(&yap.join("logs").join("installer").join("a.log")), "new");
+        assert_eq!(
+            read(&yap.join("logs").join("installer").join("a.log")),
+            "new"
+        );
         assert!(!legacy.join("logs").exists());
         assert!(legacy.exists());
         let _ = std::fs::remove_dir_all(&root);
@@ -1264,7 +1289,11 @@ mod legacy_product_app_data_tests {
         write(&legacy.join("desktop-settings.json"), "{}");
 
         // FILE_SHARE_READ only: like a running CEF holding its profile.
-        let handle = std::fs::OpenOptions::new().read(true).share_mode(1).open(&cookies).unwrap();
+        let handle = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&cookies)
+            .unwrap();
         move_legacy_app_data(&legacy, &yap);
         drop(handle);
 
@@ -1273,7 +1302,10 @@ mod legacy_product_app_data_tests {
         assert!(!yap.join("desktop-settings.json").exists());
 
         move_legacy_app_data(&legacy, &yap);
-        assert_eq!(read(&yap.join("cef").join("Network").join("Cookies")), "session");
+        assert_eq!(
+            read(&yap.join("cef").join("Network").join("Cookies")),
+            "session"
+        );
         assert_eq!(read(&yap.join("desktop-settings.json")), "{}");
         assert!(!legacy.exists());
         let _ = std::fs::remove_dir_all(&root);

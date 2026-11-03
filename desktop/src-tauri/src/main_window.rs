@@ -385,17 +385,17 @@ mod tests {
     #[test]
     fn extracts_the_link_from_argv() {
         assert_eq!(
-            deep_link_from_args([
-                r"C:\Yap\app-3.7.0\Yap.exe",
-                "ralphmeet://invite/abc123"
-            ]),
+            deep_link_from_args([r"C:\Yap\app-3.7.0\Yap.exe", "ralphmeet://invite/abc123"]),
             Some("ralphmeet://invite/abc123".to_string())
         );
         assert_eq!(
             deep_link_from_args([r"C:\Yap\app-3.7.0\Yap.exe", "yap://invite/abc123"]),
             Some("yap://invite/abc123".to_string())
         );
-        assert_eq!(normalize_deep_link("YAP://invite/x").as_deref(), Some("yap://invite/x"));
+        assert_eq!(
+            normalize_deep_link("YAP://invite/x").as_deref(),
+            Some("yap://invite/x")
+        );
         assert_eq!(normalize_deep_link("https://invite/x"), None);
     }
 
