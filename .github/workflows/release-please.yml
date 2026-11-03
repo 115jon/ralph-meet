@@ -50,6 +50,8 @@ jobs:
     if: ${{ needs.release.outputs.releases_created == 'true' }}
     permissions:
       contents: write
+      # Azure Artifact Signing logs in with the GitHub OIDC token.
+      id-token: write
     # Called directly instead of relying on the tag push, so the build runs
     # whichever token created the tag, and it saves caches on main.
     uses: ./.github/workflows/desktop-release.yml
