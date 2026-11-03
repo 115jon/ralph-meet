@@ -11,7 +11,11 @@ import {
   type AppLink,
 } from "./parse";
 
-const ORIGINS = { web: config.webUrl, scheme: config.scheme };
+const ORIGINS = {
+  web: config.webUrl,
+  legacyWeb: config.legacyWebUrl || undefined,
+  scheme: config.scheme,
+};
 
 /** What `url` points at in Ralph, or null for any other link. */
 export function readAppLink(url: string): AppLink | null {

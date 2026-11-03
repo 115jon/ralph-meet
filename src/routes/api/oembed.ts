@@ -3,6 +3,7 @@ import { hydrateInstagramEmbedsForShare } from "@/lib/share-embed-refresh";
 import { buildShareMetadata, buildShareOEmbed } from "@/lib/share-metadata";
 import { ServiceError } from "@/lib/service-error";
 import { getPublicWebUrl } from "@/lib/platform";
+import { LEGACY_PUBLIC_WEB_URL } from "@/lib/site-defaults";
 import { getPublicMessageShare } from "@/services/message-share.service";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -18,7 +19,12 @@ function getShareTokenFromUrl(
   }
 
   const publicOrigin = getPublicWebUrl();
-  const allowedOrigins = new Set([requestOrigin, publicOrigin]);
+  // Share links made before the Yap rename point at the legacy host.
+  const allowedOrigins = new Set([
+    requestOrigin,
+    publicOrigin,
+    LEGACY_PUBLIC_WEB_URL,
+  ]);
   if (!allowedOrigins.has(url.origin)) return null;
 
   const match = url.pathname.match(/^\/share\/([^/?#]+)$/);

@@ -1,7 +1,7 @@
 /**
  * Which Kova app local dev signs in with (`vite dev` only; builds and
  * deploys never read this). `RALPH_AUTH=dev` (the default) uses the
- * "Ralph Meet (dev)" app, `RALPH_AUTH=prod` the live "Ralph Meet" app.
+ * "Yap (dev)" app, `RALPH_AUTH=prod` the live "Yap" app.
  *
  * vite.config.ts resolves the target once, takes the matching publishable
  * key from wrangler.toml (dev: `[env.mobile-dev.vars]`, prod: top-level
@@ -21,10 +21,10 @@ export const DEV_AUTH_APPS: Record<
 > = {
   dev: {
     id: "app_05dda12b6492",
-    name: "Ralph Meet (dev)",
+    name: "Yap (dev)",
     keyPrefix: "pk_dev_",
   },
-  prod: { id: "app_2db95e2369dd", name: "Ralph Meet", keyPrefix: "pk_live_" },
+  prod: { id: "app_2db95e2369dd", name: "Yap", keyPrefix: "pk_live_" },
 };
 
 /** `RALPH_AUTH` to a target: unset or blank is `dev`; anything unknown throws. */

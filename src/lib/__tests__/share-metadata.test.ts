@@ -38,14 +38,11 @@ function makeShare(overrides: Partial<MessageShare> = {}): MessageShare {
 
 describe("share metadata", () => {
   it("builds noindex Open Graph source data for text shares", () => {
-    const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
-      makeShare(),
-    );
+    const metadata = buildShareMetadata("https://yap.115jon.com", makeShare());
 
     expect(metadata.title).toBe("Check this out https://example.com");
     expect(metadata.description).toBe("Check this out https://example.com");
-    expect(metadata.shareUrl).toBe("https://meet.115jon.site/share/tok_123");
+    expect(metadata.shareUrl).toBe("https://yap.115jon.com/share/tok_123");
     expect(metadata.oembedUrl).toContain("/api/oembed?url=");
     expect(metadata.robots).toBe("noindex, nofollow");
     expect(metadata.media).toBeUndefined();
@@ -53,7 +50,7 @@ describe("share metadata", () => {
 
   it("uses embed text instead of repeating a pasted URL-only message", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -101,7 +98,7 @@ describe("share metadata", () => {
 
   it("uses user-written message text as title while keeping embed media", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -144,7 +141,7 @@ describe("share metadata", () => {
 
   it("uses provider-aware image cards for link-only player embeds", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -179,7 +176,7 @@ describe("share metadata", () => {
     expect(metadata.description).toBe("#roblox #robloxfyp #roblox");
     expect(metadata.media).toEqual({
       type: "image",
-      url: "https://meet.115jon.site/api/shared-messages/tok_123/preview-image",
+      url: "https://yap.115jon.com/api/shared-messages/tok_123/preview-image",
       width: 600,
       height: 315,
     });
@@ -187,7 +184,7 @@ describe("share metadata", () => {
 
   it("uses hydrated TikTok direct media urls for link-only video shares", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -234,7 +231,7 @@ describe("share metadata", () => {
     expect(metadata.description).toBe("#roblox #robloxfyp #roblox");
     expect(metadata.media).toEqual({
       type: "video",
-      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123",
+      url: "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123",
       contentType: "video/mp4",
       width: 720,
       height: 1280,
@@ -243,7 +240,7 @@ describe("share metadata", () => {
 
   it("uses TikTok live-photo media as direct video for link-only shares", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -289,7 +286,7 @@ describe("share metadata", () => {
 
     expect(metadata.media).toEqual({
       type: "video",
-      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066",
+      url: "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066",
       contentType: "video/mp4",
       width: 720,
       height: 1280,
@@ -298,7 +295,7 @@ describe("share metadata", () => {
 
   it("uses Instagram reel video urls for link-only shares", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -334,7 +331,7 @@ describe("share metadata", () => {
     expect(metadata.cardMode).toBe("instagram-minimal");
     expect(metadata.media).toEqual({
       type: "video",
-      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fvideo.mp4%3Fsig%3D1&sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F",
+      url: "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fvideo.mp4%3Fsig%3D1&sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F",
       contentType: "video/mp4",
       width: 720,
       height: 1280,
@@ -343,7 +340,7 @@ describe("share metadata", () => {
 
   it("prefers uploaded image media for unfurls", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -363,14 +360,14 @@ describe("share metadata", () => {
 
     expect(metadata.media).toEqual({
       type: "image",
-      url: "https://meet.115jon.site/api/shared-messages/tok_123/media/server/channel/photo.png",
+      url: "https://yap.115jon.com/api/shared-messages/tok_123/media/server/channel/photo.png",
       contentType: "image/png",
     });
   });
 
   it("uses embed thumbnails when no shareable attachment or video exists", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -405,7 +402,7 @@ describe("share metadata", () => {
 
   it("escapes oEmbed html and reports video type", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -426,14 +423,14 @@ describe("share metadata", () => {
     const oembed = buildShareOEmbed(metadata);
 
     expect(oembed.type).toBe("video");
-    expect(oembed.url).toBe("https://meet.115jon.site/share/tok_123");
+    expect(oembed.url).toBe("https://yap.115jon.com/share/tok_123");
     expect(oembed.html).toContain("&lt;script");
     expect(oembed.html).not.toContain("<script>");
   });
 
   it("serves direct TikTok mp4 urls through oEmbed video payloads", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -478,7 +475,7 @@ describe("share metadata", () => {
 
     expect(oembed.type).toBe("video");
     expect(oembed.url).toBe(
-      "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123",
+      "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123",
     );
     expect(oembed.html).toContain("<video");
     expect(oembed.html).toContain("video.mp4");
@@ -489,7 +486,7 @@ describe("share metadata", () => {
 
   it("serves TikTok live-photo slides through oEmbed video payloads", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
@@ -527,7 +524,7 @@ describe("share metadata", () => {
 
     expect(oembed.type).toBe("video");
     expect(oembed.url).toBe(
-      "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066",
+      "https://yap.115jon.com/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066",
     );
     expect(oembed.html).toContain("<video");
     expect(oembed.html).toContain("live-photo-1.mp4");
@@ -538,7 +535,7 @@ describe("share metadata", () => {
 
   it("omits the trailing separator in oEmbed html when minimal cards have no description", () => {
     const metadata = buildShareMetadata(
-      "https://meet.115jon.site",
+      "https://yap.115jon.com",
       makeShare({
         snapshot: {
           ...makeShare().snapshot,
