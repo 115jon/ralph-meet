@@ -772,7 +772,7 @@ pub fn run() {
     // This causes DevTools to instantly close.
     let is_cef_child = std::env::args().any(|arg| arg.starts_with("--type="));
     if !is_cef_child {
-        // A second launch (shortcut, `yap://` or `ralphmeet://` link) reveals this
+        // A second launch (shortcut or `yap://` link) reveals this
         // instance's window and routes its link.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             main_window::on_second_instance(app, &argv);
@@ -848,8 +848,8 @@ pub fn run() {
                 settings.settings.game_capture_hook,
             ));
 
-            // Register deep-link schemes with the OS so `yap://` and
-            // `ralphmeet://` URLs are routed to this executable. On Windows this
+            // Register deep-link schemes with the OS so `yap://`
+            // URLs are routed to this executable. On Windows this
             // writes the HKCU\Software\Classes\<scheme> keys. Only needed during
             // development — the installer registers the scheme at install time.
             #[cfg(target_os = "linux")]
@@ -874,7 +874,7 @@ pub fn run() {
                 }
             }
 
-            // Route yap:// and ralphmeet://invite/<code> links (plugin events and the
+            // Route yap://invite/<code> links (plugin events and the
             // cold-start command line) through the main window owner. Sign-in
             // uses a device code, not a deep link.
             main_window::setup(app);

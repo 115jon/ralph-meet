@@ -4,7 +4,6 @@ import {
   DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY,
   DEFAULT_KOVA_AUTH_URL,
   DEFAULT_PUBLIC_WEB_URL,
-  LEGACY_PUBLIC_WEB_URL,
 } from "../../src/lib/site-defaults.ts";
 
 type AppVariant = "development" | "preview" | "production";
@@ -63,14 +62,6 @@ const apiBaseUrl =
 // them in the app (App Links, verified by the Worker's assetlinks.json).
 const webUrl = process.env.EXPO_PUBLIC_RALPH_WEB_URL ?? DEFAULT_PUBLIC_WEB_URL;
 const webHost = new URL(webUrl).host;
-// Links made before the Yap rename point at the old web host; it still serves
-// assetlinks.json, so production builds keep opening them.
-const legacyWebUrl =
-  webUrl === DEFAULT_PUBLIC_WEB_URL ? LEGACY_PUBLIC_WEB_URL : "";
-const linkHosts = [
-  webHost,
-  ...(legacyWebUrl ? [new URL(legacyWebUrl).host] : []),
-];
 const kovaAuthUrl =
   process.env.EXPO_PUBLIC_KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL;
 const kovaPublishableKey =
@@ -111,10 +102,10 @@ const config: ExpoConfig = {
         action: "VIEW",
         autoVerify: true,
         category: ["BROWSABLE", "DEFAULT"],
-        data: linkHosts.flatMap((host) => [
-          { scheme: "https", host, pathPrefix: "/invite/" },
-          { scheme: "https", host, pathPrefix: "/chat/" },
-        ]),
+        data: [
+          { scheme: "https", host: webHost, pathPrefix: "/invite/" },
+          { scheme: "https", host: webHost, pathPrefix: "/chat/" },
+        ],
       },
     ],
     // The WebRTC plugin also asks for an overlay; nothing draws over apps.
@@ -217,7 +208,6 @@ const config: ExpoConfig = {
   extra: {
     apiBaseUrl,
     webUrl,
-    legacyWebUrl,
     kovaAuthUrl,
     kovaPublishableKey,
     appVariant,

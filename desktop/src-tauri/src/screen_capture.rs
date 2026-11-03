@@ -71,9 +71,8 @@ fn normalized_window_identity(value: &str) -> String {
         .collect()
 }
 
-/// The app's window title and exe name, normalized: "Yap", and Ralph Meet's
-/// old name so a window of an old build still counts as ours.
-const OWN_APP_IDENTITIES: [&str; 2] = ["yap", "ralphmeet"];
+/// The app's window title and exe name, normalized.
+const OWN_APP_IDENTITIES: [&str; 1] = ["yap"];
 
 fn is_own_app_window(title: &str, app_name: &str) -> bool {
     let is_own = |value: &str| {
@@ -505,13 +504,13 @@ mod tests {
     }
 
     #[test]
-    fn allows_third_party_window_titles_that_mention_ralph_meet() {
+    fn allows_third_party_window_titles_that_mention_yap() {
         assert!(!is_blocked_window(
-            "Sign In — Ralph Meet - Helium",
+            "Sign In — Yap - Helium",
             "chrome"
         ));
         assert!(!is_own_app_window(
-            "Sign In — Ralph Meet - Helium",
+            "Sign In — Yap - Helium",
             "chrome"
         ));
     }
@@ -530,10 +529,8 @@ mod tests {
         assert!(is_own_app_window("Yap", ""));
         assert!(!is_own_app_window("Yap docs", "chrome"));
         assert!(!is_own_app_window("Sign In — Yap - Helium", "chrome"));
-        // Ralph Meet, the old name, still counts as ours.
-        assert!(is_own_app_window("Ralph Meet", "RalphMeet"));
-        assert!(is_own_app_window("Ralph-Meet", "ralph-meet"));
-        assert!(!is_own_app_window("Ralph Meet docs", "chrome"));
+        // The old name no longer counts as ours.
+        assert!(!is_own_app_window("Ralph Meet", "RalphMeet"));
     }
 
     #[test]
@@ -541,7 +538,7 @@ mod tests {
         let existing = window_source("Discord", "Discord");
         let mut sources = vec![existing.clone()];
         let duplicate = existing;
-        let unique = window_source("Ralph Meet", "RalphMeet");
+        let unique = window_source("Yap", "Yap");
 
         push_source_if_missing(&mut sources, duplicate);
         push_source_if_missing(&mut sources, unique);
@@ -551,7 +548,7 @@ mod tests {
             .map(|source| source.name.as_str())
             .collect::<Vec<_>>();
 
-        assert_eq!(ordered_names, vec!["Discord", "Ralph Meet"]);
+        assert_eq!(ordered_names, vec!["Discord", "Yap"]);
     }
 
     #[test]
@@ -559,8 +556,8 @@ mod tests {
         let mut sources = vec![
             monitor_source("1"),
             window_source("Discord", "Discord"),
-            window_source("Ralph Meet", "RalphMeet"),
-            window_source("Sign In — Ralph Meet - Helium", "chrome"),
+            window_source("Yap", "Yap"),
+            window_source("Sign In — Yap - Helium", "chrome"),
         ];
 
         sort_window_sources(&mut sources);
@@ -575,8 +572,8 @@ mod tests {
             vec![
                 "1",
                 "Discord",
-                "Sign In — Ralph Meet - Helium",
-                "Ralph Meet",
+                "Sign In — Yap - Helium",
+                "Yap",
             ]
         );
     }

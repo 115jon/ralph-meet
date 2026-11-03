@@ -57,19 +57,6 @@ describe("parseAppLink", () => {
     });
   });
 
-  it("reads links on the legacy web host when one is set", () => {
-    const withLegacy = { ...ORIGINS, legacyWeb: "https://old.example" };
-    expect(parseAppLink("https://old.example/invite/x", withLegacy)).toEqual({
-      kind: "invite",
-      code: "x",
-    });
-    expect(parseAppLink("https://web.example/invite/x", withLegacy)).toEqual({
-      kind: "invite",
-      code: "x",
-    });
-    expect(parseAppLink("https://old.example/invite/x", ORIGINS)).toBeNull();
-  });
-
   it("ignores other hosts, schemes and pages", () => {
     expect(parseAppLink("https://other.example/invite/x", ORIGINS)).toBeNull();
     expect(parseAppLink("ralphmeet://invite/x", ORIGINS)).toBeNull();

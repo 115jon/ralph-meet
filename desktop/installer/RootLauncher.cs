@@ -7,7 +7,7 @@ namespace Installer
     /// <summary>
     /// The native stub at the install root (Yap.exe). Every payload carries it as
     /// YapLauncher.exe; each activation copies it to the root. Shortcuts, the Run key,
-    /// the yap:// and ralphmeet:// handlers and taskbar pins point at the root copy, which starts
+    /// the yap:// handler and taskbar pins point at the root copy, which starts
     /// the active app-&lt;version&gt;\Yap.exe. See docs/desktop/launch.md.
     /// </summary>
     public static class RootLauncher

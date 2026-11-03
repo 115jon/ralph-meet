@@ -16,8 +16,6 @@ export type AppLink =
 export interface LinkOrigins {
   /** The public web app, e.g. https://<web host>. */
   readonly web: string;
-  /** The web host before the Yap rename; its links still parse. */
-  readonly legacyWeb?: string;
   /** The app's URL scheme (ralphmeet, ralphmeet-dev …). */
   readonly scheme: string;
 }
@@ -80,10 +78,7 @@ export function parseAppLink(
     return null;
   }
 
-  const webOrigins = [origins.web, origins.legacyWeb].map((web) =>
-    web ? webOrigin(web) : null,
-  );
-  if (!webOrigins.includes(parsed.origin)) return null;
+  if (parsed.origin !== webOrigin(origins.web)) return null;
   const [head, first, second] = segmentsOf(parsed.pathname);
   if (head === "invite" && first) return { kind: "invite", code: first };
   if (head === "chat" && first && second) {

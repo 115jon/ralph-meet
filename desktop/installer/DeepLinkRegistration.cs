@@ -9,12 +9,13 @@ namespace Installer
         public const string SchemeName = "yap";
 
         /// <summary>
-        /// Ralph Meet's scheme. Still registered, pointing at Yap, so links already shared open the app.
+        /// Ralph Meet's scheme. Never registered by Yap; legacy cleanup deletes it
+        /// (<see cref="RemoveLegacyScheme"/>).
         /// </summary>
         public const string LegacySchemeName = "ralphmeet";
 
         /// <summary>Every scheme an install registers and an uninstall removes.</summary>
-        public static readonly string[] SchemeNames = { SchemeName, LegacySchemeName };
+        public static readonly string[] SchemeNames = { SchemeName };
 
         private const string ClassesRegistryPath = @"Software\Classes\";
         private const string DefaultIconSubKeyPath = @"DefaultIcon";
@@ -103,6 +104,30 @@ namespace Installer
             }
 
             return removed;
+        }
+
+        /// <summary>
+        /// Deletes the ralphmeet:// registration (whole key tree), whatever it points at. Returns
+        /// true when there was one.
+        /// </summary>
+        public static bool RemoveLegacyScheme(RegistryKey currentUserRoot)
+        {
+            if (currentUserRoot == null)
+            {
+                throw new ArgumentNullException(nameof(currentUserRoot));
+            }
+
+            string path = GetProtocolRegistryPath(LegacySchemeName);
+            using (RegistryKey existing = currentUserRoot.OpenSubKey(path))
+            {
+                if (existing == null)
+                {
+                    return false;
+                }
+            }
+
+            currentUserRoot.DeleteSubKeyTree(path, false);
+            return true;
         }
 
         private static void RegisterScheme(RegistryKey currentUserRoot, string scheme, string launcherPath, string launcherArguments)

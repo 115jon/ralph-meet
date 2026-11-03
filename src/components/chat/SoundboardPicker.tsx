@@ -948,7 +948,7 @@ export default function SoundboardPicker({
       }
       fetch(url, {
         signal: controller.signal,
-        headers: { "User-Agent": "RalphMeet/1.0" },
+        headers: { "User-Agent": "Yap/1.0" },
       })
         .then((res) => {
           if (res.ok === false) {

@@ -10,6 +10,7 @@ import {
   isDesktopAuthenticated,
   setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
+import { useAuthCodeExchangePending } from "@/lib/auth-code-exchange";
 import { isTauri } from "@/lib/platform";
 import { useAuth } from "@kova/react";
 import {
@@ -126,11 +127,13 @@ function ChatLayout() {
 
 function ChatAuthCallbackGate() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const exchangePending = useAuthCodeExchangePending();
   const navigate = useNavigate();
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    // Signed out until the SDK has traded the code for a token.
+    if (!isLoaded || exchangePending) return;
 
     let cancelled = false;
 
@@ -160,7 +163,7 @@ function ChatAuthCallbackGate() {
     return () => {
       cancelled = true;
     };
-  }, [getToken, isLoaded, isSignedIn, navigate]);
+  }, [exchangePending, getToken, isLoaded, isSignedIn, navigate]);
 
   if (failed) {
     return (

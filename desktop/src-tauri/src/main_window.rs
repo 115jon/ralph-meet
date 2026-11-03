@@ -30,11 +30,10 @@ use crate::desktop_settings::DesktopSettingsStore;
 use crate::TauriRuntime;
 
 pub(crate) const MAIN_LABEL: &str = "main";
-/// The one app event the frontend listens to for `yap://` (and `ralphmeet://`) links.
+/// The one app event the frontend listens to for `yap://` links.
 pub(crate) const DEEP_LINK_EVENT: &str = "rm://deep-link";
-/// `yap`, then Ralph Meet's `ralphmeet`, which the installer still points at
-/// this app so links shared before the rename keep working.
-const DEEP_LINK_SCHEMES: [&str; 2] = ["yap", "ralphmeet"];
+/// The only scheme this app handles.
+const DEEP_LINK_SCHEMES: [&str; 1] = ["yap"];
 /// The same link through two paths (argv and the plugin) arrives together.
 const DEEP_LINK_DEDUPE_WINDOW: Duration = Duration::from_secs(2);
 
@@ -43,7 +42,7 @@ pub(crate) struct DeepLinkPayload {
     pub url: String,
 }
 
-/// Normalizes a `yap://` or `ralphmeet://` URL, or `None` for anything else.
+/// Normalizes a `yap://` URL, or `None` for anything else.
 pub(crate) fn normalize_deep_link(raw: &str) -> Option<String> {
     let trimmed = raw.trim().trim_matches('"');
     let url = tauri::Url::parse(trimmed).ok()?;
@@ -386,7 +385,7 @@ mod tests {
     fn extracts_the_link_from_argv() {
         assert_eq!(
             deep_link_from_args([r"C:\Yap\app-3.7.0\Yap.exe", "ralphmeet://invite/abc123"]),
-            Some("ralphmeet://invite/abc123".to_string())
+            None
         );
         assert_eq!(
             deep_link_from_args([r"C:\Yap\app-3.7.0\Yap.exe", "yap://invite/abc123"]),
@@ -397,19 +396,20 @@ mod tests {
             Some("yap://invite/x")
         );
         assert_eq!(normalize_deep_link("https://invite/x"), None);
+        assert_eq!(normalize_deep_link("ralphmeet://invite/x"), None);
     }
 
     #[test]
     fn extracts_quoted_and_mixed_case_links() {
         assert_eq!(
-            deep_link_from_args(["Yap.exe", "--flag", "\"RalphMeet://invite/abc\""]),
-            Some("ralphmeet://invite/abc".to_string())
+            deep_link_from_args(["Yap.exe", "--flag", "\"Yap://invite/abc\""]),
+            Some("yap://invite/abc".to_string())
         );
     }
 
     #[test]
     fn ignores_argv0_and_other_arguments() {
-        assert_eq!(deep_link_from_args(["ralphmeet://invite/argv0"]), None);
+        assert_eq!(deep_link_from_args(["yap://invite/argv0"]), None);
         assert_eq!(
             deep_link_from_args(["Yap.exe", "--type=renderer", "https://example.com"]),
             None
@@ -419,9 +419,9 @@ mod tests {
 
     #[test]
     fn argv_and_plugin_forms_normalize_the_same() {
-        let from_argv = deep_link_from_args(["Yap.exe", "ralphmeet://invite/abc"]).unwrap();
+        let from_argv = deep_link_from_args(["Yap.exe", "yap://invite/abc"]).unwrap();
         let from_plugin = normalize_deep_link(
-            tauri::Url::parse("ralphmeet://invite/abc")
+            tauri::Url::parse("yap://invite/abc")
                 .unwrap()
                 .as_str(),
         )
@@ -433,8 +433,8 @@ mod tests {
     fn autostart_flag_is_not_a_deep_link() {
         assert_eq!(deep_link_from_args(["Yap.exe", "--autostart"]), None);
         assert_eq!(
-            deep_link_from_args(["Yap.exe", "--autostart", "ralphmeet://invite/a"]),
-            Some("ralphmeet://invite/a".to_string())
+            deep_link_from_args(["Yap.exe", "--autostart", "yap://invite/a"]),
+            Some("yap://invite/a".to_string())
         );
     }
 
@@ -460,17 +460,17 @@ mod tests {
         let mut queue = DeepLinkQueue::default();
         let now = Instant::now();
         assert_eq!(
-            queue.accept("ralphmeet://invite/a".into(), now),
+            queue.accept("yap://invite/a".into(), now),
             DeepLinkAction::Queued
         );
         assert_eq!(
             queue.take_pending(),
-            vec!["ralphmeet://invite/a".to_string()]
+            vec!["yap://invite/a".to_string()]
         );
         assert!(queue.take_pending().is_empty());
         assert_eq!(
-            queue.accept("ralphmeet://invite/b".into(), now),
-            DeepLinkAction::Deliver("ralphmeet://invite/b".into())
+            queue.accept("yap://invite/b".into(), now),
+            DeepLinkAction::Deliver("yap://invite/b".into())
         );
     }
 
@@ -479,7 +479,7 @@ mod tests {
         let mut queue = DeepLinkQueue::default();
         queue.take_pending();
         let now = Instant::now();
-        let url = "ralphmeet://invite/a".to_string();
+        let url = "yap://invite/a".to_string();
         assert_eq!(
             queue.accept(url.clone(), now),
             DeepLinkAction::Deliver(url.clone())
@@ -502,10 +502,10 @@ mod tests {
         let mut queue = DeepLinkQueue::default();
         queue.take_pending();
         let now = Instant::now();
-        queue.accept("ralphmeet://invite/a".into(), now);
+        queue.accept("yap://invite/a".into(), now);
         assert_eq!(
-            queue.accept("ralphmeet://invite/b".into(), now),
-            DeepLinkAction::Deliver("ralphmeet://invite/b".into())
+            queue.accept("yap://invite/b".into(), now),
+            DeepLinkAction::Deliver("yap://invite/b".into())
         );
     }
 
@@ -513,9 +513,9 @@ mod tests {
     fn duplicate_before_ready_is_queued_once() {
         let mut queue = DeepLinkQueue::default();
         let now = Instant::now();
-        queue.accept("ralphmeet://invite/a".into(), now);
+        queue.accept("yap://invite/a".into(), now);
         assert_eq!(
-            queue.accept("ralphmeet://invite/a".into(), now),
+            queue.accept("yap://invite/a".into(), now),
             DeepLinkAction::Duplicate
         );
         assert_eq!(queue.take_pending().len(), 1);

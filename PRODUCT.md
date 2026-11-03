@@ -16,7 +16,7 @@ funnel to optimise.
 
 ## Product Purpose
 
-Ralph Meet is an open-source real-time communication app: servers with text
+Yap is an open-source real-time communication app: servers with text
 and voice channels, direct messages and DM calls, video, screen sharing,
 user-authorised game capture, listen-together, a soundboard and small
 activities (Wordle, WarpRush). It exists so the group has its own place to

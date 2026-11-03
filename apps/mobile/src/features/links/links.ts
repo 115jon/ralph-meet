@@ -13,7 +13,6 @@ import {
 
 const ORIGINS = {
   web: config.webUrl,
-  legacyWeb: config.legacyWebUrl || undefined,
   scheme: config.scheme,
 };
 

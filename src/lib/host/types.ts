@@ -136,7 +136,7 @@ export interface DeepLinkSubscription {
 }
 
 export interface HostDeepLinks {
-  /** Receive `ralphmeet://` links. One handler at a time (the latest wins). */
+  /** Receive `yap://` links. One handler at a time (the latest wins). */
   subscribe(handler: (url: string) => void): DeepLinkSubscription;
 }
 

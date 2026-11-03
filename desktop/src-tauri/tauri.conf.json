@@ -38,7 +38,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self' ipc: tauri: customprotocol: http://tauri.localhost http://ipc.localhost http://localhost:1420 ws://localhost:1420 http://localhost:5173 ws://localhost:5173 https://yap.115jon.com wss://yap.115jon.com https://auth.115jon.site https://*.115jon.site wss://*.115jon.site https://github.com https://*.github.com https://api.github.com https://*.api.radio-browser.info; img-src 'self' http://localhost:1420 http://localhost:5173 https: data: blob:; media-src 'self' http://localhost:1420 http://localhost:5173 https: blob:; font-src 'self'; style-src 'self' 'unsafe-inline'; frame-src https://auth.115jon.site https://*.115jon.site https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://*.tiktok.com https://open.spotify.com https://www.instagram.com https://platform.twitter.com https://syndication.twitter.com"
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self' ipc: tauri: customprotocol: http://tauri.localhost http://ipc.localhost http://localhost:1420 ws://localhost:1420 http://localhost:5173 ws://localhost:5173 https://yap.115jon.com wss://yap.115jon.com https://auth.115jon.site https://auth.115jon.com https://*.auth.115jon.com https://*.115jon.site wss://*.115jon.site https://github.com https://*.github.com https://api.github.com https://*.api.radio-browser.info; img-src 'self' http://localhost:1420 http://localhost:5173 https: data: blob:; media-src 'self' http://localhost:1420 http://localhost:5173 https: blob:; font-src 'self'; style-src 'self' 'unsafe-inline'; frame-src https://auth.115jon.site https://auth.115jon.com https://*.auth.115jon.com https://*.115jon.site https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://*.tiktok.com https://open.spotify.com https://www.instagram.com https://platform.twitter.com https://syndication.twitter.com"
     }
   },
   "bundle": {
@@ -75,8 +75,7 @@
     "deep-link": {
       "desktop": {
         "schemes": [
-          "yap",
-          "ralphmeet"
+          "yap"
         ]
       }
     },

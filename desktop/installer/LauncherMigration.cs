@@ -7,7 +7,7 @@ namespace Installer
     /// <summary>
     /// Moves entry points written by older builds (Update.exe --processStart Yap.exe, or a
     /// versioned app-&lt;version&gt;\Yap.exe) onto the root stub: the HKCU Run value and taskbar
-    /// pins. Shortcuts and the yap:// and ralphmeet:// handlers are rewritten on every install
+    /// pins. Shortcuts and the yap:// handler are rewritten on every install
     /// anyway. LegacyCleanup uses the same parsing to move Ralph Meet's entry points onto Yap.
     /// </summary>
     public static class LauncherMigration

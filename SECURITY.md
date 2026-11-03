@@ -20,7 +20,7 @@ authorization, realtime admission, installer behavior, update handling, native
 capture code, release workflows, or bundled runtime provenance.
 
 Third-party dependencies and Cloudflare infrastructure should also be reported
-to their respective maintainers when the issue is not caused by Ralph Meet's
+to their respective maintainers when the issue is not caused by Yap's
 integration.
 
 ## Release security

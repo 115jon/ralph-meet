@@ -1,6 +1,6 @@
 # Code of Conduct
 
-Ralph Meet follows the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+Yap follows the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 
 Participants are expected to be welcoming, respectful, and constructive.
 Harassment, discrimination, personal attacks, doxxing, threats, and deliberately
