@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.10.0](https://github.com/115jon/ralph-meet/compare/v3.9.0...v3.10.0) (2026-11-03)
+
+
+### Features
+
+* **brand:** ✨ rename the app to yap with a pixel dog mark ([9779e3c](https://github.com/115jon/ralph-meet/commit/9779e3c77216b3060cce802c46d255a12cd2b19a))
+* **brand:** ✨ rename the app to yap with a pixel dog mark ([d646565](https://github.com/115jon/ralph-meet/commit/d64656580721cc9c5afb3d0884e9eda775fc06f4))
+* **desktop:** ✨ install as yap and clean up ralph meet installs ([102ca30](https://github.com/115jon/ralph-meet/commit/102ca302302fb235f5fc5414772930258e9ff615))
+* **desktop:** ✨ install as yap and clean up ralph meet installs ([f1c212b](https://github.com/115jon/ralph-meet/commit/f1c212b27fc5429b1f61f3930426a23309d4649b))
+* **installer:** restyle setup to match the app's design system ([89f0266](https://github.com/115jon/ralph-meet/commit/89f0266f889e99928df9a4c6add2ea80d783daed))
+* **web:** ✨ move the public home to yap.115jon.com ([48c18bf](https://github.com/115jon/ralph-meet/commit/48c18bfdd81328f61b68aeaf6f96cd71e364d9c1))
+* **web:** ✨ move the public home to yap.115jon.com ([2d825f3](https://github.com/115jon/ralph-meet/commit/2d825f33622a3de26cbf2fbecd1f5f6ebba09337))
+
+
+### Bug Fixes
+
+* **installer:** 🐛 keep setup open while it works and let errors scroll ([7cc9572](https://github.com/115jon/ralph-meet/commit/7cc9572010288e88aa8283960adad347c21509b4))
+* **installer:** 🐛 relaunch after a failed install only when silent ([57d2d35](https://github.com/115jon/ralph-meet/commit/57d2d35a12bb91149d5963148ff7f6c0523de9b2))
+
 ## [3.9.0](https://github.com/115jon/ralph-meet/compare/v3.8.0...v3.9.0) (2026-11-02)
 
 
