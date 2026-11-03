@@ -327,7 +327,7 @@ type ClaimCandidate = {
 const claimLog = clog("AccountClaims");
 
 /**
- * Legacy Ralph Meet accounts that match this login. Renders nothing unless
+ * Legacy Yap accounts that match this login. Renders nothing unless
  * the server offers at least one; claiming merges it and reloads the app.
  */
 function ClaimAccountCard() {
@@ -382,7 +382,7 @@ function ClaimAccountCard() {
   return (
     <SettingsCard
       title="Claim an existing account"
-      description="We found a Ralph Meet account that may be yours. Claim it to bring its servers, messages and profile into this sign-in."
+      description="We found a Yap account that may be yours. Claim it to bring its servers, messages and profile into this sign-in."
     >
       {candidates.map((candidate) => {
         const name = candidate.display_name || candidate.username;

@@ -16,7 +16,7 @@ namespace Installer.Tests
             {
                 string updateExePath = Path.Combine(tempRoot, "Update.exe");
                 string versionDirectoryPath = Path.Combine(tempRoot, "app-1.13.0");
-                string appExePath = Path.Combine(versionDirectoryPath, "RalphMeet.exe");
+                string appExePath = Path.Combine(versionDirectoryPath, "Yap.exe");
 
                 File.WriteAllText(updateExePath, "stub");
                 Directory.CreateDirectory(versionDirectoryPath);
@@ -30,11 +30,11 @@ namespace Installer.Tests
 
                 LaunchRequest request = LaunchCurrentVersion.CreateLaunchRequest(
                     updateExePath,
-                    new[] { "--processStart", "RalphMeet.exe", "ralphmeet://join/test?room=abc" });
+                    new[] { "--processStart", "Yap.exe", "yap://join/test?room=abc" });
 
                 Assert.Equal(appExePath, request.ExecutablePath);
                 Assert.Equal(versionDirectoryPath, request.WorkingDirectory);
-                Assert.Equal("ralphmeet://join/test?room=abc", request.Arguments);
+                Assert.Equal("yap://join/test?room=abc", request.Arguments);
                 Assert.Equal("1.13.0", request.ActiveVersion);
             }
             finally
@@ -56,7 +56,7 @@ namespace Installer.Tests
                 InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
                     LaunchCurrentVersion.CreateLaunchRequest(
                         updateExePath,
-                        new[] { "--processStart", "RalphMeet.exe" }));
+                        new[] { "--processStart", "Yap.exe" }));
 
                 Assert.Contains("current.json", error.Message);
             }

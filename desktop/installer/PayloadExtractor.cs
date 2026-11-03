@@ -40,6 +40,8 @@ namespace Installer
 
             PayloadExtractionResult result = new PayloadExtractionResult();
             Stopwatch stopwatch = Stopwatch.StartNew();
+            long processed = 0;
+            InstallProgress.ReportPayload(0, header.TotalSize);
             using (IEnumerator<byte[]> blocks = RmpkReader.DecodeBlocks(
                 payload,
                 header,
@@ -72,6 +74,8 @@ namespace Installer
 
                         blockOffset += n;
                         count -= n;
+                        processed += n;
+                        InstallProgress.ReportPayload(processed, header.TotalSize);
                     }
                 };
 

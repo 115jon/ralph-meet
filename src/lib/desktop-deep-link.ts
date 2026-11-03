@@ -1,26 +1,29 @@
 // ── Desktop deep links ───────────────────────────────────────────────────────
 // The desktop shell (desktop/src-tauri/src/main_window.rs) routes every
-// `ralphmeet://` link (second launch, deep-link plugin, cold start) into one
+// `yap://` or `ralphmeet://` link (second launch, deep-link plugin, cold start) into one
 // event, `rm://deep-link` with `{ url }`, after dropping repeats. Links that
 // arrive before the page listens are queued in Rust and handed over by
 // `take_pending_deep_links`. This module is the page's one listener; see
-// docs/desktop/window-shell.md.
+// docs/desktop/window-shell.md. The page reaches it through
+// `getHost().deepLinks` (src/lib/host).
 
+import { invokeCommand, listenEvent } from "@/lib/host/tauri-gateway";
+import type { DeepLinkSubscription } from "@/lib/host/types";
 import { isRecord } from "@/lib/persisted-guard";
 
 export const DESKTOP_DEEP_LINK_EVENT = "rm://deep-link";
+
+/**
+ * The desktop app's link schemes: `yap:`, and Ralph Meet's `ralphmeet:`, which
+ * the installer still points at the app so links shared before the rename work.
+ */
+const DESKTOP_DEEP_LINK_PROTOCOLS: readonly string[] = ["yap:", "ralphmeet:"];
 
 export interface DesktopDeepLinkPayload {
   url: string;
 }
 
 type DeepLinkHandler = (url: string) => void;
-
-export interface DesktopDeepLinkSubscription {
-  unsubscribe: () => void;
-  /** Settles once the listener is attached and queued links were collected. */
-  ready: Promise<void>;
-}
 
 let handler: DeepLinkHandler | null = null;
 /** Links that arrived while no handler was subscribed. */
@@ -38,11 +41,14 @@ export function readDeepLinkPayload(payload: unknown): string | null {
   return payload.url;
 }
 
-/** The invite code of `ralphmeet://invite/<code>`, or null. */
+/** The invite code of `yap://invite/<code>` (or `ralphmeet://`), or null. */
 export function inviteCodeFromDeepLink(url: string): string | null {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "ralphmeet:" || parsed.hostname !== "invite") {
+    if (
+      !DESKTOP_DEEP_LINK_PROTOCOLS.includes(parsed.protocol) ||
+      parsed.hostname !== "invite"
+    ) {
       return null;
     }
     return parsed.pathname.replace(/^\//, "") || null;
@@ -54,15 +60,11 @@ export function inviteCodeFromDeepLink(url: string): string | null {
 /** Attach the page's one event listener and collect queued links. Once per page. */
 function start(): Promise<void> {
   started ??= (async () => {
-    const [{ listen }, { invoke }] = await Promise.all([
-      import("@tauri-apps/api/event"),
-      import("@tauri-apps/api/core"),
-    ]);
-    await listen<unknown>(DESKTOP_DEEP_LINK_EVENT, (event) => {
-      const url = readDeepLinkPayload(event.payload);
+    await listenEvent(DESKTOP_DEEP_LINK_EVENT, (payload) => {
+      const url = readDeepLinkPayload(payload);
       if (url) deliver(url);
     });
-    const pending = await invoke<string[]>("take_pending_deep_links");
+    const pending = await invokeCommand("take_pending_deep_links");
     for (const url of pending) deliver(url);
   })().catch((error: unknown) => {
     started = null;
@@ -78,7 +80,7 @@ function start(): Promise<void> {
  */
 export function subscribeDesktopDeepLinks(
   next: DeepLinkHandler,
-): DesktopDeepLinkSubscription {
+): DeepLinkSubscription {
   handler = next;
   const queued = buffered;
   buffered = [];

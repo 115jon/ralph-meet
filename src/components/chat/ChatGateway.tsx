@@ -9,7 +9,7 @@ import { useEffect, useRef } from "react";
  * Headless component that initializes and manages the
  * Chat WebSocket Gateway connection upon mount.
  *
- * Invite deep links (ralphmeet://invite/:code) are handled once, by
+ * Invite deep links (yap://invite/:code, or ralphmeet://) are handled once, by
  * DesktopDeepLinkBridge in src/routes/__root.tsx.
  */
 type ChatGatewayProps = {

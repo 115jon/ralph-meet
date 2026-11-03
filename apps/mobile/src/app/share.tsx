@@ -204,7 +204,7 @@ export default function ShareScreen() {
         <Header title="Send to" onBack={cancel} />
         <EmptyState
           title="Nothing to send"
-          description="Share a photo, a video or a link to Ralph Meet from another app."
+          description="Share a photo, a video or a link to Yap from another app."
           action={{ label: "Back", onPress: cancel }}
         />
       </Screen>

@@ -124,6 +124,20 @@ async function importCapabilityKey(secret: string): Promise<CryptoKey> {
   );
 }
 
+/**
+ * The signed reference PartyTracks clients use for a Calls session in pull
+ * requests: they never see raw session ids, and the proxy refuses them.
+ */
+export async function issuePartyTracksSessionCapability(
+  claims: Omit<PartyTracksSessionCapabilityClaims, "version">,
+  secret: string,
+): Promise<string> {
+  return issueSessionCapability(
+    { version: CAPABILITY_VERSION, ...claims },
+    secret,
+  );
+}
+
 async function issueSessionCapability(
   claims: PartyTracksSessionCapabilityClaims,
   secret: string,

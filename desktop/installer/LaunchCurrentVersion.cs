@@ -27,7 +27,7 @@ namespace Installer
 
     public static class LaunchCurrentVersion
     {
-        private const string ProcessStartSwitch = "--processStart";
+        public const string ProcessStartSwitch = "--processStart";
 
         /// <summary>What the pre-stub shortcuts passed to Update.exe; still accepted for old pins.</summary>
         public const string ProcessStartArguments = ProcessStartSwitch + " " + InstallerLogic.ExecutableFileName;

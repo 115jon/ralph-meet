@@ -1,23 +1,23 @@
 # Desktop packaging
 
-How the Windows installer (`RalphMeetSetup.exe`) gets its files, and how CI checks them.
+How the Windows installer (`YapSetup.exe`) gets its files, and how CI checks them.
 
 ## What ships
 
 One file defines it: [`desktop/packaging/payload-manifest.json`](../../desktop/packaging/payload-manifest.json).
 Each entry names a `source` and a path to copy (`to` defaults to `from`):
 
-| source      | directory                          | what comes from it                                                    |
-| ----------- | ---------------------------------- | --------------------------------------------------------------------- |
-| `cef`       | `CEF_PATH` (`D:\cef` in CI)        | the 17 CEF root files and the whole `locales` directory               |
-| `release`   | `desktop/src-tauri/target/release` | `ralph-meet-desktop.exe` (as `RalphMeet.exe`) and `obs-capture/*`     |
-| `launcher`  | `desktop/launcher/target/release`  | `ralph-meet-launcher.exe` (as `RalphMeetLauncher.exe`), the root stub |
-| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents in `obs-capture/`                                 |
+| source      | directory                          | what comes from it                                             |
+| ----------- | ---------------------------------- | -------------------------------------------------------------- |
+| `cef`       | `CEF_PATH` (`D:\cef` in CI)        | the 17 CEF root files and the whole `locales` directory        |
+| `release`   | `desktop/src-tauri/target/release` | `ralph-meet-desktop.exe` (as `Yap.exe`) and `obs-capture/*`    |
+| `launcher`  | `desktop/launcher/target/release`  | `yap-launcher.exe` (as `YapLauncher.exe`), the root stub       |
+| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents and the OBS-signed files in `obs-capture/` |
 
-`obs-capture/` holds the six OBS hook/injector binaries, the two Vulkan layer JSONs, and `LICENSE-GPLv2.txt`,
-`ATTRIBUTION.md` and `SOURCE-OFFER.md`. Nothing is dropped for size: every CEF locale and rendering DLL ships.
+`obs-capture/obs-signed/` holds the six unmodified OBS-signed hook/injector binaries (pinned by
+`obs-signed-hook.lock.json`, fetched by `fetch-obs-signed-hook.ps1`, never re-signed); `obs-capture/` holds `LICENSE-GPLv2.txt`, `ATTRIBUTION.md` and `SOURCE-OFFER.md`. Nothing is dropped for size: every CEF locale and rendering DLL ships.
 
-The installer copies `RalphMeetLauncher.exe` to the install root as `RalphMeet.exe` on every activation; see
+The installer copies `YapLauncher.exe` to the install root as `Yap.exe` on every activation; see
 [launch.md](launch.md).
 
 Changing what ships means editing the manifest. Three things read it:
@@ -75,6 +75,9 @@ It fails listing every missing file. The packer can also be run by hand (`dotnet
 Then `dotnet build desktop/installer/installer.csproj -c Release` embeds the payload if `payload.rmpk` exists.
 The `payload.rmpk` file is git-ignored.
 
+The installer window (its look, embedded fonts, progress and how to preview each state) is described in
+[installer-ui.md](installer-ui.md). It adds no libraries: the exe is still the only file that ships.
+
 ## How CI checks it
 
 `desktop-validation.yml` (on changes under `desktop/`, including the installer, packaging and scripts):
@@ -91,6 +94,6 @@ The `payload.rmpk` file is git-ignored.
 `desktop-release.yml` runs the installer tests, builds the launcher after the app, stages and packs through
 `stage-payload.ps1`, checks that the built installer is larger than its payload, and runs `desktop/scripts/validate-latest-json.ps1` before
 publishing. That script requires the updater manifest's version to match `tauri.conf.json` and the tag, the URL
-to end in `/releases/download/<tag>/RalphMeetSetup.exe`, `pub_date` to be UTC, and the signature to be a
+to end in `/releases/download/<tag>/YapSetup.exe`, `pub_date` to be UTC, and the signature to be a
 minisign signature whose key id matches the updater public key. It does not verify the signature itself, since
 the Tauri CLI has no verify command.

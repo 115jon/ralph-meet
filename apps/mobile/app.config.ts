@@ -4,23 +4,24 @@ import {
   DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY,
   DEFAULT_KOVA_AUTH_URL,
   DEFAULT_PUBLIC_WEB_URL,
+  LEGACY_PUBLIC_WEB_URL,
 } from "../../src/lib/site-defaults.ts";
 
 type AppVariant = "development" | "preview" | "production";
 
 const VARIANTS = {
   development: {
-    name: "Ralph Meet Dev",
+    name: "Yap Dev",
     package: "dev.jontitor.ralphmeet.dev",
     scheme: "ralphmeet-dev",
   },
   preview: {
-    name: "Ralph Meet Preview",
+    name: "Yap Preview",
     package: "dev.jontitor.ralphmeet.preview",
     scheme: "ralphmeet-preview",
   },
   production: {
-    name: "Ralph Meet",
+    name: "Yap",
     package: "dev.jontitor.ralphmeet",
     scheme: "ralphmeet",
   },
@@ -49,8 +50,8 @@ const googleServicesFile =
 const appVersion = process.env.RALPH_APP_VERSION ?? "0.1.0";
 const versionCode = Number.parseInt(process.env.RALPH_VERSION_CODE ?? "1", 10);
 
-const MICROPHONE_USAGE = "Ralph Meet uses the microphone in voice channels.";
-const CAMERA_USAGE = "Ralph Meet uses the camera for video in voice channels.";
+const MICROPHONE_USAGE = "Yap uses the microphone in voice channels.";
+const CAMERA_USAGE = "Yap uses the camera for video in voice channels.";
 
 // Mirrors the web app's VITE_API_BASE_URL, VITE_KOVA_AUTH_URL and
 // VITE_KOVA_AUTH_PUBLISHABLE_KEY. All defaults come from the web
@@ -62,6 +63,14 @@ const apiBaseUrl =
 // them in the app (App Links, verified by the Worker's assetlinks.json).
 const webUrl = process.env.EXPO_PUBLIC_RALPH_WEB_URL ?? DEFAULT_PUBLIC_WEB_URL;
 const webHost = new URL(webUrl).host;
+// Links made before the Yap rename point at the old web host; it still serves
+// assetlinks.json, so production builds keep opening them.
+const legacyWebUrl =
+  webUrl === DEFAULT_PUBLIC_WEB_URL ? LEGACY_PUBLIC_WEB_URL : "";
+const linkHosts = [
+  webHost,
+  ...(legacyWebUrl ? [new URL(legacyWebUrl).host] : []),
+];
 const kovaAuthUrl =
   process.env.EXPO_PUBLIC_KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL;
 const kovaPublishableKey =
@@ -102,17 +111,20 @@ const config: ExpoConfig = {
         action: "VIEW",
         autoVerify: true,
         category: ["BROWSABLE", "DEFAULT"],
-        data: [
-          { scheme: "https", host: webHost, pathPrefix: "/invite/" },
-          { scheme: "https", host: webHost, pathPrefix: "/chat/" },
-        ],
+        data: linkHosts.flatMap((host) => [
+          { scheme: "https", host, pathPrefix: "/invite/" },
+          { scheme: "https", host, pathPrefix: "/chat/" },
+        ]),
       },
     ],
     // The WebRTC plugin also asks for an overlay; nothing draws over apps.
     blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
+    // Yappy inside the 66dp safe zone on the ply-1 plate; the monochrome
+    // layer is for Android 13+ themed icons.
     adaptiveIcon: {
-      foregroundImage: "./assets/icon.png",
-      backgroundColor: "#000000",
+      foregroundImage: "./assets/adaptive-icon.png",
+      monochromeImage: "./assets/adaptive-monochrome.png",
+      backgroundColor: "#0b0b0d",
     },
   },
   plugins: [
@@ -131,7 +143,10 @@ const config: ExpoConfig = {
     // (Direct messages, Mentions and replies, Other), calls by
     // modules/ralph-call (Incoming calls, Missed calls); anything FCM draws
     // itself lands on Other.
-    ["expo-notifications", { defaultChannel: "other" }],
+    [
+      "expo-notifications",
+      { defaultChannel: "other", icon: "./assets/notification-icon.png" },
+    ],
     // Photos, videos, text and links shared from other apps open a "Send
     // to…" picker. Android only for now: iOS needs a share extension target.
     [
@@ -149,7 +164,7 @@ const config: ExpoConfig = {
       "expo-media-library",
       {
         photosPermission:
-          "Ralph Meet shows your recent photos and videos so you can attach them.",
+          "Yap shows your recent photos and videos so you can attach them.",
         savePhotosPermission: false,
         granularPermissions: ["photo", "video"],
       },
@@ -174,11 +189,11 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        image: "./assets/icon.png",
+        image: "./assets/splash-icon.png",
         imageWidth: 200,
         resizeMode: "contain",
         backgroundColor: "#f4f4f5",
-        dark: { image: "./assets/icon.png", backgroundColor: "#000000" },
+        dark: { image: "./assets/splash-icon.png", backgroundColor: "#000000" },
       },
     ],
     [
@@ -202,6 +217,7 @@ const config: ExpoConfig = {
   extra: {
     apiBaseUrl,
     webUrl,
+    legacyWebUrl,
     kovaAuthUrl,
     kovaPublishableKey,
     appVariant,

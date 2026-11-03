@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Phosphor ChatCircleDots (fill): the status-bar glyph for message notifications. -->
+<!-- Yappy, the Yap mark (branding/yappy-master.svg): the status-bar glyph for message
+     notifications. A white silhouette with the eye, nose and inner ear cut out. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
   android:width="24dp"
   android:height="24dp"
-  android:viewportWidth="256"
-  android:viewportHeight="256">
-  <path
-    android:fillColor="#FFFFFFFF"
-    android:pathData="M128 24a104 104 0 0 0-91.82 152.88l-11.35 34.05a16 16 0 0 0 20.24 20.24l34.05-11.35A104 104 0 1 0 128 24M84 140a12 12 0 1 1 12-12 12 12 0 0 1-12 12m44 0a12 12 0 1 1 12-12 12 12 0 0 1-12 12m44 0a12 12 0 1 1 12-12 12 12 0 0 1-12 12" />
+  android:viewportWidth="36"
+  android:viewportHeight="36">
+  <group android:translateX="2" android:translateY="2">
+    <path
+      android:fillColor="#FFFFFFFF"
+      android:fillType="evenOdd"
+      android:pathData="M2,0L12,10L21,10L21,12L32,12L32,19L21,19L21,22L28,22L28,26L18,26L18,32L4,32L4,24L2,24Z M4,5L8,9L4,9Z M13,13L17,13L17,17L13,17Z M29,12L32,12L32,15L29,15Z" />
+  </group>
 </vector>

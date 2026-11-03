@@ -1,5 +1,82 @@
 # Changelog
 
+## [3.10.0](https://github.com/115jon/ralph-meet/compare/v3.9.0...v3.10.0) (2026-11-03)
+
+
+### Features
+
+* **brand:** ✨ rename the app to yap with a pixel dog mark ([9779e3c](https://github.com/115jon/ralph-meet/commit/9779e3c77216b3060cce802c46d255a12cd2b19a))
+* **brand:** ✨ rename the app to yap with a pixel dog mark ([d646565](https://github.com/115jon/ralph-meet/commit/d64656580721cc9c5afb3d0884e9eda775fc06f4))
+* **desktop:** ✨ install as yap and clean up ralph meet installs ([102ca30](https://github.com/115jon/ralph-meet/commit/102ca302302fb235f5fc5414772930258e9ff615))
+* **desktop:** ✨ install as yap and clean up ralph meet installs ([f1c212b](https://github.com/115jon/ralph-meet/commit/f1c212b27fc5429b1f61f3930426a23309d4649b))
+* **installer:** restyle setup to match the app's design system ([89f0266](https://github.com/115jon/ralph-meet/commit/89f0266f889e99928df9a4c6add2ea80d783daed))
+* **web:** ✨ move the public home to yap.115jon.com ([48c18bf](https://github.com/115jon/ralph-meet/commit/48c18bfdd81328f61b68aeaf6f96cd71e364d9c1))
+* **web:** ✨ move the public home to yap.115jon.com ([2d825f3](https://github.com/115jon/ralph-meet/commit/2d825f33622a3de26cbf2fbecd1f5f6ebba09337))
+
+
+### Bug Fixes
+
+* **installer:** 🐛 keep setup open while it works and let errors scroll ([7cc9572](https://github.com/115jon/ralph-meet/commit/7cc9572010288e88aa8283960adad347c21509b4))
+* **installer:** 🐛 relaunch after a failed install only when silent ([57d2d35](https://github.com/115jon/ralph-meet/commit/57d2d35a12bb91149d5963148ff7f6c0523de9b2))
+
+## [3.9.0](https://github.com/115jon/ralph-meet/compare/v3.8.0...v3.9.0) (2026-11-02)
+
+
+### Features
+
+* **desktop:** ✨ keep the signed vulkan layer registered like obs ([d79295b](https://github.com/115jon/ralph-meet/commit/d79295bd9297e010931b61c57e6731794631ccda))
+* **desktop:** keep the signed vulkan capture layer registered like obs ([0fbe5ad](https://github.com/115jon/ralph-meet/commit/0fbe5ad1d1912e36f720ff0c219727e89c11c430))
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 reveal the window when the app is launched again ([a37c2c7](https://github.com/115jon/ralph-meet/commit/a37c2c7a20b07f79a4dbde5d4af5364ba5b8701f))
+* **desktop:** bring the window back when the app is launched again ([5943851](https://github.com/115jon/ralph-meet/commit/594385187e21c8417dff187691899cdf252b70fc))
+* **installer:** 🐛 keep shortcuts and relaunch after a failed install ([55ba1d0](https://github.com/115jon/ralph-meet/commit/55ba1d009baa456e8a35bbca3431914be7a23a1a))
+* **installer:** 🐛 require the capture hook at its signed path ([ef59dd3](https://github.com/115jon/ralph-meet/commit/ef59dd3796e35b316c6084a144cd1ee053e15dbe))
+* **installer:** install 3.8 again and keep the app when an install fails ([4053939](https://github.com/115jon/ralph-meet/commit/4053939affcdfe6754fb762291949b80b7646610))
+
+## [3.8.0](https://github.com/115jon/ralph-meet/compare/v3.7.0...v3.8.0) (2026-11-02)
+
+
+### Features
+
+* **calls:** ✨ ring phones by push and record call outcomes ([3e14207](https://github.com/115jon/ralph-meet/commit/3e1420757e0ea3a4901d6bb61157211473c20428))
+* **calls:** DM calls ring phones natively ([3f9f95c](https://github.com/115jon/ralph-meet/commit/3f9f95c114ed8920bc768a129e290c8972c37ed6))
+* **desktop:** ✨ inject the obs-signed capture hook by default ([47fb58c](https://github.com/115jon/ralph-meet/commit/47fb58c45e431be1a30affdd541155f2165382cc))
+* **desktop:** inject the OBS-signed capture hook by default ([b40d0b7](https://github.com/115jon/ralph-meet/commit/b40d0b73e60cfbc1dd7b0a336e287144b5c34855))
+* **mobile:** ✨ add per-user volume, call chat, soundboard and pip ([14640df](https://github.com/115jon/ralph-meet/commit/14640dfd0f8ab7e570e550dac428271555f368aa))
+* **mobile:** ✨ ring for dm calls like a phone ([5b8342c](https://github.com/115jon/ralph-meet/commit/5b8342c9f1c60bf3e08e66722b68de5b33f08601))
+* **mobile:** call screen gets per-user volume, chat, soundboard, PiP and landscape ([bf7d829](https://github.com/115jon/ralph-meet/commit/bf7d829f377aebf5edbe68d99dde5c9f0fb4bdb9))
+* **settings:** ✨ add the game capture hook setting and hook stats ([6c8c0b9](https://github.com/115jon/ralph-meet/commit/6c8c0b9aae6aae03bb5e4c5447ea90c9608f9b08))
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 one owner for window reveal, links and settings ([13f23ef](https://github.com/115jon/ralph-meet/commit/13f23ef68f89f038fbea54156a212c1d8334fd05))
+* **desktop:** 🐛 pace wgc capture and scope the vulkan layer to shares ([eea1a69](https://github.com/115jon/ralph-meet/commit/eea1a69eb713c373a9a099364c43374e150214c8))
+* **desktop:** 🐛 report hook fallback reason and skip anti-cheat games ([cf865f5](https://github.com/115jon/ralph-meet/commit/cf865f5cd12b7703db3201c9bd7a13a48000301b))
+* **desktop:** 🐛 restore the line breaks in the vulkan layer log line ([57e9de5](https://github.com/115jon/ralph-meet/commit/57e9de51279e0e3611b733a90e5e326fc6272462))
+* **desktop:** 🐛 set the wgc update floor below the frame interval ([abca31b](https://github.com/115jon/ralph-meet/commit/abca31ba330772f896b37c25559da1748da2800c))
+* **desktop:** 🐛 stop crashing on quit with a browser still open ([9d33b00](https://github.com/115jon/ralph-meet/commit/9d33b0053a0bc3275b31e213107be00814f65972))
+* **desktop:** one owner for window reveal, deep links and settings ([e3880f5](https://github.com/115jon/ralph-meet/commit/e3880f509cd51618a225b989c1e61d2c9990ebb0))
+* **desktop:** pace WGC to the share fps and register the Vulkan layer only during hook shares ([fe67a1a](https://github.com/115jon/ralph-meet/commit/fe67a1a2f8a62b0b6999faf398927b92c48610c8))
+* **desktop:** report hook fallback reason and skip anti-cheat games ([83b188f](https://github.com/115jon/ralph-meet/commit/83b188ff2f30b1146f9bb927f59bf0ef904fe840))
+* **desktop:** stop crashing on quit with a browser still open ([0c0100a](https://github.com/115jon/ralph-meet/commit/0c0100a7af008706a8aa2d93ebedf45186cfb0e1))
+* **mobile:** 🐛 fill the screen with the drawer when no chat is open ([c0e9722](https://github.com/115jon/ralph-meet/commit/c0e972244b3d332dd229df6dc5ef2fca588567da))
+* **mobile:** 🐛 let bottom sheets drag to close and expand ([59c4623](https://github.com/115jon/ralph-meet/commit/59c4623f5ff08cd1bdd5e9fcc6039e9a1da5ce37))
+* **mobile:** bottom sheets drag to close and expand ([4efd918](https://github.com/115jon/ralph-meet/commit/4efd918b026e387ad392066f980ac93107046571))
+* **mobile:** full-width drawer when no chat is open ([78a0d5d](https://github.com/115jon/ralph-meet/commit/78a0d5d2134a6948f51d9fd235aedc9bbcdb9759))
+* **voice:** 🐛 announce native screen shares in a form viewers can pull ([fc3c12c](https://github.com/115jon/ralph-meet/commit/fc3c12cffb58dadb4d0ff81c0b13ab31da2554e6))
+* **voice:** 🐛 identify again after an expired voice token is refused ([668ef3a](https://github.com/115jon/ralph-meet/commit/668ef3a837605064ca53c90cf50878647ef5596d))
+* **voice:** 🐛 keep one voice session per user and reap stale ones ([cce491b](https://github.com/115jon/ralph-meet/commit/cce491b8e8033272a14d295e80d8a5bd66acad6e))
+* **voice:** 🐛 keep participants held for resume in room rosters ([5d3c383](https://github.com/115jon/ralph-meet/commit/5d3c383ebc9a619087ef0063601d0eac688ea420))
+* **voice:** 🐛 refuse reaped participants and end membership on leave ([b1bf445](https://github.com/115jon/ralph-meet/commit/b1bf44543082fae323fdce96f0362f1014729ecf))
+* **voice:** 🐛 send the full roster on a voice credential refresh ([04a89fb](https://github.com/115jon/ralph-meet/commit/04a89fbdb1e8d835b61e50cb095ed0b3be6671f1))
+* **voice:** desktop native screen shares can be watched on web and mobile ([85ae3b8](https://github.com/115jon/ralph-meet/commit/85ae3b8221e550341a126405889294651cfc9fe9))
+* **voice:** one voice session per user, and stale sessions are reaped ([d8645a3](https://github.com/115jon/ralph-meet/commit/d8645a3c51224e316d6879daade1179bcb15ad2c))
+* **voice:** viewers keep a screen share whose sharer is reconnecting ([5762a38](https://github.com/115jon/ralph-meet/commit/5762a387b4aa93f7d4d3eccda8138980d8c4891c))
+
 ## [3.7.0](https://github.com/115jon/ralph-meet/compare/v3.6.0...v3.7.0) (2026-11-01)
 
 

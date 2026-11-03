@@ -67,7 +67,7 @@ const REQUEST = {
   userCode: "ABCD-EFGH",
   status: "pending" as const,
   device: {
-    label: "Ralph Meet Desktop",
+    label: "Yap Desktop",
     platform: "win32",
     hostname: "ada-laptop",
   },
@@ -164,9 +164,7 @@ describe("DeviceActivation", () => {
     await screen.findByRole("heading", { name: "Is this you?" });
     expect(mocks.getDeviceRequest).toHaveBeenCalledWith("ABCD-EFGH");
     expect(screen.getByText("Code: A B C D, E F G H")).toBeInTheDocument();
-    expect(
-      screen.getByText("Ralph Meet Desktop · Windows"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Yap Desktop · Windows")).toBeInTheDocument();
     expect(screen.getByText("ada-laptop")).toBeInTheDocument();
     expect(screen.getByText("Reported by the device")).toBeInTheDocument();
     expect(screen.getByText("Nashville, US")).toBeInTheDocument();
@@ -174,7 +172,7 @@ describe("DeviceActivation", () => {
     // The poster body names the app and the account; the account row repeats
     // the name beside its email and the "Not you?" switch.
     expect(
-      screen.getByText(/Ralph Meet for Windows wants to sign in as/),
+      screen.getByText(/Yap for Windows wants to sign in as/),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Ada Lovelace")).toHaveLength(2);
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
@@ -193,14 +191,14 @@ describe("DeviceActivation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Approve sign-in" }));
     const heading = await screen.findByRole("heading", {
-      name: "You're signed in on Ralph Meet Desktop",
+      name: "You're signed in on Yap Desktop",
     });
     expect(mocks.approveDeviceRequest).toHaveBeenCalledWith("ABCD-EFGH");
     expect(
       screen.getByText("You can close this tab and go back to the app."),
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "You're signed in on Ralph Meet Desktop",
+      "You're signed in on Yap Desktop",
     );
     await waitFor(() => expect(document.activeElement).toBe(heading));
   });

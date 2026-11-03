@@ -4,16 +4,19 @@
  * On Tauri, clicking an `<a href="https://...">` navigates the webview
  * away from the app (which is catastrophic). This hook intercepts all
  * link clicks with external or `target="_blank"` hrefs and opens them
- * in the user's default system browser via `@tauri-apps/plugin-shell`.
+ * in the user's default system browser via the host (`openExternal`).
  *
  * On web, this hook is a no-op — the browser handles links natively.
  */
 
+import { getHost } from "@/lib/host";
 import { isDesktop } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
 import { useEffect } from "react";
 
 const log = clog("useExternalLinkHandler");
+/** The desktop app's own links: `yap://`, and Ralph Meet's `ralphmeet://`. */
+const DESKTOP_APP_LINK = /^(yap|ralphmeet):\/\//i;
 
 export function useExternalLinkHandler() {
   useEffect(() => {
@@ -32,7 +35,7 @@ export function useExternalLinkHandler() {
         href.startsWith("/") ||
         href.startsWith("#") ||
         href.startsWith("javascript:") ||
-        href.startsWith("ralphmeet://")
+        DESKTOP_APP_LINK.test(href)
       ) {
         return;
       }
@@ -47,8 +50,7 @@ export function useExternalLinkHandler() {
       e.stopPropagation();
 
       try {
-        const { openUrl } = await import("@tauri-apps/plugin-opener");
-        await openUrl(href);
+        await getHost().window.openExternal(href);
       } catch (error) {
         log.error("Failed to open external URL", error);
       }

@@ -25,10 +25,14 @@ namespace Installer
 
     public static class ActivationManager
     {
-        private static readonly string[] RequiredPayloadPaths =
+        /// <summary>
+        /// Files an activated version cannot run without. Each must also be in
+        /// desktop/packaging/payload-manifest.json (checked by ActivationManagerTests).
+        /// </summary>
+        public static readonly IReadOnlyList<string> RequiredPayloadPaths = new[]
         {
             InstallerLogic.ExecutableFileName,
-            Path.Combine("obs-capture", "graphics-hook64.dll")
+            Path.Combine("obs-capture", "obs-signed", "graphics-hook64.dll")
         };
 
         public static string PrepareStagingDirectory(InstallRootLayout layout, string versionHint)

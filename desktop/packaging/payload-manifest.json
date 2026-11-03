@@ -1,5 +1,5 @@
 {
-  "$comment": "What the Windows installer ships. Read by desktop/scripts/stage-payload.ps1 (staging + packing) and desktop/src-tauri/build.rs (CEF sync). `to` defaults to `from`. See docs/desktop/packaging.md.",
+  "$comment": "What the Windows installer ships. obs-capture/obs-signed/ holds the unmodified OBS-signed capture files pinned by obs-signed-hook.lock.json; stage-payload.ps1 checks their hashes and never re-signs them. Read by desktop/scripts/stage-payload.ps1 (staging + packing) and desktop/src-tauri/build.rs (CEF sync). `to` defaults to `from`. See docs/desktop/packaging.md.",
   "version": 1,
   "sources": {
     "cef": "CEF runtime directory (CEF_PATH)",
@@ -12,13 +12,13 @@
       "type": "file",
       "source": "release",
       "from": "ralph-meet-desktop.exe",
-      "to": "RalphMeet.exe"
+      "to": "Yap.exe"
     },
     {
       "type": "file",
       "source": "launcher",
-      "from": "ralph-meet-launcher.exe",
-      "to": "RalphMeetLauncher.exe"
+      "from": "yap-launcher.exe",
+      "to": "YapLauncher.exe"
     },
 
     { "type": "file", "source": "cef", "from": "libcef.dll" },
@@ -42,43 +42,33 @@
 
     {
       "type": "file",
-      "source": "release",
-      "from": "obs-capture/graphics-hook64.dll"
+      "source": "resources",
+      "from": "obs-capture/obs-signed/graphics-hook64.dll"
     },
     {
       "type": "file",
-      "source": "release",
-      "from": "obs-capture/graphics-hook32.dll"
+      "source": "resources",
+      "from": "obs-capture/obs-signed/graphics-hook32.dll"
     },
     {
       "type": "file",
-      "source": "release",
-      "from": "obs-capture/inject-helper64.exe"
+      "source": "resources",
+      "from": "obs-capture/obs-signed/inject-helper64.exe"
     },
     {
       "type": "file",
-      "source": "release",
-      "from": "obs-capture/inject-helper32.exe"
+      "source": "resources",
+      "from": "obs-capture/obs-signed/inject-helper32.exe"
     },
     {
       "type": "file",
-      "source": "release",
-      "from": "obs-capture/get-graphics-offsets64.exe"
+      "source": "resources",
+      "from": "obs-capture/obs-signed/get-graphics-offsets64.exe"
     },
     {
       "type": "file",
-      "source": "release",
-      "from": "obs-capture/get-graphics-offsets32.exe"
-    },
-    {
-      "type": "file",
-      "source": "release",
-      "from": "obs-capture/obs-vulkan64.json"
-    },
-    {
-      "type": "file",
-      "source": "release",
-      "from": "obs-capture/obs-vulkan32.json"
+      "source": "resources",
+      "from": "obs-capture/obs-signed/get-graphics-offsets32.exe"
     },
     {
       "type": "file",

@@ -3,7 +3,7 @@
 // The screen picker shows a real application icon next to each window source
 // (instead of a generic placeholder glyph). On Windows, Chromium/CEF-based
 // apps often expose the host window's class icon first, which makes wrappers
-// like RalphMeet appear as plain Chromium. To match the behaviour users expect
+// like Yap appear as plain Chromium. To match the behaviour users expect
 // from apps like Discord, we prefer the owning executable's icon first and
 // fall back to the live window icon only when the process icon is unavailable.
 //

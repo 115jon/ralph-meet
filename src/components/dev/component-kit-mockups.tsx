@@ -3778,7 +3778,7 @@ function DialogScreen() {
           }
         >
           <p>
-            Ralph Meet for Windows on{" "}
+            Yap for Windows on{" "}
             <span className="font-medium text-ink-1">JON-PC</span> wants to sign
             in as <span className="font-medium text-ink-1">Jon</span>. Only
             approve if the code matches the app.

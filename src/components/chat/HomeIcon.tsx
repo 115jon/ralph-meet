@@ -1,4 +1,4 @@
-import { ThemeMark } from "@/components/ui/theme-slots";
+import { THEME_MARK_BASE, ThemeMark } from "@/components/ui/theme-slots";
 import { cn } from "@/lib/utils";
 
 const HOME_ICON_ASSETS = {
@@ -10,7 +10,7 @@ type HomeIconProps = {
   className?: string;
   /** Force one asset; by default the dark/light pair swaps in CSS. */
   variant?: keyof typeof HOME_ICON_ASSETS;
-  /** Layer the theme's mark (Miku's wig, Spider-Man's mask) over it. */
+  /** Swap in the theme's own Yappy (Miku, Spider-Man) where it has one. */
   showThemeOverlay?: boolean;
 };
 
@@ -35,7 +35,7 @@ export function HomeIcon({
         <img
           aria-hidden="true"
           alt=""
-          className="block size-full object-contain"
+          className={cn("block size-full object-contain", THEME_MARK_BASE)}
           src={HOME_ICON_ASSETS[variant]}
         />
       ) : (
@@ -43,13 +43,19 @@ export function HomeIcon({
           <img
             aria-hidden="true"
             alt=""
-            className="block size-full object-contain dark:hidden"
+            className={cn(
+              "block size-full object-contain dark:hidden",
+              THEME_MARK_BASE,
+            )}
             src={HOME_ICON_ASSETS.light}
           />
           <img
             aria-hidden="true"
             alt=""
-            className="hidden size-full object-contain dark:block"
+            className={cn(
+              "hidden size-full object-contain dark:block",
+              THEME_MARK_BASE,
+            )}
             src={HOME_ICON_ASSETS.dark}
           />
         </>

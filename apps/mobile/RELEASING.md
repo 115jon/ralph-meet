@@ -18,7 +18,7 @@ The `.github/workflows/mobile-release.yml` workflow then:
 1. prebuilds the `production` variant (`dev.jontitor.ralphmeet`),
 2. runs `./gradlew assembleRelease` (one universal APK),
 3. fails unless the APK is signed with the release certificate,
-4. uploads `ralph-meet-X.Y.Z.apk` to the `mobile-vX.Y.Z` release and as a workflow artifact.
+4. uploads `yap-X.Y.Z.apk` to the `mobile-vX.Y.Z` release and as a workflow artifact.
 
 ## Versioning
 
@@ -48,7 +48,7 @@ new key. Never commit it or `google-services.json`.
 
 ## Install and update
 
-Open the release on GitHub from the phone, download `ralph-meet-X.Y.Z.apk` and
+Open the release on GitHub from the phone, download `yap-X.Y.Z.apk` and
 open it (allow installs from the browser when Android asks). Install a newer
 APK over the old one to update; data is kept because the signing key is the
 same.

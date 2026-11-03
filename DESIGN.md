@@ -1,5 +1,5 @@
 ---
-name: Ralph Meet
+name: Yap
 description: A black anodised panel with white silkscreen and coloured LEDs; one live tree of who is in the call and who is talking.
 colors:
   ply-0: "#000000"
@@ -13,7 +13,7 @@ colors:
   ink-off: "#55555c"
   primary-fill: "#f2f2f3"
   on-primary: "#000000"
-  accent-ink: "#a5adff"
+  accent-ink: "#ff8ad8"
   talk: "#3ddc84"
   on-talk: "#000000"
   live: "#4cc2ff"
@@ -226,7 +226,7 @@ components:
     typography: "{typography.section-title}"
 ---
 
-# Design System: Ralph Meet
+# Design System: Yap
 
 This document records what shipped on branch `ui/redesign` and supersedes the Quiet Pro document `docs/design-system.md`. Where the two disagree, this one wins. The frontmatter describes the default dark theme; the other five themes are colourways, listed under Colors and in the sidecar.
 
@@ -244,16 +244,16 @@ The component kit behind this (keys, plates and lights) was picked on 2026-10-28
 
 - Five plies from a pure black canvas to a graphite float, separated by 1px seams rather than shadows (shadow only on floats and dialogs).
 - Squared: every corner is a 2px key corner, avatars included. Section structure is a 2px ink-1 rule, not a box.
-- Dither only in a few still places: a primary key's trailing cap, the fader range, a title rule, the poster word and a time-left bar. Never under text, never moving.
+- Dither only in a few still places: a primary key's trailing cap, the fader range, a title rule, the poster word and a time-left bar. Never under text, never moving (the loading bark is the one exception, and only while loading).
 - Hover, selected and pressed are ink tints (6, 10 and 16 percent of the ink), never a hue.
 - The tree is drawn in 1px guide strokes at 12 percent ink; the you-are-here path is lit in accent ink.
 - One LED language everywhere a person appears: 60ms on, 220ms off, opacity only.
 - Six themes (dark, light, Miku dark and light, Spider-Man dark and light) share one structure and change only tint, primary, accent, brand and shadow colour.
-- Idle budget: 0 rAF callbacks per second, at most 2 compositor frames per second, at most 1 style recalculation per second, no infinite animation, except the ring on ringing DM-call surfaces (`scripts/idle-probe.mjs`).
+- Idle budget: 0 rAF callbacks per second, at most 2 compositor frames per second, at most 1 style recalculation per second, no infinite animation, except the ring on ringing DM-call surfaces and the bark while something loads (`scripts/idle-probe.mjs`).
 
 ## Colors
 
-Near-black neutrals with one cool indigo accent for links and focus, and four fixed LED hues that carry all state.
+Near-black neutrals with one warm pink accent for links and focus, one brand pink for the mark, and four fixed LED hues that carry all state.
 
 ### Primary
 
@@ -261,7 +261,8 @@ Near-black neutrals with one cool indigo accent for links and focus, and four fi
 
 ### Secondary
 
-- **Indigo Lamp** (`accent-ink` #a5adff): links, the focus ring, text caret, selected indicators, the lit you-are-here path, and `accent-tint` (accent at 16 percent dark, 12 percent light) behind mentions and selected chips. It is never a fill and never a state colour. It is at least 4.5:1 on plies 0 to 3 in every theme.
+- **Yap Lamp** (`accent-ink` #ff8ad8 dark, #c0127a light): links, the focus ring, text caret, selected indicators, the lit you-are-here path, the loader glyph's light, and `accent-tint` (accent at 16 percent dark, 12 percent light) behind mentions and selected chips. A lighter, pinker cousin of the brand pink, pulled far enough from danger red to pass the ΔE 20 rule. It is never a fill and never a state colour. It is at least 4.5:1 on plies 0 to 3 in every theme. It replaced the indigo lamp in the default dark and light themes with the Yap rename (2026-11-03); Miku and Spider-Man keep their own accents.
+- **Yap Pink** (`brand-2` #ff3d8b dark, #d81b72 light; the icon's #ff3d8b): Yappy, the mark, and the brand slots only. Never interaction or state: #ff3d8b sits too close to danger red (it fails the accent-vs-danger ΔE 20 rule), so it never stands in for the accent.
 
 ### Tertiary (LEDs)
 
@@ -286,7 +287,7 @@ Near-black neutrals with one cool indigo accent for links and focus, and four fi
 
 Themes are colourways. Each sets neutral tint, `primary-fill`, `accent-ink`, `brand`/`brand-2` and `shadow-rgb`; LED hues are fixed and only their lightness moves for contrast on light plies.
 
-- **Light**: ply-0 #f4f4f5, ply-1 #fafafa, ply-2 and ply-3 #ffffff, ply-4 #f0f0f2; ink #0b0b0d / #4a4a52 / #6b6b73; accent #4a54d4; talk #1a9a52; live #0a7ec2; danger fill #c8282e.
+- **Light**: ply-0 #f4f4f5, ply-1 #fafafa, ply-2 and ply-3 #ffffff, ply-4 #f0f0f2; ink #0b0b0d / #4a4a52 / #6b6b73; accent #c0127a; brand-2 #d81b72; talk #1a9a52; live #0a7ec2; danger fill #c8282e.
 - **Miku dark / light**: indigo-night neutrals (ply-0 #06060b / #f1f3f7); teal primary (#39c5bb on #06060b in dark, #007a72 on white in light); teal accent ink; brand teal with pink `brand-2` (#f872a5 / #e04f8a).
 - **Spider-Man dark / light**: navy neutrals (ply-0 #02030a / #f2f4f8); blue primary (#2563eb / #1d4ed8) and blue accent ink; red brand (#e50914 / #d0101c) as identity only, never as state or interaction.
 
@@ -466,21 +467,23 @@ Martian, tabular readouts. `NumClock` ticks in its own leaf with one aligned tim
 
 ### DitherGlyph and EmptyState
 
-`DitherGlyph` (replaced TreeArt on 2026-10-30) is a small pixel drawing on a cell grid at 2, 3 or 4px cells (`sm`, `md`, `lg`): structure in solid `ink-3` cells, light in an accent-ink 8x8 Bayer dither, the two inks of the cold-load mark. One motif per context: `mark` (the Ralph Meet mark printed through a diagonal dither; the updater, the empty chat column, full-screen loaders), `empty` (a dashed slot with light pooled in one corner; the default empty state), `screen` (a monitor lit from the top-left; the screen picker) and `voice` (a still level meter with peak-hold cells; the voice landing). `pending` prints the same drawing with its light about 40 percent resolved, as the cold-load mark is before its last step: that is the whole loading signal, because nothing moves. Alpha masks over role colours, `aria-hidden`, hidden under forced colours. `EmptyState` (`motif`, `loading`) is the glyph over a Bricolage 700 title (20, 15 at sm), a 13px description in `ink-2` at a 40ch measure, and at most one action. No card, no eyebrow.
+`DitherGlyph` (replaced TreeArt on 2026-10-30) is a small pixel drawing on a cell grid at 2, 3 or 4px cells (`sm`, `md`, `lg`): structure in solid `ink-3` cells, light in an accent-ink 8x8 Bayer dither. One motif per context: `mark` (Yappy, the Yap mark, on its own 32-cell grid printed through a diagonal dither with the eye, nose and inner ear cut out; the updater, the empty chat column, full-screen loaders; drawn by `YapBark` in `ui/yap-bark`), `empty` (a dashed slot with light pooled in one corner; the default empty state), `screen` (a monitor lit from the top-left; the screen picker) and `voice` (a still level meter with peak-hold cells; the voice landing). For the still motifs `pending` prints the same drawing with its light about 40 percent resolved: that is their whole loading signal, because they never move. The mark barks instead (see Motion). The cold-load screen (`chat/ColdLoad`) is the same barking mark at full width, and hands off to the full-colour icon when the app is ready. Alpha masks over role colours, `aria-hidden`, hidden under forced colours. `EmptyState` (`motif`, `loading`) is the glyph over a Bricolage 700 title (20, 15 at sm), a 13px description in `ink-2` at a 40ch measure, and at most one action. No card, no eyebrow.
 
 ### Theme slots
 
-Theme personality lives in `ThemeMark` (a glyph over the rail home mark) and `ThemeBanner` (a 2px brand rule in the 48px header, brand then brand-2 as a hard stop, plus a 16px glyph at the end), registered by theme id in `THEME_SLOTS`. Components never branch on the active theme or sniff theme classes.
+Theme personality lives in `ThemeMark` (the theme's own Yappy, laid over the home mark) and `ThemeBanner` (a 2px brand rule in the 48px header, brand then brand-2 as a hard stop, plus a 16px glyph at the end), registered by theme id in `THEME_SLOTS`. Components never branch on the active theme or sniff theme classes. Each themed colourway registers its own `mark`, `public/icons/home-<theme>.svg`, drawn on the rail mark's 24-cell grid so the dog's silhouette and bark pose stay intact: Miku Yappy is a brand-2 pink dog with teal twin-tails (the near tail hangs from a crimson tie behind the ear to the bottom edge, the far one peeks out under the jaw) and a jagged teal fringe; Spider-Man Yappy is a brand-red head with 1-cell black web lines radiating from a white lens eye with a black border, and a blue neck. The plain mark before it takes `THEME_MARK_BASE` and steps aside while the themed one is present; under forced colours the themed mark is hidden and the plain one shows. The banners keep the wig and mask glyphs.
 
 ### Motion
 
 Instrument motion: only transform, opacity, translate, scale and rotate animate. Durations are 100 (hover, press), 150 (tooltip, toggle), 200 (menu, popover, list insert), 250 (dialog, panel, drawer) with exits at about 0.7x; LED and ring 60 on and 220 off. Curves: `ease-out` (default, enter and exit), `ease-in-out` (on-screen movement), `ease-drawer`, and a critically damped `ease-spring` for panels. No `ease-in`, no bounce, nothing over 300ms except loaders. Presence grows from the anchor at 0.97; side panels slide 16px on the spring. Reactions land in 220ms with no overshoot and leave in 150ms. Under `prefers-reduced-motion`, one global rule zeroes travel and scale and caps fades at 100ms; LEDs and the speaking ring keep working with instant transitions.
 
+**The bark** (`YapBark`, `.rm-bark` in `styles/motion.css`) is the loading mark. Yappy's lower jaw has three pixel frames (closed, half, open; it rises and lengthens a cell as it shuts, a hinge drawn in steps) and swaps them on `step-end`, never eased: closed for 420ms, then half, open, half, closed, half, open, half (84 or 224ms each), "yap yap", on a 1.4s loop. On the open frames two 1-cell 45-degree ticks show off the snout and the jaw tip. It runs only while its caller is loading (`DitherGlyph pending`, the cold-load steps, the installer's busy phases) and stops on a failure. At rest, under reduced motion, and in the installer with Windows animation effects off, it is one still frame: the icon's pose, jaw open, no ticks. Under forced colours it is hidden with the rest of the dither, and the words beside it carry the state.
+
 ### Named Rules
 
 **The Light Once Rule.** Everywhere a person appears in a call, the same LED lights at the same 60ms and decays over the same 220ms. No second speaking treatment.
 
-**The Silent Idle Rule.** Nothing loops at rest. The only infinite animations are a pending spinner and an incoming or outgoing call ring; each unmounts when its state ends. When the app is hidden, minimised, or unfocused behind a fullscreen game, `useAppActive` sets `data-app-inactive` on the root, which pauses every CSS animation, and every rAF, canvas and video loop stops.
+**The Silent Idle Rule.** Nothing loops at rest. The only infinite animations are a pending spinner, the loading bark and an incoming or outgoing call ring; each stops when its state ends. When the app is hidden, minimised, or unfocused behind a fullscreen game, `useAppActive` sets `data-app-inactive` on the root, which pauses every CSS animation, and every rAF, canvas and video loop stops.
 
 ## Do's and Don'ts
 
@@ -501,10 +504,10 @@ Instrument motion: only transform, opacity, translate, scale and rotate animate.
 - **Don't** use a hue for hover, selected or pressed, or for any surface or border.
 - **Don't** share a hue between a muted mic and a live camera, or use brand colour (Spider-Man red, Miku pink) for state or interaction.
 - **Don't** add a second call dock, duplicate mic or deafen controls in the call strip, or draw avatar-tile walls with giant initials.
-- **Don't** loop anything at rest: no pulse, breathing or level-reactive scale on the LED, no shimmering skeletons (skeletons are static `tint-1`), no new infinite animation outside the two allowed.
+- **Don't** loop anything at rest: no pulse, breathing or level-reactive scale on the LED, no shimmering skeletons (skeletons are static `tint-1`), no new infinite animation outside the three allowed (spinner, bark, call ring).
 - **Don't** animate layout or paint properties (width, height, background-position, box-shadow), and don't use `ease-in` or bounce.
 - **Don't** set a card side-stripe over 1px, a gradient fill, glass or backdrop blur as decoration. (The theme banner's hard-stop rule, the notch fill and media scrims over user images are not decoration of this kind.)
-- **Don't** put dither anywhere but the cap, the fader, a title rule, the poster word, a time-left bar and the empty-state or loader glyph; never under text, never animated, never without `aria-hidden`.
+- **Don't** put dither anywhere but the cap, the fader, a title rule, the poster word, a time-left bar and the empty-state or loader glyph; never under text, never animated (except the bark while loading), never without `aria-hidden`.
 - **Don't** clip a focusable element with `clip-path` (it cuts the focus ring); paint the shape instead, as `.rm-notch` does.
 - **Don't** set prose in Bricolage or Martian, or a key label in Geist. A kicker above a title is Martian silkscreen, never a sentence.
 - **Don't** put text below 11px, set Geist above 600 or Bricolage below 600, or use a serif or system display face.

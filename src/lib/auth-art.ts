@@ -274,7 +274,7 @@ export function resolveCssColor(
 /** Theme colours from the document's current `--rm-*` tokens. */
 export function readThemeColors(
   element: Element,
-  fallback: ThemeColors = { accent: "#5865f2", background: "#070709" },
+  fallback: ThemeColors = { accent: "#ff8ad8", background: "#0b0b0d" },
 ): ThemeColors {
   if (typeof getComputedStyle !== "function") return fallback;
   const style = getComputedStyle(element);

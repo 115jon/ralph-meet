@@ -1,11 +1,11 @@
 /// Windows Graphics Capture (WGC) based screen capture.
 /// Produces `ID3D11Texture2D` frames in BGRA format — no CPU readback.
 use std::result::Result as StdResult;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use windows::core::{Result as WinResult, *};
-use windows::Foundation::TypedEventHandler;
+use windows::Foundation::{TimeSpan, TypedEventHandler};
 use windows::Graphics::Capture::*;
 use windows::Graphics::DirectX::DirectXPixelFormat;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT};
@@ -462,6 +462,83 @@ pub struct WgcCapture {
 
 unsafe impl Send for WgcCapture {}
 
+impl WgcCapture {
+    /// Follow a live fps change. The callback's [`FramePacer`] reads the shared
+    /// interval on every frame; this moves WGC's own floor (where supported).
+    pub fn set_frame_interval(&self, frame_interval_ns: u64) {
+        apply_min_update_interval(&self.session, frame_interval_ns);
+    }
+}
+
+/// Ask WGC not to deliver frames much faster than the share's frame rate.
+/// `GraphicsCaptureSession.MinUpdateInterval` exists on Windows 11 24H2
+/// (build 26100) and later. Elsewhere the setter fails and the callback-side
+/// [`FramePacer`] does all of the pacing.
+///
+/// The floor is 3/4 of the frame interval, not the interval itself: DWM
+/// composes on vsync, so a floor of exactly 1/fps makes every frame that lands
+/// a little early wait for the next vsync (measured: 24.6 fps for a 30 fps
+/// share on a 60 Hz display). The pacer then holds the exact rate.
+fn apply_min_update_interval(session: &GraphicsCaptureSession, frame_interval_ns: u64) {
+    // 0 means "no cap". TimeSpan is in 100 ns units.
+    let floor_ns = frame_interval_ns / 4 * 3;
+    let duration = (floor_ns / 100) as i64;
+    match session.SetMinUpdateInterval(TimeSpan { Duration: duration }) {
+        Ok(()) => log::info!(
+            "[WgcCapture] MinUpdateInterval set to {}us (frame interval {}us)",
+            floor_ns / 1_000,
+            frame_interval_ns / 1_000
+        ),
+        Err(e) => log::info!(
+            "[WgcCapture] MinUpdateInterval unavailable ({}); pacing in the frame callback only",
+            e.code()
+        ),
+    }
+}
+
+/// Drops WGC frames that arrive faster than the share's frame rate.
+///
+/// Before Windows 11 24H2 WGC has no rate setting and delivers at the
+/// compositor's cadence (about 50-60 fps for a game window), so a 30 fps share
+/// captured and encoded about 49 fps. The pacer keeps a running deadline
+/// (`next_due += interval`) rather than "one interval since the last admitted
+/// frame", so a source whose rate is not a multiple of the target still
+/// averages the target rate instead of rounding down to an even divisor.
+#[derive(Debug, Default)]
+pub(crate) struct FramePacer {
+    next_due_hns: Option<i64>,
+}
+
+impl FramePacer {
+    /// Whether to forward a frame stamped `pts_hns` (100 ns units) when the
+    /// share wants one frame per `interval_hns`. `interval_hns <= 0` admits
+    /// everything.
+    pub(crate) fn admit(&mut self, pts_hns: i64, interval_hns: i64) -> bool {
+        if interval_hns <= 0 {
+            self.next_due_hns = None;
+            return true;
+        }
+        // Absorb compositor jitter, so a source at exactly the target rate is
+        // never halved by a frame that lands slightly early.
+        let tolerance = interval_hns / 8;
+        match self.next_due_hns {
+            // Early, but not so early that the clock must have gone backwards.
+            Some(due) if pts_hns + tolerance < due && pts_hns + 2 * interval_hns >= due => false,
+            // Due, and less than one whole interval late.
+            Some(due) if pts_hns + tolerance >= due && pts_hns < due + interval_hns => {
+                self.next_due_hns = Some(due + interval_hns);
+                true
+            }
+            // First frame, a gap longer than one interval (restart instead of
+            // bursting to catch up), or a timestamp that went backwards.
+            _ => {
+                self.next_due_hns = Some(pts_hns + interval_hns);
+                true
+            }
+        }
+    }
+}
+
 impl Drop for WgcCapture {
     fn drop(&mut self) {
         let _ = self.pool.RemoveFrameArrived(self.frame_arrived_token);
@@ -719,6 +796,7 @@ pub fn start_wgc_capture(
     frames: FrameSender,
     stats: Arc<NativeShareStats>,
     frame_gate: Arc<AtomicBool>,
+    frame_interval_ns: Arc<AtomicU64>,
     on_closed: Option<ItemClosedCallback>,
 ) -> StdResult<WgcCapture, String> {
     // Wrap D3D11 device as WinRT IDirect3DDevice.
@@ -751,6 +829,7 @@ pub fn start_wgc_capture(
 
     // Suppress the yellow highlight border (Win11 22H2+ only; silently skipped on Win10).
     let _ = session.SetIsBorderRequired(false);
+    apply_min_update_interval(&session, frame_interval_ns.load(Ordering::Relaxed));
 
     let in_flight = InFlight::new(POOL_BUFFERS as usize);
     let pool_size = Arc::new(Mutex::new(size));
@@ -758,6 +837,7 @@ pub fn start_wgc_capture(
     let callback_frame_gate = Arc::clone(&frame_gate);
     let first_frame_logged = Arc::new(AtomicBool::new(false));
     let gate_closed_logged = Arc::new(AtomicBool::new(false));
+    let pacer = Mutex::new(FramePacer::default());
 
     let frame_arrived_token = pool
         .FrameArrived(&TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(
@@ -774,6 +854,19 @@ pub fn start_wgc_capture(
                 let Ok(frame) = pool_inner.TryGetNextFrame() else {
                     return Ok(());
                 };
+
+                // Pace to the share's frame rate before any per-frame work.
+                // Dropping a skipped frame returns its pool buffer at once.
+                let pts_hns = frame.SystemRelativeTime().map(|t| t.Duration).unwrap_or(0);
+                let interval_hns = (frame_interval_ns.load(Ordering::Relaxed) / 100) as i64;
+                let admit = pacer
+                    .lock()
+                    .map(|mut p| p.admit(pts_hns, interval_hns))
+                    .unwrap_or(true);
+                if !admit {
+                    stats.paced_frames.fetch_add(1, Ordering::Relaxed);
+                    return Ok(());
+                }
 
                 // The source changed shape: rebuild the pool at the new size so
                 // the next frames carry the whole window at native resolution.
@@ -833,7 +926,6 @@ pub fn start_wgc_capture(
                     return Ok(());
                 };
 
-                let pts_hns = frame.SystemRelativeTime().map(|t| t.Duration).unwrap_or(0);
                 let sent = frames.try_send(CapturedFrame {
                     texture,
                     width,
@@ -887,6 +979,85 @@ pub fn start_wgc_capture(
     // closing the session + pool.
     capture.session.StartCapture().map_err(|e| e.to_string())?;
     Ok(capture)
+}
+
+#[cfg(test)]
+mod pacer_tests {
+    use super::FramePacer;
+
+    const HNS_PER_SEC: i64 = 10_000_000;
+
+    /// Feed `count` frames at `source_fps` (alternating +/- `jitter` hns)
+    /// through a pacer targeting `target_fps`, and count the admitted ones.
+    fn admitted(source_fps: i64, target_fps: i64, count: i64, jitter: i64) -> i64 {
+        let mut pacer = FramePacer::default();
+        let interval = if target_fps > 0 {
+            HNS_PER_SEC / target_fps
+        } else {
+            0
+        };
+        (0..count)
+            .filter(|&i| {
+                let wobble = if i % 2 == 0 { jitter } else { -jitter };
+                pacer.admit(i * HNS_PER_SEC / source_fps + wobble, interval)
+            })
+            .count() as i64
+    }
+
+    #[test]
+    fn a_49_fps_source_is_paced_to_30() {
+        // The joi2 Fortnite log: WGC delivered about 49 fps to a 30 fps share.
+        let n = admitted(49, 30, 49 * 10, 0);
+        assert!((295..=305).contains(&n), "admitted {n} of 490 over 10 s");
+    }
+
+    #[test]
+    fn a_jittery_60_fps_source_is_halved_to_30() {
+        let n = admitted(60, 30, 600, 10_000); // +/- 1 ms
+        assert!((298..=302).contains(&n), "admitted {n}");
+    }
+
+    #[test]
+    fn a_source_at_the_target_rate_keeps_every_frame() {
+        assert_eq!(admitted(60, 60, 600, 10_000), 600);
+        assert_eq!(admitted(30, 30, 300, 20_000), 300);
+    }
+
+    #[test]
+    fn a_144_hz_source_averages_60() {
+        let n = admitted(144, 60, 1440, 0);
+        assert!((598..=602).contains(&n), "admitted {n}");
+    }
+
+    #[test]
+    fn a_slower_source_is_never_dropped() {
+        assert_eq!(admitted(24, 30, 240, 0), 240);
+    }
+
+    #[test]
+    fn a_gap_restarts_the_schedule_without_a_burst() {
+        let mut pacer = FramePacer::default();
+        let interval = HNS_PER_SEC / 30;
+        assert!(pacer.admit(0, interval));
+        // One second of static content, then 60 fps again: the first frame is
+        // admitted, the one 1/60 s later is not.
+        assert!(pacer.admit(HNS_PER_SEC, interval));
+        assert!(!pacer.admit(HNS_PER_SEC + HNS_PER_SEC / 60, interval));
+        assert!(pacer.admit(HNS_PER_SEC + 2 * HNS_PER_SEC / 60, interval));
+    }
+
+    #[test]
+    fn backwards_timestamps_restart_the_schedule() {
+        let mut pacer = FramePacer::default();
+        let interval = HNS_PER_SEC / 30;
+        assert!(pacer.admit(10 * HNS_PER_SEC, interval));
+        assert!(pacer.admit(HNS_PER_SEC, interval));
+    }
+
+    #[test]
+    fn zero_interval_admits_everything() {
+        assert_eq!(admitted(240, 0, 100, 0), 100);
+    }
 }
 
 #[cfg(test)]

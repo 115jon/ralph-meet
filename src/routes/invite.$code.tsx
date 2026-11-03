@@ -5,11 +5,11 @@ export const Route = createFileRoute("/invite/$code")({
   component: InvitePage,
   head: () => ({
     meta: [
-      { title: "Join Server — Ralph Meet" },
+      { title: "Join Server — Yap" },
       {
         name: "description",
         content:
-          "You've been invited to join a server on Ralph Meet. Connect and chat with friends in real-time.",
+          "You've been invited to join a server on Yap. Connect and chat with friends in real-time.",
       },
     ],
   }),

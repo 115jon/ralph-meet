@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -35,7 +35,7 @@ describe("THEME_SLOTS", () => {
 
   it.each(CUSTOM)("%s has a mark and a banner backed by real assets", (id) => {
     const slots = THEME_SLOTS[id];
-    expect(slots.mark?.src).toBeTruthy();
+    expect(slots.mark?.src).toBe(`/icons/home-${id}.svg`);
     expect(existsSync(publicAsset(slots.mark!.src))).toBe(true);
     expect(slots.banner).toBeDefined();
     if (slots.banner?.glyph) {
@@ -43,8 +43,18 @@ describe("THEME_SLOTS", () => {
     }
   });
 
-  it("gives both colourways of a theme the same identity", () => {
-    expect(THEME_SLOTS["miku-dark"]).toBe(THEME_SLOTS["miku-light"]);
-    expect(THEME_SLOTS["spiderman-dark"]).toBe(THEME_SLOTS["spiderman-light"]);
+  it("gives both colourways of a theme the same banner", () => {
+    expect(THEME_SLOTS["miku-dark"].banner).toBe(
+      THEME_SLOTS["miku-light"].banner,
+    );
+    expect(THEME_SLOTS["spiderman-dark"].banner).toBe(
+      THEME_SLOTS["spiderman-light"].banner,
+    );
+  });
+
+  it.each(CUSTOM)("%s mark is a 24-cell pixel mark like the rail's", (id) => {
+    const svg = readFileSync(publicAsset(THEME_SLOTS[id].mark!.src), "utf8");
+    expect(svg).toContain('viewBox="0 0 24 24"');
+    expect(svg).toContain('shape-rendering="crispEdges"');
   });
 });

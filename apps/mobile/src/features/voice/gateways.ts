@@ -312,6 +312,8 @@ export class VoiceSocket {
   updateVoiceToken(voiceToken: string): void {
     if (this.credentials)
       this.credentials = { ...this.credentials, voiceToken };
+    // An identify the voice room refused (expired token) goes again now.
+    this.maybeIdentify();
   }
 
   /** Sends once identified (queued until VoiceReady). */
@@ -396,6 +398,15 @@ export class VoiceSocket {
         this.handlers.appEvent(message.d);
         return;
       case GatewayOp.Error:
+        if (
+          message.d.code === GatewayCloseCode.AuthenticationFailed &&
+          this.identifiedParticipantId !== null &&
+          !this.socket.isReady
+        ) {
+          // The voice room refused our identify (an expired token) and keeps
+          // the socket open: identify again once the refreshed token arrives.
+          this.identifiedParticipantId = null;
+        }
         this.handlers.error(message.d.code, message.d.message);
         return;
       default:

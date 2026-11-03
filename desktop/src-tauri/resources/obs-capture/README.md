@@ -1,56 +1,45 @@
-# Owned_Capture_Component — project-owned game-capture artifacts (built from OBS `win-capture`)
+# Game-capture component
 
-This directory holds the **Owned_Capture_Component**: the project-owned
-game-capture payload (Forked_Hook_DLL) and injector (Owned_Injector) that the
-`game-capture-hook` Cargo feature ships alongside the `ralph-meet-desktop`
-binary, **built from OBS Studio `win-capture` sources** under the project's
-control. See the `owned-game-capture-hook` design — *License & Attribution* —
-for the full GPLv2 rationale (Requirements 11.x, 12.x).
+The `game-capture-hook` feature ships **OBS Studio's own game-capture files**,
+unmodified and signed by the OBS Project, in `obs-signed/`:
+`graphics-hook{64,32}.dll`, `inject-helper{64,32}.exe` and
+`get-graphics-offsets{64,32}.exe` from the OBS Studio 33.0.1 release. They are
+pinned by `desktop/packaging/obs-signed-hook.lock.json` and fetched (not
+committed) by:
 
-> **These binaries are GPLv2.** ralph-meet has been relicensed to be
-> GPLv2-compatible so it may build/link from OBS `win-capture` sources. The
-> Forked_Hook_DLL's single intended change from upstream is a **private IPC
-> object namespace** (`RalphCaptureHook_` instead of OBS's `CaptureHook_`). The
-> GPLv2 text (`LICENSE-GPLv2.txt`), attribution (`ATTRIBUTION.md`), and source
-> offer (`SOURCE-OFFER.md`) ship with the component. The binary files are
-> excluded from git (see the repo `.gitignore`); the GPLv2 text, attribution,
-> and source offer ARE committed. A fresh checkout must (re)build/populate the
-> binaries before a `game-capture-hook` build will pass the packaging guard.
+```powershell
+.\desktop\scripts\fetch-obs-signed-hook.ps1
+```
+
+The script downloads the official release zip, checks its SHA-256, extracts the
+six files, and checks each file's SHA-256, Authenticode signature, signer
+("OBS Project, LLC"), certificate thumbprint and file version against the lock.
+The app checks hash and signature again before every injection, then stages the
+set to `%LOCALAPPDATA%\Yap\capture-hook\obs-<ver>-<sha8>\` (the stock DLL
+stays loaded in a game until it exits). **Never modify or re-sign these files**:
+a changed byte voids the signature anti-cheat vendors allowlist. See
+`docs/desktop/signed-capture-hook.md`.
 
 ## Required materials
 
-The packaging guard in `build.rs` requires the following to exist in this
-directory when the `game-capture-hook` feature is enabled (Requirement 11.4,
-12.3, 12.6):
+The packaging guard in `build.rs` requires these when the feature is enabled:
 
-| File | Role | Built from (OBS `plugins/win-capture/`) |
-| --- | --- | --- |
-| `graphics-hook64.dll` | 64-bit Forked_Hook_DLL payload | `graphics-hook` (64-bit build) |
-| `graphics-hook32.dll` | 32-bit Forked_Hook_DLL payload | `graphics-hook` (32-bit build) |
-| `inject-helper64.exe` | 64-bit Owned_Injector | `inject-helper` (64-bit build) |
-| `inject-helper32.exe` | 32-bit Owned_Injector | `inject-helper` (32-bit build) |
-| `get-graphics-offsets64.exe` | 64-bit graphics-offsets helper | `get-graphics-offsets` (64-bit build) |
-| `get-graphics-offsets32.exe` | 32-bit graphics-offsets helper | `get-graphics-offsets` (32-bit build) |
-| `LICENSE-GPLv2.txt` | GPLv2 license text for the artifacts above | OBS `COPYING` |
-| `ATTRIBUTION.md` | OBS Project attribution + pinned `win-capture` commit/tag | — |
-| `SOURCE-OFFER.md` | GPLv2 source-availability + written offer (§3) | — |
+| File | Role |
+| --- | --- |
+| `obs-signed/graphics-hook64.dll`, `obs-signed/graphics-hook32.dll` | OBS-signed hook payloads |
+| `obs-signed/inject-helper64.exe`, `obs-signed/inject-helper32.exe` | OBS-signed injectors |
+| `obs-signed/get-graphics-offsets64.exe`, `obs-signed/get-graphics-offsets32.exe` | OBS-signed offset helpers |
+| `LICENSE-GPLv2.txt` | GPLv2 text |
+| `ATTRIBUTION.md` | OBS Project attribution and pinned release |
+| `SOURCE-OFFER.md` | GPLv2 source availability and written offer |
 
-The artifact file names are pinned in code as the `GRAPHICS_HOOK64` /
-`GRAPHICS_HOOK32` / `INJECT_HELPER64` / `INJECT_HELPER32` /
-`GET_GRAPHICS_OFFSETS64` / `GET_GRAPHICS_OFFSETS32` constants in
-`src/game_capture/inject.rs`, and mirrored in the `build.rs` packaging guard. If
-you change a name here, change it in both places too.
+## Development-only fork
 
-## Pinned upstream identifier
-
-The OBS game-capture IPC protocol (named events, the `hook_info` shared-memory
-struct layout, the keyed-mutex sharing mode) changes across OBS releases, so the
-fork is pinned to a specific upstream identifier and treated as an **atomic,
-version-locked** basis. Any re-pin is a deliberate, re-verified change (re-check
-the `hook_info` layout + event names).
-
-> **Pinned upstream identifier:** **OBS Studio 32.1.2** — tag `32.1.2`,
-> commit `fb4d98b` (see `ATTRIBUTION.md` and `SOURCE-OFFER.md`).
+`fork/` is a modified build of OBS 32.1.2's `win-capture` (private
+`RalphCaptureHook_` object names, a present counter, self-unload, diagnostics).
+It is unsigned and not shipped. To use it locally, build it into this directory
+and set `RALPH_CAPTURE_HOOK_FLAVOR=own`; the host never uses it in an
+anti-cheat-protected game. The rest of this file describes that build.
 
 ## How to build / refresh the artifacts
 

@@ -68,7 +68,7 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
     title: "Account",
     icon: "account",
     headline: "Who you are, and how you sign in.",
-    blurb: "Who you are on Ralph Meet and how you sign in.",
+    blurb: "Who you are on Yap and how you sign in.",
     sections: [
       {
         id: "profile",
@@ -137,7 +137,7 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
           {
             id: "sign-out",
             label: "Sign out",
-            desc: "Sign out of Ralph Meet on this device.",
+            desc: "Sign out of Yap on this device.",
             keywords: ["log out", "logout", "leave"],
           },
         ],
@@ -196,7 +196,7 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
       {
         id: "media-filter",
         title: "Media filter",
-        desc: "Applies to GIF, sticker, clip and meme search and trending. Where a provider supports it, Ralph Meet sends your account ID so results match your choice.",
+        desc: "Applies to GIF, sticker, clip and meme search and trending. Where a provider supports it, Yap sends your account ID so results match your choice.",
         rows: [
           {
             id: "media-filter",
@@ -382,7 +382,7 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
           {
             id: "stream-preview",
             label: "Always show stream preview",
-            desc: "Keeps your stream preview visible while Ralph Meet isn't focused.",
+            desc: "Keeps your stream preview visible while Yap isn't focused.",
             keywords: ["stream", "go live", "screen share", "preview"],
           },
         ],
@@ -467,7 +467,7 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
       {
         id: "built-in-shortcuts",
         title: "Built-in shortcuts",
-        desc: "These work everywhere in Ralph Meet and can't be changed.",
+        desc: "These work everywhere in Yap and can't be changed.",
         rows: [
           {
             id: "kb-command-menu",
@@ -557,7 +557,7 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
     title: "Notifications",
     icon: "bell",
     headline: "Alerts and sounds.",
-    blurb: "Desktop alerts and the sounds Ralph Meet plays.",
+    blurb: "Desktop alerts and the sounds Yap plays.",
     sections: [
       {
         id: "desktop-alerts",
@@ -663,8 +663,7 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
     title: "Desktop app",
     icon: "monitor",
     headline: "How the app starts and updates.",
-    blurb:
-      "How the Ralph Meet app starts, closes and updates on this computer.",
+    blurb: "How the Yap app starts, closes and updates on this computer.",
     desktopOnly: true,
     sections: [
       {
@@ -674,19 +673,19 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
           {
             id: "open-on-startup",
             label: "Open on startup",
-            desc: "Ralph Meet opens when your computer starts.",
+            desc: "Yap opens when your computer starts.",
             keywords: ["autostart", "login", "boot", "launch"],
           },
           {
             id: "start-minimized",
             label: "Start minimized",
-            desc: "When it opens on startup, Ralph Meet waits in the tray.",
+            desc: "When it opens on startup, Yap waits in the tray.",
             keywords: ["background", "hidden", "tray"],
           },
           {
             id: "close-to-tray",
             label: "Close to tray",
-            desc: "The close button hides Ralph Meet in the tray instead of quitting.",
+            desc: "The close button hides Yap in the tray instead of quitting.",
             keywords: ["minimize", "quit", "system tray"],
           },
         ],
@@ -700,6 +699,20 @@ const SETTINGS_PANELS: SettingsPanelDef[] = [
             label: "Hardware acceleration",
             desc: "Uses your GPU for smoother rendering. Turn it off if you see visual glitches.",
             keywords: ["gpu", "graphics", "glitch", "performance", "restart"],
+          },
+          {
+            id: "game-capture-hook",
+            label: "Game capture hook",
+            desc: "Captures games directly for smoother screen shares, using the OBS Studio capture hook. Turn it off to always use window capture.",
+            keywords: [
+              "screen share",
+              "game",
+              "capture",
+              "hook",
+              "obs",
+              "anti-cheat",
+              "wgc",
+            ],
           },
         ],
       },

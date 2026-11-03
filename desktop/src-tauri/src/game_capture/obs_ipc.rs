@@ -571,6 +571,61 @@ pub fn target_object_name(base: &str, target_pid: u32) -> String {
     format!("{base}{target_pid}")
 }
 
+/// Which hook build a channel talks to. The wire protocol is the same; the
+/// object-name prefix and a few fork-only extensions differ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HookFlavor {
+    /// Our own fork build (`RalphCaptureHook_` names). Unsigned; development
+    /// only (`RALPH_CAPTURE_HOOK_FLAVOR=own`).
+    Own,
+    /// OBS Studio's own release files, unmodified and signed by the OBS
+    /// Project (`CaptureHook_` names). The default.
+    ObsSigned,
+}
+
+impl HookFlavor {
+    /// The kernel-object name prefix the DLL uses.
+    pub fn prefix(self) -> &'static str {
+        match self {
+            HookFlavor::Own => PRIVATE_NS,
+            HookFlavor::ObsSigned => OBS_NS,
+        }
+    }
+
+    /// Stable string reported in `Capture_Status`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            HookFlavor::Own => "own",
+            HookFlavor::ObsSigned => "obs-signed",
+        }
+    }
+
+    /// Fork only: `hook_info.frame_count` advances once per captured present,
+    /// so delivery is present-accurate. The stock DLL leaves it at 0 and the
+    /// host paces on a timer.
+    pub fn has_present_counter(self) -> bool {
+        self == HookFlavor::Own
+    }
+
+    /// Fork only: the DLL unhooks, unloads, and signals `Exit` on stop. The
+    /// stock DLL idles its hooks and stays loaded until the game exits.
+    pub fn acks_exit(self) -> bool {
+        self == HookFlavor::Own
+    }
+
+    /// Fork only: the DLL writes `graphics-hook-<pid>.log` from `DllMain`.
+    pub fn writes_pid_log(self) -> bool {
+        self == HookFlavor::Own
+    }
+}
+
+/// [`target_object_name`] in `flavor`'s namespace. `base` is one of this
+/// module's (`RalphCaptureHook_`-prefixed) base names.
+pub fn flavor_object_name(flavor: HookFlavor, base: &str, target_pid: u32) -> String {
+    let suffix = base.strip_prefix(PRIVATE_NS).unwrap_or(base);
+    format!("{}{suffix}{target_pid}", flavor.prefix())
+}
+
 /// Build the shtex data mapping name `"CaptureHook_Texture_<root-hwnd>_<map_id>"`.
 ///
 /// In `graphics-hook.c::init_shared_info` the name is
@@ -583,6 +638,14 @@ pub fn target_object_name(base: &str, target_pid: u32) -> String {
 /// per-target root-window and `map_id` keys — rather than a reimplementation.
 pub fn shtex_mapping_name(root_window: u64, map_id: u32) -> String {
     format!("{SHMEM_TEXTURE}_{root_window}_{map_id}")
+}
+
+/// [`shtex_mapping_name`] in `flavor`'s namespace.
+pub fn flavor_shtex_mapping_name(flavor: HookFlavor, root_window: u64, map_id: u32) -> String {
+    let suffix = SHMEM_TEXTURE
+        .strip_prefix(PRIVATE_NS)
+        .unwrap_or(SHMEM_TEXTURE);
+    format!("{}{suffix}_{root_window}_{map_id}", flavor.prefix())
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -667,23 +730,29 @@ impl HookLogPipe {
     /// Create the server pipe for `target_pid` and spawn the drain thread.
     /// Returns `None` if the pipe could not be created (non-fatal — capture
     /// works without DLL logs).
-    fn start(target_pid: u32) -> Option<Self> {
-        use windows::Win32::Storage::FileSystem::{FILE_FLAG_OVERLAPPED, PIPE_ACCESS_INBOUND};
+    fn start(flavor: HookFlavor, target_pid: u32) -> Option<Self> {
+        use windows::Win32::Storage::FileSystem::{FILE_FLAG_OVERLAPPED, PIPE_ACCESS_DUPLEX};
         use windows::Win32::System::Pipes::{
             CreateNamedPipeW, PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE, PIPE_WAIT,
         };
         use windows::Win32::System::Threading::CreateEventW;
 
         // Match the DLL's name exactly: "\\.\pipe\" + PIPE_NAME + <pid>.
-        let pipe_name = format!(r"\\.\pipe\{}{}", PIPE_NAME, target_pid);
+        let pipe_name = format!(
+            r"\\.\pipe\{}",
+            flavor_object_name(flavor, PIPE_NAME, target_pid)
+        );
         let wide = HSTRING::from(pipe_name.as_str());
 
-        // Inbound, message-mode, OVERLAPPED so connect/read are cancellable.
-        // Single instance (one DLL per pid).
+        // Duplex, message-mode, OVERLAPPED so connect/read are cancellable.
+        // Single instance (one DLL per pid). Duplex because the DLL's client
+        // (ipc-util `ipc_pipe_client_open`) opens with GENERIC_READ |
+        // GENERIC_WRITE, which an inbound-only pipe refuses; OBS's host also
+        // creates it PIPE_ACCESS_DUPLEX.
         let handle = unsafe {
             CreateNamedPipeW(
                 &wide,
-                PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
                 1,    // max instances
                 4096, // out buffer (unused; inbound)
@@ -974,6 +1043,12 @@ impl DxgiOffsets {
 #[cfg(windows)]
 pub struct ObsIpcChannel {
     target_pid: u32,
+    /// Which DLL build this channel drives (names + capabilities).
+    flavor: HookFlavor,
+    /// `hook_info.hook_ver_major/minor` once the mapping is open.
+    hook_version: Option<(u32, u32)>,
+    /// The DLL reported a `hook_ver_major` this host does not speak.
+    version_unsupported: bool,
     /// Keepalive mutex — held open for the channel's lifetime so the hook does
     /// not self-eject (`capture_alive`).
     keepalive_mutex: HANDLE,
@@ -1029,7 +1104,7 @@ pub struct ObsIpcChannel {
     /// Last time the paced reuse fallback emitted a frame (counter-less DLL
     /// path only). Caps that fallback at `frame_interval_ns` so a stale DLL
     /// still delivers at the negotiated rate without duplicate-encoding faster.
-    last_legacy_emit: Option<std::time::Instant>,
+    legacy_next_due: Option<std::time::Instant>,
     /// Poll budget retained from construction for API compatibility
     /// (`start_with_timeout`). No longer used as a per-frame `HookReady` wait —
     /// that wait is now non-blocking (timeout 0), because `HookReady` is a
@@ -1123,6 +1198,24 @@ impl ObsIpcChannel {
         frame_interval_ns: u64,
         timeout_ms: u32,
     ) -> Result<Self, IpcError> {
+        Self::start_flavor(
+            HookFlavor::Own,
+            target_pid,
+            offsets,
+            frame_interval_ns,
+            timeout_ms,
+        )
+    }
+
+    /// [`start_with_all_offsets`](Self::start_with_all_offsets) for a given
+    /// [`HookFlavor`]: its object names, and its capabilities.
+    pub fn start_flavor(
+        flavor: HookFlavor,
+        target_pid: u32,
+        offsets: AllGraphicsOffsets,
+        frame_interval_ns: u64,
+        timeout_ms: u32,
+    ) -> Result<Self, IpcError> {
         // The keepalive mutex MUST exist for the hook to capture: the injected
         // DLL gates ALL capture init on `capture_alive()`
         // (graphics-hook.h::capture_should_init → capture_alive), which does
@@ -1134,10 +1227,13 @@ impl ObsIpcChannel {
         // fire (the observed `initialize_signaled_no_hookready` zero-frame bug).
         // So we CREATE it here and hold it open for the channel's lifetime; the
         // hook self-ejects (`capture_should_stop`) once we release it on stop.
-        let keepalive_mutex = create_keepalive_mutex(target_pid).unwrap_or_default();
+        let keepalive_mutex = create_keepalive_mutex_in(flavor, target_pid).unwrap_or_default();
 
         let mut channel = Self {
             target_pid,
+            flavor,
+            hook_version: None,
+            version_unsupported: false,
             keepalive_mutex,
             hook_info_map: None,
             hook_info_view: MEMORY_MAPPED_VIEW_ADDRESS::default(),
@@ -1158,14 +1254,14 @@ impl ObsIpcChannel {
             last_frame_count: None,
             counter_live: false,
             ready_since: None,
-            last_legacy_emit: None,
+            legacy_next_due: None,
             timeout_ms,
             stopped: false,
             // Start draining the DLL's log pipe immediately. The host is the
             // pipe SERVER and must create it before the DLL (the client) opens
             // it; the DLL opens it lazily on (re)start, so creating it here —
             // before `Initialize` is signaled — wins the race in the common case.
-            log_pipe: HookLogPipe::start(target_pid),
+            log_pipe: HookLogPipe::start(flavor, target_pid),
         };
 
         // Best-effort: try to complete init now. If the DLL has not created its
@@ -1185,13 +1281,13 @@ impl ObsIpcChannel {
         // The texture mutexes are created by the DLL at the very end of its
         // init; their presence is OBS's "hook loaded yet?" probe.
         if self.texture_mutexes[0].is_invalid() {
-            match open_mutex(MUTEX_TEXTURE1, self.target_pid) {
+            match open_mutex_in(self.flavor, MUTEX_TEXTURE1, self.target_pid) {
                 Ok(h) => self.texture_mutexes[0] = h,
                 Err(_) => return, // hook not loaded yet
             }
         }
         if self.texture_mutexes[1].is_invalid() {
-            match open_mutex(MUTEX_TEXTURE2, self.target_pid) {
+            match open_mutex_in(self.flavor, MUTEX_TEXTURE2, self.target_pid) {
                 Ok(h) => self.texture_mutexes[1] = h,
                 Err(_) => return,
             }
@@ -1201,14 +1297,18 @@ impl ObsIpcChannel {
         // in `start_with_all_offsets`). The DLL opens this name; it must exist
         // before the DLL's `capture_alive()` check or it never initializes.
         if self.keepalive_mutex.is_invalid() {
-            if let Ok(h) = create_keepalive_mutex(self.target_pid) {
+            if let Ok(h) = create_keepalive_mutex_in(self.flavor, self.target_pid) {
                 self.keepalive_mutex = h;
             }
         }
 
         // Open + map the 648-byte hook_info (read/write so we can publish offsets).
         if self.hook_info_map.is_none() {
-            let name = HSTRING::from(target_object_name(SHMEM_HOOK_INFO, self.target_pid));
+            let name = HSTRING::from(flavor_object_name(
+                self.flavor,
+                SHMEM_HOOK_INFO,
+                self.target_pid,
+            ));
             let map = match unsafe { OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, false, &name) } {
                 Ok(h) => h,
                 Err(_) => return,
@@ -1226,20 +1326,23 @@ impl ObsIpcChannel {
 
         // Open the events (created by the DLL's init_signals).
         if self.restart_event.is_invalid() {
-            self.restart_event =
-                open_event(EVENT_CAPTURE_RESTART, self.target_pid).unwrap_or_default();
+            self.restart_event = open_event_in(self.flavor, EVENT_CAPTURE_RESTART, self.target_pid)
+                .unwrap_or_default();
         }
         if self.stop_event.is_invalid() {
-            self.stop_event = open_event(EVENT_CAPTURE_STOP, self.target_pid).unwrap_or_default();
+            self.stop_event =
+                open_event_in(self.flavor, EVENT_CAPTURE_STOP, self.target_pid).unwrap_or_default();
         }
         if self.ready_event.is_invalid() {
-            self.ready_event = open_event(EVENT_HOOK_READY, self.target_pid).unwrap_or_default();
+            self.ready_event =
+                open_event_in(self.flavor, EVENT_HOOK_READY, self.target_pid).unwrap_or_default();
         }
         if self.exit_event.is_invalid() {
-            self.exit_event = open_event(EVENT_HOOK_EXIT, self.target_pid).unwrap_or_default();
+            self.exit_event =
+                open_event_in(self.flavor, EVENT_HOOK_EXIT, self.target_pid).unwrap_or_default();
         }
         if self.init_event.is_invalid() {
-            match open_event(EVENT_HOOK_INIT, self.target_pid) {
+            match open_event_in(self.flavor, EVENT_HOOK_INIT, self.target_pid) {
                 Ok(h) => self.init_event = h,
                 Err(_) => return, // the Initialize event must exist to proceed
             }
@@ -1431,6 +1534,31 @@ impl ObsIpcChannel {
         };
 
         if signaled {
+            // Version gate. The DLL writes hook_ver_major/minor when it
+            // publishes a texture, so check on each ready, as OBS's host does
+            // (it refuses a DLL whose major is newer than its own).
+            let version = self.read_hook_version();
+            if self.hook_version != Some(version) {
+                self.hook_version = Some(version);
+                log::info!(
+                    "[ObsIpcChannel] {} hook for pid {} reports hook_ver {}.{}",
+                    self.flavor.as_str(),
+                    self.target_pid,
+                    version.0,
+                    version.1
+                );
+            }
+            if version.0 != HOOK_VER_MAJOR {
+                if !self.version_unsupported {
+                    log::warn!(
+                        "[ObsIpcChannel] hook_ver_major {} is not {HOOK_VER_MAJOR}; refusing the \
+                         hook (hook_version_unsupported)",
+                        version.0
+                    );
+                }
+                self.version_unsupported = true;
+                return Ok(None);
+            }
             // (Re)resolve the shtex mapping for this init/resize.
             if self.resolve_shtex()?.is_some() {
                 self.ready = true;
@@ -1440,7 +1568,7 @@ impl ObsIpcChannel {
                 // texture). Reset the legacy-fallback pacer for the new surface.
                 self.last_frame_count = Some(self.read_frame_count());
                 self.ready_since = Some(std::time::Instant::now());
-                self.last_legacy_emit = None;
+                self.legacy_next_due = None;
             }
             // Never forward on the resolve poll itself — wait for the first
             // counter advance (or the counter-less grace fallback) below.
@@ -1490,33 +1618,45 @@ impl ObsIpcChannel {
         // grace window) or this is a counter-less (older/stock) DLL. After the
         // grace window, fall back to paced reuse so a counter-less DLL still
         // streams at the negotiated rate rather than tripping the watchdog.
-        const COUNTER_GRACE: std::time::Duration = std::time::Duration::from_millis(750);
+        // The stock DLL never publishes the counter, so it only needs to skip
+        // the first, not-yet-copied texture: about one capture interval.
+        let counter_grace = if self.flavor.has_present_counter() {
+            std::time::Duration::from_millis(750)
+        } else {
+            std::time::Duration::from_nanos(self.frame_interval_ns.clamp(16_000_000, 100_000_000))
+        };
         let waited = self.ready_since.map(|t| t.elapsed()).unwrap_or_default();
-        if waited < COUNTER_GRACE {
+        if waited < counter_grace {
             return Ok(None);
         }
-        // Legacy paced fallback: emit at most once per frame_interval_ns.
+        // Timer delivery: one frame per frame_interval_ns, on a running
+        // deadline so poll and encoder delays do not accumulate.
         let interval = std::time::Duration::from_nanos(self.frame_interval_ns.max(1));
-        let due = self
-            .last_legacy_emit
-            .map(|t| t.elapsed() >= interval)
-            .unwrap_or(true);
-        if !due {
+        let now = std::time::Instant::now();
+        let Some(next_due) = next_timer_due(now, self.legacy_next_due, interval) else {
             return Ok(None);
-        }
+        };
         if let Some(meta) = self.current_meta()? {
-            if self.last_legacy_emit.is_none() {
+            if self.legacy_next_due.is_none() && !self.flavor.has_present_counter() {
+                log::info!(
+                    "[ObsIpcChannel] {} hook for pid {}: pacing=timer at frame_interval ({} ns); \
+                     the stock DLL has no present counter",
+                    self.flavor.as_str(),
+                    self.target_pid,
+                    self.frame_interval_ns,
+                );
+            } else if self.legacy_next_due.is_none() {
                 log::warn!(
                     "[ObsIpcChannel] hook_info.frame_count never advanced within {}ms for pid {} \
                      — DLL does not publish the present counter (older/stock graphics-hook?). \
                      Falling back to paced reuse delivery at frame_interval ({} ns). Rebuild the \
                      fork DLL (build-capture-fork.ps1) for present-accurate capture.",
-                    COUNTER_GRACE.as_millis(),
+                    counter_grace.as_millis(),
                     self.target_pid,
                     self.frame_interval_ns,
                 );
             }
-            self.last_legacy_emit = Some(std::time::Instant::now());
+            self.legacy_next_due = Some(next_due);
             return Ok(Some(self.stamp(meta)));
         }
         Ok(None)
@@ -1669,7 +1809,7 @@ impl ObsIpcChannel {
         let mut opened: Option<(String, HANDLE, MEMORY_MAPPED_VIEW_ADDRESS)> = None;
         let mut last_err_code: i32 = 0;
         for window_val in candidates {
-            let mapping_name = shtex_mapping_name(window_val, info.map_id);
+            let mapping_name = flavor_shtex_mapping_name(self.flavor, window_val, info.map_id);
             let name = HSTRING::from(mapping_name.as_str());
             let map = match unsafe { OpenFileMappingW(FILE_MAP_READ.0, false, &name) } {
                 Ok(h) => h,
@@ -1813,6 +1953,41 @@ impl ObsIpcChannel {
         self.target_pid
     }
 
+    pub fn flavor(&self) -> HookFlavor {
+        self.flavor
+    }
+
+    /// Whether the DLL's objects were found and `Initialize` was signaled:
+    /// `false` after the first-frame window means the DLL never loaded.
+    pub fn is_initialized(&self) -> bool {
+        self.initialized
+    }
+
+    /// `hook_info.hook_ver_major/minor`, once read.
+    pub fn hook_version(&self) -> Option<(u32, u32)> {
+        self.hook_version
+    }
+
+    /// The DLL reported a `hook_ver_major` this host does not speak.
+    pub fn version_unsupported(&self) -> bool {
+        self.version_unsupported
+    }
+
+    fn read_hook_version(&self) -> (u32, u32) {
+        if self.hook_info_view.Value.is_null() {
+            return (0, 0);
+        }
+        // SAFETY: the view maps HOOK_INFO_LEN bytes; the version is the first
+        // 8. Volatile, like the other cross-process reads.
+        unsafe {
+            let base = self.hook_info_view.Value as *const u8;
+            (
+                std::ptr::read_volatile(base.add(OFF_HOOK_VER_MAJOR).cast::<u32>()),
+                std::ptr::read_volatile(base.add(OFF_HOOK_VER_MINOR).cast::<u32>()),
+            )
+        }
+    }
+
     /// Acquire the OBS 32.1.2 texture-access lock (`CaptureHook_TextureMutex1`)
     /// before a per-frame read of the shared surface, waiting at most
     /// `timeout_ms` milliseconds. Returns `true` only if the lock is held on
@@ -1886,7 +2061,14 @@ impl ObsIpcChannel {
         close_if_valid(self.keepalive_mutex);
         self.keepalive_mutex = HANDLE::default();
 
-        if !self.exit_event.is_invalid() {
+        if !self.flavor.acks_exit() {
+            log::info!(
+                "[ObsIpcChannel] {} hook for pid {} stopped; it stays loaded (idle) until the \
+                 game exits",
+                self.flavor.as_str(),
+                self.target_pid
+            );
+        } else if !self.exit_event.is_invalid() {
             let unload_status = self.read_unload_status();
             let wait = unsafe { WaitForSingleObject(self.exit_event, HOOK_EXIT_WAIT_MS) };
             match wait {
@@ -2007,8 +2189,14 @@ fn default_frame_interval_ns() -> u64 {
 /// ERROR_FILE_NOT_FOUND (the DLL has not created it yet) to an error the caller
 /// treats as "retry later".
 #[cfg(windows)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn open_event(base: &str, target_pid: u32) -> Result<HANDLE, IpcError> {
-    let name = HSTRING::from(target_object_name(base, target_pid));
+    open_event_in(HookFlavor::Own, base, target_pid)
+}
+
+#[cfg(windows)]
+fn open_event_in(flavor: HookFlavor, base: &str, target_pid: u32) -> Result<HANDLE, IpcError> {
+    let name = HSTRING::from(flavor_object_name(flavor, base, target_pid));
     unsafe {
         OpenEventW(
             SYNCHRONIZATION_ACCESS_RIGHTS(EVENT_MODIFY_STATE | SYNCHRONIZE),
@@ -2021,8 +2209,14 @@ fn open_event(base: &str, target_pid: u32) -> Result<HANDLE, IpcError> {
 
 /// Open an existing per-target named mutex with sync access.
 #[cfg(windows)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn open_mutex(base: &str, target_pid: u32) -> Result<HANDLE, IpcError> {
-    let name = HSTRING::from(target_object_name(base, target_pid));
+    open_mutex_in(HookFlavor::Own, base, target_pid)
+}
+
+#[cfg(windows)]
+fn open_mutex_in(flavor: HookFlavor, base: &str, target_pid: u32) -> Result<HANDLE, IpcError> {
+    let name = HSTRING::from(flavor_object_name(flavor, base, target_pid));
     unsafe { OpenMutexW(SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE), false, &name) }.map_err(|e| {
         // Preserve ERROR_FILE_NOT_FOUND so the caller can distinguish "not yet"
         // from a real failure.
@@ -2072,8 +2266,18 @@ fn root_ancestor_window(window: u32) -> u64 {
 /// somehow created elsewhere first. Releasing/closing the handle on
 /// [`ObsIpcChannel::stop`] lets the hook self-eject via `capture_should_stop`.
 #[cfg(windows)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn create_keepalive_mutex(target_pid: u32) -> Result<HANDLE, IpcError> {
-    let name = HSTRING::from(target_object_name(WINDOW_HOOK_KEEPALIVE, target_pid));
+    create_keepalive_mutex_in(HookFlavor::Own, target_pid)
+}
+
+#[cfg(windows)]
+fn create_keepalive_mutex_in(flavor: HookFlavor, target_pid: u32) -> Result<HANDLE, IpcError> {
+    let name = HSTRING::from(flavor_object_name(
+        flavor,
+        WINDOW_HOOK_KEEPALIVE,
+        target_pid,
+    ));
     // initial_owner=false: we want the mutex to exist as a named kernel object,
     // not to actually take ownership of it (the DLL never waits on it — it only
     // probes existence via OpenMutexW). lpMutexAttributes=None (default DACL).
@@ -2153,6 +2357,50 @@ pub fn foreign_obs_hook_present(pid: u32) -> bool {
         || obs_mutex_exists("TextureMutex1")
 }
 
+/// Whether another host (OBS Studio, for instance) is driving a stock hook in
+/// `pid` right now: its keepalive mutex `CaptureHook_KeepAlive<pid>` exists.
+/// Read-only; must be checked before this host creates its own keepalive.
+/// Two hosts on one `hook_info` would fight over `Stop` and `frame_interval`.
+#[cfg(windows)]
+pub fn stock_host_active(pid: u32) -> bool {
+    let name = HSTRING::from(flavor_object_name(
+        HookFlavor::ObsSigned,
+        WINDOW_HOOK_KEEPALIVE,
+        pid,
+    ));
+    match unsafe { OpenMutexW(SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE), false, &name) } {
+        Ok(h) => {
+            close_if_valid(h);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// Timer pacing for a hook without a present counter. Returns the next
+/// deadline when a frame is due at `now`, `None` when it is not. Keeps a
+/// running deadline (`due + interval`) so a late poll does not push every
+/// later frame back; a stall longer than one interval restarts the schedule
+/// instead of bursting.
+fn next_timer_due(
+    now: std::time::Instant,
+    next_due: Option<std::time::Instant>,
+    interval: std::time::Duration,
+) -> Option<std::time::Instant> {
+    let tolerance = interval / 8;
+    match next_due {
+        None => Some(now + interval),
+        Some(due) if now + tolerance >= due => {
+            if now >= due + interval {
+                Some(now + interval)
+            } else {
+                Some(due + interval)
+            }
+        }
+        Some(_) => None,
+    }
+}
+
 /// Close a handle if it is valid (non-null, non-INVALID).
 #[cfg(windows)]
 fn close_if_valid(handle: HANDLE) {
@@ -2160,6 +2408,60 @@ fn close_if_valid(handle: HANDLE) {
         unsafe {
             let _ = CloseHandle(handle);
         }
+    }
+}
+
+#[cfg(test)]
+mod timer_pacing_tests {
+    use super::next_timer_due;
+    use std::time::{Duration, Instant};
+
+    /// Poll every `poll` for `secs`, emitting whenever due; count emits.
+    fn emits(interval_ms: u64, poll_ms: u64, extra_every: Option<(u64, u64)>, secs: u64) -> u64 {
+        let start = Instant::now();
+        let interval = Duration::from_millis(interval_ms);
+        let mut now = start;
+        let mut due = None;
+        let mut count = 0;
+        while now < start + Duration::from_secs(secs) {
+            if let Some(next) = next_timer_due(now, due, interval) {
+                due = Some(next);
+                count += 1;
+                // Encoder hand-off cost after an emit.
+                if let Some((every, cost)) = extra_every {
+                    if count % every == 0 {
+                        now += Duration::from_millis(cost);
+                    }
+                }
+            }
+            now += Duration::from_millis(poll_ms);
+        }
+        count
+    }
+
+    #[test]
+    fn a_4ms_poll_still_delivers_60_fps() {
+        // The capture loop idles 4 ms between polls; "interval since the last
+        // emit" rounded every frame up to 20 ms (50 fps).
+        let n = emits(16, 4, None, 10);
+        assert!((600..=630).contains(&n), "{n}");
+    }
+
+    #[test]
+    fn encoder_hand_off_time_does_not_accumulate() {
+        let n = emits(33, 4, Some((1, 8)), 10);
+        assert!((295..=305).contains(&n), "{n}");
+    }
+
+    #[test]
+    fn a_long_stall_restarts_without_a_burst() {
+        let start = Instant::now();
+        let interval = Duration::from_millis(33);
+        let due = next_timer_due(start, None, interval);
+        let late = start + Duration::from_secs(1);
+        let next = next_timer_due(late, due, interval).expect("due after a stall");
+        assert_eq!(next, late + interval);
+        assert!(next_timer_due(late + Duration::from_millis(4), Some(next), interval).is_none());
     }
 }
 

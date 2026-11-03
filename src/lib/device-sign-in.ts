@@ -38,7 +38,7 @@ export function getDeviceInfo(): DeviceInfo {
   const platform = getDevicePlatform();
   return {
     ...(platform ? { platform } : {}),
-    label: isMobile() ? "Ralph Meet Mobile" : "Ralph Meet Desktop",
+    label: isMobile() ? "Yap Mobile" : "Yap Desktop",
   };
 }
 

@@ -14,6 +14,13 @@ namespace Installer
 
         protected override void OnStartup(StartupEventArgs e)
         {
+#if DEBUG
+            // --preview / --capture: show the window's states without installing or logging.
+            if (Ui.Preview.TryStart(this, e.Args))
+            {
+                return;
+            }
+#endif
             InstallerLogger.Initialize(e.Args);
             InstallerLogger.Info("App startup entered.");
 
@@ -34,7 +41,7 @@ namespace Installer
                     InstallerLogger.Error("Failed to launch the active installed version.", ex);
                     MessageBox.Show(
                         InstallerLogger.AppendLogPath(ex.Message),
-                        "RalphMeet Launch Failed",
+                        "Yap launch failed",
                         MessageBoxButton.OK,
                         MessageBoxImage.Error);
                     Environment.Exit(1);
@@ -74,11 +81,36 @@ namespace Installer
                 InstallerLogger.Error("AppDomain unhandled exception.", ex ?? new Exception("Non-Exception unhandled failure."));
             };
 
+            // --cleanup-legacy: move a leftover Ralph Meet install onto Yap. No window; add /S to
+            // also skip the error box.
+            if (LegacyCleanup.IsCleanupRequest(e.Args))
+            {
+                try
+                {
+                    InstallerLogic.RunLegacyCleanupAsync().GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    InstallerLogger.Error("Ralph Meet cleanup failed.", ex);
+                    if (!isSilent)
+                    {
+                        MessageBox.Show(
+                            InstallerLogger.AppendLogPath(ex.Message),
+                            "Yap cleanup failed",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
+                    }
+                    Environment.Exit(1);
+                }
+                Environment.Exit(0);
+            }
+
             if (isUninstall)
             {
                 if (!isSilent)
                 {
                     base.OnStartup(e);
+                    new MainWindow().Show();
                     return;
                 }
 
@@ -99,7 +131,7 @@ namespace Installer
             {
                 try
                 {
-                    InstallerLogic.RunInstallationAsync(!IsNoLaunch).GetAwaiter().GetResult();
+                    InstallerLogic.RunInstallationAsync(!IsNoLaunch, relaunchOnFailure: true).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
@@ -111,6 +143,7 @@ namespace Installer
             }
 
             base.OnStartup(e);
+            new MainWindow().Show();
         }
 
         private static string GetCurrentProcessPath()

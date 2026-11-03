@@ -2,7 +2,7 @@ import {
   ExternalLinkConfirmModal,
   type PendingExternalLink,
 } from "@/components/ui/ExternalLinkConfirmModal";
-import { isDesktop } from "@/lib/platform";
+import { getHost } from "@/lib/host";
 import { useCallback, useMemo, useState } from "react";
 
 const TRUSTED_EXTERNAL_DOMAINS_KEY = "ralph-meet:trusted-external-link-domains";
@@ -55,14 +55,8 @@ function isLeavingApplication(url: URL): boolean {
   return url.origin !== window.location.origin;
 }
 
-async function openExternalUrl(url: string): Promise<void> {
-  if (isDesktop()) {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-    return;
-  }
-
-  window.open(url, "_blank", "noopener,noreferrer");
+function openExternalUrl(url: string): Promise<void> {
+  return getHost().window.openExternal(url);
 }
 
 export function useExternalLinkConfirmation() {

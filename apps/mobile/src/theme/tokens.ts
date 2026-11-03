@@ -108,9 +108,9 @@ const INPUTS: Record<ThemeId, ThemeInput> = {
     ink: ["#f2f2f3", "#b4b4ba", "#8b8b92", "#55555c"],
     primaryFill: "#f2f2f3",
     onPrimary: "#000000",
-    accentInk: "#a5adff",
+    accentInk: "#ff8ad8",
     brand: "#f2f2f3",
-    brand2: "#a5adff",
+    brand2: "#ff3d8b",
     shadowRgb: [0, 0, 0],
   },
   light: {
@@ -119,9 +119,9 @@ const INPUTS: Record<ThemeId, ThemeInput> = {
     ink: ["#0b0b0d", "#4a4a52", "#6b6b73", "#a1a1a8"],
     primaryFill: "#0b0b0d",
     onPrimary: "#ffffff",
-    accentInk: "#4a54d4",
+    accentInk: "#c0127a",
     brand: "#0b0b0d",
-    brand2: "#4a54d4",
+    brand2: "#d81b72",
     shadowRgb: [0, 0, 0],
   },
   "miku-dark": {

@@ -12,15 +12,17 @@ namespace Installer
 {
     public class InstallerLogic
     {
-        private const string DisplayName = "RalphMeet";
+        public const string DisplayName = "Yap";
         private const string Publisher = "115jon";
-        private const string CurrentUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\RalphMeet";
-        private const string LegacyUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Ralph Meet";
-        private const string CurrentPublisherKeyPath = @"Software\115jon\RalphMeet";
-        private const string LegacyPublisherKeyPath = @"Software\Jon Titor\Ralph Meet";
+        private const string CurrentUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Yap";
+        private const string CurrentPublisherKeyPath = @"Software\115jon\Yap";
 
-        public const string ExecutableFileName = "RalphMeet.exe";
+        public const string ExecutableFileName = InstallRootLayout.RootStubFileName;
 
+        /// <summary>
+        /// Stopped by name before files are replaced; RalphMeet is the legacy install's app. Yap
+        /// itself is matched by path only (a bare "Yap" name is too generic to kill by name).
+        /// </summary>
         private static readonly string[] ManagedProcessNames =
         {
             "RalphMeet",
@@ -31,9 +33,14 @@ namespace Installer
             "get-graphics-offsets64"
         };
 
-        private static readonly string[] ShortcutFileNames = { "RalphMeet.lnk", "Ralph Meet.lnk" };
+        private static readonly string[] ShortcutFileNames = { DisplayName + ".lnk" };
 
-        public static async Task RunInstallationAsync(bool launchApplication = true)
+        /// <param name="relaunchOnFailure">
+        /// Start the installed version again if this install fails. For the silent updater only:
+        /// it closed the app and nobody sees the error. The interactive window shows the error
+        /// and offers Try again, which would close a relaunched app again.
+        /// </param>
+        public static async Task RunInstallationAsync(bool launchApplication = true, bool relaunchOnFailure = false)
         {
             await Task.Run(() =>
             {
@@ -49,61 +56,116 @@ namespace Installer
                 LogKnownLockDiagnostics(layout, "Pre-install lock snapshot");
 
                 WaitForManagedProcessesToExit(environment, TimeSpan.FromSeconds(30));
-                DeleteShortcuts(environment);
-                using (RegistryKey userRoot = environment.OpenUserRoot())
+
+                try
                 {
-                    DeleteRegistryKeyTree(userRoot, LegacyUninstallKeyPath);
-                    DeleteRegistryKeyTree(userRoot, LegacyPublisherKeyPath);
+                    InstallAndActivate(environment, layout, legacyInstallDir, launchApplication);
                 }
-                DeleteDirectoryIfExists(legacyInstallDir);
-
-                Directory.CreateDirectory(layout.RootPath);
-                Directory.CreateDirectory(layout.StagingPath);
-                InstallerLogger.Info("Ensured install root exists.");
-
-                string stagingDirectoryPath = ActivationManager.PrepareStagingDirectory(layout, DisplayName);
-                InstallerLogger.Info("Prepared staging directory: " + stagingDirectoryPath);
-                ExtractPayload(stagingDirectoryPath);
-
-                string payloadExecutablePath = Path.Combine(stagingDirectoryPath, ExecutableFileName);
-                string payloadVersion = ResolvePayloadVersion(payloadExecutablePath);
-                InstallerLogger.Info("Resolved payload version: " + payloadVersion);
-
-                ActivationResult activation = ActivationManager.Activate(layout, stagingDirectoryPath, payloadVersion);
-                InstallerLogger.Info("Activated version directory: " + activation.ActiveDirectoryPath);
-
-                DeleteLegacyRootEntries(layout);
-
-                RootLauncher.Refresh(layout, activation.ActiveDirectoryPath);
-                string uninstallerPath = CopyBootstrapperToUninstaller(layout.RootPath);
-                RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
-                bool hasRootStub = File.Exists(layout.RootStubPath);
-                InstallerLogger.Info("App entry point: " + launcherPath + " " + launcherArguments);
-
-                using (RegistryKey userRoot = environment.OpenUserRoot())
+                catch
                 {
-                    CreateUninstallRegistryKeys(userRoot, layout.RootPath, activation.ActiveExecutablePath, uninstallerPath, launcherPath);
-                    CreateCompatibilityInstallLocationKey(userRoot, layout.RootPath);
-                    RegisterDeepLinkProtocol(userRoot, launcherPath, launcherArguments);
-                    if (hasRootStub)
+                    // Nothing destructive ran before activation, so the version that was
+                    // installed is intact. The updater closed it; bring it back.
+                    if (launchApplication && relaunchOnFailure)
                     {
-                        LauncherMigration.MigrateRunValue(userRoot, layout);
+                        // A Ralph Meet client updating to Yap has no Yap install yet: relaunch Ralph Meet,
+                        // which is still intact because the legacy cleanup runs after activation.
+                        if (!TryRelaunchInstalledVersion(layout))
+                        {
+                            TryRelaunchInstalledVersion(environment.LegacyLayout);
+                        }
                     }
+                    throw;
                 }
+            }).ConfigureAwait(false);
+        }
 
-                CreateShortcuts(environment, launcherPath, launcherArguments);
+        private static void InstallAndActivate(
+            InstallEnvironment environment,
+            InstallRootLayout layout,
+            string legacyInstallDir,
+            bool launchApplication)
+        {
+            Directory.CreateDirectory(layout.RootPath);
+            Directory.CreateDirectory(layout.StagingPath);
+            InstallerLogger.Info("Ensured install root exists.");
+
+            string stagingDirectoryPath = ActivationManager.PrepareStagingDirectory(layout, DisplayName);
+            InstallerLogger.Info("Prepared staging directory: " + stagingDirectoryPath);
+            ExtractPayload(stagingDirectoryPath);
+
+            string payloadExecutablePath = Path.Combine(stagingDirectoryPath, ExecutableFileName);
+            string payloadVersion = ResolvePayloadVersion(payloadExecutablePath);
+            InstallerLogger.Info("Resolved payload version: " + payloadVersion);
+
+            ActivationResult activation = ActivationManager.Activate(layout, stagingDirectoryPath, payloadVersion);
+            InstallerLogger.Info("Activated version directory: " + activation.ActiveDirectoryPath);
+
+            // Remove the legacy install only once the new version is active, so a failed
+            // install never leaves the user without shortcuts or an app. CreateShortcuts
+            // below replaces the current shortcuts itself.
+            DeleteShortcuts(environment);
+            DeleteDirectoryIfExists(legacyInstallDir);
+
+            DeleteLegacyRootEntries(layout);
+
+            RootLauncher.Refresh(layout, activation.ActiveDirectoryPath);
+            string uninstallerPath = CopyBootstrapperToUninstaller(layout.RootPath);
+            RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
+            bool hasRootStub = File.Exists(layout.RootStubPath);
+            InstallerLogger.Info("App entry point: " + launcherPath + " " + launcherArguments);
+
+            using (RegistryKey userRoot = environment.OpenUserRoot())
+            {
+                // Ralph Meet -> Yap: user data, autostart and pins move over, the rest is removed.
+                // The deep-link registration below then points ralphmeet:// at Yap.
+                RunLegacyCleanupStep(environment, userRoot, launcherPath, launcherArguments);
+                CreateUninstallRegistryKeys(userRoot, layout.RootPath, activation.ActiveExecutablePath, uninstallerPath, launcherPath);
+                CreateCompatibilityInstallLocationKey(userRoot, layout.RootPath);
+                RegisterDeepLinkProtocol(userRoot, launcherPath, launcherArguments);
                 if (hasRootStub)
                 {
-                    int pins = LauncherMigration.RetargetPinnedShortcuts(environment.TaskbarPinsDirectory, layout);
-                    InstallerLogger.Info("Retargeted " + pins + " taskbar pin(s) to the root launcher.");
+                    LauncherMigration.MigrateRunValue(userRoot, layout);
+                }
+            }
+
+            CreateShortcuts(environment, launcherPath, launcherArguments);
+            if (hasRootStub)
+            {
+                int pins = LauncherMigration.RetargetPinnedShortcuts(environment.TaskbarPinsDirectory, layout);
+                InstallerLogger.Info("Retargeted " + pins + " taskbar pin(s) to the root launcher.");
+            }
+
+            if (launchApplication)
+            {
+                LaunchApplication(launcherPath, launcherArguments, layout.RootPath);
+            }
+            InstallerLogger.Info("Installation finished successfully.");
+        }
+
+        /// <summary>
+        /// After a failed install, start the version current.json still points at, if any.
+        /// Never throws: the install error is what the caller reports.
+        /// </summary>
+        private static bool TryRelaunchInstalledVersion(InstallRootLayout layout)
+        {
+            try
+            {
+                if (InstallState.LoadIfExists(layout.CurrentStatePath) == null)
+                {
+                    InstallerLogger.Info("Install failed and no version is installed in " + layout.RootPath + "; nothing to relaunch there.");
+                    return false;
                 }
 
-                if (launchApplication)
-                {
-                    LaunchApplication(launcherPath, launcherArguments, layout.RootPath);
-                }
-                InstallerLogger.Info("Installation finished successfully.");
-            }).ConfigureAwait(false);
+                RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
+                InstallerLogger.Warn("Install failed; relaunching the installed version.");
+                LaunchApplication(launcherPath, launcherArguments, layout.RootPath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                InstallerLogger.Error("Could not relaunch the installed version after a failed install.", ex);
+                return false;
+            }
         }
 
         public static async Task RunUninstallationAsync()
@@ -125,19 +187,77 @@ namespace Installer
                 using (RegistryKey userRoot = environment.OpenUserRoot())
                 {
                     DeleteRegistryKeyTree(userRoot, CurrentUninstallKeyPath);
-                    DeleteRegistryKeyTree(userRoot, LegacyUninstallKeyPath);
                     DeleteRegistryKeyTree(userRoot, CurrentPublisherKeyPath);
-                    DeleteRegistryKeyTree(userRoot, LegacyPublisherKeyPath);
                     UnregisterDeepLinkProtocolIfOwned(userRoot, layout);
+                    RemoveVulkanLayerRegistrations(userRoot, layout);
                     if (LauncherMigration.RemoveRunValueIfOwned(userRoot, layout))
                     {
-                        InstallerLogger.Info("Removed the RalphMeet Run value.");
+                        InstallerLogger.Info("Removed the Yap Run value.");
+                    }
+
+                    // Whatever a Ralph Meet install left behind. User data stays.
+                    try
+                    {
+                        LegacyCleanup.RemoveLeftovers(environment, userRoot);
+                    }
+                    catch (Exception ex)
+                    {
+                        InstallerLogger.Warn("Failed to remove Ralph Meet leftovers: " + ex.Message);
                     }
                 }
                 DeleteDirectoryIfExists(legacyInstallDir);
                 ScheduleDirectoryDeletion(layout.RootPath);
                 InstallerLogger.Info("Uninstallation cleanup scheduled successfully.");
             }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// YapSetup.exe --cleanup-legacy: the same Ralph Meet migration an install runs, on its own.
+        /// Refuses (throws) when Yap is not installed, so it never leaves the user without an app.
+        /// </summary>
+        public static async Task RunLegacyCleanupAsync()
+        {
+            await Task.Run(() =>
+            {
+                InstallEnvironment environment = InstallEnvironment.Current;
+                InstallerLogger.Info("Starting Ralph Meet cleanup.");
+                LogSandbox(environment);
+                WaitForLegacyProcessesToExit(environment, TimeSpan.FromSeconds(30));
+                using (RegistryKey userRoot = environment.OpenUserRoot())
+                {
+                    RunLegacyCleanup(environment, userRoot);
+                }
+                InstallerLogger.Info("Ralph Meet cleanup finished.");
+            }).ConfigureAwait(false);
+        }
+
+        /// <summary>The --cleanup-legacy work once Ralph Meet has exited. Separate for tests.</summary>
+        public static LegacyCleanupResult RunLegacyCleanup(InstallEnvironment environment, RegistryKey userRoot)
+        {
+            InstallRootLayout layout = environment.Layout;
+            if (InstallState.LoadIfExists(layout.CurrentStatePath) == null)
+            {
+                throw new InvalidOperationException(
+                    "Yap is not installed at " + layout.RootPath + ", so the Ralph Meet install was left in place. Install Yap first.");
+            }
+
+            RootLauncher.ResolveEntryPoint(layout, out string launcherPath, out string launcherArguments);
+            LegacyCleanupResult result = LegacyCleanup.Run(environment, userRoot, launcherPath, launcherArguments);
+            RegisterDeepLinkProtocol(userRoot, launcherPath, launcherArguments);
+            return result;
+        }
+
+        /// <summary>The install's legacy step. A failure here never fails the install: Yap is already active.</summary>
+        private static void RunLegacyCleanupStep(InstallEnvironment environment, RegistryKey userRoot, string launcherPath, string launcherArguments)
+        {
+            try
+            {
+                LegacyCleanup.Run(environment, userRoot, launcherPath, launcherArguments);
+            }
+            catch (Exception ex)
+            {
+                InstallerLogger.Warn("Ralph Meet cleanup failed; YapSetup.exe --cleanup-legacy can retry it: " + ex.Message);
+            }
         }
 
         private static void LogSandbox(InstallEnvironment environment)
@@ -162,7 +282,27 @@ namespace Installer
                 WaitForProcessesToExit(ManagedProcessNames, timeout);
             }
 
-            WaitForInstalledArtifactsToExit(layout.GetInstalledExecutablePaths(ExecutableFileName), layout.RootPath, timeout);
+            WaitForInstalledArtifactsToExit(
+                layout.GetInstalledExecutablePaths(ExecutableFileName).Concat(GetLegacyExecutablePaths(environment)),
+                layout.RootPath,
+                timeout);
+        }
+
+        /// <summary>Stops only Ralph Meet (by name outside the sandbox, by path always).</summary>
+        private static void WaitForLegacyProcessesToExit(InstallEnvironment environment, TimeSpan timeout)
+        {
+            if (!environment.IsSandbox)
+            {
+                WaitForProcessesToExit(new[] { Path.GetFileNameWithoutExtension(InstallRootLayout.LegacyExecutableFileName) }, timeout);
+            }
+
+            WaitForInstalledArtifactsToExit(GetLegacyExecutablePaths(environment), environment.LegacyLayout.RootPath, timeout);
+        }
+
+        private static IEnumerable<string> GetLegacyExecutablePaths(InstallEnvironment environment)
+        {
+            InstallRootLayout legacy = environment.LegacyLayout;
+            return legacy.GetInstalledExecutablePaths(legacy.ExecutableFileName);
         }
 
         private static void WaitForProcessesToExit(IEnumerable<string> processNames, TimeSpan timeout)
@@ -556,19 +696,28 @@ namespace Installer
 
         private static void RegisterDeepLinkProtocol(RegistryKey userRoot, string launcherPath, string launcherArguments)
         {
-            InstallerLogger.Info("Registering ralphmeet:// deep-link protocol to launcher " + launcherPath);
+            InstallerLogger.Info("Registering yap:// and ralphmeet:// deep-link protocols to launcher " + launcherPath);
             DeepLinkRegistration.Register(userRoot, launcherPath, launcherArguments);
         }
 
         private static void UnregisterDeepLinkProtocolIfOwned(RegistryKey userRoot, InstallRootLayout layout)
         {
-            if (DeepLinkRegistration.UnregisterIfOwned(userRoot, layout))
-            {
-                InstallerLogger.Info("Removed installer-owned ralphmeet:// deep-link protocol registration.");
-                return;
-            }
+            int removed = DeepLinkRegistration.UnregisterIfOwned(userRoot, layout);
+            InstallerLogger.Info(
+                "Removed " + removed + " installer-owned deep-link protocol registration(s); any other was missing or no longer owned by this installer.");
+        }
 
-            InstallerLogger.Info("Skipped ralphmeet:// deep-link protocol removal because registration was missing or no longer owned by this installer.");
+        private static void RemoveVulkanLayerRegistrations(RegistryKey userRoot, InstallRootLayout layout)
+        {
+            try
+            {
+                int removed = VulkanLayerRegistration.RemoveOwned(userRoot, layout);
+                InstallerLogger.Info("Removed " + removed + " Vulkan capture layer registration(s) written by this install.");
+            }
+            catch (Exception ex)
+            {
+                InstallerLogger.Warn("Failed to remove the Vulkan capture layer registrations: " + ex.Message);
+            }
         }
 
         private static void CreateShortcuts(InstallEnvironment environment, string launcherPath, string launcherArguments)

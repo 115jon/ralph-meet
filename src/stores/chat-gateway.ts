@@ -812,7 +812,7 @@ export function createChatGateway(
         ) {
           void showNativeDesktopToast({
             title: `Incoming call from ${caller_display_name ?? caller_username ?? caller_name}`,
-            body: "Open Ralph Meet to answer.",
+            body: "Open Yap to answer.",
             summary: "Incoming call",
             icon: caller_avatar ?? undefined,
             actionTypeId: MOBILE_ACTION_TYPE_ID,

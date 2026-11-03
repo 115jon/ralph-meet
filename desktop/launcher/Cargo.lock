@@ -43,14 +43,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ralph-meet-launcher"
-version = "3.6.0"
-dependencies = [
- "windows-sys",
- "winresource",
-]
-
-[[package]]
 name = "serde_core"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -170,4 +162,12 @@ checksum = "a2bc6d36480b829272a5bdabf08e6dca8004761c1da7e35efef800540c66221b"
 dependencies = [
  "toml",
  "version_check",
+]
+
+[[package]]
+name = "yap-launcher"
+version = "3.9.0"
+dependencies = [
+ "windows-sys",
+ "winresource",
 ]

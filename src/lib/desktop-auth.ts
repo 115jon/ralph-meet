@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 import { clog } from "@/lib/console-logger";
-
-declare global {
-  interface Window {
-    __TAURI_INTERNALS__?: unknown;
-  }
-}
+import { isTauri } from "@/lib/runtime";
 
 const TOKEN_KEY = "desktop_auth_token";
 const TOKEN_EVENT = "ralphmeet:desktop-token-change";
@@ -30,10 +25,6 @@ function legacyRalphSessionStorageKey(): string | null {
 /** `kova-auth:<pk>:session-token` or `ralph-auth:<pk>:session-token`, any pk. */
 const SESSION_TOKEN_STORAGE_KEY =
   /^(?:kova-auth|ralph-auth):[^:]+:session-token$/;
-
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
 
 /**
  * Session-token keys left under a different publishable key (the pk moved
@@ -123,7 +114,7 @@ export function clearStoredKovaAuthSessionToken() {
 }
 
 function setDesktopToken(token: string) {
-  if (isTauriRuntime() && typeof localStorage !== "undefined") {
+  if (isTauri() && typeof localStorage !== "undefined") {
     if (localStorage.getItem(TOKEN_KEY) === token) {
       notifyDesktopTokenChanged(token);
       return;
@@ -139,7 +130,7 @@ function setDesktopToken(token: string) {
 }
 
 export function getDesktopToken(): string | null {
-  if (isTauriRuntime() && typeof localStorage !== "undefined") {
+  if (isTauri() && typeof localStorage !== "undefined") {
     return localStorage.getItem(TOKEN_KEY);
   }
   return null;
@@ -166,7 +157,7 @@ export async function waitForDesktopToken(
 }
 
 function clearDesktopToken() {
-  if (isTauriRuntime() && typeof localStorage !== "undefined") {
+  if (isTauri() && typeof localStorage !== "undefined") {
     if (DEBUG_DESKTOP_AUTH) {
       log.info("Clearing desktop token");
     }
@@ -216,7 +207,7 @@ function rememberKovaSessionToken(token: string) {
   // memory and hands it back on every sync tick, which would otherwise put
   // a dead token back in storage (or announce it over a freshly minted one).
   if (isSessionTokenRejected(token)) return;
-  const missing = isTauriRuntime()
+  const missing = isTauri()
     ? !getDesktopToken()
     : !getDesktopAuthHandoffToken();
   if (missing) setDesktopAuthSession(token);

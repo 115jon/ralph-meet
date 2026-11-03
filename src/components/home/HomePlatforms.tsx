@@ -89,7 +89,7 @@ export function HomePlatforms({ release, isSignedIn }: HomePlatformsProps) {
         <figure className="justify-self-center lg:col-span-4 lg:col-start-9">
           <PhoneShot
             name="phone-home"
-            alt="Ralph Meet on a phone: the Ralph HQ server with its text channels and the Lounge voice channel showing who is in it, above the bottom tab bar"
+            alt="Yap on a phone: the Ralph HQ server with its text channels and the Lounge voice channel showing who is in it, above the bottom tab bar"
             width={390}
             height={844}
             sizes="300px"

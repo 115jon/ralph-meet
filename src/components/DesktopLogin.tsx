@@ -67,7 +67,7 @@ type View =
  *
  * The app asks Kova for a short code, opens the verification page in the
  * system browser, and polls until the user confirms the same code there.
- * The returned session token is validated against the Ralph Meet API before
+ * The returned session token is validated against the Yap API before
  * it is persisted.
  */
 export default function DesktopLogin() {
@@ -291,7 +291,7 @@ export function DeviceSignInScreen({
             icon="check"
             tone="success"
             title="You're in"
-            body="Opening Ralph Meet…"
+            body="Opening Yap…"
           />
         );
       case "verify-unreachable":
@@ -301,7 +301,7 @@ export function DeviceSignInScreen({
             icon="offline"
             tone="danger"
             title="Couldn't finish signing in"
-            body="You approved it, but we couldn't reach Ralph Meet to confirm your account. Check your connection."
+            body="You approved it, but we couldn't reach Yap to confirm your account. Check your connection."
             actionLabel="Retry"
             onAction={handleRetryValidation}
           />
@@ -313,7 +313,7 @@ export function DeviceSignInScreen({
             icon="alert"
             tone="danger"
             title="That sign-in didn't go through"
-            body="Ralph Meet didn't accept the session. Start over with a fresh code."
+            body="Yap didn't accept the session. Start over with a fresh code."
             actionLabel="Try again"
             onAction={handleStart}
             busy={starting}
@@ -425,9 +425,9 @@ function announcementFor(view: View, state: DeviceSignInHookState): string {
     case "verifying":
       return "Approved. Finishing sign-in.";
     case "success":
-      return "Signed in. Opening Ralph Meet.";
+      return "Signed in. Opening Yap.";
     case "verify-unreachable":
-      return "Couldn't reach Ralph Meet to finish signing in.";
+      return "Couldn't reach Yap to finish signing in.";
     case "verify-rejected":
       return "That sign-in didn't go through.";
     case "denied":
@@ -470,7 +470,7 @@ function IdlePanel({
   return (
     <>
       <PublicTitle id={titleId} size="display">
-        Sign in to Ralph Meet
+        Sign in to Yap
       </PublicTitle>
       <PublicBody size="lead">
         Your browser opens to confirm it's you, then you're back here.

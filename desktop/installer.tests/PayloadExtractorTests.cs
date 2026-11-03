@@ -12,7 +12,7 @@ namespace Installer.Tests
     {
         private const int TinyBlock = 4096;
 
-        private readonly string _root = Path.Combine(Path.GetTempPath(), "RalphMeetPayloadTests_" + Guid.NewGuid().ToString("N"));
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "YapPayloadTests_" + Guid.NewGuid().ToString("N"));
 
         public PayloadExtractorTests()
         {
@@ -35,7 +35,7 @@ namespace Installer.Tests
         {
             string source = CreateTree(new Dictionary<string, byte[]>
             {
-                { "RalphMeet.exe", Random(1, 700) },
+                { "Yap.exe", Random(1, 700) },
                 { "locales/en-US.pak", Random(2, 3000) },
                 { "obs-capture/deep/er/notes.txt", System.Text.Encoding.UTF8.GetBytes("hello") },
                 { "empty.bin", new byte[0] },
@@ -140,11 +140,11 @@ namespace Installer.Tests
         [Fact]
         public void LockedDestination_IsRetriedThenReported()
         {
-            string source = CreateTree(new Dictionary<string, byte[]> { { "RalphMeet.exe", Random(11, 300) } });
+            string source = CreateTree(new Dictionary<string, byte[]> { { "Yap.exe", Random(11, 300) } });
             byte[] payload = Pack(source, EnumerateRelative(source));
             string install = Path.Combine(_root, "install");
             Directory.CreateDirectory(install);
-            string locked = Path.Combine(install, "RalphMeet.exe");
+            string locked = Path.Combine(install, "Yap.exe");
             string reported = null;
 
             using (new FileStream(locked, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
@@ -159,6 +159,50 @@ namespace Installer.Tests
             }
 
             Assert.Equal(Path.GetFullPath(locked), reported);
+        }
+
+        [Fact]
+        public void Extraction_ReportsMonotonicProgressFromZeroToTheTotal()
+        {
+            string source = CreateTree(new Dictionary<string, byte[]>
+            {
+                { "a.bin", Random(11, TinyBlock * 3 + 17) },
+                { "b/c.bin", Compressible(12, TinyBlock * 2 + 5) },
+                { "empty.bin", new byte[0] },
+            });
+            byte[] payload = Pack(source, EnumerateRelative(source));
+            long expectedTotal = TinyBlock * 5 + 22;
+
+            // Other tests extract in parallel; keep only this thread's reports (Extract reports
+            // from the thread that calls it).
+            int thread = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            List<KeyValuePair<long, long>> reports = new List<KeyValuePair<long, long>>();
+            Action<long, long> listener = (done, total) =>
+            {
+                if (System.Threading.Thread.CurrentThread.ManagedThreadId == thread)
+                {
+                    reports.Add(new KeyValuePair<long, long>(done, total));
+                }
+            };
+
+            InstallProgress.PayloadProgress += listener;
+            try
+            {
+                Extract(payload, Path.Combine(_root, "progress"), 2);
+            }
+            finally
+            {
+                InstallProgress.PayloadProgress -= listener;
+            }
+
+            Assert.NotEmpty(reports);
+            Assert.All(reports, r => Assert.Equal(expectedTotal, r.Value));
+            Assert.Equal(0, reports[0].Key);
+            Assert.Equal(expectedTotal, reports[reports.Count - 1].Key);
+            for (int i = 1; i < reports.Count; i++)
+            {
+                Assert.True(reports[i].Key >= reports[i - 1].Key, "progress went backwards");
+            }
         }
 
         private PayloadExtractionResult Extract(byte[] payload, string install, int parallel)

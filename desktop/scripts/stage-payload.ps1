@@ -40,6 +40,10 @@
     dotnet executable used to build the packer. Defaults to the Scoop SDK when
     present, otherwise `dotnet` from PATH.
 
+.PARAMETER SkipLockCheck
+    Do not check the staged obs-capture/obs-signed files against
+    desktop/packaging/obs-signed-hook.lock.json (synthetic test inputs only).
+
 .EXAMPLE
     .\stage-payload.ps1 -CefDir D:\cef
 #>
@@ -55,7 +59,8 @@ param(
     # Extra arguments for `PayloadPacker pack` (for example --block-mb 4 in tests).
     [string[]]$PackerArgs = @(),
     [switch]$NoPack,
-    [switch]$KeepStage
+    [switch]$KeepStage,
+    [switch]$SkipLockCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -124,7 +129,7 @@ if ($problems.Count -gt 0) {
 }
 
 $ownStage = -not $StageDir
-if ($ownStage) { $StageDir = Join-Path ([System.IO.Path]::GetTempPath()) "RalphMeetStage" }
+if ($ownStage) { $StageDir = Join-Path ([System.IO.Path]::GetTempPath()) "YapStage" }
 if (Test-Path -LiteralPath $StageDir) { Remove-Item -LiteralPath $StageDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
 
@@ -133,6 +138,21 @@ foreach ($item in $plan) {
     $dest = Join-Path $StageDir $item.Dest
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
     Copy-Item -LiteralPath $item.Source -Destination $dest -Force
+}
+
+# The OBS-signed capture files ship byte-for-byte as OBS released them: any
+# change voids the signature anti-cheat vendors allowlist. Never re-sign them.
+if (-not $SkipLockCheck) {
+    $lock = Get-Content -Raw -LiteralPath (Join-Path $desktopDir "packaging\obs-signed-hook.lock.json") | ConvertFrom-Json
+    foreach ($file in $lock.files) {
+        $staged = Join-Path $StageDir "obs-capture\obs-signed\$($file.name)"
+        if (-not (Test-Path -LiteralPath $staged)) { throw "Staged payload is missing obs-capture\obs-signed\$($file.name)" }
+        $sha = (Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($sha -ne $file.sha256) {
+            throw "Staged obs-capture\obs-signed\$($file.name) does not match the lock (sha256 $sha, expected $($file.sha256))"
+        }
+    }
+    Write-Host "==> OBS-signed capture files match the lock (OBS $($lock.obs_version))" -ForegroundColor Green
 }
 
 try {

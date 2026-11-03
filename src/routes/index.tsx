@@ -7,7 +7,7 @@ export const Route = createFileRoute("/")({
   component: HomePage,
   head: () => ({
     meta: [
-      { title: "Ralph Meet: voice, chat and video rooms" },
+      { title: "Yap: voice, chat and video rooms" },
       {
         name: "description",
         content:

@@ -186,7 +186,7 @@ describe("toDesktopNotificationSyncPayload", () => {
     expect(payload).toEqual({
       count: 2,
       showDot: false,
-      tooltip: "Ralph Meet - 2 unread notifications",
+      tooltip: "Yap - 2 unread notifications",
     });
   });
 
@@ -201,7 +201,7 @@ describe("toDesktopNotificationSyncPayload", () => {
     expect(payload).toEqual({
       count: 0,
       showDot: true,
-      tooltip: "Ralph Meet - unread activity",
+      tooltip: "Yap - unread activity",
     });
   });
 
@@ -213,7 +213,7 @@ describe("toDesktopNotificationSyncPayload", () => {
     expect(payload).toEqual({
       count: 0,
       showDot: false,
-      tooltip: "Ralph Meet",
+      tooltip: "Yap",
     });
   });
 });
@@ -224,12 +224,12 @@ describe("getUnreadDocumentTitle", () => {
       notifications: [makeNotification(), makeNotification({ id: "notif-2" })],
     });
 
-    expect(getUnreadDocumentTitle("Ralph Meet", badge)).toBe("(2) Ralph Meet");
+    expect(getUnreadDocumentTitle("Yap", badge)).toBe("(2) Yap");
   });
 
   it("restores the base title when there is no unread activity", () => {
     const badge = getDesktopNotificationBadgeState({ notifications: [] });
 
-    expect(getUnreadDocumentTitle("Ralph Meet", badge)).toBe("Ralph Meet");
+    expect(getUnreadDocumentTitle("Yap", badge)).toBe("Yap");
   });
 });

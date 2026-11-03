@@ -140,34 +140,33 @@ jobs:
           # writes one.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # The game-capture-hook feature makes build.rs require the OBS capture
-      # binaries (they are not committed). Build them exactly like the release
-      # workflow so this job checks the feature set that actually ships.
-      - name: Restore OBS capture binaries cache
+      # The game-capture-hook feature makes build.rs require the OBS-signed
+      # capture files (they are not committed). Fetch and verify them exactly
+      # like the release workflow: the pinned obsproject release zip, checked
+      # against desktop/packaging/obs-signed-hook.lock.json (SHA-256,
+      # Authenticode signer and thumbprint, file version).
+      - name: Restore OBS-signed capture hook cache
         if: ${{ needs.changes.outputs.rust == 'true' }}
-        id: obs-capture-cache
+        id: obs-signed-cache
         # actions/cache v4.3.0
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
-            desktop/src-tauri/resources/obs-capture/*.dll
-            desktop/src-tauri/resources/obs-capture/*.exe
-          key: obs-capture-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/resources/obs-capture/fork/**', 'desktop/scripts/build-capture-fork.ps1') }}
+          path: desktop/src-tauri/resources/obs-capture/obs-signed
+          key: obs-signed-${{ runner.os }}-${{ hashFiles('desktop/packaging/obs-signed-hook.lock.json') }}
 
-      - name: Build OBS game capture binaries from source
-        if: ${{ needs.changes.outputs.rust == 'true' && steps.obs-capture-cache.outputs.cache-hit != 'true' }}
+      - name: Fetch and verify OBS-signed capture hook
+        if: ${{ needs.changes.outputs.rust == 'true' }}
         shell: pwsh
-        run: ./desktop/scripts/build-capture-fork.ps1 -Arch both -Config Release -FetchDetours
+        # A cache hit is re-verified file by file and skips the download.
+        run: ./desktop/scripts/fetch-obs-signed-hook.ps1 -CacheDir "$env:RUNNER_TEMP\obs-signed-hook"
 
-      - name: Save OBS capture binaries cache
-        if: ${{ needs.changes.outputs.rust == 'true' && steps.obs-capture-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' }}
+      - name: Save OBS-signed capture hook cache
+        if: ${{ needs.changes.outputs.rust == 'true' && steps.obs-signed-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' }}
         # actions/cache v4.3.0
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
-            desktop/src-tauri/resources/obs-capture/*.dll
-            desktop/src-tauri/resources/obs-capture/*.exe
-          key: ${{ steps.obs-capture-cache.outputs.cache-primary-key }}
+          path: desktop/src-tauri/resources/obs-capture/obs-signed
+          key: ${{ steps.obs-signed-cache.outputs.cache-primary-key }}
 
       - name: Check desktop Rust crate
         if: ${{ needs.changes.outputs.rust == 'true' }}
@@ -182,7 +181,15 @@ jobs:
         # stops shipping any required obs-capture material (GPLv2 documents).
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features cef,native-screen-share,game-capture-hook
 
-  # The root RalphMeet.exe launcher stub (desktop/launcher). Standalone crate
+      - name: Test OBS-signed capture hook verification
+        if: ${{ needs.changes.outputs.rust == 'true' }}
+        env:
+          RALPH_GAME_CAPTURE_HOOK: "1"
+        # Unit tests for the lock, the runtime WinVerifyTrust/SHA-256 check
+        # against the fetched files, the flavor policy, and the stock-hook pacer.
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features cef,native-screen-share,game-capture-hook --lib -- signed_hook hook_policy timer_pacing vulkan_layer
+
+  # The root Yap.exe launcher stub (desktop/launcher). Standalone crate
   # with no Tauri or CEF dependencies, so it needs none of the desktop job's setup.
   launcher:
     name: launcher
@@ -211,8 +218,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
           cargo build --release
           if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed" }
-          $stub = Get-Item "target/release/ralph-meet-launcher.exe"
-          Write-Host "==> ralph-meet-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
+          $stub = Get-Item "target/release/yap-launcher.exe"
+          Write-Host "==> yap-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
 
   # Installer, payload format, and packaging scripts. Windows only (WPF, net48),
   # and independent of the Rust job: it needs no CEF, cargo build, or pnpm.

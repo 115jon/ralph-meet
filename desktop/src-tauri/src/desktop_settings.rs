@@ -26,6 +26,9 @@ pub struct DesktopSettings {
     pub close_to_tray: bool,
     pub hardware_acceleration: bool,
     pub desktop_notifications: bool,
+    /// Capture games with the game capture hook (the OBS Studio capture hook)
+    /// when possible. Off: every share uses window capture (WGC).
+    pub game_capture_hook: bool,
 }
 
 impl Default for DesktopSettings {
@@ -36,6 +39,7 @@ impl Default for DesktopSettings {
             close_to_tray: true,
             hardware_acceleration: true,
             desktop_notifications: true,
+            game_capture_hook: true,
         }
     }
 }
@@ -49,6 +53,7 @@ pub struct DesktopSettingsPatch {
     pub close_to_tray: Option<bool>,
     pub hardware_acceleration: Option<bool>,
     pub desktop_notifications: Option<bool>,
+    pub game_capture_hook: Option<bool>,
 }
 
 impl DesktopSettings {
@@ -67,6 +72,9 @@ impl DesktopSettings {
         }
         if let Some(value) = patch.desktop_notifications {
             self.desktop_notifications = value;
+        }
+        if let Some(value) = patch.game_capture_hook {
+            self.game_capture_hook = value;
         }
         self
     }
@@ -150,7 +158,7 @@ fn write_settings_file(path: &Path, settings: &DesktopSettings) -> Result<(), St
 
 /// The directory that holds the settings file. Computable before the Tauri
 /// app exists (CEF needs hardware acceleration first). On Windows this is
-/// the same directory as the app config dir (`%APPDATA%\RalphMeet`).
+/// the same directory as the app config dir (`%APPDATA%\Yap`).
 fn settings_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -227,6 +235,14 @@ impl DesktopSettingsStore {
 
         if next.open_on_startup != previous.open_on_startup {
             apply_open_on_startup(app, next.open_on_startup)?;
+        }
+
+        // The Vulkan capture layer is registered only while the hook is on.
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        if next.game_capture_hook != previous.game_capture_hook {
+            crate::game_capture::vulkan_layer::spawn_sync(crate::native_share::hook_layer_wanted(
+                next.game_capture_hook,
+            ));
         }
 
         let path = self
@@ -314,7 +330,7 @@ fn apply_open_on_startup<R: tauri::Runtime>(
 }
 
 #[cfg(target_os = "windows")]
-const RUN_VALUE_NAME: &str = "RalphMeet";
+const RUN_VALUE_NAME: &str = "Yap";
 #[cfg(target_os = "windows")]
 const RUN_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -561,6 +577,7 @@ mod tests {
             close_to_tray: false,
             hardware_acceleration: false,
             desktop_notifications: false,
+            game_capture_hook: false,
         };
         write_settings_file(&path, &settings).unwrap();
         // Overwrite once more: rename must replace the existing file.
@@ -574,14 +591,14 @@ mod tests {
 
     #[test]
     fn run_value_is_rewritten_only_when_it_differs() {
-        let desired = r#""C:\RalphMeet\RalphMeet.exe" --autostart"#;
+        let desired = r#""C:\Yap\Yap.exe" --autostart"#;
         assert!(!run_value_needs_rewrite(Some(desired), desired));
         assert!(!run_value_needs_rewrite(
-            Some(r#""c:\ralphmeet\RalphMeet.exe" --autostart"#),
+            Some(r#""c:\yap\Yap.exe" --autostart"#),
             desired
         ));
         assert!(run_value_needs_rewrite(
-            Some(r#""C:\RalphMeet\RalphMeet.exe""#),
+            Some(r#""C:\Yap\Yap.exe""#),
             desired
         ));
         assert!(run_value_needs_rewrite(None, desired));
@@ -603,6 +620,7 @@ mod tests {
                     "closeToTray": true,
                     "hardwareAcceleration": true,
                     "desktopNotifications": true,
+                    "gameCaptureHook": true,
                 },
                 "persisted": false,
             })

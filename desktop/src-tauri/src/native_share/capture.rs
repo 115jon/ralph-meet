@@ -140,6 +140,15 @@ fn game_capture_hook_enabled() -> bool {
     }
 }
 
+/// Whether the Vulkan capture layer should be registered (see
+/// `game_capture::vulkan_layer`): the hook is compiled in and not forced off by
+/// `RALPH_GAME_CAPTURE_HOOK`, and the "Game capture hook" desktop setting
+/// (`setting_on`) is on.
+#[cfg(all(feature = "game-capture-hook", windows))]
+pub fn hook_layer_wanted(setting_on: bool) -> bool {
+    game_capture_hook_enabled() && setting_on
+}
+
 /// The runtime `Capture_Policy` setting for the session, read from the
 /// `RALPH_CAPTURE_POLICY` environment variable (Req 5.1).
 ///
@@ -237,6 +246,20 @@ pub(crate) fn hook_feature_enabled() -> bool {
     compiled_in && env_on
 }
 
+/// The desktop setting "Game capture hook" (on by default). Off keeps every
+/// share on WGC.
+fn hook_setting_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    use tauri::Manager;
+    let enabled = app
+        .try_state::<crate::desktop_settings::DesktopSettingsStore>()
+        .map(|store| store.settings().game_capture_hook)
+        .unwrap_or(true);
+    if !enabled {
+        log::info!("[NativeShare] Game_Capture_Hook turned off in desktop settings; using WGC");
+    }
+    enabled
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Game_Capture_Hook session wiring (task 11.1) — gated behind
 // `game-capture-hook` + `windows`. On the feature-off / non-Windows build none
@@ -280,6 +303,14 @@ pub(crate) struct HookPreparation {
     /// which leaves `injection = NotAttempted` so the reason is
     /// `InjectionFailed` instead (Req 4.7).
     missing_offsets: bool,
+    /// The hook build chosen for this target (`None` when none was chosen).
+    flavor: Option<crate::game_capture::obs_ipc::HookFlavor>,
+    /// Attached to a stock hook already resident in the game; nothing injected.
+    attached: bool,
+    /// Open, verified handles to the signed files; held until the helper exits.
+    verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
+    /// The anti-cheat-protected executable, so a failed attempt is remembered.
+    protected_exe: Option<String>,
 }
 
 #[cfg(all(feature = "game-capture-hook", windows))]
@@ -296,6 +327,10 @@ impl HookPreparation {
             hook: None,
             helper: None,
             missing_offsets: false,
+            flavor: None,
+            attached: false,
+            verified: None,
+            protected_exe: None,
         }
     }
 }
@@ -466,6 +501,10 @@ fn process_is_descendant_of(pid: u32, ancestor_pid: u32) -> bool {
     false
 }
 
+/// Where the own (unsigned, `RALPH_CAPTURE_HOOK_FLAVOR=own`) hook DLL writes
+/// `graphics-hook-<pid>.log`. The path is compiled into that DLL
+/// (`resources/obs-capture/fork/.../graphics-hook.c`), so it keeps Ralph
+/// Meet's folder name until the fork is rebuilt.
 #[cfg(all(feature = "game-capture-hook", windows))]
 fn hook_log_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|base| {
@@ -582,7 +621,7 @@ pub(crate) fn prepare_hook(
     }
     if source_targets_current_process(source_id) {
         log::info!(
-            "[NativeShare] selected window belongs to the current RalphMeet process; skipping game-capture hook and keeping capture on WGC"
+            "[NativeShare] selected window belongs to the current Yap process; skipping game-capture hook and keeping capture on WGC"
         );
         return HookPreparation::not_attempted();
     }
@@ -639,13 +678,17 @@ fn attempt_hook_injection(
     backend: GraphicsApiBackend,
     fps: u32,
 ) -> HookPreparation {
-    use crate::game_capture::blocklist::{default_blocklist, safety_decision};
+    use crate::game_capture::blocklist::{
+        anti_cheat_marker_near, default_blocklist, safety_decision,
+    };
     use crate::game_capture::dx11::GameCaptureHook;
+    use crate::game_capture::hook_policy::{self, choose_flavor, FlavorChoice, FlavorInputs};
     use crate::game_capture::inject::{
         detect_bitness, load_all_graphics_offsets, plan_injection, run_inject_helper,
         spawn_inject_helper_async, InjectionMode, ObsArtifacts,
     };
-    use crate::game_capture::obs_ipc::ObsIpcChannel;
+    use crate::game_capture::obs_ipc::{stock_host_active, HookFlavor, ObsIpcChannel};
+    use crate::game_capture::signed_hook;
 
     let mut prep = HookPreparation::not_attempted();
 
@@ -665,8 +708,7 @@ fn attempt_hook_injection(
         target_image
     );
 
-    // 2. Discover the OBS_Capture_Component artifacts + detect target bitness.
-    let artifacts = ObsArtifacts::discover_next_to_binary();
+    // 2. Target bitness.
     let target_bitness = match detect_bitness(target_pid) {
         Ok(bitness) => bitness,
         Err(err) => {
@@ -676,27 +718,10 @@ fn attempt_hook_injection(
         }
     };
 
-    // 3. Pure injection planning. Ok ⇒ the matching-bitness payload (+ helper)
-    //    are present (artifact_available); Err(MissingArtifact) ⇒ they are not
-    //    (Req 2.5) — leave injection NotAttempted so the reason is
-    //    MissingArtifact.
-    let strategy = match plan_injection(host_bitness(), target_bitness, &artifacts) {
-        Ok(strategy) => {
-            prep.artifact_available = true;
-            strategy
-        }
-        Err(reason) => {
-            log::info!(
-                "[NativeShare] OBS artifacts unavailable for {:?} target (pid {target_pid}): {}",
-                target_bitness,
-                reason.as_str()
-            );
-            return prep;
-        }
-    };
-
-    // 4. Anti-cheat safety gate (pure). Resolve the target exe first; if it
-    //    cannot be identified, do NOT inject (conservative — Req 10.1).
+    // 3. Anti-cheat safety gate (pure). Resolve the target exe first; if it
+    //    cannot be identified, do NOT inject (conservative — Req 10.1). The
+    //    executable blocklist holds the anti-cheat services and the games
+    //    under kernel anti-cheats (Vanguard, FACEIT) or VAC: always WGC.
     let Some(target_exe) = process_image_name(target_pid) else {
         log::warn!(
             "[NativeShare] could not resolve target exe for pid {target_pid}; skipping injection"
@@ -704,52 +729,189 @@ fn attempt_hook_injection(
         prep.injection = InjectionOutcome::Failed;
         return prep;
     };
+    // Reasons decided before the artifacts are looked at must not be reported
+    // as `missing_artifact`, which the selection checks first.
+    let deny = |mut prep: HookPreparation, reason: FallbackReason| {
+        prep.artifact_available = true;
+        prep.safety = SafetyDecision::Deny(reason);
+        prep
+    };
     // No operator allowlist is configured here; an empty allowlist means
     // "allow any not-blocklisted target" (Req 10.3).
-    prep.safety = safety_decision(&target_exe, &default_blocklist(), &[]);
-    if let SafetyDecision::Deny(reason) = prep.safety {
-        // Never inject a blocklisted / non-allowlisted target. The Deny drives
-        // the fallback reason; injection stays NotAttempted (Req 10.2, 10.6).
+    if let SafetyDecision::Deny(reason) = safety_decision(&target_exe, &default_blocklist(), &[]) {
         log::info!(
             "[NativeShare] safety gate denied injection for {target_exe} (pid {target_pid}): {}",
             reason.as_str()
         );
-        return prep;
+        return deny(prep, reason);
     }
-    // The executable blocklist never names the game itself, so also screen its
-    // install tree for anti-cheat markers. Injecting there only times out (the
-    // anti-cheat refuses the unsigned hook DLL) and risks the user's account.
-    if let Some(marker) =
-        crate::game_capture::blocklist::anti_cheat_marker_near(std::path::Path::new(&target_exe))
-    {
-        prep.safety = SafetyDecision::Deny(FallbackReason::Blocklisted);
+
+    // 4. Which hook build. A game with an Easy Anti-Cheat or BattlEye install
+    //    marker gets only the OBS-signed hook (those vendors allowlist it), and
+    //    one attempt per app run.
+    let marker = anti_cheat_marker_near(std::path::Path::new(&target_exe));
+    let protected = marker.is_some();
+    let inputs = FlavorInputs {
+        protected,
+        protected_attempt_failed: protected && hook_policy::protected_attempt_failed(&target_exe),
+        other_host_active: stock_host_active(target_pid),
+        own_requested: hook_policy::own_flavor_requested(),
+    };
+    let flavor = match choose_flavor(&inputs) {
+        FlavorChoice::Use(flavor) => flavor,
+        FlavorChoice::Skip(reason) => {
+            log::info!(
+                "[NativeShare] not hooking {target_exe} (pid {target_pid}): {} \
+                 (protected={protected}, other_host_active={})",
+                reason.as_str(),
+                inputs.other_host_active,
+            );
+            return deny(prep, reason);
+        }
+    };
+    if let Some(marker) = &marker {
         log::info!(
-            "[NativeShare] safety gate denied injection for {target_exe} (pid {target_pid}): \
-             blocklisted (anti-cheat install marker {})",
+            "[NativeShare] {target_exe} is anti-cheat protected (install marker {}); using the \
+             OBS-signed hook only, one attempt this run",
             marker.display()
         );
+        prep.protected_exe = Some(target_exe.clone());
+    }
+    prep.flavor = Some(flavor);
+
+    // 5. The files for that build. The signed set is verified (SHA-256 against
+    //    the lock, Authenticode, signer) and kept open until the helper exits.
+    let artifacts = match flavor {
+        HookFlavor::ObsSigned => {
+            if signed_hook::bundled_dir().is_none() {
+                log::info!(
+                    "[NativeShare] the OBS-signed capture hook is not bundled with this build \
+                     (run desktop/scripts/fetch-obs-signed-hook.ps1); using WGC"
+                );
+                return prep;
+            }
+            let verified = signed_hook::ensure_staged().and_then(|dir| {
+                signed_hook::open_verified(&dir, &signed_hook::file_names(target_bitness))
+            });
+            match verified {
+                Ok(set) => {
+                    let lock = signed_hook::lock();
+                    log::info!(
+                        "[NativeShare] OBS-signed hook verified (OBS {}, hook {}, {:?}, signer {}) in {}",
+                        lock.obs_version,
+                        lock.hook_ver,
+                        target_bitness,
+                        lock.signer_subject,
+                        set.dir.display()
+                    );
+                    let artifacts = ObsArtifacts::discover(&set.dir);
+                    prep.verified = Some(set);
+                    artifacts
+                }
+                Err(err) => {
+                    log::warn!(
+                        "[NativeShare] OBS-signed hook failed verification: {err}; using WGC \
+                         (hook_artifact_unverified)"
+                    );
+                    return deny(prep, FallbackReason::HookArtifactUnverified);
+                }
+            }
+        }
+        HookFlavor::Own => {
+            log::warn!(
+                "[NativeShare] RALPH_CAPTURE_HOOK_FLAVOR=own: using the unsigned fork build \
+                 (development only)"
+            );
+            ObsArtifacts::discover_next_to_binary()
+        }
+    };
+
+    // Pure injection planning. Ok ⇒ the matching-bitness payload (+ helper)
+    // are present (artifact_available); Err(MissingArtifact) ⇒ they are not
+    // (Req 2.5) — leave injection NotAttempted so the reason is MissingArtifact.
+    let strategy = match plan_injection(host_bitness(), target_bitness, &artifacts) {
+        Ok(strategy) => {
+            prep.artifact_available = true;
+            strategy
+        }
+        Err(reason) => {
+            log::info!(
+                "[NativeShare] {} hook artifacts unavailable for {:?} target (pid {target_pid}): {}",
+                flavor.as_str(),
+                target_bitness,
+                reason.as_str()
+            );
+            return prep;
+        }
+    };
+
+    // 6. A stock hook already resident in the game (ours from an earlier
+    //    share, or OBS's own copy; the stock DLL stays loaded until the game
+    //    exits). Nobody is driving it (checked above), so attach to it instead
+    //    of injecting a second copy, after checking the loaded module is
+    //    signed by the OBS Project.
+    let mut attach = false;
+    if flavor == HookFlavor::ObsSigned
+        && crate::game_capture::obs_ipc::foreign_obs_hook_present(target_pid)
+    {
+        let module = crate::game_capture::vulkan_layer::process_hook_module_path(target_pid);
+        match module.as_deref().map(signed_hook::is_obs_signed_module) {
+            Some(Ok(signer)) => {
+                log::info!(
+                    "[NativeShare] attaching to the stock hook already loaded in pid {target_pid} \
+                     ({}, signer {} {})",
+                    module
+                        .as_deref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default(),
+                    signer.subject,
+                    signer.thumbprint
+                );
+                attach = true;
+            }
+            other => {
+                log::warn!(
+                    "[NativeShare] pid {target_pid} has CaptureHook_ objects from a hook that is \
+                     not a verified OBS-signed graphics-hook ({:?}); using WGC (hook_in_use)",
+                    other.map(|r| r.map(|s| s.subject))
+                );
+                return deny(prep, FallbackReason::HookInUse);
+            }
+        }
+    }
+    prep.attached = attach;
+
+    // A Vulkan game is hooked through the implicit layer, which attaches only
+    // at vkCreateInstance. The layer stays registered while the setting is on
+    // (as OBS does), so a game started after that has the dormant hook loaded
+    // and is driven like any resident hook. Without a graphics-hook module
+    // already in the game there is nothing to drive; do not inject a DLL into
+    // it for nothing.
+    if backend == GraphicsApiBackend::Vulkan
+        && !crate::game_capture::vulkan_layer::process_has_hook_module(target_pid)
+    {
+        log::info!(
+            "[NativeShare] Vulkan target pid {target_pid} has no capture layer loaded (it \
+             started before the layer was registered, or the layer is turned off); skipping \
+             injection and using WGC (backend_disabled)"
+        );
+        prep.missing_offsets = true;
         return prep;
     }
 
-    // 5. Resolve the hook vtable offsets for ALL backends for the TARGET
-    //    bitness by running the bundled get-graphics-offsets<bits>.exe (OBS
-    //    load-graphics-offsets.c). The injected DLL cannot install its Present
-    //    interception without these. Two distinct failure modes feed two
-    //    different fallback reasons (design §"Error Handling"):
+    // 7. Resolve the hook vtable offsets for ALL backends for the TARGET
+    //    bitness by running get-graphics-offsets<bits>.exe from the same set
+    //    as the DLL. The injected DLL cannot install its Present interception
+    //    without these. Two failure modes feed two fallback reasons:
     //
-    //    a) `None` — the helper is missing, exited non-zero, timed out (>5s), or
+    //    a) `None`: the helper is missing, exited non-zero, timed out (>5s), or
     //       produced no parseable output (Req 4.7). Leave `injection =
     //       NotAttempted` so the pure `fallback_reason` reports
-    //       `InjectionFailed`. The helper itself logs the precise reason +
-    //       target PID (Req 6.7), so do not inject and bail to WGC here.
-    //    b) `Some` but the present offset for the target backend is zero/absent
-    //       (Req 4.6): the backend cannot hook, so record `missing_offsets` (the
-    //       wiring maps it to `FallbackReason::BackendDisabled`, Req 5.8), skip
-    //       injection, and fall back to WGC.
+    //       `InjectionFailed`.
+    //    b) `Some` but the present offset for the target backend is zero
+    //       (Req 4.6): record `missing_offsets` (`BackendDisabled`, Req 5.8).
     let Some(all_offsets) = load_all_graphics_offsets(&artifacts, target_bitness, target_pid)
     else {
-        // Offset *resolution* failed; the loader already logged the reason and
-        // PID. Do not inject — leave injection NotAttempted ⇒ InjectionFailed.
         log::warn!(
             "[NativeShare] graphics offset resolution failed for pid {target_pid} ({:?}); \
              skipping injection and falling back to WGC",
@@ -758,22 +920,14 @@ fn attempt_hook_injection(
         return prep;
     };
 
-    // The present offset that gates this backend. For the DXGI backends (DX11,
-    // and DX12 which still presents through the DXGI swapchain) the gate is the
-    // DXGI `present` offset (and `resize`, via `dxgi.hookable()`); Vulkan/OpenGL
-    // do not hook via hook_info offsets, so they are gated upstream by the
-    // BackendGate / `is_active_capable` (only DX11 is active-capable today) and
-    // never reach here with an expectation of an offset.
+    // DX11 and DX12 present through DXGI, so the gate is the DXGI `present`
+    // offset (and `resize`, via `dxgi.hookable()`). Vulkan/OpenGL do not hook
+    // via hook_info offsets.
     let backend_hookable = match backend {
         GraphicsApiBackend::Dx11 | GraphicsApiBackend::Dx12 => all_offsets.dxgi.hookable(),
-        // Vulkan/OpenGL: no hook_info offset gate. Their enablement is decided
-        // by the BackendGate upstream; do not block injection on a DXGI offset.
         GraphicsApiBackend::Vulkan | GraphicsApiBackend::OpenGl => true,
     };
     if !backend_hookable {
-        // Present offset for the target backend is zero/absent (Req 4.6): the
-        // DLL would log "no DXGI hook address found" and never capture. Skip
-        // injection and record the disabled-backend reason (Req 5.8).
         log::warn!(
             "[NativeShare] {} hook offsets are not hookable for pid {target_pid} \
              (dxgi.present={:#x}, dxgi.resize={:#x}); skipping injection and falling back to WGC \
@@ -786,41 +940,79 @@ fn attempt_hook_injection(
         return prep;
     }
 
-    // 6. Run the OBS safe inject-helper as a SEPARATE child process (no GPL
-    //    linkage, Req 11.1, 11.2), but do not wait for it. OBS compatibility
-    //    injection posts messages for up to four seconds while the host proceeds
-    //    to open IPC objects and signal Initialize.
+    let frame_interval_ns = if fps > 0 {
+        1_000_000_000u64 / fps as u64
+    } else {
+        0
+    };
+    let start_channel = |pid: u32| {
+        ObsIpcChannel::start_flavor(
+            flavor,
+            pid,
+            all_offsets.clone(),
+            frame_interval_ns,
+            crate::game_capture::obs_ipc::DEFAULT_FRAME_WAIT_MS,
+        )
+    };
+    // The stock DLL opens its log pipe once, as it loads, and checks the
+    // keepalive mutex: like OBS's own host, create both before injecting.
+    // (The fork retries its pipe, and its IPC pid is only known after the
+    // helper has run; it starts the channel after injection.)
+    let mut early_channel = None;
+    if !flavor.writes_pid_log() {
+        match start_channel(target_pid) {
+            Ok(ipc) => early_channel = Some(ipc),
+            Err(err) => {
+                log::warn!(
+                    "[NativeShare] OBS IPC channel failed to start for pid {target_pid}: {err}; \
+                     not injecting, falling back to WGC"
+                );
+                prep.injection = InjectionOutcome::Failed;
+                return prep;
+            }
+        }
+    }
+
+    // 8. Inject (unless attaching): run the safe inject-helper as a SEPARATE
+    //    child process (no GPL linkage, Req 11.1, 11.2), but do not wait for
+    //    it. OBS compatibility injection posts messages for up to four seconds
+    //    while the host opens IPC objects and signals Initialize.
     let inject_started_at = std::time::SystemTime::now();
-    let helper = match spawn_inject_helper_async(
-        strategy,
-        &artifacts,
-        InjectionMode::Safe {
-            thread_id: target.thread_id,
-        },
-    ) {
-        Ok(child) => Some(child),
-        Err(outcome) => {
-            log::warn!(
-                "[NativeShare] safe inject-helper could not spawn for pid {target_pid} thread {}; retrying direct injection",
-                target.thread_id
-            );
-            let direct = run_inject_helper(
-                strategy,
-                &artifacts,
-                InjectionMode::Direct { pid: target_pid },
-            );
-            prep.injection = if direct.is_success() { direct } else { outcome };
-            None
+    let helper = if attach {
+        prep.injection = InjectionOutcome::Success;
+        None
+    } else {
+        match spawn_inject_helper_async(
+            strategy,
+            &artifacts,
+            InjectionMode::Safe {
+                thread_id: target.thread_id,
+            },
+        ) {
+            Ok(child) => {
+                prep.injection = InjectionOutcome::Success;
+                Some(child)
+            }
+            Err(outcome) => {
+                log::warn!(
+                    "[NativeShare] safe inject-helper could not spawn for pid {target_pid} thread {}; retrying direct injection",
+                    target.thread_id
+                );
+                let direct = run_inject_helper(
+                    strategy,
+                    &artifacts,
+                    InjectionMode::Direct { pid: target_pid },
+                );
+                prep.injection = if direct.is_success() { direct } else { outcome };
+                None
+            }
         }
     };
-    let outcome = if helper.is_some() {
-        InjectionOutcome::Success
-    } else {
-        prep.injection
-    };
-    prep.injection = outcome;
+    let outcome = prep.injection;
     prep.helper = helper;
-    let ipc_pid = if prep.helper.is_some() {
+    // Only the fork writes graphics-hook-<pid>.log, which tells which process
+    // the safe injection actually loaded the DLL into.
+    let ipc_pid = if prep.helper.is_some() && flavor.writes_pid_log() {
         resolve_safe_injection_ipc_pid(
             target_pid,
             inject_started_at,
@@ -830,33 +1022,30 @@ fn attempt_hook_injection(
         target_pid
     };
     log::info!(
-        "[NativeShare] inject-helper for selected pid {target_pid} ipc pid {ipc_pid} thread {} ({:?}) -> {:?}{}",
+        "[NativeShare] {} hook for selected pid {target_pid} ipc pid {ipc_pid} thread {} ({:?}) -> {:?}{}",
+        flavor.as_str(),
         target.thread_id,
         target_bitness,
         outcome,
-        if prep.helper.is_some() { " (async safe)" } else { "" }
+        if attach {
+            " (attached to resident hook)"
+        } else if prep.helper.is_some() {
+            " (async safe)"
+        } else {
+            ""
+        }
     );
 
-    // 7. On a successful injection, start the IPC reader (publishing ALL backend
-    //    offsets into hook_info) and build the hook. The frame interval caps the
-    //    DLL's per-present shared-texture copy at the negotiated encode rate, so
-    //    a high-fps game does not burn GPU copying frames the encoder will not
-    //    use; the host's present-accurate frame-count watch then forwards only
-    //    genuinely new captures, so a game running below the rate yields no
-    //    duplicate re-encodes. `fps == 0` means "no cap" (interval 0 ⇒ the DLL
-    //    captures every present).
+    // 9. Start the IPC reader (publishing ALL backend offsets into hook_info)
+    //    and build the hook. The frame interval caps the DLL's per-present
+    //    shared-texture copy at the negotiated encode rate. `fps == 0` means
+    //    "no cap" (interval 0 ⇒ the DLL captures every present).
     if outcome.is_success() {
-        let frame_interval_ns = if fps > 0 {
-            1_000_000_000u64 / fps as u64
-        } else {
-            0
+        let channel = match early_channel.take() {
+            Some(ipc) => Ok(ipc),
+            None => start_channel(ipc_pid),
         };
-        match ObsIpcChannel::start_with_all_offsets(
-            ipc_pid,
-            all_offsets,
-            frame_interval_ns,
-            crate::game_capture::obs_ipc::DEFAULT_FRAME_WAIT_MS,
-        ) {
+        match channel {
             Ok(ipc) => {
                 prep.hook = Some(GameCaptureHook::new(Arc::clone(d3d), ipc, backend, ipc_pid));
             }
@@ -920,6 +1109,10 @@ impl Drop for HookCaptureSession {
 pub(crate) struct HookThreadContext<R: tauri::Runtime> {
     pub(crate) hook: crate::game_capture::dx11::GameCaptureHook,
     pub(crate) helper: Option<std::process::Child>,
+    /// Verified signed files, held open until the helper has exited.
+    pub(crate) verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
+    /// Set for an anti-cheat-protected target: a failed attempt is remembered.
+    pub(crate) protected_exe: Option<String>,
     pub(crate) d3d: Arc<D3dDevice>,
     pub(crate) source_id: String,
     pub(crate) frames: crate::wmf_encoder::FrameSender,
@@ -1008,6 +1201,8 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
     let HookThreadContext {
         mut hook,
         mut helper,
+        mut verified,
+        protected_exe,
         d3d,
         source_id,
         frames: frame_tx,
@@ -1203,6 +1398,10 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
             break HookLoopOutcome::SourceGone(FallbackReason::TargetExited);
         }
 
+        if helper.is_none() && verified.is_some() {
+            // The helper has exited (or none ran): the files may be released.
+            verified = None;
+        }
         if let Some(child) = helper.as_mut() {
             if let Some(outcome) = crate::game_capture::inject::poll_async_helper(child) {
                 helper = None;
@@ -1246,6 +1445,9 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
                                 .to_string(),
                         );
                     }
+                }
+                if frames_received == 0 {
+                    stats.set_hook_version(hook.hook_version());
                 }
                 frames_received += 1;
                 last_progress = Instant::now();
@@ -1350,13 +1552,24 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
                 // the first frame ever arrives, a bounded wait distinguishes a
                 // genuinely dead/never-installing hook (→ fall back) from one
                 // still settling. After that, source-liveness is the authority.
+                if hook.version_unsupported() {
+                    break HookLoopOutcome::FallbackToWgc(FallbackReason::HookVersionUnsupported);
+                }
                 if frames_received == 0 && last_progress.elapsed() > first_frame_timeout {
+                    // No hook objects ever appeared: the DLL never loaded in
+                    // the target (an anti-cheat refusing it, typically).
+                    let reason = if hook.ipc_initialized() {
+                        FallbackReason::HookNoFirstFrame
+                    } else {
+                        FallbackReason::HookNotLoaded
+                    };
                     log::warn!(
                         "[NativeShare] no first frame within {}ms of Initialize — hook never \
-                         delivered; falling back",
-                        first_frame_timeout.as_millis()
+                         delivered ({}); falling back",
+                        first_frame_timeout.as_millis(),
+                        reason.as_str()
                     );
-                    break HookLoopOutcome::FallbackToWgc(FallbackReason::HookNoFirstFrame);
+                    break HookLoopOutcome::FallbackToWgc(reason);
                 }
                 std::thread::sleep(IDLE_POLL);
             }
@@ -1400,6 +1613,11 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
         }
         HookLoopOutcome::FallbackToWgc(reason) => reason,
     };
+    if frames_received == 0 {
+        if let Some(exe) = protected_exe.as_deref() {
+            crate::game_capture::hook_policy::record_protected_failure(exe);
+        }
+    }
 
     if wgc_preroll.is_some() && !promoted_from_wgc_preroll {
         // The WGC pre-roll stays the active capture; record why the hook lost
@@ -1520,6 +1738,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
             frame_tx,
             Arc::clone(&stats),
             Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            Arc::clone(&frame_interval_ns),
             Some(on_closed),
         )
     }) {
@@ -1564,6 +1783,10 @@ pub(crate) struct CaptureSelection {
     pub(crate) hook: Option<crate::game_capture::dx11::GameCaptureHook>,
     #[cfg(all(feature = "game-capture-hook", windows))]
     pub(crate) helper: Option<std::process::Child>,
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub(crate) verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub(crate) protected_exe: Option<String>,
 }
 
 impl CaptureSelection {
@@ -1621,7 +1844,7 @@ pub(crate) fn select_capture<R: tauri::Runtime>(
         backend.as_str(),
         source_kind,
     );
-    let hook_enabled = hook_feature_enabled();
+    let hook_enabled = hook_feature_enabled() && hook_setting_enabled(app);
     let is_windows = cfg!(windows); // Req 13.2.
 
     // ── Foreign-hook detection (Req 3.4) ─────────────────────────────────
@@ -1706,6 +1929,23 @@ pub(crate) fn select_capture<R: tauri::Runtime>(
 
     let capture_mode = select_capture_mode_v2(&selection);
     let mut reason = fallback_reason(&selection);
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    {
+        stats.set_hook_flavor(
+            if capture_mode == CaptureMode::Hook {
+                prep.flavor
+            } else {
+                None
+            },
+            prep.attached,
+        );
+        if capture_mode != CaptureMode::Hook && injection_outcome != InjectionOutcome::NotAttempted
+        {
+            if let Some(exe) = prep.protected_exe.as_deref() {
+                crate::game_capture::hook_policy::record_protected_failure(exe);
+            }
+        }
+    }
     // Injection skipped because the backend's present offset was zero/absent
     // (Req 4.6) is the more precise `BackendDisabled` (Req 5.8).
     if missing_offsets && capture_mode != CaptureMode::Hook {
@@ -1787,6 +2027,10 @@ pub(crate) fn select_capture<R: tauri::Runtime>(
         hook,
         #[cfg(all(feature = "game-capture-hook", windows))]
         helper: prep.helper,
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        verified: prep.verified,
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        protected_exe: prep.protected_exe,
     }
 }
 

@@ -7,6 +7,7 @@
 //   /api/channels/:channelId/ws     → MeetingRoom DO  (Channel-scoped presence)
 //   /api/channels/:channelId/voice  → VoiceRoom DO    (Voice Gateway — media)
 //   /.well-known/assetlinks.json    → Android App Links statement
+//   Page loads on the legacy host   → 301 to the Yap host (src/server/legacy-host.ts)
 //   Everything else                 → TanStack Start handler
 // ============================================================================
 
@@ -22,6 +23,7 @@ import {
 } from "./src/lib/api-helpers";
 import { buildHealthzPayload } from "./src/lib/healthz";
 import { handleAssetLinksRequest } from "./src/server/assetlinks";
+import { legacyHostRedirect } from "./src/server/legacy-host";
 import { handleYtDlpRequest } from "./src/lib/ytdlp/http";
 import { syncYtDlpUpstream } from "./src/lib/ytdlp/upstream";
 import {
@@ -340,6 +342,9 @@ export default {
 
     const assetLinks = handleAssetLinksRequest(request);
     if (assetLinks) return assetLinks;
+
+    const legacyRedirect = legacyHostRedirect(request);
+    if (legacyRedirect) return legacyRedirect;
 
     // ── Rate limiting for API routes ─────────────────────────────────────
     // Skip WebSocket upgrades and attachment/background static asset reads.

@@ -1,21 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const invokeMock =
+const invokeMock = vi.hoisted(() =>
   vi.fn<
     (
       cmd: string,
       args?: Record<string, unknown>,
     ) => Promise<DesktopSettings | DesktopSettingsSnapshot>
-  >();
-
-vi.mock("@/lib/platform", () => ({
-  isDesktop: () => true,
-}));
+  >(),
+);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
 }));
 
+import { setHostForTests } from "@/lib/host";
+import { createDesktopHost } from "@/lib/host/desktop";
 import {
   hydrateDesktopSettings,
   resetDesktopSettingsHydrationForTests,
@@ -30,6 +29,7 @@ const rustDefaults: DesktopSettings = {
   closeToTray: true,
   hardwareAcceleration: true,
   desktopNotifications: true,
+  gameCaptureHook: true,
 };
 
 function settingsOf(state: DesktopSettings): DesktopSettings {
@@ -39,8 +39,12 @@ function settingsOf(state: DesktopSettings): DesktopSettings {
     closeToTray: state.closeToTray,
     hardwareAcceleration: state.hardwareAcceleration,
     desktopNotifications: state.desktopNotifications,
+    gameCaptureHook: state.gameCaptureHook,
   };
 }
+
+// The real desktop adapter over the mocked `invoke`.
+setHostForTests(createDesktopHost());
 
 describe("desktop settings owned by Rust", () => {
   beforeEach(() => {
@@ -59,7 +63,7 @@ describe("desktop settings owned by Rust", () => {
     await hydrateDesktopSettings();
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
-    expect(invokeMock).toHaveBeenCalledWith("get_desktop_settings", undefined);
+    expect(invokeMock).toHaveBeenCalledWith("get_desktop_settings");
     expect(settingsOf(useDesktopSettingsStore.getState())).toEqual({
       ...rustDefaults,
       startMinimized: true,
@@ -81,6 +85,7 @@ describe("desktop settings owned by Rust", () => {
       closeToTray: false,
       hardwareAcceleration: false,
       desktopNotifications: false,
+      gameCaptureHook: true,
     };
     invokeMock.mockImplementation(async (cmd) =>
       cmd === "get_desktop_settings"

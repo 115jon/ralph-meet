@@ -235,7 +235,7 @@ function SessionsSection() {
 function SignOutSection() {
   const signOut = useSession((s) => s.signOut);
   return (
-    <Section title="Sign-in" note="Sign out of Ralph Meet on this device.">
+    <Section title="Sign-in" note="Sign out of Yap on this device.">
       <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
         <Button
           variant="ghost"

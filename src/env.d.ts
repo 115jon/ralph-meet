@@ -6,6 +6,13 @@ import type { BackgroundTaskEnvelope } from "./lib/background-tasks";
 // These are defined in wrangler.toml and injected at runtime
 
 declare global {
+  /**
+   * Build flags, defined by each Vite config (web, desktop, mobile). Read
+   * them through isDesktop()/isMobile() in src/lib/runtime.ts.
+   */
+  const __IS_DESKTOP__: boolean;
+  const __IS_MOBILE__: boolean;
+
   interface ImportMetaEnv {
     /** `vite dev` only: the Kova key RALPH_AUTH picked (lib/dev-auth-target). */
     readonly RALPH_DEV_KOVA_KEY?: string;

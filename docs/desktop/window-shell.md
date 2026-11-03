@@ -1,7 +1,7 @@
 # Desktop window shell
 
-Who decides whether the main window is visible, how `ralphmeet://` links reach the page, and where the desktop
-settings live. The frontend sends intents; Rust decides.
+Who decides whether the main window is visible, how `yap://` (and the `ralphmeet://` alias) links reach the page, and
+where the desktop settings live. The frontend sends intents; Rust decides.
 
 ## Modules
 
@@ -25,14 +25,14 @@ minimized is ignored.
 
 The main window is created hidden (`visible: false`) while the updater window checks for updates.
 
-| path                               | entry                                  | does                                                    |
-| ---------------------------------- | -------------------------------------- | ------------------------------------------------------- |
-| updater handoff                    | `launch_main_window` command           | `complete_launch`: show and focus, or start in the tray |
-| updater window closed without it   | `Destroyed` event of `updater`         | `complete_launch` (no-op if it already ran)             |
-| tray click, tray "Show Ralph Meet" | `tray.rs`                              | `reveal`                                                |
-| second launch (shortcut, Run key)  | single-instance callback               | `reveal`, or `route_deep_link` if argv has a link       |
-| `ralphmeet://` link                | single-instance argv, deep-link plugin | `route_deep_link`, which calls `reveal`                 |
-| close button                       | `CloseRequested` on `main`             | `on_close_requested`: tray state, or quit               |
+| path                              | entry                                  | does                                                    |
+| --------------------------------- | -------------------------------------- | ------------------------------------------------------- |
+| updater handoff                   | `launch_main_window` command           | `complete_launch`: show and focus, or start in the tray |
+| updater window closed without it  | `Destroyed` event of `updater`         | `complete_launch` (no-op if it already ran)             |
+| tray click, tray "Show Yap"       | `tray.rs`                              | `reveal`                                                |
+| second launch (shortcut, Run key) | single-instance callback               | `reveal`, or `route_deep_link` if argv has a link       |
+| `yap://` or `ralphmeet://` link   | single-instance argv, deep-link plugin | `route_deep_link`, which calls `reveal`                 |
+| close button                      | `CloseRequested` on `main`             | `on_close_requested`: tray state, or quit               |
 
 `complete_launch` runs once. It starts in the tray only when all three hold (`launch_to_tray`):
 
@@ -52,17 +52,17 @@ is shown (CEF keeps running, the deferred maximize from `window_state` applies) 
 `--autostart` (`AUTOSTART_ARG` in `lib.rs`) marks a launch by the OS autostart entry. Only such launches honor start
 minimized; a double-click, a shortcut, the in-app restart and the relaunch after an update open the window.
 
-| launch                          | command                                   | `--autostart` |
-| ------------------------------- | ----------------------------------------- | ------------- |
-| HKCU `Run` value (stub install) | `"…\RalphMeet\RalphMeet.exe" --autostart` | yes           |
-| autostart plugin (off Windows)  | registered with `--autostart`             | yes           |
-| in-app restart (restart helper) | `windows_relaunch_arguments`: none        | no            |
-| installer relaunch after update | the stub, no arguments                    | no            |
-| legacy `Update.exe` `Run` value | `--processStart RalphMeet.exe`            | no            |
+| launch                          | command                            | `--autostart` |
+| ------------------------------- | ---------------------------------- | ------------- |
+| HKCU `Run` value (stub install) | `"…\Yap\Yap.exe" --autostart`      | yes           |
+| autostart plugin (off Windows)  | registered with `--autostart`      | yes           |
+| in-app restart (restart helper) | `windows_relaunch_arguments`: none | no            |
+| installer relaunch after update | the stub, no arguments             | no            |
+| legacy `Update.exe` `Run` value | `--processStart Yap.exe`           | no            |
 
 The root stub forwards its arguments byte for byte, and the installer's `MigrateRunValue` keeps caller arguments, so
 the flag reaches the app. Installs whose `Run` value still points at `Update.exe --processStart` do not forward it,
-so start minimized does not apply there. The flag is not a `ralphmeet:` URL, so deep-link extraction skips it, and the
+so start minimized does not apply there. The flag is not a `yap:` or `ralphmeet:` URL, so deep-link extraction skips it, and the
 restart-helper parser only looks for `--ralph-restart-helper`.
 
 At startup, if open on startup is on, the app reads the current `Run` value (`RegGetValueW`) and rewrites it only
@@ -79,7 +79,7 @@ Every source goes through `route_deep_link`:
 | second instance  | `deep_link_from_args(argv)` in the single-instance callback             |
 | deep-link plugin | `on_open_url` (macOS `Opened` events, or the plugin seeing argv itself) |
 
-`deep_link_from_args` skips `argv[0]` and takes the first argument that parses as a `ralphmeet:` URL, normalized
+`deep_link_from_args` skips `argv[0]` and takes the first argument that parses as a `yap:` or `ralphmeet:` URL, normalized
 through `tauri::Url` so the same link from two sources compares equal. The same URL again within 2 s is dropped.
 
 Event contract:
@@ -87,20 +87,20 @@ Event contract:
 | item                      | value                                                |
 | ------------------------- | ---------------------------------------------------- |
 | event                     | `rm://deep-link`, emitted once per accepted link     |
-| payload                   | `{ "url": "ralphmeet://invite/<code>" }`             |
+| payload                   | `{ "url": "yap://invite/<code>" }`                   |
 | before the page listens   | queued in Rust                                       |
 | `take_pending_deep_links` | returns the queued URLs and marks the listener ready |
 
 The page has one listener, [`src/lib/desktop-deep-link.ts`](../../src/lib/desktop-deep-link.ts): it listens once per
-page, then calls `take_pending_deep_links`. `DesktopDeepLinkBridge` in `src/routes/__root.tsx` subscribes and navigates
-to `/invite/$code`. The old `deep-link` and `deep-link://new-url` listeners and the plugin's `getCurrent()` call are
+page, then calls `take_pending_deep_links`. `DesktopDeepLinkBridge` in `src/routes/__root.tsx` subscribes through
+`getHost().deepLinks` ([web-host.md](web-host.md)) and navigates to `/invite/$code`. The old `deep-link` and `deep-link://new-url` listeners and the plugin's `getCurrent()` call are
 gone.
 
 ## Settings
 
 | item       | value                                                                                    |
 | ---------- | ---------------------------------------------------------------------------------------- |
-| file       | `%APPDATA%\RalphMeet\desktop-settings.json` (`~/.config/RalphMeet/` elsewhere)           |
+| file       | `%APPDATA%\Yap\desktop-settings.json` (`~/.config/Yap/` elsewhere)                       |
 | write      | temp file `desktop-settings.json.tmp`, then rename over the old one                      |
 | read       | once, in `run()`, before the builder; CEF arguments, close to tray and the launch use it |
 | unknown    | unknown fields are ignored, missing fields take their defaults                           |
@@ -123,9 +123,10 @@ Commands:
 | `get_desktop_settings`            | `{ settings, persisted }`       | `persisted` is false until the file was written once   |
 | `set_desktop_settings({ patch })` | the full settings now in effect | `patch` holds only the keys to change; writes the file |
 
-`set_desktop_settings` writes or deletes the HKCU `Run` value `RalphMeet` (the autostart plugin off Windows) only when
+`set_desktop_settings` writes or deletes the HKCU `Run` value `Yap` (the autostart plugin off Windows) only when
 `openOnStartup` changes; the startup repair above is the only other write. Hardware acceleration takes effect on the next launch. The Zustand store
-([`useDesktopSettingsStore.ts`](../../src/stores/useDesktopSettingsStore.ts)) mirrors the settings and keeps its
+([`useDesktopSettingsStore.ts`](../../src/stores/useDesktopSettingsStore.ts)) reaches the commands through
+`getHost().settings`, mirrors the settings and keeps its
 localStorage copy for first paint and for the web build.
 
 ### Migration from localStorage

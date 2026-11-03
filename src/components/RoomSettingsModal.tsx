@@ -64,7 +64,7 @@ const PAGES: Record<RoomSettingsTab, { title: string; blurb: string }> = {
   },
   appearance: {
     title: "Appearance",
-    blurb: "Theme and colours for Ralph Meet on this device.",
+    blurb: "Theme and colours for Yap on this device.",
   },
 };
 

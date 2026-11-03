@@ -1,4 +1,4 @@
-// ── Ralph Meet Desktop — Tauri application entry point ──────────────────
+// ── Yap Desktop — Tauri application entry point ──────────────────
 //
 // Module layout:
 //   screen_capture  — xcap-based window/monitor enumeration + thumbnails
@@ -90,7 +90,12 @@ pub(crate) fn shutdown_in_progress<R: tauri::Runtime>(app: &tauri::AppHandle<R>)
         .load(Ordering::Acquire)
 }
 
-const APP_DATA_DIRECTORY_NAME: &str = "RalphMeet";
+const APP_DATA_DIRECTORY_NAME: &str = "Yap";
+/// Ralph Meet's roaming data folder (`%APPDATA%\RalphMeet`), moved into
+/// `APP_DATA_DIRECTORY_NAME` before CEF opens the profile (see
+/// `move_legacy_app_data`). The installer does the same move.
+#[cfg(target_os = "windows")]
+const LEGACY_PRODUCT_APP_DATA_DIRECTORY_NAME: &str = "RalphMeet";
 /// Marks a launch by the OS autostart entry (the HKCU `Run` value, or the
 /// autostart plugin elsewhere). Only such launches honor "start minimized".
 /// Relaunches (restart helper, installer) never pass it.
@@ -106,11 +111,11 @@ const WINDOWS_RESTART_HELPER_TIMEOUT_MS: u64 = 10_000;
 const WINDOWS_RESTART_HELPER_SETTLE_DELAY_MS: u64 = 300;
 /// The root launcher stub (desktop/launcher), installed by the installer.
 #[cfg(target_os = "windows")]
-const WINDOWS_ROOT_STUB_FILE_NAME: &str = "RalphMeet.exe";
+const WINDOWS_ROOT_STUB_FILE_NAME: &str = "Yap.exe";
 /// Same as `identifier` in tauri.conf.json (which the notification plugin uses
 /// for toasts) and `RootLauncher.AppUserModelId` in the installer.
 #[cfg(target_os = "windows")]
-const WINDOWS_APP_USER_MODEL_ID: &str = "site.115jon.ralphmeet";
+const WINDOWS_APP_USER_MODEL_ID: &str = "com.115jon.yap";
 
 #[cfg(target_os = "windows")]
 pub(crate) fn windows_app_data_root() -> Option<std::path::PathBuf> {
@@ -146,7 +151,7 @@ fn versioned_windows_install_root_from_exe_path(
     install_dir.parent().map(std::path::Path::to_path_buf)
 }
 
-/// The installed launcher at the install root: the native `RalphMeet.exe` stub,
+/// The installed launcher at the install root: the native `Yap.exe` stub,
 /// or `Update.exe` (which needs `--processStart`) for installs made before the
 /// stub existed. The bool is true for `Update.exe`. See docs/desktop/launch.md.
 #[cfg(target_os = "windows")]
@@ -221,7 +226,7 @@ fn build_windows_startup_command_for_executable(
 #[cfg(target_os = "windows")]
 fn windows_startup_arguments(is_update_launcher: bool) -> &'static [&'static str] {
     if is_update_launcher {
-        &["--processStart", "RalphMeet.exe"]
+        &["--processStart", WINDOWS_ROOT_STUB_FILE_NAME]
     } else {
         &[AUTOSTART_ARG]
     }
@@ -232,7 +237,7 @@ fn windows_startup_arguments(is_update_launcher: bool) -> &'static [&'static str
 #[cfg(target_os = "windows")]
 fn windows_relaunch_arguments(is_update_launcher: bool) -> &'static [&'static str] {
     if is_update_launcher {
-        &["--processStart", "RalphMeet.exe"]
+        &["--processStart", WINDOWS_ROOT_STUB_FILE_NAME]
     } else {
         &[]
     }
@@ -410,6 +415,120 @@ fn migrate_legacy_windows_app_data() -> Result<(), String> {
     Ok(())
 }
 
+/// What `migrate_legacy_product_app_data` did, logged once logging is up.
+#[cfg(target_os = "windows")]
+static LEGACY_PRODUCT_APP_DATA_NOTES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
+/// Moves Ralph Meet's data folder into Yap's before CEF opens its profile
+/// there, for runs the installer did not migrate (dev builds, portable runs, a
+/// failed installer step), so the signed-in session and settings carry over.
+#[cfg(target_os = "windows")]
+fn migrate_legacy_product_app_data() {
+    let Some(base) = std::env::var_os("APPDATA").map(std::path::PathBuf::from) else {
+        return;
+    };
+    let notes = move_legacy_app_data(
+        &base.join(LEGACY_PRODUCT_APP_DATA_DIRECTORY_NAME),
+        &base.join(APP_DATA_DIRECTORY_NAME),
+    );
+    let _ = LEGACY_PRODUCT_APP_DATA_NOTES.set(notes);
+}
+
+/// The installer's rule (`LegacyCleanup.MigrateUserData`): one rename when
+/// `destination` does not exist, otherwise each top-level entry it lacks is
+/// moved. An entry `destination` already has stays in `legacy` (never
+/// overwritten, never deleted), except the disposable `logs` folder. `legacy`
+/// is removed once empty. Returns one note per action.
+#[cfg(target_os = "windows")]
+fn move_legacy_app_data(legacy: &std::path::Path, destination: &std::path::Path) -> Vec<String> {
+    let mut notes = Vec::new();
+    if !legacy.is_dir() || legacy == destination {
+        return notes;
+    }
+
+    if !destination.exists() {
+        if let Some(parent) = destination.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::rename(legacy, destination) {
+            Ok(()) => {
+                notes.push(format!(
+                    "moved {} to {}",
+                    legacy.display(),
+                    destination.display()
+                ));
+                return notes;
+            }
+            Err(err) => notes.push(format!(
+                "could not move {} as a whole ({err}); moving its entries",
+                legacy.display()
+            )),
+        }
+    }
+
+    if let Err(err) = std::fs::create_dir_all(destination) {
+        notes.push(format!("could not create {}: {err}", destination.display()));
+        return notes;
+    }
+
+    // The profile (the sign-in) goes first. If it cannot move (Ralph Meet still
+    // running), move nothing else either, so the two installs do not end up
+    // with half each. CEF then starts a fresh profile here and the old one is
+    // kept in place (dev runs only: the installer stops Ralph Meet first).
+    let legacy_profile = legacy.join("cef");
+    let profile = destination.join("cef");
+    if legacy_profile.is_dir() && !profile.exists() {
+        match std::fs::rename(&legacy_profile, &profile) {
+            Ok(()) => notes.push(format!(
+                "moved {} to {}",
+                legacy_profile.display(),
+                profile.display()
+            )),
+            Err(err) => {
+                notes.push(format!(
+                    "could not move {} ({err}); left Ralph Meet's data in place",
+                    legacy_profile.display()
+                ));
+                return notes;
+            }
+        }
+    }
+
+    let Ok(entries) = std::fs::read_dir(legacy) else {
+        return notes;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let source = entry.path();
+        let target = destination.join(&name);
+        if target.exists() {
+            if name.eq_ignore_ascii_case("logs") {
+                let _ = std::fs::remove_dir_all(&source);
+            } else {
+                notes.push(format!(
+                    "kept {}: Yap already has its own",
+                    source.display()
+                ));
+            }
+            continue;
+        }
+        match std::fs::rename(&source, &target) {
+            Ok(()) => notes.push(format!(
+                "moved {} to {}",
+                source.display(),
+                target.display()
+            )),
+            Err(err) => notes.push(format!("kept {}: {err}", source.display())),
+        }
+    }
+
+    // Only succeeds once the folder is empty.
+    if std::fs::remove_dir(legacy).is_ok() {
+        notes.push(format!("removed {}", legacy.display()));
+    }
+    notes
+}
+
 fn claim_shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>, context: &'static str) -> bool {
     let settings = app.state::<ShutdownState>();
     if settings.shutdown_started.swap(true, Ordering::AcqRel) {
@@ -504,6 +623,10 @@ pub fn run() {
     // Before any window exists.
     #[cfg(target_os = "windows")]
     set_windows_app_user_model_id();
+
+    // Before the settings load and CEF opens its profile in %APPDATA%\Yap.
+    #[cfg(target_os = "windows")]
+    migrate_legacy_product_app_data();
 
     // Install the rustls ring crypto provider before anything touches TLS.
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -649,7 +772,7 @@ pub fn run() {
     // This causes DevTools to instantly close.
     let is_cef_child = std::env::args().any(|arg| arg.starts_with("--type="));
     if !is_cef_child {
-        // A second launch (shortcut, `ralphmeet://` link) reveals this
+        // A second launch (shortcut, `yap://` or `ralphmeet://` link) reveals this
         // instance's window and routes its link.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             main_window::on_second_instance(app, &argv);
@@ -666,6 +789,10 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             if let Err(err) = migrate_legacy_windows_app_data() {
                 log::warn!("[DesktopRuntime] failed to migrate legacy Windows app data: {err}");
+            }
+            #[cfg(target_os = "windows")]
+            for note in LEGACY_PRODUCT_APP_DATA_NOTES.get().into_iter().flatten() {
+                log::info!("[DesktopRuntime] Ralph Meet data: {note}");
             }
 
             if let Ok(log_dir) = app.path().app_log_dir() {
@@ -710,24 +837,20 @@ pub fn run() {
             #[cfg(desktop)]
             tray::setup_tray(app)?;
 
-            // ── Vulkan capture activation ────────────────────────────────
-            // The Vulkan present hook is an implicit Vulkan layer the loader
-            // only activates when its manifest is registered (and only at
-            // vkCreateInstance time), so register at startup — before any
-            // Vulkan game launches — rather than at injection time. Best-effort:
-            // failure just means Vulkan games fall back (DX/GL capture is
-            // unaffected).
+            // ── Vulkan capture layer ─────────────────────────────────────
+            // Like OBS, keep the (dormant) OBS-signed Vulkan layer registered
+            // while "Game capture hook" is on, so a Vulkan game started
+            // before a share can still be captured. This also moves the
+            // registration to the pinned version and removes entries left by
+            // older versions and the old unsigned layer.
             #[cfg(all(feature = "game-capture-hook", windows))]
-            {
-                let registered = game_capture::vulkan_layer::ensure_registered();
-                log::info!(
-                    "[DesktopRuntime] Vulkan implicit-layer registration: {registered} manifest(s) active"
-                );
-            }
+            game_capture::vulkan_layer::spawn_sync(native_share::hook_layer_wanted(
+                settings.settings.game_capture_hook,
+            ));
 
-            // Register deep-link schemes with the OS so `ralphmeet://` URLs
-            // are routed to this executable. On Windows this writes the
-            // HKCU\Software\Classes\ralphmeet registry key. Only needed during
+            // Register deep-link schemes with the OS so `yap://` and
+            // `ralphmeet://` URLs are routed to this executable. On Windows this
+            // writes the HKCU\Software\Classes\<scheme> keys. Only needed during
             // development — the installer registers the scheme at install time.
             #[cfg(target_os = "linux")]
             {
@@ -751,7 +874,7 @@ pub fn run() {
                 }
             }
 
-            // Route ralphmeet://invite/<code> links (plugin events and the
+            // Route yap:// and ralphmeet://invite/<code> links (plugin events and the
             // cold-start command line) through the main window owner. Sign-in
             // uses a device code, not a deep link.
             main_window::setup(app);
@@ -970,7 +1093,7 @@ mod windows_startup_registration_tests {
 
     #[test]
     fn root_launcher_prefers_stub_then_update_exe() {
-        let root = std::env::temp_dir().join(format!("ralph-root-launcher-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("yap-root-launcher-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
 
@@ -982,13 +1105,13 @@ mod windows_startup_registration_tests {
             Some((root.join("Update.exe"), true))
         );
 
-        std::fs::write(root.join("RalphMeet.exe"), b"stub").unwrap();
+        std::fs::write(root.join("Yap.exe"), b"stub").unwrap();
         let (launcher, is_update_launcher) = windows_root_launcher(&root).unwrap();
-        assert_eq!(launcher, root.join("RalphMeet.exe"));
+        assert_eq!(launcher, root.join("Yap.exe"));
         assert!(!is_update_launcher);
         assert_eq!(
             build_windows_startup_command_for_executable(&launcher, is_update_launcher),
-            format!("\"{}\" --autostart", root.join("RalphMeet.exe").display())
+            format!("\"{}\" --autostart", root.join("Yap.exe").display())
         );
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1004,18 +1127,18 @@ mod windows_startup_registration_tests {
     #[test]
     fn versioned_install_root_resolves_from_app_directory() {
         let root = versioned_windows_install_root_from_exe_path(Path::new(
-            r"C:\Users\jon\AppData\Local\RalphMeet\app-1.13.0\RalphMeet.exe",
+            r"C:\Users\jon\AppData\Local\Yap\app-1.13.0\Yap.exe",
         ));
         assert_eq!(
             root.as_deref(),
-            Some(Path::new(r"C:\Users\jon\AppData\Local\RalphMeet"))
+            Some(Path::new(r"C:\Users\jon\AppData\Local\Yap"))
         );
     }
 
     #[test]
     fn non_versioned_paths_do_not_report_install_root() {
         let root = versioned_windows_install_root_from_exe_path(Path::new(
-            r"C:\Users\jon\AppData\Local\RalphMeet\RalphMeet.exe",
+            r"C:\Users\jon\AppData\Local\Yap\Yap.exe",
         ));
         assert!(root.is_none());
     }
@@ -1023,24 +1146,24 @@ mod windows_startup_registration_tests {
     #[test]
     fn startup_command_targets_stable_update_launcher_when_available() {
         let command = build_windows_startup_command_for_executable(
-            Path::new(r"C:\Users\jon\AppData\Local\RalphMeet\Update.exe"),
+            Path::new(r"C:\Users\jon\AppData\Local\Yap\Update.exe"),
             true,
         );
         assert_eq!(
             command,
-            "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\Update.exe\" --processStart RalphMeet.exe"
+            "\"C:\\Users\\jon\\AppData\\Local\\Yap\\Update.exe\" --processStart Yap.exe"
         );
     }
 
     #[test]
     fn startup_command_marks_the_stub_launch_as_autostart() {
         let command = build_windows_startup_command_for_executable(
-            Path::new(r"C:\Users\jon\AppData\Local\RalphMeet\RalphMeet.exe"),
+            Path::new(r"C:\Users\jon\AppData\Local\Yap\Yap.exe"),
             false,
         );
         assert_eq!(
             command,
-            "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\RalphMeet.exe\" --autostart"
+            "\"C:\\Users\\jon\\AppData\\Local\\Yap\\Yap.exe\" --autostart"
         );
     }
 
@@ -1049,14 +1172,14 @@ mod windows_startup_registration_tests {
         assert!(windows_relaunch_arguments(false).is_empty());
         assert_eq!(
             windows_relaunch_arguments(true),
-            ["--processStart", "RalphMeet.exe"]
+            ["--processStart", "Yap.exe"]
         );
     }
 
     #[test]
     fn restart_helper_parser_ignores_autostart() {
         let parent_pid = parse_windows_restart_helper_parent_pid([
-            "RalphMeet.exe".to_string(),
+            "Yap.exe".to_string(),
             "--autostart".to_string(),
         ])
         .unwrap();
@@ -1066,7 +1189,7 @@ mod windows_startup_registration_tests {
     #[test]
     fn restart_helper_parent_pid_parser_extracts_pid() {
         let parent_pid = parse_windows_restart_helper_parent_pid([
-            "RalphMeet.exe".to_string(),
+            "Yap.exe".to_string(),
             "--flag".to_string(),
             "--ralph-restart-helper".to_string(),
             "12345".to_string(),
@@ -1078,10 +1201,121 @@ mod windows_startup_registration_tests {
     #[test]
     fn restart_helper_parent_pid_parser_ignores_regular_launches() {
         let parent_pid = parse_windows_restart_helper_parent_pid([
-            "RalphMeet.exe".to_string(),
+            "Yap.exe".to_string(),
             "--type=gpu-process".to_string(),
         ])
         .unwrap();
         assert_eq!(parent_pid, None);
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod legacy_product_app_data_tests {
+    use super::move_legacy_app_data;
+    use std::path::{Path, PathBuf};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("yap-legacy-data-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn write(path: &Path, contents: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn read(path: &Path) -> String {
+        std::fs::read_to_string(path).unwrap()
+    }
+
+    #[test]
+    fn moves_the_whole_folder_when_yap_has_none() {
+        let root = temp_root("whole");
+        let (legacy, yap) = (root.join("RalphMeet"), root.join("Yap"));
+        write(
+            &legacy.join("cef").join("Network").join("Cookies"),
+            "session",
+        );
+        write(&legacy.join("desktop-settings.json"), "{}");
+
+        move_legacy_app_data(&legacy, &yap);
+
+        assert!(!legacy.exists());
+        assert_eq!(
+            read(&yap.join("cef").join("Network").join("Cookies")),
+            "session"
+        );
+        assert_eq!(read(&yap.join("desktop-settings.json")), "{}");
+        // A second run has nothing left to do.
+        assert!(move_legacy_app_data(&legacy, &yap).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn keeps_entries_yap_already_has_and_moves_the_rest() {
+        let root = temp_root("merge");
+        let (legacy, yap) = (root.join("RalphMeet"), root.join("Yap"));
+        write(&yap.join("cef").join("Preferences"), "yap");
+        write(&yap.join("logs").join("installer").join("a.log"), "new");
+        write(&legacy.join("cef").join("Preferences"), "ralph");
+        write(&legacy.join("logs").join("installer").join("a.log"), "old");
+        write(&legacy.join(".window-state.json"), "{}");
+
+        move_legacy_app_data(&legacy, &yap);
+
+        assert_eq!(read(&yap.join("cef").join("Preferences")), "yap");
+        assert_eq!(read(&legacy.join("cef").join("Preferences")), "ralph");
+        assert_eq!(read(&yap.join(".window-state.json")), "{}");
+        assert_eq!(
+            read(&yap.join("logs").join("installer").join("a.log")),
+            "new"
+        );
+        assert!(!legacy.join("logs").exists());
+        assert!(legacy.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn moves_nothing_while_the_legacy_profile_is_locked() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = temp_root("locked");
+        let (legacy, yap) = (root.join("RalphMeet"), root.join("Yap"));
+        write(&yap.join("logs").join("installer").join("a.log"), "new");
+        let cookies = legacy.join("cef").join("Network").join("Cookies");
+        write(&cookies, "session");
+        write(&legacy.join("desktop-settings.json"), "{}");
+
+        // FILE_SHARE_READ only: like a running CEF holding its profile.
+        let handle = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&cookies)
+            .unwrap();
+        move_legacy_app_data(&legacy, &yap);
+        drop(handle);
+
+        assert_eq!(read(&legacy.join("desktop-settings.json")), "{}");
+        assert!(!yap.join("cef").exists());
+        assert!(!yap.join("desktop-settings.json").exists());
+
+        move_legacy_app_data(&legacy, &yap);
+        assert_eq!(
+            read(&yap.join("cef").join("Network").join("Cookies")),
+            "session"
+        );
+        assert_eq!(read(&yap.join("desktop-settings.json")), "{}");
+        assert!(!legacy.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn does_nothing_without_a_legacy_folder() {
+        let root = temp_root("none");
+        assert!(move_legacy_app_data(&root.join("RalphMeet"), &root.join("Yap")).is_empty());
+        assert!(!root.join("Yap").exists());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

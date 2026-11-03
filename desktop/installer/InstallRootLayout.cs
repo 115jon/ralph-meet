@@ -7,10 +7,16 @@ namespace Installer
 {
     public sealed class InstallRootLayout
     {
-        public const string DefaultInstallDirectoryName = "RalphMeet";
+        public const string DefaultInstallDirectoryName = "Yap";
         public const string CurrentStateFileName = "current.json";
         public const string UpdateExeFileName = "Update.exe";
-        public const string RootStubFileName = "RalphMeet.exe";
+        public const string RootStubFileName = "Yap.exe";
+
+        /// <summary>The Ralph Meet install root under LocalAppData, replaced by Yap (see LegacyCleanup).</summary>
+        public const string LegacyInstallDirectoryName = "RalphMeet";
+
+        /// <summary>The Ralph Meet app and root stub file name.</summary>
+        public const string LegacyExecutableFileName = "RalphMeet.exe";
         public const string RootIconFileName = "app.ico";
         public const string StagingDirectoryName = "staging";
         public const string LogsDirectoryName = "logs";
@@ -33,7 +39,10 @@ namespace Installer
             CefDirectoryName
         };
 
-        public InstallRootLayout(string rootPath)
+        /// <param name="executableFileName">
+        /// The app and root stub file name: Yap.exe, or RalphMeet.exe for a legacy install root.
+        /// </param>
+        public InstallRootLayout(string rootPath, string executableFileName = RootStubFileName)
         {
             if (string.IsNullOrWhiteSpace(rootPath))
             {
@@ -41,14 +50,18 @@ namespace Installer
             }
 
             RootPath = Path.GetFullPath(rootPath);
+            ExecutableFileName = string.IsNullOrWhiteSpace(executableFileName) ? RootStubFileName : executableFileName;
         }
 
         public string RootPath { get; }
 
+        /// <summary>The file name of the root stub and of app-&lt;version&gt;'s app exe.</summary>
+        public string ExecutableFileName { get; }
+
         public string UpdateExePath => Path.Combine(RootPath, UpdateExeFileName);
 
         /// <summary>The native launcher stub every shortcut points at (see RootLauncher).</summary>
-        public string RootStubPath => Path.Combine(RootPath, RootStubFileName);
+        public string RootStubPath => Path.Combine(RootPath, ExecutableFileName);
 
         public string CurrentStatePath => Path.Combine(RootPath, CurrentStateFileName);
 
@@ -169,6 +182,17 @@ namespace Installer
             }
 
             return new InstallRootLayout(Path.Combine(localAppData, DefaultInstallDirectoryName));
+        }
+
+        /// <summary>The Ralph Meet install root a Yap install replaces.</summary>
+        public static InstallRootLayout LegacyFromLocalAppData(string localAppData)
+        {
+            if (string.IsNullOrWhiteSpace(localAppData))
+            {
+                throw new ArgumentException("LocalAppData root is required.", nameof(localAppData));
+            }
+
+            return new InstallRootLayout(Path.Combine(localAppData, LegacyInstallDirectoryName), LegacyExecutableFileName);
         }
 
         public static InstallRootLayout FromExecutablePath(string executablePath)

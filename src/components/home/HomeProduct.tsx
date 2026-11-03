@@ -164,13 +164,13 @@ export function HomeProduct() {
             <ResponsiveShot
               desktop={{
                 name: "share",
-                alt: "A Ralph Meet voice channel with Linus sharing his screen: a code editor fills the stage, a Live badge sits beside his stream, and the people in the call are on tiles below",
+                alt: "A Yap voice channel with Linus sharing his screen: a code editor fills the stage, a Live badge sits beside his stream, and the people in the call are on tiles below",
                 width: 1440,
                 height: 900,
               }}
               phone={{
                 name: "share-stage",
-                alt: "Linus sharing his screen in a Ralph Meet voice channel: a code editor fills the stage under a Live badge, with the people in the call on tiles below",
+                alt: "Linus sharing his screen in a Yap voice channel: a code editor fills the stage under a Live badge, with the people in the call on tiles below",
                 width: 1116,
                 height: 813,
               }}
@@ -207,13 +207,13 @@ export function HomeProduct() {
             <ResponsiveShot
               desktop={{
                 name: "chat",
-                alt: "A Ralph Meet text channel planning a trivia night: messages with reactions, a pinned reply, a shared file, a thread with two replies and the composer",
+                alt: "A Yap text channel planning a trivia night: messages with reactions, a pinned reply, a shared file, a thread with two replies and the composer",
                 width: 1440,
                 height: 900,
               }}
               phone={{
                 name: "phone-chat",
-                alt: "Ralph Meet on a phone in the general channel, with messages, reactions, a shared file and the composer",
+                alt: "Yap on a phone in the general channel, with messages, reactions, a shared file and the composer",
                 width: 390,
                 height: 844,
               }}
@@ -245,7 +245,7 @@ export function HomeProduct() {
               <ResponsiveShot
                 desktop={{
                   name: "listen",
-                  alt: "Ralph Meet's Listen Together panel: search results on the left, Night Drive playing on the right with the shared queue below, each track tagged with who added it",
+                  alt: "Yap's Listen Together panel: search results on the left, Night Drive playing on the right with the shared queue below, each track tagged with who added it",
                   width: 1120,
                   height: 700,
                 }}
@@ -281,7 +281,7 @@ export function HomeProduct() {
               <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-[2px] border border-line-strong bg-ply-0 shadow-modal md:max-w-none">
                 <Shot
                   name="soundboard"
-                  alt="The Ralph Meet soundboard: favourites, the server's sounds such as Airhorn and Sad trombone, an Add sound tile, and send and playback volume sliders"
+                  alt="The Yap soundboard: favourites, the server's sounds such as Airhorn and Sad trombone, an Add sound tile, and send and playback volume sliders"
                   width={840}
                   height={1200}
                   sizes="(min-width: 768px) 420px, 300px"

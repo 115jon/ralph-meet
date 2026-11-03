@@ -48,7 +48,7 @@ namespace Installer.Tests
             Assert.True(RootLauncher.Refresh(_layout, active));
 
             Assert.Equal("stub-v2", File.ReadAllText(_layout.RootStubPath));
-            Assert.Empty(Directory.GetFiles(_root, "RalphMeet.exe*.old"));
+            Assert.Empty(Directory.GetFiles(_root, "Yap.exe*.old"));
         }
 
         [Fact]
@@ -104,7 +104,7 @@ namespace Installer.Tests
 
             WaitUntilDeletable(_layout.RootStubPath + ".old");
             RootLauncher.DeleteOldCopies(_layout);
-            Assert.Empty(Directory.GetFiles(_root, "RalphMeet.exe*.old"));
+            Assert.Empty(Directory.GetFiles(_root, "Yap.exe*.old"));
         }
 
         [Fact]
@@ -112,7 +112,7 @@ namespace Installer.Tests
         {
             RootLauncher.ResolveEntryPoint(_layout, out string path, out string arguments);
             Assert.Equal(_layout.UpdateExePath, path);
-            Assert.Equal("--processStart RalphMeet.exe", arguments);
+            Assert.Equal("--processStart Yap.exe", arguments);
 
             File.WriteAllText(_layout.RootStubPath, "stub");
             RootLauncher.ResolveEntryPoint(_layout, out path, out arguments);
@@ -123,7 +123,7 @@ namespace Installer.Tests
         [Fact]
         public void Root_Stub_Is_Preserved_By_Root_Cleanup()
         {
-            Assert.Contains("RalphMeet.exe", _layout.GetPreservedRootEntryNames());
+            Assert.Contains("Yap.exe", _layout.GetPreservedRootEntryNames());
             Assert.Contains(_layout.RootStubPath, _layout.GetInstalledExecutablePaths(InstallerLogic.ExecutableFileName));
         }
 

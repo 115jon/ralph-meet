@@ -41,9 +41,9 @@ const UNSUPPORTED_COPY: Record<
   string
 > = {
   "mobile-app":
-    "The Ralph Meet phone app can't share your screen yet. You can still watch other people's streams here. To share, use the desktop app or a browser on a computer.",
+    "The Yap phone app can't share your screen yet. You can still watch other people's streams here. To share, use the desktop app or a browser on a computer.",
   "mobile-browser":
-    "Phone and tablet browsers can't share a screen. You can still watch other people's streams here. To share, open Ralph Meet on a computer.",
+    "Phone and tablet browsers can't share a screen. You can still watch other people's streams here. To share, open Yap on a computer.",
   browser:
     "This browser can't share a screen. Try a recent Chrome, Edge, Firefox or Safari on a computer.",
 };

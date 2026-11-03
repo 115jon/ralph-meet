@@ -6,7 +6,7 @@
     Existing installs auto-update from latest.json, so a bad one strands users.
     Fails (throws) unless:
       - version equals tauri.conf.json's version and the release tag (v<version>)
-      - the windows-x86_64 url ends with /releases/download/<tag>/RalphMeetSetup.exe
+      - the windows-x86_64 url ends with /releases/download/<tag>/YapSetup.exe
       - pub_date is a UTC timestamp (yyyy-MM-ddTHH:mm:ssZ)
       - signature is base64 of a minisign signature made by the key in
         tauri.conf.json plugins.updater.pubkey (compared by minisign key id)
@@ -52,7 +52,7 @@ $platform = $latest.platforms."windows-x86_64"
 if (-not $platform) {
     $errors.Add("platforms.windows-x86_64 is missing")
 } else {
-    $expectedUrl = "https://github.com/$Repo/releases/download/$Tag/RalphMeetSetup.exe"
+    $expectedUrl = "https://github.com/$Repo/releases/download/$Tag/YapSetup.exe"
     if ($platform.url -ne $expectedUrl) { $errors.Add("url '$($platform.url)' != '$expectedUrl'") }
 
     if ([string]::IsNullOrWhiteSpace($platform.signature)) {

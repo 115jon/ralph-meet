@@ -71,16 +71,19 @@ fn normalized_window_identity(value: &str) -> String {
         .collect()
 }
 
+/// The app's window title and exe name, normalized: "Yap", and Ralph Meet's
+/// old name so a window of an old build still counts as ours.
+const OWN_APP_IDENTITIES: [&str; 2] = ["yap", "ralphmeet"];
+
 fn is_own_app_window(title: &str, app_name: &str) -> bool {
-    let own_app_identity = "ralphmeet";
-    let normalized_app_name = normalized_window_identity(app_name);
-    if normalized_app_name == own_app_identity {
-        return true;
-    }
+    let is_own = |value: &str| {
+        let normalized = normalized_window_identity(value);
+        OWN_APP_IDENTITIES.contains(&normalized.as_str())
+    };
 
     // Match only the app's exact title, not any third-party window that
-    // happens to mention "Ralph Meet" (for example a Helium tab title).
-    normalized_window_identity(title) == own_app_identity
+    // happens to mention "Yap" (for example a Helium tab title).
+    is_own(app_name) || is_own(title)
 }
 
 fn is_blocked_window(title: &str, app_name: &str) -> bool {
@@ -133,10 +136,10 @@ fn own_app_main_window_source(app: &tauri::AppHandle<TauriRuntime>) -> Option<Sc
     Some(ScreenSource {
         id: format!("window-{hwnd_value}"),
         capture_id: format!("window:{hwnd_value}:0"),
-        name: "Ralph Meet".to_string(),
+        name: "Yap".to_string(),
         kind: "window".to_string(),
         thumbnail: String::new(),
-        app_name: "RalphMeet".to_string(),
+        app_name: "Yap".to_string(),
         icon,
     })
 }
@@ -523,8 +526,12 @@ mod tests {
 
     #[test]
     fn recognizes_our_app_without_catching_other_windows() {
+        assert!(is_own_app_window("Yap", "Yap"));
+        assert!(is_own_app_window("Yap", ""));
+        assert!(!is_own_app_window("Yap docs", "chrome"));
+        assert!(!is_own_app_window("Sign In — Yap - Helium", "chrome"));
+        // Ralph Meet, the old name, still counts as ours.
         assert!(is_own_app_window("Ralph Meet", "RalphMeet"));
-        assert!(is_own_app_window("Ralph Meet", ""));
         assert!(is_own_app_window("Ralph-Meet", "ralph-meet"));
         assert!(!is_own_app_window("Ralph Meet docs", "chrome"));
     }

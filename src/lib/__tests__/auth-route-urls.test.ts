@@ -29,7 +29,7 @@ describe("auth route URL helpers", () => {
 });
 
 describe("sanitizeRedirectUrl", () => {
-  const origins = ["https://meet.115jon.site"];
+  const origins = ["https://yap.115jon.com"];
 
   it("keeps same-origin paths, including query strings", () => {
     expect(sanitizeRedirectUrl("/activate?code=ABCD-EFGH", origins)).toBe(
@@ -55,7 +55,7 @@ describe("sanitizeRedirectUrl", () => {
 
   it("allows absolute URLs on an allowed origin", () => {
     expect(
-      sanitizeRedirectUrl("https://meet.115jon.site/chat?x=1", origins),
-    ).toBe("https://meet.115jon.site/chat?x=1");
+      sanitizeRedirectUrl("https://yap.115jon.com/chat?x=1", origins),
+    ).toBe("https://yap.115jon.com/chat?x=1");
   });
 });

@@ -150,22 +150,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build OBS game capture binaries from source
+      # The game-capture hook ships as OBS Studio's own signed release files,
+      # unmodified (desktop/packaging/obs-signed-hook.lock.json). Their GPL-2.0
+      # corresponding source (OBS sources, Detours, obs-deps) is downloaded,
+      # checked against the same lock, and attached to this release below.
+      - name: Fetch and verify OBS-signed capture hook and its source
         shell: pwsh
-        run: |
-          ./desktop/scripts/build-capture-fork.ps1 -Arch both -Config Release -FetchDetours
-
-          $requiredHookDlls = @(
-            "desktop/src-tauri/resources/obs-capture/graphics-hook64.dll",
-            "desktop/src-tauri/resources/obs-capture/graphics-hook32.dll"
-          )
-          $missingHookDlls = $requiredHookDlls | Where-Object {
-            -not (Test-Path -LiteralPath $_)
-          }
-
-          if ($missingHookDlls.Count -gt 0) {
-            throw "Capture fork build did not produce required hook DLLs: $($missingHookDlls -join ', ')"
-          }
+        run: ./desktop/scripts/fetch-obs-signed-hook.ps1 -CacheDir "$env:RUNNER_TEMP\obs-signed-hook" -SourcesDir "$env:RUNNER_TEMP\obs-signed-sources"
 
       # Key the CLI on the feat/cef commit so a release reuses the cached binary
       # until upstream moves (every few weeks). The cache used to be keyed on a
@@ -197,14 +188,14 @@ jobs:
           Set-Location desktop
           cargo tauri build --config src-tauri/tauri.deployed.conf.json --features cef,native-screen-share,game-capture-hook --no-bundle
 
-      # The root RalphMeet.exe launcher stub (docs/desktop/launch.md). A small
+      # The root Yap.exe launcher stub (docs/desktop/launch.md). A small
       # standalone crate with no Tauri or CEF dependencies; it builds in seconds.
       - name: Build root launcher
         shell: pwsh
         run: |
           cargo build --release --manifest-path desktop/launcher/Cargo.toml
-          $stub = Get-Item "desktop/launcher/target/release/ralph-meet-launcher.exe"
-          Write-Host "==> ralph-meet-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
+          $stub = Get-Item "desktop/launcher/target/release/yap-launcher.exe"
+          Write-Host "==> yap-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
 
       - name: Save desktop Rust target cache
         if: steps.restore-desktop-target.outputs.cache-hit != 'true'
@@ -233,12 +224,12 @@ jobs:
           dotnet build desktop/installer/installer.csproj -c Release -p:Version=$Version -p:InformationalVersion=$Version -p:Company="$Publisher" -p:Product="$InstallerDisplayName Setup"
 
           # The csproj embeds the payload only if it exists; never ship an installer without it.
-          $setupSize = (Get-Item "desktop/installer/bin/Release/net48/RalphMeetSetup.exe").Length
+          $setupSize = (Get-Item "desktop/installer/bin/Release/net48/YapSetup.exe").Length
           $payloadSize = (Get-Item "desktop/installer/Assets/payload.rmpk").Length
           if ($setupSize -lt $payloadSize) {
-            throw "RalphMeetSetup.exe ($setupSize bytes) is smaller than its payload ($payloadSize bytes): the payload was not embedded."
+            throw "YapSetup.exe ($setupSize bytes) is smaller than its payload ($payloadSize bytes): the payload was not embedded."
           }
-          Write-Host "==> RalphMeetSetup.exe: $([math]::Round($setupSize / 1MB, 1)) MB (payload $([math]::Round($payloadSize / 1MB, 1)) MB)"
+          Write-Host "==> YapSetup.exe: $([math]::Round($setupSize / 1MB, 1)) MB (payload $([math]::Round($payloadSize / 1MB, 1)) MB)"
 
       - name: Create draft release, sign installer, and upload metadata
         shell: pwsh
@@ -258,12 +249,12 @@ jobs:
 
           if (-not $releaseExists) {
               Write-Host "Creating draft release..."
-              & gh release create $env:RELEASE_TAG --draft --title "Ralph Meet $env:RELEASE_TAG" --notes "Ralph Meet Release" -R ${{ github.repository }}
+              & gh release create $env:RELEASE_TAG --draft --title "Yap $env:RELEASE_TAG" --notes "Yap Release" -R ${{ github.repository }}
           }
 
           # 2. Sign the installer using cargo tauri signer
-          $SetupRenamePath = "desktop/installer/bin/Release/net48/RalphMeetSetup.exe"
-          Write-Host "==> Signing RalphMeetSetup.exe..."
+          $SetupRenamePath = "desktop/installer/bin/Release/net48/YapSetup.exe"
+          Write-Host "==> Signing YapSetup.exe..."
           if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
               cargo tauri signer sign -k $env:TAURI_SIGNING_PRIVATE_KEY -p $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD $SetupRenamePath
           } else {
@@ -284,7 +275,7 @@ jobs:
           # Construct the latest.json updater metadata
           $TagName = $env:RELEASE_TAG
           $Repo = "${{ github.repository }}"
-          $Url = "https://github.com/$Repo/releases/download/$TagName/RalphMeetSetup.exe"
+          $Url = "https://github.com/$Repo/releases/download/$TagName/YapSetup.exe"
           $PubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
           $Metadata = @{
@@ -308,6 +299,12 @@ jobs:
           # 4. Upload artifacts to the release
           gh release upload $env:RELEASE_TAG $SetupRenamePath --clobber -R ${{ github.repository }}
           gh release upload $env:RELEASE_TAG $LatestJsonPath --clobber -R ${{ github.repository }}
+
+          # GPL-2.0 corresponding source for the OBS capture binaries in the
+          # installer (obs-capture/SOURCE-OFFER.md points here).
+          Get-ChildItem -LiteralPath "$env:RUNNER_TEMP\obs-signed-sources" -File | ForEach-Object {
+              gh release upload $env:RELEASE_TAG $_.FullName --clobber -R ${{ github.repository }}
+          }
 
           # 5. Publish the release and mark it as latest
           gh release edit $env:RELEASE_TAG --draft=false --latest -R ${{ github.repository }}

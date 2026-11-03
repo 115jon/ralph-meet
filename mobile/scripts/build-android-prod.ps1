@@ -14,8 +14,8 @@
     Public web origin used for links opened outside the app.
 #>
 param(
-    [string]$ApiBaseUrl = "https://meet.115jon.site",
-    [string]$PublicWebUrl = "https://meet.115jon.site"
+    [string]$ApiBaseUrl = "https://yap.115jon.com",
+    [string]$PublicWebUrl = "https://yap.115jon.com"
 )
 
 $ErrorActionPreference = "Stop"

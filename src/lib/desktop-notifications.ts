@@ -113,9 +113,9 @@ export function toDesktopNotificationSyncPayload(
     showDot: badge.showDot,
     tooltip: badge.hasUnread
       ? badge.indicatorCount > 0
-        ? `Ralph Meet - ${badge.unreadCount} unread notifications`
-        : "Ralph Meet - unread activity"
-      : "Ralph Meet",
+        ? `Yap - ${badge.unreadCount} unread notifications`
+        : "Yap - unread activity"
+      : "Yap",
   };
 }
 

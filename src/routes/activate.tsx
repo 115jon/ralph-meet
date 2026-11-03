@@ -10,7 +10,7 @@ type ActivateSearch = {
 };
 
 /**
- * Kova's device verification URL for Ralph Meet:
+ * Kova's device verification URL for Yap:
  * https://<public web host>/activate?code=XXXX-XXXX (host from config)
  */
 export const Route = createFileRoute("/activate")({
@@ -24,7 +24,7 @@ export const Route = createFileRoute("/activate")({
   component: ActivatePage,
   head: () => ({
     meta: [
-      { title: "Connect a device — Ralph Meet" },
+      { title: "Connect a device — Yap" },
       { name: "robots", content: "noindex" },
       { name: "referrer", content: "no-referrer" },
     ],

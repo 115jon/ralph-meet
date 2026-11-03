@@ -1,4 +1,4 @@
-//! Which installed `RalphMeet.exe` the root stub starts, and with what command line.
+//! Which installed `Yap.exe` the root stub starts, and with what command line.
 //!
 //! Pure logic (file system reads only) so it can be unit tested on any host.
 //! The install root layout is owned by the installer (`desktop/installer/InstallRootLayout.cs`).
@@ -6,12 +6,12 @@
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
-pub const APP_EXE: &str = "RalphMeet.exe";
+pub const APP_EXE: &str = "Yap.exe";
 pub const UPDATE_EXE: &str = "Update.exe";
 pub const STATE_FILE: &str = "current.json";
 pub const VERSION_PREFIX: &str = "app-";
 /// Arguments the legacy `Update.exe` launcher needs before the caller's own.
-pub const UPDATE_EXE_ARGS: &str = "--processStart RalphMeet.exe";
+pub const UPDATE_EXE_ARGS: &str = "--processStart Yap.exe";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
@@ -19,7 +19,7 @@ pub enum Source {
     CurrentJson,
     /// An `app-<semver>` directory, highest first.
     Scan,
-    /// `Update.exe --processStart RalphMeet.exe`, the pre-stub launcher.
+    /// `Update.exe --processStart Yap.exe`, the pre-stub launcher.
     UpdateExe,
 }
 
@@ -350,7 +350,7 @@ mod tests {
     impl TempRoot {
         fn new(name: &str) -> Self {
             let path = std::env::temp_dir().join(format!(
-                "ralph-launcher-{name}-{}-{:?}",
+                "yap-launcher-{name}-{}-{:?}",
                 std::process::id(),
                 std::thread::current().id()
             ));
@@ -488,7 +488,7 @@ mod tests {
         assert_eq!(targets[0].source, Source::UpdateExe);
         assert_eq!(targets[0].exe, root.0.join(UPDATE_EXE));
         assert_eq!(targets[0].dir, root.0);
-        assert_eq!(targets[0].prefix_args, "--processStart RalphMeet.exe");
+        assert_eq!(targets[0].prefix_args, "--processStart Yap.exe");
 
         root.app("3.5.0");
         let targets = candidates(&root.0);
@@ -507,20 +507,20 @@ mod tests {
     fn command_line_tail_keeps_caller_arguments_verbatim() {
         let cases = [
             (
-                r#""C:\Users\a b\RalphMeet\RalphMeet.exe" "ralphmeet://invite/abc?x=1&y=2""#,
-                r#""ralphmeet://invite/abc?x=1&y=2""#,
+                r#""C:\Users\a b\Yap\Yap.exe" "yap://invite/abc?x=1&y=2""#,
+                r#""yap://invite/abc?x=1&y=2""#,
             ),
-            (r#""C:\RalphMeet\RalphMeet.exe""#, ""),
+            (r#""C:\Yap\Yap.exe""#, ""),
             (
-                r#""C:\RalphMeet\RalphMeet.exe"   --autostart  --minimized"#,
+                r#""C:\Yap\Yap.exe"   --autostart  --minimized"#,
                 "--autostart  --minimized",
             ),
             (
-                r#"C:\RalphMeet\RalphMeet.exe --flag "quoted \" arg""#,
+                r#"C:\Yap\Yap.exe --flag "quoted \" arg""#,
                 r#"--flag "quoted \" arg""#,
             ),
-            (r#"RalphMeet.exe"#, ""),
-            ("RalphMeet.exe\tralphmeet://x", "ralphmeet://x"),
+            (r#"Yap.exe"#, ""),
+            ("Yap.exe\tyap://x", "yap://x"),
             (r#""unterminated"#, ""),
             ("", ""),
         ];
@@ -535,14 +535,11 @@ mod tests {
 
     #[test]
     fn child_arguments_prefix_and_passthrough() {
-        let tail = wide(r#""ralphmeet://invite/abc""#);
-        assert_eq!(
-            narrow(&child_arguments("", &tail)),
-            r#""ralphmeet://invite/abc""#
-        );
+        let tail = wide(r#""yap://invite/abc""#);
+        assert_eq!(narrow(&child_arguments("", &tail)), r#""yap://invite/abc""#);
         assert_eq!(
             narrow(&child_arguments(UPDATE_EXE_ARGS, &tail)),
-            r#"--processStart RalphMeet.exe "ralphmeet://invite/abc""#
+            r#"--processStart Yap.exe "yap://invite/abc""#
         );
         assert_eq!(
             narrow(&child_arguments(UPDATE_EXE_ARGS, &[])),

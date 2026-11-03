@@ -79,7 +79,7 @@ export default function SignInScreen() {
       }}
     >
       <View style={{ gap: 8 }}>
-        <Text variant="display">Ralph Meet</Text>
+        <Text variant="display">Yap</Text>
         <Text variant="body" tone="ink2">
           Approve this phone from a browser where you are already signed in.
         </Text>

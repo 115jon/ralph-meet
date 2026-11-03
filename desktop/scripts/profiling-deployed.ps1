@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds and runs Ralph Meet in profiling mode (release opts + debug symbols).
+    Builds and runs Yap in profiling mode (release opts + debug symbols).
 
 .DESCRIPTION
     Identical to prod-deployed.ps1 EXCEPT it builds with --profile profiling
@@ -133,8 +133,8 @@ $rootLauncherPath = Join-Path $expectedDir "Update.exe"
 
 Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
-$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\RalphMeetSetup.exe"
-Get-CimInstance Win32_Process -Filter "Name = 'RalphMeetSetup.exe'" -ErrorAction SilentlyContinue |
+$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\YapSetup.exe"
+Get-CimInstance Win32_Process -Filter "Name = 'YapSetup.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.ExecutablePath -eq $workspaceInstallerPath } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Set-Location $installerProjDir
@@ -147,11 +147,12 @@ Set-Location $desktopDir
 
 $installer = $workspaceInstallerPath
 if (-not (Test-Path $installer)) {
-    Write-Error "Installer RalphMeetSetup.exe not found under $installerProjDir\bin\Release\net48"
+    Write-Error "Installer YapSetup.exe not found under $installerProjDir\bin\Release\net48"
     exit 1
 }
 
 Get-Process -Name "RalphMeet" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "Yap" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-CimInstance Win32_Process -Filter "Name = 'Update.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.ExecutablePath -eq (Join-Path $expectedDir "Update.exe") } |
@@ -182,7 +183,7 @@ if (-not $installedState.currentVersion) {
 }
 
 $installDir = Join-Path $expectedDir ("app-" + $installedState.currentVersion)
-$installedExe = Join-Path $installDir "RalphMeet.exe"
+$installedExe = Join-Path $installDir "Yap.exe"
 if (-not (Test-Path $installedExe)) {
     Write-Error "Installed exe not found: $installedExe"
     exit 1
@@ -212,11 +213,11 @@ Write-Host "    Binary has full debug symbols (CARGO_PROFILE_RELEASE_DEBUG=2)" -
 Write-Host ""
 Write-Host "    After the app is streaming, run this in an ELEVATED shell:" -ForegroundColor Magenta
 Write-Host "      `$env:PATH = 'C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit;' + `$env:PATH" -ForegroundColor Magenta
-Write-Host "      `$pid = (Get-Process RalphMeet | Sort-Object CPU -Desc | Select -First 1).Id" -ForegroundColor Magenta
+Write-Host "      `$pid = (Get-Process Yap | Sort-Object CPU -Desc | Select -First 1).Id" -ForegroundColor Magenta
 Write-Host "      samply record --pid `$pid --duration 30" -ForegroundColor Magenta
 Write-Host ""
 
-& $rootLauncherPath --processStart RalphMeet.exe
+& $rootLauncherPath --processStart Yap.exe
 
 exit $LASTEXITCODE
 

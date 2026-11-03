@@ -93,8 +93,8 @@ function AccessState({
         Show your recent photos here
       </Text>
       <Text variant="row" tone="ink2">
-        Ralph only sees the photos you allow. Camera, Photos and Files work
-        either way.
+        Yap only sees the photos you allow. Camera, Photos and Files work either
+        way.
       </Text>
       <View style={{ marginTop: 8, alignSelf: "flex-start" }}>
         <Button

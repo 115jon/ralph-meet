@@ -37,7 +37,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 const PIXEL_RATIO = 0.5;
 /** Opt-in animation cadence (12 fps). */
 const ANIMATE_INTERVAL_MS = 83;
-const FALLBACK: ThemeColors = { accent: "#5865f2", background: "#070709" };
+const FALLBACK: ThemeColors = { accent: "#ff8ad8", background: "#0b0b0d" };
 
 export interface DitherFieldProps {
   className?: string;

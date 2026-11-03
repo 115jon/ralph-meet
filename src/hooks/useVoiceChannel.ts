@@ -20,6 +20,7 @@ import {
   isDesktop,
   isWgcCaptureAllowed,
 } from "@/lib/platform";
+import { getHost } from "@/lib/host";
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import {
@@ -519,8 +520,7 @@ function logScreenShare(message: string, details?: unknown) {
 async function probeNativeHardwareEncoders() {
   if (!isDesktop()) return null;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke("probe_hardware_video_encoders");
+    return await getHost().media.probeHardwareVideoEncoders();
   } catch (error) {
     return { error };
   }
@@ -2791,6 +2791,16 @@ export function useVoiceChannel({
     onSfu("voice-token-expired", () => {
       vcLog.warn("Voice token expired, requesting fresh authentication...");
       sfu.refreshVoiceCredentials();
+    });
+
+    onSfu("kicked", () => {
+      // One voice session per user: a newer join on another device ended
+      // this one. Leave for good (no reassert, no rejoin) and say why.
+      vcLog.warn("Voice moved to another device", { channelId, mode });
+      toast.info("You joined this call on another device", {
+        description: "Voice is connected there now.",
+      });
+      window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
     });
 
     if (adoptingStandby) {
@@ -5086,31 +5096,32 @@ export function useVoiceChannel({
     let unlisten: (() => void) | null = null;
     void (async () => {
       try {
-        const { listen } = await import("@tauri-apps/api/event");
-        const dispose = await listen("native-screen-share-ended", (event) => {
-          const payload = parseNativeShareEndedPayload(event.payload);
-          const action = resolveNativeShareEndedAction(payload, {
-            isSharing: isScreenSharingRef.current,
-            wgcCaptureAllowed: isWgcCaptureAllowed(),
-          });
-          vcLog.info("Native screen share ended by the backend", {
-            payload,
-            action,
-          });
-          if (action === "fallback-cef") {
-            toast.info("Screen share switched to standard capture", {
-              id: "native-share-fallback",
-              description: "The hardware stream lost its connection.",
+        const dispose = await getHost().media.onNativeScreenShareEnded(
+          (rawPayload) => {
+            const payload = parseNativeShareEndedPayload(rawPayload);
+            const action = resolveNativeShareEndedAction(payload, {
+              isSharing: isScreenSharingRef.current,
+              wgcCaptureAllowed: isWgcCaptureAllowed(),
             });
-            void toggleScreenShareRef.current?.({
-              changeSource: true,
-              skipNative: true,
+            vcLog.info("Native screen share ended by the backend", {
+              payload,
+              action,
             });
-          } else if (action === "stop") {
-            // The no-arg stop path drops tracks, clears state, plays the sound.
-            void toggleScreenShareRef.current?.();
-          }
-        });
+            if (action === "fallback-cef") {
+              toast.info("Screen share switched to standard capture", {
+                id: "native-share-fallback",
+                description: "The hardware stream lost its connection.",
+              });
+              void toggleScreenShareRef.current?.({
+                changeSource: true,
+                skipNative: true,
+              });
+            } else if (action === "stop") {
+              // The no-arg stop path drops tracks, clears state, plays the sound.
+              void toggleScreenShareRef.current?.();
+            }
+          },
+        );
         if (cancelled) dispose();
         else unlisten = dispose;
       } catch {

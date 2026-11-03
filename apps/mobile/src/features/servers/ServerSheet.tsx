@@ -29,7 +29,7 @@ async function shareInvite(server: Server): Promise<void> {
     const { code } = await createInvite(server.id);
     const link = inviteLink(code);
     await Share.share(
-      { message: link, title: `Join ${server.name} on Ralph Meet` },
+      { message: link, title: `Join ${server.name} on Yap` },
       { dialogTitle: `Invite people to ${server.name}` },
     );
   } catch (error) {

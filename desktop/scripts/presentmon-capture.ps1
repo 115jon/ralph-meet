@@ -6,9 +6,9 @@
   Captures per-present telemetry for the GAME process using Intel PresentMon
   (v2 metrics). Run it TWICE with the game running at an uncapped frame rate:
 
-    1) .\presentmon-capture.ps1 -Label control    # Ralph Meet NOT running at all
-    2) .\presentmon-capture.ps1 -Label baseline   # Ralph Meet open but NOT sharing
-    3) .\presentmon-capture.ps1 -Label shared     # Ralph Meet sharing the game
+    1) .\presentmon-capture.ps1 -Label control    # Yap NOT running at all
+    2) .\presentmon-capture.ps1 -Label baseline   # Yap open but NOT sharing
+    3) .\presentmon-capture.ps1 -Label shared     # Yap sharing the game
 
   Three tiers decompose the FPS cost:
     control -> baseline : cost of the app merely being open (CEF, GPU process)
@@ -85,13 +85,13 @@ Write-Host "==> Capturing '$gameExe' for $Seconds s  [$Label]" -ForegroundColor 
 Write-Host "    Output: $out" -ForegroundColor DarkGray
 Write-Host "    Game must be foreground and running at its UNCAPPED frame rate." -ForegroundColor Yellow
 if ($Label -eq 'shared') {
-    Write-Host "    >>> Ralph Meet MUST be actively sharing this game now." -ForegroundColor Yellow
+    Write-Host "    >>> Yap MUST be actively sharing this game now." -ForegroundColor Yellow
 }
 if ($Label -eq 'baseline') {
-    Write-Host "    >>> Ralph Meet must be OPEN but NOT sharing (capture loop stopped)." -ForegroundColor Yellow
+    Write-Host "    >>> Yap must be OPEN but NOT sharing (capture loop stopped)." -ForegroundColor Yellow
 }
 if ($Label -eq 'control') {
-    Write-Host "    >>> Ralph Meet must be FULLY CLOSED (no ralph-meet-desktop processes)." -ForegroundColor Yellow
+    Write-Host "    >>> Yap must be FULLY CLOSED (no ralph-meet-desktop processes)." -ForegroundColor Yellow
     $running = Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue
     if ($running) {
         Write-Host "    WARNING: $($running.Count) ralph-meet-desktop process(es) still running - close the app first." -ForegroundColor Red
