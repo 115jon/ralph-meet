@@ -320,7 +320,7 @@ export default function InviteClient({
             }
           >
             <HomeLink variant="primary" href="/chat">
-              Open Ralph Meet
+              Open Yap
             </HomeLink>
           </PageState>
         );
@@ -343,7 +343,7 @@ export default function InviteClient({
             >
               Try again
             </Button>
-            <HomeLink href="/chat">Open Ralph Meet</HomeLink>
+            <HomeLink href="/chat">Open Yap</HomeLink>
           </PageState>
         );
       }

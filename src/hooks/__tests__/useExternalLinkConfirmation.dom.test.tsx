@@ -44,9 +44,7 @@ describe("useExternalLinkConfirmation", () => {
       screen.getByRole("button", { name: "Open external media" }),
     );
 
-    expect(
-      screen.getByRole("dialog", { name: "Leaving Ralph Meet" }),
-    ).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Leaving Yap" })).toBeVisible();
     expect(screen.getByText(/gif\.fxtwitter\.com\/tweet_video/)).toBeVisible();
 
     fireEvent.click(
@@ -77,9 +75,7 @@ describe("useExternalLinkConfirmation", () => {
       screen.getByRole("button", { name: "Open external media" }),
     );
 
-    expect(
-      screen.queryByRole("dialog", { name: "Leaving Ralph Meet" }),
-    ).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Leaving Yap" })).toBeNull();
     expect(window.open).toHaveBeenCalledTimes(1);
   });
 

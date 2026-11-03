@@ -16,10 +16,12 @@ import {
 import type { BadgeState } from "./types";
 
 const TRAY_ID = "main";
-const DEFAULT_TOOLTIP = "Ralph Meet";
+const DEFAULT_TOOLTIP = "Yap";
 const BADGE_ICON_SIZE = 64;
 const BADGE_RED = [239, 68, 68, 255] as const;
 const WHITE = [255, 255, 255, 255] as const;
+/** A ring between the badge and the icon: red on the pink mark needs a seam. */
+const BADGE_RING = [11, 11, 13, 255] as const;
 
 interface BaseIcon {
   rgba: Uint8Array;
@@ -256,6 +258,7 @@ export function drawBadgedIcon(
   );
   const centerX = width - badgeRadius - 2;
   const centerY = badgeRadius + 2;
+  fillCircle(rgba, width, centerX, centerY, badgeRadius + 1, BADGE_RING);
   fillCircle(rgba, width, centerX, centerY, badgeRadius, BADGE_RED);
   if (!state.showDot && state.count > 0) {
     drawBadgeLabel(rgba, width, iconKey(state), centerX, centerY);

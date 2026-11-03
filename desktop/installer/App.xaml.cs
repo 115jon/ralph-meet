@@ -41,7 +41,7 @@ namespace Installer
                     InstallerLogger.Error("Failed to launch the active installed version.", ex);
                     MessageBox.Show(
                         InstallerLogger.AppendLogPath(ex.Message),
-                        "RalphMeet Launch Failed",
+                        "Yap launch failed",
                         MessageBoxButton.OK,
                         MessageBoxImage.Error);
                     Environment.Exit(1);

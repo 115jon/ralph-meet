@@ -78,7 +78,7 @@ export function ShopFixture() {
 
 /**
  * The catalog sample is a captured third-party listing: its collection art
- * and names are someone else's marks, not Ralph Meet's own collection. The
+ * and names are someone else's marks, not Yap's own collection. The
  * product reads the same upstream, and its renderers only accept that
  * upstream's asset hosts, so the art can't be swapped for authored fixture
  * art without touching product code. Label it instead, in the fixture only.

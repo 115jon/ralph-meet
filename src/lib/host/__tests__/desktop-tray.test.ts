@@ -84,12 +84,12 @@ function ipcCount() {
   );
 }
 
-const badge = (count: number, tooltip = `Ralph Meet - ${count} unread`) => ({
+const badge = (count: number, tooltip = `Yap - ${count} unread`) => ({
   count,
   showDot: false,
   tooltip,
 });
-const cleared = { count: 0, showDot: false, tooltip: "Ralph Meet" };
+const cleared = { count: 0, showDot: false, tooltip: "Yap" };
 
 describe("desktop tray badge", () => {
   beforeEach(() => {
@@ -112,7 +112,7 @@ describe("desktop tray badge", () => {
     await applyTrayBadge(badge(3));
 
     expect(mocks.getById).toHaveBeenCalledWith("main");
-    expect(mocks.tray.setTooltip).toHaveBeenCalledWith("Ralph Meet - 3 unread");
+    expect(mocks.tray.setTooltip).toHaveBeenCalledWith("Yap - 3 unread");
     expect(mocks.setOverlayIcon).toHaveBeenCalledTimes(1);
     expect(mocks.tray.setIcon).toHaveBeenCalledTimes(1);
     const before = ipcCount();
@@ -141,12 +141,12 @@ describe("desktop tray badge", () => {
   });
 
   it("only sends the tooltip when only the tooltip changed", async () => {
-    await applyTrayBadge(badge(3, "Ralph Meet - 3 unread"));
+    await applyTrayBadge(badge(3, "Yap - 3 unread"));
     vi.clearAllMocks();
 
-    await applyTrayBadge(badge(3, "Ralph Meet - 5 unread"));
+    await applyTrayBadge(badge(3, "Yap - 5 unread"));
 
-    expect(mocks.tray.setTooltip).toHaveBeenCalledWith("Ralph Meet - 5 unread");
+    expect(mocks.tray.setTooltip).toHaveBeenCalledWith("Yap - 5 unread");
     expect(mocks.tray.setIcon).not.toHaveBeenCalled();
     expect(mocks.imageNew).not.toHaveBeenCalled();
     expect(mocks.setOverlayIcon).not.toHaveBeenCalled();

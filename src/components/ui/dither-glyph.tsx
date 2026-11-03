@@ -5,17 +5,18 @@
  * `ink-3` silkscreen cells and its light in an accent Bayer dither, the same
  * two inks as the cold-load mark (`chat/ColdLoad`), at 2, 3 or 4px cells.
  *
- *   mark    the Ralph Meet mark, printed through the dither (updater, the
- *           empty chat column, full-screen loaders)
+ *   mark    Yappy, the Yap mark, printed through the dither (updater, the
+ *           empty chat column, full-screen loaders); see `ui/yap-bark`
  *   empty   a dashed slot with light pooled in one corner (empty states)
  *   screen  a monitor whose display is lit from the top-left (screen picker)
  *   voice   a still level meter with peak-hold cells (voice landing)
  *
  * `pending` prints the same drawing with its light only partly resolved
- * (about 40 percent coverage; 70 for the mark, whose features are gaps in
- * the silhouette and vanish in a sparser print), as the cold-load mark is
- * before its last step. That is the whole loading signal: nothing moves, ever. The words
- * beside it carry the state (EmptyState sets role=status when loading).
+ * (about 40 percent coverage). That is the whole loading signal for the
+ * still motifs. The mark instead barks while pending (its jaw steps open and
+ * shut; a still frame under reduced motion), the one glyph that moves, and
+ * only while something loads. The words beside it carry the state
+ * (EmptyState sets role=status when loading).
  *
  * Same contract as `ui/dither`: aria-hidden, no pointer events, painted once
  * as alpha masks over role colours (a theme change costs nothing), and gone
@@ -24,8 +25,8 @@
 
 import * as React from "react";
 
-import splashLogo from "@/assets/splash-logo.svg";
 import { bayerLit, cellMask } from "@/components/ui/dither";
+import { YAP_CELLS, YapBark } from "@/components/ui/yap-bark";
 import { cn } from "@/lib/utils";
 
 export type GlyphMotif = "mark" | "empty" | "screen" | "voice";
@@ -35,7 +36,6 @@ const CELL: Record<GlyphSize, number> = { sm: 2, md: 3, lg: 4 };
 
 /** How much of the light is printed while `pending`. */
 const PENDING = 0.4;
-const PENDING_MARK = 0.7;
 
 type Drawing = {
   cols: number;
@@ -109,13 +109,6 @@ const EMPTY: Drawing = {
 
 const DRAWINGS = { screen: SCREEN, voice: VOICE, empty: EMPTY } as const;
 
-/** The mark is the logo's own silhouette over a 32-cell diagonal ramp. */
-const MARK_CELLS = 32;
-function markLight(x: number, y: number): number {
-  const d = (x + y) / (2 * (MARK_CELLS - 1));
-  return 0.98 - d * 0.5;
-}
-
 const maskCache = new Map<string, string>();
 function cachedMask(key: string, build: () => string): string {
   let mask = maskCache.get(key);
@@ -158,16 +151,9 @@ function DitherGlyph({
   className,
 }: DitherGlyphProps) {
   const cell = CELL[size];
-  const scale = pending ? (motif === "mark" ? PENDING_MARK : PENDING) : 1;
+  const scale = pending ? PENDING : 1;
 
   if (motif === "mark") {
-    const ramp = cachedMask(`mark:${scale}`, () =>
-      cellMask(MARK_CELLS, MARK_CELLS, (x, y) =>
-        bayerLit(x, y, markLight(x, y) * scale),
-      ),
-    );
-    const logo = `url("${splashLogo}")`;
-    const px = MARK_CELLS * cell;
     return (
       <span
         aria-hidden="true"
@@ -176,26 +162,9 @@ function DitherGlyph({
         data-motif="mark"
         data-pending={pending ? "" : undefined}
         className={cn("rm-dither relative block shrink-0", className)}
-        style={{ width: px, height: px }}
+        style={{ width: YAP_CELLS * cell, height: YAP_CELLS * cell }}
       >
-        <span
-          className="absolute inset-0"
-          style={
-            {
-              backgroundColor: "var(--accent-ink)",
-              maskImage: `${logo}, ${ramp}`,
-              WebkitMaskImage: `${logo}, ${ramp}`,
-              maskSize: "contain, 100% 100%",
-              WebkitMaskSize: "contain, 100% 100%",
-              maskPosition: "center, 0 0",
-              WebkitMaskPosition: "center, 0 0",
-              maskRepeat: "no-repeat",
-              WebkitMaskRepeat: "no-repeat",
-              maskComposite: "intersect",
-              WebkitMaskComposite: "source-in",
-            } as React.CSSProperties
-          }
-        />
+        <YapBark barking={pending} cell={cell} />
       </span>
     );
   }

@@ -29,8 +29,8 @@ export function HomeFooter({ isSignedIn, onStartRoom }: HomeFooterProps) {
             href="#home-hero"
             className="inline-flex min-h-11 items-center gap-3 rounded-[2px] font-display text-[17px] font-extrabold tracking-[-0.02em] text-ink-1"
           >
-            <ThemeAwareSplashLogo className="size-7 select-none" />
-            Ralph Meet
+            <ThemeAwareSplashLogo className="size-8 select-none" />
+            Yap
           </a>
           <p className="mt-4 max-w-[34ch] text-pretty text-ui-sm text-ink-2">
             Open source voice and chat, running on Cloudflare&rsquo;s edge.
@@ -86,7 +86,7 @@ export function HomeFooter({ isSignedIn, onStartRoom }: HomeFooterProps) {
         </nav>
       </div>
       <div className={`${CONTAINER} border-t border-line py-6`}>
-        <p className="silkscreen text-ink-3">&copy; {year} Ralph Meet</p>
+        <p className="silkscreen text-ink-3">&copy; {year} Yap</p>
       </div>
     </footer>
   );

@@ -310,8 +310,8 @@ export function DemoUploadBlockerModal({
             Uploads are in the full app
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
-            Sign in to Ralph Meet to upload images and files, with persistent
-            chat and attachment storage. GIFs work here in the demo.
+            Sign in to Yap to upload images and files, with persistent chat and
+            attachment storage. GIFs work here in the demo.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         <ResponsiveDialogFooter>

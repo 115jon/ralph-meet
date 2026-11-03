@@ -93,11 +93,11 @@ export const Route = createFileRoute("/chat")({
   },
   head: () => ({
     meta: [
-      { title: "Chat — Ralph Meet" },
+      { title: "Chat — Yap" },
       {
         name: "description",
         content:
-          "Connect with your communities on Ralph Meet. Real-time messaging, voice, and video in one place.",
+          "Connect with your communities on Yap. Real-time messaging, voice, and video in one place.",
       },
     ],
   }),

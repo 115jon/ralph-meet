@@ -57,18 +57,18 @@ function shareHead(data?: ShareLoaderData) {
   if (!data?.share) {
     return {
       meta: [
-        { title: "Shared message — Ralph Meet" },
+        { title: "Shared message — Yap" },
         { name: "robots", content: "noindex, nofollow" },
         {
           name: "description",
-          content: "This Ralph Meet message share is unavailable.",
+          content: "This Yap message share is unavailable.",
         },
-        { property: "og:title", content: "Shared message — Ralph Meet" },
+        { property: "og:title", content: "Shared message — Yap" },
         {
           property: "og:description",
-          content: "This Ralph Meet message share is unavailable.",
+          content: "This Yap message share is unavailable.",
         },
-        { property: "og:site_name", content: "Ralph Meet" },
+        { property: "og:site_name", content: "Yap" },
       ],
     };
   }
@@ -186,7 +186,7 @@ function shareHead(data?: ShareLoaderData) {
         rel: "alternate",
         type: "application/json+oembed",
         href: metadata.oembedUrl,
-        title: "Ralph Meet shared message",
+        title: "Yap shared message",
       },
     ],
   };

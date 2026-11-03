@@ -22,7 +22,7 @@ export function buildVoiceDiagnosticsBundle({
   now = () => new Date(),
 }: VoiceDiagnosticsBundleInput) {
   return {
-    app: "Ralph Meet",
+    app: "Yap",
     copiedAt: now().toISOString(),
     channelName: channelName ?? null,
     page: sanitizePageUrl(locationHref),

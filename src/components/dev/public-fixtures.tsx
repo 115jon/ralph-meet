@@ -90,7 +90,7 @@ const REQUEST = {
   userCode: "KDRW-7QXN",
   status: "pending" as const,
   device: {
-    label: "Ralph Meet Desktop",
+    label: "Yap Desktop",
     platform: "win32",
     hostname: "ada-workstation",
   },
@@ -102,7 +102,7 @@ const REQUEST = {
 const LONG_REQUEST = {
   ...REQUEST,
   device: {
-    label: "Ralph Meet Desktop (Beta channel, auto-updates on)",
+    label: "Yap Desktop (Beta channel, auto-updates on)",
     platform: "darwin",
     hostname: "adas-extremely-long-macbook-pro-hostname.local",
   },

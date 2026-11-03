@@ -30,7 +30,7 @@ export interface RestartAppDialogProps {
 }
 
 const DEFAULT_DESCRIPTION =
-  "Ralph Meet restarts to apply this. If you're in a call, you'll leave it and can rejoin after the restart.";
+  "Yap restarts to apply this. If you're in a call, you'll leave it and can rejoin after the restart.";
 
 /**
  * Confirm before restarting the desktop app. Opens over the Settings dialog

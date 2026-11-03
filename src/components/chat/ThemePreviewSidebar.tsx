@@ -26,12 +26,20 @@ const THEME_OPTIONS: Array<{
   label: string;
   previewClass: string;
 }> = [
-  { id: "light", label: "Light", previewClass: "bg-[#f2f3f5]" },
-  { id: "dark", label: "Midnight", previewClass: "bg-[#0f0f11]" },
+  {
+    id: "light",
+    label: "Light",
+    previewClass: "bg-gradient-to-br from-[#ffffff] via-[#f4f4f5] to-[#c0127a]",
+  },
+  {
+    id: "dark",
+    label: "Midnight",
+    previewClass: "bg-gradient-to-br from-[#141417] via-[#0b0b0d] to-[#ff8ad8]",
+  },
   {
     id: "system",
     label: "System",
-    previewClass: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]",
+    previewClass: "bg-gradient-to-br from-[#0b0b0d] to-[#f4f4f5]",
   },
   {
     id: "miku-light",

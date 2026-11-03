@@ -1,7 +1,7 @@
 /**
- * The cold-load screen (picked 2026-10-30, variant B): the Ralph Meet mark
- * resolving out of dither noise, one stage per completed connection step,
- * and one live status line.
+ * The cold-load screen (picked 2026-10-30, variant B; the bark replaced the
+ * dither resolve in the Yap rename): Yappy barking while the connection
+ * steps run, and one live status line.
  *
  *   Phone (<640px)   the mark full width in the upper space, the status as a
  *                    poster line anchored low in the thumb zone.
@@ -10,197 +10,59 @@
  *                    reads as an overlay over the app that is coming, not a
  *                    page of its own.
  *
- * The mark changes only when a step completes; nothing loops. Each step is
- * one still frame (DitherField paints once and releases its GL context),
- * cached per step, theme and size so the route splash and the connection
- * overlay hand off without the mark blinking. Under reduced motion frames
- * swap with no fade. The art is aria-hidden and hidden under forced colours;
- * the status text is the accessible progress (role=status, polite).
+ * The bark (`ui/yap-bark`) loops only while a step is running and stops on
+ * a failure or when the app is ready; it is static under reduced motion.
+ * The route splash and the connection overlay draw the same cells, so the
+ * hand-off does not blink. The art is aria-hidden and hidden under forced
+ * colours; the status text is the accessible progress (role=status, polite).
  */
-import splashLogo from "@/assets/splash-logo.svg";
 import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { Button } from "@/components/ui/button";
-import { DitherField } from "@/components/ui/DitherField";
 import { Skeleton } from "@/components/ui/skeleton";
-import { artInks, readThemeColors, type ArtInks } from "@/lib/auth-art";
-import { logoResolvePainter } from "@/lib/dither-painters";
+import { YapBark } from "@/components/ui/yap-bark";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export type ColdStep = 0 | 1 | 2 | 3;
 export type ColdError = "auth" | "offline" | "slow" | null;
 
-// ── The resolving mark ─────────────────────────────────────────────────
-
-let logoImage: HTMLImageElement | null = null;
-let logoWaiters: ((img: HTMLImageElement) => void)[] | null = null;
-
-/** The splash mark, loaded once per page, so the painter draws it synchronously. */
-function useLogoImage(): HTMLImageElement | null {
-  const [img, setImg] = useState<HTMLImageElement | null>(logoImage);
-  useEffect(() => {
-    if (logoImage) return;
-    if (!logoWaiters) {
-      logoWaiters = [];
-      const image = new Image();
-      image.onload = () => {
-        logoImage = image;
-        logoWaiters?.forEach((done) => done(image));
-        logoWaiters = null;
-      };
-      image.src = splashLogo;
-    }
-    logoWaiters.push(setImg);
-  }, []);
-  return img;
-}
-
-/** Painted frames, by step, theme ground/accent and size, as data URLs. */
-const frameCache = new Map<string, string>();
-
-function themeInks(): { key: string; inks: ArtInks } | null {
-  if (typeof document === "undefined") return null;
-  const colors = readThemeColors(document.documentElement);
-  const ramp = artInks(colors);
-  // The ramp's first step folded onto the ground: empty source reads as
-  // clean canvas instead of a faint checker.
-  return {
-    key: `${colors.accent}|${colors.background}`,
-    inks: [ramp[0], ramp[0], ramp[2], ramp[3], ramp[4], ramp[5]],
-  };
-}
+// ── The barking mark ──────────────────────────────────────────────────
 
 /**
- * One step's still frame. A frame painted before (the splash painted step 0
- * a moment ago) shows at once from the cache; a new one paints, fades in
- * over the previous step, and is cached once live.
- */
-function StepFrame({
-  step,
-  img,
-  cell,
-  cacheKey,
-  inks,
-  over,
-}: {
-  step: ColdStep;
-  img: HTMLImageElement;
-  cell: number;
-  cacheKey: string;
-  inks: ArtInks;
-  /** Painted over an earlier frame: no fallback ground of its own. */
-  over: boolean;
-}) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const cached = frameCache.get(cacheKey);
-
-  useEffect(() => {
-    if (cached) return;
-    const host = hostRef.current;
-    if (!host) return;
-    const field = host.querySelector<HTMLElement>("[data-live]");
-    if (!field) return;
-    const save = () => {
-      const canvas = field.querySelector("canvas");
-      if (!canvas || field.dataset.live !== "true") return false;
-      try {
-        frameCache.set(cacheKey, canvas.toDataURL());
-      } catch {
-        /* a tainted or lost canvas: just repaint next time */
-      }
-      return true;
-    };
-    if (save()) return;
-    const observer = new MutationObserver(() => {
-      if (save()) observer.disconnect();
-    });
-    observer.observe(field, {
-      attributes: true,
-      attributeFilter: ["data-live"],
-    });
-    return () => observer.disconnect();
-  }, [cached, cacheKey]);
-
-  if (cached) {
-    return (
-      <img
-        alt=""
-        src={cached}
-        className="absolute inset-0 size-full [image-rendering:pixelated]"
-      />
-    );
-  }
-  return (
-    <div ref={hostRef} className="absolute inset-0">
-      <DitherField
-        cell={cell}
-        contrast={1.15}
-        intensity={0.6}
-        paint={logoResolvePainter(step, img)}
-        inks={inks}
-        style={{ background: over ? "transparent" : "var(--ply-0)" }}
-      />
-    </div>
-  );
-}
-
-/**
- * The Ralph Meet mark resolving from dither noise, one stage per completed
- * step. At step 3 the real mark (the lockup's SVG) settles over the dither,
- * so the hand-off to the app lands on the logo itself.
+ * Yappy barking while the connection steps run. At step 3 the real mark
+ * (the icon's SVG, in its own colours) settles over the dither, so the
+ * hand-off to the app lands on the logo itself. A failure stops the bark:
+ * nothing is loading while the app waits on the user or the network.
  */
 function LogoResolve({
   step,
+  barking,
   className,
-  cell: cellProp,
 }: {
   step: ColdStep;
+  barking: boolean;
   className?: string;
-  /** Dither cell in CSS px; by default ~90-100 cells across the mark. */
-  cell?: number;
 }) {
-  const img = useLogoImage();
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  const [theme] = useState(themeInks);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    setWidth(Math.round(host.clientWidth / 8) * 8);
-  }, []);
-
-  const cell = cellProp ?? (width > 0 && width < 300 ? 2 : 4);
-  const layers: ColdStep[] = step > 0 ? [(step - 1) as ColdStep, step] : [step];
-  const ready = img && theme && width > 0;
+  const ready = step >= 3;
   return (
     <div
-      ref={hostRef}
       aria-hidden="true"
       data-slot="logo-resolve"
       data-step={step}
       className={cn("relative aspect-square", className)}
     >
-      {ready ? (
-        <div className="absolute inset-0 overflow-hidden forced-colors:hidden motion-reduce:[&_canvas]:transition-none!">
-          {layers.map((s, i) => (
-            <StepFrame
-              key={s}
-              step={s}
-              img={img}
-              cell={cell}
-              inks={theme.inks}
-              cacheKey={`${s}|${theme.key}|${width}|${cell}`}
-              over={i > 0}
-            />
-          ))}
-        </div>
-      ) : null}
+      <YapBark
+        barking={barking && !ready}
+        className={cn(
+          "absolute inset-0 size-full transition-opacity duration-500 ease-out motion-reduce:transition-none",
+          ready ? "opacity-0" : "opacity-100",
+        )}
+      />
       <ThemeAwareSplashLogo
         alt=""
         className={cn(
-          "absolute inset-[4%] size-[92%] object-contain transition-opacity duration-500 ease-out motion-reduce:transition-none",
-          step >= 3 ? "opacity-100" : "opacity-0",
+          "absolute inset-0 size-full object-contain transition-opacity duration-500 ease-out [image-rendering:pixelated] motion-reduce:transition-none",
+          ready ? "opacity-100" : "opacity-0",
         )}
       />
     </div>
@@ -262,7 +124,7 @@ function ColdStatus({
             kicker: `${pad(current + 1)} / 03 · Offline`,
             line: "Waiting for network",
             detail:
-              "Ralph connects on its own as soon as this device is back online.",
+              "Yap connects on its own as soon as this device is back online.",
           }
         : error === "slow"
           ? {
@@ -442,7 +304,8 @@ export function ColdLoadScreen({
         <div className="flex min-h-0 flex-1 items-center justify-center sm:flex-none">
           <LogoResolve
             step={markStep}
-            className="w-full max-w-[460px] sm:w-[184px]"
+            barking={error === null || error === "slow"}
+            className="w-full max-w-[448px] sm:w-[192px]"
           />
         </div>
         <ColdStatus

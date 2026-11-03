@@ -2,7 +2,7 @@ import { isPlayableVideo } from "@/lib/media";
 import type { Attachment, EmbedInfo } from "@/lib/types";
 import type { MessageShare } from "@/services/message-share.service";
 
-const DEFAULT_DESCRIPTION = "A shared Ralph Meet message snapshot.";
+const DEFAULT_DESCRIPTION = "A shared Yap message snapshot.";
 const MAX_DESCRIPTION_LENGTH = 220;
 const MAX_TITLE_LENGTH = 80;
 const URL_ONLY_REGEX = /^https?:\/\/\S+$/i;
@@ -306,7 +306,7 @@ export function buildShareMetadata(
     else if (providerStr === "spotify") embedColor = "#1db954";
   }
 
-  let providerName = "Ralph Meet";
+  let providerName = "Yap";
   let providerUrl = origin;
   let finalAuthorName = authorName;
   let authorUrl: string | undefined;

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 /**
- * Regenerates the Ralph Meet app icon everywhere it ships, from one square
- * PNG with transparency (default: branding/app-icon.png, see
- * branding/README.md).
+ * Regenerates the Yap app icon everywhere it ships, from one square PNG
+ * with transparency (default: branding/app-icon.png, see branding/README.md).
+ *
+ * The icon is pixel art, and a resized 16 px dog blurs. Any
+ * `app-icon-<size>.png` beside the source (hand-tuned 16 and 24 px, exact
+ * grid multiples above that) replaces the resized copy at that size, in the
+ * .ico files and the Tauri PNGs. `app-icon-dev-<size>.png` files, when
+ * present, become public/favicon-dev.ico (the green dev-server variant).
  *
  *   pnpm icons:app                    regenerate from branding/app-icon.png
  *   pnpm icons:app path/to/new.png    regenerate from another source
@@ -11,14 +16,15 @@
  *   desktop/src-tauri/icons/   PNGs, icon.icns and icon.ico (Tauri bundle)
  *   desktop/installer/Assets/icon.ico
  *   public/favicon.ico
+ *   public/favicon-dev.ico               (from app-icon-dev-<size>.png)
  *
  * Resizing is done by the Tauri CLI (`tauri icon`), already a desktop
  * dependency. This script only packs the .ico files, because `tauri icon`
  * writes a fixed six-size .ico and Windows asks for more sizes than that.
  *
  * Not touched: the mobile apps' icons (Android and iOS need their own safe-zone
- * padding), public/favicon-dev.* (a separate green dev variant), and the
- * installer's monochrome LogoGeometry.xaml trace.
+ * padding), the web manifest and OG images, and the installer's
+ * LogoGeometry.xaml (see branding/README.md).
  */
 import { execFileSync } from "node:child_process";
 import {
@@ -56,6 +62,14 @@ const FAVICON_SIZES = [16, 32, 48];
 
 // `tauri icon` outputs the desktop bundle uses. It also writes android/, ios/
 // and a six-size icon.ico, which are skipped.
+/** Tauri PNGs that are a plain square size, so an override can replace them. */
+const TAURI_SQUARE = {
+  "32x32.png": 32,
+  "64x64.png": 64,
+  "128x128.png": 128,
+  "128x128@2x.png": 256,
+};
+
 const TAURI_OUTPUTS = [
   "32x32.png",
   "64x64.png",
@@ -129,6 +143,21 @@ if (!existsSync(tauriCli)) {
   throw new Error("Tauri CLI missing: run pnpm install in desktop/ first.");
 }
 
+/** `<source dir>/<prefix><size>.png`, if it exists and is that size. */
+function sizedOverride(prefix, size) {
+  const file = path.join(path.dirname(source), `${prefix}${size}.png`);
+  if (!existsSync(file)) return null;
+  const png = readFileSync(file);
+  const { width, height } = readPngSize(png);
+  if (width !== size || height !== size) {
+    throw new Error(
+      `${file} must be ${size}x${size} (got ${width}x${height}).`,
+    );
+  }
+  return png;
+}
+const stem = path.basename(source, ".png");
+
 const work = mkdtempSync(path.join(tmpdir(), "ralph-app-icons-"));
 try {
   const bundleDir = path.join(work, "bundle");
@@ -137,12 +166,18 @@ try {
   const allSizes = [...new Set([...WINDOWS_ICO_SIZES, ...FAVICON_SIZES])];
   runTauriIcon([source, "--output", sizesDir, "--png", allSizes.join(",")]);
 
+  const png = (size) =>
+    sizedOverride(`${stem}-`, size) ??
+    readFileSync(path.join(sizesDir, `${size}x${size}.png`));
+
   for (const name of TAURI_OUTPUTS) {
-    copyFileSync(path.join(bundleDir, name), path.join(desktopIcons, name));
+    const size = TAURI_SQUARE[name];
+    const override = size ? sizedOverride(`${stem}-`, size) : null;
+    if (override) writeFileSync(path.join(desktopIcons, name), override);
+    else
+      copyFileSync(path.join(bundleDir, name), path.join(desktopIcons, name));
   }
 
-  const png = (size) =>
-    readFileSync(path.join(sizesDir, `${size}x${size}.png`));
   const appIco = packIco(WINDOWS_ICO_SIZES.map(png));
   writeFileSync(path.join(desktopIcons, "icon.ico"), appIco);
   writeFileSync(path.join(root, "desktop/installer/Assets/icon.ico"), appIco);
@@ -150,6 +185,12 @@ try {
     path.join(root, "public/favicon.ico"),
     packIco(FAVICON_SIZES.map(png)),
   );
+  const devPngs = FAVICON_SIZES.map((size) =>
+    sizedOverride(`${stem}-dev-`, size),
+  );
+  if (devPngs.every(Boolean)) {
+    writeFileSync(path.join(root, "public/favicon-dev.ico"), packIco(devPngs));
+  }
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

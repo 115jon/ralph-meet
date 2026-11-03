@@ -3,6 +3,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ColdLoadScreen } from "../chat/ColdLoad";
 import { SplashScreen } from "../SplashScreen";
 
 describe("SplashScreen", () => {
@@ -18,6 +19,10 @@ describe("SplashScreen", () => {
     expect(mark?.querySelector("img.theme-aware-splash-logo")).toHaveAttribute(
       "src",
     );
+    // Loading: the mark barks.
+    expect(mark?.querySelector("[data-slot=yap-bark]")).toHaveAttribute(
+      "data-barking",
+    );
   });
 
   it("offers Reload once it has been up for 10s", () => {
@@ -31,5 +36,17 @@ describe("SplashScreen", () => {
       "Taking longer than usual",
     );
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+  });
+
+  it("stops barking on a failure and once the app is ready", () => {
+    const bark = () => document.querySelector("[data-slot=yap-bark]");
+    const { rerender } = render(<ColdLoadScreen step={1} error="slow" />);
+    expect(bark()).toHaveAttribute("data-barking");
+    rerender(<ColdLoadScreen step={1} error="offline" />);
+    expect(bark()).not.toHaveAttribute("data-barking");
+    rerender(<ColdLoadScreen step={0} error="auth" />);
+    expect(bark()).not.toHaveAttribute("data-barking");
+    rerender(<ColdLoadScreen step={3} />);
+    expect(bark()).not.toHaveAttribute("data-barking");
   });
 });

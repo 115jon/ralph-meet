@@ -32,7 +32,7 @@ import { Spinner } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { DitherField } from "@/components/ui/DitherField";
 import { DitherRule } from "@/components/ui/dither";
-import { ThemeMark } from "@/components/ui/theme-slots";
+import { THEME_MARK_BASE, ThemeMark } from "@/components/ui/theme-slots";
 import { useDitherGeometry } from "@/components/ui/use-dither-geometry";
 import { cn } from "@/lib/utils";
 import { useRef, type ReactNode, type Ref } from "react";
@@ -104,11 +104,13 @@ function Lockup({ home }: { home: string | null }) {
   const content = (
     <>
       <span className="relative flex size-7 shrink-0 items-center justify-center">
-        <ThemeAwareSplashLogo className="size-7 object-contain select-none" />
-        <ThemeMark />
+        <ThemeAwareSplashLogo
+          className={cn("size-8 object-contain select-none", THEME_MARK_BASE)}
+        />
+        <ThemeMark className="-inset-0.5 size-8" />
       </span>
       <span className="font-display text-[17px] font-extrabold tracking-[-0.02em] text-ink-1">
-        Ralph Meet
+        Yap
       </span>
     </>
   );

@@ -41,7 +41,7 @@ export function getStandaloneUpdaterStatusText(
     case "installing":
       return "Installing update...";
     case "starting":
-      return "Starting Ralph Meet...";
+      return "Starting Yap...";
     case "error":
       return "Update check failed (Debug mode active)";
   }

@@ -249,7 +249,7 @@ function NotificationsRail() {
           ? "Desktop notifications are off. Mentions still show unread badges."
           : env.desktop
             ? "Shows as a native notification for mentions, replies and DMs."
-            : "Mentions, replies and DMs show as unread badges in Ralph Meet."
+            : "Mentions, replies and DMs show as unread badges in Yap."
       }
     >
       <div
@@ -262,7 +262,7 @@ function NotificationsRail() {
           <Icon name="bell" size="sm" />
         </span>
         <div className="min-w-0">
-          <p className="text-ui-xs text-ink-2">Ralph Meet · now</p>
+          <p className="text-ui-xs text-ink-2">Yap · now</p>
           <p className="text-ui-sm font-semibold text-ink-1">Ada in #design</p>
           <p className="truncate text-ui-sm text-ink-2">
             @you is the voice room still open?

@@ -162,7 +162,7 @@ namespace Installer
 
         private async Task InstallAsync()
         {
-            Title = "Ralph Meet Setup";
+            Title = "Yap Setup";
             _payloadDone = 0;
             _payloadTotal = -1;
             _extractionFinished = false;
@@ -263,12 +263,12 @@ namespace Installer
             bool failed = phase == Phase.InstallFailed || phase == Phase.UninstallFailed;
             bool busy = IsBusy(phase);
 
-            Title = install ? "Ralph Meet Setup" : "Ralph Meet Uninstall";
-            WindowLabel.Text = install ? "RALPH MEET SETUP" : "RALPH MEET UNINSTALL";
+            Title = install ? "Yap Setup" : "Yap Uninstall";
+            WindowLabel.Text = install ? "YAP SETUP" : "YAP UNINSTALL";
             AutomationProperties.SetName(WindowLabel, Title);
             AutomationProperties.SetName(this, Title);
 
-            // The mark is half-resolved while anything is pending, whole once nothing is. After a
+            // The mark barks while anything is pending and rests once nothing is. After a
             // failure it steps down to 2px cells to leave room for the message and the log.
             Mark.Pending = busy;
             Mark.Width = Mark.Height = failed ? 64 : 96;
@@ -285,14 +285,14 @@ namespace Installer
                 case Phase.Unpacking:
                 case Phase.SettingUp:
                     SetKicker("SETUP" + VersionSuffix(), null);
-                    SetText("Installing Ralph Meet",
+                    SetText("Installing Yap",
                         phase == Phase.Preparing ? "Getting ready…" :
                         phase == Phase.Unpacking ? "Unpacking files…" : "Adding shortcuts and links…");
                     break;
                 case Phase.Installed:
                     SetKicker("INSTALLED", "Talk");
-                    SetText("Ralph Meet is installed",
-                        _noLaunch ? "Open it from the Start menu or your desktop." : "Starting Ralph Meet…");
+                    SetText("Yap is installed",
+                        _noLaunch ? "Open it from the Start menu or your desktop." : "Starting Yap…");
                     break;
                 case Phase.InstallFailed:
                     SetKicker("INSTALL FAILED", "Danger");
@@ -300,17 +300,17 @@ namespace Installer
                     break;
                 case Phase.ConfirmUninstall:
                     SetKicker("UNINSTALL", null);
-                    SetText("Uninstall Ralph Meet?",
-                        "This will remove the desktop app and shortcuts from this PC. Your Ralph Meet data in AppData\\Roaming\\RalphMeet will be kept.");
+                    SetText("Uninstall Yap?",
+                        "This will remove the desktop app and shortcuts from this PC. Your Yap data in AppData\\Roaming\\RalphMeet will be kept.");
                     break;
                 case Phase.Uninstalling:
                     SetKicker("UNINSTALL", null);
-                    SetText("Removing Ralph Meet", "Removing Ralph Meet from this PC.");
+                    SetText("Removing Yap", "Removing Yap from this PC.");
                     break;
                 case Phase.Uninstalled:
                     SetKicker("REMOVED", "Talk");
-                    SetText("Ralph Meet was removed",
-                        "Your Ralph Meet data was left intact, and you can reinstall any time with the latest setup.");
+                    SetText("Yap was removed",
+                        "Your Yap data was left intact, and you can reinstall any time with the latest setup.");
                     break;
                 case Phase.UninstallFailed:
                     SetKicker("UNINSTALL FAILED", "Danger");
@@ -449,7 +449,7 @@ namespace Installer
                     break;
             }
 
-            StepFinish.Label = _noLaunch ? "Finish" : "Start Ralph Meet";
+            StepFinish.Label = _noLaunch ? "Finish" : "Start Yap";
             TreeStep[] steps = { StepUnpack, StepSetup, StepFinish };
             for (int i = 0; i < steps.Length; i++)
             {

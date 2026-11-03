@@ -15,7 +15,7 @@ import {
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
 import { inviteCodeFromDeepLink } from "@/lib/desktop-deep-link";
 import { getHost } from "@/lib/host";
-import { isDesktop, isTauri } from "@/lib/platform";
+import { getPublicWebUrl, isDesktop, isTauri } from "@/lib/platform";
 import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
   HeadContent,
@@ -36,6 +36,9 @@ const authLog = clog("DesktopAuth");
 const deepLinkLog = clog("DesktopDeepLinkBridge");
 const devtoolsLog = clog("DesktopDevtools");
 const faviconHref = import.meta.env.DEV ? "/favicon-dev.ico" : "/favicon.ico";
+const SITE_TITLE = "Yap: voice, chat and video rooms";
+const SITE_DESCRIPTION =
+  "Voice, chat, video and screen share for the people you talk to every day. Start a room, send the link, they're in.";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -49,15 +52,22 @@ export const Route = createRootRoute({
         content:
           "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
       },
-      { title: "Ralph Meet: voice, chat and video rooms" },
-      {
-        name: "description",
-        content:
-          "Voice, chat, video and screen share for the people you talk to every day. Start a room, send the link, they're in.",
-      },
+      { title: SITE_TITLE },
+      { name: "description", content: SITE_DESCRIPTION },
+      // Link previews: Yappy and the wordmark on the dark panel (1200x630).
+      // No og:image size or alt here: a route's own og:image (a shared
+      // message) replaces this one, and would inherit them.
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "Yap" },
+      { property: "og:title", content: SITE_TITLE },
+      { property: "og:description", content: SITE_DESCRIPTION },
+      { property: "og:image", content: `${getPublicWebUrl()}/og-image.png` },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "icon", href: faviconHref },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       // Self-hosted faces (styles.css imports the @font-face rules); the
       // latin subsets of the faces on first paint are preloaded so text doesn't
       // swap (Geist Mono is code only and loads on demand).

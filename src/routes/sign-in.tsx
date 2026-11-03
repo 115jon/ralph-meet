@@ -40,10 +40,10 @@ export const Route = createFileRoute("/sign-in")({
   component: SignInPage,
   head: () => ({
     meta: [
-      { title: "Sign In — Ralph Meet" },
+      { title: "Sign In — Yap" },
       {
         name: "description",
-        content: "Sign in to Ralph Meet to access your servers and channels.",
+        content: "Sign in to Yap to access your servers and channels.",
       },
     ],
   }),

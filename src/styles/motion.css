@@ -2,7 +2,8 @@
    Instrument motion (talk-tree-spec §6, performance-motion §5).
 
    Only transform, opacity, translate, scale and rotate animate. Nothing
-   loops at rest: the only infinite animations are a pending spinner and an
+   loops at rest: the only infinite animations are a pending spinner, the
+   loading bark (ui/yap-bark) and an
    incoming/outgoing call ring, and both unmount when their state ends.
 
    Durations (exits run at about 0.7x):
@@ -192,6 +193,101 @@
   animation: rm-spin 700ms linear infinite;
 }
 
+/* ---------- 7. bark (ui/yap-bark) ----------
+   The loading mark: Yappy's jaw steps closed, half, open, half twice, then
+   rests shut ("yap yap"). Frames swap on step-end, no easing. At rest only
+   the open jaw (the icon's pose) shows and the ticks are off; it loops only
+   while `data-barking` is set, which callers set only while loading. */
+.rm-bark > [data-part="closed"],
+.rm-bark > [data-part="half"],
+.rm-bark > [data-part="ticks"] {
+  opacity: 0;
+}
+.rm-bark[data-barking]
+  > :is(
+    [data-part="closed"],
+    [data-part="half"],
+    [data-part="open"],
+    [data-part="ticks"]
+  ) {
+  animation: 1.4s step-end infinite;
+}
+.rm-bark[data-barking] > [data-part="closed"] {
+  animation-name: rm-bark-closed;
+}
+.rm-bark[data-barking] > [data-part="half"] {
+  animation-name: rm-bark-half;
+}
+.rm-bark[data-barking] > :is([data-part="open"], [data-part="ticks"]) {
+  animation-name: rm-bark-open;
+}
+@keyframes rm-bark-closed {
+  0% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0;
+  }
+  58% {
+    opacity: 1;
+  }
+  64% {
+    opacity: 0;
+  }
+  92%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes rm-bark-half {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  36% {
+    opacity: 0;
+  }
+  52% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 0;
+  }
+  64% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0;
+  }
+  86% {
+    opacity: 1;
+  }
+  92%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes rm-bark-open {
+  0% {
+    opacity: 0;
+  }
+  36% {
+    opacity: 1;
+  }
+  52% {
+    opacity: 0;
+  }
+  70% {
+    opacity: 1;
+  }
+  86%,
+  100% {
+    opacity: 0;
+  }
+}
+
 /* ============================================================
    App inactive: hidden, minimised, or behind a fullscreen game. Every CSS
    animation pauses (useAppActive sets the attribute; rAF/canvas/video
@@ -246,7 +342,8 @@
   .animate-wiggle,
   .animate-clack,
   .animate-ping,
-  .animate-bounce {
+  .animate-bounce,
+  .rm-bark[data-barking] > [data-part] {
     animation: none !important;
   }
 

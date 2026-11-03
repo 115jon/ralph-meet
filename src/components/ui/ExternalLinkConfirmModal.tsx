@@ -35,7 +35,7 @@ export function ExternalLinkConfirmModal({
     >
       <ResponsiveDialogContent size="sm">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Leaving Ralph Meet</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Leaving Yap</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             This link opens the website below in your browser.
           </ResponsiveDialogDescription>
