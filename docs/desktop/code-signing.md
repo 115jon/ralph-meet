@@ -25,9 +25,15 @@ $repo = "owner/repo"
 $app = az ad app create --display-name "github-$($repo -replace '/','-')-artifact-signing" -o json | ConvertFrom-Json
 $sp = az ad sp create --id $app.appId -o json | ConvertFrom-Json
 
+# GitHub OIDC subjects for these repos use the immutable form
+# repo:<owner>@<owner id>/<repo>@<repo id>:ref:... (check a failed azure/login
+# log for the exact "subject claim" if unsure).
+$ids = gh api "repos/$repo" | ConvertFrom-Json
+$sub = "repo:$($ids.owner.login)@$($ids.owner.id)/$($ids.name)@$($ids.id)"
+
 # Trust the default branch (add one per branch or environment that signs).
 @{ name = "main"; issuer = "https://token.actions.githubusercontent.com"
-   subject = "repo:${repo}:ref:refs/heads/main"; audiences = @("api://AzureADTokenExchange") } |
+   subject = "${sub}:ref:refs/heads/main"; audiences = @("api://AzureADTokenExchange") } |
   ConvertTo-Json | Set-Content fic.json
 az ad app federated-credential create --id $app.id --parameters "@fic.json"
 
@@ -44,15 +50,12 @@ gh variable set ARTIFACT_SIGNING_ENDPOINT -R $repo -b https://eus.codesigning.az
 ```
 
 To trust tags as well, Yap uses a flexible federated credential (Graph beta
-`federatedIdentityCredentials` with `claimsMatchingExpression`). Entra requires
-the immutable `repository_id` and `repository_owner_id` claims next to the `sub`
-match:
+`federatedIdentityCredentials` with `claimsMatchingExpression`). The expression
+must match on an immutable claim, which the immutable subject already is:
 
 ```text
-claims['sub'] matches 'repo:owner/repo:ref:refs/tags/v*' and claims['repository_id'] eq '<id>' and claims['repository_owner_id'] eq '<owner id>'
+claims['sub'] matches 'repo:owner@<owner id>/repo@<repo id>:ref:refs/tags/v*'
 ```
-
-`gh api repos/owner/repo --jq '.id, .owner.id'` gives both IDs.
 
 ## Workflow
 
