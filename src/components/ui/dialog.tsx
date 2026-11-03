@@ -458,7 +458,7 @@ function DialogFooter({
 }
 
 /**
- * The kicker over a dialog title: silkscreen in ink-3 ("Invite · Ralph HQ",
+ * The kicker over a dialog title: silkscreen in ink-3 ("Invite · Yap HQ",
  * "Desktop sign-in · 4 min left"). Context, not a heading.
  */
 function DialogKicker({ className, ...props }: React.ComponentProps<"p">) {

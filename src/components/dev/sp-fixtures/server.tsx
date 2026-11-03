@@ -246,7 +246,7 @@ const auditLogs: ServerAuditLog[] = [
     actor_id: "u-me",
     actor: jon,
     action_type: "SERVER_UPDATE",
-    changes: { name: "Ralph HQ", allow_share_indexing: false },
+    changes: { name: "Yap HQ", allow_share_indexing: false },
     created_at: at(9000),
   },
 ];
@@ -326,12 +326,7 @@ function ServerFixture({ surface }: { surface: string }) {
   useApiStub(serverRoutes(surface));
   if (surface === "sp-server-invite-modal") {
     return (
-      <InviteModal
-        open
-        serverId="s-1"
-        serverName="Ralph HQ"
-        onClose={() => {}}
-      />
+      <InviteModal open serverId="s-1" serverName="Yap HQ" onClose={() => {}} />
     );
   }
   const member = surface === "sp-server-member";
@@ -340,7 +335,7 @@ function ServerFixture({ surface }: { surface: string }) {
       open
       serverId="s-1"
       ownerId={member ? "u-ada" : "u-me"}
-      serverName="Ralph HQ"
+      serverName="Yap HQ"
       iconUrl={null}
       userPermissions={member ? MODERATOR_PERMISSIONS : ALL_PERMISSIONS}
       onClose={() => {}}

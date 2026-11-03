@@ -101,7 +101,7 @@ export function profileRoutes(surface: string): StubRoute[] {
           mutualServers: {
             count: 2,
             items: [
-              { id: "s-1", name: "Ralph HQ" },
+              { id: "s-1", name: "Yap HQ" },
               { id: "s-3", name: "Night Shift" },
             ],
           },

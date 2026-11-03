@@ -323,7 +323,7 @@ function CardA() {
         </div>
         <p className="mt-6 text-ui-sm text-ink-3">Ada invited you to join</p>
         <h2 className="mt-1 text-display font-semibold tracking-[-0.03em] text-balance text-ink-1">
-          Ralph HQ
+          Yap HQ
         </h2>
         <p className="mt-3 flex items-center gap-3 text-ui-sm text-ink-2">
           <span className="inline-flex items-center gap-1.5">

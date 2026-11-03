@@ -2349,8 +2349,8 @@ function KitSheet() {
           <Option id="C1" name="Plate">
             <KitDialog
               opt={1}
-              kicker="Invite · Ralph HQ"
-              title="Invite friends to Ralph HQ"
+              kicker="Invite · Yap HQ"
+              title="Invite friends to Yap HQ"
               actions={
                 <>
                   <KitButton opt={1} kind="ghost">
@@ -2369,7 +2369,7 @@ function KitSheet() {
                   kind="input"
                   id="dlg1-link"
                   label="Invite link"
-                  value="ralph.meet/j/WDJB-MJHT"
+                  value="yap.115jon.com/j/WDJB-MJHT"
                 />
               </div>
             </KitDialog>
@@ -2914,7 +2914,7 @@ function CallBar() {
         </span>
       </div>
       <p className="mt-0.5 truncate text-[13px] font-medium text-ink-2">
-        Lounge · Ralph HQ
+        Lounge · Yap HQ
       </p>
       <div className="mt-3 flex items-center gap-2">
         {key("camera", "Camera", "idle")}
@@ -3001,7 +3001,7 @@ function TreePanel({ inCall = true }: { inCall?: boolean }) {
             "text-[17px] font-extrabold tracking-[-0.01em]",
           )}
         >
-          Ralph HQ
+          Yap HQ
         </span>
         <Icon name="chevronDown" size="sm" className="text-ink-2" />
       </button>

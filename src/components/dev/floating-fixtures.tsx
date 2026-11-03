@@ -107,7 +107,7 @@ function useSoundboardSeed() {
       store.upsertPlayback({
         playbackId: `fl-sb-${index}`,
         ownerId: "u-me",
-        serverKey: "srv-ralph",
+        serverKey: "srv-yap",
         name,
         isLocal: true,
         startedAt: now - index * 4_000,
@@ -116,7 +116,7 @@ function useSoundboardSeed() {
       }),
     );
     return () =>
-      useVoiceSoundboardStore.getState().clearServerPlaybacks("srv-ralph");
+      useVoiceSoundboardStore.getState().clearServerPlaybacks("srv-yap");
   }, []);
 }
 
@@ -163,7 +163,7 @@ function SoundboardPlayer() {
   useSoundboardSeed();
   return (
     <FloatingSoundboardManager
-      serverId="srv-ralph"
+      serverId="srv-yap"
       localUserId="u-me"
       sfu={fakeSfu}
     />

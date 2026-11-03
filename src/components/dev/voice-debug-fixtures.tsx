@@ -131,7 +131,7 @@ function buildStub(count: number): SFUClient {
     sampleRate: 48000,
     framesEncoded: count * 100,
     timestamp: last.t,
-    serverIdentifier: "ralph-hq-lounge",
+    serverIdentifier: "yap-hq-lounge",
     connectionState: "connected",
     publishConnectionState: "connected",
     subscribeConnectionState: "connected",
@@ -148,7 +148,7 @@ function buildStub(count: number): SFUClient {
     getDebugData: () => ({
       connectionState: "connected",
       participantId: "p-me-5d2e",
-      roomSlug: "ralph-hq-lounge",
+      roomSlug: "yap-hq-lounge",
       transportHistory: series.transport,
       inboundHistory: series.inbound,
       connStats: stats,
