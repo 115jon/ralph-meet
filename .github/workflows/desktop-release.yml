@@ -13,6 +13,11 @@ on:
         description: "Release tag to build and publish (for example v1.14.0)"
         required: true
         type: string
+      publish:
+        description: "Upload to the release and publish it"
+        required: false
+        default: true
+        type: boolean
   # Manual rebuild of an existing release from the Actions tab. Run it from
   # main so the caches it saves stay reusable.
   workflow_dispatch:
@@ -21,6 +26,11 @@ on:
         description: "Existing release tag to rebuild and publish (for example v1.14.0)"
         required: true
         type: string
+      publish:
+        description: "Upload to the release and publish it. Off: sign and verify only, and keep the installer as a workflow artifact."
+        required: false
+        default: true
+        type: boolean
 
 env:
   CARGO_INCREMENTAL: 0
@@ -29,11 +39,15 @@ env:
   RALPH_CAPTURE_POLICY: "wgc-enabled"
   RELEASE_TAG: ${{ inputs.release_tag }}
   VITE_RALPH_CAPTURE_POLICY: "wgc-enabled"
+  # Signer common name on the Artifact Signing public-trust certificate.
+  ARTIFACT_SIGNING_SIGNER: "Jonathan Martinez"
 
 jobs:
   build:
     permissions:
       contents: write
+      # OIDC token for azure/login (Artifact Signing). No Azure secret is stored.
+      id-token: write
 
     # Windows-only: macOS and Linux builds are excluded until those
     # platforms are ready for release distribution.
@@ -204,6 +218,64 @@ jobs:
           path: desktop/src-tauri/target
           key: ${{ steps.restore-desktop-target.outputs.cache-primary-key }}
 
+      # ── Authenticode (Azure Artifact Signing) ───────────────────────
+      # OIDC federated credential on the app registration in repo variable
+      # AZURE_CLIENT_ID; it trusts this repo's main branch and v* tags only.
+      # The service principal holds only Artifact Signing Certificate Profile
+      # Signer, with no subscription access. See CODE_SIGNING_POLICY.md.
+      - name: Azure login for Artifact Signing
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      # Sign our own binaries and the custom-built CEF binaries in place, before
+      # stage-payload.ps1 packs them. The OBS-signed capture files
+      # (obs-capture/obs-signed/graphics-hook*.dll, inject-helper*,
+      # get-graphics-offsets*) are deliberately not listed: they must keep OBS's
+      # own signature, and stage-payload.ps1 fails if their hashes change.
+      - name: Sign app, launcher, and CEF binaries
+        uses: azure/artifact-signing-action@208f8af4bf26cf2af8597424e3cb5582801523ba # v2.0.0
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: |
+            ${{ github.workspace }}\desktop\src-tauri\target\release\ralph-meet-desktop.exe
+            ${{ github.workspace }}\desktop\launcher\target\release\yap-launcher.exe
+            ${{ env.CEF_PATH }}\libcef.dll
+            ${{ env.CEF_PATH }}\chrome_elf.dll
+            ${{ env.CEF_PATH }}\bootstrap.exe
+            ${{ env.CEF_PATH }}\bootstrapc.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: Yap
+          description-url: https://yap.115jon.com
+
+      # The checkout above is the release tag, which may predate the verify
+      # script; take it from the commit this workflow runs from.
+      - name: Check out the signature verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: desktop/scripts/verify-authenticode.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Verify payload signatures
+        shell: pwsh
+        run: |
+          ./.release-tools/desktop/scripts/verify-authenticode.ps1 -ExpectedSigner $env:ARTIFACT_SIGNING_SIGNER -Path @(
+            "desktop/src-tauri/target/release/ralph-meet-desktop.exe",
+            "desktop/launcher/target/release/yap-launcher.exe",
+            "$env:CEF_PATH\libcef.dll",
+            "$env:CEF_PATH\chrome_elf.dll",
+            "$env:CEF_PATH\bootstrap.exe",
+            "$env:CEF_PATH\bootstrapc.exe"
+          )
+
       # What ships is defined once in desktop/packaging/payload-manifest.json.
       # The script fails on any missing file, stages the payload, and packs it
       # into desktop/installer/Assets/payload.rmpk (see docs/desktop/packaging.md).
@@ -231,15 +303,36 @@ jobs:
           }
           Write-Host "==> YapSetup.exe: $([math]::Round($setupSize / 1MB, 1)) MB (payload $([math]::Round($payloadSize / 1MB, 1)) MB)"
 
-      - name: Create draft release, sign installer, and upload metadata
+      # Authenticode-sign the installer before the minisign step below: the
+      # updater signature in latest.json must cover the final bytes.
+      - name: Sign installer
+        uses: azure/artifact-signing-action@208f8af4bf26cf2af8597424e3cb5582801523ba # v2.0.0
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\desktop\installer\bin\Release\net48\YapSetup.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: Yap Setup
+          description-url: https://yap.115jon.com
+
+      - name: Verify installer signature
+        shell: pwsh
+        run: ./.release-tools/desktop/scripts/verify-authenticode.ps1 -ExpectedSigner $env:ARTIFACT_SIGNING_SIGNER -Path "desktop/installer/bin/Release/net48/YapSetup.exe"
+
+      - name: Create draft release, sign updater metadata, and upload
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISH: ${{ inputs.publish }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # 1. Create or verify the draft release
-          $releaseExists = $false
+          $Publish = $env:PUBLISH -eq 'true'
+          $releaseExists = -not $Publish
           try {
               $info = & gh release view $env:RELEASE_TAG -R ${{ github.repository }} 2>$null
               if ($LASTEXITCODE -eq 0) {
@@ -252,9 +345,9 @@ jobs:
               & gh release create $env:RELEASE_TAG --draft --title "Yap $env:RELEASE_TAG" --notes "Yap Release" -R ${{ github.repository }}
           }
 
-          # 2. Sign the installer using cargo tauri signer
+          # 2. Sign the Authenticode-signed installer for the updater (minisign)
           $SetupRenamePath = "desktop/installer/bin/Release/net48/YapSetup.exe"
-          Write-Host "==> Signing YapSetup.exe..."
+          Write-Host "==> Signing YapSetup.exe for the updater..."
           if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
               cargo tauri signer sign -k $env:TAURI_SIGNING_PRIVATE_KEY -p $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD $SetupRenamePath
           } else {
@@ -296,6 +389,11 @@ jobs:
           $LatestJsonPath = "desktop/installer/bin/Release/net48/latest.json"
           ./desktop/scripts/validate-latest-json.ps1 -LatestJson $LatestJsonPath -TauriConf "desktop/src-tauri/tauri.conf.json" -Tag $TagName -Repo $Repo
 
+          if (-not $Publish) {
+              Write-Host "==> publish is off: skipping release upload and publish."
+              return
+          }
+
           # 4. Upload artifacts to the release
           gh release upload $env:RELEASE_TAG $SetupRenamePath --clobber -R ${{ github.repository }}
           gh release upload $env:RELEASE_TAG $LatestJsonPath --clobber -R ${{ github.repository }}
@@ -308,3 +406,14 @@ jobs:
 
           # 5. Publish the release and mark it as latest
           gh release edit $env:RELEASE_TAG --draft=false --latest -R ${{ github.repository }}
+
+      - name: Keep signed installer as a workflow artifact
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: YapSetup-${{ env.RELEASE_TAG }}-signed
+          path: |
+            desktop/installer/bin/Release/net48/YapSetup.exe
+            desktop/installer/bin/Release/net48/YapSetup.exe.sig
+            desktop/installer/bin/Release/net48/latest.json
+          retention-days: 7

@@ -1,12 +1,13 @@
 # Code Signing Policy
 
-> Free code signing provided by [SignPath.io](https://signpath.io), certificate
-> by [SignPath Foundation](https://signpath.org).
-
-Yap is preparing an application for the SignPath Foundation open-source
-code-signing program. This document describes the intended controls. No artifact
-is represented as SignPath-signed until a valid Authenticode signature is
-published and can be independently verified.
+Yap's Windows release binaries are Authenticode-signed with
+[Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/)
+(formerly Trusted Signing). The Public Trust certificate is issued to the
+maintainer as an individual developer after Microsoft identity validation, so the
+signer is `Jonathan Martinez` (Chicago, Illinois, US). Certificates are
+short-lived and renewed by the service. Every signature carries an RFC 3161
+timestamp from `timestamp.acs.microsoft.com`, so it stays valid after the
+certificate that made it expires.
 
 ## Signing roles
 
@@ -14,7 +15,7 @@ published and can be independently verified.
 | --------- | -------------------------------------------------------- | ----------------------------------- |
 | Committer | Maintains the source code and release configuration      | [115jon](https://github.com/115jon) |
 | Reviewer  | Reviews changes from contributors who are not committers | [115jon](https://github.com/115jon) |
-| Approver  | Approves each release-signing request                    | [115jon](https://github.com/115jon) |
+| Approver  | Approves each release by merging the release PR          | [115jon](https://github.com/115jon) |
 
 The three roles are currently held by the same maintainer. Contributions from
 other people still require maintainer review before merge. Automated tools may
@@ -22,31 +23,40 @@ assist review but do not hold a signing role.
 
 ## Signing scope
 
-The initial requested scope is limited to `Yap.exe` and
-`YapSetup.exe`, built from this repository by GitHub-hosted release CI.
-The installer may include separately classified upstream components, including
-CEF runtime files and the OBS-derived optional capture component, without
-representing those included components as directly signed.
+The release workflow (`.github/workflows/desktop-release.yml`) signs:
 
-Any expansion to sign modified upstream artifacts requires a public source fork,
-reviewed release provenance, and explicit SignPath Foundation approval.
+| File                                                                 | Origin                                                      |
+| -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `app-<version>\Yap.exe` (the app, built as `ralph-meet-desktop.exe`) | this repository                                             |
+| Root `Yap.exe` / `YapLauncher.exe` (launcher stub)                   | this repository (`desktop/launcher`)                        |
+| `YapSetup.exe` (installer, also kept as `Update.exe`)                | this repository (`desktop/installer`)                       |
+| `libcef.dll`, `chrome_elf.dll`, `bootstrap.exe`, `bootstrapc.exe`    | the project's custom CEF build (`cef-build-assets` release) |
+
+It never signs or re-signs the OBS Studio capture files
+(`obs-capture/obs-signed/graphics-hook*.dll`, `inject-helper*.exe`,
+`get-graphics-offsets*.exe`). They ship byte-for-byte as OBS released them and
+keep the OBS Project, LLC signature that anti-cheat vendors allowlist.
+`desktop/scripts/stage-payload.ps1` fails the build if their hashes differ from
+`desktop/packaging/obs-signed-hook.lock.json`. Other bundled runtime files
+(DirectX, ANGLE and SwiftShader DLLs, data files) ship as received.
 
 ## Release controls
 
 Each release follows this sequence:
 
-1. GitHub-hosted CI builds the release from a protected release tag.
-2. CI creates a classified payload manifest, checksums, and SBOM before signing.
-3. Yap submits only eligible first-party artifacts to SignPath.io.
-4. The named Approver manually reviews and approves the signing request.
-5. CI verifies the returned Authenticode signatures and trusted timestamps before
-   publishing the release and updater metadata.
-
-Release signing requests originate only from protected release origins and
-GitHub-hosted workflows. Signed artifacts must have enforced Yap product
-metadata and a version matching the release. Release artifacts, checksums, SBOMs,
-provenance records, and signature-verification results are retained with each
-release.
+1. The maintainer merges the release-please PR on `main`. Release-please tags the
+   release and calls the desktop release workflow on a GitHub-hosted runner.
+2. The workflow signs in to Azure with a GitHub OIDC token. The Entra app
+   registration trusts only this repository's `main` branch and `v*` tags, and
+   holds only the Artifact Signing Certificate Profile Signer role. No Azure
+   secret is stored in GitHub.
+3. CI signs the app, launcher, and custom CEF binaries before packing the
+   payload, then signs `YapSetup.exe` once the installer is built.
+4. `desktop/scripts/verify-authenticode.ps1` runs `signtool verify /pa` on every
+   signed file and checks the signer name and timestamp. Any failure stops the
+   release.
+5. Only then does CI cover the signed installer with the Tauri updater
+   (minisign) signature in `latest.json`, upload it, and publish the release.
 
 ## Privacy policy
 
@@ -57,11 +67,10 @@ data transfers.
 
 ## Verification and incident response
 
-Release pages will identify the signed files, their checksums, and the files that
-are intentionally included unsigned as upstream components. Users should verify
-the Authenticode signature and checksum before installation.
+Check a download with `signtool verify /pa YapSetup.exe`, or in the file's
+Properties → Digital Signatures tab. The signer must be `Jonathan Martinez`.
 
 Report suspected malicious artifacts, signing-policy violations, or certificate
 concerns to <115jon@proton.me> and through the project's security-reporting
-channel. Yap will investigate the report, preserve relevant release
-evidence, and cooperate with SignPath Foundation on revocation or remediation.
+channel. The maintainer will investigate, preserve relevant release evidence,
+and ask Microsoft to revoke the affected certificate if a signature was misused.
