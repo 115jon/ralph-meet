@@ -12,13 +12,13 @@
       "type": "file",
       "source": "release",
       "from": "ralph-meet-desktop.exe",
-      "to": "RalphMeet.exe"
+      "to": "Yap.exe"
     },
     {
       "type": "file",
       "source": "launcher",
-      "from": "ralph-meet-launcher.exe",
-      "to": "RalphMeetLauncher.exe"
+      "from": "yap-launcher.exe",
+      "to": "YapLauncher.exe"
     },
 
     { "type": "file", "source": "cef", "from": "libcef.dll" },

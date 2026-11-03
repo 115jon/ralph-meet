@@ -1,6 +1,6 @@
 // ── Desktop deep links ───────────────────────────────────────────────────────
 // The desktop shell (desktop/src-tauri/src/main_window.rs) routes every
-// `ralphmeet://` link (second launch, deep-link plugin, cold start) into one
+// `yap://` or `ralphmeet://` link (second launch, deep-link plugin, cold start) into one
 // event, `rm://deep-link` with `{ url }`, after dropping repeats. Links that
 // arrive before the page listens are queued in Rust and handed over by
 // `take_pending_deep_links`. This module is the page's one listener; see
@@ -12,6 +12,12 @@ import type { DeepLinkSubscription } from "@/lib/host/types";
 import { isRecord } from "@/lib/persisted-guard";
 
 export const DESKTOP_DEEP_LINK_EVENT = "rm://deep-link";
+
+/**
+ * The desktop app's link schemes: `yap:`, and Ralph Meet's `ralphmeet:`, which
+ * the installer still points at the app so links shared before the rename work.
+ */
+const DESKTOP_DEEP_LINK_PROTOCOLS: readonly string[] = ["yap:", "ralphmeet:"];
 
 export interface DesktopDeepLinkPayload {
   url: string;
@@ -35,11 +41,14 @@ export function readDeepLinkPayload(payload: unknown): string | null {
   return payload.url;
 }
 
-/** The invite code of `ralphmeet://invite/<code>`, or null. */
+/** The invite code of `yap://invite/<code>` (or `ralphmeet://`), or null. */
 export function inviteCodeFromDeepLink(url: string): string | null {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "ralphmeet:" || parsed.hostname !== "invite") {
+    if (
+      !DESKTOP_DEEP_LINK_PROTOCOLS.includes(parsed.protocol) ||
+      parsed.hostname !== "invite"
+    ) {
       return null;
     }
     return parsed.pathname.replace(/^\//, "") || null;

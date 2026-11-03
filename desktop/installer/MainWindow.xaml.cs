@@ -301,7 +301,7 @@ namespace Installer
                 case Phase.ConfirmUninstall:
                     SetKicker("UNINSTALL", null);
                     SetText("Uninstall Yap?",
-                        "This will remove the desktop app and shortcuts from this PC. Your Yap data in AppData\\Roaming\\RalphMeet will be kept.");
+                        "This will remove the desktop app and shortcuts from this PC. Your Yap data in AppData\\Roaming\\Yap will be kept.");
                     break;
                 case Phase.Uninstalling:
                     SetKicker("UNINSTALL", null);

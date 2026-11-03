@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds the Ralph Meet desktop installer (.exe) targeting the deployed backend.
+    Builds the Yap desktop installer (.exe) targeting the deployed backend.
 
 .DESCRIPTION
     Sets up the Rust/Cargo toolchain (Scoop layout), CEF path, and then runs
@@ -14,7 +14,7 @@
     the CEF runtime files (libcef.dll, icudtl.dat, pak files, locales, etc.).
     The upstream @tauri-apps/cli does NOT have CEF bundling support.
 
-    Output:  desktop\installer\bin\Release\net48\RalphMeetSetup.exe
+    Output:  desktop\installer\bin\Release\net48\YapSetup.exe
 
 .EXAMPLE
     .\scripts\build-installer.ps1
@@ -99,7 +99,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $releaseDir = Join-Path $desktopDir "src-tauri\target\release"
 
-# The root RalphMeet.exe launcher stub (docs/desktop/launch.md), shipped in the payload.
+# The root Yap.exe launcher stub (docs/desktop/launch.md), shipped in the payload.
 Write-Host "==> Building root launcher stub..." -ForegroundColor Yellow
 cargo build --release --manifest-path (Join-Path $desktopDir "launcher\Cargo.toml")
 if ($LASTEXITCODE -ne 0) {
@@ -122,12 +122,12 @@ $installerDisplayName = $conf.app.windows[0].title
 $installerLogDir = Join-Path $env:APPDATA "$productName\logs\installer"
 $installedRoot = Join-Path $env:LOCALAPPDATA $productName
 $installedStatePath = Join-Path $installedRoot "current.json"
-$installedRootLauncherPath = Join-Path $installedRoot "RalphMeet.exe"
+$installedRootLauncherPath = Join-Path $installedRoot "Yap.exe"
 
 Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
-$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\RalphMeetSetup.exe"
-Get-CimInstance Win32_Process -Filter "Name = 'RalphMeetSetup.exe'" -ErrorAction SilentlyContinue |
+$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\YapSetup.exe"
+Get-CimInstance Win32_Process -Filter "Name = 'YapSetup.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.ExecutablePath -eq $workspaceInstallerPath } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Set-Location $installerProjDir

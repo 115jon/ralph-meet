@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for the Ralph Meet desktop client",
+  "description": "Default capabilities for the Yap desktop client",
   "windows": ["main", "updater"],
   "permissions": [
     "core:default",

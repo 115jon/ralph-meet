@@ -188,14 +188,14 @@ jobs:
           Set-Location desktop
           cargo tauri build --config src-tauri/tauri.deployed.conf.json --features cef,native-screen-share,game-capture-hook --no-bundle
 
-      # The root RalphMeet.exe launcher stub (docs/desktop/launch.md). A small
+      # The root Yap.exe launcher stub (docs/desktop/launch.md). A small
       # standalone crate with no Tauri or CEF dependencies; it builds in seconds.
       - name: Build root launcher
         shell: pwsh
         run: |
           cargo build --release --manifest-path desktop/launcher/Cargo.toml
-          $stub = Get-Item "desktop/launcher/target/release/ralph-meet-launcher.exe"
-          Write-Host "==> ralph-meet-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
+          $stub = Get-Item "desktop/launcher/target/release/yap-launcher.exe"
+          Write-Host "==> yap-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
 
       - name: Save desktop Rust target cache
         if: steps.restore-desktop-target.outputs.cache-hit != 'true'
@@ -224,12 +224,12 @@ jobs:
           dotnet build desktop/installer/installer.csproj -c Release -p:Version=$Version -p:InformationalVersion=$Version -p:Company="$Publisher" -p:Product="$InstallerDisplayName Setup"
 
           # The csproj embeds the payload only if it exists; never ship an installer without it.
-          $setupSize = (Get-Item "desktop/installer/bin/Release/net48/RalphMeetSetup.exe").Length
+          $setupSize = (Get-Item "desktop/installer/bin/Release/net48/YapSetup.exe").Length
           $payloadSize = (Get-Item "desktop/installer/Assets/payload.rmpk").Length
           if ($setupSize -lt $payloadSize) {
-            throw "RalphMeetSetup.exe ($setupSize bytes) is smaller than its payload ($payloadSize bytes): the payload was not embedded."
+            throw "YapSetup.exe ($setupSize bytes) is smaller than its payload ($payloadSize bytes): the payload was not embedded."
           }
-          Write-Host "==> RalphMeetSetup.exe: $([math]::Round($setupSize / 1MB, 1)) MB (payload $([math]::Round($payloadSize / 1MB, 1)) MB)"
+          Write-Host "==> YapSetup.exe: $([math]::Round($setupSize / 1MB, 1)) MB (payload $([math]::Round($payloadSize / 1MB, 1)) MB)"
 
       - name: Create draft release, sign installer, and upload metadata
         shell: pwsh
@@ -249,12 +249,12 @@ jobs:
 
           if (-not $releaseExists) {
               Write-Host "Creating draft release..."
-              & gh release create $env:RELEASE_TAG --draft --title "Ralph Meet $env:RELEASE_TAG" --notes "Ralph Meet Release" -R ${{ github.repository }}
+              & gh release create $env:RELEASE_TAG --draft --title "Yap $env:RELEASE_TAG" --notes "Yap Release" -R ${{ github.repository }}
           }
 
           # 2. Sign the installer using cargo tauri signer
-          $SetupRenamePath = "desktop/installer/bin/Release/net48/RalphMeetSetup.exe"
-          Write-Host "==> Signing RalphMeetSetup.exe..."
+          $SetupRenamePath = "desktop/installer/bin/Release/net48/YapSetup.exe"
+          Write-Host "==> Signing YapSetup.exe..."
           if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
               cargo tauri signer sign -k $env:TAURI_SIGNING_PRIVATE_KEY -p $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD $SetupRenamePath
           } else {
@@ -275,7 +275,7 @@ jobs:
           # Construct the latest.json updater metadata
           $TagName = $env:RELEASE_TAG
           $Repo = "${{ github.repository }}"
-          $Url = "https://github.com/$Repo/releases/download/$TagName/RalphMeetSetup.exe"
+          $Url = "https://github.com/$Repo/releases/download/$TagName/YapSetup.exe"
           $PubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
           $Metadata = @{

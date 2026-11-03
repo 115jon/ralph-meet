@@ -15,7 +15,7 @@ The script downloads the official release zip, checks its SHA-256, extracts the
 six files, and checks each file's SHA-256, Authenticode signature, signer
 ("OBS Project, LLC"), certificate thumbprint and file version against the lock.
 The app checks hash and signature again before every injection, then stages the
-set to `%LOCALAPPDATA%\RalphMeet\capture-hook\obs-<ver>-<sha8>\` (the stock DLL
+set to `%LOCALAPPDATA%\Yap\capture-hook\obs-<ver>-<sha8>\` (the stock DLL
 stays loaded in a game until it exits). **Never modify or re-sign these files**:
 a changed byte voids the signature anti-cheat vendors allowlist. See
 `docs/desktop/signed-capture-hook.md`.

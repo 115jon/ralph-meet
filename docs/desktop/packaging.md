@@ -1,23 +1,23 @@
 # Desktop packaging
 
-How the Windows installer (`RalphMeetSetup.exe`) gets its files, and how CI checks them.
+How the Windows installer (`YapSetup.exe`) gets its files, and how CI checks them.
 
 ## What ships
 
 One file defines it: [`desktop/packaging/payload-manifest.json`](../../desktop/packaging/payload-manifest.json).
 Each entry names a `source` and a path to copy (`to` defaults to `from`):
 
-| source      | directory                          | what comes from it                                                    |
-| ----------- | ---------------------------------- | --------------------------------------------------------------------- |
-| `cef`       | `CEF_PATH` (`D:\cef` in CI)        | the 17 CEF root files and the whole `locales` directory               |
-| `release`   | `desktop/src-tauri/target/release` | `ralph-meet-desktop.exe` (as `RalphMeet.exe`) and `obs-capture/*`     |
-| `launcher`  | `desktop/launcher/target/release`  | `ralph-meet-launcher.exe` (as `RalphMeetLauncher.exe`), the root stub |
-| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents and the OBS-signed files in `obs-capture/`        |
+| source      | directory                          | what comes from it                                             |
+| ----------- | ---------------------------------- | -------------------------------------------------------------- |
+| `cef`       | `CEF_PATH` (`D:\cef` in CI)        | the 17 CEF root files and the whole `locales` directory        |
+| `release`   | `desktop/src-tauri/target/release` | `ralph-meet-desktop.exe` (as `Yap.exe`) and `obs-capture/*`    |
+| `launcher`  | `desktop/launcher/target/release`  | `yap-launcher.exe` (as `YapLauncher.exe`), the root stub       |
+| `resources` | `desktop/src-tauri/resources`      | the GPLv2 documents and the OBS-signed files in `obs-capture/` |
 
 `obs-capture/obs-signed/` holds the six unmodified OBS-signed hook/injector binaries (pinned by
 `obs-signed-hook.lock.json`, fetched by `fetch-obs-signed-hook.ps1`, never re-signed); `obs-capture/` holds `LICENSE-GPLv2.txt`, `ATTRIBUTION.md` and `SOURCE-OFFER.md`. Nothing is dropped for size: every CEF locale and rendering DLL ships.
 
-The installer copies `RalphMeetLauncher.exe` to the install root as `RalphMeet.exe` on every activation; see
+The installer copies `YapLauncher.exe` to the install root as `Yap.exe` on every activation; see
 [launch.md](launch.md).
 
 Changing what ships means editing the manifest. Three things read it:
@@ -94,6 +94,6 @@ The installer window (its look, embedded fonts, progress and how to preview each
 `desktop-release.yml` runs the installer tests, builds the launcher after the app, stages and packs through
 `stage-payload.ps1`, checks that the built installer is larger than its payload, and runs `desktop/scripts/validate-latest-json.ps1` before
 publishing. That script requires the updater manifest's version to match `tauri.conf.json` and the tag, the URL
-to end in `/releases/download/<tag>/RalphMeetSetup.exe`, `pub_date` to be UTC, and the signature to be a
+to end in `/releases/download/<tag>/YapSetup.exe`, `pub_date` to be UTC, and the signature to be a
 minisign signature whose key id matches the updater public key. It does not verify the signature itself, since
 the Tauri CLI has no verify command.

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds and installs the Ralph Meet desktop app in a production-like mode
+    Builds and installs the Yap desktop app in a production-like mode
     against the deployed backend without launching it.
 
 .DESCRIPTION
@@ -125,8 +125,8 @@ Write-Host "==> Staging and packing payload..." -ForegroundColor Yellow
 
 Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
-$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\RalphMeetSetup.exe"
-Get-CimInstance Win32_Process -Filter "Name = 'RalphMeetSetup.exe'" -ErrorAction SilentlyContinue |
+$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\YapSetup.exe"
+Get-CimInstance Win32_Process -Filter "Name = 'YapSetup.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.ExecutablePath -eq $workspaceInstallerPath } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Set-Location $installerProjDir
@@ -145,7 +145,7 @@ Set-Location $desktopDir
 
 $installer = $workspaceInstallerPath
 if (-not (Test-Path $installer)) {
-    Write-Error "Installer RalphMeetSetup.exe not found under $installerProjDir\bin\Release\net48"
+    Write-Error "Installer YapSetup.exe not found under $installerProjDir\bin\Release\net48"
     exit 1
 }
 
@@ -157,12 +157,13 @@ $rootLauncherPath = Join-Path $expectedDir "Update.exe"
 # The installer can't overwrite a running instance — stop it first so we don't
 # hit a locked-exe failure (the same lock that blocks rebuilds).
 Get-Process -Name "RalphMeet" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "Yap" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-CimInstance Win32_Process -Filter "Name = 'Update.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.ExecutablePath -eq (Join-Path $expectedDir "Update.exe") } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
-Write-Host "==> Running Custom Installer RalphMeetSetup.exe (/S /NoLaunch) ..." -ForegroundColor Yellow
+Write-Host "==> Running Custom Installer YapSetup.exe (/S /NoLaunch) ..." -ForegroundColor Yellow
 Write-Host "==> Installer logs   : $installerLogDir" -ForegroundColor Cyan
 $installerProc = Start-Process -FilePath $installer -ArgumentList "/S", "/NoLaunch" -PassThru -Wait
 if ($installerProc.ExitCode -ne 0) {
@@ -189,7 +190,7 @@ if (-not $installedState.currentVersion) {
 }
 
 $installDir = Join-Path $expectedDir ("app-" + $installedState.currentVersion)
-$installedExe = Join-Path $installDir "RalphMeet.exe"
+$installedExe = Join-Path $installDir "Yap.exe"
 if (-not (Test-Path $installedExe)) {
     Write-Error "Installed desktop executable not found: $installedExe"
     exit 1

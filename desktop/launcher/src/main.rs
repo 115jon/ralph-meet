@@ -1,7 +1,7 @@
-//! `RalphMeet.exe` at the install root (`%LOCALAPPDATA%\RalphMeet`).
+//! `Yap.exe` at the install root (`%LOCALAPPDATA%\Yap`).
 //!
-//! Shortcuts, the Run key, the `ralphmeet://` handler and taskbar pins all
-//! point here. It starts `app-<version>\RalphMeet.exe` with the caller's
+//! Shortcuts, the Run key, the `yap://` and `ralphmeet://` handlers and taskbar
+//! pins all point here. It starts `app-<version>\Yap.exe` with the caller's
 //! arguments and working directory set to that version directory, then exits.
 //! See docs/desktop/launch.md.
 #![cfg_attr(windows, windows_subsystem = "windows")]
@@ -15,7 +15,7 @@ fn main() {
 
 #[cfg(not(windows))]
 fn main() {
-    eprintln!("ralph-meet-launcher only runs on Windows");
+    eprintln!("yap-launcher only runs on Windows");
     std::process::exit(1);
 }
 
@@ -42,7 +42,7 @@ mod win {
             .ok()
             .and_then(|exe| exe.parent().map(Path::to_path_buf))
         else {
-            error_box("RalphMeet could not locate its install directory.");
+            error_box("Yap could not locate its install directory.");
             return 1;
         };
 
@@ -83,9 +83,9 @@ mod win {
             }
         }
 
-        log(&root, "no installed RalphMeet version could be started");
+        log(&root, "no installed Yap version could be started");
         error_box(&format!(
-            "RalphMeet could not find an installed version to start in\n{}\n\nReinstall RalphMeet to repair it.",
+            "Yap could not find an installed version to start in\n{}\n\nReinstall Yap to repair it.",
             root.display()
         ));
         1
@@ -131,7 +131,7 @@ mod win {
 
     fn error_box(message: &str) {
         let text: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
-        let caption: Vec<u16> = "RalphMeet".encode_utf16().chain(Some(0)).collect();
+        let caption: Vec<u16> = "Yap".encode_utf16().chain(Some(0)).collect();
         unsafe {
             MessageBoxW(
                 std::ptr::null_mut(),

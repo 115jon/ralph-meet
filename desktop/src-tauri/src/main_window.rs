@@ -4,7 +4,7 @@
 //
 // - `complete_launch`: the updater window hands off (or closes). Shows the
 //   window, or parks it in the tray when "start minimized" is on.
-// - `reveal`: tray click, tray "Show", a second launch, a `ralphmeet://`
+// - `reveal`: tray click, tray "Show", a second launch, a `yap://`
 //   link. Restores from the tray state and foregrounds the window. Before the
 //   launch handoff it only records that the launch must show the window.
 // - `on_close_requested`: close to tray, or quit.
@@ -30,9 +30,11 @@ use crate::desktop_settings::DesktopSettingsStore;
 use crate::TauriRuntime;
 
 pub(crate) const MAIN_LABEL: &str = "main";
-/// The one app event the frontend listens to for `ralphmeet://` links.
+/// The one app event the frontend listens to for `yap://` (and `ralphmeet://`) links.
 pub(crate) const DEEP_LINK_EVENT: &str = "rm://deep-link";
-const DEEP_LINK_SCHEME: &str = "ralphmeet";
+/// `yap`, then Ralph Meet's `ralphmeet`, which the installer still points at
+/// this app so links shared before the rename keep working.
+const DEEP_LINK_SCHEMES: [&str; 2] = ["yap", "ralphmeet"];
 /// The same link through two paths (argv and the plugin) arrives together.
 const DEEP_LINK_DEDUPE_WINDOW: Duration = Duration::from_secs(2);
 
@@ -41,16 +43,17 @@ pub(crate) struct DeepLinkPayload {
     pub url: String,
 }
 
-/// Normalizes a `ralphmeet://` URL, or `None` for anything else.
+/// Normalizes a `yap://` or `ralphmeet://` URL, or `None` for anything else.
 pub(crate) fn normalize_deep_link(raw: &str) -> Option<String> {
     let trimmed = raw.trim().trim_matches('"');
     let url = tauri::Url::parse(trimmed).ok()?;
-    url.scheme()
-        .eq_ignore_ascii_case(DEEP_LINK_SCHEME)
+    DEEP_LINK_SCHEMES
+        .iter()
+        .any(|scheme| url.scheme().eq_ignore_ascii_case(scheme))
         .then(|| url.to_string())
 }
 
-/// The first `ralphmeet://` URL in a command line. argv[0] is the executable.
+/// The first deep-link URL in a command line. argv[0] is the executable.
 pub(crate) fn deep_link_from_args<I, S>(args: I) -> Option<String>
 where
     I: IntoIterator<Item = S>,
@@ -383,17 +386,23 @@ mod tests {
     fn extracts_the_link_from_argv() {
         assert_eq!(
             deep_link_from_args([
-                r"C:\RalphMeet\app-3.7.0\RalphMeet.exe",
+                r"C:\Yap\app-3.7.0\Yap.exe",
                 "ralphmeet://invite/abc123"
             ]),
             Some("ralphmeet://invite/abc123".to_string())
         );
+        assert_eq!(
+            deep_link_from_args([r"C:\Yap\app-3.7.0\Yap.exe", "yap://invite/abc123"]),
+            Some("yap://invite/abc123".to_string())
+        );
+        assert_eq!(normalize_deep_link("YAP://invite/x").as_deref(), Some("yap://invite/x"));
+        assert_eq!(normalize_deep_link("https://invite/x"), None);
     }
 
     #[test]
     fn extracts_quoted_and_mixed_case_links() {
         assert_eq!(
-            deep_link_from_args(["RalphMeet.exe", "--flag", "\"RalphMeet://invite/abc\""]),
+            deep_link_from_args(["Yap.exe", "--flag", "\"RalphMeet://invite/abc\""]),
             Some("ralphmeet://invite/abc".to_string())
         );
     }
@@ -402,7 +411,7 @@ mod tests {
     fn ignores_argv0_and_other_arguments() {
         assert_eq!(deep_link_from_args(["ralphmeet://invite/argv0"]), None);
         assert_eq!(
-            deep_link_from_args(["RalphMeet.exe", "--type=renderer", "https://example.com"]),
+            deep_link_from_args(["Yap.exe", "--type=renderer", "https://example.com"]),
             None
         );
         assert_eq!(deep_link_from_args(Vec::<String>::new()), None);
@@ -410,7 +419,7 @@ mod tests {
 
     #[test]
     fn argv_and_plugin_forms_normalize_the_same() {
-        let from_argv = deep_link_from_args(["RalphMeet.exe", "ralphmeet://invite/abc"]).unwrap();
+        let from_argv = deep_link_from_args(["Yap.exe", "ralphmeet://invite/abc"]).unwrap();
         let from_plugin = normalize_deep_link(
             tauri::Url::parse("ralphmeet://invite/abc")
                 .unwrap()
@@ -422,19 +431,19 @@ mod tests {
 
     #[test]
     fn autostart_flag_is_not_a_deep_link() {
-        assert_eq!(deep_link_from_args(["RalphMeet.exe", "--autostart"]), None);
+        assert_eq!(deep_link_from_args(["Yap.exe", "--autostart"]), None);
         assert_eq!(
-            deep_link_from_args(["RalphMeet.exe", "--autostart", "ralphmeet://invite/a"]),
+            deep_link_from_args(["Yap.exe", "--autostart", "ralphmeet://invite/a"]),
             Some("ralphmeet://invite/a".to_string())
         );
     }
 
     #[test]
     fn detects_the_autostart_flag_after_argv0() {
-        assert!(launched_by_autostart(["RalphMeet.exe", "--autostart"]));
-        assert!(!launched_by_autostart(["RalphMeet.exe"]));
+        assert!(launched_by_autostart(["Yap.exe", "--autostart"]));
+        assert!(!launched_by_autostart(["Yap.exe"]));
         assert!(!launched_by_autostart(["--autostart"]));
-        assert!(!launched_by_autostart(["RalphMeet.exe", "--autostart=1"]));
+        assert!(!launched_by_autostart(["Yap.exe", "--autostart=1"]));
     }
 
     #[test]

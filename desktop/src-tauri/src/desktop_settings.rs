@@ -158,7 +158,7 @@ fn write_settings_file(path: &Path, settings: &DesktopSettings) -> Result<(), St
 
 /// The directory that holds the settings file. Computable before the Tauri
 /// app exists (CEF needs hardware acceleration first). On Windows this is
-/// the same directory as the app config dir (`%APPDATA%\RalphMeet`).
+/// the same directory as the app config dir (`%APPDATA%\Yap`).
 fn settings_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -330,7 +330,7 @@ fn apply_open_on_startup<R: tauri::Runtime>(
 }
 
 #[cfg(target_os = "windows")]
-const RUN_VALUE_NAME: &str = "RalphMeet";
+const RUN_VALUE_NAME: &str = "Yap";
 #[cfg(target_os = "windows")]
 const RUN_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -591,14 +591,14 @@ mod tests {
 
     #[test]
     fn run_value_is_rewritten_only_when_it_differs() {
-        let desired = r#""C:\RalphMeet\RalphMeet.exe" --autostart"#;
+        let desired = r#""C:\Yap\Yap.exe" --autostart"#;
         assert!(!run_value_needs_rewrite(Some(desired), desired));
         assert!(!run_value_needs_rewrite(
-            Some(r#""c:\ralphmeet\RalphMeet.exe" --autostart"#),
+            Some(r#""c:\yap\Yap.exe" --autostart"#),
             desired
         ));
         assert!(run_value_needs_rewrite(
-            Some(r#""C:\RalphMeet\RalphMeet.exe""#),
+            Some(r#""C:\Yap\Yap.exe""#),
             desired
         ));
         assert!(run_value_needs_rewrite(None, desired));

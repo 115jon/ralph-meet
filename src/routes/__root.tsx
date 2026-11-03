@@ -208,7 +208,7 @@ function DesktopDeepLinkBridge() {
 
     const { unsubscribe, ready } = getHost().deepLinks.subscribe((url) => {
       // Auth no longer uses deep links (desktop signs in with a device code);
-      // invites are the only ralphmeet:// links handled here.
+      // invites are the only yap:// (or ralphmeet://) links handled here.
       const code = inviteCodeFromDeepLink(url);
       if (!code) {
         deepLinkLog.warn("Deep link did not contain an invite");

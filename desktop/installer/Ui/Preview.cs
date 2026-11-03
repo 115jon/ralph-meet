@@ -13,12 +13,12 @@ namespace Installer.Ui
     /// Debug builds only: shows or captures each window state without installing anything,
     /// and without starting the installer logger.
     ///
-    ///   RalphMeetSetup.exe --preview installing [--theme light]
-    ///   RalphMeetSetup.exe --capture C:\out [--scale 1.5] [--theme dark|light|all]
+    ///   YapSetup.exe --preview installing [--theme light]
+    ///   YapSetup.exe --capture C:\out [--scale 1.5] [--theme dark|light|all]
     /// </summary>
     internal static class Preview
     {
-        private const string SampleLog = @"C:\Users\you\AppData\Roaming\RalphMeet\logs\installer\installer-20261102-101500-pid4242.log";
+        private const string SampleLog = @"C:\Users\you\AppData\Roaming\Yap\logs\installer\installer-20261102-101500-pid4242.log";
         private const string SampleError = "Embedded payload.rmpk not found. Rebuild the installer after packaging the desktop payload.";
 
         private static readonly Dictionary<string, Func<MainWindow>> States = new Dictionary<string, Func<MainWindow>>(StringComparer.OrdinalIgnoreCase)
@@ -32,7 +32,7 @@ namespace Installer.Ui
             { "uninstall", () => new MainWindow(Phase.ConfirmUninstall, -1, false, null, null) },
             { "uninstalling", () => new MainWindow(Phase.Uninstalling, -1, false, null, null) },
             { "uninstalled", () => new MainWindow(Phase.Uninstalled, -1, false, null, null) },
-            { "uninstall-error", () => new MainWindow(Phase.UninstallFailed, -1, false, "Access to the path 'RalphMeet.exe' is denied.", SampleLog) },
+            { "uninstall-error", () => new MainWindow(Phase.UninstallFailed, -1, false, "Access to the path 'Yap.exe' is denied.", SampleLog) },
         };
 
         public static bool TryStart(Application app, string[] args)

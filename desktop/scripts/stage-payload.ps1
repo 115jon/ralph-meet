@@ -129,7 +129,7 @@ if ($problems.Count -gt 0) {
 }
 
 $ownStage = -not $StageDir
-if ($ownStage) { $StageDir = Join-Path ([System.IO.Path]::GetTempPath()) "RalphMeetStage" }
+if ($ownStage) { $StageDir = Join-Path ([System.IO.Path]::GetTempPath()) "YapStage" }
 if (Test-Path -LiteralPath $StageDir) { Remove-Item -LiteralPath $StageDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
 

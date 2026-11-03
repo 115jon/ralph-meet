@@ -1,7 +1,7 @@
 [package]
 name = "ralph-meet-desktop"
 version = "3.9.0"
-description = "Ralph Meet — Real-Time Communication Desktop Client"
+description = "Yap — Real-Time Communication Desktop Client"
 authors = ["115jon"]
 license = "MIT"
 repository = ""

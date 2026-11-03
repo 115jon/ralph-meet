@@ -1,6 +1,6 @@
-# Ralph Meet Desktop (Tauri)
+# Yap Desktop (Tauri)
 
-Desktop client for Ralph Meet built with [Tauri 2.0](https://tauri.app/).
+Desktop client for Yap built with [Tauri 2.0](https://tauri.app/).
 
 ## Prerequisites
 

@@ -189,7 +189,7 @@ jobs:
         # against the fetched files, the flavor policy, and the stock-hook pacer.
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features cef,native-screen-share,game-capture-hook --lib -- signed_hook hook_policy timer_pacing vulkan_layer
 
-  # The root RalphMeet.exe launcher stub (desktop/launcher). Standalone crate
+  # The root Yap.exe launcher stub (desktop/launcher). Standalone crate
   # with no Tauri or CEF dependencies, so it needs none of the desktop job's setup.
   launcher:
     name: launcher
@@ -218,8 +218,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
           cargo build --release
           if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed" }
-          $stub = Get-Item "target/release/ralph-meet-launcher.exe"
-          Write-Host "==> ralph-meet-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
+          $stub = Get-Item "target/release/yap-launcher.exe"
+          Write-Host "==> yap-launcher.exe: $([math]::Round($stub.Length / 1KB)) KB"
 
   # Installer, payload format, and packaging scripts. Windows only (WPF, net48),
   # and independent of the Rust job: it needs no CEF, cargo build, or pnpm.

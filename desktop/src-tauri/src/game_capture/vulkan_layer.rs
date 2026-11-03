@@ -33,7 +33,7 @@
 //! (`graphics-hook.h`). That is the whole idle cost.
 //!
 //! This module does the same for the OBS-signed DLL we stage under
-//! `%LOCALAPPDATA%\RalphMeet\capture-hook\obs-<ver>-<sha8>\` (`signed_hook.rs`):
+//! `%LOCALAPPDATA%\Yap\capture-hook\obs-<ver>-<sha8>\` (`signed_hook.rs`):
 //!
 //! * [`sync`] runs at app start and whenever the "Game capture hook" setting
 //!   changes. With the setting on it registers the staged manifests, after the

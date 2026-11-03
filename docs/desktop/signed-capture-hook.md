@@ -306,11 +306,11 @@ description states the account risk in one sentence. It is off by default. A cur
 
 ### Runtime location and the Vulkan layer
 
-- On first use, copy the verified set to `%LOCALAPPDATA%\RalphMeet\capture-hook\obs-<ver>-<sha8>\`, outside the
+- On first use, copy the verified set to `%LOCALAPPDATA%\Yap\capture-hook\obs-<ver>-<sha8>\`, outside the
   `app-<ver>` folders. The stock DLL stays loaded in games until they exit, so a file locked inside `app-<old>`
   would block cleanup. A content-addressed folder is shared by all app versions.
 - Register one Vulkan layer manifest at one stable path (our layer name, pointing at the signed DLL), and delete
-  every `ImplicitLayers` value pointing into `RalphMeet\app-*\obs-capture\` or a `target\…\obs-capture\`. The
+  every `ImplicitLayers` value pointing into `Yap\app-*\obs-capture\` (or the legacy `RalphMeet\app-*\obs-capture\`) or a `target\…\obs-capture\`. The
   installer and the updater do the same cleanup. If OBS's own `VK_LAYER_OBS_HOOK` is registered, the second copy
   fails its dup-guard in `DllMain`, the loader skips it, and the first copy serves us (same protocol, same names).
 - Never register the unsigned fork DLL as a global layer. Fork Vulkan capture would need an explicit opt-in, or
@@ -409,7 +409,7 @@ the fork from the default path.
 - Before every injection the host opens the three files for the target bitness with read-only sharing, checks
   SHA-256 against the embedded lock and the Authenticode signature (`WinVerifyTrust`, signer "OBS Project, LLC",
   thumbprint), and holds the handles until the inject helper exits. Failure: `hook_artifact_unverified`, WGC.
-- The verified set is staged to `%LOCALAPPDATA%\RalphMeet\capture-hook\obs-<ver>-<sha8>\` with our own Vulkan layer
+- The verified set is staged to `%LOCALAPPDATA%\Yap\capture-hook\obs-<ver>-<sha8>\` with our own Vulkan layer
   manifests beside it. See [Vulkan layer registration](#vulkan-layer-registration).
 - Host stock profile: `CaptureHook_` names; the log pipe and keepalive are created before injecting (the stock DLL
   opens its pipe once); the pipe is duplex (OBS's client opens it read/write); the first-frame window is at least

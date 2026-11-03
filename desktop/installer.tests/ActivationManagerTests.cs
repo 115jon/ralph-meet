@@ -64,7 +64,7 @@ namespace Installer.Tests
 
                 string stagingDirectoryPath = Path.Combine(layout.StagingPath, "app-1.13.0.tmp");
                 Directory.CreateDirectory(stagingDirectoryPath);
-                File.WriteAllText(Path.Combine(stagingDirectoryPath, "RalphMeet.exe"), "stub");
+                File.WriteAllText(Path.Combine(stagingDirectoryPath, "Yap.exe"), "stub");
 
                 Assert.Throws<FileNotFoundException>(() =>
                     ActivationManager.Activate(layout, stagingDirectoryPath, "1.13.0"));
