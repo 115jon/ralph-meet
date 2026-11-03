@@ -22,8 +22,8 @@ resources and local storage, may also be stored locally.
 
 Ralph Meet uses these services:
 
-- `meet.115jon.site` for the Ralph Meet application API, chat gateway, and
-  service functions.
+- `yap.115jon.com` (formerly `meet.115jon.site`) for the Ralph Meet
+  application API, chat gateway, and service functions.
 - `auth.115jon.site` for the project-maintained Kova authentication service.
 - Cloudflare services for application delivery and infrastructure.
 - GitHub Releases for published desktop releases and desktop update metadata.
