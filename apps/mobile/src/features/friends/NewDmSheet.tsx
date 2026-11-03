@@ -1,7 +1,6 @@
 import { X } from "phosphor-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Keyboard, Pressable, TextInput, View } from "react-native";
-import { FlatList } from "react-native-gesture-handler";
+import { FlatList, Keyboard, Pressable, TextInput, View } from "react-native";
 
 import { useSession } from "@/features/auth/session";
 import { openDmWith } from "@/features/dms/actions";
@@ -287,7 +286,7 @@ function Body({ onClose }: { onClose: () => void }) {
           renderItem={renderItem}
           keyboardShouldPersistTaps="handled"
           style={{ marginTop: 4 }}
-          {...sheetScroll}
+          ref={sheetScroll}
         />
       )}
     </View>

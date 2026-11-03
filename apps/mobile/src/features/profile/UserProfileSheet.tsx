@@ -5,38 +5,8 @@ import {
   UserPlus,
   X,
 } from "phosphor-react-native";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  BackHandler,
-  Pressable,
-  useWindowDimensions,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from "react-native";
-import {
-  GestureDetector,
-  ScrollView,
-  usePanGesture,
-} from "react-native-gesture-handler";
-import Animated, {
-  Easing,
-  Extrapolation,
-  interpolate,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { scheduleOnRN } from "react-native-worklets";
+import { useMemo, useState, type ReactNode } from "react";
+import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 
 import { Markdown } from "@/features/chat/markdown/Markdown";
 import { parseMessage } from "@/features/chat/markdown/parse";
@@ -61,7 +31,7 @@ import {
 import { useChannelServer, useServersStore } from "@/features/servers/store";
 import { mediaUrl } from "@/lib/api";
 import { tapHaptic } from "@/lib/haptics";
-import { FONT, RADIUS, SHEET_TOP_RADIUS, useTheme } from "@/theme";
+import { FONT, RADIUS, useTheme } from "@/theme";
 import {
   Avatar,
   Button,
@@ -69,9 +39,11 @@ import {
   Icon,
   Led,
   RemoteImage,
+  Sheet,
   Skeleton,
   SquareKey,
   Text,
+  useSheetScroll,
   type ConfirmRequest,
 } from "@/ui";
 
@@ -96,19 +68,6 @@ import {
 
 const BANNER = 108;
 const AVATAR = 80;
-/** The first stop: identity and actions, with the chat still in view above. */
-const HALF_SHARE = 0.62;
-/** A flick faster than this (px/s) decides the stop on its own. */
-const FLING = 900;
-const OPEN = { duration: 250, easing: Easing.out(Easing.cubic) };
-const CLOSE = { duration: 175, easing: Easing.out(Easing.cubic) };
-/** DESIGN's panel spring: critically damped, carries the finger's velocity. */
-const SPRING = {
-  mass: 1,
-  stiffness: 360,
-  damping: 38,
-  overshootClamping: true,
-} as const;
 
 const memberSince = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -716,109 +675,21 @@ function BannerKey({
   );
 }
 
-/**
- * Someone's profile as a bottom sheet over everything: it rises to a first
- * stop (identity and actions, the chat still above it) and drags to full
- * height for the rest; down past the first stop, a tap on the scrim, the X
- * or back closes it. At full height the body scrolls, and pulling down
- * from its top drags the sheet. A theme's background tints the sheet.
- */
-function ProfileSheetView({ target }: { target: ProfileTarget }) {
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { width, height: screen } = useWindowDimensions();
-  const reducedMotion = useReducedMotion();
-  const profile = useProfile(target.userId);
+/** The sheet's body for one person, scrolling inside the native sheet. */
+function ProfileSheetBody({
+  target,
+  profile,
+  colors,
+}: {
+  target: ProfileTarget;
+  profile: Profile | null;
+  colors: ProfileColors;
+}) {
+  const { width } = useWindowDimensions();
   const failed = useProfileFailed(target.userId);
   const serverId = useContextServerId();
+  const sheetScroll = useSheetScroll();
   const [menuFor, setMenuFor] = useState<MenuPerson | null>(null);
-  const [expanded, setExpanded] = useState(false);
-
-  const full = screen - insets.top;
-  const half = Math.round(screen * HALF_SHARE);
-  /** translateY: 0 full height, `rest` the first stop, `full` gone. */
-  const rest = full - half;
-  const y = useSharedValue(full);
-  const dragFrom = useSharedValue(0);
-  const scrollY = useSharedValue(0);
-  /** This drag belongs to the scroll view (it began scrolled, or upward at full). */
-  const scrolling = useSharedValue(false);
-
-  useEffect(() => {
-    y.set(reducedMotion ? rest : withTiming(rest, OPEN));
-  }, [y, rest, reducedMotion]);
-
-  const dismiss = useCallback(() => {
-    if (reducedMotion) {
-      closeProfile();
-      return;
-    }
-    y.set(
-      withTiming(full, CLOSE, (finished) => {
-        if (finished) scheduleOnRN(closeProfile);
-      }),
-    );
-  }, [y, full, reducedMotion]);
-
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      dismiss();
-      return true;
-    });
-    return () => sub.remove();
-  }, [dismiss]);
-
-  const pan = usePanGesture({
-    activeOffsetY: [-8, 8],
-    failOffsetX: [-24, 24],
-    onActivate: (event) => {
-      "worklet";
-      dragFrom.set(y.get());
-      const atFull = y.get() <= 1;
-      scrolling.set(atFull && (scrollY.get() > 0 || event.translationY < 0));
-    },
-    onUpdate: (event) => {
-      "worklet";
-      if (scrolling.get()) return;
-      y.set(Math.min(full, Math.max(0, dragFrom.get() + event.translationY)));
-    },
-    onDeactivate: (event) => {
-      "worklet";
-      if (scrolling.get()) return;
-      const v = event.velocityY;
-      const now = y.get();
-      let next: number;
-      if (v > FLING) next = now > rest - 1 ? full : rest;
-      else if (v < -FLING) next = 0;
-      else if (now > rest + half * 0.3) next = full;
-      else next = now < rest / 2 ? 0 : rest;
-      if (next === full) {
-        y.set(
-          withTiming(full, CLOSE, (finished) => {
-            if (finished) scheduleOnRN(closeProfile);
-          }),
-        );
-        return;
-      }
-      y.set(
-        reducedMotion ? next : withSpring(next, { ...SPRING, velocity: v }),
-      );
-      scheduleOnRN(setExpanded, next === 0);
-    },
-  });
-
-  const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: y.get() }],
-  }));
-  const scrimStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(y.get(), [rest, full], [1, 0], Extrapolation.CLAMP),
-  }));
-
-  const onScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) =>
-      scrollY.set(event.nativeEvent.contentOffset.y),
-    [scrollY],
-  );
 
   const user = profile?.user;
   const person: Seedish = {
@@ -828,103 +699,73 @@ function ProfileSheetView({ target }: { target: ProfileTarget }) {
     avatar_url: user?.avatar_url ?? target.seed?.avatar_url,
   };
   const name = personName(person);
-  const colors = profileColors(user ?? {}, theme);
 
   return (
-    <View
-      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-    >
-      <Animated.View
-        style={[
-          {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: theme.scrim,
-          },
-          scrimStyle,
-        ]}
+    <>
+      <ScrollView
+        ref={sheetScroll}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 24 }}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close profile"
-          onPress={dismiss}
-          style={{ flex: 1 }}
+        <ProfileBody
+          person={person}
+          profile={profile}
+          failed={failed}
+          serverId={serverId}
+          colors={colors}
+          width={width}
+          onDismiss={closeProfile}
+          onMenu={() => setMenuFor({ ...person, name })}
         />
-      </Animated.View>
-      <GestureDetector gesture={pan}>
-        <Animated.View
-          accessibilityViewIsModal
-          accessibilityLabel={`${name}'s profile`}
-          style={[
-            {
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: full,
-              overflow: "hidden",
-              backgroundColor: colors.surface,
-              borderTopWidth: 2,
-              borderTopColor: theme.ink1,
-              borderTopLeftRadius: SHEET_TOP_RADIUS,
-              borderTopRightRadius: SHEET_TOP_RADIUS,
-              shadowColor: theme.shadow,
-              shadowOffset: { width: 0, height: -12 },
-              shadowOpacity: 1,
-              shadowRadius: 32,
-              elevation: 24,
-            },
-            sheetStyle,
-          ]}
-        >
-          <ScrollView
-            simultaneousWith={pan}
-            scrollEnabled={expanded}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-            overScrollMode="never"
-            contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-          >
-            <ProfileBody
-              person={person}
-              profile={profile}
-              failed={failed}
-              serverId={serverId}
-              colors={colors}
-              width={width}
-              onDismiss={dismiss}
-              onMenu={() => setMenuFor({ ...person, name })}
-            />
-          </ScrollView>
-          {/* The grab bar rides over the banner's top edge. */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              top: 6,
-              alignSelf: "center",
-              width: 32,
-              height: 3,
-              borderRadius: 2,
-              backgroundColor: "rgba(242, 242, 243, 0.6)",
-            }}
-          />
-        </Animated.View>
-      </GestureDetector>
+      </ScrollView>
       <PersonMenu
         person={menuFor}
         serverId={serverId}
         onClose={() => setMenuFor(null)}
       />
-    </View>
+    </>
   );
 }
 
-/** Hosts someone's profile sheet over the app while one is open. */
+/**
+ * Someone's profile as a bottom sheet over everything: it rises to a first
+ * stop (identity and actions, the chat still above it) and drags to full
+ * height for the rest; a drag down, a tap on the scrim, the X or Back
+ * closes it. At full height the body scrolls, and pulling down from its top
+ * drags the sheet. A theme's background tints the sheet.
+ */
 export function UserProfileSheet({ target }: { target: ProfileTarget | null }) {
-  if (!target) return null;
-  return <ProfileSheetView key={target.userId} target={target} />;
+  const theme = useTheme();
+  // The last person stays on the sheet while it sinks.
+  const [shown, setShown] = useState(target);
+  if (target && target !== shown) setShown(target);
+  const profile = useProfile(shown?.userId ?? "");
+  const user = profile?.user;
+  const colors = profileColors(user ?? {}, theme);
+  const name = personName({
+    username: user?.username ?? shown?.seed?.username ?? "",
+    display_name: user?.display_name ?? shown?.seed?.display_name,
+  });
+
+  return (
+    <Sheet
+      visible={target !== null}
+      onClose={closeProfile}
+      label={`${name}'s profile`}
+      expandable
+      fill
+      flush
+      surface={colors.surface}
+      grabberColor="rgba(242, 242, 243, 0.6)"
+    >
+      {shown ? (
+        <ProfileSheetBody
+          key={shown.userId}
+          target={shown}
+          profile={profile}
+          colors={colors}
+        />
+      ) : null}
+    </Sheet>
+  );
 }

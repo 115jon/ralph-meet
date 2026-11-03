@@ -81,6 +81,10 @@ reopened.
   peek, no swipe to it); a conversation that disappears closes cleanly.
   Sheets drag: down to close (the scrim fades with it), long ones up to
   full height, the list handing its top edge to the sheet.
+- Fixes: sheets now use `@lodev09/react-native-true-sheet` (native Android
+  BottomSheetBehavior): one `Sheet` for every bottom sheet, including the
+  other-user profile and the incoming-call ring; the hand-rolled pan,
+  springs and scroll hand-off (`sheet-scroll.ts`) are gone.
 - DM calls with ringing (mockup `calls.html` 01–02, all A): call key +
   confirm, Calling region in the DM, native ringing over the lock screen,
   heads-up and in-app sheet, Answer/Decline from the notification, missed

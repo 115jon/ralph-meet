@@ -20,6 +20,7 @@
     "@expo/metro-runtime": "~58.0.14",
     "@expo/ui": "58.0.26",
     "@kova/react": "https://github.com/115jon/kova/releases/download/kova-react-v1.2.0/115jon-kova-react-1.2.0.tgz",
+    "@lodev09/react-native-true-sheet": "^4.0.1",
     "@ralph/protocol": "workspace:*",
     "@ralph/realtime": "workspace:*",
     "effect": "^4.1.1",

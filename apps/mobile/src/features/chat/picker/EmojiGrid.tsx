@@ -423,8 +423,15 @@ export function EmojiGrid({
   const creations = useCreations();
   const tone = useSkinTone();
   const list = useRef<RNFlatList<GridRow>>(null);
-  // In the react picker the grid hands its top edge to the sheet.
+  // In the react picker the native sheet drives the grid's scrolling.
   const sheetScroll = useSheetScroll();
+  const listRef = useCallback(
+    (node: RNFlatList<GridRow> | null) => {
+      list.current = node;
+      sheetScroll?.(node);
+    },
+    [sheetScroll],
+  );
   const [toning, setToning] = useState<EmojiCell | null>(null);
   const searching = query.trim().length > 0;
 
@@ -470,15 +477,13 @@ export function EmojiGrid({
     }),
     [layout],
   );
-  const sheetOnScroll = sheetScroll.onScroll;
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      sheetOnScroll?.(event);
       if (searching) return;
       const next = sectionAt(layout, event.nativeEvent.contentOffset.y);
       setActive((current) => (current === next ? current : next));
     },
-    [layout, searching, sheetOnScroll],
+    [layout, searching],
   );
   const jump = useCallback(
     (section: string) => {
@@ -493,16 +498,13 @@ export function EmojiGrid({
   return (
     <View style={{ flex: 1 }}>
       <FlatList
-        ref={list}
+        ref={listRef}
         data={layout.rows}
         renderItem={renderItem}
         keyExtractor={(row) => row.key}
         getItemLayout={getItemLayout}
-        simultaneousWith={sheetScroll.simultaneousWith}
-        scrollEnabled={sheetScroll.scrollEnabled}
-        overScrollMode={sheetScroll.overScrollMode}
         onScroll={onScroll}
-        scrollEventThrottle={sheetScroll.scrollEventThrottle ?? 32}
+        scrollEventThrottle={32}
         // A tap on an emoji lands while the search keyboard is up.
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="none"
