@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Runs the Ralph Meet desktop app in dev mode against the deployed backend.
+    Runs the Yap desktop app in dev mode against the deployed backend.
 
 .DESCRIPTION
     Mirrors the environment setup used by build-installer.ps1 so local dev runs

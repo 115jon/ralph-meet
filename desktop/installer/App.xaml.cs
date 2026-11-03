@@ -81,6 +81,30 @@ namespace Installer
                 InstallerLogger.Error("AppDomain unhandled exception.", ex ?? new Exception("Non-Exception unhandled failure."));
             };
 
+            // --cleanup-legacy: move a leftover Ralph Meet install onto Yap. No window; add /S to
+            // also skip the error box.
+            if (LegacyCleanup.IsCleanupRequest(e.Args))
+            {
+                try
+                {
+                    InstallerLogic.RunLegacyCleanupAsync().GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    InstallerLogger.Error("Ralph Meet cleanup failed.", ex);
+                    if (!isSilent)
+                    {
+                        MessageBox.Show(
+                            InstallerLogger.AppendLogPath(ex.Message),
+                            "Yap cleanup failed",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
+                    }
+                    Environment.Exit(1);
+                }
+                Environment.Exit(0);
+            }
+
             if (isUninstall)
             {
                 if (!isSilent)

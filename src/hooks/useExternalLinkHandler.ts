@@ -15,6 +15,8 @@ import { clog } from "@/lib/console-logger";
 import { useEffect } from "react";
 
 const log = clog("useExternalLinkHandler");
+/** The desktop app's own links: `yap://`, and Ralph Meet's `ralphmeet://`. */
+const DESKTOP_APP_LINK = /^(yap|ralphmeet):\/\//i;
 
 export function useExternalLinkHandler() {
   useEffect(() => {
@@ -33,7 +35,7 @@ export function useExternalLinkHandler() {
         href.startsWith("/") ||
         href.startsWith("#") ||
         href.startsWith("javascript:") ||
-        href.startsWith("ralphmeet://")
+        DESKTOP_APP_LINK.test(href)
       ) {
         return;
       }

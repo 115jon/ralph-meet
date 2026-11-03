@@ -395,7 +395,12 @@ fn cef_manifest_entries() -> Vec<(String, bool)> {
     payload_manifest_entries()
         .iter()
         .filter(|entry| entry["source"] == "cef")
-        .map(|entry| (payload_destination(entry).to_owned(), entry["type"] == "directory"))
+        .map(|entry| {
+            (
+                payload_destination(entry).to_owned(),
+                entry["type"] == "directory",
+            )
+        })
         .collect()
 }
 

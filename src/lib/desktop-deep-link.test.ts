@@ -102,6 +102,8 @@ describe("desktop deep links", () => {
     );
     expect(readDeepLinkPayload(null)).toBeNull();
     expect(inviteCodeFromDeepLink("ralphmeet://invite/abc123")).toBe("abc123");
+    expect(inviteCodeFromDeepLink("yap://invite/abc123")).toBe("abc123");
+    expect(inviteCodeFromDeepLink("yap://other/abc")).toBeNull();
     expect(inviteCodeFromDeepLink("ralphmeet://invite/")).toBeNull();
     expect(inviteCodeFromDeepLink("ralphmeet://other/abc")).toBeNull();
     expect(inviteCodeFromDeepLink("https://invite/abc")).toBeNull();

@@ -13,7 +13,7 @@
 //! The stock DLL stays loaded in a game until the game exits. To keep a locked
 //! DLL out of the versioned `app-<ver>` folders (which the updater deletes),
 //! the verified set is copied once to a content-addressed folder shared by all
-//! app versions: `%LOCALAPPDATA%\RalphMeet\capture-hook\obs-<ver>-<sha8>\`.
+//! app versions: `%LOCALAPPDATA%\Yap\capture-hook\obs-<ver>-<sha8>\`.
 //! `RALPH_CAPTURE_HOOK_DIR` overrides the parent folder (development builds).
 //!
 //! Never modify or re-sign these files: a changed byte voids the signature that
@@ -294,7 +294,10 @@ pub fn open_verified(dir: &Path, names: &[&str]) -> Result<VerifiedSet, String> 
 
 /// The start of every layer name we register. `vulkan_layer` recognizes its own
 /// registrations by it. Never OBS's `VK_LAYER_OBS_HOOK`, which belongs to OBS's
-/// own registration.
+/// own registration. Kept from Ralph Meet on purpose: it is ours, not part of
+/// the OBS-signed files, but registrations and manifests written by earlier
+/// versions (and the unsigned fork's bundled manifests) carry it, and renaming
+/// it would make `vulkan_layer` treat them as a third party's.
 pub const LAYER_NAME_PREFIX: &str = "VK_LAYER_RALPH_MEET_HOOK";
 
 /// Our Vulkan layer manifest for the staged DLL, named for its bitness
@@ -315,7 +318,7 @@ fn vulkan_manifest(dll: &str, bits: &str) -> String {
         "library_path": ".\\{dll}",
         "api_version": "1.3.216",
         "implementation_version": "1",
-        "description": "Ralph Meet game capture (OBS Studio capture hook)",
+        "description": "Yap game capture (OBS Studio capture hook)",
         "functions": {{
             "vkNegotiateLoaderLayerInterfaceVersion": "OBS_Negotiate"
         }},

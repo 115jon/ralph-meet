@@ -1,7 +1,7 @@
 [package]
-name = "ralph-meet-launcher"
+name = "yap-launcher"
 version = "3.9.0"
-description = "RalphMeet root launcher: starts the active app-<version> RalphMeet.exe"
+description = "Yap root launcher: starts the active app-<version> Yap.exe"
 authors = ["115jon"]
 license = "MIT"
 edition = "2021"
@@ -11,7 +11,7 @@ publish = false
 [workspace]
 
 [[bin]]
-name = "ralph-meet-launcher"
+name = "yap-launcher"
 path = "src/main.rs"
 
 [target.'cfg(windows)'.dependencies]

@@ -5,22 +5,22 @@ using System.Linq;
 namespace Installer
 {
     /// <summary>
-    /// The native stub at the install root (RalphMeet.exe). Every payload carries it as
-    /// RalphMeetLauncher.exe; each activation copies it to the root. Shortcuts, the Run key,
-    /// the ralphmeet:// handler and taskbar pins point at the root copy, which starts the
-    /// active app-&lt;version&gt;\RalphMeet.exe. See docs/desktop/launch.md.
+    /// The native stub at the install root (Yap.exe). Every payload carries it as
+    /// YapLauncher.exe; each activation copies it to the root. Shortcuts, the Run key,
+    /// the yap:// and ralphmeet:// handlers and taskbar pins point at the root copy, which starts
+    /// the active app-&lt;version&gt;\Yap.exe. See docs/desktop/launch.md.
     /// </summary>
     public static class RootLauncher
     {
-        public const string PayloadFileName = "RalphMeetLauncher.exe";
+        public const string PayloadFileName = "YapLauncher.exe";
         public const string OldSuffix = ".old";
 
         /// <summary>The AppUserModelID shared by the shortcuts, the app window and its toasts (the Tauri identifier).</summary>
-        public const string AppUserModelId = "site.115jon.ralphmeet";
+        public const string AppUserModelId = "com.115jon.yap";
 
         /// <summary>
         /// Installs or refreshes the root stub from the active version directory. A locked stub
-        /// (for example one that is still starting the app) is renamed to RalphMeet.exe.old and
+        /// (for example one that is still starting the app) is renamed to Yap.exe.old and
         /// replaced; the .old copy is deleted on a later activation. If the stub can be neither
         /// replaced nor renamed, the existing one is kept: it reads current.json, so it still
         /// starts the new version. Returns true when the root stub exists afterwards.
@@ -82,7 +82,7 @@ namespace Installer
             }
         }
 
-        /// <summary>Deletes RalphMeet.exe.old copies left by earlier swaps, skipping any still in use.</summary>
+        /// <summary>Deletes Yap.exe.old copies left by earlier swaps, skipping any still in use.</summary>
         public static void DeleteOldCopies(InstallRootLayout layout)
         {
             if (!Directory.Exists(layout.RootPath))
@@ -110,11 +110,11 @@ namespace Installer
             }
 
             executablePath = layout.UpdateExePath;
-            arguments = LaunchCurrentVersion.ProcessStartArguments;
+            arguments = LaunchCurrentVersion.ProcessStartSwitch + " " + layout.ExecutableFileName;
         }
 
         /// <summary>
-        /// Rename first to RalphMeet.exe.old, like Squirrel's Discord.exe.old; if a still-locked
+        /// Rename first to Yap.exe.old, like Squirrel's Discord.exe.old; if a still-locked
         /// .old is in the way, use a unique name instead.
         /// </summary>
         private static bool TryMoveAside(string stubPath)

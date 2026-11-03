@@ -24,7 +24,7 @@ $stageScript = Join-Path $PSScriptRoot "stage-payload.ps1"
 $extra = @{}
 if ($Dotnet) { $extra.Dotnet = $Dotnet }
 
-$work = Join-Path ([System.IO.Path]::GetTempPath()) ("RalphMeetPipelineTest_" + [guid]::NewGuid().ToString("N"))
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ("YapPipelineTest_" + [guid]::NewGuid().ToString("N"))
 $cef = Join-Path $work "cef"
 $release = Join-Path $work "release"
 $launcher = Join-Path $work "launcher"
@@ -72,7 +72,7 @@ try {
             throw "Packed payload is missing obs-capture\$doc"
         }
     }
-    foreach ($exe in "RalphMeet.exe", "RalphMeetLauncher.exe") {
+    foreach ($exe in "Yap.exe", "YapLauncher.exe") {
         if (-not (Test-Path -LiteralPath (Join-Path $extracted $exe))) { throw "Packed payload is missing $exe" }
     }
 

@@ -5,11 +5,11 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
-    <AssemblyName>RalphMeetSetup</AssemblyName>
+    <AssemblyName>YapSetup</AssemblyName>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Company>115jon</Company>
-    <Product>Ralph Meet Setup</Product>
+    <Product>Yap Setup</Product>
     <Version>3.9.0</Version>
   </PropertyGroup>
 

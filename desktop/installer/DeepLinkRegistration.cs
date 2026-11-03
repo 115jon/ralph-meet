@@ -6,12 +6,34 @@ namespace Installer
 {
     public static class DeepLinkRegistration
     {
-        public const string SchemeName = "ralphmeet";
+        public const string SchemeName = "yap";
 
-        private const string ProtocolRegistryPath = @"Software\Classes\" + SchemeName;
+        /// <summary>
+        /// Ralph Meet's scheme. Still registered, pointing at Yap, so links already shared open the app.
+        /// </summary>
+        public const string LegacySchemeName = "ralphmeet";
+
+        /// <summary>Every scheme an install registers and an uninstall removes.</summary>
+        public static readonly string[] SchemeNames = { SchemeName, LegacySchemeName };
+
+        private const string ClassesRegistryPath = @"Software\Classes\";
         private const string DefaultIconSubKeyPath = @"DefaultIcon";
         private const string ShellOpenCommandSubKeyPath = @"shell\open\command";
-        private const string ProtocolDescription = "URL:RalphMeet Protocol";
+        private const string ProtocolDescription = "URL:Yap Protocol";
+
+        public static string GetProtocolRegistryPath(string scheme)
+        {
+            return ClassesRegistryPath + scheme;
+        }
+
+        /// <summary>The shell\open\command value registered for <paramref name="scheme"/>, or null.</summary>
+        public static string ReadLaunchCommand(RegistryKey currentUserRoot, string scheme)
+        {
+            using (RegistryKey commandKey = currentUserRoot?.OpenSubKey(GetProtocolRegistryPath(scheme) + @"\" + ShellOpenCommandSubKeyPath))
+            {
+                return commandKey?.GetValue(string.Empty) as string;
+            }
+        }
 
         /// <summary>
         /// The shell\open\command value: the launcher, its own arguments if any, then the URL.
@@ -38,10 +60,11 @@ namespace Installer
             return string.Equals(trimmed, BuildLaunchCommand(layout.RootStubPath), StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(
                        trimmed,
-                       BuildLaunchCommand(layout.UpdateExePath, LaunchCurrentVersion.ProcessStartArguments),
+                       BuildLaunchCommand(layout.UpdateExePath, LaunchCurrentVersion.ProcessStartSwitch + " " + layout.ExecutableFileName),
                        StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>Points every scheme in <see cref="SchemeNames"/> at the launcher.</summary>
         public static void Register(RegistryKey currentUserRoot, string launcherPath, string launcherArguments = "")
         {
             if (currentUserRoot == null)
@@ -50,12 +73,45 @@ namespace Installer
             }
 
             string normalizedLauncherPath = NormalizeLauncherPath(launcherPath);
+            foreach (string scheme in SchemeNames)
+            {
+                RegisterScheme(currentUserRoot, scheme, normalizedLauncherPath, launcherArguments);
+            }
+        }
 
-            using (RegistryKey protocolKey = currentUserRoot.CreateSubKey(ProtocolRegistryPath))
+        /// <summary>
+        /// Removes each scheme whose command this install (<paramref name="layout"/>) wrote. Returns
+        /// how many were removed. A scheme another app has taken over is left alone.
+        /// </summary>
+        public static int UnregisterIfOwned(RegistryKey currentUserRoot, InstallRootLayout layout)
+        {
+            if (currentUserRoot == null)
+            {
+                throw new ArgumentNullException(nameof(currentUserRoot));
+            }
+
+            int removed = 0;
+            foreach (string scheme in SchemeNames)
+            {
+                if (!IsOwnedByInstall(ReadLaunchCommand(currentUserRoot, scheme), layout))
+                {
+                    continue;
+                }
+
+                currentUserRoot.DeleteSubKeyTree(GetProtocolRegistryPath(scheme), false);
+                removed++;
+            }
+
+            return removed;
+        }
+
+        private static void RegisterScheme(RegistryKey currentUserRoot, string scheme, string launcherPath, string launcherArguments)
+        {
+            using (RegistryKey protocolKey = currentUserRoot.CreateSubKey(GetProtocolRegistryPath(scheme)))
             {
                 if (protocolKey == null)
                 {
-                    throw new InvalidOperationException("Failed to create the deep-link protocol registry key.");
+                    throw new InvalidOperationException("Failed to create the " + scheme + ":// protocol registry key.");
                 }
 
                 protocolKey.SetValue(string.Empty, ProtocolDescription, RegistryValueKind.String);
@@ -65,53 +121,25 @@ namespace Installer
                 {
                     if (defaultIconKey == null)
                     {
-                        throw new InvalidOperationException("Failed to create the deep-link icon registry key.");
+                        throw new InvalidOperationException("Failed to create the " + scheme + ":// icon registry key.");
                     }
 
-                    defaultIconKey.SetValue(string.Empty, normalizedLauncherPath, RegistryValueKind.String);
+                    defaultIconKey.SetValue(string.Empty, launcherPath, RegistryValueKind.String);
                 }
 
                 using (RegistryKey commandKey = protocolKey.CreateSubKey(ShellOpenCommandSubKeyPath))
                 {
                     if (commandKey == null)
                     {
-                        throw new InvalidOperationException("Failed to create the deep-link launch command registry key.");
+                        throw new InvalidOperationException("Failed to create the " + scheme + ":// launch command registry key.");
                     }
 
                     commandKey.SetValue(
                         string.Empty,
-                        BuildLaunchCommand(normalizedLauncherPath, launcherArguments),
+                        BuildLaunchCommand(launcherPath, launcherArguments),
                         RegistryValueKind.String);
                 }
             }
-        }
-
-        public static bool UnregisterIfOwned(RegistryKey currentUserRoot, InstallRootLayout layout)
-        {
-            if (currentUserRoot == null)
-            {
-                throw new ArgumentNullException(nameof(currentUserRoot));
-            }
-
-            using (RegistryKey protocolKey = currentUserRoot.OpenSubKey(ProtocolRegistryPath))
-            {
-                if (protocolKey == null)
-                {
-                    return false;
-                }
-
-                using (RegistryKey commandKey = protocolKey.OpenSubKey(ShellOpenCommandSubKeyPath))
-                {
-                    string existingCommand = commandKey?.GetValue(string.Empty) as string;
-                    if (!IsOwnedByInstall(existingCommand, layout))
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            currentUserRoot.DeleteSubKeyTree(ProtocolRegistryPath, false);
-            return true;
         }
 
         private static string NormalizeLauncherPath(string launcherPath)

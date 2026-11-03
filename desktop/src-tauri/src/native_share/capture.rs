@@ -501,6 +501,10 @@ fn process_is_descendant_of(pid: u32, ancestor_pid: u32) -> bool {
     false
 }
 
+/// Where the own (unsigned, `RALPH_CAPTURE_HOOK_FLAVOR=own`) hook DLL writes
+/// `graphics-hook-<pid>.log`. The path is compiled into that DLL
+/// (`resources/obs-capture/fork/.../graphics-hook.c`), so it keeps Ralph
+/// Meet's folder name until the fork is rebuilt.
 #[cfg(all(feature = "game-capture-hook", windows))]
 fn hook_log_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|base| {
@@ -617,7 +621,7 @@ pub(crate) fn prepare_hook(
     }
     if source_targets_current_process(source_id) {
         log::info!(
-            "[NativeShare] selected window belongs to the current RalphMeet process; skipping game-capture hook and keeping capture on WGC"
+            "[NativeShare] selected window belongs to the current Yap process; skipping game-capture hook and keeping capture on WGC"
         );
         return HookPreparation::not_attempted();
     }

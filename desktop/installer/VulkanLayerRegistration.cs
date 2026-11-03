@@ -25,7 +25,7 @@ namespace Installer
 
         /// <summary>
         /// True when a registered manifest path is one this install wrote: an obs-vulkan{64,32}.json
-        /// in a staged hook folder (RalphMeet\capture-hook\obs-&lt;ver&gt;-&lt;sha8&gt;\), or in an
+        /// in a staged hook folder (&lt;install root&gt;\capture-hook\obs-&lt;ver&gt;-&lt;sha8&gt;\), or in an
         /// obs-capture folder of the root or of an app-&lt;ver&gt; folder (the old unsigned layer).
         /// </summary>
         public static bool IsOwnedManifest(string manifestPath, InstallRootLayout layout)

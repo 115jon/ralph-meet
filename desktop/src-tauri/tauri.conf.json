@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "RalphMeet",
+  "productName": "Yap",
   "version": "3.9.0",
-  "identifier": "site.115jon.ralphmeet",
+  "identifier": "com.115jon.yap",
   "build": {
     "frontendDist": "../dist/client",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Ralph Meet",
+        "title": "Yap",
         "width": 1280,
         "height": 800,
         "minWidth": 940,
@@ -50,7 +50,7 @@
     ],
     "publisher": "115jon",
     "category": "SocialNetworking",
-    "shortDescription": "Ralph Meet Desktop Application",
+    "shortDescription": "Yap Desktop Application",
     "longDescription": "A decentralized, high-performance voice and video chat application built with Tauri and Cloudflare.",
     "copyright": "Copyright © 2026 115jon",
     "icon": [
@@ -75,6 +75,7 @@
     "deep-link": {
       "desktop": {
         "schemes": [
+          "yap",
           "ralphmeet"
         ]
       }

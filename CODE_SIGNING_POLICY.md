@@ -22,8 +22,8 @@ assist review but do not hold a signing role.
 
 ## Signing scope
 
-The initial requested scope is limited to `RalphMeet.exe` and
-`RalphMeetSetup.exe`, built from this repository by GitHub-hosted release CI.
+The initial requested scope is limited to `Yap.exe` and
+`YapSetup.exe`, built from this repository by GitHub-hosted release CI.
 The installer may include separately classified upstream components, including
 CEF runtime files and the OBS-derived optional capture component, without
 representing those included components as directly signed.
@@ -43,7 +43,7 @@ Each release follows this sequence:
    publishing the release and updater metadata.
 
 Release signing requests originate only from protected release origins and
-GitHub-hosted workflows. Signed artifacts must have enforced Ralph Meet product
+GitHub-hosted workflows. Signed artifacts must have enforced Yap product
 metadata and a version matching the release. Release artifacts, checksums, SBOMs,
 provenance records, and signature-verification results are retained with each
 release.

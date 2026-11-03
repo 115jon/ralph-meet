@@ -1,6 +1,6 @@
 # Installer window
 
-The window `RalphMeetSetup.exe` shows during an interactive install or uninstall. Silent runs
+The window `YapSetup.exe` shows during an interactive install or uninstall. Silent runs
 (`/S`, `--silent`, `--passive`, and `--uninstall` with one of them) show no window, as before.
 The install itself is unchanged; this covers only the presentation layer.
 
@@ -19,7 +19,7 @@ It is the app's updater window grown into a setup plate, built from the Talk Tre
   Bricolage 800 28/32 title, a Geist 15/22 status line, Martian tabular readouts, Bricolage 600
   key labels. The fonts are embedded (below).
 - **Progress**: a 4px `tint-2` track whose accent fill grows by `scaleX`, a `163 / 407 MB` and
-  percent readout, and a steps tree (Unpack files, Add shortcuts and links, Start Ralph Meet or
+  percent readout, and a steps tree (Unpack files, Add shortcuts and links, Start Yap or
   Finish) drawn like the app's tree: 1px guides, the current leaf's path lit in accent, LEDs
   that light talk green when a step is done and red when it failed.
 - **Keys**: the notched primary with its dithered cap (Try again), the paired secondary (Close,
@@ -88,7 +88,7 @@ installed and no log is written:
 
 ```powershell
 dotnet build desktop/installer -c Debug
-$exe = "desktop/installer/bin/Debug/net48/RalphMeetSetup.exe"
+$exe = "desktop/installer/bin/Debug/net48/YapSetup.exe"
 & $exe --preview installing            # also: preparing, setting-up, installed, installed-nolaunch,
                                        # error, uninstall, uninstalling, uninstalled, uninstall-error
 & $exe --preview error --theme light   # dark, light or contrast
@@ -97,4 +97,4 @@ $exe = "desktop/installer/bin/Debug/net48/RalphMeetSetup.exe"
 ```
 
 Release builds compile none of this. To watch a real install, run it against a sandbox root
-(`RALPHMEET_SANDBOX_ROOT`, see [launch.md](launch.md)) with a test payload and `/NoLaunch`.
+(`YAP_SANDBOX_ROOT`, see [launch.md](launch.md)) with a test payload and `/NoLaunch`.

@@ -12,7 +12,7 @@ namespace Installer.Tests
     {
         private const int TinyBlock = 4096;
 
-        private readonly string _root = Path.Combine(Path.GetTempPath(), "RalphMeetPayloadTests_" + Guid.NewGuid().ToString("N"));
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "YapPayloadTests_" + Guid.NewGuid().ToString("N"));
 
         public PayloadExtractorTests()
         {
@@ -35,7 +35,7 @@ namespace Installer.Tests
         {
             string source = CreateTree(new Dictionary<string, byte[]>
             {
-                { "RalphMeet.exe", Random(1, 700) },
+                { "Yap.exe", Random(1, 700) },
                 { "locales/en-US.pak", Random(2, 3000) },
                 { "obs-capture/deep/er/notes.txt", System.Text.Encoding.UTF8.GetBytes("hello") },
                 { "empty.bin", new byte[0] },
@@ -140,11 +140,11 @@ namespace Installer.Tests
         [Fact]
         public void LockedDestination_IsRetriedThenReported()
         {
-            string source = CreateTree(new Dictionary<string, byte[]> { { "RalphMeet.exe", Random(11, 300) } });
+            string source = CreateTree(new Dictionary<string, byte[]> { { "Yap.exe", Random(11, 300) } });
             byte[] payload = Pack(source, EnumerateRelative(source));
             string install = Path.Combine(_root, "install");
             Directory.CreateDirectory(install);
-            string locked = Path.Combine(install, "RalphMeet.exe");
+            string locked = Path.Combine(install, "Yap.exe");
             string reported = null;
 
             using (new FileStream(locked, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
