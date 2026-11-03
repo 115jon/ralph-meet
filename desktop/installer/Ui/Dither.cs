@@ -78,24 +78,54 @@ namespace Installer.Ui
     }
 
     /// <summary>
-    /// DitherGlyph motif="mark": the Ralph Meet mark printed in accent ink through a 32-cell
-    /// diagonal ramp. Pending prints about 70 percent of the light, as the cold-load mark is
-    /// before its last step; that is the whole loading signal.
+    /// DitherGlyph motif="mark" (ui/yap-bark): Yappy, the Yap mark, printed in accent ink through a
+    /// 32-cell diagonal ramp. While Pending the jaw barks: it steps closed, half, open, half twice,
+    /// then rests shut, on the web bark's timeline (motion.css rm-bark), and two short ticks show
+    /// beside the open mouth. At rest, or with Windows' animation effects off, it is the icon's
+    /// still pose (jaw open, no ticks).
     /// </summary>
     internal sealed class DitherMark : FrameworkElement
     {
         private const int Cells = 32;
-        private const double PendingScale = 0.7;
 
-        // The splash-logo.svg viewBox: the mark is fitted ("contain") into the square.
-        private static readonly Rect LogoBox = new Rect(560, 605, 916, 963);
+        private enum Jaw
+        {
+            Closed,
+            Half,
+            Open,
+        }
 
-        private static DrawingBrush _whole;
-        private static DrawingBrush _pending;
+        // The lower jaw per frame, in grid units (yap-bark.tsx JAW).
+        private static readonly Rect[] JawRects =
+        {
+            new Rect(17, 19, 13, 4),
+            new Rect(17, 20, 12, 4),
+            new Rect(17, 22, 11, 4),
+        };
+
+        // Two 45-degree ticks off the snout and the jaw tip (yap-bark.tsx TICK_CELLS).
+        private static readonly Point[] TickCells =
+        {
+            new Point(29, 10), new Point(30, 9), new Point(31, 8),
+            new Point(29, 28), new Point(30, 29), new Point(31, 30),
+        };
+
+        // "yap yap", then a rest: 1.4s, as the rm-bark keyframes step.
+        private static readonly (Jaw Jaw, int Ms)[] Timeline =
+        {
+            (Jaw.Closed, 420), (Jaw.Half, 84), (Jaw.Open, 224), (Jaw.Half, 84),
+            (Jaw.Closed, 84), (Jaw.Half, 84), (Jaw.Open, 224), (Jaw.Half, 84), (Jaw.Closed, 112),
+        };
+
+        private static DrawingBrush _ramp;
+        private static Geometry _ticks;
+
+        private readonly System.Windows.Threading.DispatcherTimer _timer;
+        private int _frame = -1;
 
         public static readonly DependencyProperty PendingProperty = DependencyProperty.Register(
             nameof(Pending), typeof(bool), typeof(DitherMark),
-            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender, OnPendingChanged));
 
         public static readonly DependencyProperty InkProperty = DependencyProperty.Register(
             nameof(Ink), typeof(Brush), typeof(DitherMark),
@@ -129,16 +159,72 @@ namespace Installer.Ui
             Focusable = false;
             IsHitTestVisible = false;
             SnapsToDevicePixels = true;
+            _timer = new System.Windows.Threading.DispatcherTimer();
+            _timer.Tick += (_, __) => Step();
+            Loaded += (_, __) => UpdateBark();
+            Unloaded += (_, __) => StopBark();
+            IsVisibleChanged += (_, __) => UpdateBark();
         }
 
-        private static DrawingBrush Ramp(bool pending)
+        private static void OnPendingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            double scale = pending ? PendingScale : 1;
+            ((DitherMark)d).UpdateBark();
+        }
+
+        /// <summary>Barks only while something is pending, on screen, and motion is on.</summary>
+        private void UpdateBark()
+        {
+            if (Pending && IsLoaded && IsVisible && Motion.Enabled)
+            {
+                if (!_timer.IsEnabled)
+                {
+                    _frame = -1;
+                    Step();
+                    _timer.Start();
+                }
+            }
+            else
+            {
+                StopBark();
+            }
+        }
+
+        private void StopBark()
+        {
+            _timer.Stop();
+            if (_frame != -1)
+            {
+                _frame = -1;
+                InvalidateVisual();
+            }
+        }
+
+        private void Step()
+        {
+            _frame = (_frame + 1) % Timeline.Length;
+            _timer.Interval = System.TimeSpan.FromMilliseconds(Timeline[_frame].Ms);
+            InvalidateVisual();
+        }
+
+        private static DrawingBrush Ramp()
+        {
             return Dither.Mask(Cells, Cells, (x, y) =>
             {
                 double d = (x + y) / (2.0 * (Cells - 1));
-                return Dither.BayerLit(x, y, (0.98 - d * 0.5) * scale);
+                return Dither.BayerLit(x, y, 0.98 - d * 0.3);
             });
+        }
+
+        private static Geometry Ticks()
+        {
+            GeometryGroup group = new GeometryGroup();
+            foreach (Point cell in TickCells)
+            {
+                group.Children.Add(new RectangleGeometry(new Rect(cell.X, cell.Y, 1, 1)));
+            }
+
+            group.Freeze();
+            return group;
         }
 
         protected override void OnRender(DrawingContext dc)
@@ -149,26 +235,37 @@ namespace Installer.Ui
                 return;
             }
 
-            Geometry white = TryFindResource("LogoWhiteGeometry") as Geometry;
+            Geometry head = TryFindResource("LogoHeadGeometry") as Geometry;
             Geometry black = TryFindResource("LogoBlackGeometry") as Geometry;
-            if (white == null)
+            if (head == null)
             {
                 return;
             }
 
-            DrawingBrush ramp = Pending ? (_pending ?? (_pending = Ramp(true))) : (_whole ?? (_whole = Ramp(false)));
-            DrawingBrush mask = ramp.CloneCurrentValue();
+            Jaw jaw = _frame < 0 ? Jaw.Open : Timeline[_frame].Jaw;
+            bool ticks = _frame >= 0 && jaw == Jaw.Open;
+
+            DrawingBrush mask = (_ramp ?? (_ramp = Ramp())).CloneCurrentValue();
             mask.Viewport = new Rect(0, 0, size, size);
             mask.ViewportUnits = BrushMappingMode.Absolute;
             mask.Freeze();
 
-            double scale = size / System.Math.Max(LogoBox.Width, LogoBox.Height);
-            double offsetX = (size - LogoBox.Width * scale) / 2 - LogoBox.X * scale;
-            double offsetY = (size - LogoBox.Height * scale) / 2 - LogoBox.Y * scale;
+            double scale = size / Cells;
+            double offsetX = (ActualWidth - size) / 2;
+            double offsetY = (ActualHeight - size) / 2;
+
+            dc.PushTransform(new MatrixTransform(scale, 0, 0, scale, offsetX, offsetY));
+            if (ticks)
+            {
+                dc.DrawGeometry(Ink, null, _ticks ?? (_ticks = Ticks()));
+            }
+
+            dc.Pop();
 
             dc.PushOpacityMask(mask);
             dc.PushTransform(new MatrixTransform(scale, 0, 0, scale, offsetX, offsetY));
-            dc.DrawGeometry(Ink, null, white);
+            dc.DrawGeometry(Ink, null, head);
+            dc.DrawRectangle(Ink, null, JawRects[(int)jaw]);
             if (black != null && Ground != null)
             {
                 dc.DrawGeometry(Ground, null, black);

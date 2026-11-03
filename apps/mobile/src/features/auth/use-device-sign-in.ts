@@ -19,7 +19,7 @@ export type DeviceSignInHookState = { status: "idle" } | DeviceSignInState;
 const isIos = Platform.OS === "ios";
 const DEVICE = {
   platform: isIos ? "ios" : "android",
-  label: isIos ? "Ralph Meet iOS" : "Ralph Meet Android",
+  label: isIos ? "Yap iOS" : "Yap Android",
 };
 
 /**

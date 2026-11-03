@@ -1898,7 +1898,7 @@ export default function SoundboardPicker({
                     )}
 
                   <RailButton
-                    label="Ralph sounds"
+                    label="Yap sounds"
                     active={activeCategory === DEFAULT_SECTION_ID}
                     onClick={() => jumpToSection(DEFAULT_SECTION_ID)}
                   >
@@ -2061,9 +2061,9 @@ export default function SoundboardPicker({
                   {(!deferredSearch || filteredDefault.length > 0) && (
                     <section
                       ref={setSectionRef(DEFAULT_SECTION_ID)}
-                      aria-label="Ralph sounds"
+                      aria-label="Yap sounds"
                     >
-                      <PickerSectionLabel>Ralph sounds</PickerSectionLabel>
+                      <PickerSectionLabel>Yap sounds</PickerSectionLabel>
                       <div className={SOUND_GRID}>
                         {filteredDefault.map((sound) => {
                           const isFav = myInstantsFavorites.some(

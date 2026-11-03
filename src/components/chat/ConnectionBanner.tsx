@@ -504,7 +504,7 @@ function useChatLinkIssue(
         state: "offline",
         message: "Offline",
         detail:
-          "This device has no network. Ralph reconnects on its own when it's back.",
+          "This device has no network. Yap reconnects on its own when it's back.",
       };
     }
     return failed
@@ -513,7 +513,7 @@ function useChatLinkIssue(
           state: "failed",
           message: "No chat link",
           detail:
-            "Can't reach the chat server. Ralph keeps trying; new messages catch up when it's back.",
+            "Can't reach the chat server. Yap keeps trying; new messages catch up when it's back.",
           retry: wake,
         }
       : {

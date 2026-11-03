@@ -173,7 +173,7 @@ describe("DesktopLogin device sign-in", () => {
     expect(latestController().options).toMatchObject({
       authUrl: "https://auth.test",
       publishableKey: "pk_test",
-      device: { platform: "windows", label: "Ralph Meet Desktop" },
+      device: { platform: "windows", label: "Yap Desktop" },
     });
 
     expect(screen.getByTestId("device-user-code")).toHaveTextContent("ABCD");

@@ -69,7 +69,7 @@ export const NotificationBell = memo(function NotificationBell() {
   useEffect(() => {
     if (typeof document === "undefined") return;
     if (baseTitleRef.current === null) {
-      baseTitleRef.current = document.title || "Ralph Meet";
+      baseTitleRef.current = document.title || "Yap";
     }
 
     const badge = getDesktopNotificationBadgeState({ notifications });

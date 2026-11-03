@@ -212,7 +212,7 @@ export default function InviteScreen() {
       <EmptyState
         title={load.expired ? "This invite has expired" : "Invite not found"}
         description="Ask whoever sent it for a new link."
-        action={{ label: "Go to Ralph", onPress: close }}
+        action={{ label: "Go to Yap", onPress: close }}
       />
     );
   } else if (load.status === "error") {

@@ -91,8 +91,9 @@ describe("SharedMessagePage states", () => {
         name: "This shared message is gone",
       }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Open Ralph Meet" }),
-    ).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Open Yap" })).toHaveAttribute(
+      "href",
+      "/",
+    );
   });
 });

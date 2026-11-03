@@ -24,11 +24,11 @@ export const Route = createFileRoute("/sign-up")({
   component: SignUpPage,
   head: () => ({
     meta: [
-      { title: "Sign Up — Ralph Meet" },
+      { title: "Sign Up — Yap" },
       {
         name: "description",
         content:
-          "Create a Ralph Meet account to access persistent chats, servers, and channels.",
+          "Create a Yap account to access persistent chats, servers, and channels.",
       },
     ],
   }),

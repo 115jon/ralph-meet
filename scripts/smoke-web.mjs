@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke test for a deployed Ralph Meet web Worker (a Preview or production).
+// Smoke test for a deployed Yap web Worker (a Preview or production).
 //
 //   node scripts/smoke-web.mjs <baseUrl> [--label <name>]
 //
@@ -56,7 +56,7 @@ async function request(path, init = {}) {
 const isHtml = (res) => /text\/html/iu.test(res.type);
 const appShell = (res) =>
   isHtml(res) &&
-  /<title>[^<]*Ralph Meet/iu.test(res.body) &&
+  /<title>[^<]*Yap/iu.test(res.body) &&
   /\/assets\/[\w.-]+\.js/u.test(res.body);
 
 let assetPath;

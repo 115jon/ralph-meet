@@ -632,7 +632,7 @@ describe("SoundboardPicker selection mode", () => {
     expect(screen.queryByText("Now Playing")).toBeNull();
     expect(screen.queryByRole("button", { name: "Custom sounds" })).toBeNull();
     expect(
-      screen.getAllByRole("button", { name: "Ralph sounds" })[0],
+      screen.getAllByRole("button", { name: "Yap sounds" })[0],
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Jump to Alpha server sounds" }),

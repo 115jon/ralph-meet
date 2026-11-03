@@ -22,7 +22,7 @@ import { persist } from "zustand/middleware";
 const log = clog("DesktopSettings");
 
 export interface DesktopSettings {
-  /** Open Ralph Meet when you log in to your computer */
+  /** Open Yap when you log in to your computer */
   openOnStartup: boolean;
   /** Start the app minimized (hidden in tray) */
   startMinimized: boolean;

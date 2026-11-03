@@ -27,7 +27,7 @@ const PROFILE_EDITOR_SURFACES = [
 
 const DIRTY_DRAFT = {
   pronouns: "he/him",
-  bio: "Building Ralph Meet. Ask me about the voice stack.",
+  bio: "Building Yap. Ask me about the voice stack.",
   customStatus: "Shipping the settings workbench",
 };
 

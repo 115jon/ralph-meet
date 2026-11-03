@@ -14,7 +14,7 @@ describe("buildVoiceDiagnosticsBundle", () => {
     });
 
     expect(bundle).toMatchObject({
-      app: "Ralph Meet",
+      app: "Yap",
       copiedAt: "2026-06-30T12:00:00.000Z",
       channelName: "General",
       page: "https://meet.example/chat",

@@ -754,7 +754,7 @@ function Shell({ surface }: { surface: string }) {
               }
               detail={
                 surface === "shell-offline"
-                  ? "Can't reach the chat server. Ralph keeps trying; new messages catch up when it's back."
+                  ? "Can't reach the chat server. Yap keeps trying; new messages catch up when it's back."
                   : "The chat link dropped. Keep reading and sending; new messages catch up when it's back."
               }
               attempt={surface === "shell-offline" ? undefined : 2}

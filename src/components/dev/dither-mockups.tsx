@@ -204,7 +204,7 @@ function MockHeader({ className }: { className?: string }) {
     >
       <span className="inline-flex items-center gap-3">
         <ThemeAwareSplashLogo className="size-7 object-contain select-none" />
-        <span className="text-ui-row font-semibold text-ink-1">Ralph Meet</span>
+        <span className="text-ui-row font-semibold text-ink-1">Yap</span>
       </span>
       <span className="flex items-center gap-6 text-ui-sm text-ink-2">
         <span>Product</span>
@@ -300,7 +300,7 @@ function HeroA() {
         </div>
         <Window
           name="voice"
-          alt="A Ralph Meet voice channel with four people on tiles and the call controls below"
+          alt="A Yap voice channel with four people on tiles and the call controls below"
           className="relative z-10 mx-auto w-[960px]"
           crop={520}
         />
@@ -407,7 +407,7 @@ function HeroB() {
       </div>
       <Window
         name="chat"
-        alt="A Ralph Meet text channel with messages, a link preview, an attached file and the composer"
+        alt="A Yap text channel with messages, a link preview, an attached file and the composer"
         className="absolute top-[150px] left-[calc(56%-140px)] z-10 w-[960px]"
         crop={600}
       />
@@ -534,15 +534,15 @@ function HeroC() {
 const C_PHONES = [
   {
     name: "phone-voice",
-    alt: "Ralph Meet on a phone in a voice channel, with the people in the call",
+    alt: "Yap on a phone in a voice channel, with the people in the call",
   },
   {
     name: "phone-chat",
-    alt: "Ralph Meet on a phone in the general channel, with messages, a link preview and an attached file",
+    alt: "Yap on a phone in the general channel, with messages, a link preview and an attached file",
   },
   {
     name: "phone-home",
-    alt: "Ralph Meet's phone home screen with servers and direct messages",
+    alt: "Yap's phone home screen with servers and direct messages",
   },
 ];
 

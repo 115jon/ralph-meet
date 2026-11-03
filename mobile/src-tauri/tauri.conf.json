@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Ralph Meet",
+        "title": "Yap",
         "fullscreen": false,
         "useHttpsScheme": false
       }

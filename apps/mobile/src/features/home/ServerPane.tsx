@@ -129,7 +129,7 @@ function NoServers() {
   if (status === "error") {
     return (
       <EmptyState
-        title="Ralph is out of reach"
+        title="Yap is out of reach"
         description="Your servers did not load. Check the connection and try again."
         action={{ label: "Try again", onPress: () => void loadServers() }}
       />

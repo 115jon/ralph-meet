@@ -2,14 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:Installer.Ui"
-        Title="Ralph Meet Setup" Width="440" Height="520"
+        Title="Yap Setup" Width="440" Height="520"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="False"
         WindowStartupLocation="CenterScreen" Topmost="False" ShowInTaskbar="True"
         Icon="Assets/icon.ico"
         Background="{DynamicResource Ply0}"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"
-        AutomationProperties.Name="Ralph Meet Setup">
+        AutomationProperties.Name="Yap Setup">
 
     <WindowChrome.WindowChrome>
         <!-- Our own title bar: the top 40px drag (and snap) like a native caption. -->
@@ -37,8 +37,8 @@
 
             <!-- Title bar -->
             <Grid Grid.Row="0">
-                <TextBlock x:Name="WindowLabel" Style="{StaticResource Silk}" Text="RALPH MEET SETUP"
-                           VerticalAlignment="Center" Margin="16,0,0,0" AutomationProperties.Name="Ralph Meet Setup"/>
+                <TextBlock x:Name="WindowLabel" Style="{StaticResource Silk}" Text="YAP SETUP"
+                           VerticalAlignment="Center" Margin="16,0,0,0" AutomationProperties.Name="Yap Setup"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="MinimizeKey" Style="{StaticResource TitleKey}" TabIndex="20"
                             WindowChrome.IsHitTestVisibleInChrome="True"
@@ -73,7 +73,7 @@
                         <TextBlock x:Name="KickerText" Style="{StaticResource Silk}" Text="SETUP" VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <TextBlock x:Name="TitleText" Style="{StaticResource DialogTitle}" Margin="0,8,0,0" Text="Installing Ralph Meet"/>
+                    <TextBlock x:Name="TitleText" Style="{StaticResource DialogTitle}" Margin="0,8,0,0" Text="Installing Yap"/>
 
                     <ScrollViewer x:Name="StatusScroll" Margin="0,8,0,0" MaxHeight="88" Focusable="False"
                                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -113,7 +113,7 @@
                             </Grid>
                             <ui:TreeStep x:Name="StepUnpack" Label="Unpack files"/>
                             <ui:TreeStep x:Name="StepSetup" Label="Add shortcuts and links"/>
-                            <ui:TreeStep x:Name="StepFinish" Label="Start Ralph Meet" IsLast="True"/>
+                            <ui:TreeStep x:Name="StepFinish" Label="Start Yap" IsLast="True"/>
                         </StackPanel>
                     </StackPanel>
 

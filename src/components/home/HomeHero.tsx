@@ -93,13 +93,13 @@ export function HomeHero({
           <ResponsiveShot
             desktop={{
               name: "voice",
-              alt: "Ralph Meet on the desktop: the Lounge voice channel with four people on tiles, the channel tree listing who is in the call with Linus lit as talking, and the call controls below",
+              alt: "Yap on the desktop: the Lounge voice channel with four people on tiles, the channel tree listing who is in the call with Linus lit as talking, and the call controls below",
               width: 1440,
               height: 900,
             }}
             phone={{
               name: "phone-voice",
-              alt: "Ralph Meet on a phone: the Lounge voice channel with four people on tiles, Linus lit as talking, and the call controls along the bottom",
+              alt: "Yap on a phone: the Lounge voice channel with four people on tiles, Linus lit as talking, and the call controls along the bottom",
               width: 390,
               height: 844,
             }}

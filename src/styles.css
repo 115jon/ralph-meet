@@ -497,10 +497,6 @@
   }
 }
 
-:is(.light, .miku-light, .spiderman-light) .theme-aware-splash-logo {
-  filter: brightness(0);
-}
-
 /* Base layer */
 @layer base {
   * {

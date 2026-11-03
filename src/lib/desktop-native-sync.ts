@@ -31,7 +31,7 @@ export async function syncDesktopNotificationState(input: NativeSyncInput) {
   if (!useDesktopSettingsStore.getState().desktopNotifications) {
     log.info("Clearing native desktop notification state");
     await host.notifications
-      .setBadge({ count: 0, showDot: false, tooltip: "Ralph Meet" })
+      .setBadge({ count: 0, showDot: false, tooltip: "Yap" })
       .catch(() => {
         /* desktop badge clear unavailable */
       });

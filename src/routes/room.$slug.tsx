@@ -5,11 +5,11 @@ export const Route = createFileRoute("/room/$slug")({
   component: RoomPage,
   head: () => ({
     meta: [
-      { title: "Meeting Room — Ralph Meet" },
+      { title: "Meeting Room — Yap" },
       {
         name: "description",
         content:
-          "Join your real-time video meeting on Ralph Meet. Secure, high-quality audio and video for your team.",
+          "Join your real-time video meeting on Yap. Secure, high-quality audio and video for your team.",
       },
     ],
   }),

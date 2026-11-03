@@ -44,8 +44,8 @@ export function HomeHeader() {
           href="#home-hero"
           className="flex min-h-11 w-fit items-center gap-3 rounded-[2px] font-display text-[17px] font-extrabold tracking-[-0.02em] text-ink-1"
         >
-          <ThemeAwareSplashLogo className="size-7 select-none" />
-          Ralph Meet
+          <ThemeAwareSplashLogo className="size-8 select-none" />
+          Yap
         </a>
 
         <nav aria-label="Page" className="hidden items-center gap-8 md:flex">

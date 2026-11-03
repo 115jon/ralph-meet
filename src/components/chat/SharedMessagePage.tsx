@@ -130,7 +130,7 @@ function ShareGone() {
       title="This shared message is gone"
       body="The person who shared it removed the link, or it expired."
     >
-      <HomeLink variant="primary">Open Ralph Meet</HomeLink>
+      <HomeLink variant="primary">Open Yap</HomeLink>
     </PageState>
   );
 }
@@ -147,7 +147,7 @@ function ShareError({ onRetry }: { onRetry: () => void }) {
       <Button size="lg" onClick={onRetry}>
         Try again
       </Button>
-      <HomeLink>Open Ralph Meet</HomeLink>
+      <HomeLink>Open Yap</HomeLink>
     </PageState>
   );
 }
@@ -155,7 +155,7 @@ function ShareError({ onRetry }: { onRetry: () => void }) {
 function ShareFrame({ children }: { children: ReactNode }) {
   return (
     <PublicFrame width="wide">
-      <PublicKicker>Shared from Ralph Meet</PublicKicker>
+      <PublicKicker>Shared from Yap</PublicKicker>
       <PublicTitle size="display">Shared message</PublicTitle>
       <div className="mt-8">{children}</div>
     </PublicFrame>
@@ -185,7 +185,7 @@ function LoadedShare({ token, share }: { token: string; share: PublicShare }) {
 
       <footer className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-ui-xs text-ink-3">
         <Button asChild variant="secondary" size="lg" className="max-sm:w-full">
-          <a href="/chat">Open in Ralph Meet</a>
+          <a href="/chat">Open in Yap</a>
         </Button>
         <span className="silkscreen">
           {share.expires_at

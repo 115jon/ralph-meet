@@ -530,7 +530,7 @@ export default function CameraCard({
   const starting = previewOn && !previewStream && !previewProblem && !noCamera;
 
   const deniedBody = isDesktop()
-    ? "Allow Ralph Meet to use your camera in your system's privacy settings, then try again."
+    ? "Allow Yap to use your camera in your system's privacy settings, then try again."
     : "Allow camera access from the lock icon in your browser's address bar. If it's already allowed, check your system's privacy settings.";
 
   let preview: ReactNode;

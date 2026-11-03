@@ -291,7 +291,7 @@ function VariantA({
         tone="danger"
         led="off"
         word="Offline"
-        detail="This device has no network. Ralph reconnects on its own when it's back."
+        detail="This device has no network. Yap reconnects on its own when it's back."
       />
     ),
     auth: (
@@ -321,7 +321,7 @@ function VariantA({
       "Try 3, next in 4s. Keep reading and sending; new messages catch up.",
     prolonged:
       "No reply for 42s; next try in 30s. Your messages are kept and go out later.",
-    offline: "No network. Ralph reconnects on its own.",
+    offline: "No network. Yap reconnects on its own.",
     auth: "Your session expired. Everything you see is kept.",
   };
   return (
@@ -391,7 +391,7 @@ function VariantB({
         <div className="mt-8 flex items-center gap-2.5">
           <ThemeAwareSplashLogo alt="" className="size-7 object-contain" />
           <span className="font-display text-[18px] font-extrabold tracking-[-0.02em] text-ink-1">
-            Ralph Meet
+            Yap
           </span>
         </div>
         <StepReadout className="mt-8" />
@@ -440,7 +440,7 @@ function VariantB({
       <Plate
         led="off"
         title="You're offline"
-        body="Waiting for a network. Ralph reconnects on its own; nothing to do."
+        body="Waiting for a network. Yap reconnects on its own; nothing to do."
       />
     ),
     back: (
@@ -590,7 +590,7 @@ function VariantC({
       <div className="relative h-full bg-ply-0">
         <Poster
           cover="screen"
-          kicker="Ralph Meet · Connecting"
+          kicker="Yap · Connecting"
           title="Opening the"
           last="tree"
           body="Signing you in and opening the chat link. Your servers and messages load next."
@@ -608,7 +608,7 @@ function VariantC({
         kicker="Chat · No link"
         title="Can't reach"
         last="chat"
-        body="The server hasn't answered for 42 seconds. What's on screen is kept, and Ralph keeps trying in the background."
+        body="The server hasn't answered for 42 seconds. What's on screen is kept, and Yap keeps trying in the background."
         reason={
           <Reason
             rows={[
@@ -635,7 +635,7 @@ function VariantC({
         kicker="Device · Offline"
         title="You're"
         last="offline"
-        body="This device has no network. Ralph reconnects by itself as soon as it's back; there's nothing to retry."
+        body="This device has no network. Yap reconnects by itself as soon as it's back; there's nothing to retry."
         keys={
           <Button size="lg" variant="primary">
             Keep reading

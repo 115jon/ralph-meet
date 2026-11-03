@@ -580,7 +580,7 @@ export function DeviceActivation({
           Connect a device
         </PublicTitle>
         <PublicBody size="lead">
-          Enter the code shown on your device to sign in to Ralph Meet.
+          Enter the code shown on your device to sign in to Yap.
         </PublicBody>
         <form
           className="mt-8 flex flex-col gap-2"
@@ -679,7 +679,7 @@ export function DeviceActivation({
             Is this <DitherWord cell={3}>you?</DitherWord>
           </h1>
           <p className="mt-4 text-ui-base text-pretty text-ink-2 [overflow-wrap:anywhere]">
-            Ralph Meet{platform ? ` for ${platform}` : ""} wants to sign in as{" "}
+            Yap{platform ? ` for ${platform}` : ""} wants to sign in as{" "}
             <span className="font-medium text-ink-1">{displayName}</span>.
           </p>
           <p className="mt-2 text-ui-base text-pretty text-ink-2">
@@ -784,7 +784,7 @@ export function DeviceActivation({
         <PublicBody>You can close this tab and go back to the app.</PublicBody>
         <PublicActions>
           <Button asChild variant="secondary" size="lg">
-            <a href="/chat">Open Ralph Meet here</a>
+            <a href="/chat">Open Yap here</a>
           </Button>
         </PublicActions>
         {live}

@@ -33,10 +33,10 @@ const noop = () => {};
 const SOURCES: ScreenSource[] = [
   {
     id: "w-1",
-    name: "Ralph Meet — design-system",
+    name: "Yap — design-system",
     kind: "window",
     thumbnail: "",
-    app_name: "Ralph Meet",
+    app_name: "Yap",
   },
   {
     id: "w-2",

@@ -134,6 +134,22 @@ describe("DitherGlyph", () => {
     )!;
     expect(glyph.style.width).toBe("64px");
     expect(glyph.dataset.motif).toBe("mark");
+    // Still at rest: the icon's pose, no bark.
+    const bark = glyph.querySelector('[data-slot="yap-bark"]')!;
+    expect(bark).not.toHaveAttribute("data-barking");
+    expect(bark.querySelectorAll("[data-part]")).toHaveLength(5);
+  });
+
+  it("barks the mark only while pending", () => {
+    const { container, rerender } = render(
+      <DitherGlyph motif="mark" size="sm" pending />,
+    );
+    const bark = () => container.querySelector('[data-slot="yap-bark"]');
+    expect(bark()).toHaveAttribute("data-barking");
+    expect(bark()).toHaveAttribute("aria-hidden", "true");
+    expect(bark()!.className).toContain("rm-dither");
+    rerender(<DitherGlyph motif="mark" size="sm" />);
+    expect(bark()).not.toHaveAttribute("data-barking");
   });
 });
 

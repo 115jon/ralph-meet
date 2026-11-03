@@ -117,9 +117,9 @@ const SPECS: [string, string][] = [
 const TREE_ALT =
   "The channel tree in a busy call: the Lounge voice channel shows nine people and a 25 minute call clock, each on their own branch with mute and deafen icons, and Linus lit green as talking";
 const PHONE_VOICE_ALT =
-  "Ralph Meet on a phone in the Lounge voice channel, with the people in the call and the call controls along the bottom";
+  "Yap on a phone in the Lounge voice channel, with the people in the call and the call controls along the bottom";
 const CHAT_ALT =
-  "A Ralph Meet text channel planning a trivia night: messages with reactions, a pinned reply, a shared file and the composer";
+  "A Yap text channel planning a trivia night: messages with reactions, a pinned reply, a shared file and the composer";
 
 // ── Mock data for the stats slice ────────────────────────────────────────────
 
@@ -333,7 +333,7 @@ function Lockup({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-3", className)}>
       <ThemeAwareSplashLogo className="size-7 object-contain select-none" />
-      <span className="text-ui-row font-semibold text-ink-1">Ralph Meet</span>
+      <span className="text-ui-row font-semibold text-ink-1">Yap</span>
     </span>
   );
 }

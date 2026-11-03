@@ -40,7 +40,7 @@ function HardwareAccelerationRow() {
       // reverted the store.
       if (saved) {
         setRestartError(
-          "Saved, but Ralph Meet couldn't restart. Quit and reopen the app to apply it.",
+          "Saved, but Yap couldn't restart. Quit and reopen the app to apply it.",
         );
       } else {
         setRestartError(
@@ -138,10 +138,10 @@ function UpdatesRow() {
           : status === "downloading"
             ? `Downloading the update… ${progress}%`
             : status === "installing"
-              ? "Installing. Ralph Meet will restart in a moment."
+              ? "Installing. Yap will restart in a moment."
               : status === "error"
                 ? `Couldn't update: ${error || "unknown error"}. Try again.`
-                : "Check for a newer version of Ralph Meet.";
+                : "Check for a newer version of Yap.";
 
   return (
     <SettingsRow
