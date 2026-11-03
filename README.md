@@ -4,8 +4,8 @@ Yap is an open-source real-time communication application for chat,
 voice, video, screen sharing, and user-authorized game capture.
 
 [Web app](https://yap.115jon.com) ·
-[Windows releases](https://github.com/115jon/ralph-meet/releases) ·
-[Source repository](https://github.com/115jon/ralph-meet)
+[Windows releases](https://github.com/115jon/yap/releases) ·
+[Source repository](https://github.com/115jon/yap)
 
 ## Highlights
 
@@ -19,7 +19,7 @@ voice, video, screen sharing, and user-authorized game capture.
 ## Getting started
 
 Open the [web app](https://yap.115jon.com), or download the latest Windows
-installer from the [GitHub Releases page](https://github.com/115jon/ralph-meet/releases).
+installer from the [GitHub Releases page](https://github.com/115jon/yap/releases).
 
 Release notes and version history are kept in [CHANGELOG.md](CHANGELOG.md).
 

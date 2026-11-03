@@ -23,9 +23,8 @@ interface GithubRelease {
   assets?: GithubReleaseAsset[];
 }
 
-export const REPO_URL = "https://github.com/115jon/ralph-meet";
-const RELEASES_API_URL =
-  "https://api.github.com/repos/115jon/ralph-meet/releases";
+export const REPO_URL = "https://github.com/115jon/yap";
+const RELEASES_API_URL = "https://api.github.com/repos/115jon/yap/releases";
 
 export const FALLBACK_RELEASES: DesktopRelease[] = [
   {

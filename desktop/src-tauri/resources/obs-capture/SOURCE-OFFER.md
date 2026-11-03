@@ -11,7 +11,7 @@ in `LICENSE-GPLv2.txt`).
 
 The complete corresponding source is attached to **every Ralph Meet desktop
 release** on the project's GitHub releases page
-(<https://github.com/115jon/ralph-meet/releases>), next to the installer:
+(<https://github.com/115jon/yap/releases>), next to the installer:
 
 1. `OBS-Studio-33.0.1-Sources.tar.gz`: the OBS Project's own source archive for
    the release the binaries come from (tag `33.0.1`, commit `65c320b`).
