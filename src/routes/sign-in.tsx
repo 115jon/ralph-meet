@@ -14,6 +14,7 @@ import {
   redirectOrigins,
   sanitizeRedirectUrl,
 } from "@/lib/auth-route-urls";
+import { useAuthCodeExchangePending } from "@/lib/auth-code-exchange";
 import { deviceCodeFromReturnPath } from "@/lib/device-code-format";
 import { isTauri } from "@/lib/platform";
 import { SignIn, useAuth } from "@kova/react";
@@ -64,7 +65,10 @@ function WebSignInPage() {
   const afterSignInUrl = sanitizeRedirectUrl(redirect_url, redirectOrigins());
   const signUpUrl = buildAuthRouteUrl("/sign-up", { redirect_url });
   const oauthCallbackUrl = buildWebOauthCallbackUrl(afterSignInUrl);
-  const hasAuthTransferCode = !!(kova_auth_code || ralph_auth_code);
+  // The SDK strips the code from the URL before it has a token for it.
+  const exchangePending = useAuthCodeExchangePending();
+  const hasAuthTransferCode =
+    !!(kova_auth_code || ralph_auth_code) || exchangePending;
   const [suppressStoredBrowserToken] = useState(() => {
     if (!consumeAuthLogoutIntent()) return false;
     clearStoredKovaAuthSessionToken();

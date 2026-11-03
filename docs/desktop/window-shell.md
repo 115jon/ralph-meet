@@ -1,6 +1,6 @@
 # Desktop window shell
 
-Who decides whether the main window is visible, how `yap://` (and the `ralphmeet://` alias) links reach the page, and
+Who decides whether the main window is visible, how `yap://` links reach the page, and
 where the desktop settings live. The frontend sends intents; Rust decides.
 
 ## Modules
@@ -31,7 +31,7 @@ The main window is created hidden (`visible: false`) while the updater window ch
 | updater window closed without it  | `Destroyed` event of `updater`         | `complete_launch` (no-op if it already ran)             |
 | tray click, tray "Show Yap"       | `tray.rs`                              | `reveal`                                                |
 | second launch (shortcut, Run key) | single-instance callback               | `reveal`, or `route_deep_link` if argv has a link       |
-| `yap://` or `ralphmeet://` link   | single-instance argv, deep-link plugin | `route_deep_link`, which calls `reveal`                 |
+| `yap://` link                     | single-instance argv, deep-link plugin | `route_deep_link`, which calls `reveal`                 |
 | close button                      | `CloseRequested` on `main`             | `on_close_requested`: tray state, or quit               |
 
 `complete_launch` runs once. It starts in the tray only when all three hold (`launch_to_tray`):
@@ -62,7 +62,7 @@ minimized; a double-click, a shortcut, the in-app restart and the relaunch after
 
 The root stub forwards its arguments byte for byte, and the installer's `MigrateRunValue` keeps caller arguments, so
 the flag reaches the app. Installs whose `Run` value still points at `Update.exe --processStart` do not forward it,
-so start minimized does not apply there. The flag is not a `yap:` or `ralphmeet:` URL, so deep-link extraction skips it, and the
+so start minimized does not apply there. The flag is not a `yap:` URL, so deep-link extraction skips it, and the
 restart-helper parser only looks for `--ralph-restart-helper`.
 
 At startup, if open on startup is on, the app reads the current `Run` value (`RegGetValueW`) and rewrites it only
@@ -79,7 +79,7 @@ Every source goes through `route_deep_link`:
 | second instance  | `deep_link_from_args(argv)` in the single-instance callback             |
 | deep-link plugin | `on_open_url` (macOS `Opened` events, or the plugin seeing argv itself) |
 
-`deep_link_from_args` skips `argv[0]` and takes the first argument that parses as a `yap:` or `ralphmeet:` URL, normalized
+`deep_link_from_args` skips `argv[0]` and takes the first argument that parses as a `yap:` URL, normalized
 through `tauri::Url` so the same link from two sources compares equal. The same URL again within 2 s is dropped.
 
 Event contract:

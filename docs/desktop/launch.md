@@ -24,12 +24,12 @@ Everything the user or the shell starts goes through the root stub:
 | entry point                           | command                                                     |
 | ------------------------------------- | ----------------------------------------------------------- |
 | Start menu and desktop shortcuts      | `Yap.exe`, working directory = install root                 |
-| `yap://` and `ralphmeet://` handlers  | `"…\Yap\Yap.exe" "%1"`                                      |
+| `yap://` handler                      | `"…\Yap\Yap.exe" "%1"`                                      |
 | Open on startup (HKCU `Run`)          | `"…\Yap\Yap.exe" --autostart`                               |
 | In-app restart, after-update relaunch | the root stub                                               |
 | Uninstall (Apps settings)             | `"…\Yap\Update.exe" --uninstall`; `DisplayIcon` is the stub |
 
-`yap://` is the primary scheme. `ralphmeet://` stays registered as an alias so existing invite links keep working.
+`yap://` is the only scheme. `ralphmeet://` is not registered, and the app ignores `ralphmeet://` links.
 
 The stub:
 
@@ -77,15 +77,15 @@ the new version anyway.
 Installs made before the stub launched everything through `Update.exe --processStart Yap.exe`. The first
 update that ships the stub moves them over:
 
-- Start menu and desktop shortcuts and the `yap://` and `ralphmeet://` handlers are rewritten on every install.
+- Start menu and desktop shortcuts and the `yap://` handler are rewritten on every install.
 - The HKCU `Run` value `Yap` is rewritten if it points into this install (`Update.exe` or an
   `app-<version>\Yap.exe`). The app writes it when the open-on-startup setting changes, and at
   startup when the setting is on and the value differs from the current command (which adds `--autostart`); see
   [window-shell.md](window-shell.md).
 - Taskbar pins in `%APPDATA%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar` that point into this
   install are retargeted to the stub and given the AppUserModelID. Other pins are not touched.
-- Uninstall removes the `Run` value if it belongs to this install, and the `yap://` and `ralphmeet://` handlers
-  if they are the stub or the old `Update.exe` form.
+- Uninstall removes the `Run` value if it belongs to this install, and the `yap://` handler
+  if it is the stub or the old `Update.exe` form.
 
 ## Migration from Ralph Meet
 
@@ -101,12 +101,14 @@ the same cleanup on its own. In order:
    removed only once it is empty. `logs` is disposable.
 4. Carry the `RalphMeet` Run value over to `Yap`.
 5. Retarget legacy taskbar pins to the new stub.
-6. Remove the `RalphMeet` shortcuts, uninstall key, publisher key and legacy Vulkan layer registrations.
+6. Remove the `RalphMeet` shortcuts, uninstall key, publisher key and legacy Vulkan layer registrations, and delete
+   the `HKCU\Software\Classes
+alphmeet` key whatever it points at.
 7. Delete the known install entries of `%LOCALAPPDATA%\RalphMeet`: `Update.exe`, `current.json`, `RalphMeet.exe*`,
    `app.ico`, `app-*`, `staging`, `logs`, `capture-hook`, `obs-capture`. A legacy `cef` profile folder there
    (very old builds) is moved to `%APPDATA%\Yap\cef` when Yap has no profile, and kept otherwise. Unknown
    entries are kept, and the folder stays until it is empty.
-8. Register `yap://` and `ralphmeet://` to `Yap.exe`.
+8. Register `yap://` to `Yap.exe`.
 
 Each step is safe to repeat, and a failure in steps 3 to 7 is logged without failing the install.
 The CEF profile folder name is set in the tauri-fork (`WINDOWS_CEF_PROFILE_DIR_NAME` in

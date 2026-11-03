@@ -107,8 +107,8 @@ namespace Installer
         /// The full migration, in order: user data, autostart, taskbar pins, then removal of the
         /// shortcuts, registry entries and binaries. <paramref name="launcherPath"/> and
         /// <paramref name="launcherArguments"/> start the installed Yap (RootLauncher.ResolveEntryPoint).
-        /// Run only after Ralph Meet's processes have exited. Registering yap:// and ralphmeet:// to
-        /// Yap is the caller's job (DeepLinkRegistration.Register), so ralphmeet:// never dangles.
+        /// Run only after Ralph Meet's processes have exited. Registering yap:// to Yap is the
+        /// caller's job (DeepLinkRegistration.Register); ralphmeet:// is deleted, not carried over.
         /// </summary>
         public static LegacyCleanupResult Run(
             InstallEnvironment environment,
@@ -143,7 +143,8 @@ namespace Installer
 
         /// <summary>
         /// Removes Ralph Meet's shortcuts, Run value, registry keys, Vulkan layer registrations,
-        /// ralphmeet:// registration (only while it still points at Ralph Meet) and install root.
+        /// ralphmeet:// registration (deleted whatever it points at), any yap:// registration still
+        /// pointing at the legacy install, and the install root.
         /// Leaves user data alone. The uninstaller calls this on its own.
         /// </summary>
         public static LegacyCleanupResult RemoveLeftovers(InstallEnvironment environment, RegistryKey userRoot, LegacyCleanupResult result = null)
@@ -184,6 +185,11 @@ namespace Installer
             }
 
             result.DeepLinksRemoved = DeepLinkRegistration.UnregisterIfOwned(userRoot, legacyLayout);
+            if (DeepLinkRegistration.RemoveLegacyScheme(userRoot))
+            {
+                result.DeepLinksRemoved++;
+            }
+
             result.LegacyInstallRootRemoved = RemoveInstallRoot(legacyLayout, environment);
             result.LegacyDataDirectoryRemoved = DeleteDirectoryIfEmpty(environment.LegacyDataDirectory);
             RemoveOlderIdentityFolders(environment, result);

@@ -50,22 +50,22 @@ describe("desktop deep links", () => {
     expect([...mocks.listeners.keys()]).toEqual([DESKTOP_DEEP_LINK_EVENT]);
     expect(mocks.listeners.get(DESKTOP_DEEP_LINK_EVENT)).toHaveLength(1);
 
-    emit(DESKTOP_DEEP_LINK_EVENT, { url: "ralphmeet://invite/abc" });
+    emit(DESKTOP_DEEP_LINK_EVENT, { url: "yap://invite/abc" });
     // The old event names are not listened to any more.
-    emit("deep-link", "ralphmeet://invite/abc");
-    emit("deep-link://new-url", ["ralphmeet://invite/abc"]);
+    emit("deep-link", "yap://invite/abc");
+    emit("deep-link://new-url", ["yap://invite/abc"]);
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith("ralphmeet://invite/abc");
+    expect(handler).toHaveBeenCalledWith("yap://invite/abc");
   });
 
   it("delivers links Rust queued before the listener was ready", async () => {
-    mocks.invoke.mockResolvedValueOnce(["ralphmeet://invite/cold"]);
+    mocks.invoke.mockResolvedValueOnce(["yap://invite/cold"]);
     const handler = vi.fn<(url: string) => void>();
     await subscribeDesktopDeepLinks(handler).ready;
 
     expect(mocks.invoke).toHaveBeenCalledWith("take_pending_deep_links");
-    expect(handler).toHaveBeenCalledWith("ralphmeet://invite/cold");
+    expect(handler).toHaveBeenCalledWith("yap://invite/cold");
   });
 
   it("attaches once across resubscribes and keeps links for the next handler", async () => {
@@ -74,13 +74,13 @@ describe("desktop deep links", () => {
     await sub.ready;
     sub.unsubscribe();
 
-    emit(DESKTOP_DEEP_LINK_EVENT, { url: "ralphmeet://invite/between" });
+    emit(DESKTOP_DEEP_LINK_EVENT, { url: "yap://invite/between" });
     expect(first).not.toHaveBeenCalled();
 
     const second = vi.fn<(url: string) => void>();
     await subscribeDesktopDeepLinks(second).ready;
 
-    expect(second).toHaveBeenCalledWith("ralphmeet://invite/between");
+    expect(second).toHaveBeenCalledWith("yap://invite/between");
     expect(mocks.listeners.get(DESKTOP_DEEP_LINK_EVENT)).toHaveLength(1);
     expect(mocks.invoke).toHaveBeenCalledTimes(1);
   });
@@ -89,23 +89,22 @@ describe("desktop deep links", () => {
     const handler = vi.fn<(url: string) => void>();
     await subscribeDesktopDeepLinks(handler).ready;
 
-    emit(DESKTOP_DEEP_LINK_EVENT, "ralphmeet://invite/abc");
-    emit(DESKTOP_DEEP_LINK_EVENT, ["ralphmeet://invite/abc"]);
+    emit(DESKTOP_DEEP_LINK_EVENT, "yap://invite/abc");
+    emit(DESKTOP_DEEP_LINK_EVENT, ["yap://invite/abc"]);
     emit(DESKTOP_DEEP_LINK_EVENT, { url: 3 });
 
     expect(handler).not.toHaveBeenCalled();
   });
 
   it("reads payloads and invite codes", () => {
-    expect(readDeepLinkPayload({ url: "ralphmeet://invite/x" })).toBe(
-      "ralphmeet://invite/x",
+    expect(readDeepLinkPayload({ url: "yap://invite/x" })).toBe(
+      "yap://invite/x",
     );
     expect(readDeepLinkPayload(null)).toBeNull();
-    expect(inviteCodeFromDeepLink("ralphmeet://invite/abc123")).toBe("abc123");
     expect(inviteCodeFromDeepLink("yap://invite/abc123")).toBe("abc123");
+    expect(inviteCodeFromDeepLink("ralphmeet://invite/abc123")).toBeNull();
     expect(inviteCodeFromDeepLink("yap://other/abc")).toBeNull();
-    expect(inviteCodeFromDeepLink("ralphmeet://invite/")).toBeNull();
-    expect(inviteCodeFromDeepLink("ralphmeet://other/abc")).toBeNull();
+    expect(inviteCodeFromDeepLink("yap://invite/")).toBeNull();
     expect(inviteCodeFromDeepLink("https://invite/abc")).toBeNull();
     expect(inviteCodeFromDeepLink("not a url")).toBeNull();
   });

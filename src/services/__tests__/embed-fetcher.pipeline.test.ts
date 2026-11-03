@@ -231,7 +231,7 @@ describe("OpenGraph pages", () => {
       string
     >;
     expect(headers["User-Agent"]).toContain("Discordbot/2.0");
-    expect(getLinkPreviewUserAgent()).toContain("RalphMeetBot/1.0");
+    expect(getLinkPreviewUserAgent()).toContain("YapBot/1.0");
   });
 });
 

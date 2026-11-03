@@ -144,9 +144,9 @@ export function getPublicWebUrl(): string {
   return (envUrl || DEFAULT_PUBLIC_WEB_URL).replace(/\/$/, "");
 }
 
-/** User-Agent for server-side fetches that identify Ralph Meet to third parties. */
+/** User-Agent for server-side fetches that identify Yap to third parties. */
 export function getBotUserAgent(): string {
-  return `Mozilla/5.0 (compatible; RalphMeetBot/1.0; +${getPublicWebUrl()})`;
+  return `Mozilla/5.0 (compatible; YapBot/1.0; +${getPublicWebUrl()})`;
 }
 
 /** Contact address shown for reporting abuse of shared content. */

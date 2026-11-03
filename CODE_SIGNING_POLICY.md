@@ -3,7 +3,7 @@
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate
 > by [SignPath Foundation](https://signpath.org).
 
-Ralph Meet is preparing an application for the SignPath Foundation open-source
+Yap is preparing an application for the SignPath Foundation open-source
 code-signing program. This document describes the intended controls. No artifact
 is represented as SignPath-signed until a valid Authenticode signature is
 published and can be independently verified.
@@ -37,7 +37,7 @@ Each release follows this sequence:
 
 1. GitHub-hosted CI builds the release from a protected release tag.
 2. CI creates a classified payload manifest, checksums, and SBOM before signing.
-3. Ralph Meet submits only eligible first-party artifacts to SignPath.io.
+3. Yap submits only eligible first-party artifacts to SignPath.io.
 4. The named Approver manually reviews and approves the signing request.
 5. CI verifies the returned Authenticode signatures and trusted timestamps before
    publishing the release and updater metadata.
@@ -50,7 +50,7 @@ release.
 
 ## Privacy policy
 
-Ralph Meet's privacy policy is available at [PRIVACY.md](PRIVACY.md) and will be
+Yap's privacy policy is available at [PRIVACY.md](PRIVACY.md) and will be
 published at <https://yap.115jon.com/privacy>. The installer must present this
 policy and required choices before a first installation that enables automatic
 data transfers.
@@ -63,5 +63,5 @@ the Authenticode signature and checksum before installation.
 
 Report suspected malicious artifacts, signing-policy violations, or certificate
 concerns to <115jon@proton.me> and through the project's security-reporting
-channel. Ralph Meet will investigate the report, preserve relevant release
+channel. Yap will investigate the report, preserve relevant release
 evidence, and cooperate with SignPath Foundation on revocation or remediation.

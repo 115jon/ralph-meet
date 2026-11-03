@@ -1,4 +1,4 @@
-# Ralph Meet design system
+# Yap design system
 
 This file used to hold the Quiet Pro rules. The Talk Tree redesign replaced
 them, and the system now lives in [`DESIGN.md`](../DESIGN.md) at the

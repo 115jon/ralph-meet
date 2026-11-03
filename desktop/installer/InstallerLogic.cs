@@ -117,7 +117,7 @@ namespace Installer
             using (RegistryKey userRoot = environment.OpenUserRoot())
             {
                 // Ralph Meet -> Yap: user data, autostart and pins move over, the rest is removed.
-                // The deep-link registration below then points ralphmeet:// at Yap.
+                // The deep-link registration below then registers yap://; ralphmeet:// is deleted.
                 RunLegacyCleanupStep(environment, userRoot, launcherPath, launcherArguments);
                 CreateUninstallRegistryKeys(userRoot, layout.RootPath, activation.ActiveExecutablePath, uninstallerPath, launcherPath);
                 CreateCompatibilityInstallLocationKey(userRoot, layout.RootPath);
@@ -696,7 +696,7 @@ namespace Installer
 
         private static void RegisterDeepLinkProtocol(RegistryKey userRoot, string launcherPath, string launcherArguments)
         {
-            InstallerLogger.Info("Registering yap:// and ralphmeet:// deep-link protocols to launcher " + launcherPath);
+            InstallerLogger.Info("Registering the yap:// deep-link protocol to launcher " + launcherPath);
             DeepLinkRegistration.Register(userRoot, launcherPath, launcherArguments);
         }
 

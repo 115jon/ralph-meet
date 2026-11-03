@@ -1,6 +1,6 @@
 # Performance
 
-How Ralph Meet loads, what each page may weigh, and how to check it.
+How Yap loads, what each page may weigh, and how to check it.
 
 ## What loads when
 

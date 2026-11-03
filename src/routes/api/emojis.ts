@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { getBotUserAgent } from "@/lib/platform";
 import { Schema } from "effect";
 
 import {
@@ -67,8 +68,7 @@ async function fetchKlipy(path: string, init?: RequestInit) {
     ...init,
     redirect: "error",
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+      "User-Agent": getBotUserAgent(),
       ...(init?.headers ?? {}),
     },
   });

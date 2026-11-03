@@ -155,7 +155,7 @@ class IncomingCallActivity : Activity() {
         setBackgroundColor(PLY0)
         setPadding(dp(24), dp(72), dp(24), dp(56))
       }
-    root.addView(silk("Ralph Meet · Voice call", INK3))
+    root.addView(silk("Yap · Voice call", INK3))
     root.addView(space(40))
     root.addView(avatar(call), LinearLayout.LayoutParams(dp(208), dp(208)))
     root.addView(space(28))

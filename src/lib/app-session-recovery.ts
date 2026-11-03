@@ -21,6 +21,10 @@
 // session, so a refused desktop token ends at the device-code sign-in.
 
 import { useSyncExternalStore } from "react";
+import {
+  isAuthCodeExchangePending,
+  whenAuthCodeExchangeSettles,
+} from "@/lib/auth-code-exchange";
 import { clog } from "@/lib/console-logger";
 import {
   clearDesktopAuthSession,
@@ -92,6 +96,7 @@ export function useAppSessionState(): AppSessionState {
  *
  * - A usable token already stored (another caller recovered first) is
  *   returned without asking Kova.
+ * - While a sign-in code is being exchanged, waits for its token instead.
  * - Concurrent callers share one mint.
  * - Within the cooldown of the last mint, resolves null without asking: a
  *   token minted moments ago that is refused again would only loop.
@@ -105,6 +110,20 @@ export function recoverAppSession(
     return Promise.resolve(current);
   }
   if (inFlight) return inFlight;
+  // A sign-in code is still being exchanged for a token: nothing is refused
+  // yet. Wait for it; its token is the answer.
+  if (isAuthCodeExchangePending()) {
+    const waiting = whenAuthCodeExchangeSettles()
+      .then(() => {
+        if (inFlight === waiting) inFlight = null;
+        return recoverAppSession(null);
+      })
+      .finally(() => {
+        if (inFlight === waiting) inFlight = null;
+      });
+    inFlight = waiting;
+    return waiting;
+  }
   // Signing out: a mint now could land the user straight back in.
   if (hasRecentAuthLogoutIntent()) return Promise.resolve(null);
   if (Date.now() - lastAttemptAt < SESSION_RECOVERY_COOLDOWN_MS) {
@@ -150,10 +169,16 @@ async function mintAppSessionToken(): Promise<string | null> {
   }
 
   if (response.status === 401) {
-    log.warn("Kova has no session to mint from: signed out");
-    // Clear the dead token, unless a usable one landed meanwhile.
+    // No cookie session is no verdict while a usable token is stored: one
+    // can land while the mint is out (a sign-in code exchange), and Kova's
+    // cookie is cross-site on hosts other than its own.
     const current = getDesktopAuthHandoffToken();
-    if (!current || isSessionTokenRejected(current)) clearDesktopAuthSession();
+    if (current && !isSessionTokenRejected(current)) {
+      setState("active");
+      return current;
+    }
+    log.warn("Kova has no session to mint from: signed out");
+    clearDesktopAuthSession();
     setState("signed-out");
     return null;
   }

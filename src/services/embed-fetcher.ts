@@ -2012,8 +2012,8 @@ const MAX_DESCRIPTION_LENGTH = 350;
  */
 export function getLinkPreviewUserAgent(): string {
   return getBotUserAgent().replace(
-    "RalphMeetBot/1.0;",
-    "RalphMeetBot/1.0; Discordbot/2.0;",
+    "YapBot/1.0;",
+    "YapBot/1.0; Discordbot/2.0;",
   );
 }
 

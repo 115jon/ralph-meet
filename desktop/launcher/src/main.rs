@@ -1,6 +1,6 @@
 //! `Yap.exe` at the install root (`%LOCALAPPDATA%\Yap`).
 //!
-//! Shortcuts, the Run key, the `yap://` and `ralphmeet://` handlers and taskbar
+//! Shortcuts, the Run key, the `yap://` handler and taskbar
 //! pins all point here. It starts `app-<version>\Yap.exe` with the caller's
 //! arguments and working directory set to that version directory, then exits.
 //! See docs/desktop/launch.md.

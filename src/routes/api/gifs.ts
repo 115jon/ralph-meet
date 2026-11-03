@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { getBotUserAgent } from "@/lib/platform";
 import { Schema } from "effect";
 
 import {
@@ -196,8 +197,7 @@ async function fetchTenorConfig(): Promise<TenorConfig | null> {
   try {
     const res = await fetch(TENOR_BOOTSTRAP_URL, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+        "User-Agent": getBotUserAgent(),
       },
     });
     if (!res.ok) return null;
@@ -226,8 +226,7 @@ async function fetchTenor(path: string, params: TenorParams) {
 
   const res = await fetch(url.toString(), {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+      "User-Agent": getBotUserAgent(),
     },
   });
 
@@ -675,8 +674,7 @@ async function fetchKlipy(path: string, params: GifApiParams) {
 
   const res = await fetch(url.toString(), {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+      "User-Agent": getBotUserAgent(),
     },
   });
 

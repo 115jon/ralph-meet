@@ -330,6 +330,10 @@ export default {
   ): Promise<Response> {
     const url = new URL(request.url);
 
+    // The pre-rename host: everything there moves to Yap.
+    const legacyRedirect = legacyHostRedirect(request);
+    if (legacyRedirect) return legacyRedirect;
+
     // ── CORS preflight for desktop Tauri webview ──────────────────────────
     // http://tauri.localhost is a cross-origin context. OPTIONS preflights
     // must be answered before any auth or routing logic runs.
@@ -342,9 +346,6 @@ export default {
 
     const assetLinks = handleAssetLinksRequest(request);
     if (assetLinks) return assetLinks;
-
-    const legacyRedirect = legacyHostRedirect(request);
-    if (legacyRedirect) return legacyRedirect;
 
     // ── Rate limiting for API routes ─────────────────────────────────────
     // Skip WebSocket upgrades and attachment/background static asset reads.

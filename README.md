@@ -1,6 +1,6 @@
-# Ralph Meet
+# Yap
 
-Ralph Meet is an open-source real-time communication application for chat,
+Yap is an open-source real-time communication application for chat,
 voice, video, screen sharing, and user-authorized game capture.
 
 [Web app](https://yap.115jon.com) ·
@@ -126,7 +126,7 @@ review.
 
 ## License
 
-Ralph Meet-owned source is distributed under the GNU General Public License,
+Yap-owned source is distributed under the GNU General Public License,
 version 3 or later (`GPL-3.0-or-later`). The OBS-derived capture component
 remains separately licensed under GPL-2.0-only. The canonical root license is
 in [LICENSE](LICENSE).

@@ -6,12 +6,9 @@
  */
 export const DEFAULT_PUBLIC_WEB_URL = "https://yap.115jon.com";
 /**
- * The web home before the Yap rename. The Worker still serves it so installed
- * desktop and mobile builds keep working; browser page loads there 301 to
- * DEFAULT_PUBLIC_WEB_URL (src/server/legacy-host.ts). Remove once old clients
- * are gone.
+ * Kova, for the web app, the Worker, desktop and the Android app. Moving Kova
+ * is this one line (desktop's CSP already allows auth.115jon.com).
  */
-export const LEGACY_PUBLIC_WEB_URL = "https://meet.115jon.site";
 export const DEFAULT_KOVA_AUTH_URL = "https://auth.115jon.site";
 export const DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY =
   "pk_live_yl2Z9ssEwlWuOYHVRWozk9WThozu4nFP3QAhCWAsPhE";

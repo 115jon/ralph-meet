@@ -75,7 +75,7 @@ internal object MessageNotifier {
         NotificationChannelCompat
           .Builder(CHANNEL_OTHER, NotificationManagerCompat.IMPORTANCE_DEFAULT)
           .setName("Other")
-          .setDescription("Everything else Ralph Meet tells you")
+          .setDescription("Everything else Yap tells you")
           .build(),
       ),
     )
@@ -267,7 +267,7 @@ internal object MessageNotifier {
         .Builder(context, CHANNEL_OTHER)
         .setSmallIcon(R.drawable.ralph_notify_small)
         .setStyle(lines.setSummaryText(if (count == 1) "1 conversation" else "$count conversations"))
-        .setContentTitle("Ralph Meet")
+        .setContentTitle("Yap")
         .setContentText(if (count == 1) "1 conversation" else "$count conversations")
         .setGroup(GROUP)
         .setGroupSummary(true)
@@ -451,7 +451,7 @@ internal data class Conversation(
           if (push.isDm) {
             push.senderName
           } else {
-            listOfNotNull(push.conversation, push.serverName).joinToString(" · ").ifEmpty { "Ralph Meet" }
+            listOfNotNull(push.conversation, push.serverName).joinToString(" · ").ifEmpty { "Yap" }
           },
         channel =
           when {
@@ -465,7 +465,7 @@ internal data class Conversation(
       return Conversation(
         channelId = channelId,
         isDm = bundle.getBoolean("isDm"),
-        title = bundle.getString("title") ?: "Ralph Meet",
+        title = bundle.getString("title") ?: "Yap",
         channel = bundle.getString("channel") ?: MessageNotifier.CHANNEL_OTHER,
       )
     }

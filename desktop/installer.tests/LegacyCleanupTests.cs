@@ -230,12 +230,13 @@ namespace Installer.Tests
         }
 
         [Fact]
-        public void Cleanup_Legacy_Repoints_Both_Schemes_And_Is_Idempotent()
+        public void Cleanup_Legacy_Registers_Yap_Deletes_RalphMeet_Scheme_And_Is_Idempotent()
         {
             CreateYapInstall();
             CreateLegacyInstall();
             Write(_environment.LegacyDataDirectory, "desktop-settings.json", "{}");
             DeepLinkRegistration.Register(_userRoot, Legacy.RootStubPath);
+            RegisterRalphMeetScheme(DeepLinkRegistration.BuildLaunchCommand(Legacy.RootStubPath));
             SetRun(LauncherMigration.LegacyRunValueName, "\"" + Legacy.RootStubPath + "\" --autostart");
             string expectedCommand = DeepLinkRegistration.BuildLaunchCommand(NewStub);
 
@@ -243,7 +244,7 @@ namespace Installer.Tests
             {
                 LegacyCleanupResult result = InstallerLogic.RunLegacyCleanup(_environment, _userRoot);
 
-                Assert.Equal(expectedCommand, DeepLinkRegistration.ReadLaunchCommand(_userRoot, "ralphmeet"));
+                Assert.Null(_userRoot.OpenSubKey(DeepLinkRegistration.GetProtocolRegistryPath("ralphmeet")));
                 Assert.Equal(expectedCommand, DeepLinkRegistration.ReadLaunchCommand(_userRoot, "yap"));
                 Assert.Equal("\"" + NewStub + "\" --autostart", GetRun(LauncherMigration.RunValueName));
                 Assert.Null(GetRun(LauncherMigration.LegacyRunValueName));
@@ -253,6 +254,35 @@ namespace Installer.Tests
                 Assert.Equal(run == 0, result.AutostartCarriedOver);
                 Assert.Equal(run == 0 ? 2 : 0, result.DeepLinksRemoved);
             }
+        }
+
+        [Theory]
+        [InlineData("yap")]
+        [InlineData("legacy")]
+        [InlineData("foreign")]
+        public void Deletes_The_RalphMeet_Scheme_Whatever_It_Points_At(string target)
+        {
+            string command = target == "yap"
+                ? DeepLinkRegistration.BuildLaunchCommand(NewStub)
+                : target == "legacy"
+                    ? DeepLinkRegistration.BuildLaunchCommand(Legacy.RootStubPath)
+                    : "\"C:\\Elsewhere\\Other.exe\" \"%1\"";
+            RegisterRalphMeetScheme(command);
+
+            LegacyCleanupResult result = LegacyCleanup.RemoveLeftovers(_environment, _userRoot);
+
+            Assert.Null(_userRoot.OpenSubKey(DeepLinkRegistration.GetProtocolRegistryPath("ralphmeet")));
+            Assert.Equal(1, result.DeepLinksRemoved);
+        }
+
+        [Fact]
+        public void Install_Registers_Only_The_Yap_Scheme()
+        {
+            DeepLinkRegistration.Register(_userRoot, NewStub);
+
+            Assert.Equal(new[] { "yap" }, DeepLinkRegistration.SchemeNames);
+            Assert.NotNull(DeepLinkRegistration.ReadLaunchCommand(_userRoot, "yap"));
+            Assert.Null(_userRoot.OpenSubKey(DeepLinkRegistration.GetProtocolRegistryPath("ralphmeet")));
         }
 
         [Fact]
@@ -341,15 +371,30 @@ namespace Installer.Tests
             CreateLegacyInstall();
             Write(_environment.LegacyDataDirectory, "desktop-settings.json", "{}");
             DeepLinkRegistration.Register(_userRoot, Legacy.RootStubPath);
+            RegisterRalphMeetScheme(DeepLinkRegistration.BuildLaunchCommand(Legacy.RootStubPath));
             SetRun(LauncherMigration.LegacyRunValueName, "\"" + Legacy.RootStubPath + "\"");
 
             LegacyCleanup.RemoveLeftovers(_environment, _userRoot);
 
             Assert.Equal("{}", Read(_environment.LegacyDataDirectory, "desktop-settings.json"));
             Assert.False(Directory.Exists(_environment.DataDirectory));
-            Assert.Null(DeepLinkRegistration.ReadLaunchCommand(_userRoot, "ralphmeet"));
+            Assert.Null(_userRoot.OpenSubKey(DeepLinkRegistration.GetProtocolRegistryPath("ralphmeet")));
+            Assert.Null(DeepLinkRegistration.ReadLaunchCommand(_userRoot, "yap"));
             Assert.Null(GetRun(LauncherMigration.LegacyRunValueName));
             Assert.False(Directory.Exists(Legacy.RootPath));
+        }
+
+        private void RegisterRalphMeetScheme(string command)
+        {
+            using (RegistryKey key = _userRoot.CreateSubKey(DeepLinkRegistration.GetProtocolRegistryPath("ralphmeet")))
+            {
+                key.SetValue(string.Empty, "URL:Ralph Meet Protocol");
+                key.SetValue("URL Protocol", string.Empty);
+                using (RegistryKey commandKey = key.CreateSubKey(@"shell\open\command"))
+                {
+                    commandKey.SetValue(string.Empty, command);
+                }
+            }
         }
 
         private LegacyCleanupResult Run()
