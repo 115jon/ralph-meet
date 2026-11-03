@@ -73,6 +73,8 @@ fn normalize_exe(name: &str) -> String {
 /// - **Kernel anti-cheats** (Riot Vanguard, FACEIT) and **VAC**: the protected
 ///   games themselves, so they always stay on WGC. VAC blocks injection into
 ///   CS2 unless it is launched untrusted, and FACEIT runs over CS2.
+/// - **NetEase anti-cheat** (Marvel Rivals): the game itself, which OBS cannot
+///   open.
 ///
 /// This is the *data* behind [`default_blocklist`]; keeping it as a flat slice
 /// makes the set trivial to grow as new protected titles are identified.
@@ -99,6 +101,10 @@ const DEFAULT_BLOCKLIST_EXECUTABLES: &[&str] = &[
     "faceit.exe",
     "FACEITClient.exe",
     "cs2.exe",
+    // ── NetEase anti-cheat ─────────────────────────────────────────────────
+    // OBS cannot open the process either ("could not open process"), and the
+    // hook never loads in it.
+    "Marvel-Win64-Shipping.exe",
 ];
 
 /// The default `Process_Blocklist` of anti-cheat-protected executables for
@@ -236,6 +242,20 @@ mod tests {
         // Riot Vanguard
         assert!(has("vgc.exe"));
         assert!(has("valorant.exe"));
+    }
+
+    #[test]
+    fn netease_anti_cheat_games_are_blocklisted() {
+        let blocklist = default_blocklist();
+        for exe in [
+            "Marvel-Win64-Shipping.exe",
+            r"D:\Steam\steamapps\common\MarvelRivals\Marvel\Binaries\Win64\marvel-win64-shipping.EXE",
+        ] {
+            assert_eq!(
+                safety_decision(exe, &blocklist, &[]),
+                SafetyDecision::Deny(FallbackReason::Blocklisted)
+            );
+        }
     }
 
     #[test]

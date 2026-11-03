@@ -117,6 +117,9 @@ tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace",
 bytes = { version = "1", optional = true }
 # SHA-256 of the pinned OBS-signed capture hook files (game_capture/signed_hook.rs).
 sha2 = { version = "0.10", optional = true }
+# Fetches the remote capture blocklist (game_capture/remote_policy.rs). Same TLS
+# setup as tauri-plugin-updater (rustls, ring provider installed in lib.rs).
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"], optional = true }
 bytemuck = { version = "1", optional = true }
 shiguredo_opus = { version = "2026.1.0", default-features = false, features = ["source-build"], optional = true }
 wasapi = { version = "0.23.0", optional = true }
@@ -157,7 +160,7 @@ native-screen-share = ["webrtc", "bytes", "bytemuck", "shiguredo_opus", "wasapi"
 # Bitness detection + process creation rely on the Win32 features enabled above
 # (`Win32_System_SystemInformation` for `IsWow64Process2`/`IMAGE_FILE_MACHINE`,
 # and `Win32_System_Threading` + `Win32_Security` for `CreateProcessW`).
-game-capture-hook = ["native-screen-share", "sha2"]
+game-capture-hook = ["native-screen-share", "sha2", "dep:reqwest"]
 
 # ── Dev-only dependencies (tests/benches; not part of runtime deps) ──────
 [dev-dependencies]
