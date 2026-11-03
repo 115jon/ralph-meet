@@ -293,7 +293,7 @@ function AppsFixture({ surface }: { surface: string }) {
       initialTab={surface === "act-apps-menu" ? "menu" : "activities"}
       onClose={() => {}}
       sfu={null}
-      serverId="srv-ralph"
+      serverId="srv-yap"
       channelId="ch-lounge"
       localUserId="u-me"
       gridItems={participants.map((p) => ({
@@ -374,7 +374,7 @@ function ListenFixture({ surface }: { surface: string }) {
         sfu={fakeSfu}
         roomSlug={LISTEN_ROOM}
         voiceSessionId="vs-fixture"
-        serverId="srv-ralph"
+        serverId="srv-yap"
         channelId="ch-lounge"
         localUserId="u-me"
       />
@@ -438,7 +438,7 @@ function SoundboardFixture() {
       store.upsertPlayback({
         playbackId: `fx-sb-${index}`,
         ownerId: "u-me",
-        serverKey: "srv-ralph",
+        serverKey: "srv-yap",
         name,
         isLocal: true,
         startedAt: now - index * 4_000,
@@ -447,13 +447,13 @@ function SoundboardFixture() {
       }),
     );
     return () =>
-      useVoiceSoundboardStore.getState().clearServerPlaybacks("srv-ralph");
+      useVoiceSoundboardStore.getState().clearServerPlaybacks("srv-yap");
   }, []);
   return (
     <div className="grid h-full place-items-center text-ui-sm text-rm-text-muted">
       Floating soundboard manager (top right)
       <FloatingSoundboardManager
-        serverId="srv-ralph"
+        serverId="srv-yap"
         localUserId="u-me"
         sfu={fakeSfu}
       />

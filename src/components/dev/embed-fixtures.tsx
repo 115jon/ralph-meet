@@ -253,12 +253,12 @@ const genericVideo: EmbedInfo = {
 
 const tiktokVideo: EmbedInfo = {
   id: "fx-tiktok",
-  url: "https://www.tiktok.com/@ralph.meet/video/7400000000000000001",
+  url: "https://www.tiktok.com/@yappy.dog/video/7400000000000000001",
   type: "video",
   provider: { name: "TikTok" },
   author: {
-    name: "ralph.meet",
-    url: "https://www.tiktok.com/@ralph.meet",
+    name: "yappy.dog",
+    url: "https://www.tiktok.com/@yappy.dog",
     iconURL: avatar("R", "#e11d48"),
   },
   rawDescription: "Voice rooms but they feel like a studio #design #webrtc",
@@ -284,12 +284,12 @@ const tiktokVideo: EmbedInfo = {
 
 const tiktokCarousel: EmbedInfo = {
   id: "fx-tiktok-carousel",
-  url: "https://www.tiktok.com/@ralph.meet/photo/7400000000000000002",
+  url: "https://www.tiktok.com/@yappy.dog/photo/7400000000000000002",
   type: "rich",
   provider: { name: "TikTok" },
   author: {
-    name: "ralph.meet",
-    url: "https://www.tiktok.com/@ralph.meet",
+    name: "yappy.dog",
+    url: "https://www.tiktok.com/@yappy.dog",
     iconURL: avatar("R", "#e11d48"),
   },
   rawDescription: "Three themes, one layout. Swipe",
@@ -300,7 +300,7 @@ const tiktokCarousel: EmbedInfo = {
   ],
   audio: {
     title: "original sound",
-    artist: "ralph.meet",
+    artist: "yappy.dog",
     artworkUrl: avatar("♪", "#7c3aed"),
     url: "https://example.invalid/sound.mp3",
   },
@@ -407,8 +407,8 @@ const instagramSingle: EmbedInfo = {
   type: "rich",
   provider: { name: "Instagram" },
   author: {
-    name: "ralphmeet",
-    url: "https://www.instagram.com/ralphmeet/",
+    name: "yappydog",
+    url: "https://www.instagram.com/yappydog/",
     iconURL: avatar("R", "#c026d3"),
     isVerified: true,
   },
@@ -425,8 +425,8 @@ const instagramCarousel: EmbedInfo = {
   type: "rich",
   provider: { name: "Instagram" },
   author: {
-    name: "ralphmeet",
-    url: "https://www.instagram.com/ralphmeet/",
+    name: "yappydog",
+    url: "https://www.instagram.com/yappydog/",
     iconURL: avatar("R", "#c026d3"),
   },
   rawTitle: "Swipe through the new pickers",

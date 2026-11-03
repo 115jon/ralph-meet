@@ -207,7 +207,7 @@ const users: Record<string, User> = {
 };
 
 const servers: Server[] = [
-  { id: "s-1", name: "Ralph HQ", owner_id: "u-me", created_at: at(9000) },
+  { id: "s-1", name: "Yap HQ", owner_id: "u-me", created_at: at(9000) },
   { id: "s-2", name: "Design Club", owner_id: "u-ada", created_at: at(8000) },
   { id: "s-3", name: "Night Shift", owner_id: "u-grace", created_at: at(7000) },
 ];
@@ -585,7 +585,7 @@ function seedStore(surface: string) {
         is_read: false,
         created_at: at(4),
         channel_name: "design-system",
-        server_name: "Ralph HQ",
+        server_name: "Yap HQ",
       },
       {
         id: "n-2",
@@ -602,7 +602,7 @@ function seedStore(surface: string) {
         is_read: false,
         created_at: at(38),
         channel_name: "general",
-        server_name: "Ralph HQ",
+        server_name: "Yap HQ",
       },
       {
         id: "n-3",
@@ -710,7 +710,7 @@ function Shell({ surface }: { surface: string }) {
                   categories={categories}
                   activeChannelId={channelId}
                   serverId="s-1"
-                  serverName="Ralph HQ"
+                  serverName="Yap HQ"
                   currentUserId="u-me"
                   onSelect={() => {}}
                   readStates={{ "ch-general": at(0), "ch-welcome": at(0) }}
@@ -730,7 +730,7 @@ function Shell({ surface }: { surface: string }) {
               <UserPanel
                 user={users.me!}
                 serverId="s-1"
-                serverName="Ralph HQ"
+                serverName="Yap HQ"
                 voiceConnected={false}
                 voiceChannelId={null}
                 voiceChannelName={undefined}
@@ -1263,7 +1263,7 @@ function VoiceRoom({
                 categories={categories}
                 activeChannelId="ch-lounge"
                 serverId="s-1"
-                serverName="Ralph HQ"
+                serverName="Yap HQ"
                 currentUserId="u-me"
                 onSelect={() => {}}
                 voiceChannelStates={{ "ch-lounge": loungeMembers }}
@@ -1275,7 +1275,7 @@ function VoiceRoom({
               <UserPanel
                 user={users.me!}
                 serverId="s-1"
-                serverName="Ralph HQ"
+                serverName="Yap HQ"
                 voiceConnected
                 voiceChannelId="ch-lounge"
                 voiceChannelName="Lounge"
@@ -1617,7 +1617,7 @@ function VoiceLandingFixture() {
                 categories={categories}
                 activeChannelId="ch-standup"
                 serverId="s-1"
-                serverName="Ralph HQ"
+                serverName="Yap HQ"
                 currentUserId="u-me"
                 onSelect={() => {}}
                 voiceChannelStates={{ "ch-lounge": voiceMembers }}
@@ -1694,12 +1694,7 @@ function Menus() {
         ]}
         onClose={() => {}}
       />
-      <InviteModal
-        open
-        serverId="s-1"
-        serverName="Ralph HQ"
-        onClose={() => {}}
-      />
+      <InviteModal open serverId="s-1" serverName="Yap HQ" onClose={() => {}} />
     </div>
   );
 }
@@ -1799,7 +1794,7 @@ function MobileFixture({ surface }: { surface: string }) {
             categories={categories}
             activeChannelId="ch-general"
             serverId="s-1"
-            serverName="Ralph HQ"
+            serverName="Yap HQ"
             currentUserId="u-me"
             onSelect={() => {}}
             voiceChannelStates={{ "ch-lounge": voiceMembers }}
@@ -2074,7 +2069,7 @@ function MobileHomeFixture() {
               categories={categories}
               activeChannelId="ch-general"
               serverId="s-1"
-              serverName="Ralph HQ"
+              serverName="Yap HQ"
               currentUserId="u-me"
               onSelect={() => {}}
               voiceChannelStates={{ "ch-lounge": voiceMembers }}
@@ -2180,7 +2175,7 @@ function DrawerFixture() {
       <Drawer open={open} onOpenChange={setOpen} repositionInputs>
         <DrawerContent>
           <DrawerHeader>
-            <DrawerTitle>Invite to Ralph HQ</DrawerTitle>
+            <DrawerTitle>Invite to Yap HQ</DrawerTitle>
             <DrawerDescription>
               Anyone with the link can join. It expires in 7 days.
             </DrawerDescription>
@@ -2626,7 +2621,7 @@ function VoiceDashboardFixture({ surface }: { surface: string }) {
     <OverShell>
       <div className="fixed bottom-0 left-0 z-20 w-[312px] max-md:w-full border-t border-line bg-ply-1">
         <VoiceDashboard
-          serverName="Ralph HQ"
+          serverName="Yap HQ"
           voiceChannelName="Lounge"
           startedAt={startedAt}
           voiceChannelId="ch-lounge"
@@ -2717,7 +2712,7 @@ function AccountRowMatrix() {
                     custom_status: row.custom ?? null,
                   }}
                   serverId="s-1"
-                  serverName="Ralph HQ"
+                  serverName="Yap HQ"
                   voiceConnected={Boolean(row.voice)}
                   voiceChannelId={row.voice ? "ch-lounge" : null}
                   voiceChannelName={row.voice ? "Lounge" : undefined}

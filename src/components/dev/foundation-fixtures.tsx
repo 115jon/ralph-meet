@@ -125,7 +125,7 @@ const TYPE_RAMP = [
   [
     "text-ui-md",
     "text-ui-md font-semibold text-ink-1",
-    "Invite people to Ralph HQ",
+    "Invite people to Yap HQ",
   ],
   ["text-ui-lg", "text-ui-lg font-semibold text-ink-1", "Voice & video"],
   ["text-ui-xl", "text-ui-xl font-semibold text-ink-1", "Friends"],
@@ -272,7 +272,7 @@ export function FoundationFixture() {
         >
           <div className="flex items-center gap-6 rounded-lg border border-line bg-ply-1 px-4 py-3">
             <span className="flex items-center gap-2 text-ui-sm text-ink-2">
-              <Led state="talk" /> Lounge · Ralph HQ
+              <Led state="talk" /> Lounge · Yap HQ
             </span>
             <Num size="sm" className="text-ink-3">
               28 ms
@@ -408,8 +408,8 @@ export function FoundationFixture() {
 
         <Section title="Fields and controls">
           <div className="flex w-72 flex-col gap-2">
-            <Input placeholder="Search Ralph HQ" />
-            <Input defaultValue="ada@ralph.gg" inputSize="lg" />
+            <Input placeholder="Search Yap HQ" />
+            <Input defaultValue="ada@yap.gg" inputSize="lg" />
             <Input defaultValue="not a code" aria-invalid />
             <Input placeholder="Disabled" disabled />
           </div>
@@ -592,7 +592,7 @@ export function FoundationFixture() {
               id="fx"
               kind="success"
               message="Invite link copied"
-              description="Anyone with the link can join Ralph HQ for 7 days."
+              description="Anyone with the link can join Yap HQ for 7 days."
             />
             <div className="mt-2">
               <ToastCard
@@ -622,7 +622,7 @@ export function FoundationFixture() {
               <div key={size} className="flex flex-col items-center gap-2">
                 <Avatar
                   name={
-                    ["Ada", "Grace", "Linus", "Margaret", "Alan", "Ralph"][i]!
+                    ["Ada", "Grace", "Linus", "Margaret", "Alan", "Barbara"][i]!
                   }
                   size={size}
                   presence={

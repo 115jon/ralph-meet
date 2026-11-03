@@ -191,7 +191,7 @@ const CORPUS: SearchResultMessage[] = [
     "r-5",
     DESIGN,
     ME,
-    "Light theme token contrast is fixed: every ink pair is ≥4.5:1 now. https://ralph.dev/tokens",
+    "Light theme token contrast is fixed: every ink pair is ≥4.5:1 now. https://yap.115jon.com/tokens",
     420,
     { embed_count: 1 },
   ),

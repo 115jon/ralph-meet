@@ -63,7 +63,7 @@ export function getAppTitleBarModel({
   return { kind: "logo", label: "", detail: "", iconUrl: null };
 }
 
-/** The title text: "#general · Ralph HQ", or just the label. */
+/** The title text: "#general · Yap HQ", or just the label. */
 export function formatAppTitle(model: AppTitleBarModel): string {
   return model.detail ? `${model.detail} · ${model.label}` : model.label;
 }

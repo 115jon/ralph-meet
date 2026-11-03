@@ -121,7 +121,7 @@ function ChannelFixture({ surface }: { surface: string }) {
       <ChannelInviteModal
         open
         serverId="s-1"
-        serverName="Ralph HQ"
+        serverName="Yap HQ"
         channel={channel}
         onClose={() => {}}
       />

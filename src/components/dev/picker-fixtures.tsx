@@ -122,7 +122,7 @@ const EMOJI_EYES =
 const CREATED_EMOJIS: GeneratedEmoji[] = [
   ["raccoon_cool", "#a3a3a3", "#525252"],
   ["ship_it", "#fde047", "#f97316"],
-  ["party_ralph", "#f472b6", "#7c3aed"],
+  ["party_yappy", "#f472b6", "#7c3aed"],
   ["coffee_time", "#d6a77a", "#7c4a1e"],
   ["big_brain", "#f9a8d4", "#db2777"],
 ].map(([shortcode, a, b], i) => ({
@@ -140,7 +140,7 @@ const CREATED_EMOJIS: GeneratedEmoji[] = [
 
 const SOUNDBOARD_SERVER: Server = {
   id: "s-pk",
-  name: "Ralph HQ",
+  name: "Yap HQ",
   owner_id: "u-me",
   created_at: "2026-01-01T00:00:00Z",
 };
@@ -166,7 +166,7 @@ const SOUNDBOARD_FAVORITES = [
     id: "mi-1",
     title: "Vine boom",
     url: "https://example.invalid/vine-boom.mp3",
-    color: "#4f46e5",
+    color: "#c0127a",
     soundType: "myinstants",
   },
   {
@@ -180,7 +180,7 @@ const SOUNDBOARD_FAVORITES = [
     id: "snd-2",
     title: "Rimshot",
     url: "/api/soundboard/uploads/snd-2",
-    color: "#4f46e5",
+    color: "#c0127a",
     emoji: "🥁",
     soundType: "server",
     serverId: SOUNDBOARD_SERVER.id,

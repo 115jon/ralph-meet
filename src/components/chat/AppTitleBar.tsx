@@ -7,7 +7,7 @@ import { useShallow } from "zustand/shallow";
 import InlineEmojiText from "./InlineEmojiText";
 
 /**
- * Where you are, in one quiet line: "#general · Ralph HQ", "@ada · Direct
+ * Where you are, in one quiet line: "#general · Yap HQ", "@ada · Direct
  * messages", "Friends". 12/500 ink-3, no glyph: the server header below
  * already carries the identity, so the bar only adds the channel.
  */

@@ -342,7 +342,7 @@ const SHARE: PublicShare = {
     ],
     reply_count: 4,
     created_at: "2026-10-23T15:04:00.000Z",
-    source: { server_name: "Ralph HQ", channel_name: "design-review" },
+    source: { server_name: "Yap HQ", channel_name: "design-review" },
   },
 };
 
