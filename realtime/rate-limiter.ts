@@ -36,6 +36,9 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   "POST:/api/channels/*/typing": { limit: 10, windowMs: 10_000 },
   "POST:/api/servers": { limit: 5, windowMs: 3_600_000 },
   "POST:/api/invites/*/join": { limit: 10, windowMs: 600_000 },
+  // Two per join (room + voice), plus prefetches on hover/press and the
+  // reconnects; a join's own request must not be starved by those.
+  "POST:/api/voice/socket-ticket": { limit: 120, windowMs: 60_000 },
   DEFAULT: { limit: 60, windowMs: 60_000 },
 };
 

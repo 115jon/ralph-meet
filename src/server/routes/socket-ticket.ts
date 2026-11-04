@@ -10,7 +10,6 @@ import {
   handleCorsPreflightIfNeeded,
 } from "@/lib/api-helpers";
 import { resolveChannelAccess } from "@/lib/channel-access";
-import { getUserChannelPermissionsForDb } from "@/lib/require-permission";
 import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 import { looseStruct } from "@/lib/schema";
 import { getOrCreateDemoSession } from "@/lib/voice/demo-session";
@@ -29,7 +28,7 @@ import {
 import { runRoute, type RouteServices } from "@/server/edge";
 import type { AuthUnavailable, Unauthenticated } from "@/server/errors";
 import { signedInUserId, type KovaAuth } from "@/server/kova-auth";
-import { generateTurnCredentials } from "../../../realtime/meeting-room/turn-credentials";
+import { getCachedTurnCredentials } from "../../../realtime/meeting-room/turn-credentials";
 import { issueVoiceToken } from "../../../realtime/voice-token";
 
 const SOCKET_TICKET_TTL_MS = 60_000;
@@ -213,7 +212,7 @@ async function createRoomMediaBootstrap({
       subject,
       secret,
     }),
-    generateTurnCredentials({
+    getCachedTurnCredentials({
       tokenId: env.TURN_TOKEN_ID ?? "",
       tokenSecret: env.TURN_TOKEN_SECRET ?? "",
       fetch,
@@ -307,15 +306,9 @@ function authorizeAuthenticatedTicket(
       );
     }
 
-    const channel = yield* Effect.promise(() =>
-      db
-        .prepare(
-          "SELECT channel_type FROM channels WHERE id = ? AND server_id = ?",
-        )
-        .bind(channelId, serverId)
-        .first<{ channel_type: string }>(),
-    );
-    if (channel?.channel_type !== "voice") {
+    // resolveChannelAccess read this channel's row and the caller's
+    // permissions in it (for this server) already: no second lookup.
+    if (channelAccess.channelType !== "voice") {
       return apiError(
         "Server voice channel required",
         400,
@@ -337,9 +330,7 @@ function authorizeAuthenticatedTicket(
       );
     }
 
-    const permissions = yield* Effect.promise(() =>
-      getUserChannelPermissionsForDb(db, serverId, channelId, userId),
-    );
+    const permissions = channelAccess.permissions;
     if (
       permissions === null ||
       !hasPermission(permissions, PERMISSIONS.CONNECT)
