@@ -9,7 +9,7 @@ import { getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
-  normalizeUserStatus,
+  livePresenceStatus,
   USER_STATUS_LABELS,
   UserStatusDot,
 } from "./UserStatusDot";
@@ -69,6 +69,7 @@ export function DMListPanel({
   );
   // Compute per-DM unread notification counts
   const notifications = useChatStore((s) => s.notifications);
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
   const dmUnreadCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const n of notifications) {
@@ -112,6 +113,10 @@ export function DMListPanel({
       !selected && isUnread(dm.id, state.readStates, state.lastMessageAt);
     const dmNotifCount = dmUnreadCounts[dm.id] ?? 0;
     const displayName = getDisplayName(dm.recipient, dm.name ?? "Unknown");
+    const presence = livePresenceStatus(
+      dm.recipient?.status,
+      onlineUsers.has(dm.recipient?.id),
+    );
     // One line unless the person set a custom status; presence already
     // shows as the dot, so it is never repeated as text.
     const customStatus: string | null =
@@ -188,10 +193,8 @@ export function DMListPanel({
             )}
           </button>
           <UserStatusDot
-            status={normalizeUserStatus(dm.recipient?.status)}
-            label={
-              USER_STATUS_LABELS[normalizeUserStatus(dm.recipient?.status)]
-            }
+            status={presence}
+            label={USER_STATUS_LABELS[presence]}
             ring={phone ? "bg-ply-2" : "bg-ply-1"}
             className="pointer-events-none absolute -right-1 -bottom-1 z-20 size-3"
           />
