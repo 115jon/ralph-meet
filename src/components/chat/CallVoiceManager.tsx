@@ -63,7 +63,11 @@ function ActiveCallSession({
       // Fully reset the call store so the UI cleans up (dashboard hides,
       // call button returns). The user can re-join by clicking "Join call"
       // in the DMCallRegion if the voice channel still has members.
-      useCallStore.getState().endCall("disconnected");
+      // A leave can land after the store has moved to another call (the
+      // session's props change in place); only end the call it was for.
+      const call = useCallStore.getState();
+      if (call.voiceRoomId !== voiceRoomId) return;
+      call.endCall("disconnected");
     },
   });
 

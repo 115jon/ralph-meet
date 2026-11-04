@@ -33,11 +33,7 @@ import {
 import { getHost } from "@/lib/host";
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
-import {
-  SFUClient,
-  type SFUDisconnectReason,
-  type SFUEventMap,
-} from "@/lib/sfu-client";
+import { SFUClient, type SFUEventMap } from "@/lib/sfu-client";
 import { sendVoiceDisconnectBeacon } from "@/lib/voice-disconnect-beacon";
 import {
   applyStreamWatcherSnapshot,
@@ -106,25 +102,7 @@ import {
   type AutomaticSoundboardTransport,
 } from "@/lib/voice/auto-soundboard";
 
-const AUTOMATIC_LEAVE_SEND_WINDOW_MS = 100;
-
-function finishAutomaticLeave(
-  sfu: SFUClient | null,
-  sessionId: string,
-  generation: number | undefined,
-  reason: SFUDisconnectReason,
-  onFinished?: () => void,
-  pendingTimers?: Set<number>,
-) {
-  const timerId = window.setTimeout(() => {
-    pendingTimers?.delete(timerId);
-    sfu?.disconnect(reason);
-    resetAutomaticSoundboardSession(sessionId, generation);
-    onFinished?.();
-  }, AUTOMATIC_LEAVE_SEND_WINDOW_MS);
-  pendingTimers?.add(timerId);
-}
-
+import { VoiceSession, type VoiceEndReason } from "@ralph/voice";
 import {
   playConnected,
   playDeafen,
@@ -651,6 +629,21 @@ export interface UseVoiceChannelProps {
   autoJoin?: boolean;
 }
 
+/** The props one teardown runs with: those of the render that started it. */
+interface VoiceTeardownInputs {
+  automaticSoundboardSessionId: string;
+  channelId: string | null | undefined;
+  createAutomaticSoundboardTransport: (
+    voiceClient: SFUClient | null,
+  ) => AutomaticSoundboardTransport | undefined;
+  isCall: boolean;
+  localMediaOwner: LocalMediaOwner;
+  mode: "channel" | "call" | "room";
+  onLeft?: () => void;
+  sendVoiceChannelLeave: (channelId: string) => void;
+  serverId: string | null | undefined;
+}
+
 /**
  * A processor built from the early microphone capture on a join click, in
  * parallel with the voice gateway connecting. The device sync adopts it when
@@ -1155,16 +1148,29 @@ export function useVoiceChannel({
     return () => clearSpeakingUsers(speakingSourceIdRef.current!);
   }, [clearSpeakingUsers]);
 
-  const sfuRef = useRef<SFUClient | null>(null);
-  const standbyRef = useRef(false);
+  // The session's client (standby, connecting, joined or reconnecting) for
+  // the imperative code below. Only the session writes it (onClientChange);
+  // it is null while idle and from the first step of a teardown.
+  const sfuRef: { readonly current: SFUClient | null } =
+    useRef<SFUClient | null>(null);
+  // The one record of whether there is a voice session, which client it has
+  // and which phase it is in (packages/voice/STATE_MACHINE.md). Everything
+  // below asks it; nothing else tracks "joined" or "standby" imperatively.
+  const [voiceSession] = useState(
+    () =>
+      new VoiceSession<SFUClient>({
+        timers: {
+          setTimeout: (callback, ms) => window.setTimeout(callback, ms),
+          clearTimeout: (handle) => window.clearTimeout(handle as number),
+        },
+        onStepError: (step, error) =>
+          vcLog.warn("Voice teardown step failed", { step, error }),
+        onClientChange: (client) => {
+          (sfuRef as { current: SFUClient | null }).current = client;
+        },
+      }),
+  );
   const standbySilenceRef = useRef<SilentAudioTrack | null>(null);
-  const sfuHandlerCleanupRef = useRef<(() => void) | null>(null);
-  const automaticLeaveTimersRef = useRef<Set<number>>(new Set());
-  const cleanupSfuHandlers = useCallback(() => {
-    const cleanup = sfuHandlerCleanupRef.current;
-    sfuHandlerCleanupRef.current = null;
-    cleanup?.();
-  }, []);
   const releaseStandbySilence = useCallback((nextTrack?: MediaStreamTrack) => {
     const silence = standbySilenceRef.current;
     if (!silence || silence.track === nextTrack) return;
@@ -1178,10 +1184,11 @@ export function useVoiceChannel({
   // and comes back to the voice channel via the sidebar).
   const hasAutoJoined = useRef(false);
   const autoJoinTargetRef = useRef<string | null>(null);
-  // sfuInstance is reactive state that mirrors sfuRef — changing sfuRef.current
-  // does NOT trigger re-renders, so consumers (CalLVoiceManager's sync effect,
-  // useVoiceStats, etc.) would never see the non-null value. This state field
-  // is the one returned from the hook; sfuRef is used for all imperative calls.
+  // sfuInstance is the reactive copy of the session's client — the session
+  // does NOT trigger re-renders, so consumers (CallVoiceManager's sync effect,
+  // useVoiceStats, etc.) would never see it change. It is set on join and
+  // cleared by the teardown's releaseClient step; sfuRef is used for all
+  // imperative calls.
   const [sfuInstance, setSfuInstance] = useState<SFUClient | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const publishedAudioProcessorRef = useRef<LocalAudioProcessorHandle | null>(
@@ -1791,20 +1798,20 @@ export function useVoiceChannel({
 
   const handleJoin = useCallback(async () => {
     markVoice("join-click", { channelId, serverId, mode });
-    const claimedStandby =
-      mode === "channel" && channelId && serverId
-        ? claimVoiceStandby(channelId, serverId, isMicOnRef.current)
-        : null;
-    if (claimedStandby) markVoice("standby-claimed", { channelId });
-    const adoptingStandby =
-      claimedStandby !== null ||
-      (standbyRef.current && sfuRef.current !== null);
-    if (sfuRef.current && !adoptingStandby) {
+    // One session at a time; checked before claiming, since a claim takes
+    // the standby out of the pool.
+    if (voiceSession.isLive) {
       vcLog.warn(
         "Already connecting or connected, skipping duplicate handleJoin",
       );
       return;
     }
+    const claimedStandby =
+      mode === "channel" && channelId && serverId
+        ? claimVoiceStandby(channelId, serverId, isMicOnRef.current)
+        : null;
+    if (claimedStandby) markVoice("standby-claimed", { channelId });
+    const adoptingStandby = claimedStandby !== null || voiceSession.isStandby;
     prewarmAudioContext();
     if (!adoptingStandby && mode === "channel" && channelId && serverId) {
       markVoiceChannelJoining(channelId, serverId);
@@ -1832,12 +1839,13 @@ export function useVoiceChannel({
     const roomSlug = resolvedRoomSlug;
     const sfu =
       claimedStandby?.sfu ??
-      (adoptingStandby ? sfuRef.current! : new SFUClient(roomSlug));
-    standbyRef.current = false;
+      (adoptingStandby ? voiceSession.client! : new SFUClient(roomSlug));
     if (claimedStandby?.silence) {
       standbySilenceRef.current = claimedStandby.silence;
     }
-    sfuRef.current = sfu;
+    // Not live (checked above), so the session takes it.
+    const lease = voiceSession.start(sfu);
+    if (!lease) return;
     setSfuInstance(sfu);
 
     const resolveSpeakingUserId = (participantId: string): string => {
@@ -2019,19 +2027,14 @@ export function useVoiceChannel({
       earlyAudioProcessorRef.current = early;
     }
 
-    const sfuUnsubscribers: Array<() => void> = [];
+    // Removed by the session's teardown (step 2), whichever way it ends.
     const onSfu = <K extends keyof SFUEventMap>(
       event: K,
       handler: (data: SFUEventMap[K]) => void,
     ) => {
-      sfuUnsubscribers.push(sfu.on(event, handler));
-    };
-    sfuHandlerCleanupRef.current = () => {
-      for (const unsubscribe of sfuUnsubscribers) unsubscribe();
-      sfuUnsubscribers.length = 0;
+      lease.addCleanup(sfu.on(event, handler));
     };
 
-    const announcedJoinIds = new Set<string>();
     onSfu(
       "joined",
       ({
@@ -2039,9 +2042,9 @@ export function useVoiceChannel({
         participants,
         spatialAudioState: initialSpatialAudioState,
       }: any) => {
-        if (!joinedRef.current && announcedJoinIds.has(participantId)) return;
-        announcedJoinIds.add(participantId);
-        const wasAlreadyJoined = joinedRef.current;
+        const join = lease.active ? voiceSession.markJoined() : null;
+        if (!join) return;
+        const wasAlreadyJoined = join.wasJoined;
 
         vcLog.info("SFU joined", {
           channelId,
@@ -2140,6 +2143,7 @@ export function useVoiceChannel({
     onSfu(
       "participants-sync",
       ({ participants, spatialAudioState: nextSpatialAudioState }: any) => {
+        voiceSession.connectionRestored();
         syncParticipants(participants);
         if (nextSpatialAudioState) {
           voiceDispatch({
@@ -2653,6 +2657,7 @@ export function useVoiceChannel({
     });
 
     onSfu("voice-ready", ({ speaking }) => {
+      voiceSession.connectionRestored();
       const nextSpeakingUsers: Record<string, boolean> = {};
       const speakingParticipantIds = new Set(Object.keys(speaking ?? {}));
       for (const [participantId] of uuidToUserIdRef.current.entries()) {
@@ -2717,9 +2722,16 @@ export function useVoiceChannel({
       });
     });
 
-    onSfu("connection-state", ({ state }) =>
-      voiceDispatch({ type: "SET_CONNECTION", payload: state }),
-    );
+    onSfu("connection-state", ({ state }) => {
+      voiceDispatch({ type: "SET_CONNECTION", payload: state });
+      if (state === "connected") voiceSession.connectionRestored();
+      else if (state === "disconnected" || state === "failed") {
+        voiceSession.connectionLost();
+      }
+    });
+    // The room socket closed on its own (it reconnects); Resumed brings it
+    // back as participants-sync, a new Ready as joined.
+    onSfu("disconnected", () => voiceSession.connectionLost());
 
     onSfu("voice-reconnected", () => {
       void (async () => {
@@ -3011,6 +3023,7 @@ export function useVoiceChannel({
     currentVoiceChannelStartedAt,
     localMediaOwner,
     restartVadMonitoring,
+    voiceSession,
   ]);
 
   useEffect(() => {
@@ -3145,14 +3158,13 @@ export function useVoiceChannel({
     });
     const session = held.session;
     if (!session) return;
-    sfuRef.current = session.sfu;
-    standbyRef.current = true;
+    // Idle or leaving (checked above), so the hold is taken.
+    voiceSession.holdStandby(session.sfu);
     standbySilenceRef.current = session.silence;
     return () => {
       held.release();
-      if (!standbyRef.current || sfuRef.current !== session.sfu) return;
-      standbyRef.current = false;
-      sfuRef.current = null;
+      // Promoted by a join (or ended): no longer this hold's to drop.
+      if (!voiceSession.releaseStandby(session.sfu)) return;
       if (standbySilenceRef.current === session.silence) {
         standbySilenceRef.current = null;
       }
@@ -3164,12 +3176,13 @@ export function useVoiceChannel({
     resolvedRoomSlug,
     serverId,
     user?.id,
+    voiceSession,
   ]);
 
   useEffect(() => {
     const generation = ++localMediaGenerationRef.current;
     const session = sfuRef.current;
-    if (!session || standbyRef.current) return;
+    if (!session || voiceSession.isStandby) return;
     const initialMediaRequestKey = JSON.stringify({
       audioProcessingSettings,
       cameraBackground: getCameraBackgroundEffectKey(
@@ -3899,6 +3912,7 @@ export function useVoiceChannel({
     localMediaOwner,
     restartVadMonitoring,
     releaseStandbySilence,
+    voiceSession,
   ]);
 
   useEffect(() => {
@@ -4110,13 +4124,7 @@ export function useVoiceChannel({
     mode,
   ]);
 
-  // We need to keep a ref to `joined` because the cleanup function
-  // needs to know if we are currently joined.
-  const joinedRef = useRef(joined);
   const disconnectBeaconSentRef = useRef(false);
-  useEffect(() => {
-    joinedRef.current = joined;
-  }, [joined]);
 
   useEffect(() => {
     if (joined) {
@@ -4171,7 +4179,7 @@ export function useVoiceChannel({
     if (mode !== "channel" || !channelId || !serverId) return;
 
     const handlePageExit = () => {
-      if (!joinedRef.current || disconnectBeaconSentRef.current) return;
+      if (!voiceSession.isJoined || disconnectBeaconSentRef.current) return;
 
       const voiceSessionId = myIdRef.current;
       const gatewaySessionId = useChatStore.getState().gateway.getSessionId();
@@ -4192,203 +4200,180 @@ export function useVoiceChannel({
       window.removeEventListener("pagehide", handlePageExit);
       window.removeEventListener("beforeunload", handlePageExit);
     };
-  }, [channelId, serverId, mode]);
+  }, [channelId, serverId, mode, voiceSession]);
+
+  /**
+   * The hook's part of the one teardown (VoiceSession.end, see
+   * packages/voice/STATE_MACHINE.md "Teardown"). Leave, forced disconnect
+   * and unmount all come through here, each with the props of the render
+   * that registered it; the session picks the plan (sounds, send window,
+   * onLeft) and runs these steps in its fixed order.
+   */
+  const endVoiceSession = useCallback(
+    (reason: VoiceEndReason, inputs: VoiceTeardownInputs) => {
+      const {
+        automaticSoundboardSessionId: soundboardSessionId,
+        channelId: endedChannelId,
+        createAutomaticSoundboardTransport: createTransport,
+        isCall: endedIsCall,
+        localMediaOwner: endedMediaOwner,
+        mode: endedMode,
+        onLeft: notifyLeft,
+        sendVoiceChannelLeave: leavePresence,
+        serverId: endedServerId,
+      } = inputs;
+      return voiceSession.end(
+        reason,
+        {
+          announceLeave: ({ client, plan }) => {
+            const details = {
+              reason,
+              channelId: endedChannelId,
+              serverId: endedServerId,
+              mode: endedMode,
+              joined: plan.wasJoined,
+            };
+            if (reason === "forced-disconnect") {
+              vcLog.warn("Voice lifecycle teardown", details);
+            } else {
+              vcLog.info("Voice lifecycle teardown", details);
+            }
+            // Calls skip it: the gateway plays the call-end sound.
+            if (plan.leaveSound) playDisconnect();
+            // handleLeave cancels it itself, before retiring the standby.
+            if (reason === "forced-disconnect") {
+              cancelAutomaticSoundboardCleanup(soundboardSessionId);
+            }
+            const generation =
+              getAutomaticSoundboardSessionGeneration(soundboardSessionId);
+            if (plan.leaveTrigger) {
+              void playAutomaticSoundboardTrigger(
+                "leave",
+                soundboardSessionId,
+                endedServerId,
+                createTransport(client),
+              ).catch(() => false);
+            }
+            if (plan.sendWindowMs === 0) return;
+            return () =>
+              resetAutomaticSoundboardSession(soundboardSessionId, generation);
+          },
+          releaseLocalMedia: ({ client }) => {
+            stopCameraBackgroundEffect(true);
+            client.vad.setGateController(null);
+            // VAD starts before Joined; its monitor may be a clone of the raw mic.
+            disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+            ownedVadMonitorStreamRef.current = null;
+            publishedAudioProcessorRef.current?.destroy();
+            publishedAudioProcessorRef.current = null;
+            discardEarlyAudioProcessor(earlyAudioProcessorRef);
+            for (const stream of [
+              localStreamRef.current,
+              screenStreamRef.current,
+            ]) {
+              stream?.getTracks().forEach((track) => {
+                track.onended = null;
+                track.stop();
+              });
+            }
+            localStreamRef.current = null;
+            screenStreamRef.current = null;
+            // Also invalidates a capture that may still be pending.
+            releaseLocalStream(endedMediaOwner);
+            if (standbyMediaOwnerRef.current) {
+              releaseLocalStream(standbyMediaOwnerRef.current);
+              standbyMediaOwnerRef.current = null;
+            }
+          },
+          clearSessionState: ({ plan }) => {
+            myIdRef.current = "";
+            speakingByParticipantRef.current = {};
+            participantsRef.current.clear();
+            remoteAggregatorsRef.current = {};
+            uuidToUserIdRef.current.clear();
+            capturingThumbnails.current.clear();
+            voiceDispatch({ type: "LEFT" });
+            if (plan.clearPresence && endedMode !== "room" && endedChannelId) {
+              leavePresence(endedChannelId);
+            }
+          },
+          // Only its own client: a session started inside the send window
+          // keeps the instance it set.
+          releaseClient: ({ client }) =>
+            setSfuInstance((current) => (current === client ? null : current)),
+          left: () => notifyLeft?.(),
+        },
+        { isCall: endedIsCall },
+      );
+    },
+    [stopCameraBackgroundEffect, voiceSession],
+  );
 
   useEffect(() => {
-    const participants = participantsRef.current;
-    const uuidToUserId = uuidToUserIdRef.current;
-    const thumbnails = capturingThumbnails.current;
-
     return () => {
-      const activeSfu = sfuRef.current;
-      if (standbyRef.current) {
-        standbyRef.current = false;
-        sfuRef.current = null;
-        setSfuInstance(null);
-        return;
-      }
-      if (mode === "channel" && channelId && serverId) {
+      // A held standby is only let go; its pool keeps or disposes it.
+      if (
+        !voiceSession.isStandby &&
+        mode === "channel" &&
+        channelId &&
+        serverId
+      ) {
         retireVoiceStandby(channelId, serverId);
       }
-      const automaticSoundboardTransport =
-        createAutomaticSoundboardTransport(activeSfu);
-      if (activeSfu) {
-        vcLog.info("Voice lifecycle teardown", {
-          reason: "component-unmount",
-          channelId,
-          serverId,
-          mode,
-          joined: joinedRef.current,
-        });
-        cleanupSfuHandlers();
-        sfuRef.current = null;
-        setSfuInstance(null);
-        stopCameraBackgroundEffect(true);
-        activeSfu.vad.setGateController(null);
-        disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-        ownedVadMonitorStreamRef.current = null;
-        publishedAudioProcessorRef.current?.destroy();
-        publishedAudioProcessorRef.current = null;
-        discardEarlyAudioProcessor(earlyAudioProcessorRef);
-        localStreamRef.current?.getTracks().forEach((t) => {
-          t.onended = null;
-          t.stop();
-        });
-        screenStreamRef.current?.getTracks().forEach((t) => {
-          t.onended = null;
-          t.stop();
-        });
-
-        participants.clear();
-        remoteAggregatorsRef.current = {};
-        uuidToUserId.clear();
-        thumbnails.clear();
-
-        voiceDispatch({ type: "LEFT" });
-
-        // Re-arm auto-join. Under React StrictMode (dev) the mount runs
-        // setup → cleanup → setup again, so this teardown fires immediately
-        // after the auto-join created the SFU — tearing down the half-open
-        // WebSocket ("closed before connection established"). Because
-        // hasAutoJoined is a ref, it survives the remount and would otherwise
-        // stay true, so the re-mounted effect would skip re-joining and leave
-        // the user stranded on the landing page until they click "Join Voice"
-        // a second time. Resetting it lets the remount auto-join again.
-        // This is safe: a genuine unmount discards the ref entirely, and
-        // explicit leaves go through handleLeave (which sets the guard).
-        hasAutoJoined.current = false;
-        autoJoinTargetRef.current = null;
-
-        // Invalidate an early capture that may still be pending after teardown.
-        releaseLocalStream(localMediaOwner);
-        if (standbyMediaOwnerRef.current) {
-          releaseLocalStream(standbyMediaOwnerRef.current);
-          standbyMediaOwnerRef.current = null;
-        }
-      }
-
-      for (const timerId of automaticLeaveTimersRef.current) {
-        window.clearTimeout(timerId);
-      }
-      automaticLeaveTimersRef.current.clear();
-
-      if (joinedRef.current) {
-        const generation = getAutomaticSoundboardSessionGeneration(
-          automaticSoundboardSessionId,
-        );
-        void playAutomaticSoundboardTrigger(
-          "leave",
-          automaticSoundboardSessionId,
-          serverId,
-          automaticSoundboardTransport,
-        ).catch(() => false);
-        finishAutomaticLeave(
-          activeSfu,
-          automaticSoundboardSessionId,
-          generation,
-          "component-unmount",
-          undefined,
-          automaticLeaveTimersRef.current,
-        );
-      } else {
-        activeSfu?.disconnect("component-unmount");
-      }
-
-      if (joinedRef.current && mode !== "room" && channelId) {
-        sendVoiceChannelLeave(channelId); // Leave gateway presence if we were in
-      }
+      const outcome = endVoiceSession("component-unmount", {
+        automaticSoundboardSessionId,
+        channelId,
+        createAutomaticSoundboardTransport,
+        isCall,
+        localMediaOwner,
+        mode,
+        sendVoiceChannelLeave,
+        serverId,
+      });
+      if (outcome.kind !== "ended") return;
+      // Re-arm auto-join. Under React StrictMode (dev) the mount runs
+      // setup → cleanup → setup again, so this teardown fires immediately
+      // after the auto-join created the SFU — tearing down the half-open
+      // WebSocket ("closed before connection established"). Because
+      // hasAutoJoined is a ref, it survives the remount and would otherwise
+      // stay true, so the re-mounted effect would skip re-joining and leave
+      // the user stranded on the landing page until they click "Join Voice"
+      // a second time. Resetting it lets the remount auto-join again.
+      // This is safe: a genuine unmount discards the ref entirely, and
+      // explicit leaves go through handleLeave (which sets the guard).
+      hasAutoJoined.current = false;
+      autoJoinTargetRef.current = null;
     };
   }, [
     channelId,
     sendVoiceChannelLeave,
     mode,
     serverId,
-    stopCameraBackgroundEffect,
+    isCall,
     automaticSoundboardSessionId,
     createAutomaticSoundboardTransport,
-    cleanupSfuHandlers,
     localMediaOwner,
+    endVoiceSession,
+    voiceSession,
   ]);
 
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
   useEffect(() => {
     const handleForceDisconnect = () => {
-      const activeSfu = sfuRef.current;
       if (mode === "channel" && channelId && serverId) {
         dropVoiceStandby(channelId, serverId);
       }
-      if (activeSfu) {
-        const wasJoined = joinedRef.current;
-        joinedRef.current = false;
-        vcLog.warn("Voice lifecycle teardown", {
-          reason: "forced-disconnect",
-          channelId,
-          serverId,
-          mode,
-          joined: wasJoined,
-        });
-        // Play disconnect sound before cleanup (skip for calls — gateway plays
-        // call-end sound). A session that never joined leaves silently, like
-        // handleLeave's pre-join branch.
-        if (wasJoined && !isCall) playDisconnect();
-        cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
-        const expectedGeneration = getAutomaticSoundboardSessionGeneration(
-          automaticSoundboardSessionId,
-        );
-        sfuRef.current = null;
-        if (wasJoined) {
-          void playAutomaticSoundboardTrigger(
-            "leave",
-            automaticSoundboardSessionId,
-            serverId,
-            createAutomaticSoundboardTransport(activeSfu),
-          ).catch(() => false);
-        }
-        cleanupSfuHandlers();
-        finishAutomaticLeave(
-          activeSfu,
-          automaticSoundboardSessionId,
-          expectedGeneration,
-          "forced-disconnect",
-          () => {
-            setSfuInstance(null);
-            onLeft?.();
-          },
-          automaticLeaveTimersRef.current,
-        );
-        stopCameraBackgroundEffect(true);
-        activeSfu.vad.setGateController(null);
-        publishedAudioProcessorRef.current?.destroy();
-        publishedAudioProcessorRef.current = null;
-        discardEarlyAudioProcessor(earlyAudioProcessorRef);
-        localStreamRef.current?.getTracks().forEach((t) => {
-          t.onended = null;
-          t.stop();
-        });
-        localStreamRef.current = null;
-        screenStreamRef.current?.getTracks().forEach((t) => {
-          t.onended = null;
-          t.stop();
-        });
-        screenStreamRef.current = null;
-        disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-        ownedVadMonitorStreamRef.current = null;
-        myIdRef.current = "";
-        speakingByParticipantRef.current = {};
-        releaseLocalStream(localMediaOwner);
-        if (standbyMediaOwnerRef.current) {
-          releaseLocalStream(standbyMediaOwnerRef.current);
-          standbyMediaOwnerRef.current = null;
-        }
-        participantsRef.current.clear();
-        remoteAggregatorsRef.current = {};
-        uuidToUserIdRef.current.clear();
-        capturingThumbnails.current.clear();
-        voiceDispatch({ type: "LEFT" });
-        if (wasJoined && mode !== "room" && channelId) {
-          sendVoiceChannelLeave(channelId);
-        }
-      }
+      endVoiceSession("forced-disconnect", {
+        automaticSoundboardSessionId,
+        channelId,
+        createAutomaticSoundboardTransport,
+        isCall,
+        localMediaOwner,
+        mode,
+        onLeft,
+        sendVoiceChannelLeave,
+        serverId,
+      });
     };
     forceDisconnectRef.current = handleForceDisconnect;
     window.addEventListener("force-voice-disconnect", handleForceDisconnect);
@@ -4408,130 +4393,36 @@ export function useVoiceChannel({
     isCall,
     mode,
     serverId,
-    stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
     createAutomaticSoundboardTransport,
-    cleanupSfuHandlers,
     localMediaOwner,
+    endVoiceSession,
   ]);
 
   const handleLeave = useCallback(() => {
-    const activeSfu = sfuRef.current;
+    const activeSfu = voiceSession.client;
     if (!activeSfu) return;
     // Leaving on your own drops any move grant; the leave a move causes
     // keeps the one it just brought.
     if (!activeSfu.wasMoved) clearVoiceMoveGrant();
-    const wasJoined = joinedRef.current;
     cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
     if (mode === "channel" && channelId && serverId) {
       retireVoiceStandby(channelId, serverId);
     }
-    if (!wasJoined) {
-      if (standbyRef.current) {
-        standbyRef.current = false;
-        sfuRef.current = null;
-        setSfuInstance(null);
-        return;
-      }
-      sfuRef.current = null;
-      cleanupSfuHandlers();
-      activeSfu.disconnect("user-leave");
-      stopCameraBackgroundEffect(true);
-      activeSfu.vad.setGateController(null);
-      // VAD starts before Joined; its monitor may be a clone of the raw mic.
-      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-      ownedVadMonitorStreamRef.current = null;
-      publishedAudioProcessorRef.current?.destroy();
-      publishedAudioProcessorRef.current = null;
-      discardEarlyAudioProcessor(earlyAudioProcessorRef);
-      localStreamRef.current?.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-      screenStreamRef.current = null;
-      myIdRef.current = "";
-      speakingByParticipantRef.current = {};
-      cancelPendingLocalStreamAcquisition(localMediaOwner);
-      releaseLocalStream(localMediaOwner);
-      if (standbyMediaOwnerRef.current) {
-        releaseLocalStream(standbyMediaOwnerRef.current);
-        standbyMediaOwnerRef.current = null;
-      }
-      setSfuInstance(null);
-      hasAutoJoined.current = true;
-      return;
-    }
-    const automaticSoundboardTransport =
-      createAutomaticSoundboardTransport(activeSfu);
-    const expectedGeneration = getAutomaticSoundboardSessionGeneration(
+    const outcome = endVoiceSession("user-leave", {
       automaticSoundboardSessionId,
-    );
-    joinedRef.current = false;
-    sfuRef.current = null;
-    vcLog.info("Voice lifecycle teardown", {
-      reason: "user-leave",
       channelId,
-      serverId,
+      createAutomaticSoundboardTransport,
+      isCall,
+      localMediaOwner,
       mode,
-      joined: wasJoined,
-    });
-    // Play disconnect sound (skip for calls — gateway plays call-end sound)
-    if (!isCall) playDisconnect();
-    void playAutomaticSoundboardTrigger(
-      "leave",
-      automaticSoundboardSessionId,
+      onLeft,
+      sendVoiceChannelLeave,
       serverId,
-      automaticSoundboardTransport,
-    ).catch(() => false);
-    cleanupSfuHandlers();
-    finishAutomaticLeave(
-      activeSfu,
-      automaticSoundboardSessionId,
-      expectedGeneration,
-      "user-leave",
-      () => {
-        setSfuInstance(null);
-        if (!isCall) onLeft?.();
-      },
-      automaticLeaveTimersRef.current,
-    );
-    stopCameraBackgroundEffect(true);
-    activeSfu.vad.setGateController(null);
-    disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-    ownedVadMonitorStreamRef.current = null;
-    publishedAudioProcessorRef.current?.destroy();
-    publishedAudioProcessorRef.current = null;
-    discardEarlyAudioProcessor(earlyAudioProcessorRef);
-    localStreamRef.current?.getTracks().forEach((t) => {
-      t.onended = null;
-      t.stop();
     });
-    localStreamRef.current = null;
-    screenStreamRef.current?.getTracks().forEach((t) => {
-      t.onended = null;
-      t.stop();
-    });
-    screenStreamRef.current = null;
-    myIdRef.current = "";
-    speakingByParticipantRef.current = {};
-    releaseLocalStream(localMediaOwner);
-    if (standbyMediaOwnerRef.current) {
-      releaseLocalStream(standbyMediaOwnerRef.current);
-      standbyMediaOwnerRef.current = null;
-    }
-
-    // Clear stale participant references
-    participantsRef.current.clear();
-    remoteAggregatorsRef.current = {};
-    uuidToUserIdRef.current.clear();
-    capturingThumbnails.current.clear();
-
-    voiceDispatch({ type: "LEFT" });
-    if (wasJoined && mode !== "room" && channelId) {
-      sendVoiceChannelLeave(channelId);
-    }
     // Prevent the auto-join effect from immediately re-joining after an explicit
     // leave while the URL (and autoJoin prop) still points at this voice channel.
-    hasAutoJoined.current = true;
+    if (outcome.kind === "ended") hasAutoJoined.current = true;
   }, [
     sendVoiceChannelLeave,
     onLeft,
@@ -4539,11 +4430,11 @@ export function useVoiceChannel({
     channelId,
     mode,
     serverId,
-    stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
     createAutomaticSoundboardTransport,
-    cleanupSfuHandlers,
     localMediaOwner,
+    endVoiceSession,
+    voiceSession,
   ]);
 
   const toggleMic = useCallback(() => {

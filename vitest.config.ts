@@ -6,11 +6,20 @@ export default defineConfig({
     globals: true,
     environment: "node",
     setupFiles: ["./src/test/setup-dom.ts"],
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "realtime/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "realtime/**/*.test.ts",
+      "packages/*/src/**/*.test.ts",
+    ],
     exclude: ["node_modules", "realtime/__tests__/**/*.worker.test.ts"],
     coverage: {
       provider: "v8",
-      include: ["src/lib/**/*.ts", "realtime/**/*.ts"],
+      include: [
+        "src/lib/**/*.ts",
+        "realtime/**/*.ts",
+        "packages/*/src/**/*.ts",
+      ],
       exclude: ["**/*.test.ts", "**/*.d.ts"],
     },
   },

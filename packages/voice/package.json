@@ -1,0 +1,10 @@
+{
+  "name": "@ralph/voice",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Yap voice session lifecycle: one state machine and one teardown, without React or the DOM.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

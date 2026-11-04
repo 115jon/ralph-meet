@@ -1,0 +1,17 @@
+{
+  // Checks the package on its own, without the DOM library, so nothing in
+  // it can reach for window, document or MediaStream. Platforms inject
+  // those. Part of `pnpm typecheck`.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["es2022"],
+    "types": [],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"]
+}
