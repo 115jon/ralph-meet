@@ -4,6 +4,7 @@ import {
   readReplaySeq,
   type GatewayFrame,
   type RoomGatewayServerMessage,
+  type VoiceMovePayload,
 } from "@/lib/gateway-protocol";
 import {
   type IceServer,
@@ -62,6 +63,11 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
       | null;
   };
   error: { message: string; code?: number };
+  /**
+   * A moderator moved this session to another channel. The room closes the
+   * socket with SessionReplaced right after; this comes first.
+   */
+  "voice-move": VoiceMovePayload;
 }
 
 export interface ConnectOptions {
@@ -258,6 +264,12 @@ export class RoomGateway extends BaseGateway<
           avatarUrl: pu.avatar_url,
           avatarDisplay: pu.avatar_display,
         });
+        break;
+      }
+
+      case GatewayOp.VoiceMove: {
+        this.log.info(`Moved to voice channel ${msg.d.channel_id}`);
+        this.emit("voice-move", msg.d);
         break;
       }
 

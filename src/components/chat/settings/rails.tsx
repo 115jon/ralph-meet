@@ -91,7 +91,12 @@ function ProfileRail() {
 function VoiceRail() {
   const { target } = useSettings();
   const { vSettings, audioProcessing } = useVoiceSettingsForSettings();
-  const devices = useDeviceOptions();
+  const devices = useDeviceOptions({
+    input: {
+      deviceId: vSettings.inputDeviceId,
+      label: vSettings.inputDeviceLabel,
+    },
+  });
   const mic =
     devices.input.find((option) => option.value === vSettings.inputDeviceId)
       ?.label ?? "Default microphone";
