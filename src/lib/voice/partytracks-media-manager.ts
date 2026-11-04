@@ -21,6 +21,12 @@ import {
   videoRenderDemand,
   type VideoRenderDemandSource,
 } from "@/lib/voice/video-render-demand";
+import { PUBLICATION_STALE_AFTER_MS } from "@/lib/voice/publication-liveness";
+import {
+  createVideoKeepalive,
+  type CreateVideoKeepalive,
+  type VideoKeepalive,
+} from "@/lib/voice/video-keepalive";
 import { BehaviorSubject, type Observable, Subscription } from "rxjs";
 
 export interface PartyTracksMediaTransport {
@@ -79,6 +85,8 @@ interface Publication {
   subscription: Subscription;
   latestMetadata?: TrackInfo;
   sendEncodings?: readonly RTCRtpEncodingParameters[];
+  /** Set while withdrawn (see unpublishTrack): what it sends meanwhile. */
+  keepalive?: VideoKeepalive;
 }
 
 export interface PartyTracksMediaManagerOptions {
@@ -116,6 +124,11 @@ export interface PartyTracksMediaManagerOptions {
    */
   readonly layerUpgradeDelayMs?: number;
   readonly layerDowngradeDelayMs?: number;
+  /**
+   * The stand-in a withdrawn video publication sends (see unpublishTrack);
+   * returning null closes withdrawn video like audio instead.
+   */
+  readonly createVideoKeepalive?: CreateVideoKeepalive;
 }
 
 // PartyTracks retries a failing pull itself (100 ms doubling to 10 s) and
@@ -149,6 +162,11 @@ interface RemotePull {
   pendingLayer?: { quality: VideoLayerQuality; cancel: () => void };
   /** The largest size the pulled track was last seen rendered at. */
   renderedSize?: RenderedVideoSize | null;
+  /**
+   * Its publication was withdrawn: the track is hidden (removed from the UI)
+   * but the pull keeps its transceiver for the alias's next publication.
+   */
+  parked?: boolean;
 }
 
 interface PullRetry {
@@ -209,6 +227,11 @@ function sameSfuTrack(left: TrackInfo, right: TrackInfo): boolean {
  */
 export class PartyTracksMediaManager {
   private readonly publications = new Map<string, Publication>();
+  /**
+   * Withdrawn video publications (camera off, share stopped), still pushed
+   * as their SFU track and sending a keepalive until published again.
+   */
+  private readonly withdrawnPublications = new Map<string, Publication>();
   /** Republished-over transceivers, detached and kept until dispose. */
   private readonly retiredPublications: Publication[] = [];
   private readonly offers = new Map<string, TrackInfo>();
@@ -235,6 +258,7 @@ export class PartyTracksMediaManager {
   private readonly unsubscribeVideoRenderDemand: () => void;
   private readonly layerUpgradeDelayMs: number;
   private readonly layerDowngradeDelayMs: number;
+  private readonly createVideoKeepalive: CreateVideoKeepalive;
 
   constructor(
     private readonly transport: PartyTracksMediaTransport,
@@ -262,6 +286,8 @@ export class PartyTracksMediaManager {
       options.layerUpgradeDelayMs ?? DEFAULT_LAYER_UPGRADE_DELAY_MS;
     this.layerDowngradeDelayMs =
       options.layerDowngradeDelayMs ?? DEFAULT_LAYER_DOWNGRADE_DELAY_MS;
+    this.createVideoKeepalive =
+      options.createVideoKeepalive ?? createVideoKeepalive;
     this.videoRenderDemand = options.videoRenderDemand ?? videoRenderDemand;
     this.unsubscribeVideoRenderDemand = this.videoRenderDemand.subscribe(() =>
       this.refreshVideoLayers(),
@@ -293,6 +319,11 @@ export class PartyTracksMediaManager {
         if (existing.currentTrack === track) continue;
         existing.currentTrack = track;
         existing.source$.next(track);
+        continue;
+      }
+      const withdrawn = this.withdrawnPublications.get(trackName);
+      if (withdrawn && withdrawn.currentTrack.kind === track.kind) {
+        this.resumePublication(trackName, withdrawn, track);
         continue;
       }
 
@@ -373,6 +404,9 @@ export class PartyTracksMediaManager {
             return;
           }
           publication.latestMetadata = metadata;
+          // Re-pushed while withdrawn (a rebuilt session): announced when
+          // it is published again.
+          if (publication.keepalive) return;
           this.callbacks.onPublicationMetadata(metadata);
         },
         error: (error) => this.callbacks.onError?.(error),
@@ -415,7 +449,7 @@ export class PartyTracksMediaManager {
   getRemoteTracksForDiagnostics(): TrackInfo[] {
     const tracks: TrackInfo[] = [];
     for (const [trackName, pull] of this.pulls) {
-      if (!pull.currentTrack) continue;
+      if (!pull.currentTrack || pull.parked) continue;
       tracks.push({
         ...(this.offers.get(trackName) ?? pull.metadata$.value),
         track: pull.currentTrack,
@@ -424,14 +458,77 @@ export class PartyTracksMediaManager {
     return tracks;
   }
 
+  /**
+   * Stops offering a publication. Its listeners are told it stopped either
+   * way; what happens to the SFU track depends on the kind.
+   *
+   * Video (camera, share) stays pushed as the same SFU track, sending a
+   * keepalive instead of the source, so publishing it again is a
+   * replaceTrack() and the same SFU track is announced: viewers keep their
+   * pulls (see withdrawRemoteTracks) and nobody renegotiates. Closing it
+   * made every viewer close its pull and pull the next SFU track, and the
+   * SFU recycles the closed m-line under the same MID with other RTP
+   * header extension IDs, which Chrome rejects ("RTP extension ID
+   * reassignment not supported"): the camera never came back for them.
+   *
+   * Audio, and video not yet answered, is closed.
+   */
   unpublishTrack(trackName: string): boolean {
     const publication = this.publications.get(trackName);
     if (!publication) return false;
     this.publications.delete(trackName);
-    publication.subscription.unsubscribe();
-    publication.source$.complete();
+    const keepalive =
+      publication.currentTrack.kind === "video" && publication.latestMetadata
+        ? this.createVideoKeepalive()
+        : null;
+    if (keepalive) {
+      publication.keepalive = keepalive;
+      publication.currentTrack = keepalive.track;
+      publication.source$.next(keepalive.track);
+      this.withdrawnPublications.set(trackName, publication);
+    } else {
+      this.closePublication(publication);
+    }
     this.callbacks.onPublicationStopped(trackName);
     return true;
+  }
+
+  private resumePublication(
+    trackName: string,
+    publication: Publication,
+    track: MediaStreamTrack,
+  ): void {
+    this.withdrawnPublications.delete(trackName);
+    const keepalive = publication.keepalive;
+    if (keepalive && keepalive.longestGapMs() >= PUBLICATION_STALE_AFTER_MS) {
+      // The keepalive stalled (a throttled timer) long enough that the SFU
+      // may have dropped the track: announcing it again would show viewers
+      // a dead track. Push afresh instead.
+      this.closePublication(publication);
+      this.startPublication(
+        trackName,
+        track,
+        track.kind as "audio" | "video",
+        publication.sendEncodings,
+      );
+      return;
+    }
+    this.publications.set(trackName, publication);
+    publication.keepalive = undefined;
+    publication.currentTrack = track;
+    publication.source$.next(track);
+    keepalive?.stop();
+    this.callbacks.onPushStarted?.(trackName, track.kind as "audio" | "video");
+    if (publication.latestMetadata) {
+      this.callbacks.onPublicationMetadata(publication.latestMetadata);
+    }
+  }
+
+  private closePublication(publication: Publication): void {
+    publication.subscription.unsubscribe();
+    publication.source$.complete();
+    publication.keepalive?.stop();
+    publication.keepalive = undefined;
   }
 
   offerTracks(tracks: TrackInfo[]): void {
@@ -448,26 +545,15 @@ export class PartyTracksMediaManager {
       const changed = !previous || !sameMetadata(previous, track);
       const pull = this.pulls.get(track.track_name);
       if (pull) {
-        if (
-          changed &&
-          !this.isSubscribed(track.track_name) &&
-          (!previous || !sameSfuTrack(previous, track))
-        ) {
+        if (!this.isSubscribed(track.track_name)) {
           // A kept share pull (see setRemoteTrackSubscription) whose
-          // publisher started a new share: not watched, so not pulled.
-          this.stopPull(track.track_name);
-          this.clearPullRetry(track.track_name);
-        } else if (changed) {
-          // PartyTracks pulls again (and must produce a track) only when
-          // the SFU track it names changes.
-          if (!previous || !sameSfuTrack(previous, track)) {
-            this.armPullWatchdog(track.track_name, pull);
+          // publisher started a new share: not watched, so the new share is
+          // not pulled. The pull is parked until it is.
+          if (!sameSfuTrack(pull.metadata$.value, track)) {
+            this.parkPull(track.track_name, pull);
           }
-          // Before the metadata, so a re-pull asks for this offer's RID.
-          pull.preferredRid$.next(
-            selectSimulcastRid(pull.layer, track.simulcast_rids),
-          );
-          pull.metadata$.next(track);
+        } else if (changed || pull.parked) {
+          this.retargetPull(track.track_name, pull, track);
         }
       } else if (!this.isSubscribed(track.track_name)) {
         continue;
@@ -485,16 +571,30 @@ export class PartyTracksMediaManager {
   }
 
   syncRemoteTracks(tracks: TrackInfo[]): void {
-    const currentTrackNames = new Set(
-      tracks
-        .filter((track) => track.sfu_track_name)
-        .map((track) => track.track_name),
+    const current = tracks.filter((track) => track.sfu_track_name);
+    const currentTrackNames = new Set(current.map((track) => track.track_name));
+    const currentParticipants = new Set(
+      current.map((track) => track.participant_id),
     );
     this.stopRemoteTracks(
       [...this.offers.keys()].filter(
         (trackName) => !currentTrackNames.has(trackName),
       ),
     );
+    // Parked pulls of participants who publish nothing any more: they left
+    // while this client was away, so no leave reached it. (One still here
+    // with nothing published loses its parked pull and is pulled afresh,
+    // as every withdrawn track was before.)
+    const departed: string[] = [];
+    for (const [trackName, pull] of this.pulls) {
+      if (
+        pull.parked &&
+        !currentParticipants.has(pull.metadata$.value.participant_id)
+      ) {
+        departed.push(trackName);
+      }
+    }
+    this.stopRemoteTracks(departed);
     this.offerTracks(tracks);
   }
 
@@ -521,16 +621,19 @@ export class PartyTracksMediaManager {
       this.unsubscribedTrackNames.delete(trackName);
       this.subscribedTrackNames.add(trackName);
       const offer = this.offers.get(trackName);
-      if (offer && !this.pulls.has(trackName)) this.startPull(offer);
+      const pull = this.pulls.get(trackName);
+      if (offer && pull?.parked) this.retargetPull(trackName, pull, offer);
+      else if (offer && !pull) this.startPull(offer);
       return;
     }
     this.subscribedTrackNames.delete(trackName);
     this.unsubscribedTrackNames.add(trackName);
-    // Screen video already pulled keeps its pull until the share ends.
-    // Pulling it again after a close fails in Chrome: the SFU reuses the
-    // closed m-line's MID with other RTP header extension IDs, which Chrome
-    // rejects ("RTP extension ID reassignment not supported"), and the
-    // retries leave the session's signalling out of step (406, then 410).
+    // Screen video already pulled keeps its pull (and its transceiver).
+    // Closing a pull and pulling again fails in Chrome: the SFU recycles the
+    // closed m-line under the same MID with other RTP header extension IDs,
+    // which Chrome rejects ("RTP extension ID reassignment not supported"),
+    // and the retries leave the session's signalling out of step (406, then
+    // 410).
     if (
       trackName.startsWith(OPT_IN_TRACK_PREFIX) &&
       this.pulls.has(trackName)
@@ -539,6 +642,30 @@ export class PartyTracksMediaManager {
     }
     this.stopPull(trackName);
     this.clearPullRetry(trackName);
+  }
+
+  /**
+   * Their publisher withdrew these tracks (camera off, share stopped). A
+   * pull that produced a track is parked rather than closed: hidden, but
+   * kept with its transceiver. A publisher that keeps the withdrawn SFU
+   * track alive (see unpublishTrack) offers that same track again, and the
+   * parked pull just shows it again (see retargetPull); meanwhile it
+   * receives the publisher's keepalive. A parked pull is closed when its
+   * participant leaves.
+   */
+  withdrawRemoteTracks(trackNames: string[]): void {
+    for (const trackName of trackNames) {
+      const pull = this.pulls.get(trackName);
+      // Withdrawn audio is closed by its publisher: nothing to keep.
+      if (pull?.metadata$.value.kind !== "video") {
+        this.stopRemoteTracks([trackName]);
+        continue;
+      }
+      this.offers.delete(trackName);
+      this.clearPullRetry(trackName);
+      this.notFound.delete(trackName);
+      this.parkPull(trackName, pull);
+    }
   }
 
   stopRemoteTracks(trackNames: string[]): void {
@@ -551,11 +678,19 @@ export class PartyTracksMediaManager {
   }
 
   removeParticipant(participantId: string): void {
-    this.stopRemoteTracks(
-      [...this.offers.values()]
-        .filter((track) => track.participant_id === participantId)
-        .map((track) => track.track_name),
-    );
+    // Its offers, and its withdrawn (parked) pulls, which have none.
+    const trackNames = new Set<string>();
+    for (const track of this.offers.values()) {
+      if (track.participant_id === participantId) {
+        trackNames.add(track.track_name);
+      }
+    }
+    for (const [trackName, pull] of this.pulls) {
+      if (pull.metadata$.value.participant_id === participantId) {
+        trackNames.add(trackName);
+      }
+    }
+    this.stopRemoteTracks([...trackNames]);
   }
 
   get connectionState(): RTCPeerConnectionState | "idle" {
@@ -579,7 +714,7 @@ export class PartyTracksMediaManager {
   replayRemoteTracks(): void {
     if (this.disposed) return;
     for (const [trackName, pull] of this.pulls) {
-      if (!pull.currentTrack) continue;
+      if (!pull.currentTrack || pull.parked) continue;
       this.callbacks.onRemoteTrack({
         action: "add",
         track: pull.currentTrack,
@@ -596,10 +731,13 @@ export class PartyTracksMediaManager {
     if (this.disposed) return;
     this.disposed = true;
     for (const publication of this.publications.values()) {
-      publication.subscription.unsubscribe();
-      publication.source$.complete();
+      this.closePublication(publication);
     }
     this.publications.clear();
+    for (const publication of this.withdrawnPublications.values()) {
+      this.closePublication(publication);
+    }
+    this.withdrawnPublications.clear();
     this.releaseRetiredPublications();
     for (const trackName of [...this.pulls.keys()]) this.stopPull(trackName);
     for (const trackName of [...this.pullRetries.keys()]) {
@@ -637,21 +775,33 @@ export class PartyTracksMediaManager {
         pull.cancelWatchdog = undefined;
         this.pullRetries.delete(track.track_name);
         this.notFound.delete(track.track_name);
-        const currentMetadata = this.offers.get(track.track_name) ?? track;
-        if (pull.currentTrack === remoteTrack) return;
+        const offer = this.offers.get(track.track_name);
+        // PartyTracks re-emits a track it already produced.
+        if (pull.currentTrack === remoteTrack) {
+          if (pull.parked) this.unparkPull(track.track_name, pull);
+          return;
+        }
         if (pull.currentTrack) {
-          this.callbacks.onRemoteTrack({
-            action: "remove",
-            track: pull.currentTrack,
-            trackInfo: currentMetadata,
-          });
+          if (!pull.parked) {
+            this.callbacks.onRemoteTrack({
+              action: "remove",
+              track: pull.currentTrack,
+              trackInfo: offer ?? pull.metadata$.value,
+            });
+          }
           pull.currentTrack.stop();
         }
         pull.currentTrack = remoteTrack;
+        // Withdrawn while it was being pulled, or a parked share the viewer
+        // does not watch: it stays parked.
+        pull.parked =
+          !offer ||
+          (pull.parked === true && !this.isSubscribed(track.track_name));
+        if (pull.parked || !offer) return;
         this.callbacks.onRemoteTrack({
           action: "add",
           track: remoteTrack,
-          trackInfo: currentMetadata,
+          trackInfo: offer,
         });
         this.refreshVideoLayer(track.track_name, pull);
       },
@@ -663,6 +813,67 @@ export class PartyTracksMediaManager {
   }
 
   /**
+   * Points a pull at `offer`, its alias's current publication. The same SFU
+   * track (a camera turned back on, see unpublishTrack) just shows the
+   * pulled track again, with no request. Another SFU track (an older
+   * publisher, or one whose session was rebuilt) is pulled afresh by
+   * PartyTracks, which closes the old transceiver; the watchdog covers that
+   * pull. The SFU cannot move a pull to another track in place: tracks/update
+   * answers success for a new trackName but keeps the closed one.
+   */
+  private retargetPull(
+    trackName: string,
+    pull: RemotePull,
+    offer: TrackInfo,
+  ): void {
+    const pulled = pull.metadata$.value;
+    // Before the metadata, so the move (or a re-pull) asks for this offer's
+    // RID.
+    pull.preferredRid$.next(
+      selectSimulcastRid(pull.layer, offer.simulcast_rids),
+    );
+    if (!sameMetadata(pulled, offer)) pull.metadata$.next(offer);
+    if (!sameSfuTrack(pulled, offer)) {
+      this.armPullWatchdog(trackName, pull);
+    } else {
+      this.unparkPull(trackName, pull);
+    }
+  }
+
+  /** Hides a pull's track and keeps the pull; see withdrawRemoteTracks. */
+  private parkPull(trackName: string, pull: RemotePull): void {
+    if (pull.parked) return;
+    if (!pull.currentTrack) {
+      // Nothing pulled yet, so no transceiver to keep.
+      this.stopPull(trackName);
+      return;
+    }
+    pull.parked = true;
+    pull.cancelWatchdog?.();
+    pull.cancelWatchdog = undefined;
+    pull.pendingLayer?.cancel();
+    pull.pendingLayer = undefined;
+    this.callbacks.onRemoteTrack({
+      action: "remove",
+      track: pull.currentTrack,
+      trackInfo: pull.metadata$.value,
+    });
+  }
+
+  private unparkPull(trackName: string, pull: RemotePull): void {
+    const offer = this.offers.get(trackName);
+    if (!pull.parked || !pull.currentTrack || !offer) return;
+    if (!this.isSubscribed(trackName)) return;
+    pull.parked = false;
+    this.callbacks.onRemoteTrack({
+      action: "add",
+      track: pull.currentTrack,
+      trackInfo: offer,
+    });
+    this.refreshVideoLayer(trackName, pull);
+  }
+
+  /**
    * Counts the SFU's not-found answers per pulled alias and reports the alias
    * once they persist. A not-found that outlives PartyTracks' first retries
    * does not heal by pulling again (the SFU keeps answering it for that
@@ -670,6 +881,21 @@ export class PartyTracksMediaManager {
    */
   private onPullError(error: PartyTracksPullError): void {
     if (this.disposed || error.errorCode !== SFU_TRACK_NOT_FOUND) return;
+    // A parked pull PartyTracks pulls again (its session was rebuilt) for
+    // an SFU track that is gone: nothing will bring that track back, and
+    // PartyTracks would retry it until the participant leaves.
+    const gone: string[] = [];
+    for (const [trackName, pull] of this.pulls) {
+      const pulled = pull.metadata$.value;
+      if (
+        pull.parked &&
+        pulled.session_id === error.sessionId &&
+        (pulled.sfu_track_name ?? pulled.track_name) === error.trackName
+      ) {
+        gone.push(trackName);
+      }
+    }
+    this.stopRemoteTracks(gone);
     for (const [trackName, offer] of this.offers) {
       const sfuTrackName = offer.sfu_track_name ?? offer.track_name;
       if (
@@ -783,6 +1009,7 @@ export class PartyTracksMediaManager {
   getRemoteVideoLayers(): Record<string, string> {
     const layers: Record<string, string> = {};
     for (const [trackName, pull] of this.pulls) {
+      if (pull.parked) continue;
       const rid = pull.preferredRid$.value;
       if (rid !== undefined) layers[trackName] = rid;
     }
@@ -792,7 +1019,7 @@ export class PartyTracksMediaManager {
   private refreshVideoLayers(): void {
     if (this.disposed) return;
     for (const [trackName, pull] of this.pulls) {
-      this.refreshVideoLayer(trackName, pull);
+      if (!pull.parked) this.refreshVideoLayer(trackName, pull);
     }
   }
 
@@ -851,6 +1078,10 @@ export class PartyTracksMediaManager {
     pull.metadata$.complete();
     pull.preferredRid$.complete();
     if (!pull.currentTrack) return;
+    if (pull.parked) {
+      pull.currentTrack.stop();
+      return;
+    }
     this.callbacks.onRemoteTrack({
       action: "remove",
       track: pull.currentTrack,

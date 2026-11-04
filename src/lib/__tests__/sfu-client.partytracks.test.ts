@@ -1370,6 +1370,7 @@ describe("SFUClient PartyTracks facade", () => {
         },
       ],
     });
+    // Withdrawn audio is closed (only video is kept for its next publication).
     expect(remoteAudio.stop).toHaveBeenCalledOnce();
     expect(
       send.mock.calls.some(([message]) =>

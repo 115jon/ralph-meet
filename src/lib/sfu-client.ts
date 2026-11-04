@@ -614,7 +614,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           ) || this.partyTracksMedia?.hasRemoteOffer(trackName),
       );
       if (partyTrackNames.length > 0) {
-        this.partyTracksMedia?.stopRemoteTracks(partyTrackNames);
+        // Withdrawn, not closed: the alias's next publication reuses the pull.
+        this.partyTracksMedia?.withdrawRemoteTracks(partyTrackNames);
       }
     });
     this.voiceGW.on("client-disconnect", ({ participant_id }) => {
