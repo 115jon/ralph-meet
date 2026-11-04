@@ -15,12 +15,14 @@ import {
   GatewayCloseCode,
   GatewayOp,
   type RepublishRequestPayload,
+  VOICE_MOVED_CLOSE_REASON,
 } from "./gateway-protocol";
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { AudioSentinel, OutboundAudioSentinel } from "./voice/audio-sentinel";
 import { getLocalAudioDiagnostics } from "./voice/capture-audio-context";
 import { RoomGateway } from "./voice/gateways/room-gateway";
 import { VoiceGateway } from "./voice/gateways/voice-gateway";
+import { rememberVoiceMoveGrant } from "./voice/voice-move-grants";
 import {
   NativeScreenShareTransport,
   type NativeScreenShareOptions,
@@ -42,6 +44,11 @@ const sfuLog = clog("SFU");
 const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
 /** Republishes of one track on listeners' request: at most one per this. */
 const REPUBLISH_REQUEST_INTERVAL_MS = 5_000;
+/**
+ * How long a voice socket closed for a move waits for the room's VoiceMove
+ * before giving up as on a takeover (the room socket died meanwhile).
+ */
+const VOICE_MOVE_NOTICE_WAIT_MS = 5_000;
 
 export type { SFUEventMap, VoiceConnectionStats } from "./types";
 
@@ -129,6 +136,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private partyTracksPeerConnectionSubscription: Subscription | null = null;
   private partyTracksSessionSubscription: Subscription | null = null;
   private isLeaving = false;
+  /** A moderator moved this session: its SessionReplaced close is expected. */
+  private moved = false;
+
+  /** A moderator moved this session (VoiceMove arrived). */
+  public get wasMoved(): boolean {
+    return this.moved;
+  }
   private credentialRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   /** Unsubscribes this client's sockets from page wake (set while connected). */
   private stopPageWake: (() => void) | null = null;
@@ -446,10 +460,30 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn("Room socket ticket refused: the session is gone");
       this.emit("auth-failed", undefined as never);
     });
+    this.roomGW.on("voice-move", (move) => {
+      sfuLog.info("Moved to another voice channel", {
+        channelId: move.channel_id,
+      });
+      this.moved = true;
+      if (move.grant && move.grant_expires_at) {
+        rememberVoiceMoveGrant(
+          move.channel_id,
+          move.grant,
+          move.grant_expires_at,
+        );
+      }
+      this.emit("voice-move", {
+        channelId: move.channel_id,
+        serverId: move.server_id,
+        channelName: move.channel_name ?? null,
+        moverName: move.mover_name ?? null,
+      });
+    });
     this.roomGW.on("kicked", () => {
-      // The user joined this room from another device (SessionReplaced).
+      // The user joined this room from another device (SessionReplaced),
+      // or was moved (VoiceMove came first and the call is switching).
+      if (this.isLeaving || this.moved) return;
       sfuLog.warn("Voice moved to another device");
-      if (this.isLeaving) return;
       this.disconnect("session-replaced");
       this.emit("kicked", undefined as never);
     });
@@ -607,11 +641,22 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn("Voice socket ticket refused: the session is gone");
       this.emit("auth-failed", undefined as never);
     });
-    this.voiceGW.on("kicked", () => {
-      sfuLog.warn("Kicked from VoiceGateway by a replacement connection");
-      if (this.isLeaving) return;
-      this.disconnect("voice-gateway-kicked");
-      this.emit("kicked", undefined as never);
+    this.voiceGW.on("kicked", ({ reason }) => {
+      if (this.isLeaving || this.moved) return;
+      const takeover = () => {
+        if (this.isLeaving || this.moved) return;
+        sfuLog.warn("Kicked from VoiceGateway by a replacement connection");
+        this.disconnect("voice-gateway-kicked");
+        this.emit("kicked", undefined as never);
+      };
+      if (reason !== VOICE_MOVED_CLOSE_REASON) {
+        takeover();
+        return;
+      }
+      // A move: the room's VoiceMove (on the other socket) says where to go.
+      // Only if it never comes does this end like a takeover.
+      sfuLog.info("Voice socket closed for a move; waiting for VoiceMove");
+      setTimeout(takeover, VOICE_MOVE_NOTICE_WAIT_MS);
     });
     this.voiceGW.on("disconnected", () => {
       this.rejectVoiceReadiness(new Error("WS_CLOSED"));
@@ -953,6 +998,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.roomParticipantEstablished = false;
     }
     this.isLeaving = false;
+    this.moved = false;
     this.resetLatencyTimeline();
     this.standby = options?.standby === true;
     this.deferredRemoteTracks.clear();

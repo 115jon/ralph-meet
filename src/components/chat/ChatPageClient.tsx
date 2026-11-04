@@ -37,6 +37,7 @@ import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useOccupiedVoiceStandby } from "@/lib/voice/voice-standby";
+import { useFollowVoiceMove } from "./useFollowVoiceMove";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -577,6 +578,27 @@ export default function ChatPage() {
       onVoiceLeave();
     }
   }, [localStreamState, onVoiceLeave]);
+
+  // ── Moved by a moderator ──────────────────────────────────────────────────
+  const channelIds = useMemo(() => channels.map((c) => c.id), [channels]);
+  const switchServerForMove = useCallback(
+    (serverId: string, channelId: string) =>
+      dispatch({ type: "SWITCH_SERVER", serverId, channelId }),
+    [dispatch],
+  );
+  const joinChannelForMove = useCallback(
+    (channelId: string) =>
+      handleSelectChannel(channelId, { forceVoiceJoin: true }),
+    [handleSelectChannel],
+  );
+  useFollowVoiceMove({
+    activeServerId,
+    channelIds,
+    voiceJoined: voiceState.joined,
+    disconnect: handleVoiceDisconnect,
+    switchServer: switchServerForMove,
+    joinChannel: joinChannelForMove,
+  });
 
   const handleVoiceNavigate = useCallback(() => {
     if (voiceState.channelId && voiceState.serverId) {

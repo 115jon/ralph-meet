@@ -111,6 +111,8 @@ const VoiceChannelJoinPayload = Schema.Struct({
   self_mute: Schema.optional(Schema.Boolean),
   /** Normalized by the room; out-of-range values are replaced. */
   started_at: Schema.optional(Schema.Unknown),
+  /** A voice move grant: stands in for CONNECT on the channel it names. */
+  move_grant: Schema.optional(Schema.String),
 });
 
 /**
