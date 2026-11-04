@@ -108,12 +108,20 @@ export interface UserSettings {
   alwaysShowStreamPreview?: boolean;
 }
 
+type DeviceSettingKind = "input" | "output" | "video";
+
 interface VoiceSettingsState {
   currentUser: string | null;
   // userId -> settings
   userSettings: Record<string, UserSettings>;
   /** @internal Cache for referential stability in selectors */
   _cache: Record<string, UserSettings>;
+  /**
+   * Bumped on every setDevice, even when the id is unchanged. Picking the
+   * saved device again writes identical settings, so voice capture watches
+   * this to retry a device it fell back from. Not persisted.
+   */
+  deviceSelectionRevision: Record<DeviceSettingKind, number>;
   setCurrentUser: (userId: string) => void;
   getSettings: (userId?: string | null) => UserSettings;
   setPeerVolume: (peerId: string, volume: number) => void;
@@ -138,7 +146,7 @@ interface VoiceSettingsState {
   setIsMuted: (muted: boolean, userId?: string) => void;
   setIsDeafened: (deafened: boolean, userId?: string) => void;
   setDevice: (
-    kind: "input" | "output" | "video",
+    kind: DeviceSettingKind,
     deviceId: string,
     userId?: string,
     meta?: { label?: string; groupId?: string },
@@ -414,6 +422,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
       currentUser: null,
       userSettings: {},
       _cache: {},
+      deviceSelectionRevision: { input: 0, output: 0, video: 0 },
       setCurrentUser: (userId) => set({ currentUser: userId }),
       getSettings: (userId) => {
         const uid = userId || get().currentUser;
@@ -771,6 +780,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               [labelKey]: meta?.label,
               [groupKey]: meta?.groupId,
             },
+          },
+          deviceSelectionRevision: {
+            ...state.deviceSelectionRevision,
+            [kind]: state.deviceSelectionRevision[kind] + 1,
           },
         }));
       },

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { GatewayOp } from "@/lib/gateway-protocol";
+import { GatewayOp, VOICE_MOVED_CLOSE_REASON } from "@/lib/gateway-protocol";
 
 const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
@@ -987,6 +987,25 @@ describe("VoiceGateway lifecycle", () => {
     expect(disconnected).toHaveBeenCalledOnce();
     await new Promise((resolve) => setTimeout(resolve, 700));
     expect(mocks.fetchSocketProtocols).toHaveBeenCalledOnce();
+  });
+
+  it("tells a moderator's move from a takeover by the close reason", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    const gateway = new VoiceGateway();
+    const kicked = vi.fn();
+    gateway.on("kicked", kicked);
+
+    connect(gateway);
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onclose?.({
+      code: 4010,
+      reason: VOICE_MOVED_CLOSE_REASON,
+    } as CloseEvent);
+
+    expect(kicked).toHaveBeenCalledWith({ reason: VOICE_MOVED_CLOSE_REASON });
+    gateway.disconnect();
   });
 
   it("wakes a pending retry at once instead of waiting out the backoff", async () => {

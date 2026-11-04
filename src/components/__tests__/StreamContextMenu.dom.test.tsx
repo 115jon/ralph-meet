@@ -94,6 +94,59 @@ describe("StreamContextMenu", () => {
     );
   });
 
+  it("offers Move to for someone else's row and moves them on select", async () => {
+    const onMoveTo = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <StreamContextMenu
+        userId="target"
+        x={40}
+        y={60}
+        moveTargets={[
+          { id: "vc-b", name: "Lounge" },
+          { id: "vc-c", name: "Quiet" },
+        ]}
+        onMoveTo={onMoveTo}
+        onClose={onClose}
+      />,
+    );
+    const parent = await screen.findByRole("menuitem", { name: "Move to…" });
+    act(() => parent.focus());
+    fireEvent.keyDown(parent, { key: "ArrowRight" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Quiet" }));
+    expect(onMoveTo).toHaveBeenCalledWith("vc-c");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("has no Move to on your own row or with nowhere to go", async () => {
+    const { unmount } = render(
+      <StreamContextMenu
+        userId="viewer"
+        x={40}
+        y={60}
+        moveTargets={[{ id: "vc-b", name: "Lounge" }]}
+        onMoveTo={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    await screen.findByRole("menu");
+    expect(screen.queryByRole("menuitem", { name: "Move to…" })).toBeNull();
+    unmount();
+
+    render(
+      <StreamContextMenu
+        userId="target"
+        x={40}
+        y={60}
+        moveTargets={[]}
+        onMoveTo={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    await screen.findByRole("menu");
+    expect(screen.queryByRole("menuitem", { name: "Move to…" })).toBeNull();
+  });
+
   it("opens submenus with ArrowRight and closes them with ArrowLeft", async () => {
     const onClose = vi.fn();
     render(

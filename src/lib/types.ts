@@ -505,6 +505,16 @@ export interface SFUEventMap {
    * another device). Media is already torn down; the call must not rejoin.
    */
   kicked: never;
+  /**
+   * A moderator moved this session to another voice channel. The server has
+   * ended it here; the call should leave and join `channelId` (no `kicked`).
+   */
+  "voice-move": {
+    channelId: string;
+    serverId: string;
+    channelName: string | null;
+    moverName: string | null;
+  };
   /** A call socket's ticket was refused twice: the session is gone. */
   "auth-failed": never;
   error: { message: string };

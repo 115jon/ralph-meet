@@ -10,6 +10,7 @@ import {
   buildSocketTicketProtocols,
   type SocketTicketAudience,
 } from "@/lib/voice/socket-ticket";
+import { voiceMoveGrantFor } from "@/lib/voice/voice-move-grants";
 
 export type SocketTicketRequest = {
   audience: SocketTicketAudience;
@@ -45,6 +46,7 @@ export type SocketTicketBundle = {
 function postSocketTicket(
   request: SocketTicketRequest,
   token: string | null,
+  moveGrant: string | undefined,
 ): Promise<Response> {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -55,7 +57,7 @@ function postSocketTicket(
     method: "POST",
     credentials: "include",
     headers,
-    body: JSON.stringify(request),
+    body: JSON.stringify(moveGrant ? { ...request, moveGrant } : request),
   });
 }
 
@@ -67,14 +69,21 @@ function postSocketTicket(
  */
 async function requestSocketTicket(
   request: SocketTicketRequest,
+  { withMoveGrant = false }: { withMoveGrant?: boolean } = {},
 ): Promise<SocketTicketResponse> {
   const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
-  let response = await postSocketTicket(request, token);
+  // Moved here by a moderator: the grant stands in for CONNECT. The server
+  // spends it once per audience, so a hover prefetch never carries it.
+  const moveGrant =
+    withMoveGrant && request.audience !== "global"
+      ? voiceMoveGrantFor(request.channelId)
+      : undefined;
+  let response = await postSocketTicket(request, token, moveGrant);
 
   if (response.status === 401) {
     const freshToken = await recoverAppSession(token);
     if (freshToken && freshToken !== token) {
-      response = await postSocketTicket(request, freshToken);
+      response = await postSocketTicket(request, freshToken, moveGrant);
     }
   }
 
@@ -165,7 +174,7 @@ async function takeSocketTicket(
       }
     }
   }
-  return requestSocketTicket(request);
+  return requestSocketTicket(request, { withMoveGrant: true });
 }
 
 function requireTicket(data: SocketTicketResponse): string {
