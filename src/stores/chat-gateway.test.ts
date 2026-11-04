@@ -646,7 +646,7 @@ describe("chat gateway frame decoding", () => {
 
     first.message({ op: 8, d: { heartbeat_interval: 45_000 } });
     // The wire bytes of Identify are unchanged by the codec. No user id: the
-    // room takes it from the ticket (clients no longer send clerk_user_id).
+    // room takes it from the ticket.
     expect(first.sent).toEqual([
       '{"op":0,"d":{"name":"ChatClient","platform":"web","supports_voice_state_deltas":true}}',
     ]);
