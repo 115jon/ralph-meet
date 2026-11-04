@@ -36,8 +36,10 @@ import { signedInUserId } from "@/server/kova-auth";
 import {
   serializeVoiceMoveOutRequest,
   serializeVoiceMoveRequest,
+  VOICE_MOVE_GRANT_PATH,
   VOICE_MOVE_OUT_PATH,
   VOICE_MOVE_PATH,
+  type VoiceMoveGrantRecord,
   type VoiceMoveNotice,
 } from "../../../realtime/voice-move";
 
@@ -183,9 +185,8 @@ const moveMember = Effect.fn("voice.move")(function* (request: Request) {
       request,
     );
   }
-  if (targetInTarget === null) {
-    return apiError("Member not found", 404, "MEMBER_NOT_FOUND", request);
-  }
+  // The permission decision comes before any answer about the target, so
+  // only someone who may move members learns whether a user is a member.
   const decision = decideVoiceMove(
     {
       isOwner: ownerId === moverId,
@@ -210,6 +211,9 @@ const moveMember = Effect.fn("voice.move")(function* (request: Request) {
           request,
         );
   }
+  if (targetInTarget === null) {
+    return apiError("Member not found", 404, "MEMBER_NOT_FOUND", request);
+  }
   // Discord parity: a move may skip CONNECT, never VIEW_CHANNELS. A user
   // put in a channel they cannot see would be in voice somewhere their
   // client cannot show.
@@ -223,6 +227,38 @@ const moveMember = Effect.fn("voice.move")(function* (request: Request) {
   }
 
   const grantExpiresAt = Date.now() + VOICE_MOVE_GRANT_TTL_MS;
+  const grantId = crypto.randomUUID();
+  const gateway = env.MEETING_ROOM.get(
+    env.MEETING_ROOM.idFromName("global-gateway"),
+  );
+  // Before the room tells the client: its first ticket request may follow
+  // at once. This also kills any earlier grant for the user (A->B->C).
+  const recorded = yield* Effect.promise(() =>
+    gateway
+      .fetch(`https://internal${VOICE_MOVE_GRANT_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: targetId,
+          jti: grantId,
+          channel_id: toId,
+          expires_at: grantExpiresAt,
+        } satisfies VoiceMoveGrantRecord),
+      })
+      .then(async (response) => {
+        await response.body?.cancel();
+        return response.ok;
+      })
+      .catch(() => false),
+  );
+  if (!recorded) {
+    return apiError(
+      "Could not move the member",
+      502,
+      "VOICE_MOVE_FAILED",
+      request,
+    );
+  }
   const notice: VoiceMoveNotice = {
     channel_id: toId,
     server_id: serverId,
@@ -236,6 +272,7 @@ const moveMember = Effect.fn("voice.move")(function* (request: Request) {
     grant: yield* Effect.promise(() =>
       issueVoiceMoveGrant(
         {
+          jti: grantId,
           subject: targetId,
           serverId,
           channelId: toId,
@@ -292,9 +329,6 @@ const moveMember = Effect.fn("voice.move")(function* (request: Request) {
     );
   }
 
-  const gateway = env.MEETING_ROOM.get(
-    env.MEETING_ROOM.idFromName("global-gateway"),
-  );
   yield* Effect.promise(() =>
     gateway
       .fetch(`https://internal${VOICE_MOVE_OUT_PATH}`, {

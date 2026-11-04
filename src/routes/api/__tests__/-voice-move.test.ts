@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockD1, type MockD1 } from "@/lib/__tests__/mock-d1";
 import { PERMISSIONS } from "@/lib/permissions";
-import { verifyVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
+import { openVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
 import { RateLimiter, type WorkerBindings } from "@/server/bindings";
 import { memoryAuth, testServices } from "@/server/testing";
 import { voiceMoveRoutes } from "@/server/routes/voice-move";
@@ -28,6 +28,7 @@ type DoCall = { room: string; path: string; body: unknown };
 let db: MockD1;
 let doCalls: DoCall[];
 let movedSessions: number;
+let failGrantRecord: boolean;
 let rateLimits: Layer.Layer<RateLimiter> | undefined;
 
 /** MEETING_ROOM that records every call and answers like the real objects. */
@@ -38,6 +39,11 @@ function meetingRoomNamespace() {
       fetch: async (url: string, init: RequestInit) => {
         const path = new URL(url).pathname;
         doCalls.push({ room, path, body: JSON.parse(String(init.body)) });
+        if (path === "/voice-move-grant") {
+          return failGrantRecord
+            ? new Response("down", { status: 500 })
+            : Response.json({ recorded: true });
+        }
         return path === "/voice-move"
           ? Response.json({ moved: movedSessions })
           : Response.json({ cleared: 1 });
@@ -117,6 +123,7 @@ describe("POST /api/voice/move", () => {
     db = createMockD1();
     doCalls = [];
     movedSessions = 1;
+    failGrantRecord = false;
     rateLimits = undefined;
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
@@ -130,11 +137,13 @@ describe("POST /api/voice/move", () => {
       moved: true,
       sessions: 1,
     });
+    // The grant is live with the gateway before the room tells the client.
     expect(doCalls.map(({ room, path }) => [room, path])).toEqual([
+      ["global-gateway", "/voice-move-grant"],
       [`voice-${SERVER}-${FROM}`, "/voice-move"],
       ["global-gateway", "/voice-move-out"],
     ]);
-    const notice = doCalls[0].body as {
+    const notice = doCalls[1].body as {
       user_id: string;
       notice: Record<string, unknown>;
     };
@@ -145,14 +154,19 @@ describe("POST /api/voice/move", () => {
       channel_name: "Lounge",
       mover_name: "Mo",
     });
-    await expect(
-      verifyVoiceMoveGrant(notice.notice.grant, SECRET, {
-        subject: TARGET,
-        channelId: TO,
-        serverId: SERVER,
-      }),
-    ).resolves.toBe(true);
-    expect(doCalls[1].body).toEqual({ user_id: TARGET, channel_id: FROM });
+    const grant = await openVoiceMoveGrant(notice.notice.grant, SECRET, {
+      subject: TARGET,
+      channelId: TO,
+      serverId: SERVER,
+    });
+    expect(grant).not.toBeNull();
+    expect(doCalls[0].body).toEqual({
+      user_id: TARGET,
+      jti: grant?.jti,
+      channel_id: TO,
+      expires_at: grant?.expiresAt,
+    });
+    expect(doCalls[2].body).toEqual({ user_id: TARGET, channel_id: FROM });
     db.assertCalledWith("INSERT INTO server_audit_logs", [
       expect.any(String),
       SERVER,
@@ -199,6 +213,41 @@ describe("POST /api/voice/move", () => {
     const response = await move(validBody);
     expect(response.status).toBe(403);
     expect(doCalls).toEqual([]);
+  });
+
+  it("refuses MOVE_MEMBERS on a source channel the mover cannot see", async () => {
+    seed();
+    // A private source: MOVE_MEMBERS allowed, VIEW_CHANNELS denied there.
+    db.mockQuery(
+      "FROM channel_permission_overrides",
+      {
+        results: [
+          {
+            target_id: `role-${MOD}`,
+            target_type: "role",
+            allow: PERMISSIONS.MOVE_MEMBERS,
+            deny: PERMISSIONS.VIEW_CHANNELS,
+          },
+        ],
+      },
+      [FROM, MOD],
+    );
+    const response = await move(validBody);
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "MISSING_PERMISSIONS",
+    });
+    expect(doCalls).toEqual([]);
+  });
+
+  it("answers a non-mover 403 whether or not the user is a member", async () => {
+    // No probing membership by 404 vs 403.
+    seed({ modPerms: MEMBER_PERMS, targetPerms: null });
+    const response = await move(validBody);
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "MISSING_PERMISSIONS",
+    });
   });
 
   it("answers 403 ROLE_HIERARCHY for an equal or higher role", async () => {
@@ -287,8 +336,19 @@ describe("POST /api/voice/move", () => {
       code: "NOT_IN_VOICE",
     });
     // Nothing to clear and nothing to audit.
-    expect(doCalls.map((call) => call.path)).toEqual(["/voice-move"]);
+    expect(doCalls.map((call) => call.path)).toEqual([
+      "/voice-move-grant",
+      "/voice-move",
+    ]);
     db.assertNotCalled("INSERT INTO server_audit_logs");
+  });
+
+  it("answers 502 and tells no room when the grant cannot be recorded", async () => {
+    seed();
+    failGrantRecord = true;
+    const response = await move(validBody);
+    expect(response.status).toBe(502);
+    expect(doCalls.map((call) => call.path)).toEqual(["/voice-move-grant"]);
   });
 
   it("treats the same channel as a no-op", async () => {

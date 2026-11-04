@@ -20,6 +20,8 @@ import {
 import {
   serializeVoiceMoveOutRequest,
   serializeVoiceMoveRequest,
+  VOICE_MOVE_GRANT_PATH,
+  VOICE_MOVE_GRANT_USE_PATH,
   VOICE_MOVE_OUT_PATH,
   VOICE_MOVE_PATH,
   type VoiceMoveNotice,
@@ -200,7 +202,7 @@ describe("MeetingRoom voice move (source room)", () => {
     observer.close();
   });
 
-  it("refuses a Resume of the moved session", async () => {
+  it("answers a Resume of the moved session with the same VoiceMove, then 4010", async () => {
     const roomName = crypto.randomUUID();
     const moved = await openSocket(roomName, "room", "resume-user");
     const ready = await identify(moved);
@@ -216,7 +218,66 @@ describe("MeetingRoom voice move (source room)", () => {
         d: { session_id: ready.participant_id, seq_ack: 0 },
       }),
     );
-    await expect(staleEnd).resolves.toMatchObject({ code: 4010 });
+    const { frames, code, reason } = await staleEnd;
+    // A client mid-reconnect learns where it went, not "another device".
+    expect(frames).toEqual([{ op: 42, d: NOTICE }]);
+    expect(code).toBe(4010);
+    expect(reason).toBe("Moved to another voice channel");
+  });
+
+  it("replays the move to a held session that resumes after it", async () => {
+    const roomName = crypto.randomUUID();
+    const held = await openSocket(roomName, "room", "held-move-user");
+    const ready = await identify(held);
+    held.close();
+    await vi.waitFor(
+      async () => {
+        const isHeld = await runInDurableObject(
+          meetingRoom(roomName),
+          (instance) =>
+            (
+              instance as unknown as {
+                resumableSessions: Map<string, unknown>;
+              }
+            ).resumableSessions.has(ready.participant_id),
+        );
+        expect(isHeld).toBe(true);
+      },
+      { timeout: 5_000, interval: 5 },
+    );
+    await moveRequest(roomName, "held-move-user");
+
+    const back = await openSocket(roomName, "room", "held-move-user");
+    const backEnd = framesUntilClose(back);
+    back.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+    const { frames, code } = await backEnd;
+    expect(frames).toEqual([{ op: 42, d: NOTICE }]);
+    expect(code).toBe(4010);
+  });
+
+  it("never hands a moved session's notice to another user", async () => {
+    const roomName = crypto.randomUUID();
+    const moved = await openSocket(roomName, "room", "notice-owner");
+    const ready = await identify(moved);
+    const ended = framesUntilClose(moved);
+    await moveRequest(roomName, "notice-owner");
+    await ended;
+
+    const other = await openSocket(roomName, "room", "notice-thief");
+    const otherEnd = framesUntilClose(other);
+    other.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+    const { frames } = await otherEnd;
+    expect(frames.some((frame) => frame.op === 42)).toBe(false);
   });
 
   it("removes a session held for resume (client offline) too", async () => {
@@ -266,7 +327,7 @@ describe("MeetingRoom voice move (source room)", () => {
     standby.close();
   });
 
-  it("closes the moved session's VoiceRoom socket", async () => {
+  it("closes the moved session's VoiceRoom socket with the moved reason", async () => {
     const roomName = crypto.randomUUID();
     const moved = await openSocket(roomName, "room", "media-user");
     const ready = await identify(moved);
@@ -295,7 +356,12 @@ describe("MeetingRoom voice move (source room)", () => {
     await moveRequest(roomName, "media-user");
     await vi.waitFor(
       async () => {
-        await expect(voiceEnd).resolves.toMatchObject({ code: 4010 });
+        // Distinct from a takeover's, so the client never mistakes one for
+        // the other.
+        await expect(voiceEnd).resolves.toMatchObject({
+          code: 4010,
+          reason: "Moved to another voice channel",
+        });
       },
       { timeout: 5_000, interval: 10 },
     );
@@ -371,6 +437,34 @@ const isRosterMember = (roomName: string, channelId: string, userId: string) =>
       ?.has(userId),
   );
 
+function recordGrant(
+  roomName: string,
+  userId: string,
+  jti: string,
+  channelId: string,
+  expiresAt: number,
+) {
+  return meetingRoom(roomName)
+    .fetch(`https://internal${VOICE_MOVE_GRANT_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        jti,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      }),
+    })
+    .then((response) => expect(response.status).toBe(200));
+}
+
+/** A heartbeat with a payload is acked after every frame sent before it. */
+async function settle(socket: WebSocket) {
+  const ack = nextOp(socket, 6);
+  socket.send(JSON.stringify({ op: 3, d: { settle: true } }));
+  await ack;
+}
+
 describe("MeetingRoom voice move (global gateway)", () => {
   it("lets a move grant stand in for CONNECT on VoiceChannelJoin", async () => {
     const userId = `grant-user-${crypto.randomUUID()}`;
@@ -386,37 +480,32 @@ describe("MeetingRoom voice move (global gateway)", () => {
     socket.send(JSON.stringify({ op: 33, d: { channel_id: channelId } }));
     await expect(refused).resolves.toMatchObject({ d: { code: 4003 } });
 
-    const grantFor = (channel: string, subject = userId) =>
+    const expiresAt = Date.now() + 60_000;
+    const grantFor = (channel: string, jti: string, subject = userId) =>
       issueVoiceMoveGrant(
-        {
-          subject,
-          serverId,
-          channelId: channel,
-          expiresAt: Date.now() + 60_000,
-        },
+        { jti, subject, serverId, channelId: channel, expiresAt },
         env.REALTIME_TICKET_SECRET,
       );
-    // A grant for someone else, or another channel, is no grant.
-    for (const grant of [
-      await grantFor(channelId, "someone-else"),
-      await grantFor("other-channel"),
-    ]) {
-      const wrong = nextOp(socket, 18);
+    await recordGrant(roomName, userId, "move-1", channelId, expiresAt);
+    const join = (grant?: string) =>
       socket.send(
         JSON.stringify({
           op: 33,
           d: { channel_id: channelId, move_grant: grant },
         }),
       );
+    // A grant for someone else, or another channel, is no grant.
+    for (const grant of [
+      await grantFor(channelId, "move-1", "someone-else"),
+      await grantFor("other-channel", "move-1"),
+    ]) {
+      const wrong = nextOp(socket, 18);
+      join(grant);
       await expect(wrong).resolves.toMatchObject({ d: { code: 4003 } });
     }
 
-    socket.send(
-      JSON.stringify({
-        op: 33,
-        d: { channel_id: channelId, move_grant: await grantFor(channelId) },
-      }),
-    );
+    const grant = await grantFor(channelId, "move-1");
+    join(grant);
     await vi.waitFor(
       async () => {
         expect(await sessionChannel(roomName, ready.participant_id)).toBe(
@@ -425,6 +514,84 @@ describe("MeetingRoom voice move (global gateway)", () => {
       },
       { timeout: 5_000, interval: 5 },
     );
+
+    // The client re-sends the join while connected: still in, no grant.
+    join();
+    await settle(socket);
+    expect(await sessionChannel(roomName, ready.participant_id)).toBe(
+      channelId,
+    );
+
+    // Leave, then try the same grant again: spent.
+    socket.send(JSON.stringify({ op: 34, d: { channel_id: channelId } }));
+    await settle(socket);
+    const replay = nextOp(socket, 18);
+    join(grant);
+    await expect(replay).resolves.toMatchObject({ d: { code: 4003 } });
+
+    socket.close();
+  });
+
+  it("kills the earlier grant on a later move (A -> B -> C)", async () => {
+    const userId = `abc-user-${crypto.randomUUID()}`;
+    const b = await seedServerVoiceChannel({
+      userId,
+      permissions: PERMISSIONS.VIEW_CHANNELS,
+    });
+    const roomName = crypto.randomUUID();
+    const expiresAt = Date.now() + 60_000;
+    await recordGrant(roomName, userId, "move-b", b.channelId, expiresAt);
+    // Moved on to C before using B's grant.
+    await recordGrant(roomName, userId, "move-c", "channel-c", expiresAt);
+    const grantB = await issueVoiceMoveGrant(
+      {
+        jti: "move-b",
+        subject: userId,
+        serverId: b.serverId,
+        channelId: b.channelId,
+        expiresAt,
+      },
+      env.REALTIME_TICKET_SECRET,
+    );
+    const socket = await openSocket(roomName, "global", userId);
+    const ready = await identify(socket);
+
+    const refused = nextOp(socket, 18);
+    socket.send(
+      JSON.stringify({
+        op: 33,
+        d: { channel_id: b.channelId, move_grant: grantB },
+      }),
+    );
+    await expect(refused).resolves.toMatchObject({ d: { code: 4003 } });
+    expect(await sessionChannel(roomName, ready.participant_id)).toBeNull();
+
+    // Tickets: B is dead, C spends once per audience.
+    const use = (jti: string, channel: string, kind: "room" | "voice") =>
+      meetingRoom(roomName)
+        .fetch(`https://internal${VOICE_MOVE_GRANT_USE_PATH}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            jti,
+            channel_id: channel,
+            use: kind,
+          }),
+        })
+        .then((response) => response.json());
+    await expect(use("move-b", b.channelId, "room")).resolves.toEqual({
+      ok: false,
+    });
+    await expect(use("move-c", "channel-c", "room")).resolves.toEqual({
+      ok: true,
+    });
+    await expect(use("move-c", "channel-c", "room")).resolves.toEqual({
+      ok: false,
+    });
+    await expect(use("move-c", "channel-c", "voice")).resolves.toEqual({
+      ok: true,
+    });
 
     socket.close();
   });

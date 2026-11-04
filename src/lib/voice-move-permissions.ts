@@ -27,10 +27,18 @@ export interface VoiceMoveTarget {
   topRole: number;
 }
 
-/** Whether `permissions` (effective, for one channel) may move members. */
+/**
+ * Whether `permissions` (effective, for one channel) may move members out:
+ * MOVE_MEMBERS, and the channel is visible. A mover denied VIEW_CHANNELS on
+ * a private channel cannot empty it.
+ */
 export function canMoveMembersIn(permissions: number | null): boolean {
   return (
-    permissions !== null && hasPermission(permissions, PERMISSIONS.MOVE_MEMBERS)
+    permissions !== null &&
+    hasPermission(
+      permissions,
+      PERMISSIONS.MOVE_MEMBERS | PERMISSIONS.VIEW_CHANNELS,
+    )
   );
 }
 

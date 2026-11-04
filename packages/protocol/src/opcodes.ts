@@ -150,6 +150,12 @@ export const RETIRED_BROWSER_SFU_OPS: ReadonlySet<number> = new Set([
 export const HEARTBEAT_FRAME = '{"op":3}';
 
 /**
+ * Close reason (with SessionReplaced) when a moderator moved the session to
+ * another channel, on both call sockets. Tells a move from a device takeover.
+ */
+export const VOICE_MOVED_CLOSE_REASON = "Moved to another voice channel";
+
+/**
  * Codes carried in `Error` frames (`d.code`) and, for some, as WebSocket close
  * codes. Clients compare against these, never against message text.
  */

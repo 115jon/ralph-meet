@@ -10,6 +10,7 @@ import {
   VOICE_MOVE_EVENT,
   type VoiceMoveDetail,
 } from "@/lib/voice/voice-move-client";
+import { clearVoiceMoveGrant } from "@/lib/voice/voice-move-grants";
 import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import {
   acquireLocalStream,
@@ -1980,6 +1981,9 @@ export function useVoiceChannel({
             currentSettingsRef.current.isMuted,
             currentVoiceChannelStartedAt,
           );
+          // A move grant for this channel has done its job (both tickets
+          // and this join); later reconnects must not offer it again.
+          clearVoiceMoveGrant(channelId);
         }
       },
     );
@@ -4239,6 +4243,9 @@ export function useVoiceChannel({
   const handleLeave = useCallback(() => {
     const activeSfu = sfuRef.current;
     if (!activeSfu) return;
+    // Leaving on your own drops any move grant; the leave a move causes
+    // keeps the one it just brought.
+    if (!activeSfu.wasMoved) clearVoiceMoveGrant();
     const wasJoined = joinedRef.current;
     cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
     if (mode === "channel" && channelId && serverId) {

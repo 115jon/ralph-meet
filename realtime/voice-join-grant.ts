@@ -34,6 +34,11 @@ export interface VoiceJoinGrantUpdate {
    * VoiceRoom closes the socket with SessionReplaced so the client stops.
    */
   replaced?: boolean;
+  /**
+   * The replacement is a moderator's move: the VoiceRoom closes with the
+   * moved reason, so the client does not take it for a device takeover.
+   */
+  moved?: boolean;
 }
 
 export interface VoiceJoinGrantQuery {
@@ -63,7 +68,8 @@ export function parseVoiceJoinGrantUpdate(
     typeof body.seq !== "number" ||
     !Number.isSafeInteger(body.seq) ||
     body.seq < 0 ||
-    (body.replaced !== undefined && typeof body.replaced !== "boolean")
+    (body.replaced !== undefined && typeof body.replaced !== "boolean") ||
+    (body.moved !== undefined && typeof body.moved !== "boolean")
   ) {
     return null;
   }
@@ -73,6 +79,7 @@ export function parseVoiceJoinGrantUpdate(
     granted: body.granted,
     seq: body.seq,
     replaced: body.replaced === true && !body.granted,
+    moved: body.moved === true && body.replaced === true && !body.granted,
   };
 }
 
@@ -92,6 +99,7 @@ export function serializeVoiceJoinGrantUpdate(update: VoiceJoinGrantUpdate) {
     granted: update.granted,
     seq: update.seq,
     replaced: update.replaced === true,
+    moved: update.moved === true,
   });
 }
 

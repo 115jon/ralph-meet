@@ -13,7 +13,7 @@ import { resolveChannelAccess } from "@/lib/channel-access";
 import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 import { looseStruct } from "@/lib/schema";
 import { getOrCreateDemoSession } from "@/lib/voice/demo-session";
-import { verifyVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
+import { openVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
 import { isPublicDemoRoomSlug } from "@/lib/voice/realtime-policy";
 import { validateBody } from "@/lib/validate-body";
 import {
@@ -31,6 +31,10 @@ import type { AuthUnavailable, Unauthenticated } from "@/server/errors";
 import { signedInUserId, type KovaAuth } from "@/server/kova-auth";
 import { getCachedTurnCredentials } from "../../../realtime/meeting-room/turn-credentials";
 import { issueVoiceToken } from "../../../realtime/voice-token";
+import {
+  VOICE_MOVE_GRANT_USE_PATH,
+  type VoiceMoveGrantUseRequest,
+} from "../../../realtime/voice-move";
 
 const SOCKET_TICKET_TTL_MS = 60_000;
 const DEMO_TICKET_RATE_LIMIT = { limit: 12, windowMs: 60 * 60 * 1000 };
@@ -97,7 +101,7 @@ const issueTicket = Effect.fn("voice.socket_ticket")(function* (
   const admitting: Effect.Effect<
     TicketAdmission | Response,
     Unauthenticated | AuthUnavailable,
-    KovaAuth | Database | RateLimiter
+    KovaAuth | Database | RateLimiter | WorkerEnv
   > =
     audience !== "global" && !hasChannelId
       ? authorizePublicDemoTicket(request, config.ticketSecret, body, audience)
@@ -249,7 +253,7 @@ function authorizeAuthenticatedTicket(
 ): Effect.Effect<
   TicketAdmission | Response,
   Unauthenticated | AuthUnavailable,
-  KovaAuth | Database
+  KovaAuth | Database | WorkerEnv
 > {
   return Effect.gen(function* () {
     const userId = yield* signedInUserId(request);
@@ -340,17 +344,30 @@ function authorizeAuthenticatedTicket(
     }
 
     const permissions = channelAccess.permissions;
-    const canConnect =
-      (permissions !== null &&
-        hasPermission(permissions, PERMISSIONS.CONNECT)) ||
-      (body.moveGrant !== undefined &&
-        (yield* Effect.promise(() =>
-          verifyVoiceMoveGrant(body.moveGrant, ticketSecret, {
-            subject: userId,
-            channelId,
-            serverId,
+    let canConnect =
+      permissions !== null && hasPermission(permissions, PERMISSIONS.CONNECT);
+    if (!canConnect && body.moveGrant !== undefined) {
+      // A moderator moved them here: a valid grant, spent once per audience
+      // with the global gateway (only the user's latest grant counts).
+      const grant = yield* Effect.promise(() =>
+        openVoiceMoveGrant(body.moveGrant, ticketSecret, {
+          subject: userId,
+          channelId,
+          serverId,
+        }),
+      );
+      if (grant) {
+        const env = yield* WorkerEnv;
+        canConnect = yield* Effect.promise(() =>
+          spendVoiceMoveGrant(env, {
+            user_id: userId,
+            jti: grant.jti,
+            channel_id: channelId,
+            use: audience === "voice" ? "voice" : "room",
           }),
-        )));
+        );
+      }
+    }
     if (!canConnect) {
       return apiError(
         "You do not have permission to connect to this voice channel",
@@ -422,6 +439,32 @@ function authorizePublicDemoTicket(
       subject: session.subject,
     } satisfies TicketAdmission;
   });
+}
+
+/** Spends a move grant for one ticket; false if dead, used or unreachable. */
+async function spendVoiceMoveGrant(
+  env: SocketTicketEnv,
+  use: VoiceMoveGrantUseRequest,
+): Promise<boolean> {
+  try {
+    const response = await env.MEETING_ROOM.get(
+      env.MEETING_ROOM.idFromName("global-gateway"),
+    ).fetch(`https://internal${VOICE_MOVE_GRANT_USE_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(use),
+    });
+    if (!response.ok) return false;
+    const body: unknown = await response.json();
+    return (
+      typeof body === "object" &&
+      body !== null &&
+      "ok" in body &&
+      body.ok === true
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function getAuthorizedDmCallRoomSlug(

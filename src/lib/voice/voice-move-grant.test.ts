@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { issueSocketTicket } from "./socket-ticket";
-import { issueVoiceMoveGrant, verifyVoiceMoveGrant } from "./voice-move-grant";
+import {
+  issueVoiceMoveGrant,
+  openVoiceMoveGrant,
+  VOICE_MOVE_GRANT_TTL_MS,
+} from "./voice-move-grant";
 
 const SECRET = "test-secret";
 const claims = {
+  jti: "move-1",
   subject: "user-1",
   serverId: "server-1",
   channelId: "channel-2",
@@ -13,20 +18,25 @@ const claims = {
 const expected = { subject: "user-1", channelId: "channel-2", now: 1_000 };
 
 describe("voice move grants", () => {
-  it("verifies for the user and channel they name, until they expire", async () => {
+  it("lives about 90 seconds", () => {
+    expect(VOICE_MOVE_GRANT_TTL_MS).toBe(90_000);
+  });
+
+  it("opens to its id for the user and channel it names, until it expires", async () => {
     const grant = await issueVoiceMoveGrant(claims, SECRET);
-    await expect(verifyVoiceMoveGrant(grant, SECRET, expected)).resolves.toBe(
-      true,
-    );
+    await expect(openVoiceMoveGrant(grant, SECRET, expected)).resolves.toEqual({
+      jti: "move-1",
+      expiresAt: 2_000,
+    });
     await expect(
-      verifyVoiceMoveGrant(grant, SECRET, {
+      openVoiceMoveGrant(grant, SECRET, {
         ...expected,
         serverId: "server-1",
       }),
-    ).resolves.toBe(true);
+    ).resolves.not.toBeNull();
     await expect(
-      verifyVoiceMoveGrant(grant, SECRET, { ...expected, now: 2_000 }),
-    ).resolves.toBe(false);
+      openVoiceMoveGrant(grant, SECRET, { ...expected, now: 2_000 }),
+    ).resolves.toBeNull();
   });
 
   it("refuses another user, channel, server or secret", async () => {
@@ -38,16 +48,18 @@ describe("voice move grants", () => {
       [expected, "other-secret"],
       [expected, undefined],
     ] as const) {
-      await expect(verifyVoiceMoveGrant(grant, secret, check)).resolves.toBe(
-        false,
-      );
+      await expect(
+        openVoiceMoveGrant(grant, secret, check),
+      ).resolves.toBeNull();
     }
   });
 
   it("refuses a tampered grant, a socket ticket, or junk", async () => {
     const grant = await issueVoiceMoveGrant(claims, SECRET);
     const [version, , signature] = grant.split(".");
-    const forged = btoa(JSON.stringify({ sub: "user-1", ch: "channel-2" }))
+    const forged = btoa(
+      JSON.stringify({ jti: "x", sub: "user-1", ch: "channel-2", exp: 9e15 }),
+    )
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/g, "");
@@ -69,9 +81,9 @@ describe("voice move grants", () => {
       42,
       null,
     ]) {
-      await expect(verifyVoiceMoveGrant(value, SECRET, expected)).resolves.toBe(
-        false,
-      );
+      await expect(
+        openVoiceMoveGrant(value, SECRET, expected),
+      ).resolves.toBeNull();
     }
   });
 });

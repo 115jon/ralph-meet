@@ -5,19 +5,22 @@
 // socket-ticket requests and on the global gateway's VoiceChannelJoin, and
 // each of those accepts it in place of CONNECT. Nothing else is relaxed:
 // VIEW_CHANNELS, server membership and the ticket itself are still checked.
+//
+// The signature proves who and where; the global gateway decides whether it
+// is still live. It keeps only the user's latest grant (a later move kills
+// the earlier one) and lets each grant be used once per purpose (room ticket,
+// voice ticket, roster join): realtime/voice-move.ts.
 
 import { openSignedToken, sealSignedToken } from "./socket-ticket";
 
 const VOICE_MOVE_GRANT_VERSION = "vm1";
 
-/**
- * Long enough to cover the switch and a few reconnects after it. Once it
- * runs out, a user without CONNECT who drops out cannot rejoin, which is
- * where Discord leaves them too.
- */
-export const VOICE_MOVE_GRANT_TTL_MS = 10 * 60 * 1000;
+/** Long enough for the switch (leave, two tickets, joins), no longer. */
+export const VOICE_MOVE_GRANT_TTL_MS = 90 * 1000;
 
 export interface VoiceMoveGrantClaims {
+  /** Unique per move; the global gateway's single-use key. */
+  jti: string;
   subject: string;
   serverId: string;
   channelId: string;
@@ -31,6 +34,7 @@ export function issueVoiceMoveGrant(
   return sealSignedToken(
     VOICE_MOVE_GRANT_VERSION,
     {
+      jti: claims.jti,
       sub: claims.subject,
       srv: claims.serverId,
       ch: claims.channelId,
@@ -40,8 +44,12 @@ export function issueVoiceMoveGrant(
   );
 }
 
-/** Whether `grant` lets `subject` into `channelId` now. */
-export async function verifyVoiceMoveGrant(
+/**
+ * The grant's id and expiry when it is signed with `secret`, names `subject`
+ * and `channelId` (and `serverId` when given), and has not expired; else null.
+ * Whether it is still the user's live, unused grant is the gateway's call.
+ */
+export async function openVoiceMoveGrant(
   grant: unknown,
   secret: string | undefined,
   expected: {
@@ -50,16 +58,21 @@ export async function verifyVoiceMoveGrant(
     serverId?: string | null;
     now?: number;
   },
-): Promise<boolean> {
-  if (!secret || typeof grant !== "string" || !grant) return false;
+): Promise<{ jti: string; expiresAt: number } | null> {
+  if (!secret || typeof grant !== "string" || !grant) return null;
   const claims = await openSignedToken(VOICE_MOVE_GRANT_VERSION, grant, secret);
-  if (!claims) return false;
+  if (!claims) return null;
   const now = expected.now ?? Date.now();
-  return (
-    claims.sub === expected.subject &&
-    claims.ch === expected.channelId &&
-    (expected.serverId == null || claims.srv === expected.serverId) &&
-    typeof claims.exp === "number" &&
-    now < claims.exp
-  );
+  if (
+    typeof claims.jti !== "string" ||
+    !claims.jti ||
+    claims.sub !== expected.subject ||
+    claims.ch !== expected.channelId ||
+    (expected.serverId != null && claims.srv !== expected.serverId) ||
+    typeof claims.exp !== "number" ||
+    now >= claims.exp
+  ) {
+    return null;
+  }
+  return { jti: claims.jti, expiresAt: claims.exp };
 }

@@ -35,6 +35,15 @@ describe("decideVoiceMove", () => {
     ).toEqual({ ok: false, reason: "missing_permissions" });
   });
 
+  it("needs to see the source channel (MOVE_MEMBERS alone is not enough)", () => {
+    expect(
+      decideVoiceMove(
+        mover({ sourcePermissions: MOD & ~PERMISSIONS.VIEW_CHANNELS }),
+        member,
+      ),
+    ).toEqual({ ok: false, reason: "missing_permissions" });
+  });
+
   it("needs MOVE_MEMBERS on the target channel", () => {
     expect(
       decideVoiceMove(mover({ targetPermissions: MEMBER }), member),
@@ -108,7 +117,11 @@ describe("canMoveMembersIn / canMoveMembersInto", () => {
   it("read effective channel permissions", () => {
     expect(canMoveMembersIn(null)).toBe(false);
     expect(canMoveMembersIn(MEMBER)).toBe(false);
-    expect(canMoveMembersIn(PERMISSIONS.MOVE_MEMBERS)).toBe(true);
+    // A channel you cannot see is not one you can empty.
+    expect(canMoveMembersIn(PERMISSIONS.MOVE_MEMBERS)).toBe(false);
+    expect(
+      canMoveMembersIn(PERMISSIONS.MOVE_MEMBERS | PERMISSIONS.VIEW_CHANNELS),
+    ).toBe(true);
     expect(canMoveMembersInto(PERMISSIONS.MOVE_MEMBERS)).toBe(false);
     expect(canMoveMembersInto(MOD)).toBe(true);
     expect(canMoveMembersInto(PERMISSIONS.ADMINISTRATOR)).toBe(true);
