@@ -29,6 +29,7 @@ vi.mock("../InputSensitivityMeter", () => ({
 }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import CameraCard from "../settings/CameraCard";
 import VoiceVideoPanel from "../settings/VoiceVideoPanel";
 import {
@@ -134,6 +135,27 @@ describe("VoiceVideoPanel device states", () => {
     await waitFor(() =>
       expect(screen.queryByText("Allow microphone access")).toBeNull(),
     );
+  });
+
+  it("keeps showing a saved speaker while the device list is hidden", async () => {
+    useVoiceSettingsStore
+      .getState()
+      .setDevice("output", "saved-out", "user-1", {
+        label: "Studio Monitors",
+        groupId: "g-monitors",
+      });
+    fakeMedia({
+      enumerate: () =>
+        Promise.resolve([
+          device("audioinput", "", ""),
+          device("audiooutput", "", ""),
+        ]),
+    });
+    renderVoice();
+    expect(await screen.findByText("Studio Monitors")).toBeVisible();
+    expect(
+      useVoiceSettingsStore.getState().getSettings("user-1").outputDeviceId,
+    ).toBe("saved-out");
   });
 
   it("explains a refused request without the raw error", async () => {

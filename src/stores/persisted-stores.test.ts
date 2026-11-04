@@ -484,6 +484,23 @@ describe("useVoiceSettingsStore", () => {
       }
     });
   });
+
+  it("counts every device pick, including the saved device again, without persisting it", () => {
+    const store = useVoiceSettingsStore.getState();
+    const before = store.deviceSelectionRevision.input;
+    const meta = { label: "Shure MV7", groupId: "g-shure" };
+    store.setDevice("input", "shure", "user-pick", meta);
+    store.setDevice("input", "shure", "user-pick", meta);
+
+    const after = useVoiceSettingsStore.getState();
+    expect(after.deviceSelectionRevision.input).toBe(before + 2);
+    expect(after.getSettings("user-pick").inputDeviceId).toBe("shure");
+    expect(
+      Object.keys(
+        useVoiceSettingsStore.persist.getOptions().partialize?.(after) ?? {},
+      ),
+    ).toEqual(["currentUser", "userSettings"]);
+  });
 });
 
 describe("rehydrating from localStorage", () => {
