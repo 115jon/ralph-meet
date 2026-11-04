@@ -15,7 +15,11 @@ import {
   startEarlyMic,
   type LocalMediaOwner,
 } from "@/lib/local-media-manager";
-import { refreshedDeviceId, resolveStoredDeviceId } from "@/lib/stored-device";
+import {
+  matchStoredDevice,
+  refreshedDeviceId,
+  resolveStoredDeviceId,
+} from "@/lib/stored-device";
 import {
   getCapturePolicy,
   isDesktop,
@@ -659,6 +663,40 @@ function fallbackPublicationMode(
   return mode === "passthrough" || mode === "direct" ? "direct" : "passthrough";
 }
 
+const NO_DEVICES: readonly never[] = [];
+
+const isSavedDeviceChoice = (deviceId: string | undefined) =>
+  !!deviceId && deviceId !== "default";
+
+/** What a live capture track was opened for. */
+interface CaptureRequest {
+  track: MediaStreamTrack;
+  /** The saved device id. */
+  deviceId: string;
+  /** Where the saved device was listed then, or null if it wasn't. */
+  listedId: string | null;
+  /** The device selection revision then. */
+  selection: number;
+}
+
+/**
+ * True when `track` was opened for this saved device and nothing has moved
+ * since: the saved device is listed as it was, and the user has not picked
+ * a device again. Then a track that fell back to another device is kept.
+ */
+function captureRequestAnswered(
+  request: CaptureRequest | null,
+  current: CaptureRequest,
+): boolean {
+  return (
+    !!request &&
+    request.track === current.track &&
+    request.deviceId === current.deviceId &&
+    request.listedId === current.listedId &&
+    request.selection === current.selection
+  );
+}
+
 /** Whether the current microphone publication is what `mode` asks for. */
 function publicationMatches(
   processor: LocalAudioProcessorHandle | null,
@@ -1118,15 +1156,16 @@ export function useVoiceChannel({
   const activeCameraQualityRef = useRef<string | null>(null);
   // The saved device id each live capture track was opened for. A track that
   // fell back to another device (the saved one is gone) still satisfies the
-  // request it was opened for, so unrelated syncs don't reopen it.
-  const audioCaptureRequestRef = useRef<{
-    track: MediaStreamTrack;
-    deviceId: string;
-  } | null>(null);
-  const videoCaptureRequestRef = useRef<{
-    track: MediaStreamTrack;
-    deviceId: string;
-  } | null>(null);
+  // request it was opened for, so unrelated syncs don't reopen it. It stops
+  // satisfying it once the saved device's entry in the device list changes
+  // (it was plugged back in) or the user picks a device again.
+  const audioCaptureRequestRef = useRef<CaptureRequest | null>(null);
+  const videoCaptureRequestRef = useRef<CaptureRequest | null>(null);
+  // True while the live track is a fallback for a saved device. Only then do
+  // device list changes rerun the capture sync, so the list unlocking at join
+  // doesn't restart a capture that already opened the saved device.
+  const [inputCaptureFellBack, setInputCaptureFellBack] = useState(false);
+  const [videoCaptureFellBack, setVideoCaptureFellBack] = useState(false);
   const localMediaGenerationRef = useRef(0);
   const initialMediaSyncRef = useRef<{
     session: SFUClient | null;
@@ -1200,7 +1239,13 @@ export function useVoiceChannel({
   // falling through to a fresh getDisplayMedia capture (which would break a
   // live native hardware share).
   const currentScreenSourceRef = useRef<ScreenShareSourceState | null>(null);
-  const { hasMicrophone, hasCamera } = useMediaDevices();
+  const {
+    hasMicrophone,
+    hasCamera,
+    audioInputs = NO_DEVICES,
+    audioOutputs = NO_DEVICES,
+    videoInputs = NO_DEVICES,
+  } = useMediaDevices();
 
   const settingsUserId =
     mode === "room" ? ROOM_GUEST_SETTINGS_USER_ID : user?.id || "guest";
@@ -1302,6 +1347,45 @@ export function useVoiceChannel({
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
+  const inputSelectionRevision = useVoiceSettingsStore(
+    (s) => s.deviceSelectionRevision?.input ?? 0,
+  );
+  const videoSelectionRevision = useVoiceSettingsStore(
+    (s) => s.deviceSelectionRevision?.video ?? 0,
+  );
+  const outputSelectionRevision = useVoiceSettingsStore(
+    (s) => s.deviceSelectionRevision?.output ?? 0,
+  );
+  // Where the saved microphone/camera is in the device list right now, or
+  // null when it is not listed (unplugged, or the list is still hidden).
+  const listedInputId =
+    matchStoredDevice(audioInputs, {
+      deviceId: inputDeviceId,
+      label: inputDeviceLabel,
+      groupId: inputDeviceGroupId,
+    })?.device.deviceId ?? null;
+  const listedVideoId =
+    matchStoredDevice(videoInputs, {
+      deviceId: videoDeviceId,
+      label: videoDeviceLabel,
+      groupId: videoDeviceGroupId,
+    })?.device.deviceId ?? null;
+  const inputFallbackRetryId = inputCaptureFellBack ? listedInputId : null;
+  const videoFallbackRetryId = videoCaptureFellBack ? listedVideoId : null;
+  // Read by the capture sync without rerunning it on every list change; the
+  // *FallbackRetryId deps rerun it when that matters.
+  const listedDeviceIdsRef = useRef({
+    input: listedInputId,
+    video: listedVideoId,
+  });
+  useEffect(() => {
+    listedDeviceIdsRef.current = { input: listedInputId, video: listedVideoId };
+  }, [listedInputId, listedVideoId]);
+  // Changes when a speaker is plugged in or the list unlocks after the first
+  // capture, so a saved speaker that could not be resolved earlier is retried.
+  const audioOutputsKey = audioOutputs
+    .map((d) => `${d.deviceId}|${d.groupId}|${d.label}`)
+    .join(",");
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
 
   const peerSettings = useVoiceSettingsStore(
@@ -3091,6 +3175,8 @@ export function useVoiceChannel({
     const isCurrent = () =>
       localMediaGenerationRef.current === generation &&
       sfuRef.current === session;
+    const { input: listedInputId, video: listedVideoId } =
+      listedDeviceIdsRef.current;
     const swapDevices = async () => {
       const sfu = session;
       let nextAudioProcessor: LocalAudioProcessorHandle | null = null;
@@ -3197,8 +3283,13 @@ export function useVoiceChannel({
                 !inputDeviceId ||
                 inputDeviceId === "default" ||
                 s.deviceId === inputDeviceId ||
-                (audioCaptureRequestRef.current?.track === currentAudioTrack &&
-                  audioCaptureRequestRef.current.deviceId === inputDeviceId);
+                (!!listedInputId && s.deviceId === listedInputId) ||
+                captureRequestAnswered(audioCaptureRequestRef.current, {
+                  track: currentAudioTrack,
+                  deviceId: inputDeviceId,
+                  listedId: listedInputId,
+                  selection: inputSelectionRevision,
+                });
               return (
                 deviceMatches &&
                 s.noiseSuppression === appliedNS &&
@@ -3217,8 +3308,14 @@ export function useVoiceChannel({
             !videoDeviceId ||
             videoDeviceId === "default" ||
             currentVideoId === videoDeviceId ||
-            (videoCaptureRequestRef.current?.track === currentVideoTrack &&
-              videoCaptureRequestRef.current.deviceId === videoDeviceId);
+            (!!listedVideoId && currentVideoId === listedVideoId) ||
+            (!!currentVideoTrack &&
+              captureRequestAnswered(videoCaptureRequestRef.current, {
+                track: currentVideoTrack,
+                deviceId: videoDeviceId,
+                listedId: listedVideoId,
+                selection: videoSelectionRevision,
+              }));
           const videoMatch =
             !isCameraActive ||
             (!!currentVideoTrack &&
@@ -3633,7 +3730,12 @@ export function useVoiceChannel({
         // prevents a redundant getUserMedia when the effect re-runs.
         const actualAudioTrack = newStream.getAudioTracks()[0];
         audioCaptureRequestRef.current = actualAudioTrack
-          ? { track: actualAudioTrack, deviceId: inputDeviceId }
+          ? {
+              track: actualAudioTrack,
+              deviceId: inputDeviceId,
+              listedId: listedInputId,
+              selection: inputSelectionRevision,
+            }
           : null;
         if (actualAudioTrack) {
           const actualAudio = {
@@ -3649,13 +3751,20 @@ export function useVoiceChannel({
             },
             actualAudio,
           );
+          if (!isCurrent()) return;
+          setInputCaptureFellBack(
+            isSavedDeviceChoice(inputDeviceId) &&
+              actualAudio.deviceId !== inputDeviceId &&
+              !refreshedAudioId,
+          );
           if (refreshedAudioId) {
-            if (!isCurrent()) return;
             setDevice("input", refreshedAudioId, undefined, {
               label: actualAudio.label,
               groupId: actualAudio.groupId,
             });
           }
+        } else {
+          setInputCaptureFellBack(false);
         }
         const actualVideoTrack = rawVideo;
         if (!isCurrent()) return;
@@ -3663,7 +3772,12 @@ export function useVoiceChannel({
           ? cameraQuality
           : null;
         videoCaptureRequestRef.current = actualVideoTrack
-          ? { track: actualVideoTrack, deviceId: videoDeviceId }
+          ? {
+              track: actualVideoTrack,
+              deviceId: videoDeviceId,
+              listedId: listedVideoId,
+              selection: videoSelectionRevision,
+            }
           : null;
         if (actualVideoTrack) {
           const actualVideo = {
@@ -3679,13 +3793,20 @@ export function useVoiceChannel({
             },
             actualVideo,
           );
+          if (!isCurrent()) return;
+          setVideoCaptureFellBack(
+            isSavedDeviceChoice(videoDeviceId) &&
+              actualVideo.deviceId !== videoDeviceId &&
+              !refreshedVideoId,
+          );
           if (refreshedVideoId) {
-            if (!isCurrent()) return;
             setDevice("video", refreshedVideoId, undefined, {
               label: actualVideo.label,
               groupId: actualVideo.groupId,
             });
           }
+        } else {
+          setVideoCaptureFellBack(false);
         }
       } catch (err) {
         await restorePreviousAudio();
@@ -3759,9 +3880,13 @@ export function useVoiceChannel({
     inputDeviceId,
     inputDeviceLabel,
     inputDeviceGroupId,
+    inputSelectionRevision,
+    inputFallbackRetryId,
     videoDeviceId,
     videoDeviceLabel,
     videoDeviceGroupId,
+    videoSelectionRevision,
+    videoFallbackRetryId,
     cameraQuality,
     cameraBackground,
     customCameraBackgrounds,
@@ -3813,7 +3938,10 @@ export function useVoiceChannel({
 
   // ── Output device sync ─────────────────────────────────────────────────
   // The saved speaker id can go stale like a microphone's, so look it up by
-  // groupId/label before handing it to setSinkId.
+  // label/groupId before handing it to setSinkId. While the list is hidden
+  // the saved id is tried as is; the lookup runs again when the list changes
+  // (first capture unlocks it, a device is plugged in) or the user picks a
+  // speaker again.
   useEffect(() => {
     if (!joined) return;
     let cancelled = false;
@@ -3833,6 +3961,8 @@ export function useVoiceChannel({
     outputDeviceId,
     outputDeviceLabel,
     outputDeviceGroupId,
+    outputSelectionRevision,
+    audioOutputsKey,
     joined,
     setOutputDevice,
   ]);
