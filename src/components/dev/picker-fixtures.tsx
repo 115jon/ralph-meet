@@ -13,6 +13,8 @@
  *   pk-gif-favorites     GIF picker, compact, Favorites view
  *   pk-gif-voice         GIF picker in voice-reaction mode (React Mode chips)
  *   pk-soundboard        soundboard grid: favourites, server sounds, defaults
+ *   pk-gif-vibe          GIF picker opened from the voice "Channel vibe"
+ *                        dialog (stacked over it; clicks must land in it)
  *
  * Phones get the same surfaces as bottom drawers (PickerSurface).
  */
@@ -20,6 +22,7 @@
 import EmojiPicker from "@/components/chat/EmojiPicker";
 import GifPickerModal from "@/components/chat/GifPickerModal";
 import SoundboardPicker from "@/components/chat/SoundboardPicker";
+import VoiceChannelMediaStatusModal from "@/components/chat/VoiceChannelMediaStatusModal";
 import {
   installPlaceholderSession,
   useFixtureSetup,
@@ -27,7 +30,7 @@ import {
 import type { GeneratedEmoji } from "@/lib/emoji";
 import type { GifPickerCategory, GifPickerItem } from "@/lib/gif-picker";
 import type { SFUClient } from "@/lib/sfu-client";
-import type { Server } from "@/lib/types";
+import type { Channel, Server } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
 import { useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
 import { useEffect, useRef, type ReactNode } from "react";
@@ -221,6 +224,7 @@ function installPickerStub() {
       const limit = Number(params.get("limit") ?? 24);
       return json({ results: GIF_RESULTS.slice(0, limit), next: null });
     }
+    if (url.includes("/voice-status-media")) return json({ items: [] });
     if (url.includes("/api/emojis")) return json({ items: CREATED_EMOJIS });
     if (url.includes("/api/myinstants/favorites"))
       return json({ favorites: SOUNDBOARD_FAVORITES });
@@ -283,6 +287,8 @@ function useAutoClick(match: ((button: HTMLButtonElement) => boolean) | null) {
 
 const clickTrending = (button: HTMLButtonElement) =>
   (button.textContent ?? "").includes("Trending");
+const clickChooseGif = (button: HTMLButtonElement) =>
+  (button.textContent ?? "").includes("Choose GIF");
 const clickFavorites = (button: HTMLButtonElement) =>
   button.getAttribute("aria-label") === "View favorites";
 
@@ -310,6 +316,15 @@ function ComposerFrame({
 const noop = () => {};
 const noopAsync = async () => {};
 
+const VIBE_CHANNEL: Channel = {
+  id: "ch-pk-voice",
+  server_id: SOUNDBOARD_SERVER.id,
+  name: "Lounge",
+  channel_type: "voice",
+  position: 0,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
 const FAKE_SFU = {
   voiceGW: { sendAppEvent: () => true },
   on: () => noop,
@@ -324,7 +339,9 @@ export function PickerFixture({ surface }: { surface: string }) {
       ? clickTrending
       : surface === "pk-gif-favorites"
         ? clickFavorites
-        : null;
+        : surface === "pk-gif-vibe"
+          ? clickChooseGif
+          : null;
   useAutoClick(autoClick);
   if (!ready) return null;
 
@@ -363,6 +380,14 @@ export function PickerFixture({ surface }: { surface: string }) {
             />
           )}
         </ComposerFrame>
+      );
+    case "pk-gif-vibe":
+      return (
+        <VoiceChannelMediaStatusModal
+          open
+          channel={VIBE_CHANNEL}
+          onClose={noop}
+        />
       );
     case "pk-soundboard":
       return (
