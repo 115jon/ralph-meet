@@ -6,6 +6,10 @@ import {
   type CameraBackgroundEffect,
 } from "@/lib/camera-background-effects";
 import { clog } from "@/lib/console-logger";
+import {
+  VOICE_MOVE_EVENT,
+  type VoiceMoveDetail,
+} from "@/lib/voice/voice-move-client";
 import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import {
   acquireLocalStream,
@@ -2802,6 +2806,30 @@ export function useVoiceChannel({
         description: "Voice is connected there now.",
       });
       window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+    });
+
+    onSfu("voice-move", (move) => {
+      // A moderator moved this session; the server has already ended it
+      // here. The chat page leaves and joins the target (the normal switch,
+      // so mute and deafen carry over and screen share stops). If nothing
+      // takes the move, leave for good as on a takeover.
+      vcLog.info("Moved to another voice channel", {
+        from: channelId,
+        to: move.channelId,
+      });
+      toast.call(
+        `${move.moverName ?? "A moderator"} moved you to ${move.channelName ?? "another channel"}`,
+      );
+      const detail: VoiceMoveDetail = {
+        serverId: move.serverId,
+        channelId: move.channelId,
+      };
+      const unclaimed = window.dispatchEvent(
+        new CustomEvent(VOICE_MOVE_EVENT, { detail, cancelable: true }),
+      );
+      if (unclaimed) {
+        window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+      }
     });
 
     if (adoptingStandby) {

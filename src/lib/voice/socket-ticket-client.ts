@@ -10,6 +10,7 @@ import {
   buildSocketTicketProtocols,
   type SocketTicketAudience,
 } from "@/lib/voice/socket-ticket";
+import { voiceMoveGrantFor } from "@/lib/voice/voice-move-grants";
 
 export type SocketTicketRequest = {
   audience: SocketTicketAudience;
@@ -51,11 +52,16 @@ function postSocketTicket(
   if (isTauri() && KOVA_AUTH_PUBLISHABLE_KEY) {
     headers.set("X-Publishable-Key", KOVA_AUTH_PUBLISHABLE_KEY);
   }
+  // Moved here by a moderator: the grant stands in for CONNECT.
+  const moveGrant =
+    request.audience === "global"
+      ? undefined
+      : voiceMoveGrantFor(request.channelId);
   return fetch(`${getApiBaseUrl()}/api/voice/socket-ticket`, {
     method: "POST",
     credentials: "include",
     headers,
-    body: JSON.stringify(request),
+    body: JSON.stringify(moveGrant ? { ...request, moveGrant } : request),
   });
 }
 
