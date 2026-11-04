@@ -231,9 +231,8 @@ When a remote participant's **voice** socket reconnects, VoiceRoom purges
 the old connection's state and broadcasts `ClientDisconnect` (op 11, `d: {
 participant_id }`) for them, and also sends `Speaking` 0 if they were
 speaking, **before** their new connection re-announces its tracks (`Video`,
-op 12, offered to others as tracks). The same happens when their old socket's
-close is processed after the new one identified. So a `ClientDisconnect` for
-a remote participant does not mean they left.
+op 12, offered to others as tracks). So a `ClientDisconnect` for a remote
+participant does not mean they left.
 
 Rule: on a remote `ClientDisconnect`, a client MUST keep that participant's
 roster row and audio for a grace period of `REMOTE_RECONNECT_GRACE_MS`
@@ -243,10 +242,26 @@ once. Whether a participant left the **room** is decided only by the room
 socket (`VoiceStateUpdate` op 15 with `action: "leave"`, or their absence
 from a `Ready`/`Resumed` roster), never by the voice socket.
 
-Web today: roster rows already follow the room socket only, so they never
-flicker; pulled media is dropped at once on `ClientDisconnect` and pulled
-again when the tracks are re-offered. Holding the audio through the grace is
-the publication/reconnect follow-up, not this package's first version.
+`RemoteReconnectGrace` (`src/remote-participants.ts`) is this rule with
+injected timers:
+
+- `disconnected(id)` on a voice `ClientDisconnect` for a remote participant:
+  start the grace (a second one restarts it and forgets what was offered
+  during the first).
+- `offered(id, trackName)` for every track offered by a participant
+  (`Video`/track offer, op 12, and the track list of our own `VoiceReady`,
+  op 101): inside a grace it is recorded as offered again.
+- `left(id)` when the room socket says they left: the grace is cancelled and
+  the client drops them at once.
+- When the grace runs out, `expire(id, reoffered)`: if nothing was offered
+  again, everything of theirs is dropped (pulls and pending offers); else
+  only their tracks that were not offered again are.
+- `dispose()` at teardown cancels every grace without dropping anything.
+
+Web: roster rows follow the room socket only, so they never flicker.
+SFUClient clears the participant's speaking at once and keeps their pulls
+through the grace. A track offered again with the same SFU track keeps its
+pull running (no gap); one with a new SFU track moves the pull to it.
 
 ### Voice-state deltas
 

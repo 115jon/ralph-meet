@@ -1,3 +1,4 @@
+import { RemoteReconnectGrace } from "@ralph/voice";
 import { markVoice } from "@/lib/voice/latency-marks";
 import { clog } from "./console-logger";
 import { TypedEventEmitter } from "./event-emitter";
@@ -160,6 +161,20 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private nativeScreenReconnectRequired = false;
   private nativeScreenResetPromise: Promise<void> = Promise.resolve();
   private remoteSpeakingUntil = new Map<string, number>();
+  /**
+   * Remote participants whose voice socket said ClientDisconnect: their
+   * pulls are kept for REMOTE_RECONNECT_GRACE_MS in case they are only
+   * reconnecting (packages/voice/STATE_MACHINE.md, "Reconnect grace").
+   */
+  private readonly remoteReconnectGrace = new RemoteReconnectGrace({
+    timers: {
+      setTimeout: (callback, ms) => setTimeout(callback, ms),
+      clearTimeout: (handle) =>
+        clearTimeout(handle as ReturnType<typeof setTimeout>),
+    },
+    expire: (participantId, reoffered) =>
+      this.dropDisconnectedParticipant(participantId, reoffered),
+  });
   private readonly lastRepublishRequestAt = new Map<string, number>();
   private audioTrackOperation: Promise<void> = Promise.resolve();
   private latencyTimeline: {
@@ -502,6 +517,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.emit("participant-joined", event);
     });
     this.roomGW.on("participant-left", (event) => {
+      // The room decides who left: no grace for a real leave.
+      this.remoteReconnectGrace.left(event.participantId);
       this.audio.removeParticipantVolume(event.participantId);
       this.partyTracksMedia?.removeParticipant(event.participantId);
       this.remoteSpeakingUntil.delete(event.participantId);
@@ -538,6 +555,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       const partyTracks = remoteTracks.filter((track) =>
         Boolean(track.sfu_track_name),
       );
+      for (const track of remoteTracks) {
+        this.remoteReconnectGrace.offered(
+          track.participant_id,
+          track.track_name,
+        );
+      }
 
       this.emit("voice-ready", { speaking: event.speaking ?? {} });
       // Register local senders before replay pulls enqueue negotiation on the
@@ -594,6 +617,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       ) {
         return;
       }
+      this.remoteReconnectGrace.offered(track.participant_id, track.track_name);
       if (!this.partyTracksMedia) {
         if (track.sfu_track_name) {
           this.deferredRemoteTracks.set(track.track_name, track);
@@ -619,12 +643,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
     });
     this.voiceGW.on("client-disconnect", ({ participant_id }) => {
-      for (const [trackName, track] of this.deferredRemoteTracks) {
-        if (track.participant_id === participant_id) {
-          this.deferredRemoteTracks.delete(trackName);
-        }
-      }
-      this.partyTracksMedia?.removeParticipant(participant_id);
+      // VoiceRoom says this on every voice-socket reconnect too, before the
+      // participant's tracks are offered again: keep their media through
+      // the grace (dropDisconnectedParticipant). Speaking stops now.
+      this.remoteReconnectGrace.disconnected(participant_id);
       this.remoteSpeakingUntil.delete(participant_id);
       this.emit("speaking", {
         participantId: participant_id,
@@ -1111,6 +1133,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.partyTracksMedia?.replayRemoteTracks();
   }
 
+  /**
+   * A remote participant's reconnect grace ran out: drop what they did not
+   * offer again (everything when they did not come back).
+   */
+  private dropDisconnectedParticipant(
+    participantId: string,
+    reoffered: ReadonlySet<string>,
+  ): void {
+    if (this.isLeaving) return;
+    for (const [trackName, track] of this.deferredRemoteTracks) {
+      if (track.participant_id === participantId && !reoffered.has(trackName)) {
+        this.deferredRemoteTracks.delete(trackName);
+      }
+    }
+    this.partyTracksMedia?.removeParticipant(participantId, reoffered);
+  }
+
   public disconnect(reason: SFUDisconnectReason = "unknown"): void {
     if (this.isLeaving) return;
     sfuLog.info("Disconnecting SFU client", {
@@ -1138,6 +1177,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.vad.stop();
     this.audio.dispose();
     this.remoteSpeakingUntil.clear();
+    this.remoteReconnectGrace.dispose();
     this.nativeScreenReconnectRequired = false;
     this.nativeScreenResetPromise = Promise.resolve();
     this.participantId = null;

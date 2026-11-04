@@ -643,6 +643,111 @@ describe("SFUClient PartyTracks facade", () => {
     }
   });
 
+  describe("remote reconnect grace", () => {
+    const remoteAudio: TrackInfo = {
+      participant_id: "remote-participant",
+      track_name: "cam-audio-remote-participant",
+      sfu_track_name: "opaque-remote-audio",
+      session_id: "remote-session",
+      kind: "audio",
+    };
+
+    function pulledRemoteAudio() {
+      const transport = new TestPartyTracksTransport();
+      const client = new SFUClient("test-room", {
+        createPartyTracksTransport: () => transport,
+      });
+      vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+      emitMediaReady(client);
+      const remoteTracks: Array<{ action?: string; trackName?: string }> = [];
+      client.on("remote-track", ({ action, trackInfo }) => {
+        remoteTracks.push({ action, trackName: trackInfo.track_name });
+      });
+      client.voiceGW.emit("voice-ready", { tracks: [remoteAudio] });
+      const remote = new MockMediaStreamTrack(
+        "audio",
+      ) as unknown as MediaStreamTrack;
+      transport.remoteTracks.get(remoteAudio.track_name)?.next(remote);
+      expect(remoteTracks).toEqual([
+        { action: "add", trackName: remoteAudio.track_name },
+      ]);
+      return { client, transport, remoteTracks };
+    }
+
+    it("keeps a remote participant's audio while their voice socket reconnects", () => {
+      vi.useFakeTimers();
+      try {
+        const { client, transport, remoteTracks } = pulledRemoteAudio();
+        const onSpeaking = vi.fn();
+        client.on("speaking", onSpeaking);
+
+        client.voiceGW.emit("client-disconnect", {
+          participant_id: remoteAudio.participant_id,
+        });
+        // Speaking stops at once; the audio does not.
+        expect(onSpeaking).toHaveBeenLastCalledWith({
+          participantId: remoteAudio.participant_id,
+          speaking: 0,
+        });
+        vi.advanceTimersByTime(1_000);
+        client.voiceGW.emit("track-offered", remoteAudio);
+        vi.advanceTimersByTime(5_000);
+
+        expect(remoteTracks).toHaveLength(1);
+        // Same publication offered again: the pull just carries on.
+        expect(transport.operationOrder).toEqual([
+          `pull:${remoteAudio.track_name}`,
+        ]);
+        client.disconnect("component-unmount");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("drops a remote participant who does not come back after the grace", () => {
+      vi.useFakeTimers();
+      try {
+        const { client, remoteTracks } = pulledRemoteAudio();
+        client.voiceGW.emit("client-disconnect", {
+          participant_id: remoteAudio.participant_id,
+        });
+        vi.advanceTimersByTime(2_999);
+        expect(remoteTracks).toHaveLength(1);
+        vi.advanceTimersByTime(1);
+        expect(remoteTracks.at(-1)).toEqual({
+          action: "remove",
+          trackName: remoteAudio.track_name,
+        });
+        client.disconnect("component-unmount");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("drops a remote participant at once when the room says they left", () => {
+      vi.useFakeTimers();
+      try {
+        const { client, remoteTracks } = pulledRemoteAudio();
+        client.voiceGW.emit("client-disconnect", {
+          participant_id: remoteAudio.participant_id,
+        });
+        client.roomGW.emit("participant-left", {
+          participantId: remoteAudio.participant_id,
+        });
+        expect(remoteTracks.at(-1)).toEqual({
+          action: "remove",
+          trackName: remoteAudio.track_name,
+        });
+        // The cancelled grace drops nothing later.
+        vi.advanceTimersByTime(5_000);
+        expect(remoteTracks).toHaveLength(2);
+        client.disconnect("component-unmount");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it("turns a remote VoiceGW disconnect into speaking-off", () => {
     const client = new SFUClient("test-room");
     const onSpeaking = vi.fn();
