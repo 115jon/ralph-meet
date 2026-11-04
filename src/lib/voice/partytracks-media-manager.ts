@@ -448,7 +448,16 @@ export class PartyTracksMediaManager {
       const changed = !previous || !sameMetadata(previous, track);
       const pull = this.pulls.get(track.track_name);
       if (pull) {
-        if (changed) {
+        if (
+          changed &&
+          !this.isSubscribed(track.track_name) &&
+          (!previous || !sameSfuTrack(previous, track))
+        ) {
+          // A kept share pull (see setRemoteTrackSubscription) whose
+          // publisher started a new share: not watched, so not pulled.
+          this.stopPull(track.track_name);
+          this.clearPullRetry(track.track_name);
+        } else if (changed) {
           // PartyTracks pulls again (and must produce a track) only when
           // the SFU track it names changes.
           if (!previous || !sameSfuTrack(previous, track)) {
@@ -517,6 +526,17 @@ export class PartyTracksMediaManager {
     }
     this.subscribedTrackNames.delete(trackName);
     this.unsubscribedTrackNames.add(trackName);
+    // Screen video already pulled keeps its pull until the share ends.
+    // Pulling it again after a close fails in Chrome: the SFU reuses the
+    // closed m-line's MID with other RTP header extension IDs, which Chrome
+    // rejects ("RTP extension ID reassignment not supported"), and the
+    // retries leave the session's signalling out of step (406, then 410).
+    if (
+      trackName.startsWith(OPT_IN_TRACK_PREFIX) &&
+      this.pulls.has(trackName)
+    ) {
+      return;
+    }
     this.stopPull(trackName);
     this.clearPullRetry(trackName);
   }

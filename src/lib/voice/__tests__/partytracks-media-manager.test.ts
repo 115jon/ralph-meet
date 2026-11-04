@@ -216,10 +216,51 @@ describe("PartyTracksMediaManager", () => {
     expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
       track("video", "screen-video"),
     ]);
+    viewer.dispose();
+  });
+
+  it("keeps a watched share's video pulled until that share ends", () => {
+    const transport = new TestTransport();
+    const removed: string[] = [];
+    const viewer = new PartyTracksMediaManager(transport, "viewer", {
+      onPublicationMetadata: vi.fn(),
+      onPublicationStopped: vi.fn(),
+      onRemoteTrack: ({ action, trackInfo }) => {
+        if (action === "remove") removed.push(trackInfo.sfu_track_name ?? "");
+      },
+    });
+    const share = (sfuTrackName: string): TrackInfo => ({
+      participant_id: "sharer",
+      track_name: "screen-video-sharer",
+      sfu_track_name: sfuTrackName,
+      session_id: "sharer-session",
+      kind: "video",
+    });
+    viewer.setRemoteTrackSubscription("screen-video-sharer", true);
+    viewer.offerTracks([share("share-1")]);
+    transport.pulledTracks
+      .get("screen-video-sharer")
+      ?.next(mediaTrack("video", "share-1-video"));
+
+    // Stop watching: the pull stays (closing and pulling it again fails in
+    // Chrome), so watching again needs no new pull.
     viewer.setRemoteTrackSubscription("screen-video-sharer", false);
-    // Unwatched, a re-announcement does not pull it again.
-    viewer.offerTracks([track("video", "screen-video")]);
-    expect(transport.pullCount).toBe(3);
+    expect(removed).toEqual([]);
+    viewer.setRemoteTrackSubscription("screen-video-sharer", true);
+    expect(transport.pullCount).toBe(1);
+
+    // Unwatched when the sharer starts a new share: that one is not pulled.
+    viewer.setRemoteTrackSubscription("screen-video-sharer", false);
+    viewer.offerTracks([share("share-2")]);
+    expect(removed).toEqual(["share-2"]);
+    expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
+      share("share-1"),
+    ]);
+    viewer.setRemoteTrackSubscription("screen-video-sharer", true);
+    expect(transport.pullCount).toBe(2);
+    expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
+      share("share-2"),
+    ]);
     viewer.dispose();
   });
 

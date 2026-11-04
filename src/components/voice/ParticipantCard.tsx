@@ -109,9 +109,12 @@ function ParticipantCardImpl({
   const shouldShowWatchers =
     !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
   const hasVideo = hasLiveVideoTrack(item.stream);
-  const shouldRenderVideo = hasVideo && !suppressVideo && !isPreviewHidden;
   const shouldShowWatchPrompt =
     isScreen && !item.isLocal && !isEffectivelyWatchingStream;
+  // An unwatched share shows its still under the Watch prompt, never video
+  // (its video may still be pulled from an earlier watch).
+  const shouldRenderVideo =
+    hasVideo && !suppressVideo && !isPreviewHidden && !shouldShowWatchPrompt;
   const shouldRenderThumbnailPoster =
     isScreen &&
     !shouldRenderVideo &&
