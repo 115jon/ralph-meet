@@ -2272,7 +2272,10 @@ describe("MeetingRoom lifecycle", () => {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ participant_id: participantId }),
+          body: JSON.stringify({
+            participant_id: participantId,
+            user_id: "user-test",
+          }),
         },
       );
       await expect(sessionCheck.json()).resolves.toEqual({
