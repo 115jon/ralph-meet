@@ -76,7 +76,8 @@ import {
 } from "@/lib/voice/voice-standby";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { markVoice } from "@/lib/voice/latency-marks";
-import { prefetchSocketTickets } from "@/lib/voice/socket-ticket-client";
+import { prefetchVoiceChannelJoin } from "@/lib/voice/socket-ticket-client";
+import { prewarmWebRtc } from "@/lib/voice/webrtc-prewarm";
 import { getVoiceActivityThreshold } from "@/lib/voice/vad";
 import {
   parseNativeShareEndedPayload,
@@ -2944,28 +2945,25 @@ export function useVoiceChannel({
   const standbyActive = useVoiceStandbyActive();
 
   // While the "Join voice" landing is up, fetch the room and voice tickets
-  // so the click starts at the WebSocket instead of at the ticket round trip.
-  // An occupied channel is covered by its warm standby instead.
+  // so the click starts at the WebSocket instead of at the ticket round trip,
+  // and start the browser's WebRTC stack while the page is idle. An occupied
+  // channel is covered by its warm standby instead, when one runs.
   const canPrefetchJoin =
     mode === "channel" &&
     !joined &&
     !autoJoin &&
-    standbyActive &&
     !!user?.id &&
     !!channelId &&
     !!serverId &&
-    (!channelHasOtherMembers || isVoiceStandbyDisabled());
+    (!channelHasOtherMembers || !standbyActive || isVoiceStandbyDisabled());
   const prefetchJoin = useCallback(() => {
-    if (!canPrefetchJoin || sfuRef.current) return;
-    const ticketRequest = {
-      channelId: channelId ?? undefined,
+    if (!canPrefetchJoin || sfuRef.current || !channelId || !serverId) return;
+    prewarmWebRtc();
+    prefetchVoiceChannelJoin({
+      channelId,
       roomSlug: resolvedRoomSlug,
-      serverId: serverId ?? undefined,
-    };
-    prefetchSocketTickets([
-      { audience: "room", ...ticketRequest },
-      { audience: "voice", ...ticketRequest },
-    ]);
+      serverId,
+    });
   }, [canPrefetchJoin, channelId, resolvedRoomSlug, serverId]);
   useEffect(() => {
     prefetchJoin();
