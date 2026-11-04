@@ -5,6 +5,7 @@ import { AvatarImage } from "./AvatarImage";
 import { avatarShape } from "@/components/ui/avatar-shape";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
+import { getChannelIcon } from "@/lib/channel-icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 export const ChatWelcomeContent = memo(function ChatWelcomeContent({
@@ -17,6 +18,9 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
   channelId: string | null;
 }) {
   const dmChannels = useChatStore((s) => s.dmChannels);
+  const channel = useChatStore((s) =>
+    !isDM && channelId ? s.channels.find((c) => c.id === channelId) : undefined,
+  );
 
   const dmRecipient = useMemo(() => {
     if (!isDM || !channelId) return null;
@@ -25,6 +29,9 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
 
   if (!channelId) return null;
 
+  // A voice channel's chat: its glyph already says voice, so no "#".
+  const isVoice = channel?.channel_type === "voice";
+  const roomName = isVoice ? channelName : `#${channelName}`;
   const dmName =
     dmRecipient?.display_name ?? dmRecipient?.username ?? channelName;
 
@@ -69,13 +76,22 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
       ) : (
         <>
           <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-tint-1 text-ink-2">
-            <Icon name="textChannel" size="lg" />
+            <Icon
+              name={channel ? getChannelIcon(channel) : "textChannel"}
+              size="lg"
+            />
           </div>
           <h3 className="font-display-tuned text-ui-lg font-extrabold tracking-[-0.01em] text-balance text-ink-1">
-            <InlineEmojiText text={`#${channelName}`} />
+            <InlineEmojiText text={roomName} />
           </h3>
           <p className="max-w-[72ch] text-ui-sm text-pretty text-ink-2">
-            <InlineEmojiText text={`This is the start of #${channelName}.`} />
+            <InlineEmojiText
+              text={
+                isVoice
+                  ? `This is the start of the ${roomName} chat.`
+                  : `This is the start of ${roomName}.`
+              }
+            />
           </p>
         </>
       )}

@@ -37,6 +37,7 @@ import {
   SettingsProfileFixture,
 } from "@/components/dev/sp-fixtures";
 import ChatArea from "@/components/chat/ChatArea";
+import { SidePanel } from "@/components/ui/side-panel";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ConnectionBanner as ChatConnectionBanner } from "@/components/chat/ConnectionBanner";
 import ContextMenu from "@/components/chat/ContextMenu";
@@ -526,11 +527,13 @@ function seedStore(surface: string) {
     : isDm
       ? "dm-ada"
       : (voiceChannel ?? "ch-general");
-  const list = isEmpty
-    ? []
-    : isDm
-      ? messages.slice(0, 5).map((m) => ({ ...m, channel_id: "dm-ada" }))
-      : messages;
+  // voice-chat opens the call's own chat empty, at its channel intro.
+  const list =
+    isEmpty || surface === "voice-chat"
+      ? []
+      : isDm
+        ? messages.slice(0, 5).map((m) => ({ ...m, channel_id: "dm-ada" }))
+        : messages;
   useChatStore.setState({
     connected: true,
     user: users.me!,
@@ -1180,7 +1183,10 @@ function VoiceRoom({
   focusId = null,
   items: itemsOverride,
   connectionState = "connected",
+  chat = false,
 }: {
+  /** The call's text chat docked on the right, as ChatPageClient docks it. */
+  chat?: boolean;
   live?: boolean;
   share?: boolean;
   focus?: boolean;
@@ -1307,7 +1313,7 @@ function VoiceRoom({
                 focusedItem={focusedItem}
                 currentScreenQuality={undefined}
                 sfu={null}
-                showTextChat={false}
+                showTextChat={chat}
                 onToggleTextChat={() => {}}
                 onMenuClick={() => {}}
               />
@@ -1387,6 +1393,23 @@ function VoiceRoom({
             )}
           </VoiceStage>
         </div>
+        {chat ? (
+          <SidePanel
+            open
+            onOpenChange={() => {}}
+            title="Voice chat"
+            hideHeader
+            dockClassName="flex-none"
+          >
+            <ChatArea
+              channelId="ch-lounge"
+              channelName="Lounge"
+              onMenuClick={() => {}}
+              showMembers={false}
+              onClose={() => {}}
+            />
+          </SidePanel>
+        ) : null}
       </div>
     </div>
   );
@@ -2899,6 +2922,9 @@ export default function UiFixtures() {
       break;
     case "voice-live":
       content = <VoiceRoom live />;
+      break;
+    case "voice-chat":
+      content = <VoiceRoom chat />;
       break;
     case "voice-share":
       content = <VoiceRoom share focus />;

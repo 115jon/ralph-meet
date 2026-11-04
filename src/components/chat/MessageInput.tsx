@@ -5,6 +5,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Icon } from "@/components/ui/icon";
 import { useAnimateEnter } from "@/components/ui/tree";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chat-store";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
 import {
@@ -195,7 +196,17 @@ export default function MessageInput({
   // Trays (reply bar, uploads) enter with a fade + 4px only after first paint.
   const animateEnter = useAnimateEnter();
 
-  const prompt = composerPrompt({ channelName, replyDisplayName, isDM });
+  const isVoice = useChatStore(
+    (s) =>
+      !isDM &&
+      s.channels.find((c) => c.id === channelId)?.channel_type === "voice",
+  );
+  const prompt = composerPrompt({
+    channelName,
+    replyDisplayName,
+    isDM,
+    isVoice,
+  });
 
   return (
     <ComposerGutter>
@@ -272,6 +283,7 @@ export default function MessageInput({
                   channelName={channelName}
                   replyDisplayName={replyDisplayName}
                   isDM={isDM}
+                  isVoice={isVoice}
                   className={cn(COMPOSER_TEXT, "text-ink-3")}
                 />
               </div>
