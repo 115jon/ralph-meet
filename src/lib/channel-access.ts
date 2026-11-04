@@ -324,21 +324,18 @@ export async function resolveChannelAccess(
         : null;
     }
 
-    const member = await db
-      .prepare(
-        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
-      )
-      .bind(channel.server_id, userId)
-      .first();
-    if (!member) return null;
-
-    const permissions = await getUserChannelPermissionsForDb(
-      db,
-      channel.server_id,
-      channel.id,
-      userId,
-    );
+    // Independent lookups: one D1 round trip for both instead of two.
+    const [member, permissions] = await Promise.all([
+      db
+        .prepare(
+          "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
+        )
+        .bind(channel.server_id, userId)
+        .first(),
+      getUserChannelPermissionsForDb(db, channel.server_id, channel.id, userId),
+    ]);
     if (
+      !member ||
       permissions === null ||
       !hasPermission(permissions, PERMISSIONS.VIEW_CHANNELS)
     )

@@ -50,9 +50,6 @@ function voiceChannelInServer1() {
       },
     ],
   });
-  db.mockQuery("SELECT channel_type FROM channels WHERE id = ? AND server_id", {
-    channel_type: "voice",
-  });
 }
 
 describe("socket ticket route", () => {
@@ -441,6 +438,45 @@ describe("socket ticket route", () => {
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
       code: "CONNECT_DENIED",
+    });
+  });
+
+  it("reads the channel and the caller's roles once per ticket", async () => {
+    voiceChannelInServer1();
+
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        headers: { authorization: TOKEN },
+        body: JSON.stringify({ audience: "voice", channelId: "channel-1" }),
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(db.getCalls("FROM channels")).toHaveLength(1);
+    expect(db.getCalls("JOIN member_roles")).toHaveLength(1);
+    expect(db.getCalls("SELECT 1 FROM server_members")).toHaveLength(1);
+  });
+
+  it("refuses a voice ticket for a text channel", async () => {
+    voiceChannelInServer1();
+    db.mockQuery("SELECT id, server_id, channel_type FROM channels", {
+      id: "channel-1",
+      server_id: "server-1",
+      channel_type: "text",
+    });
+
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        headers: { authorization: TOKEN },
+        body: JSON.stringify({ audience: "voice", channelId: "channel-1" }),
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "SERVER_VOICE_REQUIRED",
     });
   });
 });

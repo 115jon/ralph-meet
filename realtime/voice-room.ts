@@ -66,7 +66,11 @@ import {
   issuePartyTracksSessionCapability,
   verifyPartyTracksSessionCapability,
 } from "./partytracks-proxy";
-import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
+import {
+  consumeRealtimeTicketNonce,
+  getRealtimeAdmissionFromHeaders,
+  initRealtimeTicketNonces,
+} from "./realtime-admission";
 import { verifyVoiceToken } from "./voice-token";
 import {
   VOICE_JOIN_GRANT_CHECK_PATH,
@@ -247,6 +251,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     // zombie pruning alarm to falsely evict active users after 90 seconds.
 
     this.initSchema();
+    initRealtimeTicketNonces(this.ctx.storage.sql);
     this.voiceJoinGrants = new VoiceJoinGrantStore(this.sql);
     this.scheduleAlarm();
 
@@ -472,6 +477,16 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         admission.audience !== "voice" ||
         admission.roomSlug !== this.roomSlug
       ) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      // Single use: a voice ticket's nonce is spent here, in the object that
+      // accepts the socket (custom-server-entry.ts verified its signature).
+      const consumed = consumeRealtimeTicketNonce(
+        this.ctx.storage.sql,
+        admission,
+      );
+      if (!consumed.ok) {
+        roomLog.warn(`Voice admission refused: ${consumed.reason}`);
         return new Response("Unauthorized", { status: 401 });
       }
 

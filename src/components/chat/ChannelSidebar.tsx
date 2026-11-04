@@ -10,6 +10,8 @@ import {
   shouldShowVoiceMemberStreamState,
 } from "@/lib/voice-presence";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
+import { prefetchVoiceChannelJoin } from "@/lib/voice/socket-ticket-client";
+import { prewarmWebRtc } from "@/lib/voice/webrtc-prewarm";
 import type {
   Category,
   Channel,
@@ -102,6 +104,9 @@ const StreamContextMenu = lazy(() =>
     default: mod.StreamContextMenu,
   })),
 );
+/** Hover dwell before a voice row counts as join intent. */
+const VOICE_HOVER_INTENT_MS = 120;
+
 const EMPTY_STREAM_THUMBNAILS: Record<string, string> = {};
 
 const EMPTY_CATEGORIES: Category[] = [];
@@ -619,6 +624,35 @@ const SortableChannelItem = memo(function SortableChannelItem({
     }
   };
 
+  // Pointing at a voice channel is the best early sign of a join (a sidebar
+  // click joins right away): fetch its socket tickets and warm WebRTC now.
+  const voiceJoinIntentServerId =
+    isVoice && currentUserId && !youAreHere ? channel.server_id : null;
+  const onVoiceJoinIntent = useCallback(() => {
+    if (!voiceJoinIntentServerId) return;
+    prewarmWebRtc();
+    prefetchVoiceChannelJoin({
+      serverId: voiceJoinIntentServerId,
+      channelId: channel.id,
+    });
+  }, [voiceJoinIntentServerId, channel.id]);
+  // Hover counts only after a short dwell, so sweeping the pointer down the
+  // list does not fetch tickets for every row it crosses (each costs two
+  // requests against the ticket route's rate limit).
+  const hoverIntentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHoverIntent = useCallback(() => {
+    if (hoverIntentTimer.current) clearTimeout(hoverIntentTimer.current);
+    hoverIntentTimer.current = null;
+  }, []);
+  const onVoiceHoverIntent = useCallback(() => {
+    cancelHoverIntent();
+    hoverIntentTimer.current = setTimeout(() => {
+      hoverIntentTimer.current = null;
+      onVoiceJoinIntent();
+    }, VOICE_HOVER_INTENT_MS);
+  }, [cancelHoverIntent, onVoiceJoinIntent]);
+  useEffect(() => cancelHoverIntent, [cancelHoverIntent]);
+
   const onPopoverUser = useCallback(
     (u: VoiceMemberTarget, anchor: HTMLElement) =>
       uiDispatch({ type: "SET_POPOVER_USER", user: u, anchor }),
@@ -641,6 +675,10 @@ const SortableChannelItem = memo(function SortableChannelItem({
         type="button"
         onClick={() => onSelect(channel.id)}
         onContextMenu={(e) => onContextMenu(e, channel)}
+        onPointerEnter={isVoice ? onVoiceHoverIntent : undefined}
+        onPointerLeave={isVoice ? cancelHoverIntent : undefined}
+        onPointerDownCapture={isVoice ? onVoiceJoinIntent : undefined}
+        onFocus={isVoice ? onVoiceJoinIntent : undefined}
         {...channelLongPress}
         aria-label={`Open ${isVoice ? "voice" : "text"} channel ${channel.name}`}
         aria-current={isActive ? "page" : undefined}

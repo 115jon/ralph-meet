@@ -141,6 +141,83 @@ export function getRealtimeAdmissionFromHeaders(
   };
 }
 
+/** The SQL surface the nonce store needs (a Durable Object's `storage.sql`). */
+interface NonceSql {
+  exec(query: string, ...bindings: unknown[]): unknown;
+}
+
+/** Creates the single-use nonce table in the Durable Object that accepts sockets. */
+export function initRealtimeTicketNonces(sql: NonceSql): void {
+  sql.exec(`
+    CREATE TABLE IF NOT EXISTS realtime_ticket_nonces (
+      nonce_digest TEXT PRIMARY KEY,
+      access_mode TEXT NOT NULL,
+      audience TEXT NOT NULL,
+      room_slug TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      connection_generation TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      consumed_at INTEGER NOT NULL
+    );
+  `);
+  sql.exec(
+    "CREATE INDEX IF NOT EXISTS idx_realtime_ticket_nonces_expires ON realtime_ticket_nonces(expires_at)",
+  );
+}
+
+export type RealtimeAdmissionConsumeResult =
+  | { ok: true }
+  | { ok: false; reason: "expired" | "replayed" | "storage_error" };
+
+/**
+ * Uses up a socket ticket's nonce, once. Called by the Durable Object that
+ * accepts the socket, in the same request: a ticket names one audience and
+ * one room, and the worker routes each (audience, room) to exactly one
+ * object, so that object's table is the only place the nonce can be spent.
+ * The INSERT runs synchronously, so two upgrades racing with one ticket
+ * cannot both get past it (the primary key refuses the second).
+ */
+export function consumeRealtimeTicketNonce(
+  sql: NonceSql,
+  admission: RealtimeAdmissionContext,
+  now = Date.now(),
+): RealtimeAdmissionConsumeResult {
+  if (now >= admission.expiresAt) return { ok: false, reason: "expired" };
+  try {
+    sql.exec(`DELETE FROM realtime_ticket_nonces WHERE expires_at <= ?`, now);
+    sql.exec(
+      `INSERT INTO realtime_ticket_nonces (
+        nonce_digest,
+        access_mode,
+        audience,
+        room_slug,
+        subject,
+        connection_generation,
+        expires_at,
+        consumed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      admission.nonceDigest,
+      admission.accessMode,
+      admission.audience,
+      admission.roomSlug,
+      admission.subject,
+      admission.connectionGeneration,
+      admission.expiresAt,
+      now,
+    );
+    return { ok: true };
+  } catch (error) {
+    // Only the primary-key conflict is a replay; any other storage error
+    // still refuses the socket (fail closed) but must not read as one.
+    return {
+      ok: false,
+      reason: /UNIQUE|PRIMARY KEY|constraint/i.test(String(error))
+        ? "replayed"
+        : "storage_error",
+    };
+  }
+}
+
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) {

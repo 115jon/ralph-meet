@@ -20,6 +20,7 @@ import {
   fetchSocketTicketBundle,
   PREFETCH_MAX_AGE_MS,
   prefetchSocketTickets,
+  prefetchVoiceChannelJoin,
 } from "../socket-ticket-client";
 
 describe("fetchSocketTicketBundle", () => {
@@ -134,6 +135,27 @@ describe("prefetchSocketTickets", () => {
     prefetchSocketTickets([room]);
     const bundle = await fetchSocketTicketBundle(room);
     expect(bundle.mediaBootstrap?.participantId).toBe("participant-1");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not repeat a failed prefetch until it ages out", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 429 }));
+    prefetchSocketTickets([room]);
+    await Promise.resolve();
+    prefetchSocketTickets([room]);
+    prefetchSocketTickets([room]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefetches both tickets a voice channel join asks for, once", async () => {
+    const target = { serverId: "server", channelId: "channel" };
+    prefetchVoiceChannelJoin(target);
+    prefetchVoiceChannelJoin(target);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    // The join's own requests (useVoiceChannel) take the prefetched tickets.
+    await fetchSocketTicketBundle(room);
+    await fetchSocketTicketBundle({ ...room, audience: "voice" });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -116,10 +116,33 @@ export function prefetchSocketTickets(requests: SocketTicketRequest[]): void {
     if (existing && now - existing.fetchedAt < PREFETCH_MAX_AGE_MS) continue;
     const promise = requestSocketTicket(request);
     prefetched.set(key, { promise, fetchedAt: now });
-    promise.catch(() => {
-      if (prefetched.get(key)?.promise === promise) prefetched.delete(key);
-    });
+    // A failed prefetch (no CONNECT, 429, 401) stays cached until it ages
+    // out, so hovering again does not repeat it; the join itself falls back
+    // to a fresh request (takeSocketTicket).
+    promise.catch(() => {});
   }
+}
+
+/**
+ * Prefetches the room and voice tickets for joining a server voice channel,
+ * for intent shown before the click (hovering or pressing its sidebar row,
+ * opening its landing). Repeats within {@link PREFETCH_MAX_AGE_MS} reuse the
+ * tickets already fetched, so this is cheap to call on every hover.
+ */
+export function prefetchVoiceChannelJoin(target: {
+  serverId: string;
+  channelId: string;
+  roomSlug?: string;
+}): void {
+  const request = {
+    channelId: target.channelId,
+    roomSlug: target.roomSlug || `voice-${target.serverId}-${target.channelId}`,
+    serverId: target.serverId,
+  };
+  prefetchSocketTickets([
+    { audience: "room", ...request },
+    { audience: "voice", ...request },
+  ]);
 }
 
 export function clearPrefetchedSocketTicketsForTests(): void {

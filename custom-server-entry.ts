@@ -293,30 +293,9 @@ async function requireAuthenticatedWebSocket(
   headers.delete("Sec-WebSocket-Protocol");
   headers.set("Sec-WebSocket-Protocol", protocol.value.responseProtocol);
 
-  const consumeNamespace = env.MEETING_ROOM as DurableObjectNamespace;
-  const consumeStub = consumeNamespace.get(
-    consumeNamespace.idFromName(roomSlug),
-  );
-  const consumeHeaders = appendRealtimeAdmissionHeaders(new Headers(), context);
-  const consumeResponse = await consumeStub.fetch(
-    "https://internal/consume-realtime-admission",
-    {
-      method: "POST",
-      // Do not copy browser upgrade headers onto this ordinary internal POST.
-      headers: consumeHeaders,
-    },
-  );
-  if (!consumeResponse.ok) {
-    const consumeBody = (await consumeResponse.text()).slice(0, 200);
-    logger.warn("Realtime WebSocket admission consumption rejected", {
-      audience,
-      roomSlug,
-      status: consumeResponse.status,
-      body: consumeBody,
-    });
-    return unauthorizedWebSocket("Realtime capability already used");
-  }
-
+  // The Durable Object that accepts the socket spends the ticket's nonce
+  // (consumeRealtimeTicketNonce) before it upgrades: one round trip, not a
+  // separate consume call first.
   return {
     request: new Request(request, { headers }),
   };

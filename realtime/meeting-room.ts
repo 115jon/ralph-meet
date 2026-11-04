@@ -44,10 +44,14 @@ import {
   resolveChannelAccessForUsers,
 } from "../src/lib/channel-access";
 import { PERMISSIONS } from "../src/lib/permissions";
-import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
+import {
+  consumeRealtimeTicketNonce,
+  getRealtimeAdmissionFromHeaders,
+  initRealtimeTicketNonces,
+} from "./realtime-admission";
 import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
 import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordinator";
-import { generateTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
+import { getCachedTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
 import { issueVoiceToken } from "./voice-token";
 import {
   VOICE_JOIN_GRANT_CHECK_PATH,
@@ -380,21 +384,7 @@ export class MeetingRoom extends DurableObject<Env> {
   ) {
     super(ctx, env);
 
-    this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS realtime_ticket_nonces (
-        nonce_digest TEXT PRIMARY KEY,
-        access_mode TEXT NOT NULL,
-        audience TEXT NOT NULL,
-        room_slug TEXT NOT NULL,
-        subject TEXT NOT NULL,
-        connection_generation TEXT NOT NULL,
-        expires_at INTEGER NOT NULL,
-        consumed_at INTEGER NOT NULL
-      );
-    `);
-    this.ctx.storage.sql.exec(
-      "CREATE INDEX IF NOT EXISTS idx_realtime_ticket_nonces_expires ON realtime_ticket_nonces(expires_at)",
-    );
+    initRealtimeTicketNonces(this.ctx.storage.sql);
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS ws_rate_limits (
         rate_key TEXT PRIMARY KEY,
@@ -639,13 +629,6 @@ export class MeetingRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     const gatewayVersion = parseInt(url.searchParams.get("v") ?? "1", 10);
 
-    if (
-      url.pathname === "/consume-realtime-admission" &&
-      request.method === "POST"
-    ) {
-      return this.consumeRealtimeAdmission(request);
-    }
-
     // Extract channel ID or slug from URL path
     const channelMatch = url.pathname.match(/\/api\/channels\/([^/]+)\/ws/);
     if (channelMatch) {
@@ -668,6 +651,16 @@ export class MeetingRoom extends DurableObject<Env> {
         admission.audience !== expectedAudience ||
         admission.roomSlug !== this.roomSlug
       ) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      // Single use: the ticket's nonce is spent here, in the object that
+      // accepts the socket (custom-server-entry.ts verified its signature).
+      const consumed = consumeRealtimeTicketNonce(
+        this.ctx.storage.sql,
+        admission,
+      );
+      if (!consumed.ok) {
+        log.warn(`Realtime admission refused: ${consumed.reason}`);
         return new Response("Unauthorized", { status: 401 });
       }
 
@@ -895,70 +888,6 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     return new Response("Not found", { status: 404 });
-  }
-
-  private consumeRealtimeAdmission(request: Request): Response {
-    const admission = getRealtimeAdmissionFromHeaders(request.headers);
-    if (!admission) {
-      return Response.json(
-        { ok: false, reason: "missing_admission" },
-        { status: 401 },
-      );
-    }
-    if (this.roomSlug === "unknown") {
-      this.roomSlug = admission.roomSlug;
-      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => {});
-    }
-    if (admission.roomSlug !== this.roomSlug) {
-      return Response.json(
-        { ok: false, reason: "room_mismatch" },
-        { status: 401 },
-      );
-    }
-    if (
-      admission.audience !== "room" &&
-      admission.audience !== "voice" &&
-      admission.audience !== "global"
-    ) {
-      return Response.json(
-        { ok: false, reason: "audience_mismatch" },
-        { status: 401 },
-      );
-    }
-    if (Date.now() >= admission.expiresAt) {
-      return Response.json({ ok: false, reason: "expired" }, { status: 401 });
-    }
-
-    try {
-      this.ctx.storage.sql.exec(
-        `DELETE FROM realtime_ticket_nonces WHERE expires_at <= ?`,
-        Date.now(),
-      );
-      this.ctx.storage.sql.exec(
-        `INSERT INTO realtime_ticket_nonces (
-          nonce_digest,
-          access_mode,
-          audience,
-          room_slug,
-          subject,
-          connection_generation,
-          expires_at,
-          consumed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        admission.nonceDigest,
-        admission.accessMode,
-        admission.audience,
-        admission.roomSlug,
-        admission.subject,
-        admission.connectionGeneration,
-        admission.expiresAt,
-        Date.now(),
-      );
-
-      return Response.json({ ok: true });
-    } catch {
-      return Response.json({ ok: false, reason: "replayed" }, { status: 401 });
-    }
   }
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
