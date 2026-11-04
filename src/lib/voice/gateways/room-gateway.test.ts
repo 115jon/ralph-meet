@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GatewayOp } from "@/lib/gateway-protocol";
+import { GatewayCloseCode, GatewayOp } from "@/lib/gateway-protocol";
 
 const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
@@ -477,6 +477,41 @@ describe("RoomGateway frame decoding", () => {
     gateway.disconnect();
   });
 
+  it("reports a moderator's VoiceMove before the SessionReplaced close", async () => {
+    const { gateway, socket } = await connectedGateway();
+    const events: string[] = [];
+    const moved = vi.fn();
+    gateway.on("voice-move", (move) => {
+      events.push("voice-move");
+      moved(move);
+    });
+    gateway.on("kicked", () => events.push("kicked"));
+    socket.message({
+      op: GatewayOp.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    const move = {
+      channel_id: "vc-b",
+      server_id: "srv-1",
+      channel_name: "Lounge",
+      mover_name: "Mo",
+      grant: "vm1.a.b",
+      grant_expires_at: 123,
+    };
+    socket.message({ op: GatewayOp.VoiceMove, d: move });
+    socket.onclose?.({
+      code: 4010,
+      reason: "Moved to another voice channel",
+    } as CloseEvent);
+
+    expect(moved).toHaveBeenCalledWith(move);
+    expect(events).toEqual(["voice-move", "kicked"]);
+    // SessionReplaced is final: no reconnect attempt follows.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(TestWebSocket.instances).toHaveLength(1);
+    gateway.disconnect();
+  });
+
   it("tracks the replay cursor from frames it does not otherwise handle", async () => {
     const { gateway, socket } = await connectedGateway();
     socket.message({
@@ -580,6 +615,38 @@ describe("RoomGateway lifecycle", () => {
     expect(sentMessages(second)).toEqual([
       { op: GatewayOp.Resume, d: { session_id: "session-1", seq_ack: 0 } },
     ]);
+    gateway.disconnect();
+  });
+
+  it("reports admission-rejected and does not reconnect", async () => {
+    const { gateway, socket } = await connectedGateway();
+    const admissionRejected = vi.fn();
+    const disconnected = vi.fn();
+    gateway.on("admission-rejected", admissionRejected);
+    gateway.on("disconnected", disconnected);
+
+    socket.readyState = TestWebSocket.CLOSED;
+    socket.onclose?.({
+      code: GatewayCloseCode.AdmissionRejected,
+      reason: "Resume subject mismatch",
+    } as CloseEvent);
+
+    expect(admissionRejected).toHaveBeenCalledOnce();
+    expect(disconnected).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(TestWebSocket.instances).toHaveLength(1);
+    gateway.disconnect();
+  });
+
+  it("does not report admission-rejected for a retryable close", async () => {
+    const { gateway, socket } = await connectedGateway();
+    const admissionRejected = vi.fn();
+    gateway.on("admission-rejected", admissionRejected);
+
+    socket.readyState = TestWebSocket.CLOSED;
+    socket.onclose?.({ code: 1006, reason: "" } as CloseEvent);
+
+    expect(admissionRejected).not.toHaveBeenCalled();
     gateway.disconnect();
   });
 

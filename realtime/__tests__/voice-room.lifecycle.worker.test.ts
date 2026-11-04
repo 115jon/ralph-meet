@@ -1731,6 +1731,205 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
+  it("sends room broadcasts only to identified sockets", async () => {
+    const roomName = crypto.randomUUID();
+    const speakerId = crypto.randomUUID();
+    const listenerId = crypto.randomUUID();
+    const speaker = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(speaker, speakerId, roomName);
+    const listener = await openVoiceSocket(roomName, "listener-user");
+    await identifyVoiceSocket(listener, listenerId, roomName, "listener-user");
+    // Admitted with a voice ticket, but never sends VoiceIdentify.
+    const lurker = await openVoiceSocket(roomName, "lurker-user");
+    const lurkerOps: number[] = [];
+    lurker.addEventListener("message", (event) => {
+      lurkerOps.push((JSON.parse(event.data as string) as { op: number }).op);
+    });
+
+    const heardSpeaking = nextMessageWithOpcode(listener, 5);
+    speaker.send(JSON.stringify({ op: 5, d: { speaking: 1 } }));
+    await expect(heardSpeaking).resolves.toMatchObject({
+      d: { participant_id: speakerId, speaking: 1 },
+    });
+
+    const session = await issuePartyTracksSessionCapability(
+      speakerId,
+      roomName,
+      "raw-partytracks-session-lurker",
+    );
+    const heardVideo = nextMessageWithOpcode(listener, 12);
+    speaker.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: speakerId,
+              track_name: `cam-video-${speakerId}`,
+              sfu_track_name: "partytracks-opaque-video",
+              session_id: session,
+              kind: "video",
+            },
+          ],
+        },
+      }),
+    );
+    await expect(heardVideo).resolves.toMatchObject({
+      d: { participant_id: speakerId },
+    });
+
+    const listenerSawLeave = nextMessageWithOpcode(listener, 11);
+    speaker.send(JSON.stringify({ op: 11, d: {} }));
+    await expect(listenerSawLeave).resolves.toMatchObject({
+      d: { participant_id: speakerId },
+    });
+
+    // Its own heartbeat ack arrives after anything sent to it before.
+    const ack = nextMessageWithOpcode(lurker, 6);
+    lurker.send(JSON.stringify({ op: 3, d: { seq_ack: 0 } }));
+    await ack;
+    expect(lurkerOps).toEqual([6]);
+
+    listener.close();
+    lurker.close();
+  });
+
+  it("closes an unidentified socket that stops heartbeating", async () => {
+    const roomName = crypto.randomUUID();
+    const silent = await openVoiceSocket(roomName, "silent-user");
+    const standby = await openVoiceSocket(roomName, "standby-user");
+    const silentClosed = new Promise<CloseEvent>((resolve) => {
+      silent.addEventListener("close", resolve, { once: true });
+    });
+    let standbyClosed = false;
+    standby.addEventListener("close", () => {
+      standbyClosed = true;
+    });
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+
+    // Both were last heard from longer ago than the zombie timeout...
+    await runInDurableObject(room, (_instance, state) => {
+      for (const ws of state.getWebSockets()) {
+        const attachment = ws.deserializeAttachment() as Record<
+          string,
+          unknown
+        >;
+        ws.serializeAttachment({
+          ...attachment,
+          last_seen_at: Date.now() - 2 * 60 * 1000,
+        });
+      }
+    });
+    // ...but the standby socket heartbeats again, as a live one does.
+    const ack = nextMessageWithOpcode(standby, 6);
+    standby.send(JSON.stringify({ op: 3, d: { seq_ack: 0 } }));
+    await ack;
+
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+
+    await expect(silentClosed).resolves.toMatchObject({ code: 4009 });
+    const standbyAck = nextMessageWithOpcode(standby, 6);
+    standby.send(JSON.stringify({ op: 3, d: { seq_ack: 0 } }));
+    await expect(standbyAck).resolves.toMatchObject({ op: 6 });
+    expect(standbyClosed).toBe(false);
+
+    standby.close();
+  });
+
+  it("schedules the alarm for an unidentified socket", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "standby-user");
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+
+    await vi.waitFor(async () => {
+      const alarm = await runInDurableObject(room, (_instance, state) =>
+        state.storage.getAlarm(),
+      );
+      expect(alarm).not.toBeNull();
+    });
+
+    socket.close();
+  });
+
+  it("records no tracks for a participant that left while its publication was being checked", async () => {
+    const roomName = crypto.randomUUID();
+    const publisherId = crypto.randomUUID();
+    const observerId = crypto.randomUUID();
+    const session = await issuePartyTracksSessionCapability(
+      publisherId,
+      roomName,
+      "raw-partytracks-session-leaving",
+    );
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, publisherId, roomName);
+    const observer = await openVoiceSocket(roomName, "observer-user");
+    await identifyVoiceSocket(observer, observerId, roomName, "observer-user");
+
+    // Hold the publication's capability check open until the leave is done.
+    // (Plain flags: a promise made here cannot be awaited inside the room.)
+    const check = { started: false, released: false };
+    const verify = crypto.subtle.verify.bind(crypto.subtle);
+    const verifySpy = vi
+      .spyOn(crypto.subtle, "verify")
+      .mockImplementation(async (...args) => {
+        check.started = true;
+        while (!check.released) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        return verify(...args);
+      });
+    try {
+      const observerOps: number[] = [];
+      observer.addEventListener("message", (event) => {
+        observerOps.push(
+          (JSON.parse(event.data as string) as { op: number }).op,
+        );
+      });
+      publisher.send(
+        JSON.stringify({
+          op: 12,
+          d: {
+            tracks: [
+              {
+                participant_id: publisherId,
+                track_name: `cam-video-${publisherId}`,
+                sfu_track_name: "partytracks-opaque-video",
+                session_id: session,
+                kind: "video",
+              },
+            ],
+          },
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(check.started).toBe(true);
+      });
+
+      const left = nextMessageWithOpcode(observer, 11);
+      publisher.send(JSON.stringify({ op: 11, d: {} }));
+      await expect(left).resolves.toMatchObject({
+        d: { participant_id: publisherId },
+      });
+
+      check.released = true;
+      await vi.waitFor(() => {
+        expect(verifySpy).toHaveReturned();
+      });
+      // The observer's heartbeat ack arrives after any broadcast before it.
+      const ack = nextMessageWithOpcode(observer, 6);
+      observer.send(JSON.stringify({ op: 3, d: { seq_ack: 0 } }));
+      await ack;
+
+      expect(await trackNames(roomName)).toEqual([]);
+      expect(observerOps).not.toContain(12);
+    } finally {
+      check.released = true;
+      verifySpy.mockRestore();
+    }
+
+    observer.close();
+  });
+
   it("rejects a voice token for a subject other than the admitted socket", async () => {
     const roomName = crypto.randomUUID();
     const participantId = crypto.randomUUID();
@@ -3151,13 +3350,64 @@ describe("VoiceRoom lifecycle", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participant_id: participantId }),
+        body: JSON.stringify({
+          participant_id: participantId,
+          user_id: TEST_SUBJECT,
+        }),
       },
     );
 
     expect(disconnectResponse.status).toBe(200);
     await expect(disconnectResponse.json()).resolves.toEqual({
       disconnected: true,
+    });
+  });
+
+  it("only disconnects a participant for the user who owns it", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "owner-user");
+    await identifyVoiceSocket(socket, participantId, roomName, "owner-user");
+
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const participantRows = () =>
+      runInDurableObject(
+        room,
+        (_instance, state) =>
+          [
+            ...state.storage.sql.exec(
+              "SELECT id FROM participants WHERE id = ?",
+              participantId,
+            ),
+          ].length,
+      );
+    const disconnect = (body: Record<string, unknown>) =>
+      room.fetch("https://internal/disconnect-participant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const missingUser = await disconnect({ participant_id: participantId });
+    expect(missingUser.status).toBe(400);
+    await missingUser.body?.cancel();
+
+    const otherUser = await disconnect({
+      participant_id: participantId,
+      user_id: "other-user",
+    });
+    expect(otherUser.status).toBe(200);
+    await expect(otherUser.json()).resolves.toEqual({ disconnected: false });
+    expect(await participantRows()).toBe(1);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+
+    const owner = await disconnect({
+      participant_id: participantId,
+      user_id: "owner-user",
+    });
+    await expect(owner.json()).resolves.toEqual({ disconnected: true });
+    await vi.waitFor(async () => {
+      expect(await participantRows()).toBe(0);
     });
   });
 

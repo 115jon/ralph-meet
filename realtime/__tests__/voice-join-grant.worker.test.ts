@@ -228,6 +228,31 @@ describe("voice join grants", () => {
     await expect(ready).resolves.toBeNull();
   });
 
+  it("closes with a retryable code when the MeetingRoom cannot be asked", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const voice = await openVoiceSocket(roomName, "member");
+    await shortenJoinWait(roomName);
+    // A MeetingRoom fetch hiccup: the grant check cannot answer.
+    await runInDurableObject(voiceRoom(roomName), (instance) => {
+      (
+        instance as unknown as { checkVoiceJoinGrant: () => Promise<null> }
+      ).checkVoiceJoinGrant = async () => null;
+    });
+
+    const error = nextMessageOrNull(voice, ERROR, 500);
+    const close = closed(voice);
+    await sendVoiceIdentify(
+      voice,
+      participantId,
+      await voiceToken(participantId, roomName, "member"),
+    );
+
+    // Not AdmissionRejected (4008), which tells the client to give up.
+    await expect(close).resolves.toMatchObject({ code: 1013 });
+    await expect(error).resolves.toBeNull();
+  });
+
   it("keeps a standby room session out of voice until it is promoted", async () => {
     const roomName = crypto.randomUUID();
     const participantId = crypto.randomUUID();
@@ -274,12 +299,12 @@ describe("voice join grants", () => {
     let grantChecks = 0;
     await runInDurableObject(voiceRoom(roomName), (instance) => {
       const live = instance as unknown as {
-        confirmVoiceJoinGrant(query: unknown): Promise<boolean>;
+        checkVoiceJoinGrant(query: unknown): Promise<boolean | null>;
       };
-      const confirm = live.confirmVoiceJoinGrant.bind(live);
-      live.confirmVoiceJoinGrant = (query) => {
+      const check = live.checkVoiceJoinGrant.bind(live);
+      live.checkVoiceJoinGrant = (query) => {
         grantChecks += 1;
-        return confirm(query);
+        return check(query);
       };
     });
 

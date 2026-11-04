@@ -158,6 +158,22 @@ export function AudioDeviceMenu({
 
   const currentDeviceId =
     mode === "input" ? vSettings.inputDeviceId : vSettings.outputDeviceId;
+  // A saved device missing from the list (hidden until permission, or
+  // unplugged) stays listed under its saved name.
+  if (!devices.some((d) => d.deviceId === currentDeviceId)) {
+    devices.push({
+      deviceId: currentDeviceId,
+      label:
+        (mode === "input"
+          ? vSettings.inputDeviceLabel
+          : vSettings.outputDeviceLabel) ||
+        (mode === "input" ? "Microphone" : "Speaker"),
+      groupId:
+        mode === "input"
+          ? vSettings.inputDeviceGroupId
+          : vSettings.outputDeviceGroupId,
+    });
+  }
   const currentDeviceLabel =
     devices.find((d) => d.deviceId === currentDeviceId)?.label ?? "Default";
   const volume =

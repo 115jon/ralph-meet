@@ -34,6 +34,8 @@ export const PERMISSIONS = {
   MUTE_MEMBERS: 1 << 16, // 65536
   DEAFEN_MEMBERS: 1 << 17, // 131072
   VIEW_AUDIT_LOG: 1 << 18, // 262144
+  /** Drag members between voice channels (checked on both channels). */
+  MOVE_MEMBERS: 1 << 19, // 524288
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;

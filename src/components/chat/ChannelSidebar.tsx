@@ -31,11 +31,17 @@ import {
 } from "@/components/ui/tooltip";
 import {
   closestCenter,
+  type CollisionDetection,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
   KeyboardSensor,
   MouseSensor,
+  pointerWithin,
   TouchSensor,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -58,7 +64,17 @@ import { Num, NumClock } from "@/components/ui/num";
 import { ThemeBanner } from "@/components/ui/theme-slots";
 import { TreeBranch, TreeLeaf, useAnimateEnter } from "@/components/ui/tree";
 import { useAppActive } from "@/hooks/useAppActive";
-import { copyToClipboard } from "@/components/ui/toast";
+import { copyToClipboard, toast } from "@/components/ui/toast";
+import { requestVoiceMove } from "@/lib/voice/voice-move-client";
+import {
+  canDragVoiceMember,
+  canDropVoiceMember,
+  isVoiceDropTarget,
+  isVoiceMemberDrag,
+  voiceMoveTargets,
+  type VoiceDropTarget,
+  type VoiceMemberDrag,
+} from "./voice-move-targets";
 import {
   OCCUPANT_ROW,
   ROW_ACTION_BUTTON,
@@ -74,10 +90,12 @@ import {
 import { getChannelIcon } from "@/lib/channel-icon";
 
 import {
+  createContext,
   lazy,
   memo,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useReducer,
@@ -142,9 +160,55 @@ interface Props {
   canManageChannels?: boolean;
 }
 
+// ── Moving voice members ──────────────────────────────────────────────────
+// A member row under a voice channel drags onto another voice channel
+// (mouse only: touch and keyboard use "Move to" in the row's menu). Member
+// drags share the channel-reorder DndContext; collision detection keeps the
+// two apart.
+
+const VOICE_MEMBER_DRAG_PREFIX = "voice-member:";
+const VOICE_DROP_TARGET_PREFIX = "voice-target:";
+
+type MemberAt = Pick<VoiceMemberDrag, "userId" | "channelId">;
+
+interface VoiceMoveContextValue {
+  canDrag: (channelId: string) => boolean;
+  canDrop: (drag: MemberAt, toChannelId: string) => boolean;
+  /** True while a member is dragged: hover prefetch stays off meanwhile. */
+  draggingRef: React.RefObject<boolean>;
+}
+
+const VoiceMoveContext = createContext<VoiceMoveContextValue | null>(null);
+
+/** Voice member drags hit only valid voice targets; reorders never do. */
+function createSidebarCollisionDetection(
+  canDrop: (drag: MemberAt, toChannelId: string) => boolean,
+): CollisionDetection {
+  return (args) => {
+    const drag = args.active.data.current;
+    if (isVoiceMemberDrag(drag)) {
+      return pointerWithin({
+        ...args,
+        droppableContainers: args.droppableContainers.filter((container) => {
+          const target = container.data.current;
+          return isVoiceDropTarget(target) && canDrop(drag, target.channelId);
+        }),
+      });
+    }
+    return closestCenter({
+      ...args,
+      droppableContainers: args.droppableContainers.filter(
+        (container) => !isVoiceDropTarget(container.data.current),
+      ),
+    });
+  };
+}
+
 interface VoiceMemberContextMenuTarget {
   x: number;
   y: number;
+  /** The voice channel the row is under, for "Move to". */
+  channelId?: string;
   target: {
     id: string;
     username: string;
@@ -256,10 +320,16 @@ interface SortableChannelItemProps {
   canManageChannels: boolean;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  onUserContextMenu: (e: React.MouseEvent, target: VoiceMemberTarget) => void;
+  onUserContextMenu: VoiceMemberContextMenuHandler;
   uiDispatch: React.Dispatch<SidebarAction>;
   onWatchStream?: (channelId: string, userId: string) => void;
 }
+
+type VoiceMemberContextMenuHandler = (
+  e: React.MouseEvent,
+  target: VoiceMemberTarget,
+  channelId?: string,
+) => void;
 
 function VoiceChannelMediaDisplay({
   media,
@@ -561,6 +631,30 @@ const SortableChannelItem = memo(function SortableChannelItem({
     transition,
     isDragging,
   } = useSortable({ id: channel.id, disabled: !isDraggable });
+  const voiceMove = useContext(VoiceMoveContext);
+  const {
+    setNodeRef: setDropNodeRef,
+    isOver,
+    active: activeDrag,
+  } = useDroppable({
+    id: `${VOICE_DROP_TARGET_PREFIX}${channel.id}`,
+    data: {
+      type: "voice-target",
+      channelId: channel.id,
+    } satisfies VoiceDropTarget,
+    disabled: !isVoice,
+  });
+  const draggedMember = activeDrag?.data.current;
+  // Lit only for a member drag that may land here; never for text channels,
+  // the member's own channel, or a channel without MOVE_MEMBERS.
+  const dropState =
+    isVoice &&
+    isVoiceMemberDrag(draggedMember) &&
+    voiceMove?.canDrop(draggedMember, channel.id)
+      ? isOver
+        ? "over"
+        : "valid"
+      : undefined;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -629,13 +723,14 @@ const SortableChannelItem = memo(function SortableChannelItem({
   const voiceJoinIntentServerId =
     isVoice && currentUserId && !youAreHere ? channel.server_id : null;
   const onVoiceJoinIntent = useCallback(() => {
-    if (!voiceJoinIntentServerId) return;
+    // Crossing rows while dragging a member is not join intent.
+    if (!voiceJoinIntentServerId || voiceMove?.draggingRef.current) return;
     prewarmWebRtc();
     prefetchVoiceChannelJoin({
       serverId: voiceJoinIntentServerId,
       channelId: channel.id,
     });
-  }, [voiceJoinIntentServerId, channel.id]);
+  }, [voiceJoinIntentServerId, voiceMove, channel.id]);
   // Hover counts only after a short dwell, so sweeping the pointer down the
   // list does not fetch tickets for every row it crosses (each costs two
   // requests against the ticket route's rate limit).
@@ -665,8 +760,16 @@ const SortableChannelItem = memo(function SortableChannelItem({
         tree: true,
         selected: isActive,
         unread,
-        className: cn("cursor-pointer", isActive && "font-semibold"),
+        className: cn(
+          "cursor-pointer",
+          isActive && "font-semibold",
+          dropState === "valid" &&
+            "outline-1 -outline-offset-1 outline-line-strong outline-dashed",
+          dropState === "over" &&
+            "bg-tint-2 outline-2 -outline-offset-2 outline-focus",
+        ),
       })}
+      data-drop-target={dropState}
       style={
         { "--row-actions-w": `${actionCount * 26}px` } as React.CSSProperties
       }
@@ -794,7 +897,7 @@ const SortableChannelItem = memo(function SortableChannelItem({
       data-open={hidden ? undefined : ""}
       inert={hidden || undefined}
     >
-      <div className="rm-collapse-inner px-2">
+      <div ref={setDropNodeRef} className="rm-collapse-inner px-2">
         {isVoice ? (
           <TreeBranch
             header={row}
@@ -1135,27 +1238,69 @@ export default function ChannelSidebar({
     createChannel,
   });
 
-  const handleVoiceMemberContextMenu = useCallback(
-    (
-      e: React.MouseEvent,
-      target: {
-        id: string;
-        username: string;
-        display_name?: string | null;
-        avatar_url?: string | null;
-        avatar_display?: User["avatar_display"];
-      },
-    ) => {
+  const handleVoiceMemberContextMenu =
+    useCallback<VoiceMemberContextMenuHandler>((e, target, channelId) => {
       e.preventDefault();
       e.stopPropagation();
       setVoiceMemberMenu({
         x: e.clientX,
         y: e.clientY,
+        channelId,
         target,
       });
-    },
-    [],
+    }, []);
+
+  // ── Voice member moves (drag or "Move to") ───────────────────────────────
+  const memberDragRef = useRef(false);
+  const [draggedMember, setDraggedMember] = useState<VoiceMemberDrag | null>(
+    null,
   );
+  const canDropMember = useCallback(
+    (drag: MemberAt, toChannelId: string) =>
+      canDropVoiceMember(channels, drag, toChannelId, effectiveCurrentUserId),
+    [channels, effectiveCurrentUserId],
+  );
+  const voiceMove = useMemo<VoiceMoveContextValue>(
+    () => ({
+      canDrag: (channelId) => canDragVoiceMember(channels, channelId),
+      canDrop: canDropMember,
+      draggingRef: memberDragRef,
+    }),
+    [canDropMember, channels],
+  );
+  const collisionDetection = useMemo(
+    () => createSidebarCollisionDetection(canDropMember),
+    [canDropMember],
+  );
+  const moveVoiceMember = useCallback(
+    (drag: MemberAt, toChannelId: string) => {
+      if (!serverId || !canDropMember(drag, toChannelId)) return;
+      // Dragging yourself is a normal join (with the switch prompt).
+      if (drag.userId === effectiveCurrentUserId) {
+        onSelect(toChannelId);
+        return;
+      }
+      void requestVoiceMove({
+        serverId,
+        userId: drag.userId,
+        fromChannelId: drag.channelId,
+        toChannelId,
+      }).then((error) => {
+        if (error) toast.error(error);
+      });
+    },
+    [canDropMember, effectiveCurrentUserId, onSelect, serverId],
+  );
+  const endMemberDrag = useCallback(() => {
+    memberDragRef.current = false;
+    setDraggedMember(null);
+  }, []);
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const drag = event.active.data.current;
+    if (!isVoiceMemberDrag(drag)) return;
+    memberDragRef.current = true;
+    setDraggedMember(drag);
+  }, []);
 
   const toggleCategory = useCallback(
     (catId: string) => {
@@ -1173,6 +1318,15 @@ export default function ChannelSidebar({
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
+      const memberDrag = active.data.current;
+      if (isVoiceMemberDrag(memberDrag)) {
+        endMemberDrag();
+        const target = over?.data.current;
+        if (isVoiceDropTarget(target)) {
+          moveVoiceMember(memberDrag, target.channelId);
+        }
+        return;
+      }
       if (!over || active.id === over.id || !serverId) return;
 
       // Find the group containing the dragged channel
@@ -1222,7 +1376,15 @@ export default function ChannelSidebar({
       // Persist to DB + broadcast to all clients
       reorderChannels(serverId, channelUpdates);
     },
-    [grouped, serverId, channels, reorderChannels, dispatch],
+    [
+      grouped,
+      serverId,
+      channels,
+      reorderChannels,
+      dispatch,
+      endMemberDrag,
+      moveVoiceMember,
+    ],
   );
 
   return (
@@ -1257,37 +1419,49 @@ export default function ChannelSidebar({
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-2">
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={collisionDetection}
+            onDragStart={handleDragStart}
+            onDragCancel={endMemberDrag}
             onDragEnd={handleDragEnd}
           >
-            {grouped.map((group) => (
-              <ChannelCategoryGroup
-                key={group.id || "uncategorized"}
-                group={group}
-                isCollapsed={collapsedCategories.has(group.id || "")}
-                activeChannelId={activeChannelId}
-                readStates={readStates}
-                lastMessageAt={lastMessageAt}
-                voiceChannelStates={voiceChannelStates}
-                localVoiceChannelId={localVoiceChannelId}
-                localVoiceConnected={localVoiceConnected}
-                localVoiceSessionId={localVoiceSessionId}
-                listenTogetherRoomSlug={localVoiceRoomSlug}
-                channelMentionCounts={channelMentionCounts}
-                streamPreviewChannelId={streamPreviewChannelId}
-                streamThumbnails={streamThumbnails}
-                currentUserId={effectiveCurrentUserId}
-                canReorder={canReorder}
-                canManageChannels={canManageChannels}
-                onSelect={onSelect}
-                toggleCategory={toggleCategory}
-                handleCategoryContextMenu={handleCategoryContextMenu}
-                handleChannelContextMenu={handleChannelContextMenu}
-                handleUserContextMenu={handleVoiceMemberContextMenu}
-                uiDispatch={uiDispatch}
-                onWatchStream={onWatchStream}
-              />
-            ))}
+            <VoiceMoveContext.Provider value={voiceMove}>
+              {grouped.map((group) => (
+                <ChannelCategoryGroup
+                  key={group.id || "uncategorized"}
+                  group={group}
+                  isCollapsed={collapsedCategories.has(group.id || "")}
+                  activeChannelId={activeChannelId}
+                  readStates={readStates}
+                  lastMessageAt={lastMessageAt}
+                  voiceChannelStates={voiceChannelStates}
+                  localVoiceChannelId={localVoiceChannelId}
+                  localVoiceConnected={localVoiceConnected}
+                  localVoiceSessionId={localVoiceSessionId}
+                  listenTogetherRoomSlug={localVoiceRoomSlug}
+                  channelMentionCounts={channelMentionCounts}
+                  streamPreviewChannelId={streamPreviewChannelId}
+                  streamThumbnails={streamThumbnails}
+                  currentUserId={effectiveCurrentUserId}
+                  canReorder={canReorder}
+                  canManageChannels={canManageChannels}
+                  onSelect={onSelect}
+                  toggleCategory={toggleCategory}
+                  handleCategoryContextMenu={handleCategoryContextMenu}
+                  handleChannelContextMenu={handleChannelContextMenu}
+                  handleUserContextMenu={handleVoiceMemberContextMenu}
+                  uiDispatch={uiDispatch}
+                  onWatchStream={onWatchStream}
+                />
+              ))}
+            </VoiceMoveContext.Provider>
+            {/* The dragged member floats above the list (rows clip). */}
+            <DragOverlay dropAnimation={null}>
+              {draggedMember ? (
+                <div className="flex h-7 max-w-48 items-center rounded-md border border-line bg-ply-3 px-2 text-ui-sm font-medium text-ink-1 shadow-float">
+                  <span className="truncate">{draggedMember.name}</span>
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </div>
 
@@ -1397,6 +1571,28 @@ export default function ChannelSidebar({
               }
               onOpenMessage={() => openDm(voiceMemberMenu.target.id)}
               showDisconnect={false}
+              moveTargets={
+                voiceMemberMenu.channelId
+                  ? voiceMoveTargets(
+                      channels,
+                      {
+                        userId: voiceMemberMenu.target.id,
+                        channelId: voiceMemberMenu.channelId,
+                      },
+                      effectiveCurrentUserId,
+                    )
+                  : undefined
+              }
+              onMoveTo={(toChannelId) => {
+                if (!voiceMemberMenu.channelId) return;
+                moveVoiceMember(
+                  {
+                    userId: voiceMemberMenu.target.id,
+                    channelId: voiceMemberMenu.channelId,
+                  },
+                  toChannelId,
+                );
+              }}
             />
           </Suspense>
         )}
@@ -1774,7 +1970,7 @@ interface VoiceOccupantLeafProps {
   isCurrentUser: boolean;
   isCurrentClientVoiceConnected: boolean;
   streamThumbnailUrl: string | null;
-  onContextMenu: (e: React.MouseEvent, target: VoiceMemberTarget) => void;
+  onContextMenu: VoiceMemberContextMenuHandler;
   onPopoverUser: (u: VoiceMemberTarget, anchor: HTMLElement) => void;
   onWatchStream?: (channelId: string, userId: string) => void;
 }
@@ -1923,6 +2119,28 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
 
   const silenced = member.self_mute || member.self_deaf || isMutedByCurrentUser;
 
+  const voiceMove = useContext(VoiceMoveContext);
+  const draggable = !leaving && !!voiceMove?.canDrag(channelId);
+  const {
+    setNodeRef: setDragNodeRef,
+    listeners: dragListeners,
+    isDragging,
+  } = useDraggable({
+    id: `${VOICE_MEMBER_DRAG_PREFIX}${channelId}:${member.user_id}`,
+    data: {
+      type: "voice-member",
+      userId: member.user_id,
+      channelId,
+      name: resolvedIdentity.name,
+    } satisfies VoiceMemberDrag,
+    disabled: !draggable,
+  });
+  // Mouse only: a press on the row still opens the profile (a drag starts
+  // after 5px), Enter keeps doing so, and touch keeps its long-press menu.
+  const onDragMouseDown = draggable
+    ? (dragListeners?.onMouseDown as React.MouseEventHandler | undefined)
+    : undefined;
+
   return (
     <TreeLeaf
       self={isCurrentUser && !isReconnecting && !leaving}
@@ -1948,18 +2166,23 @@ const VoiceOccupantLeaf = memo(function VoiceOccupantLeaf({
       {...(leaving ? null : speakingAttr)}
     >
       <button
+        ref={setDragNodeRef}
         type="button"
         className={cn(
           OCCUPANT_ROW,
           "-ml-1 pl-1 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus in-data-speaking:text-ink-1",
           isCurrentUser && "text-ink-1",
+          draggable && "pointer-fine:cursor-grab",
+          isDragging && "opacity-50",
         )}
         aria-label={`Open profile for ${resolvedIdentity.name}`}
+        data-voice-draggable={draggable ? "" : undefined}
+        onMouseDown={onDragMouseDown}
         onMouseEnter={(event) => openStreamPreview(event.currentTarget)}
         onMouseLeave={scheduleStreamPreviewClose}
         onFocus={(event) => openStreamPreview(event.currentTarget)}
         onBlur={scheduleStreamPreviewClose}
-        onContextMenu={(e) => onContextMenu(e, userInfo)}
+        onContextMenu={(e) => onContextMenu(e, userInfo, channelId)}
         onClick={(e) => {
           e.stopPropagation();
           if (e.button === 0) onPopoverUser(userInfo, e.currentTarget);
@@ -2112,10 +2335,7 @@ interface ChannelCategoryGroupProps {
     group: CategoryGroup,
   ) => void;
   handleChannelContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  handleUserContextMenu: (
-    e: React.MouseEvent,
-    target: VoiceMemberTarget,
-  ) => void;
+  handleUserContextMenu: VoiceMemberContextMenuHandler;
   uiDispatch: React.Dispatch<SidebarAction>;
   onWatchStream?: (channelId: string, userId: string) => void;
 }

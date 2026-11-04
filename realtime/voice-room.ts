@@ -55,6 +55,7 @@ import {
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
   parseGatewayFrame,
+  VOICE_MOVED_CLOSE_REASON,
   type VoiceClientPayload,
 } from "../src/lib/gateway-protocol";
 import {
@@ -145,6 +146,12 @@ interface VoiceSocketClose {
 /** Close reason (with CloseCode.SessionReplaced) when voice moves device. */
 const VOICE_SESSION_REPLACED_REASON = "Voice moved to another device";
 
+/**
+ * Close code ("Try Again Later") when a voice identify's join grant could not
+ * be verified with the MeetingRoom. Unlike AdmissionRejected, clients retry.
+ */
+const VOICE_JOIN_UNVERIFIED_CLOSE_CODE = 1013;
+
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   admission?: {
@@ -155,6 +162,11 @@ interface VoiceAttachment {
   participant_id: string;
   connection_id?: string;
   supports_listen_together_snapshot_events?: boolean;
+  /**
+   * When an unidentified socket was last heard from (accepted, or a
+   * heartbeat). Identified sockets track liveness in participants instead.
+   */
+  last_seen_at?: number;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -462,7 +474,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           subject: admission.subject,
           ...(admission.serverId ? { serverId: admission.serverId } : {}),
         },
+        last_seen_at: Date.now(),
       });
+      // The alarm closes this socket if it goes silent before identifying.
+      this.scheduleAlarm();
 
       log.info(`New connection, gateway_version=${gatewayVersion}`);
 
@@ -498,6 +513,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           await this.disconnectParticipantImmediately(
             update.participantId,
             update.replaced === true,
+            update.moved === true,
           );
         }
       }
@@ -526,22 +542,29 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       try {
         const body = (await request.json()) as {
           participant_id?: string;
+          user_id?: string;
         };
 
         const participantId =
           typeof body.participant_id === "string" && body.participant_id.trim()
             ? body.participant_id.trim()
             : "";
+        const userId =
+          typeof body.user_id === "string" && body.user_id.trim()
+            ? body.user_id.trim()
+            : "";
 
-        if (!participantId) {
+        if (!participantId || !userId) {
           return Response.json(
-            { error: "Missing participant id" },
+            { error: "Missing participant or user id" },
             { status: 400 },
           );
         }
 
+        // Only the participant's own user may end it from here.
         const disconnected =
-          await this.disconnectParticipantImmediately(participantId);
+          this.isParticipantOwnedBy(participantId, userId) &&
+          (await this.disconnectParticipantImmediately(participantId));
         return Response.json({ disconnected }, { status: 200 });
       } catch (error) {
         return Response.json(
@@ -750,6 +773,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       }
 
       await this.reapParticipantsWithoutJoin(now);
+      this.closeSilentUnidentifiedSockets(now);
 
       // Prune pending reconnects whose grace period expired
       this.advanceListenTogetherIfNeeded(now);
@@ -775,6 +799,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       `SELECT last_heartbeat FROM participants WHERE last_heartbeat > 0`,
     )) {
       deadlines.push((row.last_heartbeat as number) + VOICE_ZOMBIE_TIMEOUT_MS);
+    }
+    for (const ws of this.unidentifiedSockets()) {
+      const lastSeenAt = this.getVoiceAttachment(ws)?.last_seen_at;
+      deadlines.push((lastSeenAt ?? now) + VOICE_ZOMBIE_TIMEOUT_MS);
     }
     for (const row of this.sql.exec(
       `SELECT MIN(expires_at) as expires_at FROM demo_chat_messages`,
@@ -809,6 +837,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
       const hasWork =
         participantCount > 0 ||
+        this.unidentifiedSockets().length > 0 ||
         demoChatCount > 0 ||
         typeof listenTogetherDeadline === "number";
 
@@ -900,7 +929,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   ) {
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = this.getVoiceAttachment(ws);
-      if (attachment?.supports_listen_together_snapshot_events === true) {
+      // Only identified participants hear the room (see broadcast).
+      if (!attachment?.participant_id) continue;
+      if (attachment.supports_listen_together_snapshot_events === true) {
         this.sendTo(ws, {
           op: Op.VoiceAppEvent,
           d: {
@@ -1632,6 +1663,49 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     return participantIds;
   }
 
+  /** Open voice sockets that have not identified (and are not identifying). */
+  private unidentifiedSockets(): WebSocket[] {
+    return this.ctx
+      .getWebSockets()
+      .filter(
+        (ws) =>
+          !this.getParticipantId(ws) &&
+          !this.identifyingSockets.has(ws) &&
+          ws.readyState === WebSocket.OPEN,
+      );
+  }
+
+  /**
+   * Heartbeats are the only liveness signal of an unidentified socket, as
+   * participants' last_heartbeat is for identified ones. One that stops
+   * sending them for VOICE_ZOMBIE_TIMEOUT_MS is closed, so a vanished peer
+   * cannot hold a socket open forever. A live standby socket heartbeats and
+   * stays.
+   */
+  private closeSilentUnidentifiedSockets(now: number): void {
+    for (const ws of this.unidentifiedSockets()) {
+      const attachment = this.getVoiceAttachment(ws);
+      const lastSeenAt = attachment?.last_seen_at;
+      if (typeof lastSeenAt !== "number") {
+        // Accepted before sockets carried last_seen_at: start its clock now.
+        try {
+          ws.serializeAttachment({ ...attachment, last_seen_at: now });
+        } catch {
+          // The socket is already gone.
+        }
+        continue;
+      }
+      if (now - lastSeenAt < VOICE_ZOMBIE_TIMEOUT_MS) continue;
+      roomLog.info(
+        `Closing unidentified voice socket, silent for ${Math.round((now - lastSeenAt) / 1000)}s`,
+      );
+      this.closeVoiceSocket(ws, {
+        code: CloseCode.SessionTimeout,
+        reason: "Voice socket timed out",
+      });
+    }
+  }
+
   private getVoiceAttachment(ws: WebSocket): VoiceAttachment | null {
     return ws.deserializeAttachment() as VoiceAttachment | null;
   }
@@ -1643,28 +1717,26 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private async disconnectParticipantImmediately(
     participantId: string,
     replaced = false,
+    moved = false,
   ): Promise<boolean> {
     const ws = this.getWsByParticipant(participantId);
     if (ws) {
+      // A moderator's move says so in its reason, so the client waits for
+      // the room's VoiceMove instead of treating it as a device takeover.
+      const reason = moved
+        ? VOICE_MOVED_CLOSE_REASON
+        : VOICE_SESSION_REPLACED_REASON;
       if (replaced) {
-        // The user's voice moved to another device: tell this one to stop
-        // (no reconnect) before its tracks go.
+        // The user's voice moved to another device or channel: tell this one
+        // to stop (no reconnect) before its tracks go.
         this.sendTo(ws, {
           op: Op.Error,
-          d: {
-            code: CloseCode.SessionReplaced,
-            message: VOICE_SESSION_REPLACED_REASON,
-          },
+          d: { code: CloseCode.SessionReplaced, message: reason },
         });
       }
       await this.handleLeave(
         ws,
-        replaced
-          ? {
-              code: CloseCode.SessionReplaced,
-              reason: VOICE_SESSION_REPLACED_REASON,
-            }
-          : true,
+        replaced ? { code: CloseCode.SessionReplaced, reason } : true,
       );
       return true;
     }
@@ -1681,6 +1753,23 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
     await this.disconnectParticipant(participantId);
     return true;
+  }
+
+  /** Whether an authenticated user owns this participant in the room. */
+  private isParticipantOwnedBy(participantId: string, userId: string): boolean {
+    const rows = [
+      ...this.sql.exec(
+        "SELECT user_id FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ];
+    if (rows.length > 0) return rows[0].user_id === userId;
+
+    const ws = this.getWsByParticipant(participantId);
+    const admission = ws ? this.getVoiceAttachment(ws)?.admission : undefined;
+    return (
+      admission?.accessMode === "authenticated" && admission.subject === userId
+    );
   }
 
   private getParticipantId(ws: WebSocket): string | undefined {
@@ -1855,6 +1944,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       await this.identifyVoiceParticipant(ws, d);
     } finally {
       this.identifyingSockets.delete(ws);
+      // A failed identify leaves an unidentified socket that the alarm must
+      // still watch; the room's last leave may have cleared the alarm.
+      await this.scheduleAlarm();
     }
   }
 
@@ -1867,19 +1959,33 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private async waitForVoiceJoinGrant(
     query: VoiceJoinGrantQuery,
   ): Promise<boolean> {
+    return (await this.awaitVoiceJoinVerdict(query)) === "granted";
+  }
+
+  /**
+   * Like waitForVoiceJoinGrant, but tells a refusal apart from a wait that
+   * ended with no grant, no revocation and no answer from the MeetingRoom
+   * (its check failed or is still running): "unverified".
+   */
+  private async awaitVoiceJoinVerdict(
+    query: VoiceJoinGrantQuery,
+  ): Promise<"granted" | "denied" | "unverified"> {
     const state = this.voiceJoinGrants.state(
       query.participantId,
       query.subject,
     );
-    if (state !== "unknown") return state === "granted";
+    if (state !== "unknown") return state === "granted" ? "granted" : "denied";
 
-    void this.confirmVoiceJoinGrant(query).then((confirmed) => {
-      if (!confirmed) return;
+    // undefined while the check runs; null when the MeetingRoom could not say.
+    let checked: boolean | null | undefined;
+    void this.checkVoiceJoinGrant(query).then((answer) => {
+      checked = answer;
+      if (answer !== true) return;
       this.voiceJoinGrants.recordConfirmed(query);
       this.voiceJoinGrantWaiters.notify(query.participantId);
     });
 
-    return this.voiceJoinGrantWaiters.wait(
+    const granted = await this.voiceJoinGrantWaiters.wait(
       query.participantId,
       this.voiceJoinGrantWaitMs,
       () => {
@@ -1890,12 +1996,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         return next === "unknown" ? null : next === "granted";
       },
     );
-  }
-
-  private async confirmVoiceJoinGrant(
-    query: VoiceJoinGrantQuery,
-  ): Promise<boolean> {
-    return (await this.checkVoiceJoinGrant(query)) === true;
+    if (granted) return "granted";
+    const final = this.voiceJoinGrants.state(
+      query.participantId,
+      query.subject,
+    );
+    return final === "unknown" && checked !== false ? "unverified" : "denied";
   }
 
   /**
@@ -2054,13 +2160,28 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     // joined (not standby) in this channel's MeetingRoom before it may see
     // tracks, publish or appear to the voice room.
     const joinWaitStartedAt = Date.now();
-    const joined = await this.waitForVoiceJoinGrant({
+    const verdict = await this.awaitVoiceJoinVerdict({
       participantId: d.participant_id,
       subject: admission.subject,
     });
     const joinWaitMs = Date.now() - joinWaitStartedAt;
     if (ws.readyState !== WebSocket.OPEN || this.getParticipantId(ws)) return;
-    if (!joined) {
+    if (verdict === "unverified") {
+      // The MeetingRoom could not be asked (a failed or slow fetch). Not a
+      // refusal: close with a retryable code so the client reconnects and
+      // identifies again instead of ending the session (AdmissionRejected).
+      roomLog.warn(
+        `VoiceIdentify deferred: participant=${d.participant_id} join could not be verified`,
+      );
+      try {
+        ws.close(
+          VOICE_JOIN_UNVERIFIED_CLOSE_CODE,
+          "Voice channel join could not be verified",
+        );
+      } catch {}
+      return;
+    }
+    if (verdict === "denied") {
       roomLog.warn(
         `VoiceIdentify refused: participant=${d.participant_id} has not joined the channel`,
       );
@@ -2210,6 +2331,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private handleHeartbeat(ws: WebSocket) {
     const pid = this.getParticipantId(ws);
     if (!pid) {
+      // A standby session keeps its socket unidentified until the user joins
+      // (see SFUClient.connectVoice); its heartbeats keep it open.
+      const attachment = this.getVoiceAttachment(ws);
+      if (attachment) {
+        ws.serializeAttachment({ ...attachment, last_seen_at: Date.now() });
+      }
       this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
       return;
     }
@@ -2621,18 +2748,28 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     participantId: string,
     tracks: TrackInfo[],
   ): Promise<void> {
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    const rejectOwnedTrackName = () => {
+      if (
+        !tracks.some((track) =>
+          this.hasTrackNameConflict(track.track_name, participantId),
+        )
+      ) {
+        return false;
+      }
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Track name is already owned",
+        },
+      });
+      return true;
+    };
+    if (rejectOwnedTrackName()) return;
+
     const sanitizedTracks: TrackInfo[] = [];
     for (const track of tracks) {
-      if (this.hasTrackNameConflict(track.track_name, participantId)) {
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: {
-            code: CloseCode.InvalidPayload,
-            message: "Track name is already owned",
-          },
-        });
-        return;
-      }
       const claims = await verifyPartyTracksSessionCapability(
         track.session_id,
         this.env.CALLS_APP_SECRET,
@@ -2659,6 +2796,13 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         kind: track.kind,
       });
     }
+
+    // The capability checks above yield. If the participant left (or this
+    // socket was replaced) meanwhile, its tracks were already purged:
+    // recording these now would leave rows nobody owns. Another participant
+    // may also have claimed one of the names meanwhile.
+    if (!this.isCurrentVoiceConnection(ws, participantId, connectionId)) return;
+    if (rejectOwnedTrackName()) return;
 
     for (const track of sanitizedTracks) {
       this.sql.exec(
@@ -3988,10 +4132,17 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
   }
 
+  /**
+   * Sends to every identified voice socket. An unidentified socket (a
+   * standby session, or a ticket holder that never sent VoiceIdentify) has
+   * not been admitted to the room and hears none of it; VoiceReady gives it
+   * the room's state once it identifies.
+   */
   private broadcast(msg: ServerMsg, excludeWs?: WebSocket) {
     const data = JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === excludeWs) continue;
+      if (!this.getParticipantId(ws)) continue;
       try {
         ws.send(data);
       } catch {

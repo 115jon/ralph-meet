@@ -111,6 +111,17 @@ const ProfileUpdatePayload = Schema.Struct({
   avatar_display: Schema.optional(NullableString),
 });
 
+/** VoiceMove: where a moderator moved this session, and how to get in. */
+const VoiceMovePayload = Schema.Struct({
+  channel_id: Schema.String,
+  server_id: Schema.String,
+  channel_name: Schema.optional(NullableString),
+  mover_name: Schema.optional(NullableString),
+  /** Signed for this user and channel; stands in for CONNECT there. */
+  grant: Schema.optional(Schema.String),
+  grant_expires_at: Schema.optional(Schema.Number),
+});
+
 /** Server opcodes RoomGateway handles (MeetingRoom, room or global socket). */
 export const roomGatewayServerRules = {
   [GatewayOp.Hello]: { schema: HelloPayload, invalid: "Invalid Hello" },
@@ -136,6 +147,10 @@ export const roomGatewayServerRules = {
     invalid: "Invalid ProfileUpdate",
   },
   [GatewayOp.Error]: { schema: ErrorPayload, invalid: "Invalid Error" },
+  [GatewayOp.VoiceMove]: {
+    schema: VoiceMovePayload,
+    invalid: "Invalid VoiceMove",
+  },
 } as const satisfies PayloadRules;
 
 // ── Voice gateway (VoiceRoom) ──────────────────────────────────────────────
@@ -242,6 +257,7 @@ type ReadyPayload = typeof ReadyPayload.Type;
 type ResumedPayload = typeof ResumedPayload.Type;
 type VoiceStateUpdatePayload = typeof VoiceStateUpdatePayload.Type;
 type ProfileUpdatePayload = typeof ProfileUpdatePayload.Type;
+export type VoiceMovePayload = typeof VoiceMovePayload.Type;
 type VoiceReadyPayload = typeof VoiceReadyPayload.Type;
 export type SessionDescriptionPayload = typeof SessionDescriptionPayload.Type;
 export type NegotiationDonePayload = typeof NegotiationDonePayload.Type;

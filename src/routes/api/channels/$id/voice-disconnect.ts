@@ -26,7 +26,7 @@ const OPTIONS = async ({ request }: any) => {
   );
 };
 
-const POST = async ({ request, params }: any) => {
+export const POST = async ({ request, params }: any) => {
   const preflight = handleCorsPreflightIfNeeded(request);
   if (preflight) return preflight;
 
@@ -56,15 +56,12 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess({ disconnected: false }, 202, request);
   }
 
-  let serverId = body.server_id?.trim() || null;
-  if (!serverId) {
-    const row = await getDB()
-      .prepare("SELECT server_id FROM channels WHERE id = ?")
-      .bind(channelId)
-      .first<{ server_id: string | null }>();
-
-    serverId = row?.server_id?.trim() || null;
-  }
+  // The room comes from the channel itself; the body's server_id is ignored.
+  const row = await getDB()
+    .prepare("SELECT server_id FROM channels WHERE id = ?")
+    .bind(channelId)
+    .first<{ server_id: string | null }>();
+  const serverId = row?.server_id?.trim() || null;
 
   if (!serverId) {
     return apiSuccess({ disconnected: false }, 202, request);
@@ -114,6 +111,7 @@ const POST = async ({ request, params }: any) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           participant_id: voiceSessionId,
+          user_id: userId,
         }),
       }),
     );
