@@ -848,6 +848,12 @@ pub fn run() {
                 settings.settings.game_capture_hook,
             ));
 
+            // ── Remote capture blocklist ─────────────────────────────────
+            // Loads the cached list now and refreshes it in the background,
+            // away from the share path.
+            #[cfg(feature = "game-capture-hook")]
+            game_capture::remote_policy::spawn_refresh();
+
             // Register deep-link schemes with the OS so `yap://`
             // URLs are routed to this executable. On Windows this
             // writes the HKCU\Software\Classes\<scheme> keys. Only needed during

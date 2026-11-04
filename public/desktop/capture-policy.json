@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "blocklist": [
+    {
+      "exe": "Marvel-Win64-Shipping.exe",
+      "note": "NetEase anti-cheat; OBS cannot open the process"
+    }
+  ]
+}

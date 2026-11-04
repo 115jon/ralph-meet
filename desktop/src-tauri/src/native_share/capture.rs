@@ -309,8 +309,8 @@ pub(crate) struct HookPreparation {
     attached: bool,
     /// Open, verified handles to the signed files; held until the helper exits.
     verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
-    /// The anti-cheat-protected executable, so a failed attempt is remembered.
-    protected_exe: Option<String>,
+    /// The executable the hook is attempted on, so the outcome is remembered.
+    target_exe: Option<String>,
 }
 
 #[cfg(all(feature = "game-capture-hook", windows))]
@@ -330,7 +330,7 @@ impl HookPreparation {
             flavor: None,
             attached: false,
             verified: None,
-            protected_exe: None,
+            target_exe: None,
         }
     }
 }
@@ -442,6 +442,84 @@ fn process_image_name(pid: u32) -> Option<String> {
         let _ = CloseHandle(process);
         result.ok()?;
         Some(String::from_utf16_lossy(&buf[..size as usize]))
+    }
+}
+
+/// OBS's own preflight: it opens the target with
+/// `PROCESS_QUERY_INFORMATION | SYNCHRONIZE` before injecting and gives up
+/// (`could not open process`) when that fails. A process that refuses it is
+/// elevated or protected by an anti-cheat, and the hook never loads there even
+/// though the inject helper reports success. Returns `false` (and logs why)
+/// when the host should not inject.
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn target_openable_like_obs(pid: u32, exe: &str) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_SYNCHRONIZE,
+    };
+    match unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_SYNCHRONIZE, false, pid) } {
+        Ok(process) => {
+            unsafe {
+                let _ = CloseHandle(process);
+            }
+            true
+        }
+        Err(err) => {
+            log::info!(
+                "[NativeShare] could not open {exe} (pid {pid}) for query and synchronize: {err}; \
+                 not injecting. This matches OBS Studio, which gives up on the same process: it \
+                 is elevated or anti-cheat protected{}",
+                if target_runs_as_administrator(pid) {
+                    " (target runs as administrator)"
+                } else {
+                    ""
+                }
+            );
+            false
+        }
+    }
+}
+
+/// Best effort, for the log only: the target opens with limited rights, but
+/// its token cannot be queried, or it is elevated and this process is not.
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn target_runs_as_administrator(pid: u32) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    unsafe fn token_elevated(process: HANDLE) -> Option<bool> {
+        let mut token = HANDLE::default();
+        OpenProcessToken(process, TOKEN_QUERY, &mut token).ok()?;
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut returned = 0u32;
+        let queried = GetTokenInformation(
+            token,
+            TokenElevation,
+            Some(std::ptr::addr_of_mut!(elevation).cast()),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut returned,
+        );
+        let _ = CloseHandle(token);
+        queried.ok()?;
+        Some(elevation.TokenIsElevated != 0)
+    }
+
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+            return false;
+        };
+        let target = token_elevated(process);
+        let _ = CloseHandle(process);
+        match target {
+            // The token is off limits to a process that can otherwise be opened.
+            None => true,
+            Some(elevated) => elevated && token_elevated(GetCurrentProcess()) == Some(false),
+        }
     }
 }
 
@@ -658,6 +736,9 @@ pub(crate) fn prepare_hook(
 /// 4. Resolve the target exe and run the **pure** `safety_decision` against the
 ///    default blocklist (no allowlist configured) — a `Deny` short-circuits
 ///    **before** injection so a blocklisted title is never injected (Req 10.2).
+///    The remote blocklist, the learned skips (games the hook already failed
+///    on) and OBS's own `OpenProcess` preflight follow, all before any
+///    artifact is touched.
 /// 5. Only on `Allow`: run the OBS `inject-helper` as a separate child process
 ///    (Req 1.1, 11.1) and, on success, start the [`ObsIpcChannel`] and build the
 ///    [`GameCaptureHook`].
@@ -688,6 +769,7 @@ fn attempt_hook_injection(
         spawn_inject_helper_async, InjectionMode, ObsArtifacts,
     };
     use crate::game_capture::obs_ipc::{stock_host_active, HookFlavor, ObsIpcChannel};
+    use crate::game_capture::remote_policy;
     use crate::game_capture::signed_hook;
 
     let mut prep = HookPreparation::not_attempted();
@@ -699,13 +781,13 @@ fn attempt_hook_injection(
         return prep;
     };
     let target_pid = target.pid;
-    let target_image = process_image_name(target_pid).unwrap_or_else(|| "<unknown>".to_string());
+    let target_exe = process_image_name(target_pid);
     log::info!(
         "[NativeShare] selected hook target hwnd={:#x} pid={} thread_id={} image={}",
         hwnd,
         target.pid,
         target.thread_id,
-        target_image
+        target_exe.as_deref().unwrap_or("<unknown>")
     );
 
     // 2. Target bitness.
@@ -722,7 +804,7 @@ fn attempt_hook_injection(
     //    cannot be identified, do NOT inject (conservative — Req 10.1). The
     //    executable blocklist holds the anti-cheat services and the games
     //    under kernel anti-cheats (Vanguard, FACEIT) or VAC: always WGC.
-    let Some(target_exe) = process_image_name(target_pid) else {
+    let Some(target_exe) = target_exe else {
         log::warn!(
             "[NativeShare] could not resolve target exe for pid {target_pid}; skipping injection"
         );
@@ -745,15 +827,41 @@ fn attempt_hook_injection(
         );
         return deny(prep, reason);
     }
+    // The list published by the web app only adds to the built-in one.
+    if remote_policy::blocks(&target_exe) {
+        log::info!(
+            "[NativeShare] safety gate denied injection for {target_exe} (pid {target_pid}): \
+             {} (remote blocklist)",
+            FallbackReason::Blocklisted.as_str()
+        );
+        return deny(prep, FallbackReason::Blocklisted);
+    }
 
-    // 4. Which hook build. A game with an Easy Anti-Cheat or BattlEye install
-    //    marker gets only the OBS-signed hook (those vendors allowlist it), and
-    //    one attempt per app run.
+    // 3b. Skip a game the hook already failed on: an earlier run saw it deliver
+    //    no frame (one failure for a game with an Easy Anti-Cheat or BattlEye
+    //    install marker, two for any other), and it has not been updated since.
     let marker = anti_cheat_marker_near(std::path::Path::new(&target_exe));
     let protected = marker.is_some();
+    if hook_policy::learned_skip(&target_exe, protected) {
+        log::info!(
+            "[NativeShare] not hooking {target_exe} (pid {target_pid}): {} (the hook delivered \
+             no frame on earlier shares of this build; protected={protected})",
+            FallbackReason::HookAttemptSpent.as_str()
+        );
+        return deny(prep, FallbackReason::HookAttemptSpent);
+    }
+
+    // 3c. Same preflight as OBS: a target that cannot be opened with query and
+    //    synchronize rights is not injected.
+    if !target_openable_like_obs(target_pid, &target_exe) {
+        return deny(prep, FallbackReason::InjectionDenied);
+    }
+    prep.target_exe = Some(target_exe.clone());
+
+    // 4. Which hook build. A game with an Easy Anti-Cheat or BattlEye install
+    //    marker gets only the OBS-signed hook (those vendors allowlist it).
     let inputs = FlavorInputs {
         protected,
-        protected_attempt_failed: protected && hook_policy::protected_attempt_failed(&target_exe),
         other_host_active: stock_host_active(target_pid),
         own_requested: hook_policy::own_flavor_requested(),
     };
@@ -772,10 +880,9 @@ fn attempt_hook_injection(
     if let Some(marker) = &marker {
         log::info!(
             "[NativeShare] {target_exe} is anti-cheat protected (install marker {}); using the \
-             OBS-signed hook only, one attempt this run",
+             OBS-signed hook only, and one failed attempt is remembered",
             marker.display()
         );
-        prep.protected_exe = Some(target_exe.clone());
     }
     prep.flavor = Some(flavor);
 
@@ -1111,8 +1218,9 @@ pub(crate) struct HookThreadContext<R: tauri::Runtime> {
     pub(crate) helper: Option<std::process::Child>,
     /// Verified signed files, held open until the helper has exited.
     pub(crate) verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
-    /// Set for an anti-cheat-protected target: a failed attempt is remembered.
-    pub(crate) protected_exe: Option<String>,
+    /// The target executable: a hook that delivers no frame is remembered, one
+    /// that does clears the record.
+    pub(crate) target_exe: Option<String>,
     pub(crate) d3d: Arc<D3dDevice>,
     pub(crate) source_id: String,
     pub(crate) frames: crate::wmf_encoder::FrameSender,
@@ -1202,7 +1310,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
         mut hook,
         mut helper,
         mut verified,
-        protected_exe,
+        target_exe,
         d3d,
         source_id,
         frames: frame_tx,
@@ -1448,6 +1556,9 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
                 }
                 if frames_received == 0 {
                     stats.set_hook_version(hook.hook_version());
+                    if let Some(exe) = target_exe.as_deref() {
+                        crate::game_capture::hook_policy::record_hook_success(exe);
+                    }
                 }
                 frames_received += 1;
                 last_progress = Instant::now();
@@ -1613,9 +1724,19 @@ fn run_hook_capture_loop<R: tauri::Runtime>(ctx: HookThreadContext<R>) {
         }
         HookLoopOutcome::FallbackToWgc(reason) => reason,
     };
-    if frames_received == 0 {
-        if let Some(exe) = protected_exe.as_deref() {
-            crate::game_capture::hook_policy::record_protected_failure(exe);
+    // A hook that never delivered a frame is remembered, so the next share of
+    // this build of the game can skip it. A stalled encoder or a version
+    // mismatch says nothing about the game.
+    if frames_received == 0
+        && matches!(
+            reason,
+            FallbackReason::HookNotLoaded
+                | FallbackReason::HookNoFirstFrame
+                | FallbackReason::InjectionFailed
+        )
+    {
+        if let Some(exe) = target_exe.as_deref() {
+            crate::game_capture::hook_policy::record_hook_failure(exe);
         }
     }
 
@@ -1786,7 +1907,7 @@ pub(crate) struct CaptureSelection {
     #[cfg(all(feature = "game-capture-hook", windows))]
     pub(crate) verified: Option<crate::game_capture::signed_hook::VerifiedSet>,
     #[cfg(all(feature = "game-capture-hook", windows))]
-    pub(crate) protected_exe: Option<String>,
+    pub(crate) target_exe: Option<String>,
 }
 
 impl CaptureSelection {
@@ -1941,8 +2062,8 @@ pub(crate) fn select_capture<R: tauri::Runtime>(
         );
         if capture_mode != CaptureMode::Hook && injection_outcome != InjectionOutcome::NotAttempted
         {
-            if let Some(exe) = prep.protected_exe.as_deref() {
-                crate::game_capture::hook_policy::record_protected_failure(exe);
+            if let Some(exe) = prep.target_exe.as_deref() {
+                crate::game_capture::hook_policy::record_hook_failure(exe);
             }
         }
     }
@@ -2030,7 +2151,7 @@ pub(crate) fn select_capture<R: tauri::Runtime>(
         #[cfg(all(feature = "game-capture-hook", windows))]
         verified: prep.verified,
         #[cfg(all(feature = "game-capture-hook", windows))]
-        protected_exe: prep.protected_exe,
+        target_exe: prep.target_exe,
     }
 }
 

@@ -715,7 +715,7 @@ impl ShareSession {
                         hook,
                         helper: selection.helper.take(),
                         verified: selection.verified.take(),
-                        protected_exe: selection.protected_exe.take(),
+                        target_exe: selection.target_exe.take(),
                         d3d: Arc::clone(d3d),
                         source_id: source_id.to_string(),
                         frames,

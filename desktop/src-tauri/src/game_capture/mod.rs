@@ -57,6 +57,11 @@ pub mod blocklist;
 #[cfg(feature = "game-capture-hook")]
 pub mod hook_policy;
 
+/// Add-only executable blocklist fetched from the Yap web app (cached for
+/// offline use), merged after the built-in one. Never enables injection.
+#[cfg(feature = "game-capture-hook")]
+pub mod remote_policy;
+
 /// Implicit-Vulkan-layer registration (Vulkan present interception activation).
 /// Vulkan cannot be Detours-hooked like DX/GL; OBS's capture is an implicit
 /// Vulkan layer the loader only activates when its JSON manifest is registered
@@ -341,8 +346,10 @@ pub enum FallbackReason {
     /// Another host (OBS Studio, for instance) is already capturing the
     /// target with the stock hook.
     HookInUse,
-    /// A hook attempt on this anti-cheat-protected game already failed this
-    /// run; it is not retried until the app restarts.
+    /// Earlier hook attempts on this exact build of the game ended without a
+    /// frame (one for an anti-cheat-protected game, two otherwise), so it is
+    /// not tried again until the game updates or the record expires (30 days
+    /// for an anti-cheat game, 7 for any other).
     HookAttemptSpent,
 }
 
