@@ -1,5 +1,29 @@
 # Changelog
 
+## [3.11.0](https://github.com/115jon/yap/compare/v3.10.1...v3.11.0) (2026-11-04)
+
+
+### Features
+
+* **auth:** ✨ sign in through kova at auth.115jon.com ([f93b375](https://github.com/115jon/yap/commit/f93b375478c892675f18485f6e4e99102b5a13eb))
+* **auth:** ✨ sign in through kova at auth.115jon.com ([ae5fb30](https://github.com/115jon/yap/commit/ae5fb3063ef063043b4a7dd7abfa7cd1c5b22f93))
+
+
+### Bug Fixes
+
+* **capture:** 🐛 skip hooks that cannot load, as obs does ([e484c83](https://github.com/115jon/yap/commit/e484c831752d86d77185be25c59b31e5c1e18eed))
+* **capture:** skip hooks that cannot load, as OBS does ([88a9171](https://github.com/115jon/yap/commit/88a9171a77dbb4a8f079dfad28af570ecb3f277b))
+* **chat:** 🐛 fit the voice chat panel header ([b6f4baa](https://github.com/115jon/yap/commit/b6f4baa488f145a2dbd0db53c3b2733e6e01d2a6))
+* **chat:** 🐛 keep gif picker clickable over dialogs ([8a749ba](https://github.com/115jon/yap/commit/8a749baced162d2bc1945112ad260d2aab762f09))
+* **chat:** clickable GIF picker over dialogs, voice chat panel header ([5ffdedf](https://github.com/115jon/yap/commit/5ffdedf48713f9ea3004d0ac4bf41b2b21195afb))
+
+
+### Performance Improvements
+
+* **realtime:** ⚡️ cut round trips from voice join admission ([f1b02a6](https://github.com/115jon/yap/commit/f1b02a6e086bad8c5f102bce9d4daa538d408d3d))
+* **voice:** ⚡️ prefetch join tickets and prewarm webrtc on intent ([8e7b83e](https://github.com/115jon/yap/commit/8e7b83ee7eb849c075958bd456eb042eed9fc625))
+* **voice:** faster voice joins (fewer round trips, prefetch, prewarm) ([4287ef7](https://github.com/115jon/yap/commit/4287ef70bed756921a94703c73c05e1d08dddd44))
+
 ## [3.10.1](https://github.com/115jon/yap/compare/v3.10.0...v3.10.1) (2026-11-03)
 
 
