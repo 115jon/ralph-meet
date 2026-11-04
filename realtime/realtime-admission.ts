@@ -163,8 +163,10 @@ export function initRealtimeTicketNonces(
   );
   // Carry over nonces the previous version spent that are still live, so a
   // ticket used just before the deploy cannot be used again after it, then
-  // drop its table. A rollback recreates that table (CREATE IF NOT EXISTS)
-  // with the column it expects.
+  // drop its table. After a rollback the previous version recreates that
+  // table empty (CREATE IF NOT EXISTS) and never reads
+  // realtime_ticket_nonce_uses, so a ticket spent under this version can be
+  // replayed once until it expires (SOCKET_TICKET_TTL_MS, 60 s).
   try {
     sql.exec(
       `INSERT OR IGNORE INTO realtime_ticket_nonce_uses (
@@ -174,11 +176,20 @@ export function initRealtimeTicketNonces(
       FROM ${RETIRED_NONCE_TABLE} WHERE expires_at > ?`,
       now,
     );
-  } catch {
-    // No retired table: a new object, or one already migrated.
-    return;
+  } catch (error) {
+    // No retired table: a new object, or one already migrated. Any other
+    // failure must surface: dropping the table without carrying its live
+    // nonces over would make those tickets replayable.
+    if (isMissingTableError(error)) return;
+    throw error;
   }
   sql.exec(`DROP TABLE IF EXISTS ${RETIRED_NONCE_TABLE}`);
+}
+
+/** Whether a SQLite error says a table does not exist. */
+function isMissingTableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bno such table\b/i.test(message);
 }
 
 export type RealtimeAdmissionConsumeResult =

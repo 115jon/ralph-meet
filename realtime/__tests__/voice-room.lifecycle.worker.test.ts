@@ -6003,4 +6003,41 @@ describe("VoiceRoom schema start-up", () => {
       ).toBe(2);
     });
   });
+
+  it("keeps the retired nonce table when carrying its nonces over fails", async () => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const now = Date.now();
+
+    await runInDurableObject(room, (_instance, state) => {
+      const sql = state.storage.sql;
+      // A retired table the carry-over SELECT cannot read (no consumed_at).
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS realtime_ticket_nonces (
+          nonce_digest TEXT PRIMARY KEY,
+          access_mode TEXT NOT NULL,
+          audience TEXT NOT NULL,
+          room_slug TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+      `);
+      sql.exec(
+        "INSERT INTO realtime_ticket_nonces VALUES ('live-digest', 'authenticated', 'voice', ?, 'user', ?)",
+        roomName,
+        now + 60_000,
+      );
+
+      expect(() => initRealtimeTicketNonces(sql, now)).toThrow(
+        /no such column/,
+      );
+      expect(
+        [
+          ...sql.exec<{ c: number }>(
+            "SELECT COUNT(*) AS c FROM realtime_ticket_nonces",
+          ),
+        ][0]?.c,
+      ).toBe(1);
+    });
+  });
 });
