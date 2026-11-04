@@ -1,4 +1,5 @@
 import { solvePlayerChallenges } from "./solver";
+import { youtubeFetch } from "./youtube-fetch";
 import type {
   PreferredPlaybackKind,
   YouTubeResolveOptions,
@@ -680,7 +681,7 @@ async function fetchWatchPage(videoId: string) {
   watchUrl.searchParams.set("bpctr", "9999999999");
   watchUrl.searchParams.set("has_verified", "1");
 
-  const response = await fetch(watchUrl, {
+  const response = await youtubeFetch(watchUrl, {
     headers: {
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "en-us,en;q=0.5",
@@ -714,7 +715,7 @@ async function fetchWebInnertubeConfig(
     return cachedWebInnertubeConfig.value;
   }
 
-  const response = await fetch("https://www.youtube.com/?hl=en", {
+  const response = await youtubeFetch("https://www.youtube.com/?hl=en", {
     headers: {
       "Accept-Language": "en-US,en;q=0.9",
       "User-Agent": YOUTUBE_USER_AGENT,
@@ -807,7 +808,7 @@ async function postWebInnertubeRequest(
         headers.set("X-Goog-Visitor-Id", attempt.visitorData);
       }
 
-      const response = await fetch(
+      const response = await youtubeFetch(
         `https://www.youtube.com/youtubei/v1/${endpoint}?key=${encodeURIComponent(attempt.apiKey)}`,
         {
           method: "POST",
@@ -933,7 +934,7 @@ async function fetchPlayerResponseFromInnertube(
     }
 
     try {
-      const response = await fetch(
+      const response = await youtubeFetch(
         `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(attempt.apiKey)}`,
         {
           method: "POST",
@@ -1519,7 +1520,7 @@ async function servesWholeStream(format: YouTubeResolvedFormat) {
       ? `bytes=${length - 2}-${length - 1}`
       : "bytes=1048576-1048577";
   try {
-    const response = await fetch(format.url, {
+    const response = await youtubeFetch(format.url, {
       headers: { Range: range, "User-Agent": YOUTUBE_USER_AGENT },
       signal: AbortSignal.timeout(STREAM_PROBE_TIMEOUT_MS),
     });
