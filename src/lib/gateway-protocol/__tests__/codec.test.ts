@@ -14,9 +14,7 @@ import {
   compilePayloadDecoder,
   parseGatewayFrame,
   readReplaySeq,
-  LEGACY_CLERK_USER_ID_COMPAT,
   voiceGatewayClientRules,
-  withLegacyClerkUserId,
   type GatewayFrame,
   type PayloadRules,
 } from "@/lib/gateway-protocol";
@@ -167,13 +165,6 @@ const VALID_MAIN_CLIENT_PAYLOADS = {
     // chat store
     {
       name: "ChatClient",
-      platform: "web",
-      supports_voice_state_deltas: true,
-    },
-    // chat store before the user_id rename: the room ignores clerk_user_id
-    {
-      name: "ChatClient",
-      clerk_user_id: "user-1",
       platform: "web",
       supports_voice_state_deltas: true,
     },
@@ -537,150 +528,6 @@ describe("server → client rules", () => {
 });
 
 // ── Module boundary ────────────────────────────────────────────────────────
-
-// ── user_id rename ─────────────────────────────────────────────────────────
-// Servers from before the rename (and replays they buffered) send only
-// clerk_user_id; current servers send both. Decoded payloads carry only
-// user_id either way.
-
-describe("user_id compatibility", () => {
-  const legacyState = {
-    id: "p-1",
-    clerk_user_id: "user-1",
-    name: "Ada",
-    self_mute: false,
-    self_deaf: false,
-    self_stream: false,
-    self_video: false,
-    suppress: false,
-    tracks: [],
-  };
-  const { clerk_user_id: _legacy, ...currentState } = {
-    ...legacyState,
-    user_id: "user-1",
-  };
-  const dualState = { ...currentState, clerk_user_id: "user-1" };
-  const legacyMember = {
-    clerk_user_id: "user-1",
-    name: "Ada",
-    self_mute: false,
-    self_deaf: false,
-    self_video: false,
-    self_stream: false,
-  };
-  const { clerk_user_id: _legacyMember, ...currentMember } = {
-    ...legacyMember,
-    user_id: "user-1",
-  };
-
-  function decodedD(
-    decode: (frame: GatewayFrame) => {
-      ok: boolean;
-      message?: { d?: unknown };
-    },
-    op: number,
-    d: unknown,
-  ) {
-    const result = decode(frame(op, d));
-    expect(result.ok).toBe(true);
-    return result.message?.d;
-  }
-
-  it.each([
-    ["a pre-rename server (clerk_user_id only)", legacyState],
-    ["a current server (both names)", dualState],
-    ["a server after the dual-send ends (user_id only)", currentState],
-  ])("reads VoiceState user_id from %s", (_label, state) => {
-    const ready = {
-      participant_id: "p-1",
-      ice_servers: [],
-      voice_token: "t",
-      participants: [state],
-    };
-    expect(
-      decodedD(decodeRoomGatewayServerFrame, GatewayOp.Ready, ready),
-    ).toEqual({ ...ready, participants: [currentState] });
-    expect(
-      decodedD(decodeRoomGatewayServerFrame, GatewayOp.Resumed, {
-        participants: [state],
-      }),
-    ).toEqual({ participants: [currentState] });
-    expect(
-      decodedD(decodeRoomGatewayServerFrame, GatewayOp.VoiceStateUpdate, {
-        participant: state,
-        action: "join",
-      }),
-    ).toEqual({ participant: currentState, action: "join" });
-  });
-
-  it("reads user_id from a pre-rename VoiceStateUpdate delta", () => {
-    const delta = { id: "p-1", clerk_user_id: "user-1", self_mute: true };
-    expect(
-      decodedD(decodeRoomGatewayServerFrame, GatewayOp.VoiceStateUpdate, {
-        participant: delta,
-        action: "update",
-      }),
-    ).toEqual({
-      participant: { id: "p-1", user_id: "user-1", self_mute: true },
-      action: "update",
-    });
-  });
-
-  it.each([
-    ["a pre-rename server (clerk_user_id only)", legacyMember],
-    [
-      "a current server (both names)",
-      { ...currentMember, clerk_user_id: "user-1" },
-    ],
-  ])("reads voice channel member user_id from %s", (_label, member) => {
-    expect(
-      decodedD(decodeChatGatewayServerFrame, GatewayOp.Dispatch, {
-        seq: 3,
-        event: "VOICE_CHANNEL_STATES",
-        data: { voice_states: { "vc-1": [member] }, voice_started_at: {} },
-      }),
-    ).toEqual({
-      seq: 3,
-      event: "VOICE_CHANNEL_STATES",
-      data: { voice_states: { "vc-1": [currentMember] }, voice_started_at: {} },
-    });
-    expect(
-      decodedD(decodeChatGatewayServerFrame, GatewayOp.Dispatch, {
-        event: "VOICE_CHANNEL_STATE_UPDATE",
-        data: { channel_id: "vc-1", members: [member], started_at: 1 },
-      }),
-    ).toEqual({
-      event: "VOICE_CHANNEL_STATE_UPDATE",
-      data: { channel_id: "vc-1", members: [currentMember], started_at: 1 },
-    });
-  });
-
-  it("leaves other dispatches and user-less payloads untouched", () => {
-    const other = { event: "GUILD_UPDATE", data: { clerk_user_id: "x" } };
-    const result = decodeChatGatewayServerFrame(
-      frame(GatewayOp.Dispatch, other),
-    );
-    expect(result.ok && result.message.d).toBe(other);
-    const guest = { id: "p-guest", name: "Guest", tracks: [] };
-    expect(
-      decodedD(decodeRoomGatewayServerFrame, GatewayOp.VoiceStateUpdate, {
-        participant: guest,
-        action: "join",
-      }),
-    ).toEqual({ participant: guest, action: "join" });
-  });
-
-  it("sends both names while the dual-send is on, and nothing for guests", () => {
-    expect(LEGACY_CLERK_USER_ID_COMPAT).toBe(true);
-    expect(withLegacyClerkUserId(currentState)).toEqual(dualState);
-    expect(withLegacyClerkUserId(currentMember)).toEqual({
-      ...currentMember,
-      clerk_user_id: "user-1",
-    });
-    const guest = { id: "p-guest", user_id: undefined };
-    expect(withLegacyClerkUserId(guest)).toBe(guest);
-  });
-});
 
 describe("gateway-protocol imports", () => {
   it("uses only Schema from effect and type-only app imports", () => {

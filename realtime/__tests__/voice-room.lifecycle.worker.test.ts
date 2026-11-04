@@ -7,7 +7,9 @@ import {
 } from "../../src/lib/voice/socket-ticket";
 import {
   appendRealtimeAdmissionHeaders,
+  consumeRealtimeTicketNonce,
   createRealtimeAdmissionContext,
+  initRealtimeTicketNonces,
 } from "../realtime-admission";
 import { createSoundboardPlaybackId } from "../../src/lib/voice/soundboard-playback-id";
 import { verifySoundboardMediaCapability } from "../../src/lib/voice/soundboard-media-capability";
@@ -673,7 +675,10 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-unknown-source`,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "unknown-source",
+          ),
           sound_id: "not-a-default-sound",
           name: "Unknown",
         },
@@ -702,7 +707,10 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-known-default`,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "known-default",
+          ),
           sound_id: "ping",
           name: "Ping",
         },
@@ -716,7 +724,7 @@ describe("VoiceRoom lifecycle", () => {
     );
     expect(response.d).toMatchObject({
       sound_id: "ping",
-      playback_id: `s-${TEST_SUBJECT}-known-default`,
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "known-default"),
     });
 
     socket.close();
@@ -1266,7 +1274,7 @@ describe("VoiceRoom lifecycle", () => {
       "legacy-peer",
     );
 
-    const playbackId = `s-${TEST_SUBJECT}-${soundId}`;
+    const playbackId = createSoundboardPlaybackId(TEST_SUBJECT, soundId);
     socket.send(
       JSON.stringify({
         op: 106,
@@ -2275,8 +2283,6 @@ describe("VoiceRoom lifecycle", () => {
         ],
       },
     },
-    { label: "pull prewarm", op: 107, d: {} },
-    { label: "pull reset", op: 105, d: {} },
   ])(
     "rejects unsupported browser SFU $label without side effects",
     async (message) => {
@@ -2329,6 +2335,31 @@ describe("VoiceRoom lifecycle", () => {
       for (const opcode of [4, 10, 108]) {
         expect(await hasMessageWithOpcode(socket, opcode)).toBe(false);
       }
+      socket.close();
+    },
+  );
+
+  it.each([107, 105])(
+    "answers retired browser SFU opcode %i as an unknown opcode",
+    async (op) => {
+      const roomName = crypto.randomUUID();
+      const participantId = crypto.randomUUID();
+      let callsRequestCount = 0;
+      await mockCallsApi(roomName, async () => {
+        callsRequestCount += 1;
+        return Response.json({});
+      });
+      const socket = await openVoiceSocket(roomName);
+      await identifyVoiceSocket(socket, participantId, roomName);
+      const unknown = nextMessageWithOpcodeOrNull(socket, 18);
+
+      socket.send(JSON.stringify({ op, d: {} }));
+
+      await expect(unknown).resolves.toMatchObject({
+        op: 18,
+        d: { code: 4001, message: `Unknown voice opcode: ${op}` },
+      });
+      expect(callsRequestCount).toBe(0);
       socket.close();
     },
   );
@@ -4539,7 +4570,7 @@ describe("VoiceRoom lifecycle", () => {
           user_id: "forged-owner",
           participant_id: "forged-participant",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-sound-1`,
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "sound-1"),
           sound_id: "sound-1",
           name: "Airhorn",
           media_url: mediaUrl,
@@ -4559,7 +4590,7 @@ describe("VoiceRoom lifecycle", () => {
       user_id: TEST_SUBJECT,
       participant_id: participantId,
       server_key: "server-1",
-      playback_id: `s-${TEST_SUBJECT}-sound-1`,
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "sound-1"),
       sound_id: "sound-1",
       name: "Airhorn",
       media_url: mediaUrl,
@@ -4586,7 +4617,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-canonical`,
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "canonical"),
           sound_id: "sound-1",
           name: "Airhorn",
           data_url: audioDataUrlForDecodedBytes(1),
@@ -4605,7 +4636,7 @@ describe("VoiceRoom lifecycle", () => {
       participant_id: participantId,
       user_id: TEST_SUBJECT,
       server_key: "server-1",
-      playback_id: `s-${TEST_SUBJECT}-canonical`,
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "canonical"),
       sound_id: "sound-1",
       name: "Airhorn",
       media_url: mediaUrl,
@@ -4632,7 +4663,10 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-invalid-legacy`,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "invalid-legacy",
+          ),
           sound_id: "sound-1",
           name: "Airhorn",
           data_url: "data:audio/wav;base64,AAA==",
@@ -4651,7 +4685,7 @@ describe("VoiceRoom lifecycle", () => {
       participant_id: participantId,
       user_id: TEST_SUBJECT,
       server_key: "server-1",
-      playback_id: `s-${TEST_SUBJECT}-invalid-legacy`,
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "invalid-legacy"),
       sound_id: "sound-1",
       name: "Airhorn",
       media_url: mediaUrl,
@@ -4674,7 +4708,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-tracking`,
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "tracking"),
           name: "Tracking",
           media_url: "https://tracking.example.com/pixel.mp3",
         },
@@ -4714,7 +4748,10 @@ describe("VoiceRoom lifecycle", () => {
           d: {
             type: "soundboard.play",
             server_key: "server-1",
-            playback_id: `s-${TEST_SUBJECT}-credential-url`,
+            playback_id: createSoundboardPlaybackId(
+              TEST_SUBJECT,
+              "credential-url",
+            ),
             name: "Airhorn",
             media_url: mediaUrl,
           },
@@ -4752,7 +4789,10 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-invalid-data-url`,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "invalid-data-url",
+          ),
           sound_id: "sound-1",
           name: "Custom",
           data_url: dataUrl,
@@ -4792,7 +4832,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-unsafe-media`,
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "unsafe-media"),
           name: "Custom",
           media_url: mediaUrl,
         },
@@ -4824,7 +4864,10 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-catalog-media`,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "catalog-media",
+          ),
           sound_id: "sound-1",
           name: "Airhorn",
           media_url: "/api/soundboard/uploads/sound-1",
@@ -4855,7 +4898,10 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-catalog-media`,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "catalog-media",
+          ),
           sound_id: "sound-1",
           name: "Airhorn",
           media_url: "/api/soundboard/uploads/sound-1",
@@ -4925,7 +4971,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: "s-another-user-airhorn",
+          playback_id: createSoundboardPlaybackId("another-user", "airhorn"),
           sound_id: "airhorn",
           name: "Airhorn",
           media_url: "https://cdn.example.com/airhorn.mp3",
@@ -4986,11 +5032,11 @@ describe("VoiceRoom lifecycle", () => {
     listener.close();
   });
 
-  it("rejects a prefix-colliding legacy control from user", async () => {
+  it("rejects a control naming the caller in the retired s-<owner>-<sound> form", async () => {
     const roomName = crypto.randomUUID();
-    const owner = await openVoiceSocket(roomName, "user-other");
+    const listener = await openVoiceSocket(roomName, "user-other");
     await identifyVoiceSocket(
-      owner,
+      listener,
       crypto.randomUUID(),
       roomName,
       "user-other",
@@ -4999,7 +5045,7 @@ describe("VoiceRoom lifecycle", () => {
     await identifyVoiceSocket(caller, crypto.randomUUID(), roomName, "user");
     const response = nextMessageWithOpcode(caller, 18);
     const broadcast = nextMessageWithOpcodeAndTypeOrNull(
-      owner,
+      listener,
       106,
       "soundboard.stop",
     );
@@ -5010,7 +5056,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.stop",
           server_key: "server-1",
-          playback_id: "s-user-other-control",
+          playback_id: "s-user-control",
         },
       }),
     );
@@ -5020,23 +5066,32 @@ describe("VoiceRoom lifecycle", () => {
       d: { code: 4000, message: "Soundboard event was rejected" },
     });
     expect(await broadcast).toBeNull();
-    owner.close();
+    listener.close();
     caller.close();
   });
 
   it.each([
     {
       type: "soundboard.stop",
-      playback_id: `s-${TEST_SUBJECT}-cross-user-control`,
+      playback_id: createSoundboardPlaybackId(
+        TEST_SUBJECT,
+        "cross-user-control",
+      ),
     },
     {
       type: "soundboard.pause-set",
-      playback_id: `s-${TEST_SUBJECT}-cross-user-control`,
+      playback_id: createSoundboardPlaybackId(
+        TEST_SUBJECT,
+        "cross-user-control",
+      ),
       paused: true,
     },
     {
       type: "soundboard.volume-set",
-      playback_id: `s-${TEST_SUBJECT}-cross-user-control`,
+      playback_id: createSoundboardPlaybackId(
+        TEST_SUBJECT,
+        "cross-user-control",
+      ),
       volume: 0.25,
     },
   ])("rejects a cross-user %s control", async (event) => {
@@ -5299,39 +5354,6 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
-  it("prunes expired legacy soundboard playback owner rows", async () => {
-    const roomName = crypto.randomUUID();
-    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    const socket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-
-    await runInDurableObject(room, (instance) => {
-      const { sql } = instance as unknown as { sql: SqlStorage };
-      sql.exec(
-        `INSERT OR REPLACE INTO soundboard_legacy_playback_owners (playback_id, owner_id, created_at)
-         VALUES (?, ?, ?)`,
-        `s-${TEST_SUBJECT}-stale`,
-        TEST_SUBJECT,
-        Date.now() - 11 * 60 * 1000,
-      );
-    });
-
-    await runDurableObjectAlarm(room);
-
-    await runInDurableObject(room, (instance) => {
-      const { sql } = instance as unknown as { sql: SqlStorage };
-      const rows = [
-        ...sql.exec(
-          "SELECT playback_id FROM soundboard_legacy_playback_owners WHERE playback_id = ?",
-          `s-${TEST_SUBJECT}-stale`,
-        ),
-      ];
-      expect(rows).toHaveLength(0);
-    });
-
-    socket.close();
-  });
-
   it("accepts soundboard data URLs just below the decoded byte cap", async () => {
     const roomName = crypto.randomUUID();
     const participantId = crypto.randomUUID();
@@ -5349,7 +5371,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-under-cap`,
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "under-cap"),
           name: "Custom",
           data_url: dataUrl,
         },
@@ -5366,7 +5388,7 @@ describe("VoiceRoom lifecycle", () => {
       participant_id: participantId,
       user_id: TEST_SUBJECT,
       server_key: "server-1",
-      playback_id: `s-${TEST_SUBJECT}-under-cap`,
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "under-cap"),
       name: "Custom",
       data_url: dataUrl,
       volume: 1,
@@ -5392,7 +5414,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-at-cap`,
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "at-cap"),
           name: "Custom",
           data_url: dataUrl,
         },
@@ -5406,7 +5428,7 @@ describe("VoiceRoom lifecycle", () => {
     );
     expect(response.d).toMatchObject({
       data_url: dataUrl,
-      playback_id: `s-${TEST_SUBJECT}-at-cap`,
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "at-cap"),
     });
 
     socket.close();
@@ -5433,7 +5455,10 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-oversized-with-id`,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "oversized-with-id",
+          ),
           sound_id: "sound-1",
           name: "Custom",
           data_url: oversizedDataUrl,
@@ -5469,7 +5494,7 @@ describe("VoiceRoom lifecycle", () => {
         d: {
           type: "soundboard.play",
           server_key: "server-1",
-          playback_id: `s-${TEST_SUBJECT}-custom`,
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "custom"),
           name: "Custom",
           data_url: oversizedDataUrl,
         },
@@ -5828,195 +5853,191 @@ describe("VoiceRoom gateway protocol edge", () => {
   });
 });
 
-// The previous Worker version (pre-rename, origin/main before this change)
-// runs these statements against participants, verbatim. After a rollback it
-// must keep working on a table this code created or migrated.
-const PRE_RENAME_PARTICIPANTS_SQL = {
-  createTable: `
-      CREATE TABLE IF NOT EXISTS participants (
-        id TEXT PRIMARY KEY,
-        clerk_user_id TEXT,
-        native_screen_session_id TEXT,
-        last_heartbeat INTEGER DEFAULT 0,
-        speaking INTEGER DEFAULT 0,
-        connection_id TEXT
-      );
-    `,
-  addColumns: [
-    `ALTER TABLE participants ADD COLUMN connection_id TEXT;`,
-    `ALTER TABLE participants ADD COLUMN native_screen_session_id TEXT;`,
-  ],
-  upsert: `INSERT INTO participants (id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id)
-       VALUES (?, ?, NULL, ?, 0, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         clerk_user_id = excluded.clerk_user_id,
-         native_screen_session_id = NULL,
-         last_heartbeat = excluded.last_heartbeat,
-         connection_id = excluded.connection_id`,
-  userIdOf: "SELECT clerk_user_id FROM participants WHERE id = ?",
-  screenParticipantOf: `SELECT p.id
-       FROM participants p
-       WHERE (p.clerk_user_id = ? OR p.id = ?)
-         AND EXISTS (
-           SELECT 1
-           FROM tracks t
-           WHERE t.participant_id = p.id
-             AND t.track_name LIKE 'screen-%'
-             AND t.native_screen_pending = 0
-         )
-       LIMIT 1`,
-  owners: "SELECT id, clerk_user_id FROM participants",
-};
-
-describe("VoiceRoom participants user id columns", () => {
+describe("VoiceRoom schema start-up", () => {
   type SqlStorage = DurableObjectState["storage"]["sql"];
   type Internals = {
     getUserIdForParticipant(participantId: string): string | null;
-    getActiveScreenParticipantIdForUserId(userId: string): string | null;
-    getLegacySoundboardPlaybackOwners(playbackId: string): Set<string>;
   };
   const columns = (sql: SqlStorage) =>
     [...sql.exec<{ name: string }>("PRAGMA table_info(participants)")].map(
       (row) => row.name,
     );
-  const rowOf = (sql: SqlStorage, participantId: string) =>
+  const userIdOf = (sql: SqlStorage, participantId: string) =>
     [
-      ...sql.exec<{ user_id: string | null; clerk_user_id: string | null }>(
-        "SELECT user_id, clerk_user_id FROM participants WHERE id = ?",
+      ...sql.exec<{ user_id: string | null }>(
+        "SELECT user_id FROM participants WHERE id = ?",
         participantId,
       ),
-    ][0];
-  /** The previous version starting up: its schema statements, as it runs them. */
-  const startPreRename = (sql: SqlStorage) => {
-    sql.exec(PRE_RENAME_PARTICIPANTS_SQL.createTable);
-    for (const statement of PRE_RENAME_PARTICIPANTS_SQL.addColumns) {
-      try {
-        sql.exec(statement);
-      } catch {
-        // As the previous version: the column already exists.
-      }
-    }
-  };
+    ][0]?.user_id;
   const roomEnv = env as unknown as ConstructorParameters<typeof VoiceRoom>[1];
 
-  it("adds user_id to a pre-rename table, backfills it, and is a no-op on a second start", async () => {
+  it.each([
+    {
+      label: "a table with only the pre-rename column",
+      columnsSql: "clerk_user_id TEXT",
+      insertSql:
+        "INSERT INTO participants (id, clerk_user_id) VALUES (?, ?), (?, ?)",
+      rows: (a: string, b: string) => [a, "user-a", b, "user-b"],
+    },
+    {
+      label: "a table with both user id columns",
+      columnsSql: "user_id TEXT, clerk_user_id TEXT",
+      // One row written by both versions, one only by pre-rename code.
+      insertSql:
+        "INSERT INTO participants (id, user_id, clerk_user_id) VALUES (?, ?, ?), (?, NULL, ?)",
+      rows: (a: string, b: string) => [a, "user-a", "user-a", b, "user-b"],
+    },
+  ])(
+    "drops the pre-rename user id column from $label, keeping every user id",
+    async ({ columnsSql, insertSql, rows }) => {
+      const roomName = crypto.randomUUID();
+      const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+      const a = crypto.randomUUID();
+      const b = crypto.randomUUID();
+
+      await runInDurableObject(room, (_instance, state) => {
+        const sql = state.storage.sql;
+        sql.exec("DROP TABLE participants");
+        sql.exec(
+          `CREATE TABLE participants (id TEXT PRIMARY KEY, ${columnsSql}, native_screen_session_id TEXT, last_heartbeat INTEGER DEFAULT 0, speaking INTEGER DEFAULT 0, connection_id TEXT)`,
+        );
+        sql.exec(insertSql, ...rows(a, b));
+
+        const started = new VoiceRoom(state, roomEnv) as unknown as Internals;
+        expect(columns(sql)).toContain("user_id");
+        expect(columns(sql)).not.toContain("clerk_user_id");
+        expect(userIdOf(sql, a)).toBe("user-a");
+        expect(userIdOf(sql, b)).toBe("user-b");
+        expect(started.getUserIdForParticipant(b)).toBe("user-b");
+
+        const before = columns(sql);
+        new VoiceRoom(state, roomEnv);
+        expect(columns(sql)).toEqual(before);
+        expect(userIdOf(sql, b)).toBe("user-b");
+      });
+    },
+  );
+
+  it("drops the retired soundboard playback owner table", async () => {
     const roomName = crypto.randomUUID();
     const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    const oldId = crypto.randomUUID();
 
     await runInDurableObject(room, (_instance, state) => {
       const sql = state.storage.sql;
-      // A room the previous version created, with one row it wrote.
-      sql.exec("DROP TABLE participants");
-      startPreRename(sql);
       sql.exec(
-        PRE_RENAME_PARTICIPANTS_SQL.upsert,
-        oldId,
-        "old-user",
-        Date.now(),
-        crypto.randomUUID(),
+        "CREATE TABLE IF NOT EXISTS soundboard_legacy_playback_owners (playback_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT 0)",
       );
-      expect(columns(sql)).not.toContain("user_id");
-
-      const migrated = new VoiceRoom(state, roomEnv) as unknown as Internals;
-      expect(columns(sql)).toEqual(
-        expect.arrayContaining(["user_id", "clerk_user_id"]),
-      );
-      expect(rowOf(sql, oldId)).toEqual({
-        user_id: "old-user",
-        clerk_user_id: "old-user",
-      });
-      expect(migrated.getUserIdForParticipant(oldId)).toBe("old-user");
-      expect([
-        ...migrated.getLegacySoundboardPlaybackOwners("s-old-user-1"),
-      ]).toEqual(["old-user"]);
-
-      const before = columns(sql);
       new VoiceRoom(state, roomEnv);
-      expect(columns(sql)).toEqual(before);
-      expect(rowOf(sql, oldId)).toEqual({
-        user_id: "old-user",
-        clerk_user_id: "old-user",
-      });
+      expect(() =>
+        sql.exec("SELECT COUNT(*) FROM soundboard_legacy_playback_owners"),
+      ).toThrow(/no such table/);
     });
   });
 
-  it("keeps the previous version's statements working on rows this version wrote", async () => {
-    // A fresh room: this version creates the table and writes the row.
+  it("carries live nonces over from the retired nonce table and drops it", async () => {
     const roomName = crypto.randomUUID();
     const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    const participantId = crypto.randomUUID();
-    const socket = await openVoiceSocket(roomName, "new-user");
-    await identifyVoiceSocket(socket, participantId, roomName, "new-user");
+    const now = Date.now();
 
     await runInDurableObject(room, (_instance, state) => {
       const sql = state.storage.sql;
-      expect(rowOf(sql, participantId)).toEqual({
-        user_id: "new-user",
-        clerk_user_id: "new-user",
-      });
-      sql.exec(
-        "INSERT INTO tracks (track_name, participant_id, sfu_track_name, session_id, kind) VALUES (?, ?, ?, ?, 'video')",
-        `screen-video-${participantId}`,
-        participantId,
-        `opaque-${participantId}`,
-        "session-1",
-      );
+      // The previous version's table, as it creates it.
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS realtime_ticket_nonces (
+          nonce_digest TEXT PRIMARY KEY,
+          access_mode TEXT NOT NULL,
+          audience TEXT NOT NULL,
+          room_slug TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          connection_generation TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          consumed_at INTEGER NOT NULL
+        );
+      `);
+      const insert =
+        "INSERT INTO realtime_ticket_nonces VALUES (?, 'authenticated', 'voice', ?, 'user', 'gen', ?, ?)";
+      sql.exec(insert, "live-digest", roomName, now + 60_000, now);
+      sql.exec(insert, "expired-digest", roomName, now - 1, now - 60_000);
 
-      // Rollback: the previous version starts and reads this version's rows.
-      startPreRename(sql);
-      expect([
-        ...sql.exec(PRE_RENAME_PARTICIPANTS_SQL.userIdOf, participantId),
-      ]).toEqual([{ clerk_user_id: "new-user" }]);
-      expect([
-        ...sql.exec(
-          PRE_RENAME_PARTICIPANTS_SQL.screenParticipantOf,
-          "new-user",
-          "new-user",
+      initRealtimeTicketNonces(sql, now);
+
+      expect(() =>
+        sql.exec("SELECT COUNT(*) FROM realtime_ticket_nonces"),
+      ).toThrow(/no such table/);
+      expect(
+        [
+          ...sql.exec<{ nonce_digest: string }>(
+            "SELECT nonce_digest FROM realtime_ticket_nonce_uses",
+          ),
+        ].map((row) => row.nonce_digest),
+      ).toEqual(["live-digest"]);
+      const replay = {
+        accessMode: "authenticated" as const,
+        audience: "voice" as const,
+        expiresAt: now + 60_000,
+        nonceDigest: "live-digest",
+        participantId: "p",
+        roomSlug: roomName,
+        subject: "user",
+      };
+      expect(consumeRealtimeTicketNonce(sql, replay, now)).toEqual({
+        ok: false,
+        reason: "replayed",
+      });
+      expect(
+        consumeRealtimeTicketNonce(
+          sql,
+          { ...replay, nonceDigest: "fresh-digest" },
+          now,
         ),
-      ]).toEqual([{ id: participantId }]);
-      expect([...sql.exec(PRE_RENAME_PARTICIPANTS_SQL.owners)]).toEqual([
-        { id: participantId, clerk_user_id: "new-user" },
-      ]);
+      ).toEqual({ ok: true });
 
-      // It inserts a row and re-identifies an existing one (as another user,
-      // the worst case for the stale copy in user_id).
-      const rollbackId = crypto.randomUUID();
-      sql.exec(
-        PRE_RENAME_PARTICIPANTS_SQL.upsert,
-        rollbackId,
-        "rollback-user",
-        Date.now(),
-        crypto.randomUUID(),
-      );
-      sql.exec(
-        PRE_RENAME_PARTICIPANTS_SQL.upsert,
-        participantId,
-        "other-user",
-        Date.now(),
-        crypto.randomUUID(),
-      );
-      expect([
-        ...sql.exec(PRE_RENAME_PARTICIPANTS_SQL.userIdOf, rollbackId),
-      ]).toEqual([{ clerk_user_id: "rollback-user" }]);
+      // A second start, with no retired table left, changes nothing.
+      initRealtimeTicketNonces(sql, now);
+      expect(
+        [
+          ...sql.exec<{ c: number }>(
+            "SELECT COUNT(*) AS c FROM realtime_ticket_nonce_uses",
+          ),
+        ][0]?.c,
+      ).toBe(2);
+    });
+  });
 
-      // Roll forward: this version starts again and reads what it wrote.
-      const restarted = new VoiceRoom(state, roomEnv) as unknown as Internals;
-      expect(rowOf(sql, rollbackId)).toEqual({
-        user_id: "rollback-user",
-        clerk_user_id: "rollback-user",
-      });
-      expect(rowOf(sql, participantId)).toEqual({
-        user_id: "other-user",
-        clerk_user_id: "other-user",
-      });
-      expect(restarted.getUserIdForParticipant(rollbackId)).toBe(
-        "rollback-user",
+  it("keeps the retired nonce table when carrying its nonces over fails", async () => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const now = Date.now();
+
+    await runInDurableObject(room, (_instance, state) => {
+      const sql = state.storage.sql;
+      // A retired table the carry-over SELECT cannot read (no consumed_at).
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS realtime_ticket_nonces (
+          nonce_digest TEXT PRIMARY KEY,
+          access_mode TEXT NOT NULL,
+          audience TEXT NOT NULL,
+          room_slug TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+      `);
+      sql.exec(
+        "INSERT INTO realtime_ticket_nonces VALUES ('live-digest', 'authenticated', 'voice', ?, 'user', ?)",
+        roomName,
+        now + 60_000,
+      );
+
+      expect(() => initRealtimeTicketNonces(sql, now)).toThrow(
+        /no such column/,
       );
       expect(
-        restarted.getActiveScreenParticipantIdForUserId("other-user"),
-      ).toBe(participantId);
+        [
+          ...sql.exec<{ c: number }>(
+            "SELECT COUNT(*) AS c FROM realtime_ticket_nonces",
+          ),
+        ][0]?.c,
+      ).toBe(1);
     });
-    socket.close();
   });
 });

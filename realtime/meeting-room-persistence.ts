@@ -1,5 +1,3 @@
-import { normalizeUserIdField } from "../src/lib/gateway-protocol";
-
 export const PENDING_CALLS_STORAGE_KEY = "pendingCalls";
 export const ACTIVE_CALLS_STORAGE_KEY = "activeCalls";
 export const SPATIAL_AUDIO_STORAGE_PREFIX = "spatialAudio:";
@@ -255,18 +253,12 @@ export function isSpatialAudioState(
   return true;
 }
 
-// ── user_id in stored state ────────────────────────────────────────────────
+// ── Stored session state ──────────────────────────────────────────────────
 // WebSocket attachments, resumable session snapshots and the vc:members:*
-// lists written before the rename carry the user id only as `clerk_user_id`,
-// and a Durable Object keeps that state across deploys and hibernation. These
-// normalizers are the only code that reads stored records: each takes
-// `user_id`, falls back to `clerk_user_id` (normalizeUserIdField), and drops
-// the old key, so the room holds only `user_id`. The room writes both keys
-// (withLegacyClerkUserId at each write in meeting-room.ts) so that the
-// previous Worker version still finds `clerk_user_id` after a rollback.
-// TODO(user-id-rename phase 2): the fallback goes with normalizeUserIdField's.
+// lists outlive deploys and hibernation. These readers are the only code that
+// reads them back; malformed entries are dropped.
 
-/** What the normalizers check of a stored WebSocket attachment. */
+/** What the readers check of a stored WebSocket attachment. */
 interface IdentifiedAttachment {
   id: string;
   user_id?: string;
@@ -275,68 +267,52 @@ interface IdentifiedAttachment {
 /**
  * A WebSocket attachment (ws.deserializeAttachment()) or the attachment of a
  * resumable snapshot. Null until Identify has run (only `admission` is set).
- * A legacy `replay_buffer` is kept for the caller to read and drop.
  */
 export function normalizeStoredWsAttachment<A extends IdentifiedAttachment>(
   stored: unknown,
 ): A | null {
   if (!isRecord(stored) || typeof stored.id !== "string") return null;
-  return normalizeUserIdField(stored) as unknown as A;
+  return stored as unknown as A;
 }
 
 export interface StoredResumableSession<A, R> {
   attachment: A;
   replay: R[];
-  /** Absent for the legacy shape; the room treats it as the write cap. */
+  /** Unchecked here; the room treats anything but a count as the write cap. */
   persistWrites: unknown;
 }
 
-/**
- * One entry of the `resumableSessions` key: `{ attachment, replay,
- * persist_writes }`, or the older bare attachment with its replay in
- * `replay_buffer`.
- */
+/** One entry of the `resumableSessions` key: `{ attachment, replay, persist_writes }`. */
 export function normalizeStoredResumableSession<
   A extends IdentifiedAttachment,
   R,
 >(stored: unknown): StoredResumableSession<A, R> | null {
-  if (!isRecord(stored)) return null;
-  if (isRecord(stored.attachment) && Array.isArray(stored.replay)) {
-    const attachment = normalizeStoredWsAttachment<A>(stored.attachment);
-    return attachment
-      ? {
-          attachment,
-          replay: stored.replay as R[],
-          persistWrites: stored.persist_writes,
-        }
-      : null;
+  if (
+    !isRecord(stored) ||
+    !isRecord(stored.attachment) ||
+    !Array.isArray(stored.replay)
+  ) {
+    return null;
   }
-  const attachment = normalizeStoredWsAttachment<A>(stored);
-  if (!attachment) return null;
-  return {
-    attachment,
-    replay: Array.isArray(stored.replay_buffer)
-      ? (stored.replay_buffer as R[])
-      : [],
-    persistWrites: undefined,
-  };
+  const attachment = normalizeStoredWsAttachment<A>(stored.attachment);
+  return attachment
+    ? {
+        attachment,
+        replay: stored.replay as R[],
+        persistWrites: stored.persist_writes,
+      }
+    : null;
 }
 
 /**
- * The members of one `vc:members:<channel>` list (or of the older
- * `voiceChannelMembers` map). Entries without a user id are dropped.
+ * The members of one `vc:members:<channel>` list. Entries without a user id
+ * are dropped.
  */
 export function normalizeStoredVoiceChannelMembers<
   M extends { user_id: string },
 >(stored: unknown): M[] {
   if (!Array.isArray(stored)) return [];
-  const members: M[] = [];
-  for (const entry of stored) {
-    if (!isRecord(entry)) continue;
-    const member = normalizeUserIdField(entry);
-    if (typeof member.user_id === "string") {
-      members.push(member as unknown as M);
-    }
-  }
-  return members;
+  return stored.filter(
+    (entry) => isRecord(entry) && typeof entry.user_id === "string",
+  ) as M[];
 }

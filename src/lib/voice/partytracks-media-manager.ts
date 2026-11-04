@@ -1,5 +1,5 @@
 import type { TrackInfo } from "@/lib/types";
-import type { ScheduleTimer } from "@/lib/voice/heartbeat-manager";
+import { scheduleWithGlobalTimers, type ScheduleTimer } from "@ralph/realtime";
 import {
   type PartyTracksPullError,
   SFU_TRACK_NOT_FOUND,
@@ -95,11 +95,6 @@ const DEFAULT_TRACK_UNAVAILABLE_AFTER_MS = 1_000;
 const DEFAULT_TRACK_UNAVAILABLE_MIN_ERRORS = 2;
 const DEFAULT_TRACK_UNAVAILABLE_REPORT_INTERVAL_MS = 5_000;
 const DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS = 3;
-
-const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
-  const handle = setTimeout(callback, ms);
-  return () => clearTimeout(handle);
-};
 
 interface RemotePull {
   currentTrack?: MediaStreamTrack;

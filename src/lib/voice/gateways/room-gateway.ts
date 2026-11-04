@@ -40,7 +40,7 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
   resumed: {
     voiceToken?: string;
     iceServers?: IceServer[];
-    participants?: VoiceState[];
+    participants: VoiceState[];
     spatialAudioState?: SharedSpatialAudioState;
   };
   "participant-joined": { participant: VoiceState };
@@ -322,13 +322,6 @@ export class RoomGateway extends BaseGateway<
       supports_voice_state_deltas: true,
       ...(this.options?.standby ? { standby: true } : {}),
     };
-  }
-
-  public sendMuteUpdate(isMicOn: boolean, isCameraOn: boolean) {
-    this.send({
-      op: GatewayOp.VoiceStateUpdate,
-      d: { self_mute: !isMicOn, self_video: isCameraOn },
-    });
   }
 
   public sendVoiceState(state: any) {

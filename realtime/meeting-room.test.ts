@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isReconnectWithinGrace,
   shouldKeepResumableSession,
-} from "../src/lib/voice/connection-generation";
+} from "./connection-lifecycle";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordinator";
 import {
@@ -175,90 +175,58 @@ describe("meeting room persistence codecs", () => {
   });
 });
 
-// State a Durable Object wrote before the user_id rename uses clerk_user_id.
-describe("stored state from before the user_id rename", () => {
+describe("stored session state", () => {
   const admission = {
     accessMode: "authenticated",
-    connectionGeneration: "gen-1",
     participantId: "p-1",
     subject: "user-1",
   };
-  const legacyAttachment = {
+  const attachment = {
     admission,
     id: "p-1",
     name: "Ada",
-    clerk_user_id: "user-1",
+    user_id: "user-1",
     self_mute: true,
     tracks: [],
     seq: 0,
     subscribed_channels: ["c-1"],
     subscribed_servers: [],
   };
-  const { clerk_user_id: _legacy, ...attachment } = {
-    ...legacyAttachment,
-    user_id: "user-1",
-  };
   const replay = [{ seq: 1, msg: { op: 19, d: { event: "X" } } }];
 
-  it("reads a WebSocket attachment under either name and writes user_id", () => {
-    expect(normalizeStoredWsAttachment(legacyAttachment)).toEqual(attachment);
+  it("reads an identified WebSocket attachment", () => {
     expect(normalizeStoredWsAttachment(attachment)).toBe(attachment);
     // Before Identify the attachment holds only the admission.
     expect(normalizeStoredWsAttachment({ admission })).toBeNull();
     expect(normalizeStoredWsAttachment(null)).toBeNull();
   });
 
-  it("prefers user_id when a record carries both names", () => {
-    expect(
-      normalizeStoredWsAttachment({
-        ...attachment,
-        clerk_user_id: "stale",
-      }),
-    ).toEqual(attachment);
-  });
-
-  it("reads a resumable snapshot in the current and the bare legacy shape", () => {
+  it("reads a resumable snapshot and drops other shapes", () => {
     expect(
       normalizeStoredResumableSession({
-        attachment: legacyAttachment,
+        attachment,
         replay,
         persist_writes: 2,
       }),
     ).toEqual({ attachment, replay, persistWrites: 2 });
     expect(
-      normalizeStoredResumableSession({
-        ...legacyAttachment,
-        replay_buffer: replay,
-      }),
-    ).toEqual({
-      attachment: { ...attachment, replay_buffer: replay },
-      replay,
-      persistWrites: undefined,
-    });
+      normalizeStoredResumableSession({ ...attachment, replay_buffer: replay }),
+    ).toBeNull();
     expect(normalizeStoredResumableSession({ replay })).toBeNull();
   });
 
   it("reads vc:members lists and drops members without a user id", () => {
-    const legacyMember = {
-      clerk_user_id: "user-1",
+    const member = {
+      user_id: "user-1",
       name: "Ada",
       self_mute: false,
       self_deaf: false,
       self_video: false,
       self_stream: false,
     };
-    const { clerk_user_id: _legacyMember, ...member } = {
-      ...legacyMember,
-      user_id: "user-1",
-    };
     expect(
-      normalizeStoredVoiceChannelMembers([
-        legacyMember,
-        member,
-        { name: "No id" },
-        "junk",
-      ]),
-    ).toEqual([member, member]);
+      normalizeStoredVoiceChannelMembers([member, { name: "No id" }, "junk"]),
+    ).toEqual([member]);
     expect(normalizeStoredVoiceChannelMembers(undefined)).toEqual([]);
   });
 });

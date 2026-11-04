@@ -15,7 +15,6 @@ import {
   HEARTBEAT_FRAME,
   mainGatewayClientRules,
 } from "../../src/lib/gateway-protocol";
-import { MeetingRoom } from "../meeting-room";
 import type { IceServer } from "../meeting-room/turn-credentials";
 
 async function createAdmissionHeaders(
@@ -527,7 +526,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "profile-sender",
-        clerk_user_id: "profile-sender",
         platform: "web",
         stream_preview_url: null,
         self_mute: false,
@@ -548,7 +546,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "profile-sender",
-        clerk_user_id: "profile-sender",
         name: "Sender Name",
         username: "sender-user",
         display_name: "Sender Display",
@@ -638,7 +635,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "replay-sender",
-        clerk_user_id: "replay-sender",
         platform: "web",
         stream_preview_url: null,
         self_mute: false,
@@ -659,7 +655,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "replay-sender",
-        clerk_user_id: "replay-sender",
         name: "Replay Sender",
         username: "replay-sender",
         display_name: "Replay Display",
@@ -2030,13 +2025,12 @@ describe("MeetingRoom lifecycle", () => {
     const socket = await openMeetingSocket(roomName);
     const ready = nextMessageWithOpcode(socket, 2);
 
-    // Pre-rename clients still send clerk_user_id in Identify. The room must
-    // accept the frame and take the user from the ticket, not from either key.
+    // The room must accept the frame and take the user from the ticket, not
+    // from the payload.
     socket.send(
       JSON.stringify({
         op: 0,
         d: {
-          clerk_user_id: "forged-user",
           user_id: "forged-user",
           name: "Forged Name",
         },
@@ -2466,13 +2460,11 @@ describe("MeetingRoom lifecycle", () => {
         d: { channel_id: channelId, self_mute: true },
       }),
     );
-    // Members carry user_id and, for pre-rename clients, clerk_user_id too.
     expect(
       ((await initialJoin).d as { data: { members: unknown[] } }).data.members,
     ).toEqual([
       expect.objectContaining({
         user_id: "user-test",
-        clerk_user_id: "user-test",
       }),
     ]);
 
@@ -3790,209 +3782,6 @@ describe("MeetingRoom gateway protocol edge", () => {
     });
     sender.close();
     observer.close();
-  });
-});
-
-describe("MeetingRoom user_id rename compatibility", () => {
-  it("sends VoiceState with user_id and the pre-rename clerk_user_id", async () => {
-    const roomName = crypto.randomUUID();
-    const first = await openMeetingSocket(roomName, "first-user");
-    await identifyMeetingSocket(first, { name: "First" });
-    const second = await openMeetingSocket(roomName, "second-user");
-    const joined = nextMessageWithOpcodeMatching(
-      first,
-      15,
-      (message) =>
-        (message.d as { participant?: { user_id?: string } }).participant
-          ?.user_id === "second-user",
-    );
-    const ready = await identifyMeetingSocket(second, { name: "Second" });
-
-    expect(ready.participants).toContainEqual(
-      expect.objectContaining({
-        user_id: "first-user",
-        clerk_user_id: "first-user",
-      }),
-    );
-    expect((await joined).d).toMatchObject({
-      action: "join",
-      participant: { user_id: "second-user", clerk_user_id: "second-user" },
-    });
-
-    first.close();
-    second.close();
-  });
-
-  it("restores pre-rename state as user_id and stores both names for a rollback", async () => {
-    const roomName = crypto.randomUUID();
-    const socket = await openMeetingSocket(roomName, "live-user");
-    await identifyMeetingSocket(socket, { name: "Live" });
-    const now = Date.now();
-    // Attachments persist voice_channel_id, and a member survives a restart
-    // only while a session of its user is in that channel.
-    const legacyAttachment = (id: string, userId: string) => ({
-      id,
-      name: userId,
-      clerk_user_id: userId,
-      voice_channel_id: "vc-legacy",
-      self_mute: true,
-      self_deaf: false,
-      self_stream: false,
-      self_video: false,
-      suppress: false,
-      tracks: [],
-      seq: 0,
-      subscribed_channels: [],
-      subscribed_servers: [],
-    });
-    const legacyMember = (userId: string) => ({
-      clerk_user_id: userId,
-      name: userId,
-      self_mute: true,
-      self_deaf: false,
-      self_video: false,
-      self_stream: false,
-      connected: true,
-    });
-
-    await runInDurableObject(
-      meetingRoom(roomName),
-      async (_instance, state) => {
-        // Rewrite what this room stored in the shape written before the rename.
-        const [ws] = state.getWebSockets();
-        const { user_id: liveUserId, ...attachment } =
-          ws.deserializeAttachment() as Record<string, unknown>;
-        expect(liveUserId).toBe("live-user");
-        ws.serializeAttachment({
-          ...attachment,
-          clerk_user_id: liveUserId,
-          voice_channel_id: "vc-legacy",
-        });
-        await state.storage.put({
-          resumableSessions: {
-            "snapshot-session": {
-              attachment: legacyAttachment("snapshot-session", "snapshot-user"),
-              replay: [],
-              persist_writes: 1,
-            },
-            "bare-session": {
-              ...legacyAttachment("bare-session", "bare-user"),
-              replay_buffer: [],
-            },
-          },
-          resumableSessionExpiry: {
-            "snapshot-session": now,
-            "bare-session": now,
-          },
-          "vc:members:vc-legacy": [
-            legacyMember("live-user"),
-            legacyMember("snapshot-user"),
-          ],
-        });
-
-        // A restart (deploy or hibernation wake) reads it all back.
-        // The test env's bindings type is wider than the room's Env.
-        const restarted = new MeetingRoom(
-          state as unknown as ConstructorParameters<typeof MeetingRoom>[0],
-          env as unknown as ConstructorParameters<typeof MeetingRoom>[1],
-        ) as unknown as {
-          sessions: Map<WebSocket, Record<string, unknown>>;
-          resumableSessions: Map<string, Record<string, unknown>>;
-          voiceChannelMembers: Map<
-            string,
-            Map<string, Record<string, unknown>>
-          >;
-          persist(ws: WebSocket, data: Record<string, unknown>): void;
-          persistVoiceChannelMembers(): void;
-          persistResumableSessions(): void;
-          flushDirtyStorage(): void;
-        };
-        await vi.waitFor(() =>
-          expect(restarted.voiceChannelMembers.get("vc-legacy")?.size).toBe(2),
-        );
-
-        const session = restarted.sessions.get(ws);
-        expect(session).toMatchObject({
-          id: attachment.id,
-          user_id: "live-user",
-        });
-        expect(session).not.toHaveProperty("clerk_user_id");
-        for (const [id, userId] of [
-          ["snapshot-session", "snapshot-user"],
-          ["bare-session", "bare-user"],
-        ]) {
-          const resumable = restarted.resumableSessions.get(id);
-          expect(resumable).toMatchObject({ id, user_id: userId });
-          expect(resumable).not.toHaveProperty("clerk_user_id");
-          expect(resumable).not.toHaveProperty("replay_buffer");
-        }
-        const members = restarted.voiceChannelMembers.get("vc-legacy")!;
-        expect([...members.keys()].sort()).toEqual([
-          "live-user",
-          "snapshot-user",
-        ]);
-        for (const member of members.values()) {
-          expect(member).not.toHaveProperty("clerk_user_id");
-        }
-
-        // Writes carry both names, so the previous Worker version (which
-        // reads only clerk_user_id) still finds every user after a rollback.
-        restarted.persist(ws, session!);
-        restarted.persistVoiceChannelMembers();
-        restarted.persistResumableSessions();
-        restarted.flushDirtyStorage();
-        let stored = new Map<string, unknown>();
-        await vi.waitFor(async () => {
-          stored = await state.storage.get([
-            "vc:members:vc-legacy",
-            "resumableSessions",
-          ]);
-          expect(stored.size).toBe(2);
-        });
-
-        // The previous version's reads, field for field.
-        const preRenameAttachment = ws.deserializeAttachment() as {
-          id?: string;
-          clerk_user_id?: string;
-        };
-        expect(preRenameAttachment.clerk_user_id).toBe("live-user");
-        const preRenameMembers = new Map<string, unknown>();
-        for (const m of stored.get("vc:members:vc-legacy") as Array<{
-          clerk_user_id: string;
-        }>) {
-          preRenameMembers.set(m.clerk_user_id, m);
-        }
-        expect([...preRenameMembers.keys()].sort()).toEqual([
-          "live-user",
-          "snapshot-user",
-        ]);
-        const preRenameSnapshots = stored.get("resumableSessions") as Record<
-          string,
-          { attachment: { clerk_user_id?: string; user_id?: string } }
-        >;
-        for (const [id, userId] of [
-          ["snapshot-session", "snapshot-user"],
-          ["bare-session", "bare-user"],
-        ]) {
-          expect(preRenameSnapshots[id]?.attachment).toMatchObject({
-            clerk_user_id: userId,
-            user_id: userId,
-          });
-        }
-        // Both names, the same value, everywhere.
-        expect(
-          (stored.get("vc:members:vc-legacy") as unknown[]).every(
-            (member) =>
-              (member as { user_id?: string }).user_id ===
-              (member as { clerk_user_id?: string }).clerk_user_id,
-          ),
-        ).toBe(true);
-        // What the room keeps in memory has only user_id.
-        expect(restarted.sessions.get(ws)).not.toHaveProperty("clerk_user_id");
-      },
-    );
-
-    socket.close();
   });
 });
 

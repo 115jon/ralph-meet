@@ -197,7 +197,7 @@ describe("SFUClient PartyTracks facade", () => {
       tracksToQueue: [],
       participants: [],
     });
-    client.roomGW.emit("resumed", {});
+    client.roomGW.emit("resumed", { participants: [] });
 
     // The silent standby publication reaches the SFU...
     const silence = new MockMediaStreamTrack(
@@ -624,6 +624,7 @@ describe("SFUClient PartyTracks facade", () => {
       client.roomGW.emit("resumed", {
         voiceToken: "voice-token-2",
         iceServers: SECOND_ICE_SERVERS,
+        participants: [],
       });
 
       expect(updateVoiceToken).toHaveBeenCalledWith("voice-token-2");
@@ -1569,21 +1570,5 @@ describe("SFUClient track-unavailable recovery", () => {
     ]);
     client.disconnect("component-unmount");
     clock.mockRestore();
-  });
-
-  it("does not surface an old voice room's unknown-opcode reply as an error", () => {
-    const client = new SFUClient("test-room");
-    const errors = vi.fn();
-    client.on("error", errors);
-    client.voiceGW.emit("error", {
-      code: 4001,
-      message: `Unknown voice opcode: ${GatewayOp.TrackUnavailable}`,
-    });
-    expect(errors).not.toHaveBeenCalled();
-    client.voiceGW.emit("error", {
-      code: 4001,
-      message: "Unknown voice opcode: 99",
-    });
-    expect(errors).toHaveBeenCalledOnce();
   });
 });

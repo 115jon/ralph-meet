@@ -9,16 +9,12 @@
 // is required only when the client reads it without a fallback. Nested domain
 // objects (VoiceState, TrackInfo, IceServer, spatial audio state, Dispatch
 // data) are checked only to be objects; their shape is the server's to keep.
-// Extra keys are never rejected, and the client receives the original object,
-// except that every VoiceState is normalized to `user_id` (a pre-rename server
-// sends only `clerk_user_id`; see user-id.ts in @ralph/protocol).
+// Extra keys are never rejected, and the client receives the original object.
 
 import {
   ErrorPayload,
   GatewayOp,
   HelloPayload,
-  normalizeUserIdField,
-  normalizeUserIdFields,
   type PayloadRules,
 } from "@ralph/protocol";
 import { Schema } from "effect";
@@ -67,18 +63,6 @@ const NullableString = Schema.NullOr(Schema.String);
 
 // ── Main gateway (MeetingRoom) ─────────────────────────────────────────────
 
-// TODO(user-id-rename phase 2): the `normalize` steps below (and the
-// `clerk_user_id` fallback they apply) go; see docs/user-id-rename.md.
-
-/** Ready and Resumed: the roster, with each user id under `user_id`. */
-function normalizeParticipantUserIds<
-  T extends { readonly participants?: VoiceState[] },
->(d: T): T {
-  return d.participants === undefined
-    ? d
-    : { ...d, participants: normalizeUserIdFields(d.participants) };
-}
-
 const MediaReadyPayload = Schema.Struct({
   participant_id: Schema.String,
   ice_servers: IceServers,
@@ -118,13 +102,6 @@ const VoiceStateUpdatePayload = Schema.Union([
   }),
 ]);
 
-/** VoiceStateUpdate: the participant's user id under `user_id`. */
-function normalizeVoiceStateUpdateUserId<
-  T extends { readonly participant: object },
->(d: T): T {
-  return { ...d, participant: normalizeUserIdField(d.participant) };
-}
-
 const ProfileUpdatePayload = Schema.Struct({
   participant_id: Schema.String,
   name: Schema.String,
@@ -156,17 +133,14 @@ export const roomGatewayServerRules = {
   [GatewayOp.Ready]: {
     schema: ReadyPayload,
     invalid: "Invalid Ready",
-    normalize: normalizeParticipantUserIds,
   },
   [GatewayOp.Resumed]: {
     schema: ResumedPayload,
     invalid: "Invalid Resumed",
-    normalize: normalizeParticipantUserIds,
   },
   [GatewayOp.VoiceStateUpdate]: {
     schema: VoiceStateUpdatePayload,
     invalid: "Invalid VoiceStateUpdate",
-    normalize: normalizeVoiceStateUpdateUserId,
   },
   [GatewayOp.ProfileUpdate]: {
     schema: ProfileUpdatePayload,

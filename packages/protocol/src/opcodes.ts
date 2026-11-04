@@ -135,15 +135,6 @@ export enum GatewayOp {
 }
 
 /**
- * Opcodes of the retired browser SFU negotiation (14, 103-105, 107, 108).
- * Old builds may still send them; the voice gateway answers each with
- * "Browser SFU negotiation is unsupported" instead of "Unknown opcode".
- */
-export const RETIRED_BROWSER_SFU_OPS: ReadonlySet<number> = new Set([
-  14, 103, 104, 105, 107, 108,
-]);
-
-/**
  * The heartbeat exactly as clients send it: no `d`, no extra fields, no
  * whitespace. Keep it byte-stable; heartbeats are never schema-decoded.
  */

@@ -213,11 +213,9 @@ describe("RoomGateway", () => {
         }),
       },
     ]);
-    // The room takes the user from the ticket; Identify names no user id,
-    // under either the current or the pre-rename key.
+    // The room takes the user from the ticket; Identify names no user id.
     for (const message of identifyMessages) {
       expect(message.d).not.toHaveProperty("user_id");
-      expect(message.d).not.toHaveProperty("clerk_user_id");
     }
 
     gateway.disconnect();
