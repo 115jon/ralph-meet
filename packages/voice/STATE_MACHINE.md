@@ -247,7 +247,12 @@ the platform's job; the reconciler only receives the finished track.
   the `enabled` it last applied to it. A slot with no record is **unknown**:
   nothing was done on this connection yet, or a swap found no publication.
 - **Published?**, per slot, asked of the media session (web: SFUClient has a
-  sender for `cam-audio-<participant>` / `cam-video-<participant>`).
+  live publication for `cam-audio-<participant>` /
+  `cam-video-<participant>`). It is only consulted for a slot with **no
+  record** on this connection. Once this connection unpublished a slot, the
+  slot is "none" whatever the media session reports: a camera withdrawn with
+  a keepalive keeps its sender, and a platform MAY report it as published.
+  Consulting it there would plan `unpublish` forever.
 
 ### Operations
 
@@ -272,12 +277,13 @@ For each slot, microphone first (what peers hear matters most), then camera:
 
 | intent    | applied on this connection | published? | operations                  |
 | --------- | -------------------------- | ---------- | --------------------------- |
-| none      | a track                    | any        | `unpublish`                 |
-| none      | unknown, or none           | yes        | `unpublish`                 |
-| none      | unknown, or none           | no         | nothing                     |
-| track _T_ | _T_                        | any        | `set-enabled` if it differs |
-| track _T_ | another track              | any        | `replace`, `set-enabled`    |
-| track _T_ | unknown, or none           | any        | `publish`, `set-enabled`    |
+| none      | a track                    | not asked  | `unpublish`                 |
+| none      | none (unpublished)         | not asked  | nothing                     |
+| none      | unknown                    | yes        | `unpublish`                 |
+| none      | unknown                    | no         | nothing                     |
+| track _T_ | _T_                        | not asked  | `set-enabled` if it differs |
+| track _T_ | another track              | not asked  | `replace`, `set-enabled`    |
+| track _T_ | unknown, or none           | not asked  | `publish`, `set-enabled`    |
 
 `planPublication` is this table as a pure function. A `set-enabled` applies
 the intent's `enabled` **as it is when the operation runs**, not when it was

@@ -31,11 +31,24 @@ function deferred(): Deferred {
 /** What a publish/replace/unpublish does: succeed, throw, find nothing, or wait. */
 type Step = "ok" | "throw" | "missing" | Deferred;
 
+/**
+ * A media session like web's PartyTracks: unpublishing the camera withdraws
+ * it but keeps its sender alive (keepalive), and `isPublished` reports that
+ * sender, so the camera still reads as published after an unpublish.
+ */
 class FakeMedia implements PublicationMedia<string> {
   readonly log: string[] = [];
   readonly published = new Map<PublicationSlot, string>();
+  /** Withdrawn slots whose sender is kept alive. */
+  readonly keptAlive = new Set<PublicationSlot>();
   readonly enabled = new Map<PublicationSlot, boolean>();
   readonly steps: Step[] = [];
+
+  constructor(
+    private readonly keepAlive: ReadonlySet<PublicationSlot> = new Set([
+      "camera",
+    ]),
+  ) {}
 
   private async step(entry: string, apply: () => void): Promise<boolean> {
     this.log.push(entry);
@@ -48,9 +61,10 @@ class FakeMedia implements PublicationMedia<string> {
   }
 
   async publish(slot: PublicationSlot, track: string): Promise<void> {
-    await this.step(`publish:${slot}:${track}`, () =>
-      this.published.set(slot, track),
-    );
+    await this.step(`publish:${slot}:${track}`, () => {
+      this.keptAlive.delete(slot);
+      this.published.set(slot, track);
+    });
   }
 
   replace(slot: PublicationSlot, track: string): Promise<boolean> {
@@ -60,7 +74,11 @@ class FakeMedia implements PublicationMedia<string> {
   }
 
   async unpublish(slot: PublicationSlot): Promise<void> {
-    await this.step(`unpublish:${slot}`, () => this.published.delete(slot));
+    await this.step(`unpublish:${slot}`, () => {
+      if (this.published.delete(slot) && this.keepAlive.has(slot)) {
+        this.keptAlive.add(slot);
+      }
+    });
   }
 
   setEnabled(slot: PublicationSlot, enabled: boolean): void {
@@ -69,7 +87,7 @@ class FakeMedia implements PublicationMedia<string> {
   }
 
   isPublished(slot: PublicationSlot): boolean {
-    return this.published.has(slot);
+    return this.published.has(slot) || this.keptAlive.has(slot);
   }
 }
 
@@ -151,6 +169,18 @@ describe("planPublication", () => {
         intent(),
         { camera: { track: null, enabled: null } },
         never,
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not unpublish again what this connection already unpublished", () => {
+    // A withdrawn camera kept alive still has a sender: the media session
+    // reports it as published, and the plan must still come out empty.
+    expect(
+      planPublication(
+        intent(),
+        { camera: { track: null, enabled: null } },
+        (slot) => slot === "camera",
       ),
     ).toEqual([]);
   });
@@ -240,6 +270,61 @@ describe("PublicationReconciler", () => {
     await settle(reconciler.reconcile());
     expect(media.log).toEqual(["unpublish:camera"]);
     expect(media.published.has("camera")).toBe(false);
+  });
+
+  it("converges after withdrawing a camera whose sender is kept alive", async () => {
+    reconciler.setTrack("camera", "cam");
+    await settle(reconciler.reconcile());
+    media.log.length = 0;
+
+    reconciler.setTrack("camera", null);
+    expect(await settle(reconciler.reconcile())).toEqual({
+      status: "converged",
+    });
+    expect(media.isPublished("camera")).toBe(true);
+    expect(media.log).toEqual(["unpublish:camera"]);
+
+    // Later runs leave it alone.
+    media.log.length = 0;
+    reconciler.setTrack("microphone", "mic");
+    expect(await settle(reconciler.reconcile())).toEqual({
+      status: "converged",
+    });
+    expect(media.log).toEqual([
+      "publish:microphone:mic",
+      "enabled:microphone:true",
+    ]);
+  });
+
+  it("withdraws a kept-alive camera once after a reset, then converges", async () => {
+    reconciler.setTrack("camera", "cam");
+    await settle(reconciler.reconcile());
+    reconciler.setTrack("camera", null);
+    await settle(reconciler.reconcile());
+    media.log.length = 0;
+
+    reconciler.connectionReset();
+    expect(await settle(reconciler.reconcile())).toEqual({
+      status: "converged",
+    });
+    // Nothing is known on the new connection and the media session reports
+    // the kept-alive sender: one unpublish, then nothing.
+    expect(media.log).toEqual(["unpublish:camera"]);
+  });
+
+  it("publishes the camera again over its kept-alive sender", async () => {
+    reconciler.setTrack("camera", "cam-a");
+    await settle(reconciler.reconcile());
+    reconciler.setTrack("camera", null);
+    await settle(reconciler.reconcile());
+    media.log.length = 0;
+
+    reconciler.setTrack("camera", "cam-b");
+    expect(await settle(reconciler.reconcile())).toEqual({
+      status: "converged",
+    });
+    expect(media.log).toEqual(["publish:camera:cam-b", "enabled:camera:true"]);
+    expect(media.keptAlive.has("camera")).toBe(false);
   });
 
   it("applies a mute at once without moving any generation", async () => {

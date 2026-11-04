@@ -98,8 +98,12 @@ export type AppliedPublications<T> = Readonly<
  * The operations that take `applied` to `intent`. Pure. Per slot, in
  * {@link PUBLICATION_SLOTS} order:
  *
- * - wanted nothing: `unpublish` if this connection published something on
- *   it or the media session has a publication there; else nothing.
+ * - wanted nothing: `unpublish` if this connection published a track on it
+ *   and has not unpublished it since; when this connection has no record
+ *   for the slot, `unpublish` if the media session reports a publication
+ *   there. Once this connection unpublished the slot, nothing, whatever the
+ *   media session reports (a withdrawn camera kept alive still has a
+ *   sender), so the plan converges.
  * - wanted a track already applied on this connection: no track operation.
  * - wanted a track, and this connection published another one: `replace`.
  * - wanted a track, and nothing is known on this connection: `publish`.
@@ -116,7 +120,8 @@ export function planPublication<T>(
     const want = intent[slot];
     const have = applied[slot];
     if (want.track === null) {
-      if ((have?.track ?? null) !== null || isPublished(slot)) {
+      const published = have ? have.track !== null : isPublished(slot);
+      if (published) {
         ops.push({ kind: "unpublish", slot });
       }
       continue;
