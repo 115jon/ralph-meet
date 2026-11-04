@@ -145,6 +145,44 @@ describe("VoiceGrid focused stage", () => {
     expect(markup).not.toContain('type="range"');
   });
 
+  it("shows a focused share's still or a loader, not a black video, until its video arrives", () => {
+    const audioOnly = makeFocusedScreenItem();
+    const stage = (item: GridItem, streamThumbnails: Record<string, string>) =>
+      renderToStaticMarkup(
+        React.createElement(VoiceGrid, {
+          items: [item],
+          focusedId: item.id,
+          onFocus: () => {},
+          globalDeafened: false,
+          currentSettings: { peerSettings: {} },
+          watchedStreams: { "user-2": true },
+          streamThumbnails,
+          voiceActions: {},
+        }),
+      );
+
+    const loading = stage(audioOnly, {});
+    expect(loading).not.toContain("<video");
+    expect(loading).toContain('role="status"');
+
+    const still = stage(audioOnly, { "user-2": "https://cdn.test/still.webp" });
+    expect(still).not.toContain("<video");
+    expect(still).toContain("https://cdn.test/still.webp");
+
+    const liveVideo = { kind: "video", readyState: "live" } as MediaStreamTrack;
+    const withVideo = stage(
+      makeFocusedScreenItem({
+        stream: {
+          getAudioTracks: () => [],
+          getVideoTracks: () => [liveVideo],
+          getTracks: () => [liveVideo],
+        } as unknown as MediaStream,
+      }),
+      {},
+    );
+    expect(withVideo).toContain("<video");
+  });
+
   it("renders a clean focused stream label without duplicated possessives", () => {
     const markup = render([makeFocusedScreenItem()], "remote-screen-user-2");
 

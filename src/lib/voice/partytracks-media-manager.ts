@@ -4,7 +4,23 @@ import {
   type PartyTracksPullError,
   SFU_TRACK_NOT_FOUND,
 } from "@/lib/voice/partytracks-pull-errors";
-import type { RalphPublishedTrack } from "@/lib/voice/partytracks-transport";
+import type {
+  RalphPublishedTrack,
+  RalphPullOptions,
+  RalphPushOptions,
+} from "@/lib/voice/partytracks-transport";
+import {
+  CAMERA_SIMULCAST_ENCODINGS,
+  compareVideoLayerQuality,
+  resolveVideoLayerQuality,
+  selectSimulcastRid,
+  type RenderedVideoSize,
+  type VideoLayerQuality,
+} from "@/lib/voice/video-layers";
+import {
+  videoRenderDemand,
+  type VideoRenderDemandSource,
+} from "@/lib/voice/video-render-demand";
 import { BehaviorSubject, type Observable, Subscription } from "rxjs";
 
 export interface PartyTracksMediaTransport {
@@ -12,8 +28,12 @@ export interface PartyTracksMediaTransport {
   push(
     sourceTrack$: Observable<MediaStreamTrack>,
     identity: RalphPublishedTrack,
+    options?: RalphPushOptions,
   ): Observable<TrackInfo>;
-  pull(track$: Observable<TrackInfo>): Observable<MediaStreamTrack>;
+  pull(
+    track$: Observable<TrackInfo>,
+    options?: RalphPullOptions,
+  ): Observable<MediaStreamTrack>;
   /** SFU errors of pulls the transport is retrying (see partytracks-pull-errors). */
   readonly pullErrors$?: Observable<PartyTracksPullError>;
 }
@@ -58,6 +78,7 @@ interface Publication {
   source$: BehaviorSubject<MediaStreamTrack>;
   subscription: Subscription;
   latestMetadata?: TrackInfo;
+  sendEncodings?: readonly RTCRtpEncodingParameters[];
 }
 
 export interface PartyTracksMediaManagerOptions {
@@ -83,6 +104,18 @@ export interface PartyTracksMediaManagerOptions {
   readonly trackUnavailableReportIntervalMs?: number;
   readonly trackUnavailableMaxReports?: number;
   readonly now?: () => number;
+  /**
+   * Where pulled video is rendered and how large, for choosing simulcast
+   * layers. Defaults to the app's registry, which VideoPlayer reports to.
+   */
+  readonly videoRenderDemand?: VideoRenderDemandSource;
+  /**
+   * A layer change waits this long for the rendered size to settle, so a
+   * resize or layout transition switches once. Downgrades wait longer: a
+   * tile that shrinks for a moment keeps its sharp layer.
+   */
+  readonly layerUpgradeDelayMs?: number;
+  readonly layerDowngradeDelayMs?: number;
 }
 
 // PartyTracks retries a failing pull itself (100 ms doubling to 10 s) and
@@ -95,6 +128,12 @@ const DEFAULT_TRACK_UNAVAILABLE_AFTER_MS = 1_000;
 const DEFAULT_TRACK_UNAVAILABLE_MIN_ERRORS = 2;
 const DEFAULT_TRACK_UNAVAILABLE_REPORT_INTERVAL_MS = 5_000;
 const DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS = 3;
+const DEFAULT_LAYER_UPGRADE_DELAY_MS = 150;
+const DEFAULT_LAYER_DOWNGRADE_DELAY_MS = 1_000;
+/** Remote tracks pulled only once subscribed (see isSubscribed). */
+const OPT_IN_TRACK_PREFIX = "screen-video-";
+/** Until something renders a pulled camera, it is pulled at the low layer. */
+const INITIAL_VIDEO_LAYER: VideoLayerQuality = "low";
 
 interface RemotePull {
   currentTrack?: MediaStreamTrack;
@@ -102,6 +141,14 @@ interface RemotePull {
   subscription: Subscription;
   /** Armed until the pull produces a track for its current metadata. */
   cancelWatchdog?: () => void;
+  /** The simulcast layer asked of the SFU (meaningful for simulcast video). */
+  layer: VideoLayerQuality;
+  /** That layer's RID in the current offer; undefined for a single layer. */
+  preferredRid$: BehaviorSubject<string | undefined>;
+  /** A layer change waiting for the rendered size to settle. */
+  pendingLayer?: { quality: VideoLayerQuality; cancel: () => void };
+  /** The largest size the pulled track was last seen rendered at. */
+  renderedSize?: RenderedVideoSize | null;
 }
 
 interface PullRetry {
@@ -126,13 +173,25 @@ function isMediaKind(kind: string): kind is "audio" | "video" {
   return kind === "audio" || kind === "video";
 }
 
+function sameRids(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean {
+  if (!left || !right) return left === right;
+  return (
+    left.length === right.length &&
+    left.every((rid, index) => rid === right[index])
+  );
+}
+
 function sameMetadata(left: TrackInfo, right: TrackInfo): boolean {
   return (
     left.participant_id === right.participant_id &&
     left.track_name === right.track_name &&
     left.sfu_track_name === right.sfu_track_name &&
     left.session_id === right.session_id &&
-    left.kind === right.kind
+    left.kind === right.kind &&
+    sameRids(left.simulcast_rids, right.simulcast_rids)
   );
 }
 
@@ -156,6 +215,8 @@ export class PartyTracksMediaManager {
   private readonly pulls = new Map<string, RemotePull>();
   private readonly pullRetries = new Map<string, PullRetry>();
   private readonly unsubscribedTrackNames = new Set<string>();
+  /** Opt-in tracks (screen video) the viewer has asked for. */
+  private readonly subscribedTrackNames = new Set<string>();
   private readonly stateSubscription: Subscription;
   private peerConnectionState: RTCPeerConnectionState = "new";
   private disposed = false;
@@ -170,6 +231,10 @@ export class PartyTracksMediaManager {
   private readonly trackUnavailableReportIntervalMs: number;
   private readonly trackUnavailableMaxReports: number;
   private readonly now: () => number;
+  private readonly videoRenderDemand: VideoRenderDemandSource;
+  private readonly unsubscribeVideoRenderDemand: () => void;
+  private readonly layerUpgradeDelayMs: number;
+  private readonly layerDowngradeDelayMs: number;
 
   constructor(
     private readonly transport: PartyTracksMediaTransport,
@@ -193,6 +258,14 @@ export class PartyTracksMediaManager {
       options.trackUnavailableMaxReports ??
       DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS;
     this.now = options.now ?? (() => performance.now());
+    this.layerUpgradeDelayMs =
+      options.layerUpgradeDelayMs ?? DEFAULT_LAYER_UPGRADE_DELAY_MS;
+    this.layerDowngradeDelayMs =
+      options.layerDowngradeDelayMs ?? DEFAULT_LAYER_DOWNGRADE_DELAY_MS;
+    this.videoRenderDemand = options.videoRenderDemand ?? videoRenderDemand;
+    this.unsubscribeVideoRenderDemand = this.videoRenderDemand.subscribe(() =>
+      this.refreshVideoLayers(),
+    );
     this.pullErrorSubscription = this.transport.pullErrors$?.subscribe(
       (error) => this.onPullError(error),
     );
@@ -223,7 +296,14 @@ export class PartyTracksMediaManager {
         continue;
       }
 
-      this.startPublication(trackName, track, track.kind);
+      this.startPublication(
+        trackName,
+        track,
+        track.kind,
+        prefix === "cam" && track.kind === "video"
+          ? CAMERA_SIMULCAST_ENCODINGS
+          : undefined,
+      );
     }
   }
 
@@ -247,6 +327,7 @@ export class PartyTracksMediaManager {
       trackName,
       stale.currentTrack,
       stale.currentTrack.kind,
+      stale.sendEncodings,
     );
     // PartyTracks hands each source emission to sender.replaceTrack(), which
     // accepts null.
@@ -266,21 +347,23 @@ export class PartyTracksMediaManager {
     trackName: string,
     track: MediaStreamTrack,
     kind: "audio" | "video",
+    sendEncodings?: readonly RTCRtpEncodingParameters[],
   ): void {
     const source$ = new BehaviorSubject(track);
     const publication: Publication = {
       currentTrack: track,
       source$,
       subscription: new Subscription(),
+      sendEncodings,
     };
     this.publications.set(trackName, publication);
     this.callbacks.onPushStarted?.(trackName, kind);
     publication.subscription = this.transport
-      .push(source$, {
-        participantId: this.participantId,
-        trackName,
-        kind,
-      })
+      .push(
+        source$,
+        { participantId: this.participantId, trackName, kind },
+        sendEncodings ? { sendEncodings } : undefined,
+      )
       .subscribe({
         next: (metadata) => {
           if (
@@ -365,15 +448,28 @@ export class PartyTracksMediaManager {
       const changed = !previous || !sameMetadata(previous, track);
       const pull = this.pulls.get(track.track_name);
       if (pull) {
-        if (changed) {
+        if (
+          changed &&
+          !this.isSubscribed(track.track_name) &&
+          (!previous || !sameSfuTrack(previous, track))
+        ) {
+          // A kept share pull (see setRemoteTrackSubscription) whose
+          // publisher started a new share: not watched, so not pulled.
+          this.stopPull(track.track_name);
+          this.clearPullRetry(track.track_name);
+        } else if (changed) {
           // PartyTracks pulls again (and must produce a track) only when
           // the SFU track it names changes.
           if (!previous || !sameSfuTrack(previous, track)) {
             this.armPullWatchdog(track.track_name, pull);
           }
+          // Before the metadata, so a re-pull asks for this offer's RID.
+          pull.preferredRid$.next(
+            selectSimulcastRid(pull.layer, track.simulcast_rids),
+          );
           pull.metadata$.next(track);
         }
-      } else if (this.unsubscribedTrackNames.has(track.track_name)) {
+      } else if (!this.isSubscribed(track.track_name)) {
         continue;
       } else if (this.pullRetries.get(track.track_name)?.cancel) {
         // A dropped pull is waiting out its backoff; the re-pull takes the
@@ -406,14 +502,41 @@ export class PartyTracksMediaManager {
     return this.offers.has(trackName);
   }
 
+  /**
+   * Screen video is opt-in: it is pulled only once the viewer subscribes
+   * (watches the share), so joining a room with shares running does not
+   * pull, negotiate and then drop each of them. Everything else is pulled
+   * unless unsubscribed.
+   */
+  private isSubscribed(trackName: string): boolean {
+    if (this.unsubscribedTrackNames.has(trackName)) return false;
+    return (
+      !trackName.startsWith(OPT_IN_TRACK_PREFIX) ||
+      this.subscribedTrackNames.has(trackName)
+    );
+  }
+
   setRemoteTrackSubscription(trackName: string, subscribe: boolean): void {
     if (subscribe) {
       this.unsubscribedTrackNames.delete(trackName);
+      this.subscribedTrackNames.add(trackName);
       const offer = this.offers.get(trackName);
       if (offer && !this.pulls.has(trackName)) this.startPull(offer);
       return;
     }
+    this.subscribedTrackNames.delete(trackName);
     this.unsubscribedTrackNames.add(trackName);
+    // Screen video already pulled keeps its pull until the share ends.
+    // Pulling it again after a close fails in Chrome: the SFU reuses the
+    // closed m-line's MID with other RTP header extension IDs, which Chrome
+    // rejects ("RTP extension ID reassignment not supported"), and the
+    // retries leave the session's signalling out of step (406, then 410).
+    if (
+      trackName.startsWith(OPT_IN_TRACK_PREFIX) &&
+      this.pulls.has(trackName)
+    ) {
+      return;
+    }
     this.stopPull(trackName);
     this.clearPullRetry(trackName);
   }
@@ -484,7 +607,9 @@ export class PartyTracksMediaManager {
     }
     this.offers.clear();
     this.unsubscribedTrackNames.clear();
+    this.subscribedTrackNames.clear();
     this.notFound.clear();
+    this.unsubscribeVideoRenderDemand();
     this.pullErrorSubscription?.unsubscribe();
     this.stateSubscription.unsubscribe();
   }
@@ -494,11 +619,19 @@ export class PartyTracksMediaManager {
     const pull: RemotePull = {
       metadata$,
       subscription: new Subscription(),
+      layer: INITIAL_VIDEO_LAYER,
+      preferredRid$: new BehaviorSubject(
+        selectSimulcastRid(INITIAL_VIDEO_LAYER, track.simulcast_rids),
+      ),
     };
     this.pulls.set(track.track_name, pull);
     this.armPullWatchdog(track.track_name, pull);
     this.callbacks.onPullStarted?.(track.track_name);
-    pull.subscription = this.transport.pull(metadata$).subscribe({
+    const pullOptions =
+      track.kind === "video"
+        ? { preferredRid$: pull.preferredRid$.asObservable() }
+        : undefined;
+    pull.subscription = this.transport.pull(metadata$, pullOptions).subscribe({
       next: (remoteTrack) => {
         pull.cancelWatchdog?.();
         pull.cancelWatchdog = undefined;
@@ -520,6 +653,7 @@ export class PartyTracksMediaManager {
           track: remoteTrack,
           trackInfo: currentMetadata,
         });
+        this.refreshVideoLayer(track.track_name, pull);
       },
       error: (error) => {
         this.callbacks.onError?.(error);
@@ -624,7 +758,7 @@ export class PartyTracksMediaManager {
         this.disposed ||
         !offer ||
         this.pulls.has(trackName) ||
-        this.unsubscribedTrackNames.has(trackName)
+        !this.isSubscribed(trackName)
       ) {
         return;
       }
@@ -645,14 +779,77 @@ export class PartyTracksMediaManager {
     this.pullRetries.delete(trackName);
   }
 
+  /** The RID each simulcast pull asks for, by alias (diagnostics). */
+  getRemoteVideoLayers(): Record<string, string> {
+    const layers: Record<string, string> = {};
+    for (const [trackName, pull] of this.pulls) {
+      const rid = pull.preferredRid$.value;
+      if (rid !== undefined) layers[trackName] = rid;
+    }
+    return layers;
+  }
+
+  private refreshVideoLayers(): void {
+    if (this.disposed) return;
+    for (const [trackName, pull] of this.pulls) {
+      this.refreshVideoLayer(trackName, pull);
+    }
+  }
+
+  /**
+   * Moves a simulcast pull to the layer its largest render needs once that
+   * need has held for the upgrade or downgrade delay. Only a change of layer
+   * reaches the SFU (one tracks/update, no renegotiation, same track);
+   * resizes within a layer's range do nothing.
+   */
+  private refreshVideoLayer(trackName: string, pull: RemotePull): void {
+    const offer = this.offers.get(trackName) ?? pull.metadata$.value;
+    if (offer.kind !== "video" || !offer.simulcast_rids) return;
+    const size = pull.currentTrack
+      ? this.videoRenderDemand.largestRenderFor(pull.currentTrack)
+      : null;
+    const resized =
+      size?.width !== pull.renderedSize?.width ||
+      size?.height !== pull.renderedSize?.height;
+    pull.renderedSize = size;
+    const wanted = resolveVideoLayerQuality(size);
+    if (wanted === pull.layer) {
+      pull.pendingLayer?.cancel();
+      pull.pendingLayer = undefined;
+      return;
+    }
+    // Still settling (a resize or layout transition): wait out the delay
+    // from its last step, so it switches once, to where it lands.
+    if (pull.pendingLayer?.quality === wanted && !resized) return;
+    pull.pendingLayer?.cancel();
+    const delay =
+      compareVideoLayerQuality(wanted, pull.layer) > 0
+        ? this.layerUpgradeDelayMs
+        : this.layerDowngradeDelayMs;
+    pull.pendingLayer = {
+      quality: wanted,
+      cancel: this.schedule(() => {
+        pull.pendingLayer = undefined;
+        if (this.disposed || this.pulls.get(trackName) !== pull) return;
+        pull.layer = wanted;
+        const rids = (this.offers.get(trackName) ?? pull.metadata$.value)
+          .simulcast_rids;
+        pull.preferredRid$.next(selectSimulcastRid(wanted, rids));
+      }, delay),
+    };
+  }
+
   private stopPull(trackName: string): void {
     const pull = this.pulls.get(trackName);
     if (!pull) return;
     this.pulls.delete(trackName);
     pull.cancelWatchdog?.();
     pull.cancelWatchdog = undefined;
+    pull.pendingLayer?.cancel();
+    pull.pendingLayer = undefined;
     pull.subscription.unsubscribe();
     pull.metadata$.complete();
+    pull.preferredRid$.complete();
     if (!pull.currentTrack) return;
     this.callbacks.onRemoteTrack({
       action: "remove",

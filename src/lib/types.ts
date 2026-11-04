@@ -67,6 +67,12 @@ export interface TrackInfo {
   session_id: string;
   mid?: string;
   kind: "audio" | "video";
+  /**
+   * RIDs of a simulcast publication's layers, highest first. Absent for a
+   * single-layer publication (audio, screen shares, mobile cameras, older
+   * clients), which is pulled without choosing a layer.
+   */
+  simulcast_rids?: string[];
   track?: MediaStreamTrack;
 }
 

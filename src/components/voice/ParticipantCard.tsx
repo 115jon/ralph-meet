@@ -22,6 +22,7 @@ import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
+import { hasLiveVideoTrack } from "./media-stream-tracks";
 import { TileAvatar, TileNameplate } from "./TileParts";
 import {
   cardPropsEqual,
@@ -107,9 +108,13 @@ function ParticipantCardImpl({
   const displayName = tileDisplayName(item);
   const shouldShowWatchers =
     !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
-  const shouldRenderVideo = !!item.stream && !suppressVideo && !isPreviewHidden;
+  const hasVideo = hasLiveVideoTrack(item.stream);
   const shouldShowWatchPrompt =
     isScreen && !item.isLocal && !isEffectivelyWatchingStream;
+  // An unwatched share shows its still under the Watch prompt, never video
+  // (its video may still be pulled from an earlier watch).
+  const shouldRenderVideo =
+    hasVideo && !suppressVideo && !isPreviewHidden && !shouldShowWatchPrompt;
   const shouldRenderThumbnailPoster =
     isScreen &&
     !shouldRenderVideo &&
@@ -118,7 +123,7 @@ function ParticipantCardImpl({
     !isPreviewHidden;
   const isLoadingStream =
     (isCamera || isScreen) &&
-    !item.stream &&
+    !hasVideo &&
     !shouldShowWatchPrompt &&
     !isPreviewHidden &&
     !shouldRenderThumbnailPoster;

@@ -611,7 +611,11 @@ describe("PartyTracks proxy", () => {
     expect(pull?.status).toBe(403);
     expect(route).not.toHaveBeenCalled();
     expect(authorizeRemotePull).toHaveBeenCalledWith(
-      { roomSlug: "room-one", participantId: "lurker", subject: "user-lurker" },
+      expect.objectContaining({
+        roomSlug: "room-one",
+        participantId: "lurker",
+        subject: "user-lurker",
+      }),
       env,
     );
   });

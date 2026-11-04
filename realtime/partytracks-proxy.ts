@@ -2,7 +2,9 @@ import { routePartyTracksRequest } from "partytracks/server";
 import { verifyVoiceToken } from "./voice-token";
 import {
   VOICE_MEDIA_AUTHORIZATION_PATH,
-  serializeVoiceJoinGrantQuery,
+  serializeVoiceMediaAuthorizationQuery,
+  type VoiceMediaAuthorization,
+  type VoiceMediaTrackRef,
 } from "./voice-join-grant";
 
 const PARTICIPANT_HEADER = "X-Voice-Session-Id";
@@ -22,13 +24,21 @@ interface RemotePullAuthorizationInput {
   roomSlug: string;
   participantId: string;
   subject: string;
+  /**
+   * Remote pulls in the request that name no simulcast layer, by session
+   * capability (as published) and SFU track name.
+   */
+  tracks?: VoiceMediaTrackRef[];
 }
 
-/** Answers whether a participant may pull other participants' tracks. */
+/**
+ * Answers whether a participant may pull other participants' tracks and,
+ * for the asked `tracks`, which simulcast layers each is published with.
+ */
 type RemotePullAuthorizer = (
   input: RemotePullAuthorizationInput,
   env: PartyTracksProxyEnv,
-) => Promise<boolean>;
+) => Promise<boolean | VoiceMediaAuthorization>;
 
 export interface PartyTracksProxyOptions {
   authorizeRemotePull?: RemotePullAuthorizer;
@@ -41,7 +51,7 @@ export interface PartyTracksProxyOptions {
  * not enough.
  */
 const authorizeRemotePullWithVoiceRoom: RemotePullAuthorizer = async (
-  { roomSlug, participantId, subject },
+  { roomSlug, participantId, subject, tracks },
   env,
 ) => {
   const namespace = env.VOICE_ROOM;
@@ -52,11 +62,24 @@ const authorizeRemotePullWithVoiceRoom: RemotePullAuthorizer = async (
       .fetch(`https://internal${VOICE_MEDIA_AUTHORIZATION_PATH}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: serializeVoiceJoinGrantQuery({ participantId, subject }),
+        body: serializeVoiceMediaAuthorizationQuery({
+          participantId,
+          subject,
+          tracks,
+        }),
       });
     if (!response.ok) return false;
-    const body = (await response.json()) as { authorized?: unknown };
-    return body.authorized === true;
+    const body = (await response.json()) as {
+      authorized?: unknown;
+      simulcast?: unknown;
+    };
+    if (body.authorized !== true) return false;
+    return {
+      authorized: true,
+      simulcast: Array.isArray(body.simulcast)
+        ? (body.simulcast as VoiceMediaAuthorization["simulcast"])
+        : undefined,
+    };
   } catch {
     return false;
   }
@@ -248,6 +271,118 @@ async function decodeSessionReferences(
   return decoded;
 }
 
+/**
+ * PartyTracks sends only `simulcast.preferredRid` on a pull (tracks/new) and a
+ * layer switch (tracks/update). The SFU's defaults then forward nothing when
+ * that layer is not being sent (a browser drops top layers for a small
+ * capture or a constrained uplink) and keep forwarding it over a receiver's
+ * congested link. Ralph's RIDs sort highest layer first (f, h, q), so
+ * `asciibetical` for both falls back to the best layer that is available
+ * and fits. A policy the client did set is kept.
+ */
+export function withSimulcastFallback(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const body = value as Record<string, unknown>;
+  if (!Array.isArray(body.tracks)) return value;
+  return {
+    ...body,
+    tracks: body.tracks.map((track: unknown) => {
+      if (!track || typeof track !== "object") return track;
+      const simulcast = (track as Record<string, unknown>).simulcast;
+      if (
+        !simulcast ||
+        typeof simulcast !== "object" ||
+        typeof (simulcast as Record<string, unknown>).preferredRid !== "string"
+      ) {
+        return track;
+      }
+      return {
+        ...track,
+        simulcast: {
+          priorityOrdering: "asciibetical",
+          ridNotAvailable: "asciibetical",
+          ...simulcast,
+        },
+      };
+    }),
+  };
+}
+
+const TRACKS_NEW_PATH = /\/tracks\/new$/u;
+
+/**
+ * Indexes and refs of the remote pulls in a tracks/new body that name no
+ * simulcast layer. Read before session capabilities are decoded: the
+ * VoiceRoom knows publications by the capability their publisher announced.
+ */
+export function remotePullsWithoutLayer(
+  value: unknown,
+): Array<{ index: number; ref: VoiceMediaTrackRef }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const tracks = (value as Record<string, unknown>).tracks;
+  if (!Array.isArray(tracks)) return [];
+  const pulls: Array<{ index: number; ref: VoiceMediaTrackRef }> = [];
+  tracks.forEach((track: unknown, index) => {
+    if (!track || typeof track !== "object") return;
+    const entry = track as Record<string, unknown>;
+    if (
+      entry.location !== "remote" ||
+      entry.simulcast !== undefined ||
+      typeof entry.sessionId !== "string" ||
+      typeof entry.trackName !== "string"
+    ) {
+      return;
+    }
+    pulls.push({
+      index,
+      ref: { sessionId: entry.sessionId, trackName: entry.trackName },
+    });
+  });
+  return pulls;
+}
+
+/**
+ * A client older than simulcast pulls without naming a layer, and what the
+ * SFU forwards then is unspecified. It used to get the publisher's only
+ * (full) layer, so ask for the top one, falling back down (f, h, q) when that
+ * is not being sent or does not fit.
+ */
+export function withTopLayerForLegacyPulls(
+  value: unknown,
+  pulls: ReadonlyArray<{ index: number; ref: VoiceMediaTrackRef }>,
+  published: VoiceMediaAuthorization["simulcast"],
+): unknown {
+  if (!published?.length || pulls.length === 0) return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const body = value as Record<string, unknown>;
+  if (!Array.isArray(body.tracks)) return value;
+  const tracks: unknown[] = [...body.tracks];
+  for (const { index, ref } of pulls) {
+    const layers = published.find(
+      (track) =>
+        track.sessionId === ref.sessionId && track.trackName === ref.trackName,
+    );
+    const top = Array.isArray(layers?.rids) ? layers.rids[0] : undefined;
+    const track = tracks[index];
+    if (typeof top !== "string" || !track || typeof track !== "object") {
+      continue;
+    }
+    tracks[index] = {
+      ...track,
+      simulcast: {
+        preferredRid: top,
+        priorityOrdering: "asciibetical",
+        ridNotAvailable: "asciibetical",
+      },
+    };
+  }
+  return { ...body, tracks };
+}
+
 function restoreSessionReferences(
   value: unknown,
   capabilitiesBySession: ReadonlyMap<string, string>,
@@ -391,12 +526,17 @@ export async function handlePartyTracksProxyRequest(
   headers.delete("Content-Length");
 
   let body: string | undefined;
+  let decodedBody: unknown;
+  let legacyPulls: Array<{ index: number; ref: VoiceMediaTrackRef }> = [];
   if (request.method !== "GET" && request.method !== "HEAD") {
     const rawBody = await request.text();
     if (rawBody) {
       try {
         const parsed: unknown = JSON.parse(rawBody);
-        body = JSON.stringify(
+        if (TRACKS_NEW_PATH.test(routedUrl.pathname)) {
+          legacyPulls = remotePullsWithoutLayer(parsed);
+        }
+        decodedBody = withSimulcastFallback(
           await decodeSessionReferences(
             parsed,
             roomSlug,
@@ -405,6 +545,7 @@ export async function handlePartyTracksProxyRequest(
             referencedParticipants,
           ),
         );
+        body = JSON.stringify(decodedBody);
         headers.set("Content-Type", "application/json");
       } catch (error) {
         if (
@@ -423,12 +564,25 @@ export async function handlePartyTracksProxyRequest(
     const authorize =
       options.authorizeRemotePull ?? authorizeRemotePullWithVoiceRoom;
     const startedAt = performance.now();
-    const authorized = await authorize(
-      { roomSlug, participantId, subject: verification.subject },
+    const answer = await authorize(
+      {
+        roomSlug,
+        participantId,
+        subject: verification.subject,
+        ...(legacyPulls.length > 0
+          ? { tracks: legacyPulls.map(({ ref }) => ref) }
+          : {}),
+      },
       env,
     );
     pullAuthorizationMs = performance.now() - startedAt;
+    const authorized = typeof answer === "boolean" ? answer : answer.authorized;
     if (!authorized) return forbidden();
+    if (typeof answer !== "boolean" && answer.simulcast?.length) {
+      body = JSON.stringify(
+        withTopLayerForLegacyPulls(decodedBody, legacyPulls, answer.simulcast),
+      );
+    }
   }
 
   if (body !== undefined) {

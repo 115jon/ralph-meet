@@ -253,3 +253,69 @@ describe("togglePreviewHidden hide flow", () => {
     ).toBe(false);
   });
 });
+
+describe("ParticipantCard — a share's stream before its video arrives", () => {
+  const liveAudio = { kind: "audio", readyState: "live" } as MediaStreamTrack;
+  const audioOnly = {
+    getAudioTracks: () => [liveAudio],
+    getVideoTracks: () => [],
+    getTracks: () => [liveAudio],
+  } as unknown as MediaStream;
+  const remoteShare = makeLocalScreenItem({
+    id: "remote-screen-user-2",
+    userId: "user-2",
+    name: "Alice",
+    isLocal: false,
+    stream: audioOnly,
+  });
+  const render = (watched: boolean) =>
+    renderToStaticMarkup(
+      React.createElement(ParticipantCard, {
+        item: remoteShare,
+        isFocused: false,
+        isTray: false,
+        globalDeafened: false,
+        onClick: () => {},
+        voiceActions: {},
+        watchedStreams: watched ? { "user-2": true } : {},
+        streamThumbnails: {},
+      }),
+    );
+
+  it("renders no video element for an unwatched share that only has audio", () => {
+    const markup = render(false);
+    expect(markup).not.toContain("<video");
+    expect(markup).toContain("Watch stream");
+  });
+
+  it("renders no video under the Watch prompt even when the share's video is pulled", () => {
+    const liveVideo = { kind: "video", readyState: "live" } as MediaStreamTrack;
+    const markup = renderToStaticMarkup(
+      React.createElement(ParticipantCard, {
+        item: {
+          ...remoteShare,
+          stream: {
+            getAudioTracks: () => [liveAudio],
+            getVideoTracks: () => [liveVideo],
+            getTracks: () => [liveAudio, liveVideo],
+          } as unknown as MediaStream,
+        },
+        isFocused: false,
+        isTray: false,
+        globalDeafened: false,
+        onClick: () => {},
+        voiceActions: {},
+        watchedStreams: {},
+        streamThumbnails: {},
+      }),
+    );
+    expect(markup).not.toContain("<video");
+    expect(markup).toContain("Watch stream");
+  });
+
+  it("shows the loader, not a black video, while a watched share's video is pulled", () => {
+    const markup = render(true);
+    expect(markup).not.toContain("<video");
+    expect(markup).toContain('role="status"');
+  });
+});

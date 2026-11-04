@@ -34,6 +34,15 @@ const TrackId = Schema.String.check(
   Schema.isMaxLength(MAX_TRACK_ID_LENGTH),
 );
 const Mid = Schema.String.check(Schema.isMaxLength(MAX_MID_LENGTH));
+/** RIDs of a simulcast publication's layers, highest first (RFC 8851 ids). */
+const MAX_SIMULCAST_LAYERS = 4;
+const SimulcastRids = Schema.mutable(
+  Schema.Array(Schema.String.check(Schema.isPattern(/^[A-Za-z0-9]{1,16}$/))),
+).check(
+  Schema.isMinLength(2),
+  Schema.isMaxLength(MAX_SIMULCAST_LAYERS),
+  Schema.makeFilter((rids) => new Set(rids).size === rids.length),
+);
 
 // ── Main gateway (MeetingRoom) ─────────────────────────────────────────────
 
@@ -243,6 +252,7 @@ const TrackInfoWire = Schema.Struct({
   ),
   mid: Schema.optional(Mid),
   kind: TrackKind,
+  simulcast_rids: Schema.optional(SimulcastRids),
 }).check(
   // Only PartyTracks (sfu_track_name) session ids may be long.
   Schema.makeFilter(

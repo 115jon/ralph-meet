@@ -128,6 +128,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private standby = false;
   private joinedSnapshot: SFUEventMap["joined"] | null = null;
   private readonly deferredRemoteTracks = new Map<string, TrackInfo>();
+  /**
+   * The viewer's latest subscription choice per remote track, kept here so
+   * a PartyTracks session created (or rebuilt) after the choice still gets
+   * it: screen video is pulled only once subscribed.
+   */
+  private readonly remoteTrackSubscriptions = new Map<string, boolean>();
   private partyTracksTransport: PartyTracksClientTransport | null = null;
   private partyTracksMedia: PartyTracksMediaManager | null = null;
   private partyTracksParticipantId: string | null = null;
@@ -856,6 +862,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         },
       },
     );
+    for (const [trackName, subscribe] of this.remoteTrackSubscriptions) {
+      this.partyTracksMedia.setRemoteTrackSubscription(trackName, subscribe);
+    }
     this.flushDeferredRemoteTracks();
     this.resolvePartyTracksReadiness();
   }
@@ -1215,15 +1224,22 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.audio.resumeAudioContext();
   }
 
+  /**
+   * Pulls a remote track while subscribed and stops pulling it otherwise.
+   * Which simulcast layer a pulled camera comes at follows where it is
+   * rendered (see video-layers.ts), not this call.
+   */
   public setRemoteTrackSubscription(
-    participantId: string,
     trackName: string,
     subscribe: boolean,
-    rid?: string,
   ): void {
-    void participantId;
-    void rid;
+    this.remoteTrackSubscriptions.set(trackName, subscribe);
     this.partyTracksMedia?.setRemoteTrackSubscription(trackName, subscribe);
+  }
+
+  /** The RID each simulcast pull asks for, by alias (diagnostics). */
+  public getRemoteVideoLayers(): Record<string, string> {
+    return this.partyTracksMedia?.getRemoteVideoLayers() ?? {};
   }
 
   public unpublishTrack(trackName: string): void {

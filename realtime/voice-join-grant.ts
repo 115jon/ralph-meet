@@ -110,6 +110,74 @@ export function serializeVoiceJoinGrantQuery(query: VoiceJoinGrantQuery) {
   });
 }
 
+/** A published SFU track as clients name it: session capability + SFU name. */
+export interface VoiceMediaTrackRef {
+  sessionId: string;
+  trackName: string;
+}
+
+/**
+ * Proxy -> VoiceRoom media authorization. `tracks` are remote pulls that name
+ * no simulcast layer (clients older than simulcast): the VoiceRoom answers
+ * the layers each one is published with, so the proxy can pick one.
+ */
+export interface VoiceMediaAuthorizationQuery extends VoiceJoinGrantQuery {
+  tracks?: VoiceMediaTrackRef[];
+}
+
+export interface VoiceMediaAuthorization {
+  authorized: boolean;
+  /** Published layers, highest first, of the asked tracks that have them. */
+  simulcast?: Array<VoiceMediaTrackRef & { rids: string[] }>;
+}
+
+/** More tracks than any one pull batch; the rest are ignored. */
+const MAX_MEDIA_TRACK_REFS = 64;
+/** Session capabilities are signed claims, longer than a plain id. */
+const MAX_SESSION_REF_LENGTH = 4_096;
+
+function isSessionRef(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_SESSION_REF_LENGTH
+  );
+}
+
+export function parseVoiceMediaAuthorizationQuery(
+  value: unknown,
+): VoiceMediaAuthorizationQuery | null {
+  const query = parseVoiceJoinGrantQuery(value);
+  if (!query) return null;
+  const tracks = (value as Record<string, unknown>).tracks;
+  if (!Array.isArray(tracks)) return query;
+  const refs: VoiceMediaTrackRef[] = [];
+  for (const entry of tracks.slice(0, MAX_MEDIA_TRACK_REFS)) {
+    if (!entry || typeof entry !== "object") continue;
+    const ref = entry as Record<string, unknown>;
+    if (!isSessionRef(ref.session_id) || !isId(ref.track_name)) continue;
+    refs.push({ sessionId: ref.session_id, trackName: ref.track_name });
+  }
+  return refs.length > 0 ? { ...query, tracks: refs } : query;
+}
+
+export function serializeVoiceMediaAuthorizationQuery(
+  query: VoiceMediaAuthorizationQuery,
+) {
+  return JSON.stringify({
+    participant_id: query.participantId,
+    subject: query.subject,
+    ...(query.tracks?.length
+      ? {
+          tracks: query.tracks.map((track) => ({
+            session_id: track.sessionId,
+            track_name: track.trackName,
+          })),
+        }
+      : {}),
+  });
+}
+
 /** Strictly increasing sequence numbers that stay ahead of wall time. */
 export function createVoiceJoinGrantSequence(now: () => number = Date.now) {
   let last = 0;

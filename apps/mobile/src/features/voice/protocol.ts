@@ -26,6 +26,8 @@ export const TrackInfoSchema = Schema.Struct({
   sfu_track_name: Schema.optional(Schema.String),
   session_id: Schema.String,
   kind: Schema.String,
+  /** A simulcast camera's layer RIDs, highest first; absent for one layer. */
+  simulcast_rids: Schema.optional(Schema.Array(Schema.String)),
 });
 /** As src/lib/types.ts: `track` is set locally on pulled tracks, never sent. */
 export type TrackInfo = typeof TrackInfoSchema.Type & {

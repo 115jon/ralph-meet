@@ -744,6 +744,45 @@ describe("SFUClient PartyTracks facade", () => {
     client.disconnect("component-unmount");
   });
 
+  it("pulls screen video once watched, including a watch chosen before the session", () => {
+    const transports: TestPartyTracksTransport[] = [];
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => {
+        const transport = new TestPartyTracksTransport();
+        transports.push(transport);
+        return transport;
+      },
+    });
+    vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+    const screen = (sharer: string): TrackInfo => ({
+      participant_id: sharer,
+      track_name: `screen-video-${sharer}`,
+      sfu_track_name: `opaque-screen-${sharer}`,
+      session_id: `session-${sharer}`,
+      kind: "video",
+    });
+
+    // Watch is chosen before the PartyTracks session exists.
+    client.setRemoteTrackSubscription("screen-video-watched", true);
+    emitMediaReady(client, "participant-generation-1", "voice-token-1");
+    client.voiceGW.emit("voice-ready", {
+      tracks: [screen("watched"), screen("unwatched")],
+    });
+    expect([...(transports[0]?.pullMetadata.keys() ?? [])]).toEqual([
+      "screen-video-watched",
+    ]);
+
+    // A new participant generation keeps the viewer's choice.
+    emitMediaReady(client, "participant-generation-2", "voice-token-2");
+    client.voiceGW.emit("voice-ready", {
+      tracks: [screen("watched"), screen("unwatched")],
+    });
+    expect([...(transports[1]?.pullMetadata.keys() ?? [])]).toEqual([
+      "screen-video-watched",
+    ]);
+    client.disconnect("component-unmount");
+  });
+
   it("updates PartyTracks across a same-generation VoiceGW reconnect and reconciles once", async () => {
     const transport = new TestPartyTracksTransport();
     const createPartyTracksTransport = vi.fn(() => transport);

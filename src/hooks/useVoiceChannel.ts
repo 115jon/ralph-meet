@@ -319,20 +319,55 @@ export function resolvePreviewStartState(
 }
 
 export interface ScreenVideoSubscriptionDecisionInput {
-  alwaysHear: boolean;
+  /** The viewer pressed Watch on this share. */
   isWatched: boolean;
+  /** The share's tile is on stage (which shows it as watched too). */
+  isFocused: boolean;
 }
 
-export function resolveScreenVideoSubscription(
-  _state: ScreenVideoSubscriptionDecisionInput,
-): boolean {
-  // Watch state controls UI presentation only. Keeping video subscribed avoids
-  // audio-only screen streams being rendered as a black video element.
-  return true;
+/**
+ * A remote screen share's video is pulled only while the viewer watches it,
+ * the same rule its tile uses to show the video instead of the Watch prompt.
+ * Its audio is pulled regardless ("always hear" only sets its volume), so an
+ * unwatched share costs a few kbps, not a video stream.
+ */
+export function resolveScreenVideoSubscription({
+  isWatched,
+  isFocused,
+}: ScreenVideoSubscriptionDecisionInput): boolean {
+  return isWatched || isFocused;
 }
 
-export function resolveCameraVideoSubscriptionRid(): "h" {
-  return "h";
+/**
+ * Stills for screen-share tiles. A remote share's video is pulled only while
+ * watched, so the still behind an unwatched share's Watch prompt is the one
+ * its publisher broadcasts (`stream_preview_url`, kept fresh while sharing);
+ * a still captured here from pulled video fills in where there is none.
+ * The local share keeps the still captured from its own preview.
+ */
+export function resolveStreamThumbnails(
+  captured: Record<string, string>,
+  members: ReadonlyArray<{
+    user_id?: string;
+    stream_preview_url?: string | null;
+  }>,
+  localUserId: string | null | undefined,
+): Record<string, string> {
+  let merged = captured;
+  for (const member of members) {
+    const preview = member.stream_preview_url;
+    if (
+      !member.user_id ||
+      member.user_id === localUserId ||
+      !preview ||
+      merged[member.user_id] === preview
+    ) {
+      continue;
+    }
+    if (merged === captured) merged = { ...captured };
+    merged[member.user_id] = preview;
+  }
+  return merged;
 }
 
 export type RemoteStreamsByUser = Record<string, Record<string, MediaStream>>;
@@ -1693,7 +1728,6 @@ export function useVoiceChannel({
     const vcMembers = channelId ? (voiceChannelStates[channelId] ?? []) : [];
     const localAppUserId = user?.id;
 
-    let hasRemoteSubs = false;
     for (const [uuid, appUserId] of uuidToUserIdRef.current.entries()) {
       // Skip the local user — we never subscribe to our own tracks
       if (uuid === myIdRef.current || appUserId === localAppUserId) continue;
@@ -1703,10 +1737,9 @@ export function useVoiceChannel({
         appUserId
       ] || { volume: 100, streamVolume: 100 };
       const alwaysHear = !!bandwidthPeerSettings[appUserId];
+      const isScreenFocused = focusedId === `remote-screen-${appUserId}`;
       const isFocused =
-        focusedId === `remote-screen-${appUserId}` ||
-        focusedId === `remote-camera-${appUserId}`;
-      const camRid = resolveCameraVideoSubscriptionRid();
+        isScreenFocused || focusedId === `remote-camera-${appUserId}`;
 
       // Verify the user is still in the channel (voice channel or call/room)
       // For calls and rooms, we rely on SFU participants entirely rather than gateway presence
@@ -1716,7 +1749,6 @@ export function useVoiceChannel({
         vcMembers.some((m: any) => m.user_id === appUserId);
       if (!isStillInChannel) continue;
 
-      hasRemoteSubs = true;
       // Screen-audio: keep transceiver ALWAYS active (recvonly). Audio is
       // ~20kbps — negligible bandwidth. Toggling the transceiver to inactive
       // and back deactivates the WebRTC media pipeline, causing the Web Audio
@@ -1727,28 +1759,22 @@ export function useVoiceChannel({
         currentSettingsRef.current.isDeafened || settings.muted
           ? 0
           : (settings.streamVolume ?? settings.volume) / 100;
-      sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, true);
+      sfu.setRemoteTrackSubscription(`screen-audio-${uuid}`, true);
       sfu.setTrackVolume(
         uuid,
         `screen-audio-${uuid}`,
         wantsScreenAudio ? streamVolume : 0,
       );
 
-      const wantsScreenVideo = resolveScreenVideoSubscription({
-        alwaysHear,
-        isWatched,
-      });
       sfu.setRemoteTrackSubscription(
-        uuid,
         `screen-video-${uuid}`,
-        wantsScreenVideo,
-        wantsScreenVideo ? "h" : undefined,
+        resolveScreenVideoSubscription({
+          isWatched,
+          isFocused: isScreenFocused,
+        }),
       );
-      sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, camRid);
-    }
-    // Only pull when there are actual remote subscriptions to negotiate
-    if (hasRemoteSubs) {
-      sfu.pullTracks([]);
+      // Always pulled; the simulcast layer follows the tile's rendered size.
+      sfu.setRemoteTrackSubscription(`cam-video-${uuid}`, true);
     }
   }, [
     watchedStreams,
@@ -5593,6 +5619,18 @@ export function useVoiceChannel({
     voiceDispatch({ type: "SET_FOCUSED", payload: id });
   }, []);
 
+  const tileStreamThumbnails = useMemo(
+    () =>
+      resolveStreamThumbnails(
+        streamThumbnails,
+        mode !== "room" && channelId
+          ? (voiceChannelStates[channelId] ?? [])
+          : [],
+        user?.id,
+      ),
+    [streamThumbnails, mode, channelId, voiceChannelStates, user?.id],
+  );
+
   const gridItems = useMemo(() => {
     const items: GridItem[] = [];
 
@@ -5932,7 +5970,7 @@ export function useVoiceChannel({
     setFocusedId,
     watchedStreams,
     watchersByStreamer,
-    streamThumbnails,
+    streamThumbnails: tileStreamThumbnails,
     gridItems,
     audioBlocked,
     setAudioBlocked: (blocked: boolean) =>

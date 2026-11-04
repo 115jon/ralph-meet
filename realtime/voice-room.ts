@@ -75,10 +75,12 @@ import {
   VOICE_MEDIA_AUTHORIZATION_PATH,
   VoiceJoinGrantStore,
   VoiceJoinGrantWaiters,
-  parseVoiceJoinGrantQuery,
+  parseVoiceMediaAuthorizationQuery,
   parseVoiceJoinGrantUpdate,
   serializeVoiceJoinGrantQuery,
   type VoiceJoinGrantQuery,
+  type VoiceMediaAuthorization,
+  type VoiceMediaTrackRef,
 } from "./voice-join-grant";
 import {
   DemoChatStore,
@@ -123,6 +125,22 @@ interface TrackInfo {
   session_id: string;
   mid?: string;
   kind: "audio" | "video";
+  /** A simulcast publication's layer RIDs, highest first. */
+  simulcast_rids?: string[];
+}
+
+/** Stored comma-joined; RIDs are alphanumeric (see the Video payload rule). */
+function encodeSimulcastRids(
+  rids: readonly string[] | undefined,
+): string | null {
+  return rids && rids.length > 1 ? rids.join(",") : null;
+}
+
+/** `{ simulcast_rids }` from a stored row, or nothing for a single layer. */
+function withSimulcastRids(value: unknown): { simulcast_rids?: string[] } {
+  if (typeof value !== "string" || !value) return {};
+  const rids = value.split(",").filter(Boolean);
+  return rids.length > 1 ? { simulcast_rids: rids } : {};
 }
 
 interface NativeScreenTrackRow {
@@ -331,7 +349,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         session_id TEXT NOT NULL,
         mid TEXT,
         kind TEXT NOT NULL,
-        native_screen_pending INTEGER NOT NULL DEFAULT 0
+        native_screen_pending INTEGER NOT NULL DEFAULT 0,
+        simulcast_rids TEXT
       );
     `);
     try {
@@ -343,6 +362,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       this.sql.exec(
         `ALTER TABLE tracks ADD COLUMN native_screen_pending INTEGER NOT NULL DEFAULT 0;`,
       );
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
+    try {
+      this.sql.exec(`ALTER TABLE tracks ADD COLUMN simulcast_rids TEXT;`);
     } catch {
       // Existing SQLite-backed Durable Objects already have the column.
     }
@@ -524,15 +548,22 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       url.pathname === VOICE_MEDIA_AUTHORIZATION_PATH &&
       request.method === "POST"
     ) {
-      const query = parseVoiceJoinGrantQuery(
+      const query = parseVoiceMediaAuthorizationQuery(
         await request.json().catch(() => null),
       );
       if (!query) {
         return Response.json({ authorized: false }, { status: 400 });
       }
-      return Response.json({
-        authorized: await this.waitForVoiceJoinGrant(query),
+      const authorized = await this.waitForVoiceJoinGrant({
+        participantId: query.participantId,
+        subject: query.subject,
       });
+      const answer: VoiceMediaAuthorization = { authorized };
+      if (authorized && query.tracks) {
+        const simulcast = this.publishedSimulcastRids(query.tracks);
+        if (simulcast.length > 0) answer.simulcast = simulcast;
+      }
+      return Response.json(answer);
     }
 
     if (
@@ -1950,6 +1981,26 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
   }
 
+  /** The published layers of the given SFU tracks that have several. */
+  private publishedSimulcastRids(
+    tracks: readonly VoiceMediaTrackRef[],
+  ): Array<VoiceMediaTrackRef & { rids: string[] }> {
+    const found: Array<VoiceMediaTrackRef & { rids: string[] }> = [];
+    for (const track of tracks) {
+      const [row] = this.sql.exec<{ simulcast_rids: string | null }>(
+        "SELECT simulcast_rids FROM tracks WHERE session_id = ? AND " +
+          "(sfu_track_name = ? OR (sfu_track_name IS NULL AND track_name = ?)) " +
+          "AND simulcast_rids IS NOT NULL LIMIT 1",
+        track.sessionId,
+        track.trackName,
+        track.trackName,
+      );
+      const { simulcast_rids: rids } = withSimulcastRids(row?.simulcast_rids);
+      if (rids) found.push({ ...track, rids });
+    }
+    return found;
+  }
+
   /**
    * Waits for the MeetingRoom's join grant for this participant. A grant the
    * MeetingRoom already pushed answers immediately; otherwise the request
@@ -2267,7 +2318,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     const existingTracks: TrackInfo[] = [];
     let staleTrackCount = 0;
     const tCursor = this.sql.exec(
-      "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind FROM tracks WHERE participant_id != ? AND native_screen_pending = 0",
+      "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind, simulcast_rids FROM tracks WHERE participant_id != ? AND native_screen_pending = 0",
       d.participant_id,
     );
     for (const row of tCursor) {
@@ -2282,6 +2333,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         session_id: row.session_id as string,
         mid: (row.mid as string) || undefined,
         kind: row.kind as "audio" | "video",
+        ...withSimulcastRids(row.simulcast_rids),
       });
     }
 
@@ -2632,7 +2684,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
               "ON CONFLICT(track_name) DO UPDATE SET " +
               "participant_id = excluded.participant_id, " +
               "sfu_track_name = NULL, session_id = excluded.session_id, " +
-              "mid = excluded.mid, kind = excluded.kind, native_screen_pending = 1 " +
+              "mid = excluded.mid, kind = excluded.kind, native_screen_pending = 1, " +
+              "simulcast_rids = NULL " +
               "WHERE tracks.participant_id = excluded.participant_id",
             track.track_name,
             participantId,
@@ -2794,6 +2847,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         sfu_track_name: track.sfu_track_name,
         session_id: track.session_id,
         kind: track.kind,
+        ...(track.kind === "video" && encodeSimulcastRids(track.simulcast_rids)
+          ? { simulcast_rids: [...(track.simulcast_rids ?? [])] }
+          : {}),
       });
     }
 
@@ -2807,18 +2863,20 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     for (const track of sanitizedTracks) {
       this.sql.exec(
         "INSERT INTO tracks " +
-          "(track_name, participant_id, sfu_track_name, session_id, mid, kind, native_screen_pending) " +
-          "VALUES (?, ?, ?, ?, NULL, ?, 0) " +
+          "(track_name, participant_id, sfu_track_name, session_id, mid, kind, native_screen_pending, simulcast_rids) " +
+          "VALUES (?, ?, ?, ?, NULL, ?, 0, ?) " +
           "ON CONFLICT(track_name) DO UPDATE SET " +
           "participant_id = excluded.participant_id, " +
           "sfu_track_name = excluded.sfu_track_name, " +
           "session_id = excluded.session_id, mid = NULL, " +
-          "kind = excluded.kind, native_screen_pending = 0",
+          "kind = excluded.kind, native_screen_pending = 0, " +
+          "simulcast_rids = excluded.simulcast_rids",
         track.track_name,
         participantId,
         track.sfu_track_name,
         track.session_id,
         track.kind,
+        encodeSimulcastRids(track.simulcast_rids),
       );
     }
 
@@ -2853,7 +2911,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     for (const trackName of d.track_names) {
       const row = [
         ...this.sql.exec(
-          "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+          "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind, simulcast_rids " +
             "FROM tracks WHERE track_name = ? AND participant_id = ?",
           trackName,
           participantId,
@@ -2922,7 +2980,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     for (const trackName of d.track_names) {
       const row = [
         ...this.sql.exec(
-          "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+          "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind, simulcast_rids " +
             "FROM tracks WHERE track_name = ? AND participant_id = ? " +
             "AND session_id = ? AND sfu_track_name IS NULL " +
             "AND native_screen_pending = 1",
@@ -2993,6 +3051,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       session_id: String(row.session_id),
       ...(typeof row.mid === "string" && row.mid ? { mid: row.mid } : {}),
       kind: row.kind === "audio" ? "audio" : "video",
+      ...withSimulcastRids(row.simulcast_rids),
     };
   }
 
@@ -3002,7 +3061,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   ): TrackInfo[] {
     return [
       ...this.sql.exec(
-        "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+        "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind, simulcast_rids " +
           "FROM tracks WHERE participant_id = ? AND session_id = ? " +
           "AND sfu_track_name IS NULL ORDER BY CASE kind WHEN 'video' THEN 0 ELSE 1 END, track_name",
         participantId,
@@ -4047,7 +4106,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
     const tracks = [
       ...this.sql.exec(
-        "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+        "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind, simulcast_rids " +
           "FROM tracks WHERE participant_id = ?",
         participantId,
       ),

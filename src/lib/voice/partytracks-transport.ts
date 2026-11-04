@@ -5,7 +5,15 @@ import {
   type PartyTracksConfig,
   type TrackMetadata,
 } from "partytracks/client";
-import { EMPTY, map, type Observable, type Subscription } from "rxjs";
+import {
+  distinctUntilChanged,
+  EMPTY,
+  map,
+  of,
+  tap,
+  type Observable,
+  type Subscription,
+} from "rxjs";
 import {
   installOpusPtimePreference,
   resolveVoiceOpusPtime,
@@ -53,6 +61,43 @@ export interface RalphPublishedTrack {
   participantId: string;
   trackName: string;
   kind: "audio" | "video";
+}
+
+export interface RalphPushOptions {
+  /**
+   * Simulcast encodings (with RIDs, highest first). The publication announces
+   * the RIDs its sender actually negotiated as `simulcast_rids`.
+   */
+  sendEncodings?: readonly RTCRtpEncodingParameters[];
+}
+
+export interface RalphPullOptions {
+  /**
+   * The simulcast layer to pull; undefined pulls a publication's single
+   * layer. A change after the pull started switches layers through the SFU's
+   * tracks/update, without renegotiating or replacing the track.
+   */
+  preferredRid$?: Observable<string | undefined>;
+}
+
+/**
+ * The RIDs `track`'s sender negotiated, highest first, when it negotiated
+ * more than one: a browser or SFU that declines simulcast leaves a single
+ * encoding, and that publication is announced as single-layer.
+ */
+export function negotiatedSimulcastRids(
+  peerConnection: RTCPeerConnection | null,
+  track: MediaStreamTrack | null,
+): string[] | undefined {
+  if (!peerConnection || !track) return undefined;
+  for (const sender of peerConnection.getSenders()) {
+    if (sender.track !== track) continue;
+    const rids = (sender.getParameters().encodings ?? [])
+      .map((encoding) => encoding.rid)
+      .filter((rid): rid is string => typeof rid === "string" && rid !== "");
+    if (rids.length > 1) return rids;
+  }
+  return undefined;
 }
 
 export interface PartyTracksTransportOptions {
@@ -197,23 +242,72 @@ export class PartyTracksTransport {
   push(
     sourceTrack$: Observable<MediaStreamTrack>,
     identity: RalphPublishedTrack,
-    options?: PushOptions,
+    options: RalphPushOptions = {},
   ): Observable<TrackInfo> {
-    return this.client.push(sourceTrack$, options).pipe(
-      map((metadata) => ({
-        participant_id: identity.participantId,
-        track_name: identity.trackName,
-        sfu_track_name: requireMetadataField(metadata, "trackName"),
-        session_id: requireMetadataField(metadata, "sessionId"),
-        kind: identity.kind,
-      })),
-    );
+    const sendEncodings = options.sendEncodings;
+    let currentTrack: MediaStreamTrack | null = null;
+    // PartyTracks re-emits a push's metadata as soon as it hands a new source
+    // track to sender.replaceTrack(), but sender.track changes only once that
+    // resolves, so the sender cannot be found by the new track then. The
+    // negotiated layers belong to the SFU track (one transceiver), not to the
+    // source track: read them once per SFU track and keep them across
+    // replacements (device switch, recovery).
+    let negotiated: { sfuTrack: string; rids: string[] | undefined } | null =
+      null;
+    const negotiatedRids = (track: TrackInfo): string[] | undefined => {
+      const sfuTrack = `${track.session_id}/${track.sfu_track_name}`;
+      if (negotiated?.sfuTrack !== sfuTrack) {
+        negotiated = {
+          sfuTrack,
+          rids: negotiatedSimulcastRids(
+            this.activePeerConnection,
+            currentTrack,
+          ),
+        };
+      }
+      return negotiated.rids;
+    };
+    const pushOptions: PushOptions | undefined = sendEncodings
+      ? {
+          sendEncodings$: of(
+            sendEncodings.map((encoding) => ({ ...encoding })),
+          ),
+        }
+      : undefined;
+    return this.client
+      .push(
+        sourceTrack$.pipe(tap((track) => (currentTrack = track))),
+        pushOptions,
+      )
+      .pipe(
+        map((metadata) => {
+          const track: TrackInfo = {
+            participant_id: identity.participantId,
+            track_name: identity.trackName,
+            sfu_track_name: requireMetadataField(metadata, "trackName"),
+            session_id: requireMetadataField(metadata, "sessionId"),
+            kind: identity.kind,
+          };
+          const rids = sendEncodings ? negotiatedRids(track) : undefined;
+          return rids ? { ...track, simulcast_rids: rids } : track;
+        }),
+      );
   }
 
   pull(
     track$: Observable<TrackInfo>,
-    options?: PullOptions,
+    options: RalphPullOptions = {},
   ): Observable<MediaStreamTrack> {
-    return this.client.pull(track$.pipe(map(toPartyTracksMetadata)), options);
+    const pullOptions: PullOptions | undefined = options.preferredRid$
+      ? {
+          simulcast: {
+            preferredRid$: options.preferredRid$.pipe(distinctUntilChanged()),
+          },
+        }
+      : undefined;
+    return this.client.pull(
+      track$.pipe(map(toPartyTracksMetadata)),
+      pullOptions,
+    );
   }
 }

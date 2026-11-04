@@ -4,8 +4,10 @@ import {
   createVoiceJoinGrantSequence,
   parseVoiceJoinGrantQuery,
   parseVoiceJoinGrantUpdate,
+  parseVoiceMediaAuthorizationQuery,
   serializeVoiceJoinGrantQuery,
   serializeVoiceJoinGrantUpdate,
+  serializeVoiceMediaAuthorizationQuery,
 } from "./voice-join-grant";
 
 describe("voice join grant messages", () => {
@@ -61,6 +63,30 @@ describe("voice join grant messages", () => {
     expect(
       parseVoiceJoinGrantQuery(JSON.parse(serializeVoiceJoinGrantQuery(query))),
     ).toEqual(query);
+  });
+
+  it("round-trips media authorization queries with the tracks to describe", () => {
+    const query = {
+      participantId: "participant-1",
+      subject: "user-1",
+      tracks: [{ sessionId: "c".repeat(900), trackName: "sfu-camera" }],
+    };
+    expect(
+      parseVoiceMediaAuthorizationQuery(
+        JSON.parse(serializeVoiceMediaAuthorizationQuery(query)),
+      ),
+    ).toEqual(query);
+    // A query without tracks (or only malformed ones) is a plain join check.
+    expect(
+      parseVoiceMediaAuthorizationQuery({
+        participant_id: "participant-1",
+        subject: "user-1",
+        tracks: [{ session_id: "", track_name: "x" }, "nope"],
+      }),
+    ).toEqual({ participantId: "participant-1", subject: "user-1" });
+    expect(
+      parseVoiceMediaAuthorizationQuery({ subject: "user-1", tracks: [] }),
+    ).toBeNull();
   });
 
   it.each([
