@@ -4388,6 +4388,66 @@ describe("MeetingRoom voice-channel membership across one user's sessions", () =
     return { roomName, channelId, first, firstReady, second, secondReady };
   }
 
+  it("keeps the current mute and deafen state on a re-sent join without them", async () => {
+    const userId = "rejoin-state-user";
+    const roomName = crypto.randomUUID();
+    const channelId = await seedDmVoiceChannel([userId]);
+    const socket = await openGlobalSocket(roomName, userId);
+    const ready = await identifyMeetingSocket(socket);
+    await joinVoiceChannel(roomName, socket, ready.participant_id, channelId);
+    const voiceState = () =>
+      runInDurableObject(meetingRoom(roomName), (instance) => {
+        const live = instance as unknown as {
+          voiceChannelMembers: Map<
+            string,
+            Map<string, { self_mute?: boolean; self_deaf?: boolean }>
+          >;
+          sessions: Map<
+            unknown,
+            { id: string; self_mute?: boolean; self_deaf?: boolean }
+          >;
+        };
+        const member = live.voiceChannelMembers.get(channelId)?.get(userId);
+        const session = [...live.sessions.values()].find(
+          (entry) => entry.id === ready.participant_id,
+        );
+        return {
+          member: {
+            self_mute: member?.self_mute,
+            self_deaf: member?.self_deaf,
+          },
+          session: {
+            self_mute: session?.self_mute,
+            self_deaf: session?.self_deaf,
+          },
+        };
+      });
+
+    socket.send(
+      JSON.stringify({ op: 15, d: { self_mute: false, self_deaf: true } }),
+    );
+    await settled(socket);
+    // The periodic re-send names only the channel.
+    socket.send(JSON.stringify({ op: 33, d: { channel_id: channelId } }));
+    await settled(socket);
+    expect(await voiceState()).toEqual({
+      member: { self_mute: false, self_deaf: true },
+      session: { self_mute: false, self_deaf: true },
+    });
+
+    // A join that names the state still sets it.
+    socket.send(
+      JSON.stringify({ op: 33, d: { channel_id: channelId, self_mute: true } }),
+    );
+    await settled(socket);
+    expect(await voiceState()).toEqual({
+      member: { self_mute: true, self_deaf: true },
+      session: { self_mute: true, self_deaf: true },
+    });
+
+    socket.close();
+  });
+
   it("keeps the member until the user's last session leaves the channel", async () => {
     const userId = "multi-leave-user";
     const { roomName, channelId, first, firstReady, second } =

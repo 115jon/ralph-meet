@@ -4123,6 +4123,10 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    // Clients re-send this join every 30 s. A field it leaves out keeps the
+    // state the session has (Op 15 maintains it); it never resets it.
+    if (d.self_mute !== undefined) session.self_mute = d.self_mute;
+
     // Leave previous voice channel if switching to a different one.
     // If already in the same channel (e.g. server added us during handleCallInitiate
     // and now the SFU join fires sendVoiceChannelJoin for the same channel), just
@@ -4130,13 +4134,13 @@ export class MeetingRoom extends DurableObject<Env> {
     if (session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
       this.removeFromVoiceChannel(session);
     } else if (session.voice_channel_id === d.channel_id) {
-      // Already in this channel — just update self_mute and broadcast
-      session.self_mute = d.self_mute ?? true;
+      // Already in this channel — just refresh the member and broadcast
       this.persist(ws, session);
       const members = this.voiceChannelMembers.get(d.channel_id);
       if (members?.has(session.user_id)) {
         const member = members.get(session.user_id)!;
         member.self_mute = session.self_mute;
+        member.self_deaf = session.self_deaf;
         member.connected = true;
         member.connection_state = "connected";
         member.disconnected_at = null;
@@ -4208,7 +4212,7 @@ export class MeetingRoom extends DurableObject<Env> {
       connection_state: "connected",
       disconnected_at: null,
       reconnect_expires_at: null,
-      self_mute: d.self_mute ?? true,
+      self_mute: session.self_mute,
       self_deaf: session.self_deaf,
       self_video: session.self_video,
       self_stream: session.self_stream,
