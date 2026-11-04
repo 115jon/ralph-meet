@@ -248,6 +248,45 @@ async function decodeSessionReferences(
   return decoded;
 }
 
+/**
+ * PartyTracks sends only `simulcast.preferredRid` on a pull (tracks/new) and a
+ * layer switch (tracks/update). The SFU's defaults then forward nothing when
+ * that layer is not being sent (a browser drops top layers for a small
+ * capture or a constrained uplink) and keep forwarding it over a receiver's
+ * congested link. Ralph's RIDs sort highest layer first (f, h, q), so
+ * `asciibetical` for both falls back to the best layer that is available
+ * and fits. A policy the client did set is kept.
+ */
+export function withSimulcastFallback(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const body = value as Record<string, unknown>;
+  if (!Array.isArray(body.tracks)) return value;
+  return {
+    ...body,
+    tracks: body.tracks.map((track: unknown) => {
+      if (!track || typeof track !== "object") return track;
+      const simulcast = (track as Record<string, unknown>).simulcast;
+      if (
+        !simulcast ||
+        typeof simulcast !== "object" ||
+        typeof (simulcast as Record<string, unknown>).preferredRid !== "string"
+      ) {
+        return track;
+      }
+      return {
+        ...track,
+        simulcast: {
+          priorityOrdering: "asciibetical",
+          ridNotAvailable: "asciibetical",
+          ...simulcast,
+        },
+      };
+    }),
+  };
+}
+
 function restoreSessionReferences(
   value: unknown,
   capabilitiesBySession: ReadonlyMap<string, string>,
@@ -397,12 +436,14 @@ export async function handlePartyTracksProxyRequest(
       try {
         const parsed: unknown = JSON.parse(rawBody);
         body = JSON.stringify(
-          await decodeSessionReferences(
-            parsed,
-            roomSlug,
-            env.CALLS_APP_SECRET,
-            capabilitiesBySession,
-            referencedParticipants,
+          withSimulcastFallback(
+            await decodeSessionReferences(
+              parsed,
+              roomSlug,
+              env.CALLS_APP_SECRET,
+              capabilitiesBySession,
+              referencedParticipants,
+            ),
           ),
         );
         headers.set("Content-Type", "application/json");

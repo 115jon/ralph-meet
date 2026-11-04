@@ -1929,6 +1929,104 @@ describe("VoiceRoom lifecycle", () => {
     postStopObserver.close();
   });
 
+  it("relays a camera's simulcast layers to listeners and late joiners", async () => {
+    const roomName = crypto.randomUUID();
+    const publisherId = crypto.randomUUID();
+    const observerId = crypto.randomUUID();
+    await mockCallsApi(roomName, async () => Response.json({}));
+    const session = await issuePartyTracksSessionCapability(
+      publisherId,
+      roomName,
+      "raw-partytracks-session",
+    );
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, publisherId, roomName);
+    const observer = await openVoiceSocket(roomName, "observer-user");
+    await identifyVoiceSocket(observer, observerId, roomName, "observer-user");
+    const camera = (sfuTrackName: string, rids?: unknown) => ({
+      participant_id: publisherId,
+      track_name: `cam-video-${publisherId}`,
+      sfu_track_name: sfuTrackName,
+      session_id: session,
+      kind: "video",
+      ...(rids === undefined ? {} : { simulcast_rids: rids }),
+    });
+
+    const publication = nextMessageWithOpcode(observer, 12);
+    publisher.send(
+      JSON.stringify({
+        op: 12,
+        d: { tracks: [camera("opaque-camera", ["f", "h", "q"])] },
+      }),
+    );
+    await expect(publication).resolves.toMatchObject({
+      d: {
+        tracks: [
+          {
+            track_name: `cam-video-${publisherId}`,
+            simulcast_rids: ["f", "h", "q"],
+          },
+        ],
+      },
+    });
+
+    const lateObserverId = crypto.randomUUID();
+    const lateObserver = await openVoiceSocket(roomName, "late-observer-user");
+    await grantVoiceJoin(roomName, lateObserverId, "late-observer-user");
+    const lateReady = nextJsonMessage(lateObserver);
+    lateObserver.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: lateObserverId,
+          voice_token: await issueVoiceToken(
+            lateObserverId,
+            roomName,
+            "late-observer-user",
+          ),
+        },
+      }),
+    );
+    await expect(lateReady).resolves.toMatchObject({
+      op: 101,
+      d: {
+        tracks: [
+          {
+            track_name: `cam-video-${publisherId}`,
+            simulcast_rids: ["f", "h", "q"],
+          },
+        ],
+      },
+    });
+
+    // Malformed layers (duplicate RIDs) are refused, not stored.
+    publisher.send(
+      JSON.stringify({
+        op: 12,
+        d: { tracks: [camera("opaque-camera-bad", ["f", "f"])] },
+      }),
+    );
+    expect(await hasMessageWithOpcode(observer, 12)).toBe(false);
+
+    // Republished without simulcast (e.g. the browser declined it): the
+    // stored layers go with the old publication.
+    const singleLayer = nextMessageWithOpcode(observer, 12);
+    publisher.send(
+      JSON.stringify({ op: 12, d: { tracks: [camera("opaque-camera-2")] } }),
+    );
+    const singleLayerMessage = (await singleLayer) as {
+      d: { tracks: Array<Record<string, unknown>> };
+    };
+    expect(singleLayerMessage.d.tracks[0]).toMatchObject({
+      sfu_track_name: "opaque-camera-2",
+    });
+    expect(singleLayerMessage.d.tracks[0]).not.toHaveProperty("simulcast_rids");
+
+    publisher.close();
+    observer.close();
+    lateObserver.close();
+  });
+
   it("keeps two PartyTracks participants off the direct Calls signaling path", async () => {
     const roomName = crypto.randomUUID();
     const firstParticipantId = crypto.randomUUID();

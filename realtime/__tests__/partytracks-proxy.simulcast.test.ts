@@ -1,0 +1,163 @@
+import { describe, expect, it, vi } from "vitest";
+import { issueVoiceToken } from "../voice-token";
+import {
+  handlePartyTracksProxyRequest,
+  issuePartyTracksSessionCapability,
+  withSimulcastFallback,
+  type PartyTracksProxyEnv,
+  type PartyTracksRouter,
+} from "../partytracks-proxy";
+
+const env: PartyTracksProxyEnv = {
+  CALLS_APP_ID: "cloudflare-app",
+  CALLS_APP_SECRET: "cloudflare-secret",
+};
+
+const joined = { authorizeRemotePull: async () => true };
+
+async function capability(participantId: string, sessionId: string) {
+  return issuePartyTracksSessionCapability(
+    { roomSlug: "room-one", participantId, sessionId },
+    env.CALLS_APP_SECRET,
+  );
+}
+
+async function viewerRequest(path: string, method: string, body: unknown) {
+  const voiceToken = await issueVoiceToken({
+    participantId: "viewer",
+    roomSlug: "room-one",
+    subject: "user-viewer",
+    secret: env.CALLS_APP_SECRET,
+  });
+  const viewerSession = await capability("viewer", "cloudflare-viewer");
+  return new Request(
+    `https://meet.test/api/channels/room-one/partytracks/sessions/${encodeURIComponent(viewerSession)}${path}`,
+    {
+      method,
+      headers: {
+        Authorization: `Bearer ${voiceToken}`,
+        "X-Voice-Session-Id": "viewer",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+describe("PartyTracks proxy simulcast fallback", () => {
+  it("asks the SFU to fall back between layers on a layer switch (tracks/update)", async () => {
+    const routed: unknown[] = [];
+    const route = vi.fn<PartyTracksRouter>(async ({ request }) => {
+      const body = await request.json();
+      routed.push(body);
+      return Response.json(body);
+    });
+    const publisher = await capability("publisher", "cloudflare-publisher");
+
+    const response = await handlePartyTracksProxyRequest(
+      await viewerRequest("/tracks/update", "PUT", {
+        tracks: [
+          {
+            location: "remote",
+            sessionId: publisher,
+            trackName: "sfu-camera",
+            mid: "3",
+            simulcast: { preferredRid: "h" },
+          },
+        ],
+      }),
+      env,
+      route,
+      joined,
+    );
+
+    expect(response?.status).toBe(200);
+    expect(routed).toEqual([
+      {
+        tracks: [
+          {
+            location: "remote",
+            sessionId: "cloudflare-publisher",
+            trackName: "sfu-camera",
+            mid: "3",
+            simulcast: {
+              preferredRid: "h",
+              priorityOrdering: "asciibetical",
+              ridNotAvailable: "asciibetical",
+            },
+          },
+        ],
+      },
+    ]);
+    expect(new URL(route.mock.calls[0]![0].request.url).pathname).toBe(
+      "/api/channels/room-one/partytracks/sessions/cloudflare-viewer/tracks/update",
+    );
+  });
+
+  it("leaves pulls without a layer alone (single-layer tracks, audio)", async () => {
+    const routed: unknown[] = [];
+    const route = vi.fn<PartyTracksRouter>(async ({ request }) => {
+      routed.push(await request.json());
+      return Response.json({});
+    });
+    const publisher = await capability("publisher", "cloudflare-publisher");
+
+    await handlePartyTracksProxyRequest(
+      await viewerRequest("/tracks/new", "POST", {
+        tracks: [
+          { location: "remote", sessionId: publisher, trackName: "mic" },
+        ],
+      }),
+      env,
+      route,
+      joined,
+    );
+
+    expect(routed).toEqual([
+      {
+        tracks: [
+          {
+            location: "remote",
+            sessionId: "cloudflare-publisher",
+            trackName: "mic",
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("withSimulcastFallback", () => {
+  it("keeps a policy the client set", () => {
+    expect(
+      withSimulcastFallback({
+        tracks: [
+          {
+            trackName: "camera",
+            simulcast: { preferredRid: "f", ridNotAvailable: "none" },
+          },
+        ],
+      }),
+    ).toEqual({
+      tracks: [
+        {
+          trackName: "camera",
+          simulcast: {
+            preferredRid: "f",
+            priorityOrdering: "asciibetical",
+            ridNotAvailable: "none",
+          },
+        },
+      ],
+    });
+  });
+
+  it("passes through bodies it does not recognize", () => {
+    const sdp = { sessionDescription: { type: "offer", sdp: "v=0" } };
+    expect(withSimulcastFallback(sdp)).toBe(sdp);
+    expect(withSimulcastFallback(null)).toBeNull();
+    expect(withSimulcastFallback([1])).toEqual([1]);
+    expect(
+      withSimulcastFallback({ tracks: [null, { simulcast: {} }] }),
+    ).toEqual({ tracks: [null, { simulcast: {} }] });
+  });
+});
