@@ -16,6 +16,7 @@ import {
   mainGatewayClientRules,
 } from "../../src/lib/gateway-protocol";
 import { MeetingRoom } from "../meeting-room";
+import type { IceServer } from "../meeting-room/turn-credentials";
 
 async function createAdmissionHeaders(
   roomName: string,
@@ -4228,6 +4229,84 @@ describe("MeetingRoom one voice session per user", () => {
     standby.close();
   });
 
+  it("drops an Identify whose socket closed before it finished", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "closed-mid-identify-user";
+    const room = meetingRoom(roomName);
+    // Hold the first Identify's TURN step open (plain flags: a promise made
+    // here cannot be awaited inside the room).
+    const turn = { calls: 0, released: false };
+    await runInDurableObject(room, (instance) => {
+      const live = instance as unknown as {
+        generateTurnCredentials(): Promise<IceServer[]>;
+      };
+      const generate = live.generateTurnCredentials.bind(live);
+      live.generateTurnCredentials = async () => {
+        turn.calls += 1;
+        if (turn.calls === 1) {
+          while (!turn.released) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+        }
+        return generate();
+      };
+    });
+
+    const stale = await openMeetingSocket(roomName, userId);
+    stale.send(JSON.stringify({ op: 0, d: { name: "Old tab" } }));
+    await vi.waitFor(() => {
+      expect(turn.calls).toBe(1);
+    });
+    const staleClosed = closeOf(stale);
+    stale.close(1000, "tab closed");
+    await staleClosed;
+
+    const current = await openMeetingSocket(roomName, userId);
+    const currentMessages: Array<{ op: number; d: unknown }> = [];
+    current.addEventListener("message", (event) => {
+      currentMessages.push(JSON.parse(event.data as string));
+    });
+    let currentClosed = false;
+    const currentClose = closeOf(current).then((close) => {
+      currentClosed = true;
+      return close;
+    });
+    const currentReady = await identifyMeetingSocket(current, {
+      name: "New tab",
+    });
+
+    turn.released = true;
+    await vi.waitFor(async () => {
+      const identifying = await runInDurableObject(
+        room,
+        (instance) =>
+          (
+            instance as unknown as {
+              identifyingVoiceJoins: Map<string, string>;
+            }
+          ).identifyingVoiceJoins.size,
+      );
+      expect(identifying).toBe(0);
+    });
+    // A replaced socket is closed and never acks.
+    await Promise.race([settled(current), currentClose]);
+
+    expect(currentMessages.filter((message) => message.op === 18)).toEqual([]);
+    expect(currentClosed).toBe(false);
+    const sessionIds = await runInDurableObject(room, (instance) =>
+      [
+        ...(
+          instance as unknown as {
+            sessions: Map<WebSocket, { id: string }>;
+          }
+        ).sessions.values(),
+      ].map((session) => session.id),
+    );
+    expect(sessionIds).toEqual([currentReady.participant_id]);
+
+    current.close();
+  });
+
   it("never replaces a different user's session", async () => {
     const roomName = crypto.randomUUID();
     const first = await openMeetingSocket(roomName, "peer-one");
@@ -4341,6 +4420,66 @@ describe("MeetingRoom voice-channel membership across one user's sessions", () =
     );
     return { roomName, channelId, first, firstReady, second, secondReady };
   }
+
+  it("keeps the current mute and deafen state on a re-sent join without them", async () => {
+    const userId = "rejoin-state-user";
+    const roomName = crypto.randomUUID();
+    const channelId = await seedDmVoiceChannel([userId]);
+    const socket = await openGlobalSocket(roomName, userId);
+    const ready = await identifyMeetingSocket(socket);
+    await joinVoiceChannel(roomName, socket, ready.participant_id, channelId);
+    const voiceState = () =>
+      runInDurableObject(meetingRoom(roomName), (instance) => {
+        const live = instance as unknown as {
+          voiceChannelMembers: Map<
+            string,
+            Map<string, { self_mute?: boolean; self_deaf?: boolean }>
+          >;
+          sessions: Map<
+            unknown,
+            { id: string; self_mute?: boolean; self_deaf?: boolean }
+          >;
+        };
+        const member = live.voiceChannelMembers.get(channelId)?.get(userId);
+        const session = [...live.sessions.values()].find(
+          (entry) => entry.id === ready.participant_id,
+        );
+        return {
+          member: {
+            self_mute: member?.self_mute,
+            self_deaf: member?.self_deaf,
+          },
+          session: {
+            self_mute: session?.self_mute,
+            self_deaf: session?.self_deaf,
+          },
+        };
+      });
+
+    socket.send(
+      JSON.stringify({ op: 15, d: { self_mute: false, self_deaf: true } }),
+    );
+    await settled(socket);
+    // The periodic re-send names only the channel.
+    socket.send(JSON.stringify({ op: 33, d: { channel_id: channelId } }));
+    await settled(socket);
+    expect(await voiceState()).toEqual({
+      member: { self_mute: false, self_deaf: true },
+      session: { self_mute: false, self_deaf: true },
+    });
+
+    // A join that names the state still sets it.
+    socket.send(
+      JSON.stringify({ op: 33, d: { channel_id: channelId, self_mute: true } }),
+    );
+    await settled(socket);
+    expect(await voiceState()).toEqual({
+      member: { self_mute: true, self_deaf: true },
+      session: { self_mute: true, self_deaf: true },
+    });
+
+    socket.close();
+  });
 
   it("keeps the member until the user's last session leaves the channel", async () => {
     const userId = "multi-leave-user";

@@ -349,6 +349,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private _roomSlug: string = "unknown";
   private profileRefreshCooldowns: Map<string, number> = new Map();
   private profileRequestCoordinator = new ProfileRequestCoordinator();
+  /** Sockets whose close or error has been delivered (see handleIdentify). */
+  private readonly closedSockets = new WeakSet<WebSocket>();
   private profileIdentities: Map<string, ProfileIdentity> = new Map();
   private resumableSessions: Map<string, WsAttachment> = new Map();
   /** Voice sessions another device took over: participantId -> replaced at. */
@@ -1180,6 +1182,7 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
+    this.closedSockets.add(ws);
     await this.handleLeave(ws, false, false);
     this.flushDirtyStorage();
     try {
@@ -1190,6 +1193,7 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   async webSocketError(ws: WebSocket) {
+    this.closedSockets.add(ws);
     await this.handleLeave(ws, false, false);
     this.flushDirtyStorage();
   }
@@ -2907,6 +2911,7 @@ export class MeetingRoom extends DurableObject<Env> {
           : null,
         this.generateVoiceToken(participantId, admission.subject),
       ]);
+      if (this.abandonStaleIdentify(ws, voiceJoin)) return;
 
       this.sendTo(ws, {
         op: Op.MediaReady,
@@ -2967,6 +2972,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
       if (admittedUserId && profileRequestIsCurrent) {
         await this.updateProfileIdentity(admittedUserId, identity);
+        if (this.abandonStaleIdentify(ws, voiceJoin)) return;
       }
 
       const attachment: WsAttachment = {
@@ -3113,6 +3119,39 @@ export class MeetingRoom extends DurableObject<Env> {
     } finally {
       if (voiceJoin) this.identifyingVoiceJoins.delete(voiceJoin.participantId);
     }
+  }
+
+  /**
+   * Identify yields (TURN, profile, D1). If the socket closed meanwhile,
+   * webSocketClose found no session to clean up, so persisting one now would
+   * leave a ghost on the roster and, through replaceOtherVoiceSessions, end
+   * the user's newer session on another socket. If the socket identified or
+   * resumed meanwhile, that session stands. Either way this Identify stops,
+   * and the voice grant it pushed is withdrawn unless a session holds it.
+   */
+  private abandonStaleIdentify(
+    ws: WebSocket,
+    voiceJoin: { participantId: string; subject: string } | null,
+  ): boolean {
+    const closed =
+      ws.readyState !== WebSocket.OPEN || this.closedSockets.has(ws);
+    if (!closed && !this.getSession(ws)) return false;
+    meetingLog.info(
+      closed
+        ? "Identify abandoned: socket closed while identifying"
+        : "Identify abandoned: socket already has a session",
+    );
+    if (
+      voiceJoin &&
+      this.getSessionSocket(voiceJoin.participantId) === undefined
+    ) {
+      this.pushVoiceJoinGrant(
+        voiceJoin.participantId,
+        voiceJoin.subject,
+        false,
+      );
+    }
+    return true;
   }
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
@@ -4381,6 +4420,10 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    // Clients re-send this join every 30 s. A field it leaves out keeps the
+    // state the session has (Op 15 maintains it); it never resets it.
+    if (d.self_mute !== undefined) session.self_mute = d.self_mute;
+
     // Leave previous voice channel if switching to a different one.
     // If already in the same channel (e.g. server added us during handleCallInitiate
     // and now the SFU join fires sendVoiceChannelJoin for the same channel), just
@@ -4388,13 +4431,13 @@ export class MeetingRoom extends DurableObject<Env> {
     if (session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
       this.removeFromVoiceChannel(session);
     } else if (session.voice_channel_id === d.channel_id) {
-      // Already in this channel — just update self_mute and broadcast
-      session.self_mute = d.self_mute ?? true;
+      // Already in this channel — just refresh the member and broadcast
       this.persist(ws, session);
       const members = this.voiceChannelMembers.get(d.channel_id);
       if (members?.has(session.user_id)) {
         const member = members.get(session.user_id)!;
         member.self_mute = session.self_mute;
+        member.self_deaf = session.self_deaf;
         member.connected = true;
         member.connection_state = "connected";
         member.disconnected_at = null;
@@ -4466,7 +4509,7 @@ export class MeetingRoom extends DurableObject<Env> {
       connection_state: "connected",
       disconnected_at: null,
       reconnect_expires_at: null,
-      self_mute: d.self_mute ?? true,
+      self_mute: session.self_mute,
       self_deaf: session.self_deaf,
       self_video: session.self_video,
       self_stream: session.self_stream,
