@@ -59,4 +59,23 @@ describe("MessageInputPlaceholder", () => {
       }),
     ).toBe("Reply to Grace…");
   });
+  it("drops the # for a voice channel's chat, and DMs and replies win", () => {
+    expect(
+      composerPrompt({
+        channelName: "Lounge",
+        replyDisplayName: null,
+        isVoice: true,
+      }),
+    ).toBe("Message Lounge");
+    expect(
+      composerPrompt({ channelName: "general", replyDisplayName: null }),
+    ).toBe("Message #general");
+    expect(
+      composerPrompt({
+        channelName: "Lounge",
+        replyDisplayName: "Ada",
+        isVoice: true,
+      }),
+    ).toBe("Reply to Ada…");
+  });
 });

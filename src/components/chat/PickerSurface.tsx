@@ -46,10 +46,15 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
   else if (ref) (ref as React.MutableRefObject<T | null>).current = value;
 }
 
-/** The desktop panel recipe. */
+/**
+ * The desktop panel recipe. `data-stacked:z-60`: a modal picker opened over
+ * another modal layer gets the stacked scrim at z-60 from DialogOverlay, so
+ * the panel must rise with it or the scrim sits on top and eats every press
+ * (as DialogContent, Sheet and Drawer do).
+ */
 const PICKER_PANEL = cn(
   MENU_PANEL,
-  "fixed z-50 m-0 flex max-h-[min(600px,calc(100dvh-var(--app-chrome-top,0px)-24px))] flex-col overflow-hidden p-0 outline-none",
+  "fixed z-50 data-stacked:z-60 m-0 flex max-h-[min(600px,calc(100dvh-var(--app-chrome-top,0px)-24px))] flex-col overflow-hidden p-0 outline-none",
 );
 /** Pointer open: fade + scale from the trigger; exit at ~0.7x. */
 const PRESENCE_POINTER =
