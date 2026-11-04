@@ -3394,4 +3394,346 @@ describe("useVoiceChannel SFU lifecycle", () => {
 
     hook.unmount();
   });
+
+  describe("a promoted standby session across a voice reconnect", () => {
+    async function joinFromStandby(muted: boolean) {
+      authUser.current = { id: "user-1" };
+      chatState.voiceChannelStates = {
+        channel: [{ user_id: "other-user", name: "Other", connected: true }],
+      };
+      settingsState.getSettings().isMuted = muted;
+      const mic = createTrack("audio", "standby-live-mic");
+      vi.mocked(acquireLocalStream).mockResolvedValue(
+        createStream([mic.track]),
+      );
+      const hook = renderHook(() =>
+        useVoiceChannel({ channelId: "channel", serverId: "server" }),
+      );
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const sfu = sfuInstances[0];
+      if (!sfu) throw new Error("Standby SFU was not created");
+      await act(async () => {
+        sfu.emit("joined", { participantId: "self", participants: [] });
+      });
+      await act(async () => {
+        await hook.result.current.handleJoin();
+      });
+      expect(sfu.roomGW.sendVoiceState).toHaveBeenCalledWith({
+        promote_standby: true,
+      });
+      return { hook, sfu, mic };
+    }
+
+    async function setMuted(
+      hook: { rerender: () => void },
+      muted: boolean,
+    ): Promise<void> {
+      settingsState.getSettings().isMuted = muted;
+      await act(async () => {
+        hook.rerender();
+      });
+    }
+
+    async function reconnect(sfu: InstanceType<typeof FakeSFUClient>) {
+      const publishes = sfu.publishTracks.mock.calls.length;
+      sfu.setPublishedTrackEnabled.mockClear();
+      await act(async () => {
+        sfu.emit("voice-reconnected", undefined);
+      });
+      await waitFor(() =>
+        expect(sfu.publishTracks.mock.calls.length).toBeGreaterThan(publishes),
+      );
+      await waitFor(() =>
+        expect(sfu.setPublishedTrackEnabled).toHaveBeenCalled(),
+      );
+    }
+
+    it("keeps a mute made after joining unmuted", async () => {
+      const { hook, sfu, mic } = await joinFromStandby(false);
+      // The live microphone replaced the standby silence.
+      await waitFor(() =>
+        expect(sfu.replaceTrack).toHaveBeenCalledWith(
+          "cam-audio-self",
+          mic.track,
+        ),
+      );
+      await setMuted(hook, true);
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        false,
+      );
+
+      await reconnect(sfu);
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        false,
+      );
+      expect(sfu.setPublishedTrackEnabled).not.toHaveBeenCalledWith(
+        "cam-audio-self",
+        true,
+      );
+      hook.unmount();
+    });
+
+    it("keeps an unmute made after joining muted", async () => {
+      const { hook, sfu, mic } = await joinFromStandby(true);
+      await setMuted(hook, false);
+      await waitFor(() =>
+        expect(sfu.replaceTrack).toHaveBeenCalledWith(
+          "cam-audio-self",
+          mic.track,
+        ),
+      );
+      await waitFor(() =>
+        expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+          "cam-audio-self",
+          true,
+        ),
+      );
+
+      await reconnect(sfu);
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        true,
+      );
+      expect(sfu.setPublishedTrackEnabled).not.toHaveBeenCalledWith(
+        "cam-audio-self",
+        false,
+      );
+      hook.unmount();
+    });
+
+    it("keeps an unmute made after a device swap while muted", async () => {
+      const { hook, sfu, mic } = await joinFromStandby(false);
+      await waitFor(() =>
+        expect(sfu.replaceTrack).toHaveBeenCalledWith(
+          "cam-audio-self",
+          mic.track,
+        ),
+      );
+      await setMuted(hook, true);
+      // A capture while muted publishes the new microphone muted.
+      const next = createTrack("audio", "standby-next-mic");
+      vi.mocked(acquireLocalStream).mockResolvedValueOnce(
+        createStream([next.track]),
+      );
+      settingsState.getSettings().inputDeviceId = "device-next";
+      await act(async () => {
+        hook.rerender();
+      });
+      await waitFor(() =>
+        expect(sfu.replaceTrack).toHaveBeenLastCalledWith(
+          "cam-audio-self",
+          next.track,
+        ),
+      );
+      await waitFor(() =>
+        expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+          "cam-audio-self",
+          false,
+        ),
+      );
+
+      await setMuted(hook, false);
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        true,
+      );
+      await reconnect(sfu);
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        true,
+      );
+      expect(sfu.setPublishedTrackEnabled).not.toHaveBeenCalledWith(
+        "cam-audio-self",
+        false,
+      );
+      hook.unmount();
+    });
+
+    it("keeps the mute state when muted twice over a reconnect", async () => {
+      const { hook, sfu, mic } = await joinFromStandby(false);
+      await waitFor(() =>
+        expect(sfu.replaceTrack).toHaveBeenCalledWith(
+          "cam-audio-self",
+          mic.track,
+        ),
+      );
+      await setMuted(hook, true);
+      await reconnect(sfu);
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        false,
+      );
+      await setMuted(hook, false);
+      await reconnect(sfu);
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        true,
+      );
+      hook.unmount();
+    });
+  });
+
+  it("does not recover a stalled microphone while a device swap is capturing", async () => {
+    const tracks = {
+      a: createTrack("audio", "stall-a"),
+      b: createTrack("audio", "stall-b"),
+    };
+    const swapCapture = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream)
+      .mockResolvedValueOnce(createStream([tracks.a.track]))
+      .mockReturnValueOnce(swapCapture.promise);
+    const processors: LocalAudioProcessorHandle[] = [];
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (stream) => {
+      const processor = createProcessor(stream);
+      processors.push(processor);
+      return processor;
+    });
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+    expect(processors).toHaveLength(1);
+
+    // The user picks mic B; its capture is still opening when mic A stalls.
+    settingsState.getSettings().inputDeviceId = "device-b";
+    await act(async () => {
+      hook.rerender();
+    });
+    await waitFor(() => expect(acquireLocalStream).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      sfu.emit("outbound-audio-stalled", true);
+    });
+    // No recovery processor for mic A.
+    expect(processors).toHaveLength(1);
+
+    await act(async () => {
+      swapCapture.resolve(createStream([tracks.b.track]));
+    });
+    await waitFor(() =>
+      expect(sfu.replaceTrack).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        tracks.b.track,
+      ),
+    );
+    expect(processors).toHaveLength(2);
+    expect(processors[1]?.destroy).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it("drops a stall recovery that a device swap overtook", async () => {
+    const tracks = {
+      a: createTrack("audio", "overtaken-a"),
+      b: createTrack("audio", "overtaken-b"),
+    };
+    const swapCapture = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream)
+      .mockResolvedValueOnce(createStream([tracks.a.track]))
+      .mockReturnValueOnce(swapCapture.promise);
+    const processors: LocalAudioProcessorHandle[] = [];
+    const recoveryHold = deferred<void>();
+    const recoveryBuilt = deferred<LocalAudioProcessorHandle>();
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (stream) => {
+      const processor = createProcessor(stream);
+      processors.push(processor);
+      // The recovery's processor (the second build) takes its time.
+      if (processors.length === 2) {
+        recoveryBuilt.resolve(processor);
+        await recoveryHold.promise;
+      }
+      return processor;
+    });
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+
+    // Mic A stalls; while its recovery builds, the user picks mic B.
+    await act(async () => {
+      sfu.emit("outbound-audio-stalled", true);
+    });
+    const recovery = await recoveryBuilt.promise;
+    settingsState.getSettings().inputDeviceId = "device-b";
+    await act(async () => {
+      hook.rerender();
+    });
+    await waitFor(() => expect(acquireLocalStream).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      recoveryHold.resolve();
+    });
+    await waitFor(() => expect(recovery.destroy).toHaveBeenCalledOnce());
+    expect(sfu.replaceTrack).not.toHaveBeenCalled();
+
+    await act(async () => {
+      swapCapture.resolve(createStream([tracks.b.track]));
+    });
+    await waitFor(() =>
+      expect(sfu.replaceTrack).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        tracks.b.track,
+      ),
+    );
+    hook.unmount();
+  });
+
+  it("leaves the first capture alone when the camera is toggled during it", async () => {
+    const audio = createTrack("audio", "first-capture");
+    const firstCapture = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream).mockReturnValueOnce(firstCapture.promise);
+    const getUserMedia = vi
+      .fn()
+      .mockResolvedValue(createStream([createTrack("video", "cam").track]));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(acquireLocalStream).toHaveBeenCalledOnce());
+    vi.mocked(cancelPendingLocalStreamAcquisition).mockClear();
+
+    await act(async () => {
+      await hook.result.current.toggleCamera();
+    });
+    expect(cancelPendingLocalStreamAcquisition).not.toHaveBeenCalled();
+    expect(getUserMedia).not.toHaveBeenCalled();
+
+    await act(async () => {
+      firstCapture.resolve(createStream([audio.track]));
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledOnce());
+    expect(sfu.unpublishTrack).not.toHaveBeenCalled();
+    expect(acquireLocalStream).toHaveBeenCalledOnce();
+    hook.unmount();
+  });
 });

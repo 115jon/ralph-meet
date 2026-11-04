@@ -1237,6 +1237,24 @@ export function useVoiceChannel({
     readonly initial: boolean;
     done: boolean;
   } | null>(null);
+  /**
+   * Whether a capture sync for `client` is still on its way (with
+   * `initialOnly`, only the session's first one). Stall recovery and camera
+   * toggles must not displace it.
+   */
+  const isCaptureInFlight = useCallback(
+    (client: SFUClient, options?: { initialOnly?: boolean }): boolean => {
+      const run = captureRunRef.current;
+      return (
+        !!run &&
+        !run.done &&
+        run.client === client &&
+        run.generation === captureGenerationRef.current &&
+        (!options?.initialOnly || run.initial)
+      );
+    },
+    [],
+  );
   // Bumped to re-run the capture sync (unmute with no live microphone).
   const [captureRetryNonce, setCaptureRetryNonce] = useState(0);
   // The one owner of this session's microphone and camera publications
@@ -2225,6 +2243,15 @@ export function useVoiceChannel({
       if (!isStalled || !isMicOnRef.current) return;
 
       const sfu = sfuRef.current;
+      // A capture sync in flight (a device swap) is about to replace the
+      // microphone: recovering the old one now would move its publication
+      // generation and make the swap drop the device the user picked. The
+      // sentinel watches the new microphone afresh once it is published.
+      if (sfu && isCaptureInFlight(sfu)) {
+        vcLog.info("Outbound audio stalled during a capture; not recovering");
+        sfu.outboundAudioSentinel?.resetMonitoring();
+        return;
+      }
       const publication = existingPublication(sfu);
       const recoveryStream = localStreamRef.current;
       const rawAudioTrack = recoveryStream?.getAudioTracks()[0];
@@ -2269,12 +2296,15 @@ export function useVoiceChannel({
             );
             return;
           }
-          // A capture sync committed another microphone meanwhile.
+          // A capture sync committed another microphone meanwhile, or one
+          // started and will (see above).
           if (
             sfuRef.current !== sfu ||
-            localStreamRef.current !== recoveryStream
+            localStreamRef.current !== recoveryStream ||
+            isCaptureInFlight(sfu)
           ) {
             recoveryProcessor.destroy();
+            sfu.outboundAudioSentinel?.resetMonitoring();
             return;
           }
 
@@ -2799,6 +2829,8 @@ export function useVoiceChannel({
         // way (it commits its own processor when its publish converges).
         const publication = existingPublication(sfu);
         if (publication) {
+          // The republish applies the mute as it is now.
+          publication.setEnabled("microphone", isMicOnRef.current);
           publication.connectionReset();
           const result = await publication.reconcile();
           if (sfuRef.current !== sfu) return;
@@ -2943,6 +2975,7 @@ export function useVoiceChannel({
     restartVadMonitoring,
     existingPublication,
     committedPublicationTrack,
+    isCaptureInFlight,
     voiceSession,
   ]);
 
@@ -3909,6 +3942,11 @@ export function useVoiceChannel({
         standbyOwnsMic,
       });
     }
+    // The reconciler's mute intent follows every mute change, whoever gates
+    // the sender now (a claimed standby gates it itself): a republish after
+    // a voice reconnect applies this intent. Applied at once; never cancels
+    // a publication in flight.
+    existingPublication(sfuRef.current)?.setEnabled("microphone", publishMic);
     const stream = localStreamRef.current;
     if (!stream && !standbyOwnsMic) return;
 
@@ -3917,8 +3955,6 @@ export function useVoiceChannel({
       if (audioTrack) {
         audioTrack.enabled = publishMic;
       }
-      // Applied at once; never cancels a publication in flight.
-      existingPublication(sfuRef.current)?.setEnabled("microphone", publishMic);
     }
 
     if (!joinedChanged) restartVadMonitoring(sfuRef.current);
@@ -4328,9 +4364,14 @@ export function useVoiceChannel({
   const toggleCamera = useCallback(async () => {
     const session = sfuRef.current;
     const stream = localStreamRef.current;
-    // Nothing captured yet: leave the first capture alone (cancelling it
-    // here would drop the first publication with nothing to redo it).
     if (!stream || !session) return;
+    // The session's first capture is on its way: leave it alone (cancelling
+    // it here would withdraw its publication and push it again). The stream
+    // exists from the join on, so it says nothing about the capture.
+    if (isCaptureInFlight(session, { initialOnly: true })) {
+      devicesLog.info("Camera toggle ignored during the first capture");
+      return;
+    }
     cancelPendingLocalStreamAcquisition(localMediaOwner);
     const generation = ++captureGenerationRef.current;
     const publication = publicationFor(session);
@@ -4489,6 +4530,7 @@ export function useVoiceChannel({
     stopCameraBackgroundEffect,
     localMediaOwner,
     publicationFor,
+    isCaptureInFlight,
   ]);
 
   const toggleScreenShare = useCallback(
