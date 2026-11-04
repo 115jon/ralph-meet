@@ -37,10 +37,7 @@ import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useOccupiedVoiceStandby } from "@/lib/voice/voice-standby";
-import {
-  VOICE_MOVE_EVENT,
-  type VoiceMoveDetail,
-} from "@/lib/voice/voice-move-client";
+import { useFollowVoiceMove } from "./useFollowVoiceMove";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -583,53 +580,25 @@ export default function ChatPage() {
   }, [localStreamState, onVoiceLeave]);
 
   // ── Moved by a moderator ──────────────────────────────────────────────────
-  // The server has already ended the old session. Leave here (the normal
-  // leave: screen share and room-bound state stop), then join the target
-  // the way a sidebar click does, switching server first if needed. Mute
-  // and deafen live in the voice settings store, so they carry over.
-  const [pendingVoiceMove, setPendingVoiceMove] =
-    useState<VoiceMoveDetail | null>(null);
-  useEffect(() => {
-    const onVoiceMove = (event: Event) => {
-      const detail = (event as CustomEvent<VoiceMoveDetail>).detail;
-      if (!detail?.channelId || !detail.serverId) return;
-      event.preventDefault();
-      setPendingVoiceMove(detail);
-      // Off the socket's message dispatch: the leave closes that socket.
-      window.setTimeout(handleVoiceDisconnect, 0);
-    };
-    window.addEventListener(VOICE_MOVE_EVENT, onVoiceMove);
-    return () => window.removeEventListener(VOICE_MOVE_EVENT, onVoiceMove);
-  }, [handleVoiceDisconnect]);
-  useEffect(() => {
-    if (!pendingVoiceMove || voiceState.joined) return;
-    if (activeServerId !== pendingVoiceMove.serverId) {
-      dispatch({
-        type: "SWITCH_SERVER",
-        serverId: pendingVoiceMove.serverId,
-        channelId: pendingVoiceMove.channelId,
-      });
-      return;
-    }
-    // Wait for the server's channels (after a server switch).
-    if (!channels.some((c) => c.id === pendingVoiceMove.channelId)) return;
-    // eslint-disable-next-line react-hooks-js/set-state-in-effect
-    setPendingVoiceMove(null);
-    handleSelectChannel(pendingVoiceMove.channelId, { forceVoiceJoin: true });
-  }, [
+  const channelIds = useMemo(() => channels.map((c) => c.id), [channels]);
+  const switchServerForMove = useCallback(
+    (serverId: string, channelId: string) =>
+      dispatch({ type: "SWITCH_SERVER", serverId, channelId }),
+    [dispatch],
+  );
+  const joinChannelForMove = useCallback(
+    (channelId: string) =>
+      handleSelectChannel(channelId, { forceVoiceJoin: true }),
+    [handleSelectChannel],
+  );
+  useFollowVoiceMove({
     activeServerId,
-    channels,
-    dispatch,
-    handleSelectChannel,
-    pendingVoiceMove,
-    voiceState.joined,
-  ]);
-  useEffect(() => {
-    if (!pendingVoiceMove) return;
-    // A target that never shows up (deleted, access lost) is dropped.
-    const timer = window.setTimeout(() => setPendingVoiceMove(null), 15_000);
-    return () => window.clearTimeout(timer);
-  }, [pendingVoiceMove]);
+    channelIds,
+    voiceJoined: voiceState.joined,
+    disconnect: handleVoiceDisconnect,
+    switchServer: switchServerForMove,
+    joinChannel: joinChannelForMove,
+  });
 
   const handleVoiceNavigate = useCallback(() => {
     if (voiceState.channelId && voiceState.serverId) {
