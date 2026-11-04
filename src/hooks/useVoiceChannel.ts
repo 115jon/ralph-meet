@@ -102,7 +102,14 @@ import {
   type AutomaticSoundboardTransport,
 } from "@/lib/voice/auto-soundboard";
 
-import { VoiceSession, type VoiceEndReason } from "@ralph/voice";
+import {
+  VoiceSession,
+  type PublicationGeneration,
+  type PublicationReconciler,
+  type PublicationSlot,
+  type VoiceEndReason,
+} from "@ralph/voice";
+import { createSfuPublicationReconciler } from "@/lib/voice/publication-media";
 import {
   playConnected,
   playDeafen,
@@ -1217,26 +1224,82 @@ export function useVoiceChannel({
   // doesn't restart a capture that already opened the saved device.
   const [inputCaptureFellBack, setInputCaptureFellBack] = useState(false);
   const [videoCaptureFellBack, setVideoCaptureFellBack] = useState(false);
-  const localMediaGenerationRef = useRef(0);
-  const initialMediaSyncRef = useRef<{
-    session: SFUClient | null;
-    inFlight: boolean;
-    deviceId: string;
-    requestKey: string;
-    token: number;
-  }>({
-    session: null,
-    inFlight: false,
-    deviceId: "",
-    requestKey: "",
-    token: 0,
-  });
-  const initialMediaTokenRef = useRef(0);
-  const pendingInitialMediaRef = useRef<{
-    stream: MediaStream;
-    processor: LocalAudioProcessorHandle | null;
-    token: number;
+  // Capture ownership (getUserMedia, processors, camera effects), not
+  // publication: each capture sync and camera toggle takes a generation and
+  // drops what it captured once a newer one started. Mute takes none.
+  const captureGenerationRef = useRef(0);
+  // The capture sync in flight. The first one of a session is not restarted
+  // by a re-run that asks for the same devices and settings.
+  const captureRunRef = useRef<{
+    readonly generation: number;
+    readonly client: SFUClient;
+    readonly requestKey: string;
+    readonly initial: boolean;
+    done: boolean;
   } | null>(null);
+  // Bumped to re-run the capture sync (unmute with no live microphone).
+  const [captureRetryNonce, setCaptureRetryNonce] = useState(0);
+  // The one owner of this session's microphone and camera publications
+  // (packages/voice, "Publication"). Created for a client on first use and
+  // disposed by the teardown.
+  const publicationRef = useRef<{
+    readonly client: SFUClient;
+    readonly reconciler: PublicationReconciler<MediaStreamTrack>;
+  } | null>(null);
+  const publicationFor = useCallback(
+    (client: SFUClient): PublicationReconciler<MediaStreamTrack> => {
+      const current = publicationRef.current;
+      if (current?.client === client && !current.reconciler.isDisposed) {
+        return current.reconciler;
+      }
+      current?.reconciler.dispose();
+      const reconciler = createSfuPublicationReconciler(
+        client,
+        () => myIdRef.current,
+      );
+      publicationRef.current = { client, reconciler };
+      return reconciler;
+    },
+    [],
+  );
+  /**
+   * The track the session has committed on `slot` (what it would publish if
+   * nothing were in flight), if it is still live. An abandoned or failed
+   * publication change hands the slot back to this, never to whatever intent
+   * it displaced: that may be another abandoned change's, already released.
+   */
+  const committedPublicationTrack = useCallback(
+    (slot: PublicationSlot): MediaStreamTrack | null => {
+      const live = (track: MediaStreamTrack | null | undefined) =>
+        track && track.readyState !== "ended" ? track : null;
+      if (slot === "camera") {
+        return live(localStreamRef.current?.getVideoTracks()[0]);
+      }
+      const processor = publishedAudioProcessorRef.current;
+      if (processor) {
+        return live(processor.publicationStream.getAudioTracks()[0]);
+      }
+      return (
+        live(localStreamRef.current?.getAudioTracks()[0]) ??
+        live(standbySilenceRef.current?.track)
+      );
+    },
+    [],
+  );
+  /** The reconciler of `client` if it has one (never creates one). */
+  const existingPublication = useCallback(
+    (
+      client: SFUClient | null,
+    ): PublicationReconciler<MediaStreamTrack> | null => {
+      const current = publicationRef.current;
+      return client &&
+        current?.client === client &&
+        !current.reconciler.isDisposed
+        ? current.reconciler
+        : null;
+    },
+    [],
+  );
   const [localMediaOwner] = useState<LocalMediaOwner>(() =>
     createLocalMediaOwner(),
   );
@@ -2162,13 +2225,12 @@ export function useVoiceChannel({
       if (!isStalled || !isMicOnRef.current) return;
 
       const sfu = sfuRef.current;
-      const participantId = myIdRef.current;
-      const recoveryGeneration = localMediaGenerationRef.current;
+      const publication = existingPublication(sfu);
       const recoveryStream = localStreamRef.current;
       const rawAudioTrack = recoveryStream?.getAudioTracks()[0];
       if (
         !sfu ||
-        !participantId ||
+        !publication ||
         !rawAudioTrack ||
         rawAudioTrack.readyState === "ended"
       ) {
@@ -2186,7 +2248,6 @@ export function useVoiceChannel({
             publishedAudioProcessorRef.current?.mode ?? "passthrough",
         },
       );
-      const trackName = `cam-audio-${participantId}`;
       void (async () => {
         let recoveryProcessor: LocalAudioProcessorHandle | null = null;
         try {
@@ -2208,46 +2269,42 @@ export function useVoiceChannel({
             );
             return;
           }
-
-          const replaced = await sfu.replaceTrack(trackName, recoveryTrack);
-          if (replaced !== true) {
-            recoveryProcessor.destroy();
-            sfu.outboundAudioSentinel?.resetMonitoring();
-            return;
-          }
-          if (sfuRef.current !== sfu || myIdRef.current !== participantId) {
+          // A capture sync committed another microphone meanwhile.
+          if (
+            sfuRef.current !== sfu ||
+            localStreamRef.current !== recoveryStream
+          ) {
             recoveryProcessor.destroy();
             return;
           }
 
-          const recoverySenderTrack = sfu.getPublishedTrack(trackName);
-          const recoveryIsStale =
-            localMediaGenerationRef.current !== recoveryGeneration ||
-            localStreamRef.current !== recoveryStream;
-          if (recoveryIsStale) {
-            const currentTrack =
-              publishedAudioProcessorRef.current?.publicationStream.getAudioTracks()[0];
-            if (
-              recoverySenderTrack &&
-              currentTrack &&
-              currentTrack.readyState !== "ended"
-            ) {
-              const restored = await sfu.replaceTrackIfCurrent(
-                trackName,
-                recoverySenderTrack,
-                currentTrack,
+          // Through the reconciler, like every publication change: a mute
+          // meanwhile does not cancel it, a capture sync or a teardown does.
+          publication.setTrack("microphone", recoveryTrack);
+          const generation = publication.generation;
+          const result = await publication.reconcile();
+          const current =
+            result.status === "converged" &&
+            publication.isCurrent(generation, "microphone") &&
+            sfuRef.current === sfu &&
+            localStreamRef.current === recoveryStream;
+          if (!current) {
+            if (publication.isCurrent(generation, "microphone")) {
+              // Still ours but not published: back to the committed track.
+              publication.setTrack(
+                "microphone",
+                committedPublicationTrack("microphone"),
               );
-              recoveryProcessor.destroy();
-              if (restored) {
-                sfu.setPublishedTrackEnabled(trackName, isMicOnRef.current);
-                restartVadMonitoring(sfu);
-              }
-              return;
-            }
-            if (recoverySenderTrack) {
-              void sfu.unpublishTrackIfCurrent(trackName, recoverySenderTrack);
+              void publication.reconcile();
             }
             recoveryProcessor.destroy();
+            if (result.status === "failed") {
+              sfu.outboundAudioSentinel?.resetMonitoring();
+              vcLog.warn(
+                "Failed to recover stalled outbound microphone audio",
+                result.error,
+              );
+            }
             return;
           }
 
@@ -2259,8 +2316,9 @@ export function useVoiceChannel({
           sfu.vad.setGateController(
             publishedAudioProcessorRef.current.gateController,
           );
-          sfu.setPublishedTrackEnabled(trackName, isMicOnRef.current);
-          previousProcessor?.destroy();
+          if (previousProcessor !== publishedAudioProcessorRef.current) {
+            previousProcessor?.destroy();
+          }
           restartVadMonitoring(sfu);
         } catch (error) {
           recoveryProcessor?.destroy();
@@ -2736,180 +2794,40 @@ export function useVoiceChannel({
     onSfu("voice-reconnected", () => {
       void (async () => {
         vcLog.info("Voice reconnected — re-publishing local tracks");
-        let stream =
-          pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
-        if (!stream) return;
-        const getPublishedAudioStream = (
-          source: MediaStream,
-        ): MediaStream | null => {
-          const publicationStream =
-            publishedAudioProcessorRef.current?.publicationStream ??
-            pendingInitialMediaRef.current?.processor?.publicationStream;
-          if (
-            publicationStream &&
-            publicationStream.getAudioTracks().length > 0
-          ) {
-            return publicationStream;
-          }
-          const rawAudioTracks = source.getAudioTracks();
-          return rawAudioTracks.length > 0
-            ? new MediaStream(rawAudioTracks)
-            : null;
-        };
-        const reconcileCurrentAudio = async (): Promise<{
-          stream: MediaStream;
-          audioStream: MediaStream;
-        } | null> => {
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            const currentStream =
-              pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
-            const currentAudioStream = currentStream
-              ? getPublishedAudioStream(currentStream)
-              : null;
-            const currentTrack = currentAudioStream?.getAudioTracks()[0];
-            if (!currentStream || !currentAudioStream || !currentTrack) {
-              return null;
-            }
-
-            const generation = localMediaGenerationRef.current;
-            const replaced = await sfu.replaceTrack(
-              `cam-audio-${myIdRef.current}`,
-              currentTrack,
-            );
-            if (!replaced || sfuRef.current !== sfu) return null;
-            if (
-              generation === localMediaGenerationRef.current &&
-              currentStream === localStreamRef.current
-            ) {
-              return { stream: currentStream, audioStream: currentAudioStream };
-            }
-          }
-          return null;
-        };
-        const reconcileCurrentVideo = async (): Promise<boolean> => {
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            const currentStream =
-              pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
-            const currentTrack = currentStream?.getVideoTracks()[0];
-            if (!currentStream || currentTrack?.readyState !== "live") {
-              return false;
-            }
-            const generation = localMediaGenerationRef.current;
-            const replaced = await sfu.replaceTrack(
-              `cam-video-${myIdRef.current}`,
-              currentTrack,
-            );
-            if (!replaced || sfuRef.current !== sfu) return false;
-            if (
-              generation === localMediaGenerationRef.current &&
-              currentStream === localStreamRef.current
-            ) {
-              return true;
-            }
-          }
-          return false;
-        };
-        const reconcileCurrentScreen = async (): Promise<boolean> => {
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            const currentStream = screenStreamRef.current;
-            const currentTracks =
-              currentStream
-                ?.getTracks()
-                .filter((track) => track.readyState === "live") ?? [];
-            if (currentTracks.length === 0) return true;
-            const generation = localMediaGenerationRef.current;
-            await sfu.publishTracks(new MediaStream(currentTracks), "screen");
-            if (sfuRef.current !== sfu) return false;
-            if (
-              generation === localMediaGenerationRef.current &&
-              currentStream === screenStreamRef.current
-            ) {
-              return true;
-            }
-          }
-          return false;
-        };
-        let audioStream = getPublishedAudioStream(stream);
-        let mediaGeneration = localMediaGenerationRef.current;
-        if (audioStream) {
-          await sfu.publishTracks(audioStream, "cam");
+        // The media session has no publications: everything wanted is
+        // published afresh, including a capture sync's track still on its
+        // way (it commits its own processor when its publish converges).
+        const publication = existingPublication(sfu);
+        if (publication) {
+          publication.connectionReset();
+          const result = await publication.reconcile();
           if (sfuRef.current !== sfu) return;
-          const pendingInitialMedia = pendingInitialMediaRef.current;
-          let isCurrentMedia =
-            localMediaGenerationRef.current === mediaGeneration &&
-            (localStreamRef.current === stream ||
-              pendingInitialMedia?.stream === stream) &&
-            sfuRef.current === sfu;
-
-          if (isCurrentMedia && pendingInitialMedia?.stream === stream) {
-            localStreamRef.current = pendingInitialMedia.stream;
-            publishedAudioProcessorRef.current = pendingInitialMedia.processor;
-            pendingInitialMediaRef.current = null;
-            if (
-              initialMediaSyncRef.current.token === pendingInitialMedia.token
-            ) {
-              initialMediaSyncRef.current.inFlight = false;
-            }
+          if (result.status === "failed") {
+            vcLog.warn("Voice reconnect publication failed", result.error);
           }
-
-          if (!isCurrentMedia) {
-            const reconciledAudio = await reconcileCurrentAudio();
-            if (reconciledAudio) {
-              stream = reconciledAudio.stream;
-              audioStream = reconciledAudio.audioStream;
-              mediaGeneration = localMediaGenerationRef.current;
-              isCurrentMedia = sfuRef.current === sfu;
-            }
-          }
-
-          if (isCurrentMedia) {
-            sfu.setPublishedTrackEnabled(
-              `cam-audio-${myIdRef.current}`,
-              isMicOnRef.current,
-            );
-          }
-          if (isCurrentMedia) {
+          if (localStreamRef.current) {
             sfu.vad.setGateController(
               publishedAudioProcessorRef.current?.gateController ?? null,
             );
             restartVadMonitoring(sfu);
           }
         }
-        const currentStream = localStreamRef.current;
-        if (!currentStream || sfuRef.current !== sfu) return;
-        const videoTracks = currentStream.getVideoTracks();
-        if (videoTracks.length > 0) {
-          const videoGeneration = localMediaGenerationRef.current;
-          await sfu.publishTracks(new MediaStream(videoTracks), "cam");
-          if (sfuRef.current !== sfu) return;
-          if (
-            localMediaGenerationRef.current !== videoGeneration ||
-            localStreamRef.current !== currentStream
-          ) {
-            if (!(await reconcileCurrentVideo())) return;
-          }
-        }
 
-        const activeScreenTracks = !sfu.isNativeScreenShareActive
-          ? (screenStreamRef.current
-              ?.getTracks()
-              .filter((track) => track.readyState === "live") ?? [])
-          : [];
-        if (activeScreenTracks.length > 0) {
+        // Screen share keeps its own publication path for now.
+        const activeScreenTracks = (): MediaStreamTrack[] =>
+          !sfu.isNativeScreenShareActive
+            ? (screenStreamRef.current
+                ?.getTracks()
+                .filter((track) => track.readyState === "live") ?? [])
+            : [];
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const screenStream = screenStreamRef.current;
+          const tracks = activeScreenTracks();
+          if (tracks.length === 0) return;
           vcLog.info("Voice reconnected — re-publishing active screen tracks");
-          const screenStreamAtStart = screenStreamRef.current;
-          const screenGeneration = localMediaGenerationRef.current;
-          await sfu.publishTracks(
-            new MediaStream(activeScreenTracks),
-            "screen",
-          );
+          await sfu.publishTracks(new MediaStream(tracks), "screen");
           if (sfuRef.current !== sfu) return;
-          if (
-            screenStreamRef.current !== screenStreamAtStart ||
-            localMediaGenerationRef.current !== screenGeneration
-          ) {
-            if (!(await reconcileCurrentScreen())) return;
-          }
+          if (screenStreamRef.current === screenStream) return;
         }
       })().catch((error) => {
         vcLog.warn("Voice reconnect publication failed", error);
@@ -3023,6 +2941,8 @@ export function useVoiceChannel({
     currentVoiceChannelStartedAt,
     localMediaOwner,
     restartVadMonitoring,
+    existingPublication,
+    committedPublicationTrack,
     voiceSession,
   ]);
 
@@ -3180,10 +3100,12 @@ export function useVoiceChannel({
   ]);
 
   useEffect(() => {
-    const generation = ++localMediaGenerationRef.current;
     const session = sfuRef.current;
-    if (!session || voiceSession.isStandby) return;
-    const initialMediaRequestKey = JSON.stringify({
+    if (!session || voiceSession.isStandby) {
+      captureGenerationRef.current += 1;
+      return;
+    }
+    const requestKey = JSON.stringify({
       audioProcessingSettings,
       cameraBackground: getCameraBackgroundEffectKey(
         cameraBackground,
@@ -3198,57 +3120,64 @@ export function useVoiceChannel({
       videoDeviceId,
       videoDeviceLabel,
     });
-    if (initialMediaSyncRef.current.session !== session) {
-      initialMediaSyncRef.current = {
-        session,
-        inFlight: false,
-        deviceId: inputDeviceId,
-        requestKey: initialMediaRequestKey,
-        token: 0,
-      };
-    }
     const hasActiveAudio =
-      localStreamRef.current?.getAudioTracks().length ||
-      publishedAudioProcessorRef.current;
+      !!localStreamRef.current?.getAudioTracks().length ||
+      !!publishedAudioProcessorRef.current;
+    const isInitialMediaSync = !hasActiveAudio;
+    const inFlight = captureRunRef.current;
     if (
-      initialMediaSyncRef.current.inFlight &&
-      !hasActiveAudio &&
-      initialMediaSyncRef.current.requestKey === initialMediaRequestKey
+      isInitialMediaSync &&
+      inFlight &&
+      !inFlight.done &&
+      inFlight.initial &&
+      inFlight.client === session &&
+      inFlight.requestKey === requestKey &&
+      inFlight.generation === captureGenerationRef.current
     ) {
+      // The session's first capture is still on its way for these same
+      // devices and settings: let it finish rather than start over.
       return;
     }
-    const isInitialMediaSync = !hasActiveAudio;
-    const initialMediaToken = isInitialMediaSync
-      ? ++initialMediaTokenRef.current
-      : 0;
-    if (isInitialMediaSync) {
-      initialMediaSyncRef.current.inFlight = true;
-      initialMediaSyncRef.current.deviceId = inputDeviceId;
-      initialMediaSyncRef.current.requestKey = initialMediaRequestKey;
-      initialMediaSyncRef.current.token = initialMediaToken;
+    if (inFlight && !inFlight.done) {
+      cancelPendingLocalStreamAcquisition(localMediaOwner);
     }
-    const clearInitialMediaSync = () => {
-      if (
-        isInitialMediaSync &&
-        initialMediaSyncRef.current.token === initialMediaToken
-      ) {
-        initialMediaSyncRef.current.inFlight = false;
-      }
+    const generation = ++captureGenerationRef.current;
+    const run = {
+      generation,
+      client: session,
+      requestKey,
+      initial: isInitialMediaSync,
+      done: false,
     };
+    captureRunRef.current = run;
 
     const isCurrent = () =>
-      localMediaGenerationRef.current === generation &&
-      sfuRef.current === session;
+      captureGenerationRef.current === generation && sfuRef.current === session;
     const { input: listedInputId, video: listedVideoId } =
       listedDeviceIdsRef.current;
     const swapDevices = async () => {
       const sfu = session;
+      const publication = publicationFor(sfu);
       let nextAudioProcessor: LocalAudioProcessorHandle | null = null;
       let acquiredStream: MediaStream | null = null;
       let acquiredCameraEffect: CameraBackgroundEffect | null = null;
-      let replacedAudioTrack: MediaStreamTrack | null = null;
-      let previousAudioTrack: MediaStreamTrack | null = null;
-      let pendingInitialCaptureStream: MediaStream | null = null;
+      // The publication intents this run set, so an abandoned run can hand
+      // those slots back (see revertPublication).
+      const ownIntents: Array<{
+        slot: PublicationSlot;
+        generation: PublicationGeneration;
+      }> = [];
+      const wantPublished = async (
+        slot: PublicationSlot,
+        track: MediaStreamTrack,
+      ): Promise<boolean> => {
+        publication.setTrack(slot, track);
+        const generation = publication.generation;
+        ownIntents.push({ slot, generation });
+        const result = await publication.reconcile();
+        if (result.status === "failed") throw result.error;
+        return publication.isCurrent(generation, slot);
+      };
       const disposeStaleResources = (
         audioProcessor: LocalAudioProcessorHandle | null,
         cameraEffect: CameraBackgroundEffect | null = null,
@@ -3259,42 +3188,34 @@ export function useVoiceChannel({
           acquiredStream.getTracks().forEach((track) => track.stop());
         }
       };
-      const restorePreviousAudio = async () => {
-        if (!replacedAudioTrack) return;
-        const trackName = `cam-audio-${myIdRef.current}`;
-        if (!previousAudioTrack) {
-          await sfu.unpublishTrackIfCurrent(trackName, replacedAudioTrack);
-          replacedAudioTrack = null;
-          return;
-        }
-        try {
-          const restored = await sfu.replaceTrackIfCurrent(
-            trackName,
-            replacedAudioTrack,
-            previousAudioTrack,
+      // Hands every slot whose intent is still this run's back to the
+      // committed track, and waits until that is published again, so
+      // nothing this run is about to release stays on the wire.
+      const revertPublication = async () => {
+        let reverted = false;
+        for (const intent of ownIntents.splice(0)) {
+          if (!publication.isCurrent(intent.generation, intent.slot)) continue;
+          publication.setTrack(
+            intent.slot,
+            committedPublicationTrack(intent.slot),
           );
-          if (restored) {
-            sfu.setPublishedTrackEnabled(
-              `cam-audio-${myIdRef.current}`,
-              isMicOnRef.current,
-            );
-          }
-        } catch (error) {
+          reverted = true;
+        }
+        if (!reverted) return;
+        const result = await publication.reconcile();
+        if (result.status === "failed") {
           devicesLog.warn(
-            "Failed to restore microphone after an abandoned device swap",
-            error,
+            "Failed to restore the publication after an abandoned device swap",
+            result.error,
           );
         }
-        replacedAudioTrack = null;
-        previousAudioTrack = null;
       };
       const abortStaleSwap = async (
         audioProcessor: LocalAudioProcessorHandle | null,
         cameraEffect: CameraBackgroundEffect | null = null,
       ) => {
-        await restorePreviousAudio();
+        await revertPublication();
         disposeStaleResources(audioProcessor, cameraEffect);
-        clearInitialMediaSync();
       };
       const oldStream = localStreamRef.current;
       const requestedCameraBackgroundKey = getCameraBackgroundEffectKey(
@@ -3440,7 +3361,6 @@ export function useVoiceChannel({
           if (err.name !== "NotAllowedError") {
             devicesLog.warn("Failed to acquire stream:", err.name);
           }
-          clearInitialMediaSync();
           return;
         }
 
@@ -3519,7 +3439,6 @@ export function useVoiceChannel({
         }
 
         const displayStream = new MediaStream(newStream.getAudioTracks());
-        pendingInitialCaptureStream = newStream;
         const rawAudioTrack = newStream.getAudioTracks()[0];
         if (rawAudioTrack) rawAudioTrack.enabled = isMicOnRef.current;
         const previousAudioProcessor = publishedAudioProcessorRef.current;
@@ -3540,6 +3459,14 @@ export function useVoiceChannel({
           !!standbySilenceRef.current &&
           standbySilenceRef.current.track ===
             sfu.getPublishedTrack(microphoneTrackName);
+        if (
+          silenceStillPublished &&
+          standbySilenceRef.current &&
+          publication.appliedFor("microphone") === undefined
+        ) {
+          // A promoted standby's silence: replaced, not published beside.
+          publication.adopt("microphone", standbySilenceRef.current.track);
+        }
         const replaceSilenceWithLiveMic =
           isMicOnRef.current &&
           silenceStillPublished &&
@@ -3558,49 +3485,24 @@ export function useVoiceChannel({
           newAudio &&
           !keepStandbySilence
         ) {
-          if (oldAudio) {
-            const replaced = await sfu.replaceTrack(
-              `cam-audio-${myIdRef.current}`,
-              newAudio,
-            );
-            if (!replaced) {
-              nextAudioProcessor?.destroy();
-              nextAudioProcessor = null;
-              throw new Error("Audio transceiver is unavailable");
-            }
-          } else {
+          if (!oldAudio) {
+            // Speaking detection starts before the first publication lands.
             if (nextAudioProcessor) {
               sfu.vad.setGateController(nextAudioProcessor.gateController);
               restartVadMonitoring(sfu, nextAudioProcessor);
             } else {
               restartVadMonitoring(sfu, null, newStream);
             }
-            if (isInitialMediaSync) {
-              pendingInitialMediaRef.current = {
-                stream: newStream,
-                processor: nextAudioProcessor,
-                token: initialMediaToken,
-              };
-            }
-            await sfu.publishTracks(new MediaStream([newAudio]), "cam");
           }
-          if (oldAudio) {
-            replacedAudioTrack = sfu.getPublishedTrack(
-              `cam-audio-${myIdRef.current}`,
-            );
-            previousAudioTrack = previousPublishedAudio ?? null;
-          } else {
-            replacedAudioTrack = sfu.getPublishedTrack(
-              `cam-audio-${myIdRef.current}`,
-            );
-          }
-          sfu.setPublishedTrackEnabled(microphoneTrackName, isMicOnRef.current);
-          if (rawAudioTrack) rawAudioTrack.enabled = isMicOnRef.current;
-          releaseStandbySilence(newAudio);
-          if (!isCurrent()) {
+          // Mute is the reconciler's `enabled`: it never restarts this.
+          publication.setEnabled("microphone", isMicOnRef.current);
+          const published = await wantPublished("microphone", newAudio);
+          if (!isCurrent() || !published) {
             await abortStaleSwap(nextAudioProcessor);
             return;
           }
+          if (rawAudioTrack) rawAudioTrack.enabled = isMicOnRef.current;
+          releaseStandbySilence(newAudio);
         }
 
         const oldVideo = oldStream?.getVideoTracks()[0];
@@ -3654,19 +3556,8 @@ export function useVoiceChannel({
 
         if (newVideo && (!oldVideo || newVideo.id !== oldVideo.id)) {
           newVideo.enabled = isCameraActive;
-          if (oldVideo) {
-            if (
-              !(await sfu.replaceTrack(
-                `cam-video-${myIdRef.current}`,
-                newVideo,
-              ))
-            ) {
-              throw new Error("Video transceiver is unavailable");
-            }
-          } else {
-            await sfu.publishTracks(new MediaStream([newVideo]), "cam");
-          }
-          if (!isCurrent()) {
+          const published = await wantPublished("camera", newVideo);
+          if (!isCurrent() || !published) {
             await abortStaleSwap(nextAudioProcessor);
             return;
           }
@@ -3675,10 +3566,7 @@ export function useVoiceChannel({
         const committedAudioProcessor = nextAudioProcessor;
         localStreamRef.current = displayStream;
         publishedAudioProcessorRef.current = committedAudioProcessor;
-        if (pendingInitialMediaRef.current?.stream === newStream) {
-          pendingInitialMediaRef.current = null;
-        }
-        clearInitialMediaSync();
+        ownIntents.length = 0;
         nextAudioProcessor = null;
         if (audioNeedsUpdate) {
           sfu.vad.setGateController(
@@ -3717,8 +3605,6 @@ export function useVoiceChannel({
         ) {
           previousRawVideo.stop();
         }
-        replacedAudioTrack = null;
-        previousAudioTrack = null;
 
         if (
           (audioNeedsUpdate || replaceSilenceWithLiveMic) &&
@@ -3815,45 +3701,20 @@ export function useVoiceChannel({
           setVideoCaptureFellBack(false);
         }
       } catch (err) {
-        await restorePreviousAudio();
-        const pendingInitialMedia = pendingInitialMediaRef.current;
-        const retainPendingInitialMedia =
-          isInitialMediaSync &&
-          !sfu.voiceGW.isReady &&
-          pendingInitialMedia?.stream === pendingInitialCaptureStream;
-        if (!retainPendingInitialMedia) {
-          clearInitialMediaSync();
-          if (
-            pendingInitialMedia &&
-            pendingInitialMedia.stream === pendingInitialCaptureStream
-          ) {
-            pendingInitialMedia.processor?.destroy();
-            pendingInitialMedia.stream
-              .getTracks()
-              .forEach((track) => track.stop());
-            pendingInitialMediaRef.current = null;
-            if (
-              initialMediaSyncRef.current.token === pendingInitialMedia.token
-            ) {
-              initialMediaSyncRef.current.inFlight = false;
-            }
-          }
-        }
-        if (isInitialMediaSync) {
+        // The reconciler gave up (its retries are spent) or a step threw:
+        // hand the slots back and release what this run captured.
+        await revertPublication();
+        if (isInitialMediaSync && isCurrent()) {
           sfu.vad.stop();
           sfu.vad.setGateController(null);
         }
-        if (!retainPendingInitialMedia) nextAudioProcessor?.destroy();
+        nextAudioProcessor?.destroy();
         acquiredCameraEffect?.stop();
         if (cameraBackgroundEffectRef.current === acquiredCameraEffect) {
           cameraBackgroundEffectRef.current = null;
           activeCameraBackgroundKeyRef.current = "none";
         }
-        if (
-          !retainPendingInitialMedia &&
-          acquiredStream &&
-          acquiredStream !== localStreamRef.current
-        ) {
+        if (acquiredStream && acquiredStream !== localStreamRef.current) {
           const currentTracks = new Set(
             localStreamRef.current?.getTracks() ?? [],
           );
@@ -3865,23 +3726,12 @@ export function useVoiceChannel({
       }
     };
 
-    void swapDevices();
-    return () => {
-      cancelPendingLocalStreamAcquisition(localMediaOwner);
-      const pendingInitialMedia = pendingInitialMediaRef.current;
-      if (pendingInitialMedia) {
-        pendingInitialMedia.processor?.destroy();
-        pendingInitialMedia.stream.getTracks().forEach((track) => track.stop());
-        pendingInitialMediaRef.current = null;
-        if (initialMediaSyncRef.current.token === pendingInitialMedia.token) {
-          initialMediaSyncRef.current.inFlight = false;
-        }
-      }
-      clearInitialMediaSync();
-      if (localMediaGenerationRef.current === generation) {
-        localMediaGenerationRef.current += 1;
-      }
-    };
+    void swapDevices().finally(() => {
+      run.done = true;
+    });
+    // No cleanup: the next run cancels this one (unless it is the first
+    // capture asking for the same thing), and the teardown releases what
+    // a cancelled run still holds.
   }, [
     inputDeviceId,
     inputDeviceLabel,
@@ -3898,7 +3748,7 @@ export function useVoiceChannel({
     customCameraBackgrounds,
     isCameraActive,
     hasMicrophone,
-    settingsMuted,
+    captureRetryNonce,
     sfuInstance,
     noiseSuppression,
     noiseReductionEnabled,
@@ -3912,8 +3762,19 @@ export function useVoiceChannel({
     localMediaOwner,
     restartVadMonitoring,
     releaseStandbySilence,
+    publicationFor,
+    committedPublicationTrack,
     voiceSession,
   ]);
+
+  // Unmount: drop whatever capture is still in flight.
+  useEffect(
+    () => () => {
+      captureGenerationRef.current += 1;
+      cancelPendingLocalStreamAcquisition(localMediaOwner);
+    },
+    [localMediaOwner],
+  );
 
   useEffect(() => {
     if (!sfuRef.current) return;
@@ -4005,14 +3866,22 @@ export function useVoiceChannel({
           ) ?? [];
       for (const track of liveTracks) track.enabled = true;
       if (trackName && silenceTrack && published === silenceTrack && liveMic) {
-        void sfu.replaceTrack(trackName, liveMic).then((replaced) => {
-          if (!replaced) {
+        const publication = publicationFor(sfu);
+        if (publication.appliedFor("microphone") === undefined) {
+          publication.adopt("microphone", silenceTrack);
+        }
+        publication.setEnabled("microphone", true);
+        publication.setTrack("microphone", liveMic);
+        void publication.reconcile().then((result) => {
+          if (
+            result.status !== "converged" ||
+            publication.intentFor("microphone").track !== liveMic
+          ) {
             vcLog.warn("Unmute could not replace standby silence", {
               trackName,
             });
             return;
           }
-          sfu.setPublishedTrackEnabled(trackName, true);
           vcLog.info("Unmute published live microphone", { trackName });
         });
       } else if (trackName && silenceTrack && published === silenceTrack) {
@@ -4024,6 +3893,9 @@ export function useVoiceChannel({
               enabled: track.enabled,
             })) ?? [],
         });
+        // Mute is not a capture input any more: ask the capture sync to
+        // open a microphone now.
+        setCaptureRetryNonce((nonce) => nonce + 1);
       }
     }
     const publishKey = `${isMicOn}:${hasMicrophone}:${settingsMuted}:${standbyOwnsMic}`;
@@ -4045,12 +3917,8 @@ export function useVoiceChannel({
       if (audioTrack) {
         audioTrack.enabled = publishMic;
       }
-      if (!joinedChanged && myIdRef.current) {
-        sfuRef.current?.setPublishedTrackEnabled(
-          `cam-audio-${myIdRef.current}`,
-          publishMic,
-        );
-      }
+      // Applied at once; never cancels a publication in flight.
+      existingPublication(sfuRef.current)?.setEnabled("microphone", publishMic);
     }
 
     if (!joinedChanged) restartVadMonitoring(sfuRef.current);
@@ -4102,6 +3970,8 @@ export function useVoiceChannel({
     channelId,
     serverId,
     restartVadMonitoring,
+    publicationFor,
+    existingPublication,
   ]);
 
   useEffect(() => {
@@ -4259,6 +4129,12 @@ export function useVoiceChannel({
               resetAutomaticSoundboardSession(soundboardSessionId, generation);
           },
           releaseLocalMedia: ({ client }) => {
+            // Publications end with the media session; nothing more may be
+            // published, replaced or retried for this client.
+            if (publicationRef.current?.client === client) {
+              publicationRef.current.reconciler.dispose();
+              publicationRef.current = null;
+            }
             stopCameraBackgroundEffect(true);
             client.vad.setGateController(null);
             // VAD starts before Joined; its monitor may be a clone of the raw mic.
@@ -4452,12 +4328,15 @@ export function useVoiceChannel({
   const toggleCamera = useCallback(async () => {
     const session = sfuRef.current;
     const stream = localStreamRef.current;
-    cancelPendingLocalStreamAcquisition(localMediaOwner);
-    const generation = ++localMediaGenerationRef.current;
+    // Nothing captured yet: leave the first capture alone (cancelling it
+    // here would drop the first publication with nothing to redo it).
     if (!stream || !session) return;
+    cancelPendingLocalStreamAcquisition(localMediaOwner);
+    const generation = ++captureGenerationRef.current;
+    const publication = publicationFor(session);
 
     const isCurrent = () =>
-      localMediaGenerationRef.current === generation &&
+      captureGenerationRef.current === generation &&
       sfuRef.current === session &&
       localStreamRef.current === stream;
     const discardStaleCapture = (
@@ -4562,12 +4441,12 @@ export function useVoiceChannel({
         }
         if (!isCurrent()) return;
         stream.getVideoTracks().forEach((t) => (t.enabled = true));
+        const cameraTrack = stream.getVideoTracks()[0];
+        if (!cameraTrack) return;
+        publication.setTrack("camera", cameraTrack);
+        const result = await publication.reconcile();
         if (!isCurrent()) return;
-        await session.publishTracks(
-          new MediaStream(stream.getVideoTracks()),
-          "cam",
-        );
-        if (!isCurrent()) return;
+        if (result.status === "failed") throw result.error;
       } else {
         if (!isCurrent()) return;
         stopCameraBackgroundEffect(true);
@@ -4578,14 +4457,12 @@ export function useVoiceChannel({
         });
         if (!isCurrent()) return;
         activeCameraQualityRef.current = null;
-        if (myIdRef.current) {
-          if (!isCurrent()) return;
-          void session
-            .replaceTrack(`cam-video-${myIdRef.current}`, null)
-            .catch(() => {});
-          if (!isCurrent()) return;
-          session.unpublishTrack(`cam-video-${myIdRef.current}`);
-        }
+        // Withdrawn, not closed: PartyTracks keeps the camera's SFU track
+        // alive with a keepalive (see unpublishTrack).
+        publication.setTrack("camera", null);
+        const result = await publication.reconcile();
+        if (!isCurrent()) return;
+        if (result.status === "failed") throw result.error;
       }
       if (!isCurrent()) return;
       voiceDispatch({ type: "SET_CAMERA", payload: newState });
@@ -4611,6 +4488,7 @@ export function useVoiceChannel({
     customCameraBackgrounds,
     stopCameraBackgroundEffect,
     localMediaOwner,
+    publicationFor,
   ]);
 
   const toggleScreenShare = useCallback(
