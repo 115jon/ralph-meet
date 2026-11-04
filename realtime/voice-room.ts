@@ -2717,18 +2717,28 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     participantId: string,
     tracks: TrackInfo[],
   ): Promise<void> {
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    const rejectOwnedTrackName = () => {
+      if (
+        !tracks.some((track) =>
+          this.hasTrackNameConflict(track.track_name, participantId),
+        )
+      ) {
+        return false;
+      }
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.InvalidPayload,
+          message: "Track name is already owned",
+        },
+      });
+      return true;
+    };
+    if (rejectOwnedTrackName()) return;
+
     const sanitizedTracks: TrackInfo[] = [];
     for (const track of tracks) {
-      if (this.hasTrackNameConflict(track.track_name, participantId)) {
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: {
-            code: CloseCode.InvalidPayload,
-            message: "Track name is already owned",
-          },
-        });
-        return;
-      }
       const claims = await verifyPartyTracksSessionCapability(
         track.session_id,
         this.env.CALLS_APP_SECRET,
@@ -2755,6 +2765,13 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         kind: track.kind,
       });
     }
+
+    // The capability checks above yield. If the participant left (or this
+    // socket was replaced) meanwhile, its tracks were already purged:
+    // recording these now would leave rows nobody owns. Another participant
+    // may also have claimed one of the names meanwhile.
+    if (!this.isCurrentVoiceConnection(ws, participantId, connectionId)) return;
+    if (rejectOwnedTrackName()) return;
 
     for (const track of sanitizedTracks) {
       this.sql.exec(
