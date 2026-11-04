@@ -1,8 +1,17 @@
 diff --git a/dist/client/index.js b/dist/client/index.js
-index 030793c98d77b71e6d32020e35a4a9624ac8eed5..430aae10358c13bfe801ebade83a86b4dd0cd895 100644
+index 030793c98d77b71e6d32020e35a4a9624ac8eed5..84879c4d7c74e47de9b04764acd21630e7bc9714 100644
 --- a/dist/client/index.js
 +++ b/dist/client/index.js
-@@ -287,15 +287,15 @@ var PartyTracks = class {
+@@ -172,6 +172,8 @@ function fromFetch(input, initWithSelector = {}) {
+ }
+ //#endregion
+ //#region src/client/PartyTracks.ts
++// Ralph Meet: how long a fast layer switch keeps priorityOrdering "none".
++const LAYER_SWITCH_SETTLE_MS = 2e3;
+ var PartyTracks = class {
+ 	/**
+ 	Useful for logging/debugging purposes.
+@@ -287,15 +289,15 @@ var PartyTracks = class {
  			})).then(({ tracks }) => {
  				const trackData = tracks.find((t) => t.mid === transceiver.mid);
  				if (trackData) {
@@ -25,7 +34,7 @@ index 030793c98d77b71e6d32020e35a4a9624ac8eed5..430aae10358c13bfe801ebade83a86b4
  						if (transceiver.mid) {
  							logger.debug("🔚 Closing pushed track ", trackName);
  							this.#closeTrackInBulk(peerConnection, transceiver.mid, sessionId);
-@@ -371,6 +371,13 @@ var PartyTracks = class {
+@@ -371,6 +373,13 @@ var PartyTracks = class {
  		return new Observable((subscriber) => {
  			logger.debug("📥 pulling track ", trackMetadata.trackName);
  			this.#pullTrackDispatcher.doBulkRequest(trackMetadata, (tracks) => this.#taskScheduler.schedule(async () => {
@@ -39,7 +48,7 @@ index 030793c98d77b71e6d32020e35a4a9624ac8eed5..430aae10358c13bfe801ebade83a86b4
  				const newTrackResponse = await this.#fetchWithRecordedHistory(`${this.#config.prefix}/sessions/${sessionId}/tracks/new?${this.#params}`, {
  					method: "POST",
  					body: JSON.stringify({ tracks })
-@@ -417,8 +424,20 @@ var PartyTracks = class {
+@@ -417,8 +426,20 @@ var PartyTracks = class {
  				}).catch((err) => subscriber.error(err));
  				else subscriber.error(/* @__PURE__ */ new Error("Missing Track Info"));
  				return trackMetadata.trackName;
@@ -61,7 +70,55 @@ index 030793c98d77b71e6d32020e35a4a9624ac8eed5..430aae10358c13bfe801ebade83a86b4
  	}
  	/**
  	Pulls a track from the Realtime SFU. If trackData$ emits new TrackMetadata
-@@ -530,6 +549,39 @@ function waitForTransceiverToSendData(transceiver, onDataSent) {
+@@ -435,6 +456,8 @@ var PartyTracks = class {
+ 			} : trackData);
+ 		}));
+ 		const subsequentPreferredRid$ = concat(of(void 0), preferredRid$.pipe(skip(1)));
++		// Ralph Meet: see the layer switch below.
++		let layerSwitch = 0;
+ 		return combineLatest([
+ 			pulledTrack$,
+ 			this.session$,
+@@ -444,15 +467,31 @@ var PartyTracks = class {
+ 			logger.log(`🔧 Updating preferredRid (${preferredRid}) for trackName ${trackMetadata.trackName}`);
+ 			const transceiver = peerConnection.getTransceivers().find((t) => t.receiver.track === track);
+ 			if (!transceiver) return;
+-			const request = { tracks: [{
+-				...trackMetadata,
+-				mid: transceiver.mid,
+-				simulcast: { preferredRid }
+-			}] };
+-			this.#fetchWithRecordedHistory(`${this.#config.prefix}/sessions/${sessionId}/tracks/update?${this.#params}`, {
++			// Ralph Meet: under a bandwidth-aware policy (priorityOrdering
++			// "asciibetical", which the Ralph proxy adds) the SFU applies a new
++			// preferredRid only at its next layer evaluation, 4 to 12 s later in
++			// testing, and only then asks the publisher for a keyframe.
++			// priorityOrdering "none" makes it switch at once (about 300 ms).
++			// The policy the proxy adds is restored once the switch has had time
++			// to land, so the SFU keeps moving a congested receiver down; the
++			// layer it switched to holds across that.
++			const update = (simulcast) => this.#fetchWithRecordedHistory(`${this.#config.prefix}/sessions/${sessionId}/tracks/update?${this.#params}`, {
+ 				method: "PUT",
+-				body: JSON.stringify(request)
++				body: JSON.stringify({ tracks: [{
++					...trackMetadata,
++					mid: transceiver.mid,
++					simulcast
++				}] })
++			}).catch((err) => logger.warn("Updating preferredRid failed", err));
++			const thisSwitch = ++layerSwitch;
++			update({
++				preferredRid,
++				priorityOrdering: "none"
+ 			});
++			setTimeout(() => {
++				if (thisSwitch !== layerSwitch || transceiver.currentDirection === "stopped" || peerConnection.connectionState === "closed") return;
++				update({ preferredRid });
++			}, LAYER_SWITCH_SETTLE_MS);
+ 		}), map(([{ track }]) => track), shareReplay({
+ 			refCount: true,
+ 			bufferSize: 1
+@@ -530,6 +569,39 @@ function waitForTransceiverToSendData(transceiver, onDataSent) {
  		if (timeoutId !== void 0) clearTimeout(timeoutId);
  	};
  }
