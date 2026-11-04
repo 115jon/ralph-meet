@@ -79,10 +79,12 @@ import {
   VOICE_MEDIA_AUTHORIZATION_PATH,
   VoiceJoinGrantStore,
   VoiceJoinGrantWaiters,
-  parseVoiceJoinGrantQuery,
+  parseVoiceMediaAuthorizationQuery,
   parseVoiceJoinGrantUpdate,
   serializeVoiceJoinGrantQuery,
   type VoiceJoinGrantQuery,
+  type VoiceMediaAuthorization,
+  type VoiceMediaTrackRef,
 } from "./voice-join-grant";
 import {
   DemoChatStore,
@@ -568,15 +570,22 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       url.pathname === VOICE_MEDIA_AUTHORIZATION_PATH &&
       request.method === "POST"
     ) {
-      const query = parseVoiceJoinGrantQuery(
+      const query = parseVoiceMediaAuthorizationQuery(
         await request.json().catch(() => null),
       );
       if (!query) {
         return Response.json({ authorized: false }, { status: 400 });
       }
-      return Response.json({
-        authorized: await this.waitForVoiceJoinGrant(query),
+      const authorized = await this.waitForVoiceJoinGrant({
+        participantId: query.participantId,
+        subject: query.subject,
       });
+      const answer: VoiceMediaAuthorization = { authorized };
+      if (authorized && query.tracks) {
+        const simulcast = this.publishedSimulcastRids(query.tracks);
+        if (simulcast.length > 0) answer.simulcast = simulcast;
+      }
+      return Response.json(answer);
     }
 
     if (
@@ -1971,6 +1980,26 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     } finally {
       this.identifyingSockets.delete(ws);
     }
+  }
+
+  /** The published layers of the given SFU tracks that have several. */
+  private publishedSimulcastRids(
+    tracks: readonly VoiceMediaTrackRef[],
+  ): Array<VoiceMediaTrackRef & { rids: string[] }> {
+    const found: Array<VoiceMediaTrackRef & { rids: string[] }> = [];
+    for (const track of tracks) {
+      const [row] = this.sql.exec<{ simulcast_rids: string | null }>(
+        "SELECT simulcast_rids FROM tracks WHERE session_id = ? AND " +
+          "(sfu_track_name = ? OR (sfu_track_name IS NULL AND track_name = ?)) " +
+          "AND simulcast_rids IS NOT NULL LIMIT 1",
+        track.sessionId,
+        track.trackName,
+        track.trackName,
+      );
+      const { simulcast_rids: rids } = withSimulcastRids(row?.simulcast_rids);
+      if (rids) found.push({ ...track, rids });
+    }
+    return found;
   }
 
   /**

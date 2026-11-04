@@ -1999,6 +1999,41 @@ describe("VoiceRoom lifecycle", () => {
       },
     });
 
+    // The PartyTracks proxy asks for the layers of pulls that name none
+    // (clients older than simulcast), with the join check it already makes.
+    const authorizeMedia = async (subject: string, participantId: string) => {
+      const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+      const response = await room.fetch(
+        "https://internal/voice-media-authorization",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            participant_id: participantId,
+            subject,
+            tracks: [
+              { session_id: session, track_name: "opaque-camera" },
+              { session_id: session, track_name: "opaque-microphone" },
+              { session_id: "other-session", track_name: "opaque-camera" },
+            ],
+          }),
+        },
+      );
+      return response.json();
+    };
+    await expect(
+      authorizeMedia("late-observer-user", lateObserverId),
+    ).resolves.toEqual({
+      authorized: true,
+      simulcast: [
+        {
+          sessionId: session,
+          trackName: "opaque-camera",
+          rids: ["f", "h", "q"],
+        },
+      ],
+    });
+
     // Malformed layers (duplicate RIDs) are refused, not stored.
     publisher.send(
       JSON.stringify({

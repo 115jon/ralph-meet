@@ -3,6 +3,7 @@ import { issueVoiceToken } from "../voice-token";
 import {
   handlePartyTracksProxyRequest,
   issuePartyTracksSessionCapability,
+  remotePullsWithoutLayer,
   withSimulcastFallback,
   type PartyTracksProxyEnv,
   type PartyTracksRouter,
@@ -123,6 +124,139 @@ describe("PartyTracks proxy simulcast fallback", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("PartyTracks proxy pulls from clients older than simulcast", () => {
+  it("pulls a simulcast camera at its top layer, falling back down", async () => {
+    const routed: unknown[] = [];
+    const route = vi.fn<PartyTracksRouter>(async ({ request }) => {
+      routed.push(await request.json());
+      return Response.json({});
+    });
+    const publisher = await capability("publisher", "cloudflare-publisher");
+    const authorizeRemotePull = vi.fn(async () => ({
+      authorized: true,
+      simulcast: [
+        {
+          sessionId: publisher,
+          trackName: "sfu-camera",
+          rids: ["f", "h", "q"],
+        },
+      ],
+    }));
+
+    const response = await handlePartyTracksProxyRequest(
+      await viewerRequest("/tracks/new", "POST", {
+        tracks: [
+          { location: "remote", sessionId: publisher, trackName: "sfu-camera" },
+          { location: "remote", sessionId: publisher, trackName: "sfu-mic" },
+        ],
+      }),
+      env,
+      route,
+      { authorizeRemotePull },
+    );
+
+    expect(response?.status).toBe(200);
+    // The VoiceRoom is asked by the capability the publisher announced.
+    expect(authorizeRemotePull).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "viewer",
+        tracks: [
+          { sessionId: publisher, trackName: "sfu-camera" },
+          { sessionId: publisher, trackName: "sfu-mic" },
+        ],
+      }),
+      env,
+    );
+    expect(routed).toEqual([
+      {
+        tracks: [
+          {
+            location: "remote",
+            sessionId: "cloudflare-publisher",
+            trackName: "sfu-camera",
+            simulcast: {
+              preferredRid: "f",
+              priorityOrdering: "asciibetical",
+              ridNotAvailable: "asciibetical",
+            },
+          },
+          {
+            location: "remote",
+            sessionId: "cloudflare-publisher",
+            trackName: "sfu-mic",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("asks nothing for pulls that name a layer, and keeps their choice", async () => {
+    const routed: unknown[] = [];
+    const route = vi.fn<PartyTracksRouter>(async ({ request }) => {
+      routed.push(await request.json());
+      return Response.json({});
+    });
+    const publisher = await capability("publisher", "cloudflare-publisher");
+    const authorizeRemotePull = vi.fn(async () => true);
+
+    await handlePartyTracksProxyRequest(
+      await viewerRequest("/tracks/new", "POST", {
+        tracks: [
+          {
+            location: "remote",
+            sessionId: publisher,
+            trackName: "sfu-camera",
+            simulcast: { preferredRid: "q" },
+          },
+        ],
+      }),
+      env,
+      route,
+      { authorizeRemotePull },
+    );
+
+    expect(authorizeRemotePull).toHaveBeenCalledWith(
+      expect.not.objectContaining({ tracks: expect.anything() }),
+      env,
+    );
+    expect(routed).toEqual([
+      {
+        tracks: [
+          {
+            location: "remote",
+            sessionId: "cloudflare-publisher",
+            trackName: "sfu-camera",
+            simulcast: {
+              preferredRid: "q",
+              priorityOrdering: "asciibetical",
+              ridNotAvailable: "asciibetical",
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("finds legacy pulls only among remote tracks", () => {
+    expect(
+      remotePullsWithoutLayer({
+        tracks: [
+          { location: "local", trackName: "mine", mid: "0" },
+          { location: "remote", sessionId: "s", trackName: "a" },
+          {
+            location: "remote",
+            sessionId: "s",
+            trackName: "b",
+            simulcast: { preferredRid: "h" },
+          },
+          null,
+        ],
+      }),
+    ).toEqual([{ index: 1, ref: { sessionId: "s", trackName: "a" } }]);
+    expect(remotePullsWithoutLayer({ sessionDescription: {} })).toEqual([]);
   });
 });
 
