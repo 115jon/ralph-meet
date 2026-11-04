@@ -30,11 +30,13 @@ class TestTransport implements PartyTracksMediaTransport {
   readonly pulledTracks = new Map<string, Subject<MediaStreamTrack>>();
   readonly pullErrors$ = new Subject<PartyTracksPullError>();
   pullCount = 0;
+  pushCount = 0;
 
   push(
     sourceTrack$: Observable<MediaStreamTrack>,
     identity: RalphPublishedTrack,
   ): Observable<TrackInfo> {
+    this.pushCount += 1;
     const sourceTracks: MediaStreamTrack[] = [];
     sourceTrack$.subscribe((track) => sourceTracks.push(track));
     this.pushSources.set(identity.trackName, sourceTracks);
@@ -219,7 +221,7 @@ describe("PartyTracksMediaManager", () => {
     viewer.dispose();
   });
 
-  it("keeps a watched share's video pulled until that share ends", () => {
+  it("keeps a share's video pull across unwatching and new shares", () => {
     const transport = new TestTransport();
     const removed: string[] = [];
     const viewer = new PartyTracksMediaManager(transport, "viewer", {
@@ -249,16 +251,19 @@ describe("PartyTracksMediaManager", () => {
     viewer.setRemoteTrackSubscription("screen-video-sharer", true);
     expect(transport.pullCount).toBe(1);
 
-    // Unwatched when the sharer starts a new share: that one is not pulled.
+    // Unwatched when the sharer starts a new share: the old share is hidden
+    // and the new one is not pulled, but the pull is kept.
     viewer.setRemoteTrackSubscription("screen-video-sharer", false);
     viewer.offerTracks([share("share-2")]);
-    expect(removed).toEqual(["share-2"]);
+    expect(removed).toEqual(["share-1"]);
     expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
       share("share-1"),
     ]);
+    // Watching again points the same pull at the new share.
     viewer.setRemoteTrackSubscription("screen-video-sharer", true);
-    expect(transport.pullCount).toBe(2);
+    expect(transport.pullCount).toBe(1);
     expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
+      share("share-1"),
       share("share-2"),
     ]);
     viewer.dispose();
@@ -817,5 +822,305 @@ describe("PartyTracksMediaManager track-unavailable detection", () => {
     notFoundAfter(0);
     notFoundAfter(2_000);
     expect(reports).toEqual([]);
+  });
+});
+
+describe("PartyTracksMediaManager withdrawn publications", () => {
+  const cameraMetadata = (sfuTrackName: string): TrackInfo => ({
+    participant_id: "publisher",
+    track_name: "cam-video-publisher",
+    sfu_track_name: sfuTrackName,
+    session_id: "publisher-session",
+    kind: "video",
+  });
+
+  function setup() {
+    const transport = new TestTransport();
+    const announced: TrackInfo[] = [];
+    const stopped: string[] = [];
+    const keepalives: Array<{
+      track: MediaStreamTrack;
+      longestGapMs: () => number;
+      stop: () => void;
+    }> = [];
+    let keepaliveGapMs = 1_000;
+    const manager = new PartyTracksMediaManager(
+      transport,
+      "publisher",
+      {
+        onPublicationMetadata: (track) => announced.push(track),
+        onPublicationStopped: (trackName) => stopped.push(trackName),
+        onRemoteTrack: vi.fn(),
+      },
+      {
+        createVideoKeepalive: () => {
+          const keepalive = {
+            track: mediaTrack("video", `keepalive-${keepalives.length}`),
+            longestGapMs: () => keepaliveGapMs,
+            stop: vi.fn(),
+          };
+          keepalives.push(keepalive);
+          return keepalive;
+        },
+      },
+    );
+    return {
+      transport,
+      announced,
+      stopped,
+      keepalives,
+      manager,
+      setKeepaliveGapMs: (ms: number) => (keepaliveGapMs = ms),
+    };
+  }
+
+  it("pushes afresh when the keepalive stalled long enough for the SFU to drop the track", () => {
+    const { transport, announced, keepalives, manager, setKeepaliveGapMs } =
+      setup();
+    manager.publishStream(mediaStream(mediaTrack("video", "camera-1")), "cam");
+    transport.pushMetadata
+      .get("cam-video-publisher")
+      ?.next(cameraMetadata("sfu-camera-1"));
+    manager.unpublishTrack("cam-video-publisher");
+    setKeepaliveGapMs(26_000);
+
+    const camera2 = mediaTrack("video", "camera-2");
+    manager.publishStream(mediaStream(camera2), "cam");
+    expect(transport.pushCount).toBe(2);
+    expect(keepalives[0]?.stop).toHaveBeenCalledOnce();
+    expect(transport.pushSources.get("cam-video-publisher")).toEqual([camera2]);
+    // Announced once the new push is answered, not before.
+    expect(announced).toEqual([cameraMetadata("sfu-camera-1")]);
+    transport.pushMetadata
+      .get("cam-video-publisher")
+      ?.next(cameraMetadata("sfu-camera-2"));
+    expect(announced).toEqual([
+      cameraMetadata("sfu-camera-1"),
+      cameraMetadata("sfu-camera-2"),
+    ]);
+    manager.dispose();
+  });
+
+  it("keeps a camera turned off pushed on a keepalive and resumes the same SFU track", () => {
+    const { transport, announced, stopped, keepalives, manager } = setup();
+    const camera1 = mediaTrack("video", "camera-1");
+    manager.publishStream(mediaStream(camera1), "cam");
+    transport.pushMetadata
+      .get("cam-video-publisher")
+      ?.next(cameraMetadata("sfu-camera"));
+    expect(announced).toEqual([cameraMetadata("sfu-camera")]);
+
+    expect(manager.unpublishTrack("cam-video-publisher")).toBe(true);
+    expect(stopped).toEqual(["cam-video-publisher"]);
+    const keepalive = keepalives[0]!;
+    expect(transport.pushSources.get("cam-video-publisher")).toEqual([
+      camera1,
+      keepalive.track,
+    ]);
+    // Withdrawn: not a publication to anything else.
+    expect(manager.getPublishedTrack("cam-video-publisher")).toBeNull();
+    expect(
+      manager.replaceTrack("cam-video-publisher", mediaTrack("video", "x")),
+    ).toBe(false);
+    manager.reannouncePublications();
+    expect(announced).toHaveLength(1);
+
+    const camera2 = mediaTrack("video", "camera-2");
+    manager.publishStream(mediaStream(camera2), "cam");
+    expect(transport.pushCount).toBe(1);
+    expect(transport.pushSources.get("cam-video-publisher")).toEqual([
+      camera1,
+      keepalive.track,
+      camera2,
+    ]);
+    expect(keepalive.stop).toHaveBeenCalledOnce();
+    expect(announced).toEqual([
+      cameraMetadata("sfu-camera"),
+      cameraMetadata("sfu-camera"),
+    ]);
+    expect(manager.getPublishedTrack("cam-video-publisher")).toBe(camera2);
+    manager.dispose();
+  });
+
+  it("announces a track re-pushed while withdrawn only once it is published again", () => {
+    const { transport, announced, manager } = setup();
+    manager.publishStream(mediaStream(mediaTrack("video", "camera-1")), "cam");
+    const metadata = transport.pushMetadata.get("cam-video-publisher");
+    metadata?.next(cameraMetadata("sfu-camera-1"));
+    manager.unpublishTrack("cam-video-publisher");
+    // A rebuilt session pushes the keepalive again as a new SFU track.
+    metadata?.next(cameraMetadata("sfu-camera-2"));
+    expect(announced).toEqual([cameraMetadata("sfu-camera-1")]);
+
+    manager.publishStream(mediaStream(mediaTrack("video", "camera-2")), "cam");
+    expect(announced).toEqual([
+      cameraMetadata("sfu-camera-1"),
+      cameraMetadata("sfu-camera-2"),
+    ]);
+    manager.dispose();
+  });
+
+  it("closes audio, and video the SFU has not answered yet", () => {
+    const { transport, keepalives, manager } = setup();
+    manager.publishStream(
+      mediaStream(mediaTrack("audio", "screen-audio")),
+      "screen",
+    );
+    manager.publishStream(mediaStream(mediaTrack("video", "camera")), "cam");
+    manager.unpublishTrack("screen-audio-publisher");
+    manager.unpublishTrack("cam-video-publisher");
+    expect(keepalives).toEqual([]);
+
+    // Published again: a fresh push.
+    manager.publishStream(mediaStream(mediaTrack("video", "camera")), "cam");
+    expect(transport.pushCount).toBe(3);
+    manager.dispose();
+  });
+
+  it("stops the keepalive when the manager is disposed", () => {
+    const { transport, keepalives, manager } = setup();
+    manager.publishStream(mediaStream(mediaTrack("video", "camera")), "cam");
+    transport.pushMetadata
+      .get("cam-video-publisher")
+      ?.next(cameraMetadata("sfu-camera"));
+    manager.unpublishTrack("cam-video-publisher");
+    manager.dispose();
+    expect(keepalives[0]?.stop).toHaveBeenCalledOnce();
+  });
+});
+
+describe("PartyTracksMediaManager withdrawn remote tracks", () => {
+  const camera = (sfuTrackName: string, participant = "remote"): TrackInfo => ({
+    participant_id: participant,
+    track_name: `cam-video-${participant}`,
+    sfu_track_name: sfuTrackName,
+    session_id: `${participant}-session`,
+    kind: "video",
+  });
+
+  function setup() {
+    const transport = new TestTransport();
+    const events: string[] = [];
+    const manager = new PartyTracksMediaManager(transport, "viewer", {
+      onPublicationMetadata: vi.fn(),
+      onPublicationStopped: vi.fn(),
+      onRemoteTrack: ({ action, track, trackInfo }) =>
+        events.push(`${action} ${track.id} ${trackInfo.sfu_track_name}`),
+    });
+    return { transport, events, manager };
+  }
+
+  it("hides a withdrawn camera and shows the same pull when it comes back", () => {
+    const { transport, events, manager } = setup();
+    manager.offerTracks([camera("sfu-camera")]);
+    const remote = mediaTrack("video", "remote-camera");
+    transport.pulledTracks.get("cam-video-remote")?.next(remote);
+
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    expect(events).toEqual([
+      "add remote-camera sfu-camera",
+      "remove remote-camera sfu-camera",
+    ]);
+    expect(remote.stop).not.toHaveBeenCalled();
+    expect(manager.hasRemoteOffer("cam-video-remote")).toBe(false);
+    expect(manager.getRemoteTracksForDiagnostics()).toEqual([]);
+
+    // The publisher turned the camera on again: same SFU track, no pull.
+    manager.offerTracks([camera("sfu-camera")]);
+    expect(transport.pullCount).toBe(1);
+    expect(transport.pullMetadata.get("cam-video-remote")).toEqual([
+      camera("sfu-camera"),
+    ]);
+    expect(events.at(-1)).toBe("add remote-camera sfu-camera");
+    manager.dispose();
+  });
+
+  it("pulls another SFU track into a withdrawn pull and shows what it produces", () => {
+    const { transport, events, manager } = setup();
+    manager.offerTracks([camera("sfu-camera-1")]);
+    const first = mediaTrack("video", "remote-camera-1");
+    transport.pulledTracks.get("cam-video-remote")?.next(first);
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+
+    // An older publisher pushes each camera as a new SFU track.
+    manager.offerTracks([camera("sfu-camera-2")]);
+    expect(transport.pullMetadata.get("cam-video-remote")).toEqual([
+      camera("sfu-camera-1"),
+      camera("sfu-camera-2"),
+    ]);
+    const second = mediaTrack("video", "remote-camera-2");
+    transport.pulledTracks.get("cam-video-remote")?.next(second);
+    expect(first.stop).toHaveBeenCalledOnce();
+    expect(events).toEqual([
+      "add remote-camera-1 sfu-camera-1",
+      "remove remote-camera-1 sfu-camera-1",
+      "add remote-camera-2 sfu-camera-2",
+    ]);
+    manager.dispose();
+  });
+
+  it("closes withdrawn pulls when their participant leaves or is gone after a resync", () => {
+    const { transport, events, manager } = setup();
+    manager.offerTracks([camera("sfu-a", "a"), camera("sfu-b", "b")]);
+    const a = mediaTrack("video", "a-camera");
+    const b = mediaTrack("video", "b-camera");
+    transport.pulledTracks.get("cam-video-a")?.next(a);
+    transport.pulledTracks.get("cam-video-b")?.next(b);
+    manager.withdrawRemoteTracks(["cam-video-a", "cam-video-b"]);
+    events.length = 0;
+
+    manager.removeParticipant("a");
+    expect(a.stop).toHaveBeenCalledOnce();
+    // Already hidden: no second remove.
+    expect(events).toEqual([]);
+
+    // A snapshot without b (it left while this client was away).
+    manager.syncRemoteTracks([camera("sfu-c", "c")]);
+    expect(b.stop).toHaveBeenCalledOnce();
+    expect(events).toEqual([]);
+    manager.dispose();
+  });
+
+  it("closes withdrawn audio instead of keeping it", () => {
+    const { transport, manager } = setup();
+    const microphone: TrackInfo = {
+      ...camera("sfu-mic"),
+      track_name: "cam-audio-remote",
+      kind: "audio",
+    };
+    manager.offerTracks([microphone]);
+    const remote = mediaTrack("audio", "remote-mic");
+    transport.pulledTracks.get("cam-audio-remote")?.next(remote);
+    manager.withdrawRemoteTracks(["cam-audio-remote"]);
+    expect(remote.stop).toHaveBeenCalledOnce();
+    expect(manager.hasRemotePulls).toBe(false);
+    manager.dispose();
+  });
+
+  it("closes a withdrawn pull the SFU no longer finds", () => {
+    const { transport, manager } = setup();
+    manager.offerTracks([camera("sfu-camera")]);
+    const remote = mediaTrack("video", "remote-camera");
+    transport.pulledTracks.get("cam-video-remote")?.next(remote);
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    // The viewer's session was rebuilt and PartyTracks pulls it again.
+    transport.pullErrors$.next({
+      errorCode: "not_found_track_error",
+      sessionId: "remote-session",
+      trackName: "sfu-camera",
+    } as PartyTracksPullError);
+    expect(remote.stop).toHaveBeenCalledOnce();
+    expect(manager.hasRemotePulls).toBe(false);
+    manager.dispose();
+  });
+
+  it("drops a pull withdrawn before it produced a track", () => {
+    const { transport, manager } = setup();
+    manager.offerTracks([camera("sfu-camera")]);
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    expect(manager.hasRemotePulls).toBe(false);
+    manager.offerTracks([camera("sfu-camera")]);
+    expect(transport.pullCount).toBe(2);
+    manager.dispose();
   });
 });
