@@ -80,6 +80,9 @@ importers:
       '@ralph/realtime':
         specifier: workspace:*
         version: link:packages/realtime
+      '@ralph/voice':
+        specifier: workspace:*
+        version: link:packages/voice
       '@sapphi-red/web-noise-suppressor':
         specifier: ^0.3.5
         version: 0.3.5
@@ -537,6 +540,8 @@ importers:
       '@ralph/protocol':
         specifier: workspace:*
         version: link:../protocol
+
+  packages/voice: {}
 
 packages:
 
