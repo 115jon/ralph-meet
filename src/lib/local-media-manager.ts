@@ -128,10 +128,14 @@ function applyActiveAudioTrackLabel(
 function audioConstraintsMatch(
   track: MediaStreamTrack,
   c: LocalAudioConstraints,
+  anyDevice = false,
 ): boolean {
   const s = track.getSettings();
   const idMatch =
-    !c.deviceId || c.deviceId === "default" || s.deviceId === c.deviceId;
+    anyDevice ||
+    !c.deviceId ||
+    c.deviceId === "default" ||
+    s.deviceId === c.deviceId;
   return (
     idMatch &&
     s.noiseSuppression === c.noiseSuppression &&
@@ -144,10 +148,14 @@ function videoConstraintsMatch(
   track: MediaStreamTrack,
   c: LocalVideoConstraints,
   activeVideoRequestKey: string | null,
+  anyDevice = false,
 ): boolean {
   const s = track.getSettings();
   const idMatch =
-    !c.deviceId || c.deviceId === "default" || s.deviceId === c.deviceId;
+    anyDevice ||
+    !c.deviceId ||
+    c.deviceId === "default" ||
+    s.deviceId === c.deviceId;
   const qualityMatch = activeVideoRequestKey === videoRequestKey(c);
   return idMatch && qualityMatch;
 }
@@ -262,10 +270,18 @@ async function reopenStoredDevices(
     log: Logger;
   },
 ): Promise<MediaStream> {
-  const [audioRetry, videoRetry] = await Promise.all([
-    audioId === undefined ? lookupStoredAudio(audio, log) : null,
-    video && videoId === undefined ? lookupStoredVideo(video, log) : null,
-  ]);
+  let audioRetry: StoredDeviceLookup | null;
+  let videoRetry: StoredDeviceLookup | null;
+  try {
+    [audioRetry, videoRetry] = await Promise.all([
+      audioId === undefined ? lookupStoredAudio(audio, log) : null,
+      video && videoId === undefined ? lookupStoredVideo(video, log) : null,
+    ]);
+  } catch (err: any) {
+    // The fallback stream is live and owned by the caller: hand it back.
+    log.warn(`Saved device lookup failed (${err?.name ?? "unknown"})`);
+    return fallback;
+  }
   if (isStale()) return fallback;
   const nextAudioId = audioId ?? audioRetry?.deviceId;
   const nextVideoId = videoId ?? videoRetry?.deviceId;
@@ -321,11 +337,22 @@ export async function acquireLocalStream(
   // If we have an active stream that matches, return it immediately
   if (state.activeStream) {
     const activeLookupOrder = state.acquisitionOrder;
-    const resolvedAudioId = (await lookupStoredAudio(audio, log)).deviceId;
-    const resolvedVideoId = videoConstraint
-      ? (await lookupStoredVideo(videoConstraint, log)).deviceId
-      : undefined;
+    const activeAudioLookup = await lookupStoredAudio(audio, log);
+    const activeVideoLookup = videoConstraint
+      ? await lookupStoredVideo(videoConstraint, log)
+      : null;
     throwIfAcquisitionStale(state, generation, activeLookupOrder);
+    const resolvedAudioId = activeAudioLookup.deviceId;
+    const resolvedVideoId = activeVideoLookup?.deviceId;
+    // The list is still hidden, so the saved id can't be compared with the
+    // live track. A stream opened for this same saved id (it may have fallen
+    // back) already answers the request: don't reopen it.
+    const audioIdAnswered =
+      activeAudioLookup.unverified &&
+      state.activeAudioRequestDeviceId === audio.deviceId;
+    const videoIdAnswered =
+      !!activeVideoLookup?.unverified &&
+      state.activeVideoRequestDeviceId === videoConstraint?.deviceId;
     const resolvedAudio = { ...audio, deviceId: resolvedAudioId };
     const resolvedVideo = videoConstraint
       ? { ...videoConstraint, deviceId: resolvedVideoId }
@@ -350,7 +377,8 @@ export async function acquireLocalStream(
       audioLive &&
       (!audioFellBackToDefault ||
         state.activeAudioRequestDeviceId === audio.deviceId) &&
-      (!audioTrack || audioConstraintsMatch(audioTrack, resolvedAudio));
+      (!audioTrack ||
+        audioConstraintsMatch(audioTrack, resolvedAudio, audioIdAnswered));
     const videoOk =
       !resolvedVideo ||
       ((!videoFellBackToDefault ||
@@ -360,6 +388,7 @@ export async function acquireLocalStream(
           videoTrack,
           resolvedVideo,
           state.activeVideoRequestKey,
+          videoIdAnswered,
         ));
     if (audioOk && videoOk) {
       log.debug("Reusing active stream (constraints match)");

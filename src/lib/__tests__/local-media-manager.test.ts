@@ -596,5 +596,60 @@ describe("local-media-manager", () => {
       expect(getUserMedia).toHaveBeenCalledTimes(2);
       expect(fallback.track.stop).not.toHaveBeenCalled();
     });
+
+    it("hands back the fallback stream when the second lookup fails", async () => {
+      const fallback = createAudioStream("default");
+      const enumerateDevices = vi
+        .fn()
+        .mockResolvedValueOnce(hiddenList)
+        .mockRejectedValue(new Error("enumerate failed"));
+      const getUserMedia = vi
+        .fn()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("no such device"), {
+            name: "OverconstrainedError",
+          }),
+        )
+        .mockResolvedValueOnce(fallback.stream);
+      vi.stubGlobal("navigator", {
+        mediaDevices: { enumerateDevices, getUserMedia },
+      });
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        fallback.stream,
+      );
+      expect(getUserMedia).toHaveBeenCalledTimes(2);
+      expect(fallback.track.stop).not.toHaveBeenCalled();
+    });
+
+    it("reuses a fallback stream opened for the same saved id while the list stays hidden", async () => {
+      const fallback = createAudioStream("default");
+      const overconstrained = () =>
+        Object.assign(new Error("no such device"), {
+          name: "OverconstrainedError",
+        });
+      const getUserMedia = vi
+        .fn()
+        .mockRejectedValueOnce(overconstrained())
+        .mockResolvedValueOnce(fallback.stream)
+        .mockRejectedValueOnce(overconstrained());
+      vi.stubGlobal("navigator", {
+        mediaDevices: {
+          enumerateDevices: vi.fn().mockResolvedValue(hiddenList),
+          getUserMedia,
+        },
+      });
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        fallback.stream,
+      );
+      const callsAfterJoin = getUserMedia.mock.calls.length;
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        fallback.stream,
+      );
+      expect(getUserMedia).toHaveBeenCalledTimes(callsAfterJoin);
+      expect(fallback.track.stop).not.toHaveBeenCalled();
+    });
   });
 });
