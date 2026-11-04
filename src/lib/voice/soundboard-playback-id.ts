@@ -54,11 +54,3 @@ export function isSoundboardPlaybackOwnedBy(
 ): boolean {
   return parseSoundboardPlaybackId(playbackId)?.ownerId === ownerId;
 }
-
-export function isLegacySoundboardPlaybackOwnedBy(
-  playbackId: string,
-  ownerId: string,
-  soundId: string,
-): boolean {
-  return !!ownerId && !!soundId && playbackId === `s-${ownerId}-${soundId}`;
-}

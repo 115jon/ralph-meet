@@ -10,7 +10,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
-import { isSupersededVoiceConnection } from "../src/lib/voice/connection-generation";
+import { isSupersededVoiceConnection } from "./connection-lifecycle";
 import {
   buildListenTogetherSnapshot,
   isValidListenTogetherVideoId,
@@ -40,10 +40,7 @@ import {
   hasPermission,
   PERMISSIONS,
 } from "../src/lib/permissions";
-import {
-  isLegacySoundboardPlaybackOwnedBy,
-  isSoundboardPlaybackOwnedBy,
-} from "../src/lib/voice/soundboard-playback-id";
+import { isSoundboardPlaybackOwnedBy } from "../src/lib/voice/soundboard-playback-id";
 import {
   getSoundboardUploadUrl,
   normalizeSoundboardUploadUrl,
@@ -57,9 +54,7 @@ import {
   decodeVoiceGatewayClientFrame,
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
-  LEGACY_CLERK_USER_ID_COMPAT,
   parseGatewayFrame,
-  RETIRED_BROWSER_SFU_OPS,
   type VoiceClientPayload,
 } from "../src/lib/gateway-protocol";
 import {
@@ -113,13 +108,6 @@ interface Env {
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
-/**
- * A participant's user id: `user_id`, or `clerk_user_id` in a row only
- * pre-rename code wrote (see migrateParticipantsUserIdColumns).
- * TODO(user-id-rename phase 2): plain `user_id`.
- */
-const PARTICIPANT_USER_ID_SQL = "COALESCE(user_id, clerk_user_id)";
-
 interface VoiceSql {
   exec<T extends Record<string, unknown>>(
     query: string,
@@ -161,7 +149,6 @@ const VOICE_SESSION_REPLACED_REASON = "Voice moved to another device";
 interface VoiceAttachment {
   admission?: {
     accessMode: "authenticated" | "public-demo";
-    connectionGeneration: string;
     serverId?: string;
     subject: string;
   };
@@ -182,7 +169,6 @@ const RADIO_STATION_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RADIO_STATION_LOOKUPS_PER_ENQUEUE = 5;
 const MAX_SOUNDBOARD_DATA_URL_BYTES = 128 * 1024;
-const LEGACY_SOUNDBOARD_PLAYBACK_OWNER_TTL_MS = 10 * 60 * 1000;
 // Recheck membership on every media request, so this bounded lifetime gives
 // range/retry playback room without weakening revocation.
 const SOUNDBOARD_MEDIA_CAPABILITY_TTL_MS = 60 * 60 * 1000;
@@ -265,38 +251,27 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   }
 
   /**
-   * participants has the user id twice: `user_id`, and `clerk_user_id`, its
-   * pre-rename name, which the previous Worker version reads and writes. The
-   * room writes both (while LEGACY_CLERK_USER_ID_COMPAT is on) and reads
-   * PARTICIPANT_USER_ID_SQL, so a rollback, and the roll-forward after it,
-   * both find every row's user.
-   *
-   * Runs on every start, before anything else touches the table: adds a
-   * missing column (a pre-rename room has no `user_id`), then copies
-   * `clerk_user_id` into `user_id` wherever they differ. Only pre-rename code
-   * makes them differ (rows it inserted, or upserted during a rollback); this
-   * code writes both, so a second start changes nothing.
-   *
-   * TODO(user-id-rename phase 2): drop `clerk_user_id` in a later migration
-   * (see docs/user-id-rename.md), with this method and the dual write.
+   * Drops `clerk_user_id`, the pre-rename name of `user_id`, from a
+   * participants table an older version created. A row only pre-rename code
+   * wrote has its user id there alone, so it is copied into `user_id` first.
+   * The previous version adds the column back if a rollback starts it.
    */
-  private migrateParticipantsUserIdColumns() {
+  private dropParticipantsLegacyUserIdColumn() {
     const columns = new Set<string>();
     for (const row of this.sql.exec<{ name: string }>(
       "PRAGMA table_info(participants)",
     )) {
       columns.add(row.name);
     }
+    if (!columns.has("clerk_user_id")) return;
     if (!columns.has("user_id")) {
       this.sql.exec("ALTER TABLE participants ADD COLUMN user_id TEXT");
-    }
-    if (!columns.has("clerk_user_id")) {
-      this.sql.exec("ALTER TABLE participants ADD COLUMN clerk_user_id TEXT");
     }
     this.sql.exec(
       `UPDATE participants SET user_id = clerk_user_id
        WHERE clerk_user_id IS NOT NULL AND user_id IS NOT clerk_user_id`,
     );
+    this.sql.exec("ALTER TABLE participants DROP COLUMN clerk_user_id");
   }
 
   private initSchema() {
@@ -304,28 +279,16 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       CREATE TABLE IF NOT EXISTS participants (
         id TEXT PRIMARY KEY,
         user_id TEXT,
-        clerk_user_id TEXT,
         native_screen_session_id TEXT,
         last_heartbeat INTEGER DEFAULT 0,
         speaking INTEGER DEFAULT 0,
         connection_id TEXT
       );
     `);
-    this.migrateParticipantsUserIdColumns();
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS soundboard_legacy_playback_owners (
-        playback_id TEXT PRIMARY KEY,
-        owner_id TEXT NOT NULL,
-        created_at INTEGER NOT NULL DEFAULT 0
-      );
-    `);
-    try {
-      this.sql.exec(
-        `ALTER TABLE soundboard_legacy_playback_owners ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;`,
-      );
-    } catch {
-      // Existing Durable Objects already have the timestamp column.
-    }
+    this.dropParticipantsLegacyUserIdColumn();
+    // Owners of `s-<owner>-<sound>` playback ids, which no client sends any
+    // more. A rollback recreates the table (CREATE IF NOT EXISTS).
+    this.sql.exec(`DROP TABLE IF EXISTS soundboard_legacy_playback_owners;`);
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS ws_rate_limits (
         rate_key TEXT PRIMARY KEY,
@@ -496,7 +459,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       server.serializeAttachment({
         admission: {
           accessMode: admission.accessMode,
-          connectionGeneration: admission.connectionGeneration,
           subject: admission.subject,
           ...(admission.serverId ? { serverId: admission.serverId } : {}),
         },
@@ -625,28 +587,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     const frame = parsed.frame;
 
     if (
-      this.isPublicDemoSocket(ws) &&
-      !this.isAllowedPublicDemoOpcode(frame.op)
-    ) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.NotAuthenticated,
-          message: "Operation is unavailable in public demo rooms",
-        },
-      });
-      return;
-    }
-
-    if (
       this.isAuthenticatedMutatingOpcode(frame.op) &&
       !this.isCurrentAuthenticatedVoiceSocket(ws)
     ) {
-      return;
-    }
-
-    if (RETIRED_BROWSER_SFU_OPS.has(frame.op)) {
-      this.rejectBrowserSfuNegotiation(ws);
       return;
     }
 
@@ -771,7 +714,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       const zombies: string[] = [];
 
       this.demoChatStore.pruneExpired(now);
-      this.pruneLegacySoundboardPlaybackOwners(now);
       this.voiceJoinGrants.prune(
         now,
         new Set(
@@ -839,15 +781,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     )) {
       if (row.expires_at) deadlines.push(row.expires_at as number);
     }
-    for (const row of this.sql.exec(
-      `SELECT MIN(created_at) as created_at FROM soundboard_legacy_playback_owners`,
-    )) {
-      if (typeof row.created_at === "number") {
-        deadlines.push(
-          row.created_at + LEGACY_SOUNDBOARD_PLAYBACK_OWNER_TTL_MS,
-        );
-      }
-    }
 
     const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
     if (listenTogetherDeadline) {
@@ -873,19 +806,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         ...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`),
       ][0];
       const demoChatCount = Number(demoChatCountRow?.c ?? 0);
-      const legacyPlaybackOwnerCountRow = [
-        ...this.sql.exec(
-          `SELECT COUNT(*) as c FROM soundboard_legacy_playback_owners`,
-        ),
-      ][0];
-      const legacyPlaybackOwnerCount = Number(
-        legacyPlaybackOwnerCountRow?.c ?? 0,
-      );
       const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
       const hasWork =
         participantCount > 0 ||
         demoChatCount > 0 ||
-        legacyPlaybackOwnerCount > 0 ||
         typeof listenTogetherDeadline === "number";
 
       if (!hasWork) {
@@ -1716,22 +1640,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     return this.getVoiceAttachment(ws)?.admission?.accessMode === "public-demo";
   }
 
-  private isAllowedPublicDemoOpcode(op: number): boolean {
-    return (
-      op === Op.VoiceIdentify ||
-      op === Op.Heartbeat ||
-      op === Op.SelectProtocol ||
-      op === Op.Video ||
-      op === Op.StopTracks ||
-      op === Op.TracksReady ||
-      op === Op.Speaking ||
-      op === Op.ClientDisconnect ||
-      op === Op.VoiceAppEvent ||
-      op === Op.TrackUnavailable ||
-      RETIRED_BROWSER_SFU_OPS.has(op)
-    );
-  }
-
   private async disconnectParticipantImmediately(
     participantId: string,
     replaced = false,
@@ -1806,8 +1714,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       op === Op.Speaking ||
       op === Op.ClientDisconnect ||
       op === Op.VoiceAppEvent ||
-      op === Op.TrackUnavailable ||
-      RETIRED_BROWSER_SFU_OPS.has(op)
+      op === Op.TrackUnavailable
     );
   }
 
@@ -1849,7 +1756,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private getUserIdForParticipant(participantId: string): string | null {
     const rows = [
       ...this.sql.exec(
-        `SELECT ${PARTICIPANT_USER_ID_SQL} AS user_id FROM participants WHERE id = ?`,
+        "SELECT user_id FROM participants WHERE id = ?",
         participantId,
       ),
     ];
@@ -1863,7 +1770,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       ...this.sql.exec(
         `SELECT p.id
        FROM participants p
-       WHERE (COALESCE(p.user_id, p.clerk_user_id) = ? OR p.id = ?)
+       WHERE (p.user_id = ? OR p.id = ?)
          AND EXISTS (
            SELECT 1
            FROM tracks t
@@ -2216,18 +2123,15 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     ws.serializeAttachment(attachment);
 
     this.sql.exec(
-      `INSERT INTO participants (id, user_id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id)
-       VALUES (?, ?, ?, NULL, ?, 0, ?)
+      `INSERT INTO participants (id, user_id, native_screen_session_id, last_heartbeat, speaking, connection_id)
+       VALUES (?, ?, NULL, ?, 0, ?)
        ON CONFLICT(id) DO UPDATE SET
          user_id = excluded.user_id,
-         clerk_user_id = excluded.clerk_user_id,
          native_screen_session_id = NULL,
          last_heartbeat = excluded.last_heartbeat,
          connection_id = excluded.connection_id`,
       d.participant_id,
       userId ?? null,
-      // TODO(user-id-rename phase 2): stop writing clerk_user_id.
-      LEGACY_CLERK_USER_ID_COMPAT ? (userId ?? null) : null,
       Date.now(),
       connectionId,
     );
@@ -3315,7 +3219,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       try {
         const pRows = [
           ...this.sql.exec<{ user_id: string }>(
-            `SELECT ${PARTICIPANT_USER_ID_SQL} AS user_id FROM participants WHERE id = ?`,
+            "SELECT user_id FROM participants WHERE id = ?",
             pid,
           ),
         ];
@@ -3624,8 +3528,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           !DEFAULT_SOUNDBOARD_SOUND_IDS.has(soundId))
       )
         return null;
-      if (!this.ownsSoundboardPlayback(playbackId, callerUserId, soundId))
-        return null;
+      if (!isSoundboardPlaybackOwnedBy(playbackId, callerUserId)) return null;
       let outboundMediaUrl = mediaUrl;
       if (mediaUrl?.startsWith(SOUNDBOARD_UPLOAD_PATH)) {
         if (isDmAdmission) {
@@ -3725,12 +3628,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
     const playbackId = stringField("playback_id", 160);
     const ownsPlayback =
-      !!callerUserId && this.ownsSoundboardPlayback(playbackId, callerUserId);
+      !!callerUserId && isSoundboardPlaybackOwnedBy(playbackId, callerUserId);
     if (isDmAdmission && type === "soundboard.volume-set") return null;
     if (type === "soundboard.stop") {
       if (!ownsPlayback || !playbackId) return null;
       const event = { ...base, server_key: serverKey, playback_id: playbackId };
-      this.deleteLegacySoundboardPlayback(playbackId);
       return event;
     }
     if (type === "soundboard.pause-set") {
@@ -3902,89 +3804,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     } catch {
       return false;
     }
-  }
-
-  private ownsSoundboardPlayback(
-    playbackId: string,
-    callerUserId: string,
-    soundId?: string,
-  ): boolean {
-    if (isSoundboardPlaybackOwnedBy(playbackId, callerUserId)) return true;
-
-    const trackedOwner = this.getLegacySoundboardPlaybackOwner(playbackId);
-    if (trackedOwner) return trackedOwner === callerUserId;
-
-    if (
-      soundId &&
-      isLegacySoundboardPlaybackOwnedBy(playbackId, callerUserId, soundId)
-    ) {
-      const candidateOwners =
-        this.getLegacySoundboardPlaybackOwners(playbackId);
-      return (
-        candidateOwners.size === 1 &&
-        candidateOwners.has(callerUserId) &&
-        this.trackLegacySoundboardPlayback(playbackId, callerUserId)
-      );
-    }
-
-    const candidateOwners = this.getLegacySoundboardPlaybackOwners(playbackId);
-    if (candidateOwners.size !== 1 || !candidateOwners.has(callerUserId))
-      return false;
-    return this.trackLegacySoundboardPlayback(playbackId, callerUserId);
-  }
-
-  private getLegacySoundboardPlaybackOwners(playbackId: string): Set<string> {
-    const candidateOwners = new Set<string>();
-    for (const row of this.sql.exec(
-      `SELECT id, ${PARTICIPANT_USER_ID_SQL} AS user_id FROM participants`,
-    )) {
-      const participantId = row.id as string;
-      const ownerId = (row.user_id as string | null) || participantId;
-      const ownerPrefix = `s-${ownerId}-`;
-      if (playbackId.slice(0, ownerPrefix.length) === ownerPrefix)
-        candidateOwners.add(ownerId);
-    }
-    return candidateOwners;
-  }
-
-  private getLegacySoundboardPlaybackOwner(playbackId: string): string | null {
-    this.pruneLegacySoundboardPlaybackOwners(Date.now());
-    const rows = [
-      ...this.sql.exec(
-        "SELECT owner_id FROM soundboard_legacy_playback_owners WHERE playback_id = ?",
-        playbackId,
-      ),
-    ];
-    return rows.length > 0 ? (rows[0].owner_id as string) : null;
-  }
-
-  private trackLegacySoundboardPlayback(
-    playbackId: string,
-    ownerId: string,
-  ): boolean {
-    const existingOwner = this.getLegacySoundboardPlaybackOwner(playbackId);
-    if (existingOwner && existingOwner !== ownerId) return false;
-    this.sql.exec(
-      "INSERT OR IGNORE INTO soundboard_legacy_playback_owners (playback_id, owner_id, created_at) VALUES (?, ?, ?)",
-      playbackId,
-      ownerId,
-      Date.now(),
-    );
-    return true;
-  }
-
-  private pruneLegacySoundboardPlaybackOwners(now: number): void {
-    this.sql.exec(
-      "DELETE FROM soundboard_legacy_playback_owners WHERE created_at < ?",
-      now - LEGACY_SOUNDBOARD_PLAYBACK_OWNER_TTL_MS,
-    );
-  }
-
-  private deleteLegacySoundboardPlayback(playbackId: string): void {
-    this.sql.exec(
-      "DELETE FROM soundboard_legacy_playback_owners WHERE playback_id = ?",
-      playbackId,
-    );
   }
 
   private sanitizeSoundboardDataUrl(value: unknown): string | null {

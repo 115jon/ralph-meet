@@ -20,7 +20,6 @@ import {
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
   parseGatewayFrame,
-  withLegacyClerkUserId,
   type CallRecord,
   type MainClientPayload,
 } from "../src/lib/gateway-protocol";
@@ -28,7 +27,7 @@ import { clog } from "../src/lib/console-logger";
 import {
   isReconnectWithinGrace,
   shouldKeepResumableSession,
-} from "../src/lib/voice/connection-generation";
+} from "./connection-lifecycle";
 import {
   normalizePresencePlatform,
   type PresencePlatform,
@@ -174,7 +173,6 @@ type VoiceStateDelta = Omit<
 interface WsAttachment {
   admission?: {
     accessMode: "authenticated" | "public-demo";
-    connectionGeneration: string;
     participantId: string;
     subject: string;
   };
@@ -204,8 +202,6 @@ interface WsAttachment {
   outbound_seq?: number;
   subscribed_channels: string[];
   subscribed_servers: string[];
-  /** Legacy field accepted while reading pre-continuity snapshots. */
-  replay_buffer?: ReplayEntry[];
   /** Channel ID the user is currently in voice for (global gateway only) */
   voice_channel_id?: string;
   /** Client can merge profile-less VOICE_CHANNEL_STATE_UPDATE members. */
@@ -404,9 +400,7 @@ export class MeetingRoom extends DurableObject<Env> {
           ws.deserializeAttachment(),
         );
         if (attachment) {
-          const { replay_buffer: _legacyReplay, ...liveAttachment } =
-            attachment;
-          this.sessions.set(ws, liveAttachment);
+          this.sessions.set(ws, attachment);
 
           // Rebuild channel subscriptions from session data
           if (attachment.subscribed_channels) {
@@ -455,9 +449,7 @@ export class MeetingRoom extends DurableObject<Env> {
             ReplayEntry
           >(stored);
           if (!restored) continue;
-          const { replay_buffer: _legacyReplay, ...attachment } =
-            restored.attachment;
-          this.resumableSessions.set(id, attachment);
+          this.resumableSessions.set(id, restored.attachment);
           this.replayBuffers.set(id, this.trimReplayBuffer(restored.replay));
           this.replayPersistWrites.set(
             id,
@@ -478,39 +470,6 @@ export class MeetingRoom extends DurableObject<Env> {
         }
         if (memberMap.size > 0) {
           this.voiceChannelMembers.set(channelId, memberMap);
-        }
-      }
-
-      // One-time migration: move old single-key format to per-channel keys
-      if (vcEntries.size === 0) {
-        const oldStored = (await this.ctx.storage.get(
-          "voiceChannelMembers",
-        )) as Record<string, unknown> | undefined;
-        if (oldStored) {
-          const migrationBatch: Record<string, VoiceChannelMember[]> = {};
-          for (const channelId of Object.keys(oldStored)) {
-            const memberList =
-              normalizeStoredVoiceChannelMembers<VoiceChannelMember>(
-                oldStored[channelId],
-              );
-            const memberMap = new Map<string, VoiceChannelMember>();
-            for (const m of memberList) {
-              memberMap.set(m.user_id, m);
-            }
-            if (memberMap.size > 0) {
-              this.voiceChannelMembers.set(channelId, memberMap);
-              migrationBatch[`vc:members:${channelId}`] = memberList.map(
-                (member) => withLegacyClerkUserId(member),
-              );
-            }
-          }
-          if (Object.keys(migrationBatch).length > 0) {
-            await this.ctx.storage.put(migrationBatch);
-          }
-          await this.ctx.storage.delete("voiceChannelMembers");
-          log.info(
-            `Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`,
-          );
         }
       }
 
@@ -670,7 +629,6 @@ export class MeetingRoom extends DurableObject<Env> {
       server.serializeAttachment({
         admission: {
           accessMode: admission.accessMode,
-          connectionGeneration: admission.connectionGeneration,
           participantId: admission.participantId,
           subject: admission.subject,
         },
@@ -1290,30 +1248,26 @@ export class MeetingRoom extends DurableObject<Env> {
     const admission =
       data.admission ?? this.getSessionAdmission(ws) ?? undefined;
     const nextData = admission ? { ...data, admission } : data;
-    const { replay_buffer: _legacyReplay, ...serializedData } = nextData;
-    // Stored with clerk_user_id too, for a rollback (withLegacyClerkUserId);
-    // the session the room keeps has only user_id.
-    const storedData = withLegacyClerkUserId(serializedData);
     const serializedBytes = new TextEncoder().encode(
-      JSON.stringify(storedData),
+      JSON.stringify(nextData),
     ).byteLength;
-    const compactData: WsAttachment = withLegacyClerkUserId({
-      ...serializedData,
+    const compactData: WsAttachment = {
+      ...nextData,
       stream_preview_url: null,
       avatar_url: null,
       avatar_display: null,
       username: undefined,
       display_name: null,
       tracks: [],
-      subscribed_channels: serializedData.subscribed_channels.slice(-32),
-      subscribed_servers: serializedData.subscribed_servers.slice(-32),
-      name: serializedData.name.slice(0, 256),
-    });
+      subscribed_channels: nextData.subscribed_channels.slice(-32),
+      subscribed_servers: nextData.subscribed_servers.slice(-32),
+      name: nextData.name.slice(0, 256),
+    };
     try {
       ws.serializeAttachment(
         serializedBytes > MAX_WEBSOCKET_ATTACHMENT_BYTES
           ? compactData
-          : storedData,
+          : nextData,
       );
     } catch (error) {
       try {
@@ -1325,7 +1279,7 @@ export class MeetingRoom extends DurableObject<Env> {
         });
       }
     }
-    this.sessions.set(ws, serializedData);
+    this.sessions.set(ws, nextData);
     if (wasEmpty) this.ctx.waitUntil(this.scheduleAlarm());
   }
 
@@ -1475,12 +1429,7 @@ export class MeetingRoom extends DurableObject<Env> {
     for (const [channelId, members] of this.voiceChannelMembers) {
       if (members.size > 0) {
         activeChannelIds.add(channelId);
-        this.markDirty(
-          `vc:members:${channelId}`,
-          Array.from(members.values(), (member) =>
-            withLegacyClerkUserId(member),
-          ),
-        );
+        this.markDirty(`vc:members:${channelId}`, Array.from(members.values()));
       }
     }
   }
@@ -1572,9 +1521,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const spatialAudioStates: Record<string, SpatialAudioState> = {};
     for (const [channelId, members] of this.voiceChannelMembers) {
       if (members.size > 0) {
-        voiceStates[channelId] = Array.from(members.values(), (member) =>
-          withLegacyClerkUserId(member),
-        );
+        voiceStates[channelId] = Array.from(members.values());
         const startedAt = this.voiceChannelStartedAt.get(channelId);
         if (startedAt) {
           voiceStartedAt[channelId] = startedAt;
@@ -1603,7 +1550,7 @@ export class MeetingRoom extends DurableObject<Env> {
           channel_id: channelId,
           members: members
             ? Array.from(members.values()).map((member) => {
-                if (includeProfiles) return withLegacyClerkUserId(member);
+                if (includeProfiles) return member;
                 const {
                   name: _name,
                   username: _username,
@@ -1612,7 +1559,7 @@ export class MeetingRoom extends DurableObject<Env> {
                   avatar_display: _avatarDisplay,
                   ...state
                 } = member;
-                return withLegacyClerkUserId(state);
+                return state;
               })
             : [],
           started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
@@ -1989,13 +1936,8 @@ export class MeetingRoom extends DurableObject<Env> {
     return session;
   }
 
-  // VoiceState and VoiceChannelMember go out through withLegacyClerkUserId,
-  // which adds `clerk_user_id` next to `user_id` for pre-rename clients while
-  // LEGACY_CLERK_USER_ID_COMPAT is on (see user-id.ts in @ralph/protocol), as
-  // do the attachments, snapshots and vc:members lists the room stores.
-  // TODO(user-id-rename phase 2): every withLegacyClerkUserId call goes.
   private buildVoiceState(data: WsAttachment): VoiceState {
-    return withLegacyClerkUserId({
+    return {
       id: data.id,
       user_id: data.user_id,
       name: data.name,
@@ -2015,7 +1957,7 @@ export class MeetingRoom extends DurableObject<Env> {
       suppress: data.suppress,
       status: data.status,
       tracks: [...data.tracks],
-    });
+    };
   }
 
   /**
@@ -2050,7 +1992,7 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private buildVoiceStateDelta(data: WsAttachment): VoiceStateDelta {
-    return withLegacyClerkUserId({
+    return {
       id: data.id,
       user_id: data.user_id,
       platform: data.platform,
@@ -2065,7 +2007,7 @@ export class MeetingRoom extends DurableObject<Env> {
       suppress: data.suppress,
       status: data.status,
       tracks: [...data.tracks],
-    });
+    };
   }
 
   private buildVoiceStateUpdateMessage(
@@ -2412,10 +2354,8 @@ export class MeetingRoom extends DurableObject<Env> {
     );
     for (const [id, attachment] of this.resumableSessions) {
       if (liveSessionIds.has(id)) continue;
-      const { replay_buffer: _legacyReplay, ...snapshotAttachment } =
-        attachment;
       serialized[id] = {
-        attachment: withLegacyClerkUserId(snapshotAttachment),
+        attachment,
         replay: this.replayBuffers.get(id) ?? [],
         persist_writes: this.replayPersistWrites.get(id) ?? 0,
       };
@@ -2931,8 +2871,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    const buffer =
-      this.replayBuffers.get(d.session_id) ?? oldAttachment.replay_buffer ?? [];
+    const buffer = this.replayBuffers.get(d.session_id) ?? [];
     const currentSeq = oldAttachment.outbound_seq ?? 0;
     const firstRetainedSeq = buffer[0]?.seq;
     const cursorIsValid =
@@ -3454,7 +3393,6 @@ export class MeetingRoom extends DurableObject<Env> {
       // can reconnect and resume without a full re-identify. Mark expiry.
       this.resumableSessionExpiry.set(participantId, now);
       const resumableAttachment = { ...session };
-      delete resumableAttachment.replay_buffer;
       this.resumableSessions.set(participantId, resumableAttachment);
       this.replayPersistWrites.set(participantId, 0);
       this.persistResumableSessions();
