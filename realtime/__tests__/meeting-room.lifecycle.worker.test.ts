@@ -16,6 +16,7 @@ import {
   mainGatewayClientRules,
 } from "../../src/lib/gateway-protocol";
 import { MeetingRoom } from "../meeting-room";
+import type { IceServer } from "../meeting-room/turn-credentials";
 
 async function createAdmissionHeaders(
   roomName: string,
@@ -4193,6 +4194,84 @@ describe("MeetingRoom one voice session per user", () => {
     await expect(firstClosed).resolves.toMatchObject({ code: 4010 });
 
     standby.close();
+  });
+
+  it("drops an Identify whose socket closed before it finished", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "closed-mid-identify-user";
+    const room = meetingRoom(roomName);
+    // Hold the first Identify's TURN step open (plain flags: a promise made
+    // here cannot be awaited inside the room).
+    const turn = { calls: 0, released: false };
+    await runInDurableObject(room, (instance) => {
+      const live = instance as unknown as {
+        generateTurnCredentials(): Promise<IceServer[]>;
+      };
+      const generate = live.generateTurnCredentials.bind(live);
+      live.generateTurnCredentials = async () => {
+        turn.calls += 1;
+        if (turn.calls === 1) {
+          while (!turn.released) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+        }
+        return generate();
+      };
+    });
+
+    const stale = await openMeetingSocket(roomName, userId);
+    stale.send(JSON.stringify({ op: 0, d: { name: "Old tab" } }));
+    await vi.waitFor(() => {
+      expect(turn.calls).toBe(1);
+    });
+    const staleClosed = closeOf(stale);
+    stale.close(1000, "tab closed");
+    await staleClosed;
+
+    const current = await openMeetingSocket(roomName, userId);
+    const currentMessages: Array<{ op: number; d: unknown }> = [];
+    current.addEventListener("message", (event) => {
+      currentMessages.push(JSON.parse(event.data as string));
+    });
+    let currentClosed = false;
+    const currentClose = closeOf(current).then((close) => {
+      currentClosed = true;
+      return close;
+    });
+    const currentReady = await identifyMeetingSocket(current, {
+      name: "New tab",
+    });
+
+    turn.released = true;
+    await vi.waitFor(async () => {
+      const identifying = await runInDurableObject(
+        room,
+        (instance) =>
+          (
+            instance as unknown as {
+              identifyingVoiceJoins: Map<string, string>;
+            }
+          ).identifyingVoiceJoins.size,
+      );
+      expect(identifying).toBe(0);
+    });
+    // A replaced socket is closed and never acks.
+    await Promise.race([settled(current), currentClose]);
+
+    expect(currentMessages.filter((message) => message.op === 18)).toEqual([]);
+    expect(currentClosed).toBe(false);
+    const sessionIds = await runInDurableObject(room, (instance) =>
+      [
+        ...(
+          instance as unknown as {
+            sessions: Map<WebSocket, { id: string }>;
+          }
+        ).sessions.values(),
+      ].map((session) => session.id),
+    );
+    expect(sessionIds).toEqual([currentReady.participant_id]);
+
+    current.close();
   });
 
   it("never replaces a different user's session", async () => {
