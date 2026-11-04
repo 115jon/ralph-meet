@@ -2,6 +2,7 @@ import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import type { StoredDevice } from "@/lib/stored-device";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import type { VoiceInputProfile } from "@/lib/voice/input-profiles";
 import {
@@ -91,16 +92,27 @@ function stripDefaultPrefix(label: string): string {
 /**
  * Device lists without the entries a browser reports before permission is
  * granted (empty id), which no picker can select, and without "default",
- * which gets its own labelled option.
+ * which gets its own labelled option. A saved device missing from the list
+ * (hidden until permission, or unplugged) keeps an option under its saved
+ * label, so the picker still shows the choice instead of nothing.
  */
-export function useDeviceOptions() {
+export function useDeviceOptions(saved?: {
+  input?: StoredDevice;
+  output?: StoredDevice;
+}) {
   const { audioInputs, audioOutputs } = useMediaDevices();
+  const savedInputId = saved?.input?.deviceId;
+  const savedInputLabel = saved?.input?.label;
+  const savedOutputId = saved?.output?.deviceId;
+  const savedOutputLabel = saved?.output?.label;
   return useMemo(() => {
     const build = (
       devices: typeof audioInputs,
       fallback: string,
       unnamed: string,
       icon: SelectOption["icon"],
+      savedId: string | undefined,
+      savedLabel: string | undefined,
     ): SelectOption[] => {
       const defaultDevice = devices.find((d) => d.deviceId === "default");
       // Browsers name it "Default - Shure MV7 (USB Audio)": show the device's
@@ -108,7 +120,7 @@ export function useDeviceOptions() {
       const defaultName = defaultDevice?.label
         ? stripDefaultPrefix(defaultDevice.label)
         : "";
-      return [
+      const options: SelectOption[] = [
         {
           value: "default",
           label: defaultName || fallback,
@@ -123,14 +135,39 @@ export function useDeviceOptions() {
             icon,
           })),
       ];
+      if (savedId && !options.some((option) => option.value === savedId)) {
+        options.push({ value: savedId, label: savedLabel || unnamed, icon });
+      }
+      return options;
     };
     return {
       audioInputs,
       audioOutputs,
-      input: build(audioInputs, "Default microphone", "Microphone", "mic"),
-      output: build(audioOutputs, "Default speaker", "Speaker", "headphones"),
+      input: build(
+        audioInputs,
+        "Default microphone",
+        "Microphone",
+        "mic",
+        savedInputId,
+        savedInputLabel,
+      ),
+      output: build(
+        audioOutputs,
+        "Default speaker",
+        "Speaker",
+        "headphones",
+        savedOutputId,
+        savedOutputLabel,
+      ),
     };
-  }, [audioInputs, audioOutputs]);
+  }, [
+    audioInputs,
+    audioOutputs,
+    savedInputId,
+    savedInputLabel,
+    savedOutputId,
+    savedOutputLabel,
+  ]);
 }
 
 const INPUT_PROFILES: Array<{
@@ -281,7 +318,16 @@ export default function VoiceVideoPanel({
     audioProcessing,
     noiseReductionSupported,
   } = useVoiceSettingsForSettings(settingsUserIdProp);
-  const devices = useDeviceOptions();
+  const devices = useDeviceOptions({
+    input: {
+      deviceId: vSettings.inputDeviceId,
+      label: vSettings.inputDeviceLabel,
+    },
+    output: {
+      deviceId: vSettings.outputDeviceId,
+      label: vSettings.outputDeviceLabel,
+    },
+  });
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateVoiceSettings = useVoiceSettingsStore(
     (s) => s.updateVoiceSettings,
@@ -351,6 +397,11 @@ export default function VoiceVideoPanel({
   const selectDevice = (kind: "input" | "output", value: string) => {
     const list = kind === "input" ? devices.audioInputs : devices.audioOutputs;
     const device = list.find((item) => item.deviceId === value);
+    const savedId =
+      kind === "input" ? vSettings.inputDeviceId : vSettings.outputDeviceId;
+    // The saved device's own option: nothing to change, and the list has no
+    // fresh label for it.
+    if (!device && value === savedId) return;
     setDevice(kind, value, settingsUserId ?? undefined, {
       label: device?.label,
       groupId: device?.groupId,

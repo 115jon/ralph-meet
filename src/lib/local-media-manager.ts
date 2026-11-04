@@ -18,9 +18,15 @@ import {
   getMediaDeviceSnapshot,
   type MediaDeviceInfo_Custom,
 } from "@/lib/media-device-snapshot";
+import {
+  resolveStoredDeviceId,
+  type StoredDeviceLookup,
+} from "@/lib/stored-device";
 import { useMediaDeviceStore } from "@/lib/useMediaDevices";
 
 const lmLog = clog("LocalMedia");
+
+type Logger = ReturnType<typeof clog>;
 
 export interface LocalAudioConstraints {
   deviceId?: string;
@@ -198,52 +204,95 @@ function mediaConstraints(
   };
 }
 
-async function resolveStoredDeviceId(
-  kind: MediaDeviceKind,
-  deviceId?: string,
-  deviceLabel?: string,
-  groupId?: string,
-  log = lmLog,
-): Promise<string | undefined> {
-  if (!deviceId || deviceId === "default") return deviceId;
-  if (!navigator.mediaDevices?.enumerateDevices) return deviceId;
+function lookupStoredAudio(
+  audio: LocalAudioConstraints,
+  log: Logger,
+): Promise<StoredDeviceLookup> {
+  return resolveStoredDeviceId(
+    "audioinput",
+    {
+      deviceId: audio.deviceId,
+      label: audio.deviceLabel,
+      groupId: audio.groupId,
+    },
+    log,
+  );
+}
 
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const candidates = devices.filter((d) => d.kind === kind);
-  if (
-    !deviceId.startsWith("native:") &&
-    candidates.some((d) => d.deviceId === deviceId)
-  )
-    return deviceId;
+function lookupStoredVideo(
+  video: LocalVideoConstraints,
+  log: Logger,
+): Promise<StoredDeviceLookup> {
+  return resolveStoredDeviceId(
+    "videoinput",
+    {
+      deviceId: video.deviceId,
+      label: video.deviceLabel,
+      groupId: video.groupId,
+    },
+    log,
+  );
+}
 
-  const byGroup = groupId
-    ? candidates.find((d) => d.groupId && d.groupId === groupId)
-    : undefined;
-  if (byGroup) {
-    log.info(
-      `Resolved stale ${kind} deviceId by groupId: ${byGroup.label || "unlabeled device"}`,
+const isConcreteDeviceId = (deviceId: string | undefined) =>
+  !!deviceId && deviceId !== "default";
+
+/**
+ * A saved id was tried blind because the device list was hidden, and the
+ * capture fell back to the system default. That capture granted access, so
+ * the list is readable now: look the saved devices up again by groupId and
+ * label and reopen them. Keeps the fallback stream if nothing better is found.
+ * Ids already verified before the fallback are passed in `audioId`/`videoId`.
+ */
+async function reopenStoredDevices(
+  fallback: MediaStream,
+  {
+    audio,
+    video,
+    audioId,
+    videoId,
+    isStale,
+    log,
+  }: {
+    audio: LocalAudioConstraints;
+    video: LocalVideoConstraints | null;
+    audioId: string | undefined;
+    videoId: string | undefined;
+    isStale: () => boolean;
+    log: Logger;
+  },
+): Promise<MediaStream> {
+  const [audioRetry, videoRetry] = await Promise.all([
+    audioId === undefined ? lookupStoredAudio(audio, log) : null,
+    video && videoId === undefined ? lookupStoredVideo(video, log) : null,
+  ]);
+  if (isStale()) return fallback;
+  const nextAudioId = audioId ?? audioRetry?.deviceId;
+  const nextVideoId = videoId ?? videoRetry?.deviceId;
+  const exactAudio = isConcreteDeviceId(nextAudioId);
+  const exactVideo = !!video && isConcreteDeviceId(nextVideoId);
+  if (!exactAudio && !exactVideo) return fallback;
+
+  try {
+    const reopened = await navigator.mediaDevices.getUserMedia(
+      mediaConstraints(
+        { ...audio, deviceId: nextAudioId },
+        video ? { ...video, deviceId: nextVideoId } : null,
+        exactAudio,
+        exactVideo,
+      ),
     );
-    return byGroup.deviceId;
+    if (isStale()) {
+      stopStreamTracks(reopened);
+      return fallback;
+    }
+    stopStreamTracks(fallback);
+    log.info("Reopened the saved device after the device list unlocked");
+    return reopened;
+  } catch (err: any) {
+    log.warn(`Saved device still unavailable (${err?.name ?? "unknown"})`);
+    return fallback;
   }
-
-  const normalizedLabel = deviceLabel?.trim().toLowerCase();
-  const byLabel = normalizedLabel
-    ? candidates.find((d) => d.label?.trim().toLowerCase() === normalizedLabel)
-    : undefined;
-  if (byLabel) {
-    log.info(`Resolved stale ${kind} deviceId by label: ${byLabel.label}`);
-    return byLabel.deviceId;
-  }
-
-  if (deviceId.startsWith("native:")) {
-    log.warn(
-      `Native ${kind} endpoint is not exposed by CEF; falling back to system default`,
-    );
-    return "default";
-  }
-
-  log.warn(`Stored ${kind} deviceId is gone; falling back to system default`);
-  return "default";
 }
 
 // ── Core API ──────────────────────────────────────────────────────────────
@@ -272,21 +321,9 @@ export async function acquireLocalStream(
   // If we have an active stream that matches, return it immediately
   if (state.activeStream) {
     const activeLookupOrder = state.acquisitionOrder;
-    const resolvedAudioId = await resolveStoredDeviceId(
-      "audioinput",
-      audio.deviceId,
-      audio.deviceLabel,
-      audio.groupId,
-      log,
-    );
+    const resolvedAudioId = (await lookupStoredAudio(audio, log)).deviceId;
     const resolvedVideoId = videoConstraint
-      ? await resolveStoredDeviceId(
-          "videoinput",
-          videoConstraint.deviceId,
-          videoConstraint.deviceLabel,
-          videoConstraint.groupId,
-          log,
-        )
+      ? (await lookupStoredVideo(videoConstraint, log)).deviceId
       : undefined;
     throwIfAcquisitionStale(state, generation, activeLookupOrder);
     const resolvedAudio = { ...audio, deviceId: resolvedAudioId };
@@ -359,23 +396,13 @@ export async function acquireLocalStream(
 
   const requestOrder = ++state.acquisitionOrder;
 
-  const resolvedAudioId = await resolveStoredDeviceId(
-    "audioinput",
-    audio.deviceId,
-    audio.deviceLabel,
-    audio.groupId,
-    log,
-  );
+  const audioLookup = await lookupStoredAudio(audio, log);
   throwIfAcquisitionStale(state, generation, requestOrder);
-  const resolvedVideoId = videoConstraint
-    ? await resolveStoredDeviceId(
-        "videoinput",
-        videoConstraint.deviceId,
-        videoConstraint.deviceLabel,
-        videoConstraint.groupId,
-        log,
-      )
-    : undefined;
+  const videoLookup = videoConstraint
+    ? await lookupStoredVideo(videoConstraint, log)
+    : null;
+  const resolvedAudioId = audioLookup.deviceId;
+  const resolvedVideoId = videoLookup?.deviceId;
   throwIfAcquisitionStale(state, generation, requestOrder);
   const resolvedAudio = { ...audio, deviceId: resolvedAudioId };
   const resolvedVideo = videoConstraint
@@ -424,6 +451,27 @@ export async function acquireLocalStream(
       ) {
         stopStreamTracks(stream);
         throwIfAcquisitionStale(state, generation, requestOrder);
+      }
+      if (audioLookup.unverified || videoLookup?.unverified) {
+        stream = await reopenStoredDevices(stream, {
+          audio,
+          video: videoConstraint,
+          audioId: audioLookup.unverified ? undefined : resolvedAudio.deviceId,
+          videoId: videoLookup?.unverified
+            ? undefined
+            : resolvedVideo?.deviceId,
+          isStale: () =>
+            generation !== state.acquisitionGeneration ||
+            requestOrder !== state.acquisitionOrder,
+          log,
+        });
+        if (
+          generation !== state.acquisitionGeneration ||
+          requestOrder !== state.acquisitionOrder
+        ) {
+          stopStreamTracks(stream);
+          throwIfAcquisitionStale(state, generation, requestOrder);
+        }
       }
     } else if (err.name === "NotAllowedError") {
       // Permission denied — surface, don't swallow
@@ -476,14 +524,8 @@ export function startEarlyMic(
   lmLog.debug("Starting early mic acquisition...");
   const generation = state.acquisitionGeneration;
   const requestOrder = ++state.acquisitionOrder;
-  const promise = resolveStoredDeviceId(
-    "audioinput",
-    audio.deviceId,
-    audio.deviceLabel,
-    audio.groupId,
-    lmLog,
-  )
-    .then((resolvedId) => {
+  const promise = lookupStoredAudio(audio, lmLog)
+    .then(({ deviceId: resolvedId }) => {
       throwIfAcquisitionStale(state, generation, requestOrder);
       return navigator.mediaDevices.getUserMedia(
         mediaConstraints(

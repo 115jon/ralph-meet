@@ -15,6 +15,7 @@ import {
   startEarlyMic,
   type LocalMediaOwner,
 } from "@/lib/local-media-manager";
+import { refreshedDeviceId, resolveStoredDeviceId } from "@/lib/stored-device";
 import {
   getCapturePolicy,
   isDesktop,
@@ -1115,6 +1116,17 @@ export function useVoiceChannel({
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
   const activeCameraBackgroundKeyRef = useRef("none");
   const activeCameraQualityRef = useRef<string | null>(null);
+  // The saved device id each live capture track was opened for. A track that
+  // fell back to another device (the saved one is gone) still satisfies the
+  // request it was opened for, so unrelated syncs don't reopen it.
+  const audioCaptureRequestRef = useRef<{
+    track: MediaStreamTrack;
+    deviceId: string;
+  } | null>(null);
+  const videoCaptureRequestRef = useRef<{
+    track: MediaStreamTrack;
+    deviceId: string;
+  } | null>(null);
   const localMediaGenerationRef = useRef(0);
   const initialMediaSyncRef = useRef<{
     session: SFUClient | null;
@@ -1213,6 +1225,8 @@ export function useVoiceChannel({
     streamHighFidelity,
     outputVolume,
     outputDeviceId,
+    outputDeviceLabel,
+    outputDeviceGroupId,
     spatialAudioEnabled,
     inputProfile,
     alwaysShowStreamPreview,
@@ -1242,6 +1256,8 @@ export function useVoiceChannel({
         inputProfile: st.inputProfile,
         outputVolume: st.outputVolume,
         outputDeviceId: st.outputDeviceId,
+        outputDeviceLabel: st.outputDeviceLabel,
+        outputDeviceGroupId: st.outputDeviceGroupId,
         alwaysShowStreamPreview: !!st.alwaysShowStreamPreview,
       };
     }),
@@ -3180,7 +3196,9 @@ export function useVoiceChannel({
               const deviceMatches =
                 !inputDeviceId ||
                 inputDeviceId === "default" ||
-                s.deviceId === inputDeviceId;
+                s.deviceId === inputDeviceId ||
+                (audioCaptureRequestRef.current?.track === currentAudioTrack &&
+                  audioCaptureRequestRef.current.deviceId === inputDeviceId);
               return (
                 deviceMatches &&
                 s.noiseSuppression === appliedNS &&
@@ -3198,7 +3216,9 @@ export function useVoiceChannel({
             !isCameraActive ||
             !videoDeviceId ||
             videoDeviceId === "default" ||
-            currentVideoId === videoDeviceId;
+            currentVideoId === videoDeviceId ||
+            (videoCaptureRequestRef.current?.track === currentVideoTrack &&
+              videoCaptureRequestRef.current.deviceId === videoDeviceId);
           const videoMatch =
             !isCameraActive ||
             (!!currentVideoTrack &&
@@ -3607,18 +3627,33 @@ export function useVoiceChannel({
 
         if (!isCurrent()) return;
 
-        // Reflect the actual device IDs in the settings store so the UI
-        // shows what hardware is genuinely in use (not just "Default").
-        // The early-exit guard above prevents this from causing a redundant
-        // getUserMedia call when the effect re-runs with the resolved ID.
+        // Save a refreshed id when the saved device came back under a new
+        // one. A fallback capture (device unplugged, or the list was still
+        // hidden) leaves the saved choice alone. The early-exit guard above
+        // prevents a redundant getUserMedia when the effect re-runs.
         const actualAudioTrack = newStream.getAudioTracks()[0];
+        audioCaptureRequestRef.current = actualAudioTrack
+          ? { track: actualAudioTrack, deviceId: inputDeviceId }
+          : null;
         if (actualAudioTrack) {
-          const actualAudioId = actualAudioTrack.getSettings().deviceId;
-          if (actualAudioId && actualAudioId !== inputDeviceId) {
+          const actualAudio = {
+            deviceId: actualAudioTrack.getSettings().deviceId,
+            label: actualAudioTrack.label,
+            groupId: actualAudioTrack.getSettings().groupId,
+          };
+          const refreshedAudioId = refreshedDeviceId(
+            {
+              deviceId: inputDeviceId,
+              label: inputDeviceLabel,
+              groupId: inputDeviceGroupId,
+            },
+            actualAudio,
+          );
+          if (refreshedAudioId) {
             if (!isCurrent()) return;
-            setDevice("input", actualAudioId, undefined, {
-              label: actualAudioTrack.label,
-              groupId: actualAudioTrack.getSettings().groupId,
+            setDevice("input", refreshedAudioId, undefined, {
+              label: actualAudio.label,
+              groupId: actualAudio.groupId,
             });
           }
         }
@@ -3627,13 +3662,28 @@ export function useVoiceChannel({
         activeCameraQualityRef.current = actualVideoTrack
           ? cameraQuality
           : null;
+        videoCaptureRequestRef.current = actualVideoTrack
+          ? { track: actualVideoTrack, deviceId: videoDeviceId }
+          : null;
         if (actualVideoTrack) {
-          const actualVideoId = actualVideoTrack.getSettings().deviceId;
-          if (actualVideoId && actualVideoId !== videoDeviceId) {
+          const actualVideo = {
+            deviceId: actualVideoTrack.getSettings().deviceId,
+            label: actualVideoTrack.label,
+            groupId: actualVideoTrack.getSettings().groupId,
+          };
+          const refreshedVideoId = refreshedDeviceId(
+            {
+              deviceId: videoDeviceId,
+              label: videoDeviceLabel,
+              groupId: videoDeviceGroupId,
+            },
+            actualVideo,
+          );
+          if (refreshedVideoId) {
             if (!isCurrent()) return;
-            setDevice("video", actualVideoId, undefined, {
-              label: actualVideoTrack.label,
-              groupId: actualVideoTrack.getSettings().groupId,
+            setDevice("video", refreshedVideoId, undefined, {
+              label: actualVideo.label,
+              groupId: actualVideo.groupId,
             });
           }
         }
@@ -3762,10 +3812,30 @@ export function useVoiceChannel({
   }, [outputVolume, joined, setMasterVolume]);
 
   // ── Output device sync ─────────────────────────────────────────────────
+  // The saved speaker id can go stale like a microphone's, so look it up by
+  // groupId/label before handing it to setSinkId.
   useEffect(() => {
     if (!joined) return;
-    setOutputDevice(outputDeviceId);
-  }, [outputDeviceId, joined, setOutputDevice]);
+    let cancelled = false;
+    void resolveStoredDeviceId("audiooutput", {
+      deviceId: outputDeviceId,
+      label: outputDeviceLabel,
+      groupId: outputDeviceGroupId,
+    })
+      .catch(() => ({ deviceId: outputDeviceId }))
+      .then(({ deviceId }) => {
+        if (!cancelled) setOutputDevice(deviceId ?? "default");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    outputDeviceId,
+    outputDeviceLabel,
+    outputDeviceGroupId,
+    joined,
+    setOutputDevice,
+  ]);
 
   const previousVoiceJoinStateRef = useRef(joined);
   useEffect(() => {
