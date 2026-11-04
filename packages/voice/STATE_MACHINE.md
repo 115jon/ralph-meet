@@ -56,8 +56,11 @@ particular a refused `start` creates nothing and claims nothing).
 | `leaving`      | `standby`²   | -               | `connecting`² | -         | -               | -                   | -                         | -           | `idle`³ |
 
 1. A second `Ready` while joined (the room socket could not resume and
-   identified again) re-syncs the roster. It is not a new join: no
-   "connected" sound, no new presence join.
+   identified again) re-syncs the roster. The phase stays `joined` and no
+   "connected" sound plays. The client still re-announces itself as on a
+   first `Ready`: it re-sends the presence join (`VoiceChannelJoin`, op 33,
+   on the chat gateway) and the automatic "join" soundboard trigger, because
+   the server may have dropped both with the old room session.
 2. A leave's send window does not block a new session. The leaving client
    keeps draining on its own timer and still reports `left` when its plan
    says so; the new session is unaffected.
