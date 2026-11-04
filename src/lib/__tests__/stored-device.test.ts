@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { refreshedDeviceId, resolveStoredDeviceId } from "../stored-device";
+import {
+  matchStoredDevice,
+  refreshedDeviceId,
+  resolveStoredDeviceId,
+} from "../stored-device";
 
 const quietLog = { info: vi.fn(), warn: vi.fn() };
 
@@ -93,6 +97,39 @@ describe("resolveStoredDeviceId", () => {
     ).resolves.toEqual({ deviceId: "new-headphones", unverified: false });
   });
 
+  it("prefers the label over a sibling endpoint that shares the groupId", async () => {
+    // Windows lists a sound card's inputs under one groupId.
+    stubDevices([
+      device("audioinput", "default", "Default - Microphone (Realtek)", "g-rt"),
+      device("audioinput", "new-mic", "Microphone (Realtek)", "g-rt"),
+      device("audioinput", "new-line", "Line In (Realtek)", "g-rt"),
+      device("audioinput", "new-mix", "Stereo Mix (Realtek)", "g-rt"),
+    ]);
+
+    await expect(
+      resolveStoredDeviceId(
+        "audioinput",
+        { deviceId: "old-line", label: "Line In (Realtek)", groupId: "g-rt" },
+        quietLog,
+      ),
+    ).resolves.toEqual({ deviceId: "new-line", unverified: false });
+  });
+
+  it("does not guess between sibling endpoints when no label matches", async () => {
+    stubDevices([
+      device("audioinput", "new-mic", "Microphone (Realtek)", "g-rt"),
+      device("audioinput", "new-mix", "Stereo Mix (Realtek)", "g-rt"),
+    ]);
+
+    await expect(
+      resolveStoredDeviceId(
+        "audioinput",
+        { deviceId: "old-line", label: "Line In (Realtek)", groupId: "g-rt" },
+        quietLog,
+      ),
+    ).resolves.toEqual({ deviceId: "default", unverified: false });
+  });
+
   it("falls back to the system default when the saved device is gone", async () => {
     stubDevices([device("audioinput", "other-mic", "Webcam Mic", "g-cam")]);
 
@@ -147,6 +184,15 @@ describe("refreshedDeviceId", () => {
     ).toBeNull();
   });
 
+  it("does not save a sibling endpoint that shares the groupId", () => {
+    expect(
+      refreshedDeviceId(
+        { deviceId: "old-line", label: "Line In (Realtek)", groupId: "g-rt" },
+        { deviceId: "mic", label: "Microphone (Realtek)", groupId: "g-rt" },
+      ),
+    ).toBeNull();
+  });
+
   it("keeps System default following the OS", () => {
     expect(
       refreshedDeviceId(
@@ -159,6 +205,37 @@ describe("refreshedDeviceId", () => {
   it("does nothing when the id already matches", () => {
     expect(
       refreshedDeviceId(savedShure, { ...savedShure, deviceId: "old-shure" }),
+    ).toBeNull();
+  });
+});
+
+describe("matchStoredDevice", () => {
+  const list = [
+    device("audioinput", "default", "Default - Shure MV7", "g-shure"),
+    device("audioinput", "shure", "Shure MV7", "g-shure"),
+    device("audioinput", "webcam", "Webcam Mic", "g-cam"),
+  ];
+
+  it("matches by id, then label, then a unique groupId", () => {
+    expect(
+      matchStoredDevice(list, { deviceId: "shure" })?.device.deviceId,
+    ).toBe("shure");
+    expect(
+      matchStoredDevice(list, { deviceId: "old", label: "webcam mic" }),
+    ).toMatchObject({ device: { deviceId: "webcam" }, by: "label" });
+    expect(
+      matchStoredDevice(list, { deviceId: "old", groupId: "g-shure" }),
+    ).toMatchObject({ device: { deviceId: "shure" }, by: "groupId" });
+  });
+
+  it("returns null for System default and for devices not listed", () => {
+    expect(matchStoredDevice(list, { deviceId: "default" })).toBeNull();
+    expect(
+      matchStoredDevice(list, {
+        deviceId: "gone",
+        label: "Yeti",
+        groupId: "g",
+      }),
     ).toBeNull();
   });
 });

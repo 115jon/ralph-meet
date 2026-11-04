@@ -4,7 +4,7 @@
 // Settings keep the device id the user picked plus its label and groupId.
 // Device ids can change (another browser profile, cleared site data, a driver
 // reinstall), so a saved id that no longer matches is looked up again by
-// groupId, then by label.
+// label, then by groupId when only one endpoint has it.
 //
 // Before the page has media permission, enumerateDevices() hides ids and
 // labels. Desktop CEF grants capture per request and records nothing, so
@@ -45,6 +45,15 @@ function normalizedLabel(label: string | undefined) {
 }
 
 /**
+ * Windows decorates endpoint names ("Microphone (Shure MV7)"), so one label
+ * holding the other counts as the same device. Siblings on one card, like
+ * "Line In (Realtek Audio)" and "Microphone (Realtek Audio)", do not overlap.
+ */
+function labelsOverlap(a: string, b: string) {
+  return !!a && !!b && (a.includes(b) || b.includes(a));
+}
+
+/**
  * True when the browser lists devices of a kind but hides their ids and
  * labels until permission is granted. An empty list means none exist.
  */
@@ -55,12 +64,68 @@ export function isHiddenDeviceList(devices: readonly MediaDeviceInfo[]) {
   );
 }
 
+interface DeviceListEntry {
+  deviceId: string;
+  groupId?: string;
+  label: string;
+}
+
+export interface StoredDeviceMatch<T extends DeviceListEntry> {
+  device: T;
+  by: "id" | "label" | "groupId";
+}
+
+/**
+ * Finds the saved device in a readable device list: by id, then by label,
+ * then by groupId. On Windows a sound card's Microphone, Line In and Stereo
+ * Mix share one groupId, so a group match is accepted only when one physical
+ * endpoint has it, or one endpoint in it has an overlapping label. Returns
+ * null when the device is not listed.
+ */
+export function matchStoredDevice<T extends DeviceListEntry>(
+  candidates: readonly T[],
+  stored: StoredDevice,
+): StoredDeviceMatch<T> | null {
+  const { deviceId, label, groupId } = stored;
+  if (!deviceId || deviceId === "default") return null;
+  if (!deviceId.startsWith("native:")) {
+    const exact = candidates.find((d) => d.deviceId === deviceId);
+    if (exact) return { device: exact, by: "id" };
+  }
+
+  const physical = candidates.filter(
+    (d) => d.deviceId && !isVirtualDeviceId(d.deviceId),
+  );
+  const wantedLabel = normalizedLabel(label);
+  const byLabel = wantedLabel
+    ? physical.filter((d) => normalizedLabel(d.label) === wantedLabel)
+    : [];
+  if (byLabel.length > 0) {
+    // Two endpoints with one name: prefer the one in the saved group.
+    const device =
+      (groupId && byLabel.find((d) => d.groupId === groupId)) || byLabel[0];
+    return { device, by: "label" };
+  }
+
+  if (groupId) {
+    const byGroup = physical.filter((d) => d.groupId === groupId);
+    if (byGroup.length === 1) return { device: byGroup[0], by: "groupId" };
+    const overlapping = byGroup.filter((d) =>
+      labelsOverlap(normalizedLabel(d.label), wantedLabel),
+    );
+    if (overlapping.length === 1) {
+      return { device: overlapping[0], by: "groupId" };
+    }
+  }
+  return null;
+}
+
 export async function resolveStoredDeviceId(
   kind: MediaDeviceKind,
   stored: StoredDevice,
   log: Logger = deviceLog,
 ): Promise<StoredDeviceLookup> {
-  const { deviceId, label, groupId } = stored;
+  const { deviceId } = stored;
   if (!deviceId || deviceId === "default") {
     return { deviceId, unverified: false };
   }
@@ -77,31 +142,14 @@ export async function resolveStoredDeviceId(
     return { deviceId, unverified: true };
   }
 
-  if (
-    !deviceId.startsWith("native:") &&
-    candidates.some((d) => d.deviceId === deviceId)
-  ) {
-    return { deviceId, unverified: false };
-  }
-
-  const physical = candidates.filter((d) => !isVirtualDeviceId(d.deviceId));
-  const byGroup = groupId
-    ? physical.find((d) => d.groupId && d.groupId === groupId)
-    : undefined;
-  if (byGroup) {
-    log.info(
-      `Resolved stale ${kind} deviceId by groupId: ${byGroup.label || "unlabeled device"}`,
-    );
-    return { deviceId: byGroup.deviceId, unverified: false };
-  }
-
-  const wantedLabel = normalizedLabel(label);
-  const byLabel = wantedLabel
-    ? physical.find((d) => normalizedLabel(d.label) === wantedLabel)
-    : undefined;
-  if (byLabel) {
-    log.info(`Resolved stale ${kind} deviceId by label: ${byLabel.label}`);
-    return { deviceId: byLabel.deviceId, unverified: false };
+  const match = matchStoredDevice(candidates, stored);
+  if (match) {
+    if (match.by !== "id") {
+      log.info(
+        `Resolved stale ${kind} deviceId by ${match.by}: ${match.device.label || "unlabeled device"}`,
+      );
+    }
+    return { deviceId: match.device.deviceId, unverified: false };
   }
 
   if (deviceId.startsWith("native:")) {
@@ -133,9 +181,15 @@ export function refreshedDeviceId(
   if (!actualId || actualId === storedId || isVirtualDeviceId(actualId)) {
     return null;
   }
+  const storedLabel = normalizedLabel(stored.label);
+  const actualLabel = normalizedLabel(actual.label);
+  if (storedLabel && storedLabel === actualLabel) return actualId;
+  // A shared groupId alone is not enough: sibling inputs of one sound card
+  // share it. With both labels known they must overlap as well.
   const sameGroup = !!stored.groupId && stored.groupId === actual.groupId;
-  const wantedLabel = normalizedLabel(stored.label);
-  const sameLabel =
-    !!wantedLabel && wantedLabel === normalizedLabel(actual.label);
-  return sameGroup || sameLabel ? actualId : null;
+  if (!sameGroup) return null;
+  if (storedLabel && actualLabel) {
+    return labelsOverlap(storedLabel, actualLabel) ? actualId : null;
+  }
+  return actualId;
 }
