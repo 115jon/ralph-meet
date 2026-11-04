@@ -104,6 +104,13 @@ export enum GatewayOp {
   RefreshVoiceCredentials = 40,
   /** S→C: Media credentials before full room/profile Ready */
   MediaReady = 41,
+  /**
+   * S→C room: a moderator moved this voice session to another channel. The
+   * room then closes the socket with SessionReplaced; a client that knows
+   * this op switches to `channel_id` instead of stopping. Old clients ignore
+   * it and stop as on a device takeover.
+   */
+  VoiceMove = 42,
 
   // ── Voice Gateway specific (100+) ─────────────────────────────────
 

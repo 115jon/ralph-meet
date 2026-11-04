@@ -384,6 +384,25 @@ export function describeAudit(
     case "MEMBER_UNBAN":
     case "MEMBER_BAN_REMOVE":
       return { verb: "unbanned", target: target("member"), details: [] };
+    case "MEMBER_MOVE": {
+      const channelName = (id: unknown) => {
+        const channel =
+          typeof id === "string" ? lookup.channels.get(id) : undefined;
+        return channel ? channelLabel(channel.name, channel.voice) : null;
+      };
+      const from = channelName(changes.from_channel_id);
+      const to = channelName(changes.to_channel_id);
+      return {
+        verb: "moved",
+        target: target("member"),
+        details:
+          from && to
+            ? [{ type: "text", text: `From ${from} to ${to}` }]
+            : to
+              ? [{ type: "text", text: `To ${to}` }]
+              : [],
+      };
+    }
     case "MEMBER_ROLE_UPDATE": {
       const ids = split(changes.added_roles ?? changes.roles).after;
       const names = Array.isArray(ids)

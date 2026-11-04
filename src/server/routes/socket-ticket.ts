@@ -13,6 +13,7 @@ import { resolveChannelAccess } from "@/lib/channel-access";
 import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 import { looseStruct } from "@/lib/schema";
 import { getOrCreateDemoSession } from "@/lib/voice/demo-session";
+import { verifyVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
 import { isPublicDemoRoomSlug } from "@/lib/voice/realtime-policy";
 import { validateBody } from "@/lib/validate-body";
 import {
@@ -42,6 +43,8 @@ const OPTIONS = async ({ request }: { request: Request }) =>
 export const socketTicketRequestBodySchema = looseStruct({
   audience: Schema.optional(Schema.Unknown),
   channelId: Schema.optional(Schema.Unknown),
+  /** A voice move grant for channelId: stands in for CONNECT there. */
+  moveGrant: Schema.optional(Schema.Unknown),
   roomSlug: Schema.optional(Schema.Unknown),
   serverId: Schema.optional(Schema.Unknown),
 });
@@ -98,7 +101,12 @@ const issueTicket = Effect.fn("voice.socket_ticket")(function* (
   > =
     audience !== "global" && !hasChannelId
       ? authorizePublicDemoTicket(request, config.ticketSecret, body, audience)
-      : authorizeAuthenticatedTicket(request, body, audience);
+      : authorizeAuthenticatedTicket(
+          request,
+          body,
+          audience,
+          config.ticketSecret,
+        );
   const admission = yield* timing.measure("admission", admitting);
   if (admission instanceof Response) return admission;
 
@@ -237,6 +245,7 @@ function authorizeAuthenticatedTicket(
   request: Request,
   body: SocketTicketRequestBody,
   audience: SocketTicketAudience,
+  ticketSecret: string,
 ): Effect.Effect<
   TicketAdmission | Response,
   Unauthenticated | AuthUnavailable,
@@ -331,10 +340,18 @@ function authorizeAuthenticatedTicket(
     }
 
     const permissions = channelAccess.permissions;
-    if (
-      permissions === null ||
-      !hasPermission(permissions, PERMISSIONS.CONNECT)
-    ) {
+    const canConnect =
+      (permissions !== null &&
+        hasPermission(permissions, PERMISSIONS.CONNECT)) ||
+      (body.moveGrant !== undefined &&
+        (yield* Effect.promise(() =>
+          verifyVoiceMoveGrant(body.moveGrant, ticketSecret, {
+            subject: userId,
+            channelId,
+            serverId,
+          }),
+        )));
+    if (!canConnect) {
       return apiError(
         "You do not have permission to connect to this voice channel",
         403,

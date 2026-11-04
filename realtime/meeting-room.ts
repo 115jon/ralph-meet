@@ -44,6 +44,14 @@ import {
   resolveChannelAccessForUsers,
 } from "../src/lib/channel-access";
 import { PERMISSIONS } from "../src/lib/permissions";
+import { verifyVoiceMoveGrant } from "../src/lib/voice/voice-move-grant";
+import {
+  parseVoiceMoveOutRequest,
+  parseVoiceMoveRequest,
+  VOICE_MOVE_OUT_PATH,
+  VOICE_MOVE_PATH,
+  type VoiceMoveNotice,
+} from "./voice-move";
 import {
   consumeRealtimeTicketNonce,
   getRealtimeAdmissionFromHeaders,
@@ -118,6 +126,8 @@ interface Env {
   VOICE_ROOM?: DurableObjectNamespace;
   /** Service-account JSON for FCM; unset = no call ring pushes. */
   FCM_SERVICE_ACCOUNT?: string;
+  /** Verifies voice move grants on VoiceChannelJoin (the ticket secret). */
+  REALTIME_TICKET_SECRET?: string;
 }
 
 // Opcodes, codes and payload schemas: src/lib/gateway-protocol.
@@ -295,6 +305,8 @@ const REPLACED_VOICE_SESSION_TTL_MS = 60 * 60 * 1000;
 const REPLACED_VOICE_SESSIONS_STORAGE_KEY = "replacedVoiceSessions";
 /** Close reason (with CloseCode.SessionReplaced) when voice moves device. */
 const VOICE_SESSION_REPLACED_REASON = "Voice moved to another device";
+/** Close reason (with CloseCode.SessionReplaced) when a moderator moves voice. */
+const VOICE_SESSION_MOVED_REASON = "Moved to another voice channel";
 const MAX_GATEWAY_FRAME_BYTES = 1_000_000;
 const MAX_REPLAY_BUFFER_BYTES = 256_000;
 const MAX_REPLAY_PERSIST_WRITES = 32;
@@ -847,6 +859,36 @@ export class MeetingRoom extends DurableObject<Env> {
       return Response.json(result === "ok" ? { ok: true } : { error: result }, {
         status: REST_ANSWER_STATUS[result],
       });
+    }
+
+    // POST /api/voice/move (src/server/routes/voice-move.ts), on the source
+    // channel's room: hand the user's voice session(s) the move and end them
+    // here. The worker has checked the mover's permissions.
+    if (url.pathname === VOICE_MOVE_PATH && request.method === "POST") {
+      const move = parseVoiceMoveRequest(
+        await request.json().catch(() => null),
+      );
+      if (!move || !this.grantsVoiceJoins) {
+        return Response.json({ error: "invalid" }, { status: 400 });
+      }
+      const moved = this.moveVoiceSessions(move.userId, move.notice);
+      this.flushDirtyStorage();
+      return Response.json({ moved });
+    }
+
+    // The same move, on the global gateway: take the user off the source
+    // channel's roster even if their client never switches (offline, old).
+    if (url.pathname === VOICE_MOVE_OUT_PATH && request.method === "POST") {
+      const move = parseVoiceMoveOutRequest(
+        await request.json().catch(() => null),
+      );
+      if (!move) return Response.json({ error: "invalid" }, { status: 400 });
+      const cleared = this.clearVoiceChannelForUser(
+        move.userId,
+        move.channelId,
+      );
+      this.flushDirtyStorage();
+      return Response.json({ cleared });
     }
 
     if (url.pathname === "/disconnect-session" && request.method === "POST") {
@@ -2340,6 +2382,109 @@ export class MeetingRoom extends DurableObject<Env> {
       });
     }
     if (remembered) this.persistReplacedVoiceSessions();
+  }
+
+  // ── Moderator moves ────────────────────────────────────────────────────
+
+  /**
+   * Ends `userId`'s voice session(s) in this room for a moderator's move.
+   * Each live one hears VoiceMove (where to go, and a grant to get in), then
+   * is closed with SessionReplaced: a current client switches channels, an
+   * old one stops as it does on a device takeover, and none reconnects here.
+   * Held sessions (a client offline or mid-reconnect) end too, and resuming
+   * one answers SessionReplaced. The VoiceRoom drops their media on the
+   * replaced revocation. Standby sessions are not in voice and stay.
+   * Returns how many sessions ended; 0 means the user is not in voice here.
+   */
+  private moveVoiceSessions(userId: string, notice: VoiceMoveNotice): number {
+    let moved = 0;
+    for (const [ws, session] of [...this.sessions]) {
+      if (session.user_id !== userId || session.standby) continue;
+      meetingLog.info(
+        `Voice session ${session.id} moved to channel ${notice.channel_id}`,
+      );
+      this.rememberReplacedVoiceSession(session.id);
+      moved += 1;
+      this.sendTo(ws, { op: Op.VoiceMove, d: notice });
+      // handleLeave does all its work before it returns.
+      void this.handleLeave(ws, true, false, true);
+      try {
+        ws.close(CloseCode.SessionReplaced, VOICE_SESSION_MOVED_REASON);
+      } catch {
+        /* already closed */
+      }
+    }
+    for (const [id, resumable] of [...this.resumableSessions]) {
+      if (resumable.user_id !== userId || resumable.standby) continue;
+      meetingLog.info(`Held voice session ${id} moved to ${notice.channel_id}`);
+      this.rememberReplacedVoiceSession(id);
+      moved += 1;
+      if (resumable.voice_channel_id) this.removeFromVoiceChannel(resumable);
+      this.revokeVoiceJoin(resumable, true);
+      this.resumableSessions.delete(id);
+      this.replayBuffers.delete(id);
+      this.replayPersistWrites.delete(id);
+      this.resumableSessionExpiry.delete(id);
+      this.persistResumableSessions();
+      this.persistResumableSessionExpiry();
+      this.broadcast({
+        op: Op.VoiceStateUpdate,
+        d: {
+          participant: this.buildVoiceState(resumable),
+          action: "leave",
+        },
+      });
+    }
+    if (moved > 0) this.persistReplacedVoiceSessions();
+    return moved;
+  }
+
+  /**
+   * Global gateway: takes `userId` off `channelId`'s roster on every session
+   * (live or held) that is in it. A session already in another channel (the
+   * client switched first) is left alone.
+   */
+  private clearVoiceChannelForUser(userId: string, channelId: string): number {
+    let cleared = 0;
+    for (const [ws, session] of this.sessions) {
+      if (session.user_id !== userId || session.voice_channel_id !== channelId)
+        continue;
+      this.removeFromVoiceChannel(session);
+      session.voice_channel_id = undefined;
+      this.persist(ws, session);
+      cleared += 1;
+    }
+    let heldChanged = false;
+    for (const resumable of this.resumableSessions.values()) {
+      if (
+        resumable.user_id !== userId ||
+        resumable.voice_channel_id !== channelId
+      )
+        continue;
+      delete resumable.voice_channel_id;
+      heldChanged = true;
+      cleared += 1;
+    }
+    if (heldChanged) this.persistResumableSessions();
+    // Held sessions never count as "another device in the channel", so the
+    // member entry can outlive the live sessions above: drop what is left.
+    const members = this.voiceChannelMembers.get(channelId);
+    if (
+      cleared > 0 &&
+      members?.has(userId) &&
+      !this.hasOtherVoiceChannelSession(userId, channelId, "")
+    ) {
+      members.delete(userId);
+      if (members.size === 0) {
+        this.voiceChannelMembers.delete(channelId);
+        this.deleteVoiceChannelStorage(channelId);
+        this.voiceChannelStartedAt.delete(channelId);
+        this.persistVoiceChannelStartedAt();
+      }
+      this.persistVoiceChannelMembers();
+      this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
+    }
+    return cleared;
   }
 
   private rememberReplacedVoiceSession(participantId: string): void {
@@ -4073,7 +4218,20 @@ export class MeetingRoom extends DurableObject<Env> {
       session.user_id,
       d.channel_id,
     );
-    if (!access || !hasChannelPermission(access, PERMISSIONS.CONNECT)) {
+    // A moderator's move stands in for CONNECT on the channel it names.
+    const canConnect =
+      !!access &&
+      (hasChannelPermission(access, PERMISSIONS.CONNECT) ||
+        (await verifyVoiceMoveGrant(
+          d.move_grant,
+          this.env.REALTIME_TICKET_SECRET,
+          {
+            subject: session.user_id,
+            channelId: d.channel_id,
+            serverId: access.serverId,
+          },
+        )));
+    if (!canConnect) {
       this.sendTo(ws, {
         op: Op.Error,
         d: {

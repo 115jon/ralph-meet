@@ -8,6 +8,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import type { WorkerBindings } from "@/server/bindings";
 import { brokenAuth, memoryAuth, testServices } from "@/server/testing";
 import { verifySocketTicket } from "@/lib/voice/socket-ticket";
+import { issueVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
 import { verifyVoiceToken } from "../../../../realtime/voice-token";
 import { socketTicketRoutes } from "@/server/routes/socket-ticket";
 
@@ -439,6 +440,57 @@ describe("socket ticket route", () => {
     await expect(response.json()).resolves.toMatchObject({
       code: "CONNECT_DENIED",
     });
+  });
+
+  it("lets a voice move grant stand in for CONNECT, for its user and channel only", async () => {
+    voiceChannelInServer1();
+    db.mockQuery("JOIN member_roles", {
+      results: [
+        {
+          id: "role-everyone",
+          permissions: PERMISSIONS.VIEW_CHANNELS,
+          position: 0,
+          is_default: 1,
+        },
+      ],
+    });
+    const grantFor = (subject: string, channelId: string) =>
+      issueVoiceMoveGrant(
+        {
+          subject,
+          serverId: "server-1",
+          channelId,
+          expiresAt: Date.now() + 60_000,
+        },
+        ticketSecret,
+      );
+    const request = (moveGrant: string) =>
+      socketTicketPost({
+        request: new Request("https://meet.test/api/voice/socket-ticket", {
+          method: "POST",
+          headers: { authorization: TOKEN },
+          body: JSON.stringify({
+            audience: "voice",
+            channelId: "channel-1",
+            moveGrant,
+          }),
+        }),
+      });
+
+    expect(
+      (await request(await grantFor("user-123", "channel-1"))).status,
+    ).toBe(200);
+    for (const grant of [
+      await grantFor("user-456", "channel-1"),
+      await grantFor("user-123", "channel-2"),
+      "vm1.not.signed",
+    ]) {
+      const refused = await request(grant);
+      expect(refused.status).toBe(403);
+      await expect(refused.json()).resolves.toMatchObject({
+        code: "CONNECT_DENIED",
+      });
+    }
   });
 
   it("reads the channel and the caller's roles once per ticket", async () => {
