@@ -6,18 +6,33 @@
 //
 // Wire contract (see docs/deploy.md):
 //
-//   POST {base}/fetch    { url, method: "GET" | "HEAD", headers?, nonce }
+//   POST {base}/fetch    { url, method: "GET" | "HEAD" | "POST", headers?,
+//                          body?, nonce }
 //   POST {base}/resolve  { url, headers?, nonce }   (follows <= 5 redirects)
+//   POST {base}/stream   { url, headers?, nonce }   (googlevideo media bytes)
 //
 //   ts  = unix seconds (the proxy accepts +-60 s)
 //   sig = hex(HMAC_SHA256(key = EGRESS_PROXY_SECRET, msg = ts + "\n" + body))
 //   X-Egress-Timestamp: ts, X-Egress-Signature: sig
 //
+// `/fetch` POSTs carry a string `body` (<= 48 KiB) and are only accepted for
+// a path under `/youtubei/v1/` on www.youtube.com or youtubei.googleapis.com.
+// For YouTube hosts the proxy also forwards content-type, origin,
+// x-youtube-client-name, x-youtube-client-version, x-goog-visitor-id,
+// sec-fetch-mode and cookie (this client sends those only for YouTube and
+// googlevideo URLs). YouTube hosts fail closed with 424 `vpn_unavailable`
+// when the VPN is down (transient).
+//
 // The proxy answers JSON. `/fetch` wraps the upstream's answer in an
 // envelope (status, headers, utf8 or base64 body) and never follows
-// redirects. A failure of the proxy itself is `{ ok: false, error, message }`
-// with a status that says what to do (mapped in `EgressError`). A non-JSON
-// answer is a Cloudflare error page in front of the proxy: transient.
+// redirects. `/stream` is the exception: `https://*.googlevideo.com` only
+// (user-agent, range, origin, referer forwarded), it always answers 200 with
+// the upstream's status in `X-Egress-Upstream-Status` and the raw bytes
+// streamed as the body (<= 16 MiB, 120 s), following googlevideo redirects
+// itself. A failure of the proxy itself is `{ ok: false, error, message }`
+// with a status that says what to do (mapped in `EgressError`) and, on
+// `/stream`, no `X-Egress-Upstream-Status`. A non-JSON answer is a Cloudflare
+// error page in front of the proxy: transient.
 //
 // The client is off when `EGRESS_PROXY_SECRET` is unset (local dev, Worker
 // Previews); callers check `egressEnabled` and fetch directly instead.
@@ -67,12 +82,21 @@ export interface EgressEnv {
 
 export interface EgressRequest {
   url: string;
-  method?: "GET" | "HEAD";
+  method?: "GET" | "HEAD" | "POST";
+  headers?: Record<string, string>;
+  /** Only with `method: "POST"`; the proxy caps it at 48 KiB. */
+  body?: string;
+}
+
+export interface EgressStreamRequest {
+  url: string;
   headers?: Record<string, string>;
 }
 
 export interface EgressCallOptions {
   timeoutMs?: number;
+  /** Aborts the proxy call (and a streamed body) when the caller gives up. */
+  signal?: AbortSignal;
   /** Test hook: the clock the signature timestamp is taken from. */
   now?: () => number;
 }
@@ -183,7 +207,7 @@ export async function signEgressBody(
   return toHex(new Uint8Array(signature));
 }
 
-/** The only request headers the proxy forwards. */
+/** The request headers the proxy forwards to every host. */
 const FORWARDED_HEADERS = [
   "user-agent",
   "accept",
@@ -191,20 +215,59 @@ const FORWARDED_HEADERS = [
   "referer",
 ] as const;
 
-type ForwardedHeaderName = (typeof FORWARDED_HEADERS)[number];
+/**
+ * More headers the proxy forwards to YouTube hosts only (`range` is for
+ * `/stream`). The proxy filters per host anyway; sending them only for
+ * YouTube keeps every other provider's payload, and any cookie, off the wire.
+ */
+const YOUTUBE_FORWARDED_HEADERS = [
+  "range",
+  "content-type",
+  "origin",
+  "x-youtube-client-name",
+  "x-youtube-client-version",
+  "x-goog-visitor-id",
+  "sec-fetch-mode",
+  "cookie",
+] as const;
+
+type ForwardedHeaderName =
+  | (typeof FORWARDED_HEADERS)[number]
+  | (typeof YOUTUBE_FORWARDED_HEADERS)[number];
 type ForwardedHeaders = Partial<Record<ForwardedHeaderName, string>>;
 
-function isForwardedHeaderName(name: string): name is ForwardedHeaderName {
-  return (FORWARDED_HEADERS as readonly string[]).includes(name);
+function isYouTubeHost(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return (
+      hostname === "www.youtube.com" ||
+      hostname === "youtubei.googleapis.com" ||
+      hostname.endsWith(".googlevideo.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isForwardedHeaderName(
+  name: string,
+  youtube: boolean,
+): name is ForwardedHeaderName {
+  return (
+    (FORWARDED_HEADERS as readonly string[]).includes(name) ||
+    (youtube && (YOUTUBE_FORWARDED_HEADERS as readonly string[]).includes(name))
+  );
 }
 
 function pickForwardedHeaders(
   headers: Readonly<Record<string, string>> | undefined,
+  url: string,
 ): ForwardedHeaders {
+  const youtube = isYouTubeHost(url);
   const picked: ForwardedHeaders = {};
   for (const [name, value] of Object.entries(headers ?? {})) {
     const lower = name.toLowerCase();
-    if (isForwardedHeaderName(lower)) picked[lower] = value;
+    if (isForwardedHeaderName(lower, youtube)) picked[lower] = value;
   }
   return picked;
 }
@@ -278,6 +341,27 @@ function failureFor(
   return new EgressError("hard", message, details);
 }
 
+/** The signed `POST` init every proxy path sends. */
+async function signedRequestInit(
+  config: EgressConfig,
+  payload: Record<string, unknown>,
+  options?: EgressCallOptions,
+): Promise<RequestInit> {
+  const body = JSON.stringify({ ...payload, nonce: createEgressNonce() });
+  const timestamp = String(Math.floor((options?.now ?? Date.now)() / 1000));
+  const signature = await signEgressBody(config.secret, timestamp, body);
+  return {
+    method: "POST",
+    body,
+    headers: {
+      "content-type": "application/json",
+      "X-Egress-Timestamp": timestamp,
+      "X-Egress-Signature": signature,
+    },
+    signal: options?.signal,
+  };
+}
+
 async function callEgress(
   env: EgressEnv,
   path: "/fetch" | "/resolve",
@@ -287,26 +371,14 @@ async function callEgress(
   const config = readEgressConfig(env);
   if (!config) throw new EgressDisabledError();
 
-  const body = JSON.stringify({ ...payload, nonce: createEgressNonce() });
-  const timestamp = String(Math.floor((options?.now ?? Date.now)() / 1000));
-  const signature = await signEgressBody(config.secret, timestamp, body);
+  const init = await signedRequestInit(config, payload, options);
 
   let response: Response;
   let text: string;
   try {
-    response = await safeFetch(
-      `${config.baseUrl}${path}`,
-      {
-        method: "POST",
-        body,
-        headers: {
-          "content-type": "application/json",
-          "X-Egress-Timestamp": timestamp,
-          "X-Egress-Signature": signature,
-        },
-      },
-      { timeoutMs: options?.timeoutMs ?? EGRESS_TIMEOUT_MS },
-    );
+    response = await safeFetch(`${config.baseUrl}${path}`, init, {
+      timeoutMs: options?.timeoutMs ?? EGRESS_TIMEOUT_MS,
+    });
     text = await readTextCapped(response, EGRESS_MAX_ENVELOPE_BYTES);
   } catch (error) {
     throw new EgressError(
@@ -341,16 +413,14 @@ export async function egressFetch(
   request: EgressRequest,
   options?: EgressCallOptions,
 ): Promise<Response> {
-  const { envelope } = await callEgress(
-    env,
-    "/fetch",
-    {
-      url: request.url,
-      method: request.method ?? "GET",
-      headers: pickForwardedHeaders(request.headers),
-    },
-    options,
-  );
+  const fetchPayload: Record<string, unknown> = {
+    url: request.url,
+    method: request.method ?? "GET",
+    headers: pickForwardedHeaders(request.headers, request.url),
+  };
+  // Part of the signed body only when there is one.
+  if (request.body !== undefined) fetchPayload.body = request.body;
+  const { envelope } = await callEgress(env, "/fetch", fetchPayload, options);
 
   const status = envelope.status;
   if (
@@ -398,6 +468,117 @@ export async function egressFetch(
   return response;
 }
 
+/** `/stream` carries the upstream's status here; a proxy failure has no such header. */
+const UPSTREAM_STATUS_HEADER = "X-Egress-Upstream-Status";
+/** How long `/stream` may take to answer with headers (the proxy's own cap is 120 s). */
+const EGRESS_STREAM_HEADERS_TIMEOUT_MS = 60_000;
+/** A proxy failure on `/stream` is a small JSON object. */
+const EGRESS_STREAM_ERROR_MAX_BYTES = 64 * 1024;
+/** Upstream headers `/stream` hands back. */
+const STREAM_PASSTHROUGH_HEADERS = [
+  "content-type",
+  "content-length",
+  "content-range",
+  "accept-ranges",
+  "etag",
+  "last-modified",
+] as const;
+
+/**
+ * Fetch googlevideo media bytes from the proxy's network (a media URL is
+ * bound to the IP that resolved it). Resolves to a `Response` with the
+ * upstream's status and headers whose body is STREAMED from the proxy, not
+ * buffered. `options.timeoutMs` bounds the wait for headers only; abort the
+ * body with `options.signal`. Throws `EgressError` for a proxy failure.
+ */
+export async function egressStream(
+  env: EgressEnv,
+  request: EgressStreamRequest,
+  options?: EgressCallOptions,
+): Promise<Response> {
+  const config = readEgressConfig(env);
+  if (!config) throw new EgressDisabledError();
+
+  const init = await signedRequestInit(
+    config,
+    {
+      url: request.url,
+      headers: pickForwardedHeaders(request.headers, request.url),
+    },
+    options,
+  );
+
+  const headersTimeout = new AbortController();
+  const timer = setTimeout(
+    () =>
+      headersTimeout.abort(
+        new DOMException(
+          "The egress proxy did not answer in time",
+          "TimeoutError",
+        ),
+      ),
+    options?.timeoutMs ?? EGRESS_STREAM_HEADERS_TIMEOUT_MS,
+  );
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, headersTimeout.signal])
+    : headersTimeout.signal;
+
+  let response: Response;
+  try {
+    response = await fetch(`${config.baseUrl}/stream`, { ...init, signal });
+  } catch (error) {
+    throw new EgressError(
+      "transient",
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const upstreamStatusHeader = response.headers.get(UPSTREAM_STATUS_HEADER);
+  if (upstreamStatusHeader === null) {
+    let text: string;
+    try {
+      text = await readTextCapped(response, EGRESS_STREAM_ERROR_MAX_BYTES);
+    } catch (error) {
+      throw new EgressError(
+        "transient",
+        error instanceof Error ? error.message : String(error),
+        { status: response.status },
+      );
+    }
+    const decoded = safeParseJson(EgressEnvelope, text);
+    if (!decoded.success) {
+      throw new EgressError(
+        "transient",
+        "The egress proxy did not answer JSON",
+        { status: response.status },
+      );
+    }
+    throw failureFor(response, decoded.data);
+  }
+
+  const status = Number(upstreamStatusHeader);
+  if (!Number.isInteger(status) || status < 200 || status > 599) {
+    void response.body?.cancel().catch(() => {});
+    throw new EgressError("transient", "The egress proxy sent a bad status", {
+      status: response.status,
+    });
+  }
+
+  const headers = new Headers();
+  for (const name of STREAM_PASSTHROUGH_HEADERS) {
+    const value = response.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+
+  if (isNullBodyStatus(status)) {
+    void response.body?.cancel().catch(() => {});
+    return new Response(null, { status, headers });
+  }
+  return new Response(response.body, { status, headers });
+}
+
 export interface EgressResolveResult {
   url: string;
   status: number;
@@ -417,7 +598,10 @@ export async function egressResolve(
   const { envelope } = await callEgress(
     env,
     "/resolve",
-    { url: request.url, headers: pickForwardedHeaders(request.headers) },
+    {
+      url: request.url,
+      headers: pickForwardedHeaders(request.headers, request.url),
+    },
     options,
   );
   if (!envelope.url) {

@@ -3,6 +3,7 @@ import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
 import { clog } from "@/lib/console-logger";
 import { UpstreamBlockedError } from "@/lib/upstream-guard";
 import { YouTubeBotCheckError } from "@/lib/ytdlp/youtube";
+import { youtubeFetch } from "@/lib/ytdlp/youtube-fetch";
 import { resolveListenTogetherAudioStream } from "@/services/listen-together.service";
 
 // Googlevideo rejects very large tail ranges, so an open-ended browser range
@@ -262,7 +263,7 @@ export function normalizeListenTogetherUpstreamRange(
 }
 
 async function fetchListenTogetherUpstream(upstreamUrl: URL, range: string) {
-  return fetch(upstreamUrl.toString(), {
+  return youtubeFetch(upstreamUrl.toString(), {
     method: "GET",
     headers: {
       Accept: "*/*",

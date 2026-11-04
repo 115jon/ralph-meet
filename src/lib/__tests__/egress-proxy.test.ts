@@ -8,6 +8,7 @@ import {
   egressFetch,
   egressProviderName,
   egressResolve,
+  egressStream,
   guardedEgressFetch,
   signEgressBody,
 } from "../egress-proxy";
@@ -175,6 +176,273 @@ describe("signing", () => {
       headers: { "user-agent": "ua" },
       nonce: expect.stringMatching(/^[0-9a-f]{32}$/),
     });
+  });
+});
+
+describe("POST /fetch", () => {
+  it("signs and sends the body and the YouTube headers", async () => {
+    const proxy = stubProxy(await upstreamEnvelope(200, '{"ok":1}'));
+    const body = '{"videoId":"abc"}';
+
+    const response = await egressFetch(config, {
+      url: "https://www.youtube.com/youtubei/v1/player?key=k",
+      method: "POST",
+      body,
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://www.youtube.com",
+        "X-YouTube-Client-Name": "5",
+        "X-YouTube-Client-Version": "20.1",
+        "X-Goog-Visitor-Id": "visitor",
+        "Sec-Fetch-Mode": "navigate",
+        Cookie: "CONSENT=YES+1",
+        "X-Custom": "dropped",
+      },
+    });
+
+    expect(await response.json()).toEqual({ ok: 1 });
+    const [request] = proxy.requests;
+    expect(request.url).toBe(`${EGRESS_TEST_URL}/fetch`);
+    expect(request.headers.get("X-Egress-Signature")).toBe(
+      hmacHex(
+        EGRESS_TEST_SECRET,
+        request.headers.get("X-Egress-Timestamp")!,
+        request.body,
+      ),
+    );
+    expect(JSON.parse(request.body)).toEqual({
+      url: "https://www.youtube.com/youtubei/v1/player?key=k",
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://www.youtube.com",
+        "x-youtube-client-name": "5",
+        "x-youtube-client-version": "20.1",
+        "x-goog-visitor-id": "visitor",
+        "sec-fetch-mode": "navigate",
+        cookie: "CONSENT=YES+1",
+      },
+      body,
+      nonce: expect.stringMatching(/^[0-9a-f]{32}$/),
+    });
+  });
+
+  it("leaves `body` out of the payload for a GET", async () => {
+    const proxy = stubProxy(await upstreamEnvelope(200, "{}"));
+    await egressFetch(config, { url: "https://www.youtube.com/" });
+    expect(JSON.parse(proxy.requests[0].body)).not.toHaveProperty("body");
+  });
+
+  it("stops waiting for the proxy when the caller's signal aborts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        init?.signal?.throwIfAborted();
+        return upstreamEnvelope(200, "{}");
+      }) as unknown as typeof fetch,
+    );
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      egressFetch(
+        config,
+        { url: "https://www.youtube.com/" },
+        { signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ kind: "transient" });
+  });
+});
+
+describe("POST /stream", () => {
+  const streamRequest = {
+    url: "https://rr1---sn-x.googlevideo.com/videoplayback?itag=140",
+    headers: {
+      "User-Agent": "ua",
+      Range: "bytes=0-9",
+      Accept: "*/*",
+      "X-Custom": "dropped",
+    },
+  };
+
+  function streamReply(
+    status: number,
+    body: BodyInit | null,
+    headers: Record<string, string> = {},
+  ) {
+    return new Response(body, {
+      status: 200,
+      headers: { "X-Egress-Upstream-Status": String(status), ...headers },
+    });
+  }
+
+  it("signs the request and passes the upstream status, headers and bytes through", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    const proxy = stubProxy(
+      streamReply(206, bytes, {
+        "content-type": "audio/mp4",
+        "content-length": "10",
+        "content-range": "bytes 0-9/100",
+        "accept-ranges": "bytes",
+        etag: '"e"',
+        "last-modified": "Wed, 01 Jan 2026 00:00:00 GMT",
+        "set-cookie": "nope=1",
+        "x-other": "dropped",
+      }),
+    );
+
+    const response = await egressStream(config, streamRequest);
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-type")).toBe("audio/mp4");
+    expect(response.headers.get("content-length")).toBe("10");
+    expect(response.headers.get("content-range")).toBe("bytes 0-9/100");
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(response.headers.get("etag")).toBe('"e"');
+    expect(response.headers.get("last-modified")).toBe(
+      "Wed, 01 Jan 2026 00:00:00 GMT",
+    );
+    expect(response.headers.has("set-cookie")).toBe(false);
+    expect(response.headers.has("x-other")).toBe(false);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+
+    const [request] = proxy.requests;
+    expect(request.url).toBe(`${EGRESS_TEST_URL}/stream`);
+    expect(request.method).toBe("POST");
+    expect(request.headers.get("X-Egress-Signature")).toBe(
+      hmacHex(
+        EGRESS_TEST_SECRET,
+        request.headers.get("X-Egress-Timestamp")!,
+        request.body,
+      ),
+    );
+    expect(JSON.parse(request.body)).toEqual({
+      url: streamRequest.url,
+      headers: { "user-agent": "ua", range: "bytes=0-9", accept: "*/*" },
+      nonce: expect.stringMatching(/^[0-9a-f]{32}$/),
+    });
+  });
+
+  it("streams: the Response is available before the body ends", async () => {
+    let finish!: () => void;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+        finish = () => {
+          controller.enqueue(new Uint8Array([2]));
+          controller.close();
+        };
+      },
+    });
+    stubProxy(streamReply(200, body));
+
+    const response = await egressStream(config, streamRequest);
+    const reader = response.body!.getReader();
+    expect((await reader.read()).value).toEqual(new Uint8Array([1]));
+    finish();
+    expect((await reader.read()).value).toEqual(new Uint8Array([2]));
+    expect((await reader.read()).done).toBe(true);
+  });
+
+  it("resolves an upstream 403 normally and drops the body of a 304", async () => {
+    stubProxy(streamReply(403, "denied"));
+    const refused = await egressStream(config, streamRequest);
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).toBe("denied");
+
+    stubProxy(streamReply(304, "ignored"));
+    const notModified = await egressStream(config, streamRequest);
+    expect(notModified.status).toBe(304);
+    expect(await notModified.text()).toBe("");
+  });
+
+  it.each([
+    [429, "backoff", "rate_limited"],
+    [503, "backoff", "busy"],
+    [424, "transient", "vpn_unavailable"],
+    [401, "hard", "bad_signature"],
+    [403, "hard", "host_not_allowed"],
+    [413, "hard", "too_large"],
+    [400, "hard", "bad_request"],
+  ] as const)(
+    "maps a proxy %i (%s) to an EgressError",
+    async (status, kind, code) => {
+      stubProxy(
+        proxyError(status, code, `msg ${code}`, { "Retry-After": "9" })
+          .response,
+      );
+
+      const error = await egressStream(config, streamRequest).catch(
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(EgressError);
+      expect(error).toMatchObject({
+        kind,
+        code,
+        status,
+        message: `msg ${code}`,
+        retryAfterSeconds: 9,
+      });
+    },
+  );
+
+  it("treats a non-JSON answer without the status header as transient", async () => {
+    stubProxy(
+      new Response("<html>Bad gateway</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+    await expect(egressStream(config, streamRequest)).rejects.toMatchObject({
+      name: "EgressError",
+      kind: "transient",
+      status: 502,
+    });
+  });
+
+  it("treats a 200 without the status header as transient", async () => {
+    stubProxy(new Response("raw bytes", { status: 200 }));
+    await expect(egressStream(config, streamRequest)).rejects.toMatchObject({
+      kind: "transient",
+    });
+  });
+
+  it("treats a bad upstream status header as transient", async () => {
+    stubProxy(streamReply(200, "x", { "X-Egress-Upstream-Status": "abc" }));
+    await expect(egressStream(config, streamRequest)).rejects.toMatchObject({
+      kind: "transient",
+    });
+  });
+
+  it("turns a network failure into a transient error", async () => {
+    stubProxy(new TypeError("connection reset"));
+    await expect(egressStream(config, streamRequest)).rejects.toMatchObject({
+      kind: "transient",
+      message: "connection reset",
+    });
+  });
+
+  it("aborts when the caller's signal is already aborted", async () => {
+    const fetchMock = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        init?.signal?.throwIfAborted();
+        return streamReply(200, "x");
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      egressStream(config, streamRequest, { signal: controller.signal }),
+    ).rejects.toMatchObject({ kind: "transient" });
+  });
+
+  it("is disabled without a secret", async () => {
+    await expect(egressStream({}, streamRequest)).rejects.toBeInstanceOf(
+      EgressDisabledError,
+    );
   });
 });
 
